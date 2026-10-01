@@ -1,0 +1,98 @@
+using IAAutos.Dominio.Comun;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+
+namespace IAAutos.Infraestructura.Persistencia;
+
+/// <summary>
+/// Unidad de trabajo sobre el DbContext. Traduce los errores de SQL Server (duplicados, claves foraneas,
+/// restricciones CHECK y triggers de inmutabilidad) en excepciones de dominio con los mensajes de la API.
+/// </summary>
+internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTrabajo
+{
+    private const int ERROR_UNICO_INDICE = 2601;
+    private const int ERROR_UNICO_RESTRICCION = 2627;
+    private const int ERROR_CONFLICTO_RESTRICCION = 547;
+    private const int ERROR_TRIGGER_INSPECCION_CERRADA = 51000;
+    private const int ERROR_TRIGGER_HALLAZGO_EN_CERRADA = 51001;
+    private const int ERROR_TRIGGER_EVIDENCIA_EN_CERRADA = 51002;
+
+    // Mensajes por restriccion: coinciden con los de la API original.
+    private static readonly (string Restriccion, string Mensaje)[] CONFLICTOS_UNICOS =
+    [
+        ("UQ_tblUsuarios_Email", "Ya existe un usuario con ese correo"),
+        ("UQ_tblVehiculos_Vin", "Ya existe un vehículo con ese VIN"),
+        ("UQ_tblEtapas_Vehiculo_Orden", "Ya existe una etapa con ese orden para el vehículo"),
+        ("UQ_tblInspecciones_Etapa_Momento", "Esta etapa ya tiene un informe registrado"),
+        ("UQ_tblTransferencias_Inspeccion", "Esta inspección ya tiene una transferencia de custodia"),
+        ("UQ_tblOrdenesSofasa_SourceId", "Ya existe una orden con ese identificador de origen"),
+    ];
+
+    private static readonly (string Restriccion, string Mensaje)[] REFERENCIAS_INVALIDAS =
+    [
+        ("FK_tblEtapas_", "El vehículo o el punto de custodia no existen"),
+        ("FK_tblInspecciones_", "La etapa o el usuario no existen"),
+        ("FK_tblTransferencias_", "Algún usuario (entrega/recibe) no existe"),
+        ("FK_tblAsignaciones_", "Referencia inválida (vehículo o usuario)"),
+        ("FK_tblEvidencias_", "El hallazgo indicado no pertenece a esta inspección"),
+        ("FK_tblHallazgos_", "La inspección indicada no existe"),
+    ];
+
+    public async Task<int> GuardarCambiosAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await contexto.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is SqlException sql)
+        {
+            throw Traducir(sql) ?? throw new InvalidOperationException("Error de base de datos no controlado", ex);
+        }
+    }
+
+    public void DescartarCambios() => contexto.ChangeTracker.Clear();
+
+    private static clsExcepcionDominio? Traducir(SqlException sql)
+    {
+        switch (sql.Number)
+        {
+            case ERROR_UNICO_INDICE or ERROR_UNICO_RESTRICCION:
+                foreach (var (restriccion, mensaje) in CONFLICTOS_UNICOS)
+                {
+                    if (sql.Message.Contains(restriccion, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new clsConflictoException(mensaje);
+                    }
+                }
+
+                return new clsConflictoException("Ya existe un registro con esos datos");
+
+            case ERROR_CONFLICTO_RESTRICCION:
+                if (sql.Message.Contains("CHECK constraint", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new clsValidacionException("Los datos no cumplen las restricciones del modelo");
+                }
+
+                if (sql.Message.Contains("DELETE statement", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new clsConflictoException("El registro tiene operaciones asociadas y no puede eliminarse");
+                }
+
+                foreach (var (prefijo, mensaje) in REFERENCIAS_INVALIDAS)
+                {
+                    if (sql.Message.Contains(prefijo, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new clsEntidadNoEncontradaException(mensaje);
+                    }
+                }
+
+                return new clsEntidadNoEncontradaException("Referencia inválida");
+
+            case ERROR_TRIGGER_INSPECCION_CERRADA or ERROR_TRIGGER_HALLAZGO_EN_CERRADA or ERROR_TRIGGER_EVIDENCIA_EN_CERRADA:
+                return new clsConflictoException("La inspección está cerrada y es inmutable; no admite cambios");
+
+            default:
+                return null;
+        }
+    }
+}

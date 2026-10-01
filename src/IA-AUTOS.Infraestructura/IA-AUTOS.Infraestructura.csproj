@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\IA-AUTOS.Dominio\IA-AUTOS.Dominio.csproj" />
+    <ProjectReference Include="..\IA-AUTOS.Aplicacion\IA-AUTOS.Aplicacion.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="IA-AUTOS.Tests.Unitarios" />
+    <InternalsVisibleTo Include="IA-AUTOS.Tests.Integracion" />
+  </ItemGroup>
+</Project>

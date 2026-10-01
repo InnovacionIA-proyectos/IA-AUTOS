@@ -1,0 +1,16 @@
+# Fuera del contexto de compilacion de la imagen
+**/bin/
+**/obj/
+.git/
+.vs/
+.idea/
+.vscode/
+TestResults/
+coverage/
+database/export/
+.env
+.env.*
+!.env.example
+*.log
+.uploads/
+docs/

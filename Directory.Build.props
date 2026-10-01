@@ -1,0 +1,14 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- Los proyectos se llaman IA-AUTOS.* pero el espacio de nombres es IAAutos.* (el guion no es valido en C#). -->
+    <RootNamespace>$([System.String]::Copy('$(MSBuildProjectName)').Replace('IA-AUTOS','IAAutos'))</RootNamespace>
+  </PropertyGroup>
+</Project>

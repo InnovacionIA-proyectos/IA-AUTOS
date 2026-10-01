@@ -1,0 +1,32 @@
+# Secretos y configuracion local
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+secrets.json
+*.pfx
+*.key
+
+# Compilacion
+bin/
+obj/
+out/
+publish/
+*.user
+*.suo
+.vs/
+.idea/
+.vscode/
+
+# Pruebas y cobertura
+TestResults/
+coverage/
+*.trx
+*.coverage
+
+# Archivos temporales y de datos locales
+*.log
+*.tmp
+.uploads/
+database/export/
+*.csv

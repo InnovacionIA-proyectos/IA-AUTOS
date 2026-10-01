@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/IA-AUTOS.API/IA-AUTOS.API.csproj" />
+    <Project Path="src/IA-AUTOS.Aplicacion/IA-AUTOS.Aplicacion.csproj" />
+    <Project Path="src/IA-AUTOS.Dominio/IA-AUTOS.Dominio.csproj" />
+    <Project Path="src/IA-AUTOS.Infraestructura/IA-AUTOS.Infraestructura.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/IA-AUTOS.Tests.Integracion/IA-AUTOS.Tests.Integracion.csproj" />
+    <Project Path="tests/IA-AUTOS.Tests.Unitarios/IA-AUTOS.Tests.Unitarios.csproj" />
+  </Folder>
+</Solution>
