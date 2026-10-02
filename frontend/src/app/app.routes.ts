@@ -11,15 +11,8 @@ import { ShellGestion, ShellInformes, ShellPublico } from './layout/shells';
  * Los guards solo mejoran la experiencia: la autorización real la impone la API.
  */
 export const routes: Routes = [
-  {
-    path: '',
-    component: ShellPublico,
-    children: [
-      { path: 'descargar', title: 'Descargar app', loadComponent: () => import('./features/descargar/descargar').then((m) => m.Descargar) },
-      { path: 'login', canActivate: [guardInvitado], title: 'Iniciar sesión', loadComponent: () => import('./features/auth/login').then((m) => m.Login) },
-      { path: 'acceso-restringido', canActivate: [guardAutenticado], title: 'Acceso restringido', loadComponent: () => import('./features/auth/paginas-estado').then((m) => m.AccesoRestringido) },
-    ],
-  },
+  // La ruta protegida de '/' va primero: la pública no tiene hijo para '/', y si fuera antes la raíz quedaría en blanco
+  // en vez de redirigir a /login.
   {
     path: '',
     component: ShellInformes,
@@ -49,6 +42,15 @@ export const routes: Routes = [
       { path: 'inspecciones/:id', title: 'Informe', loadComponent: () => import('./features/inspecciones/informe-detalle').then((m) => m.InformeDetalle) },
       { path: 'cargar-vins', title: 'Cargar VINs', loadComponent: () => import('./features/cargar-vins/cargar-vins').then((m) => m.CargarVins) },
       { path: 'sofasa', title: 'Órdenes Sofasa', loadComponent: () => import('./features/sofasa/ordenes-sofasa').then((m) => m.OrdenesSofasa) },
+    ],
+  },
+  {
+    path: '',
+    component: ShellPublico,
+    children: [
+      { path: 'descargar', title: 'Descargar app', loadComponent: () => import('./features/descargar/descargar').then((m) => m.Descargar) },
+      { path: 'login', canActivate: [guardInvitado], title: 'Iniciar sesión', loadComponent: () => import('./features/auth/login').then((m) => m.Login) },
+      { path: 'acceso-restringido', canActivate: [guardAutenticado], title: 'Acceso restringido', loadComponent: () => import('./features/auth/paginas-estado').then((m) => m.AccesoRestringido) },
     ],
   },
   {

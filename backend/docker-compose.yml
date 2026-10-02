@@ -1,12 +1,17 @@
-# Entorno local / desarrollo / QA. Los secretos se leen del archivo .env (no versionado).
-# Uso:  docker compose up --build
+# Entorno real: la API lee TODA su configuracion del archivo .env (no versionado): base de datos, MinIO, JWT, CORS...
+# Uso (entorno real):          docker compose up --build -d
+# Uso (base y almacen locales): docker compose --profile local up --build -d
+#   y en .env apuntar ConnectionStrings__DefaultConnection a  Server=sqlserver,1433;Database=IAAutos;User Id=sa;Password=<MSSQL_SA_PASSWORD>;Encrypt=False;TrustServerCertificate=True
+#   y Storage__S3__Endpoint a  http://almacen:9090  (Storage__S3__Bucket=iaautos). Los servicios del profile "local" no arrancan por defecto.
 services:
   sqlserver:
+    profiles: [local]
     image: mcr.microsoft.com/mssql/server:2019-latest
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?defina MSSQL_SA_PASSWORD en .env}
+      # Solo se usa con el profile "local"; en entorno real puede no estar definida.
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-}
     ports:
       - "1433:1433"
     volumes:
@@ -19,12 +24,13 @@ services:
       start_period: 20s
 
   db-init:
+    profiles: [local]
     image: mcr.microsoft.com/mssql/server:2019-latest
     depends_on:
       sqlserver:
         condition: service_healthy
     environment:
-      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD}
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-}
     volumes:
       - ./database:/database:ro
     entrypoint: ["/bin/bash", "-c"]
@@ -32,10 +38,10 @@ services:
       - /opt/mssql-tools18/bin/sqlcmd -C -S sqlserver -U sa -P "$$MSSQL_SA_PASSWORD" -I -b -i /database/00-crear-base.sql && /opt/mssql-tools18/bin/sqlcmd -C -S sqlserver -d IAAutos -U sa -P "$$MSSQL_SA_PASSWORD" -I -b -i /database/ddl.sql
     restart: "no"
 
-  # Almacen S3 compatible para desarrollo (efimero: las imagenes se pierden al recrear el contenedor; la base de datos si persiste).
-  # En produccion se usa el MinIO (u otro S3) existente: basta con configurar
-  # Storage__S3__* en el entorno. La imagen oficial de MinIO ya no se publica en registros publicos.
+  # Almacen S3 compatible solo para desarrollo local (efimero). En entorno real se usa el MinIO existente,
+  # configurado con Storage__S3__* en .env.
   almacen:
+    profiles: [local]
     image: adobe/s3mock:5.2.3
     environment:
       COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: iaautos
@@ -44,20 +50,19 @@ services:
 
   api:
     build: .
+    # Los servicios locales solo se esperan si el profile "local" esta activo.
     depends_on:
       db-init:
         condition: service_completed_successfully
+        required: false
       almacen:
         condition: service_started
+        required: false
+    # Toda la configuracion (cadena de conexion, MinIO, JWT, CORS...) viene del .env; aqui no se sobrescribe.
     env_file:
       - .env
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
-      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=IAAutos;User Id=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=False;TrustServerCertificate=True
-      Storage__S3__Endpoint: http://almacen:9090
-      Storage__S3__Bucket: iaautos
-      Storage__S3__AccessKey: desarrollo
-      Storage__S3__SecretKey: desarrollo-solo-local
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
     ports:
       - "8080:8080"
 

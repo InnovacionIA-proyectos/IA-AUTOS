@@ -19,3 +19,15 @@ services:
       PROVEEDOR_LOGIN: ${WEB_PROVEEDOR_LOGIN:-propio}
     ports:
       - "4200:8080"
+
+  # Swagger UI opcional para desarrollo (no arranca por defecto):  docker compose --profile docs up -d swagger
+  # Lee el contrato de la API, que requiere Documentacion__Habilitada=true en backend/.env.  http://localhost:8081
+  swagger:
+    profiles: [docs]
+    image: swaggerapi/swagger-ui:v5.17.14
+    environment:
+      URL: ${SWAGGER_OPENAPI_URL:-http://localhost:8080/openapi/v1.json}
+    depends_on:
+      - api
+    ports:
+      - "8081:8080"
