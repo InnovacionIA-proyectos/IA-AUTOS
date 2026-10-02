@@ -1,0 +1,4 @@
+{
+  "FLAVOR": "qa",
+  "API_URL": "https://<url-de-la-api-qa>"
+}

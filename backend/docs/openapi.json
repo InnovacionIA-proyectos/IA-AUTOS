@@ -1,0 +1,3748 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "IA-AUTOS API",
+    "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Los campos van en snake_case, salvo Reportes y la respuesta de la ingesta, en camelCase.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/vehiculos/cargar": {
+      "post": {
+        "tags": [
+          "Vehiculos"
+        ],
+        "operationId": "Vehiculos_Cargar",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CargarVinsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/vehiculos": {
+      "get": {
+        "tags": [
+          "Vehiculos"
+        ],
+        "operationId": "Vehiculos_Buscar",
+        "parameters": [
+          {
+            "name": "vin",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VehiculoBusquedaDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VehiculoBusquedaDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/VehiculoBusquedaDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/vehiculos/listado": {
+      "get": {
+        "tags": [
+          "Vehiculos"
+        ],
+        "operationId": "Vehiculos_Listar",
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "vin",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoPaginadoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoPaginadoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoPaginadoDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/vehiculos/{vin}/inventario/pdf": {
+      "get": {
+        "tags": [
+          "Vehiculos"
+        ],
+        "operationId": "Vehiculos_InventarioPdf",
+        "parameters": [
+          {
+            "name": "vin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/pdf": {}
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/vehiculos/{vin}/inventario": {
+      "get": {
+        "tags": [
+          "Vehiculos"
+        ],
+        "operationId": "Vehiculos_Inventario",
+        "parameters": [
+          {
+            "name": "vin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventarioDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventarioDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InventarioDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/usuarios": {
+      "get": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_Listar",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UsuarioDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UsuarioDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UsuarioDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "post": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_Crear",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearUsuarioRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/usuarios/{id}": {
+      "patch": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_Actualizar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActualizarUsuarioRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_Eliminar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EliminarUsuarioResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EliminarUsuarioResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EliminarUsuarioResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/etl/sofasa/ordenes": {
+      "post": {
+        "tags": [
+          "Sofasa"
+        ],
+        "operationId": "Sofasa_Ingestar",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestarOrdenesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoIngestaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoIngestaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoIngestaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sofasa/ordenes": {
+      "get": {
+        "tags": [
+          "Sofasa"
+        ],
+        "operationId": "Sofasa_Listar",
+        "parameters": [
+          {
+            "name": "vin",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ciudad",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrdenSofasaDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrdenSofasaDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrdenSofasaDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Salud"
+        ],
+        "operationId": "Salud_Obtener",
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/patrones": {
+      "get": {
+        "tags": [
+          "Reportes"
+        ],
+        "operationId": "Reportes_Patrones",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatronesDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatronesDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatronesDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/patrones/analisis": {
+      "get": {
+        "tags": [
+          "Reportes"
+        ],
+        "operationId": "Reportes_Analisis",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalisisDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalisisDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalisisDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/metricas/rechazo": {
+      "get": {
+        "tags": [
+          "Reportes"
+        ],
+        "operationId": "Reportes_Rechazo",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TasaRechazoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TasaRechazoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TasaRechazoDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/inspecciones": {
+      "post": {
+        "tags": [
+          "Inspecciones"
+        ],
+        "operationId": "Inspecciones_Crear",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearInspeccionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspeccionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspeccionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspeccionDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "get": {
+        "tags": [
+          "Inspecciones"
+        ],
+        "operationId": "Inspecciones_Listar",
+        "parameters": [
+          {
+            "name": "vin",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "usuarioId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "momento",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "proceso",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InspeccionListadoDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InspeccionListadoDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InspeccionListadoDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/inspecciones/{id}": {
+      "get": {
+        "tags": [
+          "Inspecciones"
+        ],
+        "operationId": "Inspecciones_Obtener",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InformeDetalleDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InformeDetalleDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InformeDetalleDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/inspecciones/{id}/evidencias": {
+      "post": {
+        "tags": [
+          "Inspecciones"
+        ],
+        "operationId": "Inspecciones_AgregarEvidencia",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearEvidenciaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenciaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenciaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenciaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/inspecciones/{id}/hallazgos": {
+      "post": {
+        "tags": [
+          "Inspecciones"
+        ],
+        "operationId": "Inspecciones_AgregarHallazgo",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearHallazgoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/inspecciones/{id}/transferencia": {
+      "post": {
+        "tags": [
+          "Inspecciones"
+        ],
+        "operationId": "Inspecciones_FirmarTransferencia",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FirmarTransferenciaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferenciaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferenciaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferenciaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/inspecciones/{id}/cerrar": {
+      "post": {
+        "tags": [
+          "Inspecciones"
+        ],
+        "operationId": "Inspecciones_Cerrar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CerrarInspeccionResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CerrarInspeccionResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CerrarInspeccionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "Auth_Login",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "Auth_Me",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioAutenticadoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioAutenticadoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioAutenticadoDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/asignaciones": {
+      "post": {
+        "tags": [
+          "Asignaciones"
+        ],
+        "operationId": "Asignaciones_CrearAsignacion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearAsignacionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsignacionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsignacionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AsignacionDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/etapas": {
+      "post": {
+        "tags": [
+          "Asignaciones"
+        ],
+        "operationId": "Asignaciones_CrearEtapa",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearEtapaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EtapaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EtapaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EtapaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/uploads": {
+      "post": {
+        "tags": [
+          "Archivos"
+        ],
+        "operationId": "Archivos_Subir",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubirArchivoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchivoSubidoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchivoSubidoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchivoSubidoDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/uploads/{archivo}": {
+      "get": {
+        "tags": [
+          "Archivos"
+        ],
+        "operationId": "Archivos_Obtener",
+        "parameters": [
+          {
+            "name": "archivo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ActualizarUsuarioRequest": {
+        "required": [
+          "nombre",
+          "email",
+          "rol",
+          "subtipo_inspector",
+          "password",
+          "activo"
+        ],
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rol": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subtipo_inspector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "activo": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "AnalisisDto": {
+        "required": [
+          "porClase",
+          "porTamano",
+          "sugerencias"
+        ],
+        "type": "object",
+        "properties": {
+          "porClase": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConteoClaseDto"
+            }
+          },
+          "porTamano": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConteoTamanoDto"
+            }
+          },
+          "sugerencias": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ArchivoSubidoDto": {
+        "required": [
+          "storage_path",
+          "url"
+        ],
+        "type": "object",
+        "properties": {
+          "storage_path": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "AsignacionDto": {
+        "required": [
+          "id",
+          "vehiculo_id",
+          "ninera",
+          "conductor_id",
+          "asignado_por",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "vehiculo_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ninera": {
+            "type": "string"
+          },
+          "conductor_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "asignado_por": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "CargarVinsRequest": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "required": [
+                "vin",
+                "marca",
+                "modelo",
+                "color",
+                "operacion"
+              ],
+              "type": "object",
+              "properties": {
+                "vin": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "marca": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "modelo": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "color": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "operacion": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "CerrarInspeccionResponse": {
+        "required": [
+          "inspeccion",
+          "resumen"
+        ],
+        "type": "object",
+        "properties": {
+          "inspeccion": {
+            "$ref": "#/components/schemas/InspeccionDto"
+          },
+          "resumen": {
+            "$ref": "#/components/schemas/ResumenCierreDto"
+          }
+        }
+      },
+      "ConteoClaseDto": {
+        "required": [
+          "clase_dano",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "clase_dano": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ConteoProcesoDto": {
+        "required": [
+          "proceso",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "proceso": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ConteoTamanoDto": {
+        "required": [
+          "tamano_dano",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "tamano_dano": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ConteoZonaDto": {
+        "required": [
+          "parte_vehiculo",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "parte_vehiculo": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ConteoZonaProcesoDto": {
+        "required": [
+          "proceso",
+          "parte_vehiculo",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "proceso": {
+            "type": "string"
+          },
+          "parte_vehiculo": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "CoordsDiagramaDto": {
+        "required": [
+          "x",
+          "y"
+        ],
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number",
+            "format": "double"
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "CrearAsignacionRequest": {
+        "required": [
+          "vehiculo_id",
+          "ninera",
+          "conductor_id"
+        ],
+        "type": "object",
+        "properties": {
+          "vehiculo_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "ninera": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conductor_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "CrearEtapaRequest": {
+        "required": [
+          "vehiculo_id",
+          "punto_custodia_id",
+          "orden",
+          "requiere_inspeccion"
+        ],
+        "type": "object",
+        "properties": {
+          "vehiculo_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "punto_custodia_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "orden": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "requiere_inspeccion": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "CrearEvidenciaRequest": {
+        "required": [
+          "hallazgo_id",
+          "storage_path",
+          "sello_fecha",
+          "sello_lat",
+          "sello_lng"
+        ],
+        "type": "object",
+        "properties": {
+          "hallazgo_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "storage_path": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sello_fecha": {
+            "format": "date-time"
+          },
+          "sello_lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "sello_lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "CrearHallazgoRequest": {
+        "required": [
+          "parte_vehiculo",
+          "clase_dano",
+          "tamano_dano",
+          "coords_diagrama"
+        ],
+        "type": "object",
+        "properties": {
+          "parte_vehiculo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clase_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tamano_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "coords_diagrama": {
+            "required": [
+              "x",
+              "y"
+            ],
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "format": "double"
+              },
+              "y": {
+                "type": "number",
+                "format": "double"
+              }
+            }
+          }
+        }
+      },
+      "CrearInspeccionRequest": {
+        "required": [
+          "etapa_id",
+          "momento",
+          "fecha",
+          "lat",
+          "lng",
+          "estado",
+          "conductor_nombre",
+          "placa",
+          "trailer",
+          "notas"
+        ],
+        "type": "object",
+        "properties": {
+          "etapa_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "momento": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fecha": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "estado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conductor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "placa": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trailer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notas": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CrearUsuarioRequest": {
+        "required": [
+          "nombre",
+          "email",
+          "rol",
+          "subtipo_inspector",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rol": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subtipo_inspector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "EliminarUsuarioResponse": {
+        "required": [
+          "modo"
+        ],
+        "type": "object",
+        "properties": {
+          "modo": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorApiDto": {
+        "required": [
+          "error",
+          "code",
+          "message",
+          "timestamp",
+          "details"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "details": {}
+        }
+      },
+      "ErrorCargaDto": {
+        "required": [
+          "vin",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "vin": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorIngestaDto": {
+        "required": [
+          "source_id",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "source_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "EtapaDto": {
+        "required": [
+          "id",
+          "vehiculo_id",
+          "punto_custodia_id",
+          "orden",
+          "requiere_inspeccion",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "vehiculo_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "punto_custodia_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orden": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "requiere_inspeccion": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "EvidenciaDto": {
+        "required": [
+          "id",
+          "inspeccion_id",
+          "hallazgo_id",
+          "sello_fecha",
+          "sello_lat",
+          "sello_lng",
+          "url",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inspeccion_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "hallazgo_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "sello_fecha": {
+            "format": "date-time"
+          },
+          "sello_lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "sello_lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "FirmarTransferenciaRequest": {
+        "required": [
+          "entrega_usuario_id",
+          "recibe_usuario_id",
+          "firma_entrega",
+          "firma_recibe"
+        ],
+        "type": "object",
+        "properties": {
+          "entrega_usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "recibe_usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "firma_entrega": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "firma_recibe": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "HallazgoDto": {
+        "required": [
+          "id",
+          "inspeccion_id",
+          "parte_vehiculo",
+          "clase_dano",
+          "tamano_dano",
+          "coords_diagrama",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inspeccion_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parte_vehiculo": {
+            "type": "string"
+          },
+          "clase_dano": {
+            "type": "string"
+          },
+          "tamano_dano": {
+            "type": "string"
+          },
+          "coords_diagrama": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CoordsDiagramaDto"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "InformeDetalleDto": {
+        "required": [
+          "id",
+          "etapa_id",
+          "usuario_id",
+          "momento",
+          "fecha",
+          "lat",
+          "lng",
+          "estado",
+          "conductor_nombre",
+          "placa",
+          "trailer",
+          "notas",
+          "created_at",
+          "updated_at",
+          "vin",
+          "marca",
+          "modelo",
+          "proceso",
+          "requiere_inspeccion",
+          "inspector_nombre",
+          "ninera",
+          "hallazgos",
+          "evidencias",
+          "transferencia"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "etapa_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "momento": {
+            "type": "string"
+          },
+          "fecha": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "conductor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "placa": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trailer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notas": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          },
+          "vin": {
+            "type": "string"
+          },
+          "marca": {
+            "type": "string"
+          },
+          "modelo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proceso": {
+            "type": "string"
+          },
+          "requiere_inspeccion": {
+            "type": "boolean"
+          },
+          "inspector_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ninera": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hallazgos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HallazgoDto"
+            }
+          },
+          "evidencias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenciaDto"
+            }
+          },
+          "transferencia": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TransferenciaDetalleDto"
+              }
+            ]
+          }
+        }
+      },
+      "IngestarOrdenesRequest": {
+        "required": [
+          "ordenes"
+        ],
+        "type": "object",
+        "properties": {
+          "ordenes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "required": [
+                "source_id",
+                "status_code",
+                "datetime_event",
+                "orden_number",
+                "orden_sap",
+                "origin_cedi",
+                "vin",
+                "make",
+                "model_description",
+                "dealer_code",
+                "destination_city",
+                "destination_address",
+                "loading_date",
+                "appointment",
+                "loading_dock",
+                "weight"
+              ],
+              "type": "object",
+              "properties": {
+                "source_id": {
+                  "format": "int64"
+                },
+                "status_code": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "datetime_event": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "orden_number": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "orden_sap": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "origin_cedi": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "vin": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "make": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "model_description": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "dealer_code": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "destination_city": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "destination_address": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "loading_date": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "appointment": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "loading_dock": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "weight": {
+                  "format": "double"
+                }
+              }
+            }
+          }
+        }
+      },
+      "InspeccionDto": {
+        "required": [
+          "id",
+          "etapa_id",
+          "usuario_id",
+          "momento",
+          "fecha",
+          "lat",
+          "lng",
+          "estado",
+          "conductor_nombre",
+          "placa",
+          "trailer",
+          "notas",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "etapa_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "momento": {
+            "type": "string"
+          },
+          "fecha": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "conductor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "placa": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trailer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notas": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "InspeccionListadoDto": {
+        "required": [
+          "id",
+          "etapa_id",
+          "usuario_id",
+          "momento",
+          "fecha",
+          "lat",
+          "lng",
+          "estado",
+          "conductor_nombre",
+          "placa",
+          "trailer",
+          "notas",
+          "created_at",
+          "updated_at",
+          "vin",
+          "proceso"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "etapa_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "momento": {
+            "type": "string"
+          },
+          "fecha": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "conductor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "placa": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trailer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notas": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          },
+          "vin": {
+            "type": "string"
+          },
+          "proceso": {
+            "type": "string"
+          }
+        }
+      },
+      "InventarioDto": {
+        "required": [
+          "id",
+          "vin",
+          "marca",
+          "tipo_vehiculo",
+          "modelo",
+          "chasis",
+          "color",
+          "operacion",
+          "created_at",
+          "updated_at",
+          "etapas"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "vin": {
+            "type": "string"
+          },
+          "marca": {
+            "type": "string"
+          },
+          "tipo_vehiculo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "modelo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "chasis": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "color": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "operacion": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          },
+          "etapas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventarioEtapaDto"
+            }
+          }
+        }
+      },
+      "InventarioEtapaDto": {
+        "required": [
+          "id",
+          "orden",
+          "proceso",
+          "requiere_inspeccion",
+          "inspecciones"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "orden": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "proceso": {
+            "type": "string"
+          },
+          "requiere_inspeccion": {
+            "type": "boolean"
+          },
+          "inspecciones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InventarioInspeccionDto"
+            }
+          }
+        }
+      },
+      "InventarioInspeccionDto": {
+        "required": [
+          "id",
+          "etapa_id",
+          "usuario_id",
+          "momento",
+          "fecha",
+          "lat",
+          "lng",
+          "estado",
+          "conductor_nombre",
+          "placa",
+          "trailer",
+          "notas",
+          "created_at",
+          "updated_at",
+          "hallazgos",
+          "evidencias",
+          "transferencia"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "etapa_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "momento": {
+            "type": "string"
+          },
+          "fecha": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "conductor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "placa": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trailer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notas": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          },
+          "hallazgos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HallazgoDto"
+            }
+          },
+          "evidencias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenciaDto"
+            }
+          },
+          "transferencia": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TransferenciaDto"
+              }
+            ]
+          }
+        }
+      },
+      "ListadoPaginadoDto": {
+        "required": [
+          "rows",
+          "total",
+          "page",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ListadoVehiculoDto"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ListadoVehiculoDto": {
+        "required": [
+          "id",
+          "vin",
+          "marca",
+          "modelo",
+          "color",
+          "operacion",
+          "etapas",
+          "completas",
+          "novedades"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "vin": {
+            "type": "string"
+          },
+          "marca": {
+            "type": "string"
+          },
+          "modelo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "color": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "operacion": {
+            "type": "string"
+          },
+          "etapas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "novedades": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "LoginRequest": {
+        "required": [
+          "email",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "LoginResponse": {
+        "required": [
+          "token",
+          "usuario"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "usuario": {
+            "$ref": "#/components/schemas/UsuarioAutenticadoDto"
+          }
+        }
+      },
+      "OrdenSofasaDto": {
+        "required": [
+          "id",
+          "source_id",
+          "status_code",
+          "datetime_event",
+          "orden_number",
+          "orden_sap",
+          "origin_cedi",
+          "vin",
+          "make",
+          "model_description",
+          "dealer_code",
+          "destination_city",
+          "destination_address",
+          "loading_date",
+          "appointment",
+          "loading_dock",
+          "weight",
+          "vehiculo_id",
+          "synced_at",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "source_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status_code": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "datetime_event": {
+            "format": "date-time"
+          },
+          "orden_number": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "orden_sap": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "origin_cedi": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "vin": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "make": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model_description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dealer_code": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "destination_city": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "destination_address": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "loading_date": {
+            "format": "date-time"
+          },
+          "appointment": {
+            "format": "date-time"
+          },
+          "loading_dock": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "weight": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "vehiculo_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "synced_at": {
+            "format": "date-time"
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "PatronesDto": {
+        "required": [
+          "total",
+          "porProceso",
+          "porZona",
+          "porZonaProceso"
+        ],
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "porProceso": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConteoProcesoDto"
+            }
+          },
+          "porZona": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConteoZonaDto"
+            }
+          },
+          "porZonaProceso": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConteoZonaProcesoDto"
+            }
+          }
+        }
+      },
+      "ResultadoCargaDto": {
+        "required": [
+          "recibidos",
+          "creados",
+          "actualizados",
+          "fallidos",
+          "errores"
+        ],
+        "type": "object",
+        "properties": {
+          "recibidos": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "creados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "actualizados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fallidos": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "errores": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ErrorCargaDto"
+            }
+          }
+        }
+      },
+      "ResultadoIngestaDto": {
+        "required": [
+          "recibidas",
+          "guardadas",
+          "vehiculosCreados",
+          "vehiculosActualizados",
+          "errores"
+        ],
+        "type": "object",
+        "properties": {
+          "recibidas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "guardadas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "vehiculosCreados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "vehiculosActualizados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "errores": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ErrorIngestaDto"
+            }
+          }
+        }
+      },
+      "ResumenCierreDto": {
+        "required": [
+          "evidencias",
+          "hallazgos"
+        ],
+        "type": "object",
+        "properties": {
+          "evidencias": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hallazgos": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "SubirArchivoRequest": {
+        "required": [
+          "data",
+          "ext"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ext": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "TasaOperacionDto": {
+        "required": [
+          "operacion",
+          "total",
+          "conNovedad",
+          "tasaActual",
+          "lineaBase",
+          "variacion"
+        ],
+        "type": "object",
+        "properties": {
+          "operacion": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "conNovedad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tasaActual": {
+            "type": "number",
+            "format": "double"
+          },
+          "lineaBase": {
+            "type": "number",
+            "format": "double"
+          },
+          "variacion": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "TasaRechazoDto": {
+        "required": [
+          "tasaGlobal",
+          "totalMovilizadas",
+          "totalPendientes",
+          "totalConNovedad",
+          "totalNovedad",
+          "porOperacion"
+        ],
+        "type": "object",
+        "properties": {
+          "tasaGlobal": {
+            "type": "number",
+            "format": "double"
+          },
+          "totalMovilizadas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalPendientes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalConNovedad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalNovedad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "porOperacion": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TasaOperacionDto"
+            }
+          }
+        }
+      },
+      "TransferenciaDetalleDto": {
+        "required": [
+          "id",
+          "inspeccion_id",
+          "entrega_usuario_id",
+          "recibe_usuario_id",
+          "firmada",
+          "firmada_at",
+          "created_at",
+          "updated_at",
+          "entrega_nombre",
+          "recibe_nombre",
+          "firma_entrega",
+          "firma_recibe"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inspeccion_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "entrega_usuario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "recibe_usuario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "firmada": {
+            "type": "boolean"
+          },
+          "firmada_at": {
+            "format": "date-time"
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          },
+          "entrega_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recibe_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "firma_entrega": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "firma_recibe": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "TransferenciaDto": {
+        "required": [
+          "id",
+          "inspeccion_id",
+          "entrega_usuario_id",
+          "recibe_usuario_id",
+          "firmada",
+          "firmada_at",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inspeccion_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "entrega_usuario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "recibe_usuario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "firmada": {
+            "type": "boolean"
+          },
+          "firmada_at": {
+            "format": "date-time"
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "UsuarioAutenticadoDto": {
+        "required": [
+          "id",
+          "nombre",
+          "email",
+          "rol"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "rol": {
+            "type": "string"
+          }
+        }
+      },
+      "UsuarioDto": {
+        "required": [
+          "id",
+          "nombre",
+          "email",
+          "rol",
+          "subtipo_inspector",
+          "activo",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "rol": {
+            "type": "string"
+          },
+          "subtipo_inspector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "VehiculoBusquedaDto": {
+        "required": [
+          "vin",
+          "marca",
+          "modelo",
+          "color",
+          "operacion"
+        ],
+        "type": "object",
+        "properties": {
+          "vin": {
+            "type": "string"
+          },
+          "marca": {
+            "type": "string"
+          },
+          "modelo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "color": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "operacion": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "clsVehiculos"
+    },
+    {
+      "name": "clsUsuarios"
+    },
+    {
+      "name": "clsSofasa"
+    },
+    {
+      "name": "clsSalud"
+    },
+    {
+      "name": "clsReportes"
+    },
+    {
+      "name": "clsInspecciones"
+    },
+    {
+      "name": "clsAuth"
+    },
+    {
+      "name": "clsAsignaciones"
+    },
+    {
+      "name": "clsArchivos"
+    }
+  ]
+}

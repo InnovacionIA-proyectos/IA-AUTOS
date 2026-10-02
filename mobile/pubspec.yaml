@@ -1,0 +1,52 @@
+name: traza_autos
+description: "Traza Autos 360 - app movil de campo (inspecciones, evidencias y firmas con cola offline)."
+publish_to: 'none'
+
+# versionName+versionCode. El versionCode debe crecer en cada APK que se distribuya.
+version: 1.1.0+12
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  flutter_riverpod: ^3.4.3
+  go_router: ^17.5.0
+  dio: ^5.11.1
+  drift: ^2.35.1
+  drift_flutter: ^0.3.1
+  path_provider: ^2.1.6
+  path: ^1.9.1
+  flutter_secure_storage: ^11.2.0
+  camera: ^0.12.1
+  geolocator: ^14.0.1
+  connectivity_plus: ^7.3.2
+  intl: ^0.20.2
+  uuid: ^4.6.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.35.1
+  build_runner: ^2.15.1
+  mocktail: ^1.0.5
+  flutter_launcher_icons: ^0.14.4
+
+# Ícono de la app (regenerar con: dart run flutter_launcher_icons).
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/adaptive-icon.png"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/logo.png
+    - assets/diagrama-novedades.png

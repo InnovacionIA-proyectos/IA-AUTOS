@@ -1,0 +1,6 @@
+{
+  "apiUrl": "http://localhost:8080",
+  "apkUrl": "",
+  "inactividadMinutos": 30,
+  "proveedorLogin": "propio"
+}

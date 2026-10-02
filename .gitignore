@@ -30,3 +30,30 @@ coverage/
 .uploads/
 database/export/
 *.csv
+
+# Frontend (Angular) y Node
+node_modules/
+dist/
+.angular/
+.nx/
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Mobile (Flutter / Android)
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+.gradle/
+local.properties
+*.jks
+*.keystore
+key.properties
+**/android/app/debug
+**/android/app/profile
+**/android/app/release
+**/ios/Pods/

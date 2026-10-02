@@ -1,0 +1,5 @@
+#!/bin/sh
+# nginx ejecuta los .envsh con "source" antes de procesar las plantillas: el valor normalizado llega a la CSP.
+# API_URL sin barra final (una barra final en CSP restringiria las rutas permitidas).
+API_URL="${API_URL%/}"
+export API_URL

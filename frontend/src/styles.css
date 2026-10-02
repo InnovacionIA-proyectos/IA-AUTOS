@@ -1,0 +1,37 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '@fontsource/ibm-plex-mono/500.css';
+
+/*
+ * Tokens del sistema de diseño de Botero Soto (paleta de marca: azul #005AAB, verde #009A3C).
+ * Se conservan los mismos nombres de utilidades del frontend original (bg-primary, text-text-muted, border-border...).
+ */
+@theme {
+  --color-primary: #005aab;
+  --color-primary-hover: #004886;
+  --color-secondary: #1e7acb;
+  --color-accent: #009a3c;
+  --color-bg: #ffffff;
+  --color-surface: #f4f7fb;
+  --color-border: #d6e0ec;
+  --color-text-primary: #0f2347;
+  --color-text-muted: #5a7299;
+  --color-success: #0a7a34;
+  --color-warning: #e68a00;
+  --color-danger: #d32f2f;
+  --color-info: #1e7acb;
+
+  --font-sans: 'Inter Variable', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+}
