@@ -1,0 +1,86 @@
+name: CI Backend
+
+on:
+  push:
+    branches: [main, QA]
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci-backend.yml"
+  pull_request:
+    branches: [main, QA]
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci-backend.yml"
+
+permissions:
+  contents: read
+
+# Una sola ejecucion por rama: una nueva solicitud cancela la anterior (evita abrir conexiones de mas a la base real).
+concurrency:
+  group: ci-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Self-hosted (no ubuntu-latest): las pruebas del entorno real usan la base SQL Server de la red corporativa privada
+  # y el MinIO reales; un runner en la nube de GitHub no podria alcanzarlos.
+  # No se ejecuta en PR de forks: ese codigo externo correria en el runner corporativo con acceso a los secretos.
+  build-and-test:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, dokploy_]
+    # Este runner solo tiene Windows PowerShell (politica de ejecucion restringida) y cmd. Sin este default, cualquier
+    # "run:" sin "shell:" cae en PowerShell y falla con "la ejecucion de scripts esta deshabilitada".
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+
+      # DOTNET_INSTALL_DIR explicito: por defecto setup-dotnet instala en "C:\Program Files\dotnet" y la cuenta del runner
+      # no tiene permiso de escritura ahi. runner.tool_cache si es escribible por esa cuenta. El paso siguiente agrega esa
+      # carpeta al PATH porque setup-dotnet solo lo hace automaticamente para la ubicacion por defecto.
+      - name: Instalar .NET SDK
+        uses: actions/setup-dotnet@v4
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.tool_cache }}\dotnet
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Agregar dotnet al PATH
+        run: echo ${{ runner.tool_cache }}\dotnet>>"%GITHUB_PATH%"
+
+      - name: Restaurar dependencias
+        run: dotnet restore backend\IA-AUTOS.slnx
+
+      - name: Compilar (Release)
+        run: dotnet build backend\IA-AUTOS.slnx -c Release --no-restore
+
+      # No tocan ninguna base ni servicio externo.
+      - name: Pruebas unitarias
+        run: dotnet test backend\tests\IA-AUTOS.Tests.Unitarios -c Release --no-build --logger "trx;LogFileName=unitarias.trx" --results-directory TestResults
+
+      # SOLO LECTURA contra la base y el MinIO reales: solo SELECT y listados, sin insertar, actualizar ni borrar nada.
+      # Usan los mismos nombres de variable que backend/.env (ASP.NET Core las mapea solo, doble guion bajo). Los valores
+      # son secretos del repositorio; la lista completa esta en backend/.env.github.
+      #
+      # NO se ejecuta aqui IA-AUTOS.Tests.Integracion: sus pruebas borran y vuelven a crear los datos de negocio al inicio
+      # de cada prueba (en su propio contenedor Testcontainers) y NUNCA deben apuntar a la base real. Se corren en local
+      # con Docker: dotnet test backend/tests/IA-AUTOS.Tests.Integracion
+      - name: Pruebas contra el entorno real (solo lectura)
+        env:
+          ConnectionStrings__DefaultConnection: ${{ secrets.CONNECTIONSTRINGS_DEFAULTCONNECTION }}
+          Jwt__Secret: ${{ secrets.JWT_SECRET }}
+          Storage__S3__Endpoint: ${{ secrets.STORAGE_S3_ENDPOINT }}
+          Storage__S3__Bucket: ${{ secrets.STORAGE_S3_BUCKET }}
+          Storage__S3__Region: ${{ vars.STORAGE_S3_REGION || 'us-east-1' }}
+          Storage__S3__AccessKey: ${{ secrets.STORAGE_S3_ACCESSKEY }}
+          Storage__S3__SecretKey: ${{ secrets.STORAGE_S3_SECRETKEY }}
+        run: dotnet test backend\tests\IA-AUTOS.Tests.EntornoReal -c Release --no-build --logger "trx;LogFileName=entorno-real.trx" --results-directory TestResults
+
+      - name: Conservar resultados de las pruebas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-pruebas-backend
+          path: TestResults/*.trx
+          if-no-files-found: warn
+          retention-days: 14

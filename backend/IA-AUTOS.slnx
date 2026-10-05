@@ -6,6 +6,7 @@
     <Project Path="src/IA-AUTOS.Infraestructura/IA-AUTOS.Infraestructura.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/IA-AUTOS.Tests.EntornoReal/IA-AUTOS.Tests.EntornoReal.csproj" />
     <Project Path="tests/IA-AUTOS.Tests.Integracion/IA-AUTOS.Tests.Integracion.csproj" />
     <Project Path="tests/IA-AUTOS.Tests.Unitarios/IA-AUTOS.Tests.Unitarios.csproj" />
   </Folder>

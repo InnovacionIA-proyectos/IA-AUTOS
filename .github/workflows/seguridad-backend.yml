@@ -1,0 +1,81 @@
+name: Seguridad Backend
+
+# Analisis estatico (CodeQL) y escaneo de dependencias del backend. Corren en runners de GitHub (ubuntu-latest): solo
+# compilan, no necesitan la red corporativa ni secretos.
+on:
+  push:
+    branches: [main, QA]
+    paths:
+      - "backend/**"
+      - ".github/workflows/seguridad-backend.yml"
+  pull_request:
+    branches: [main, QA]
+    paths:
+      - "backend/**"
+      - ".github/workflows/seguridad-backend.yml"
+  # Tambien semanal: aparecen vulnerabilidades nuevas en paquetes que no han cambiado.
+  schedule:
+    - cron: "0 11 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seguridad-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codeql:
+    name: Analisis de codigo (CodeQL)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Iniciar CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: csharp
+          build-mode: manual
+
+      # Compilacion explicita de la solucion: el autobuild de CodeQL busca .sln/.csproj en la raiz y el backend vive en
+      # backend/ con un .slnx, asi que se indica el comando exacto.
+      - name: Compilar para el analisis
+        run: dotnet build backend/IA-AUTOS.slnx -c Release
+
+      - name: Analizar
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:csharp"
+
+  dependencias:
+    name: Escaneo de dependencias vulnerables
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restaurar dependencias
+        run: dotnet restore backend/IA-AUTOS.slnx
+
+      # "dotnet list package --vulnerable" termina con codigo 0 aunque encuentre vulnerabilidades, asi que se lee la salida
+      # en JSON: si aparece la clave "vulnerabilities" el paso falla (el formato JSON no depende del idioma del SDK).
+      - name: Buscar paquetes con vulnerabilidades (incluye transitivos)
+        run: |
+          dotnet list backend/IA-AUTOS.slnx package --vulnerable --include-transitive --format json > vulnerabilidades.json
+          if grep -q '"vulnerabilities"' vulnerabilidades.json; then
+            echo "::error::Hay paquetes NuGet con vulnerabilidades conocidas."
+            dotnet list backend/IA-AUTOS.slnx package --vulnerable --include-transitive
+            exit 1
+          fi
+          echo "Sin paquetes vulnerables."
