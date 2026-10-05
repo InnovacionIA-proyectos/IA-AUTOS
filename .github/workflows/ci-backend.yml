@@ -33,7 +33,7 @@ jobs:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # DOTNET_INSTALL_DIR explicito: por defecto setup-dotnet instala en "C:\Program Files\dotnet" y la cuenta del runner
       # no tiene permiso de escritura ahi. runner.tool_cache si es escribible por esa cuenta. El paso siguiente agrega esa
