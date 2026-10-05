@@ -71,7 +71,7 @@ jobs:
           Jwt__Secret: ${{ secrets.JWT_SECRET }}
           Storage__S3__Endpoint: ${{ secrets.STORAGE_S3_ENDPOINT }}
           Storage__S3__Bucket: ${{ secrets.STORAGE_S3_BUCKET }}
-          Storage__S3__Region: ${{ vars.STORAGE_S3_REGION || 'us-east-1' }}
+          Storage__S3__Region: ${{ secrets.STORAGE_S3_REGION }}
           Storage__S3__AccessKey: ${{ secrets.STORAGE_S3_ACCESSKEY }}
           Storage__S3__SecretKey: ${{ secrets.STORAGE_S3_SECRETKEY }}
         run: dotnet test backend\tests\IA-AUTOS.Tests.EntornoReal -c Release --no-build --logger "trx;LogFileName=entorno-real.trx" --results-directory TestResults

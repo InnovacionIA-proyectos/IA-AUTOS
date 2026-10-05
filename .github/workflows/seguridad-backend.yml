@@ -2,6 +2,7 @@ name: Seguridad Backend
 
 # Analisis estatico (CodeQL) y escaneo de dependencias del backend. Corren en runners de GitHub (ubuntu-latest): solo
 # compilan, no necesitan la red corporativa ni secretos.
+# Repo privado sin GitHub Advanced Security: CodeQL no sube resultados a la pestaña Security; se guardan como artefacto.
 on:
   push:
     branches: [main, QA]
@@ -30,8 +31,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: read
-      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -50,10 +49,45 @@ jobs:
       - name: Compilar para el analisis
         run: dotnet build backend/IA-AUTOS.slnx -c Release
 
+      # upload: never -> no se envia el SARIF a GitHub (requiere Advanced Security en repos privados).
+      # upload-database: false -> tampoco se sube la base de datos de CodeQL.
       - name: Analizar
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:csharp"
+          output: sarif-results
+          upload: never
+          upload-database: false
+
+      - name: Resumen de hallazgos
+        if: always()
+        run: |
+          SARIF=$(ls sarif-results/*.sarif 2>/dev/null | head -n 1)
+          if [ -z "$SARIF" ]; then
+            echo "::warning::No se genero el archivo SARIF."
+            exit 0
+          fi
+          TOTAL=$(jq '[.runs[].results[]?] | length' "$SARIF")
+          {
+            echo "### Resultados de CodeQL"
+            echo "Hallazgos: **$TOTAL**"
+            echo ""
+            echo "Descarga el artefacto \`codeql-sarif\` para ver el detalle."
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$TOTAL" -gt 0 ]; then
+            echo "::warning::CodeQL encontro $TOTAL hallazgo(s). Revisa el artefacto codeql-sarif."
+            # Para que el job falle cuando haya hallazgos, descomenta la siguiente linea:
+            # exit 1
+          fi
+
+      - name: Guardar resultados SARIF
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif
+          path: sarif-results
+          if-no-files-found: warn
+          retention-days: 30
 
   dependencias:
     name: Escaneo de dependencias vulnerables
