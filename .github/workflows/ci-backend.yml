@@ -66,6 +66,7 @@ jobs:
       # de cada prueba (en su propio contenedor Testcontainers) y NUNCA deben apuntar a la base real. Se corren en local
       # con Docker: dotnet test backend/tests/IA-AUTOS.Tests.Integracion
       - name: Pruebas contra el entorno real (solo lectura)
+        if: github.actor != 'dependabot[bot]'
         env:
           ConnectionStrings__DefaultConnection: ${{ secrets.CONNECTIONSTRINGS_DEFAULTCONNECTION }}
           Jwt__Secret: ${{ secrets.JWT_SECRET }}
