@@ -25,7 +25,7 @@ dependencies:
   camera: ^0.12.1
   geolocator: ^14.0.1
   connectivity_plus: ^7.3.2
-  intl: ^0.20.2
+  intl: ^0.20.3
   uuid: ^4.6.0
 
 dev_dependencies:
