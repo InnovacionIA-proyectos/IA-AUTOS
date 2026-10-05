@@ -39,7 +39,7 @@ jobs:
       # no tiene permiso de escritura ahi. runner.tool_cache si es escribible por esa cuenta. El paso siguiente agrega esa
       # carpeta al PATH porque setup-dotnet solo lo hace automaticamente para la ubicacion por defecto.
       - name: Instalar .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         env:
           DOTNET_INSTALL_DIR: ${{ runner.tool_cache }}\dotnet
         with:
