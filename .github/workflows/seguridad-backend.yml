@@ -31,6 +31,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # La accion de CodeQL consulta los datos de la ejecucion (API de workflow runs) al terminar el analisis; sin este
+      # permiso falla con "Resource not accessible by integration" aunque el analisis haya salido bien.
+      actions: read
     steps:
       - uses: actions/checkout@v4
 

@@ -93,7 +93,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     # Self-hosted (no ubuntu-latest): el webhook de Dokploy vive en la red privada corporativa y no es alcanzable desde
     # los runners en la nube de GitHub.
-    runs-on: [self-hosted, dokploy]
+    runs-on: [self-hosted, dokploy_]
     steps:
       - name: Mostrar informacion del deploy
         shell: cmd
