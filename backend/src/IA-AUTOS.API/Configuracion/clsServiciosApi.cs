@@ -18,6 +18,7 @@ public static class clsServiciosApi
     public const string POLITICA_CORS = "api";
     public const string CLAVE_PROXY = "Proxy:ConfiarEnEncabezadosReenviados";
     public const string CLAVE_DOCUMENTACION = "Documentacion:Habilitada";
+    public const string RUTA_SWAGGER = "/swagger";
 
     public static IServiceCollection AddApi(this IServiceCollection servicios, IConfiguration configuracion)
     {
@@ -140,13 +141,19 @@ public static class clsServiciosApi
             }
         });
 
+        var documentacionHabilitada = app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>(CLAVE_DOCUMENTACION);
+
         app.Use(async (contexto, siguiente) =>
         {
             var cabeceras = contexto.Response.Headers;
             cabeceras.XContentTypeOptions = "nosniff";
             cabeceras.XFrameOptions = "DENY";
             cabeceras["Referrer-Policy"] = "no-referrer";
-            cabeceras.ContentSecurityPolicy = "default-src 'none'; frame-ancestors 'none'";
+            // La API solo devuelve JSON: no necesita cargar nada. La interfaz de documentacion (/swagger) si necesita sus
+            // propios scripts y estilos, asi que solo esa ruta (y solo si la documentacion esta habilitada) tiene una politica mas amplia.
+            cabeceras.ContentSecurityPolicy = documentacionHabilitada && contexto.Request.Path.StartsWithSegments(RUTA_SWAGGER)
+                ? "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'"
+                : "default-src 'none'; frame-ancestors 'none'";
             contexto.Response.OnStarting(() =>
             {
                 if (!cabeceras.ContainsKey("Cache-Control"))
@@ -169,9 +176,18 @@ public static class clsServiciosApi
         app.UseAuthorization();
         app.MapControllers();
 
-        if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>(CLAVE_DOCUMENTACION))
+        if (documentacionHabilitada)
         {
             app.MapOpenApi();
+
+            // Interfaz Swagger sobre el contrato que ya genera la API: /swagger (el boton Authorize acepta el token Bearer).
+            app.UseSwaggerUI(o =>
+            {
+                o.RoutePrefix = RUTA_SWAGGER.TrimStart('/');
+                o.DocumentTitle = "IA-AUTOS API";
+                o.SwaggerEndpoint("/openapi/v1.json", "IA-AUTOS API v1");
+                o.EnablePersistAuthorization();
+            });
         }
 
         return app;
