@@ -1,16 +1,24 @@
-# Fuera del contexto de compilacion de la imagen
+# El contexto de compilacion del backend es la raiz del repositorio (ver backend/Dockerfile): se excluye todo lo que
+# no entra en la imagen para que el envio del contexto sea rapido (sobre todo frontend/node_modules).
 **/bin/
 **/obj/
 .git/
+.github/
 .vs/
 .idea/
 .vscode/
-TestResults/
-coverage/
-database/export/
-.env
-.env.*
-!.env.example
+**/TestResults/
+**/coverage/
+**/.env
+**/.env.*
+!**/.env.example
 *.log
-.uploads/
+**/.uploads/
+
+# Otras piezas del repositorio
+frontend/
+mobile/
 docs/
+backend/docs/
+backend/database/
+backend/tests/

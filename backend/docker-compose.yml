@@ -49,7 +49,10 @@ services:
       - "9090:9090"
 
   api:
-    build: .
+    # Mismo contexto y Dockerfile que en Dokploy: contexto = raiz del repositorio.
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
     # Los servicios locales solo se esperan si el profile "local" esta activo.
     depends_on:
       db-init:
