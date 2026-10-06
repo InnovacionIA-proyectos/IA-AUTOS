@@ -15,10 +15,11 @@ on:
 permissions:
   contents: read
 
-# Una sola ejecucion por rama: una nueva solicitud cancela la anterior (evita abrir conexiones de mas a la base real).
+# Una sola ejecucion por rama. En PR una nueva solicitud cancela la anterior (evita abrir conexiones de mas a la base real);
+# en push a main NO se cancela, para no cortar un despliegue a medias: la siguiente espera su turno.
 concurrency:
   group: ci-backend-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Self-hosted (no ubuntu-latest): las pruebas del entorno real usan la base SQL Server de la red corporativa privada
@@ -85,3 +86,28 @@ jobs:
           path: TestResults/*.trx
           if-no-files-found: warn
           retention-days: 14
+
+  # CD: solo despues de que el CI pase y unicamente en push a main (nunca en PR ni en QA).
+  deploy:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Self-hosted (no ubuntu-latest): el webhook de Dokploy vive en la red privada corporativa y no es alcanzable desde
+    # los runners en la nube de GitHub.
+    runs-on: [self-hosted, dokploy]
+    steps:
+      - name: Mostrar informacion del deploy
+        shell: cmd
+        run: |
+          echo Branch: ${{ github.ref }}
+          echo Commit: ${{ github.sha }}
+          echo Evento: ${{ github.event_name }}
+
+      # DOKPLOY_DEPLOY_WEBHOOK_URL es un secreto del repositorio (Dokploy > aplicacion > Deployments > Webhook URL).
+      # -f hace que el job falle si Dokploy responde con error (4xx/5xx).
+      - name: Disparar despliegue en Dokploy
+        shell: cmd
+        run: |
+          curl -f -X POST "${{ secrets.DOKPLOY_DEPLOY_WEBHOOK_URL }}" ^
+            -H "Content-Type: application/json" ^
+            -H "X-GitHub-Event: push" ^
+            -d "{\"ref\":\"${{ github.ref }}\",\"repository\":{\"full_name\":\"${{ github.repository }}\"}}"
