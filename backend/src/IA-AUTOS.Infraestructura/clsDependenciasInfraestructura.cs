@@ -1,11 +1,13 @@
 using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Auth.Services;
+using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Reportes;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Sofasa;
 using IAAutos.Aplicacion.Vehiculos;
 using IAAutos.Dominio.Asignaciones;
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Auditoria;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Custodia;
@@ -14,6 +16,7 @@ using IAAutos.Dominio.Sofasa;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Infraestructura.Almacenamiento;
+using IAAutos.Infraestructura.Catalogos;
 using IAAutos.Infraestructura.Persistencia;
 using IAAutos.Infraestructura.Portal;
 using IAAutos.Infraestructura.Reportes;
@@ -78,7 +81,7 @@ public static class clsDependenciasInfraestructura
         servicios.Configure<clsOpcionesPortalTi>(configuracion.GetSection(clsOpcionesPortalTi.SECCION));
         servicios.AddScoped<IPortalUsuarios, clsPortalUsuarios>();
         servicios.AddScoped<IVehiculoRepository, clsVehiculoRepository>();
-        servicios.AddScoped<IPuntoCustodiaRepository, clsPuntoCustodiaRepository>();
+        RegistrarCatalogos(servicios);
         servicios.AddScoped<IEtapaRepository, clsEtapaRepository>();
         servicios.AddScoped<IInspeccionRepository, clsInspeccionRepository>();
         servicios.AddScoped<ITransferenciaCustodiaRepository, clsTransferenciaCustodiaRepository>();
@@ -86,5 +89,24 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IOrdenSofasaRepository, clsOrdenSofasaRepository>();
         servicios.AddScoped<IAuditoriaRepository, clsAuditoriaRepository>();
         return servicios;
+    }
+
+    /// <summary>Catalogos maestros: cada uno se registra como ICatalogo y el servicio de aplicacion los administra y los cachea.</summary>
+    private static void RegistrarCatalogos(IServiceCollection servicios)
+    {
+        servicios.AddMemoryCache();
+        servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsEtapaCatalogo>(
+            p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.ETAPAS, clsEtapaCatalogo.Crear));
+        servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsPuntoCustodia>(
+            p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.PUNTOS_CUSTODIA, clsPuntoCustodia.Crear));
+        servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsTipoUnidadTransportadora>(
+            p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.TIPOS_UNIDAD, clsTipoUnidadTransportadora.Crear));
+        servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsClaseDano>(
+            p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.CLASES_DANO, clsClaseDano.Crear));
+        servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsTamanoDano>(
+            p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.TAMANOS_DANO, clsTamanoDano.Crear));
+        servicios.AddScoped<ICatalogo, clsCatalogoNiveles>();
+        servicios.AddScoped<ICatalogo, clsCatalogoVistas>();
+        servicios.AddScoped<ICatalogo, clsCatalogoCuadrantes>();
     }
 }

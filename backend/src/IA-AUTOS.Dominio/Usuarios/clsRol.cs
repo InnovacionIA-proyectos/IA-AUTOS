@@ -20,6 +20,9 @@ public static class clsRol
     /// <summary>Administracion de datos maestros (carga de VINs, asignaciones, etapas). super_admin incluido.</summary>
     public static readonly string[] ADMINISTRACION = [ADMIN, SUPER_ADMIN];
 
+    /// <summary>Administracion de los catalogos maestros (etapas, lugares, clases y tamanos de dano, vistas, cuadrantes...).</summary>
+    public static readonly string[] ADMINISTRACION_CATALOGOS = [ADMIN, SUPER_ADMIN, COORDINADOR_CALIDAD];
+
     /// <summary>Gestion de usuarios.</summary>
     public static readonly string[] GESTION_USUARIOS = [SUPER_ADMIN];
 

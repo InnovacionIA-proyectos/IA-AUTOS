@@ -1,5 +1,6 @@
 using System.Globalization;
 using FluentValidation;
+using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Dominio.Comun;
@@ -30,6 +31,7 @@ public sealed class clsInspeccionesService(
     IAuditor auditor,
     IUsuarioActual actual,
     IReloj reloj,
+    ICatalogosLectura catalogos,
     IOptions<clsOpcionesSeguridad> seguridad,
     IValidator<CrearInspeccionRequest> validadorInspeccion,
     IValidator<CrearHallazgoRequest> validadorHallazgo,
@@ -64,7 +66,7 @@ public sealed class clsInspeccionesService(
     }
 
     public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspeccionesRequest solicitud, CancellationToken ct = default) =>
-        await consultas.ListarAsync(ParsearFiltros(solicitud), LIMITE_LISTADO, ct);
+        await consultas.ListarAsync(await ParsearFiltrosAsync(solicitud, ct), LIMITE_LISTADO, ct);
 
     public async Task<InformeDetalleDto> ObtenerInformeAsync(Guid id, CancellationToken ct = default) =>
         await consultas.ObtenerInformeAsync(id, ct)
@@ -72,7 +74,7 @@ public sealed class clsInspeccionesService(
 
     public async Task<HallazgoDto> AgregarHallazgoAsync(Guid inspeccionId, CrearHallazgoRequest solicitud, CancellationToken ct = default)
     {
-        await validadorHallazgo.ValidarOLanzarAsync(solicitud, ct);
+        await ValidarHallazgoAsync(solicitud, ct);
         var inspeccion = await ObtenerParaEscrituraAsync(inspeccionId, ct);
         inspeccion.AsegurarEditable();
 
@@ -179,7 +181,49 @@ public sealed class clsInspeccionesService(
         return inspeccion;
     }
 
-    private static FiltrosInspecciones ParsearFiltros(FiltrosInspeccionesRequest s)
+    /// <summary>
+    /// Valida el cuerpo y ademas que la clase y el tamano existan en el catalogo y esten activos (un valor inactivo ya no se ofrece para
+    /// hallazgos nuevos). Los errores de ambas validaciones se devuelven juntos.
+    /// </summary>
+    private async Task ValidarHallazgoAsync(CrearHallazgoRequest solicitud, CancellationToken ct)
+    {
+        var deCatalogo = new Dictionary<string, string[]>();
+        if (!string.IsNullOrWhiteSpace(solicitud.ClaseDano)
+            && !(await catalogos.CodigosAsync(clsNombresCatalogo.CLASES_DANO, soloActivos: true, ct)).Contains(solicitud.ClaseDano))
+        {
+            deCatalogo["clase_dano"] = ["Clase de daño inválida"];
+        }
+
+        if (!string.IsNullOrWhiteSpace(solicitud.TamanoDano)
+            && !(await catalogos.CodigosAsync(clsNombresCatalogo.TAMANOS_DANO, soloActivos: true, ct)).Contains(solicitud.TamanoDano))
+        {
+            deCatalogo["tamano_dano"] = ["Tamaño de daño inválido"];
+        }
+
+        try
+        {
+            await validadorHallazgo.ValidarOLanzarAsync(solicitud, ct);
+        }
+        catch (clsValidacionException ex) when (deCatalogo.Count > 0 && ex.Detalles is Dictionary<string, object> detalles
+            && detalles.TryGetValue("fieldErrors", out var campos) && campos is Dictionary<string, string[]> porCampo)
+        {
+            foreach (var (campo, mensajes) in deCatalogo)
+            {
+                porCampo.TryAdd(campo, mensajes);
+            }
+
+            throw;
+        }
+
+        if (deCatalogo.Count > 0)
+        {
+            throw new clsValidacionException(
+                "Datos inválidos",
+                new Dictionary<string, object> { ["formErrors"] = Array.Empty<string>(), ["fieldErrors"] = deCatalogo });
+        }
+    }
+
+    private async Task<FiltrosInspecciones> ParsearFiltrosAsync(FiltrosInspeccionesRequest s, CancellationToken ct)
     {
         var errores = new Dictionary<string, string[]>();
 
@@ -208,7 +252,8 @@ public sealed class clsInspeccionesService(
 
         var momento = Catalogo(s.Momento, clsMomento.VALORES, "momento", errores);
         var estado = Catalogo(s.Estado, clsEstadoInspeccion.VALORES, "estado", errores);
-        var proceso = Catalogo(s.Proceso, clsPuntoCustodiaNombre.VALORES, "proceso", errores);
+        // El proceso es una etapa del catalogo; se aceptan tambien las inactivas porque hay informes historicos de ellas.
+        var proceso = Catalogo(s.Proceso, await catalogos.CodigosAsync(clsNombresCatalogo.ETAPAS, soloActivos: false, ct), "proceso", errores);
         var desde = Fecha(s.Desde, "desde", errores);
         var hasta = Fecha(s.Hasta, "hasta", errores);
 

@@ -82,10 +82,12 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
         }
 
         var etapas = await (from e in contexto.Etapas.AsNoTracking()
-                            join p in contexto.PuntosCustodia on e.PuntoCustodiaId equals p.Id
+                            join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id
+                            join l in contexto.PuntosCustodia on e.PuntoCustodiaId equals l.Id into lugares
+                            from l in lugares.DefaultIfEmpty()
                             where e.VehiculoId == vehiculo.Id
                             orderby e.Orden
-                            select new { Etapa = e, Proceso = p.Nombre }).ToListAsync(ct);
+                            select new { Etapa = e, Proceso = p.Codigo, Lugar = (string?)l.Nombre }).ToListAsync(ct);
         var etapaIds = etapas.Select(e => e.Etapa.Id).ToList();
 
         var inspecciones = await contexto.Inspecciones.AsNoTracking()
@@ -103,6 +105,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
             e.Etapa.Id,
             e.Etapa.Orden,
             e.Proceso,
+            e.Lugar,
             e.Etapa.RequiereInspeccion,
             inspecciones.Where(i => i.EtapaId == e.Etapa.Id).Select(i => new InventarioInspeccionDto(
                 i.Id, i.EtapaId, i.UsuarioId, i.Momento, i.Fecha, i.Lat, i.Lng, i.Estado, i.ConductorNombre, i.Placa, i.Trailer, i.Notas,

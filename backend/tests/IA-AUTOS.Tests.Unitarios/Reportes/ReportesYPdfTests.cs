@@ -109,6 +109,7 @@ public class GeneradorPdfInventarioTests
             Guid.NewGuid(),
             orden,
             orden == 1 ? "cargue" : "transporte",
+            null,
             true,
             [
                 new InventarioInspeccionDto(

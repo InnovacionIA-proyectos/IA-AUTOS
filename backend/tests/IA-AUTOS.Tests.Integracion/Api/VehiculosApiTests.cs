@@ -40,7 +40,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal(6, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas"));
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblVehiculos WHERE Vin = '9FBHSR4E8PM000001'"));
         var ruta = await Sembrador.EscalarAsync(
-            "SELECT STRING_AGG(p.Nombre, ',') WITHIN GROUP (ORDER BY e.Orden) FROM dbo.tblEtapas e JOIN dbo.tblPuntosCustodia p ON p.Id = e.PuntoCustodiaId JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = '9FBHSR4E8PM000002'");
+            "SELECT STRING_AGG(c.Codigo, ',') WITHIN GROUP (ORDER BY e.Orden) FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = '9FBHSR4E8PM000002'");
         Assert.Equal("cargue,transporte,descargue", ruta);
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'vehiculos.cargar'"));
     }

@@ -46,8 +46,8 @@ public sealed class CrearHallazgoRequestValidator : AbstractValidator<CrearHalla
     {
         RuleFor(x => x.ParteVehiculo).Must(p => !string.IsNullOrWhiteSpace(p)).WithMessage("La parte del vehículo es requerida")
             .Must(p => p is null || p.Trim().Length <= 80).WithMessage("La parte del vehículo admite máximo 80 caracteres");
-        RuleFor(x => x.ClaseDano).Must(c => c is not null && clsClaseDano.VALORES.Contains(c)).WithMessage("Clase de daño inválida");
-        RuleFor(x => x.TamanoDano).Must(t => t is not null && clsTamanoDano.VALORES.Contains(t)).WithMessage("Tamaño de daño inválido");
+        RuleFor(x => x.ClaseDano).Must(c => !string.IsNullOrWhiteSpace(c)).WithMessage("Clase de daño inválida");
+        RuleFor(x => x.TamanoDano).Must(t => !string.IsNullOrWhiteSpace(t)).WithMessage("Tamaño de daño inválido");
         RuleFor(x => x.CoordsDiagrama)
             .Must(c => c is { X: >= 0 and <= 1, Y: >= 0 and <= 1 })
             .When(x => x.CoordsDiagrama is not null)

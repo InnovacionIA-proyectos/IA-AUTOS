@@ -16,22 +16,3 @@ public static class clsEstadoInspeccion
 
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { BORRADOR, CERRADA };
 }
-
-public static class clsClaseDano
-{
-    public static readonly IReadOnlySet<string> VALORES = new HashSet<string>
-    {
-        "deformacion", "rotura", "cortado", "perforacion", "golpe",
-        "mancha", "raya_pintar", "desconchado", "particulas", "faltante",
-    };
-}
-
-public static class clsTamanoDano
-{
-    public const string REQUIERE_REEMPLAZO = "requiere_reemplazo";
-
-    public static readonly IReadOnlySet<string> VALORES = new HashSet<string>
-    {
-        "1_5cm", "5_10cm", "10_20cm", "mas_20cm", REQUIERE_REEMPLAZO, "mas_10_particulas",
-    };
-}

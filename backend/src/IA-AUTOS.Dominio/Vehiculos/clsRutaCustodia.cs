@@ -2,27 +2,26 @@ using IAAutos.Dominio.Comun;
 
 namespace IAAutos.Dominio.Vehiculos;
 
-/// <summary>Servicio de dominio: arma la ruta estandar Cargue, Transporte, Descargue de un vehiculo.</summary>
+/// <summary>Servicio de dominio: arma la ruta estandar de un vehiculo con las etapas activas del catalogo (hoy Cargue, Transporte, Descargue).</summary>
 public static class clsRutaCustodia
 {
     /// <summary>
-    /// Devuelve las etapas de la ruta estandar. Falla si el catalogo no contiene alguno de los puntos.
+    /// Devuelve una etapa por cada etapa del catalogo recibida, en el mismo orden (1, 2, 3...). Falla si el catalogo no tiene etapas.
     /// </summary>
     public static IReadOnlyList<clsEtapa> CrearEtapasEstandar(
         Guid vehiculoId,
-        IReadOnlyDictionary<string, Guid> puntoIdPorNombre,
+        IReadOnlyList<Guid> etapasCatalogoOrdenadas,
         DateTimeOffset ahora)
     {
-        var etapas = new List<clsEtapa>(clsPuntoCustodiaNombre.RUTA_CARGA.Length);
-        for (var i = 0; i < clsPuntoCustodiaNombre.RUTA_CARGA.Length; i++)
+        if (etapasCatalogoOrdenadas.Count == 0)
         {
-            var nombre = clsPuntoCustodiaNombre.RUTA_CARGA[i];
-            if (!puntoIdPorNombre.TryGetValue(nombre, out var puntoId))
-            {
-                throw new clsErrorInternoException($"Falta el punto de custodia \"{nombre}\" en el catálogo");
-            }
+            throw new clsErrorInternoException("El catálogo de etapas no tiene valores activos para armar la ruta");
+        }
 
-            etapas.Add(clsEtapa.Crear(vehiculoId, puntoId, i + 1, true, ahora));
+        var etapas = new List<clsEtapa>(etapasCatalogoOrdenadas.Count);
+        for (var i = 0; i < etapasCatalogoOrdenadas.Count; i++)
+        {
+            etapas.Add(clsEtapa.Crear(vehiculoId, etapasCatalogoOrdenadas[i], null, i + 1, true, ahora));
         }
 
         return etapas;

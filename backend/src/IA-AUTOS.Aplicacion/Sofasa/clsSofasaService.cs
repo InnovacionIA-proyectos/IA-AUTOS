@@ -1,3 +1,4 @@
+using IAAutos.Aplicacion.Catalogos;
 using System.Globalization;
 using FluentValidation;
 using IAAutos.Aplicacion.Comun;
@@ -36,7 +37,7 @@ public interface IConsultasSofasa
 public sealed class clsSofasaService(
     IVehiculoRepository vehiculos,
     IEtapaRepository etapas,
-    IPuntoCustodiaRepository puntos,
+    ICatalogosLectura catalogos,
     IOrdenSofasaRepository ordenes,
     IConsultasSofasa consultas,
     IUnidadDeTrabajo unidadDeTrabajo,
@@ -56,7 +57,7 @@ public sealed class clsSofasaService(
             return new ResultadoIngestaDto(0, 0, 0, 0, []);
         }
 
-        var materializador = new clsMaterializadorVehiculos(vehiculos, etapas, puntos, reloj);
+        var materializador = new clsMaterializadorVehiculos(vehiculos, etapas, catalogos, reloj);
         var vines = lote.Select(o => Limpiar(o.Vin)).Where(v => v is not null).Select(v => clsVin.Normalizar(v!)).ToList();
         await materializador.PrepararAsync(vines, ct);
 

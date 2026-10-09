@@ -12,14 +12,13 @@ internal sealed class clsConsultasReportes(clsAppDbContext contexto) : IConsulta
 
     public async Task<(IReadOnlyList<ConteoProcesoDto>, IReadOnlyList<ConteoZonaDto>, IReadOnlyList<ConteoZonaProcesoDto>)> ObtenerPatronesAsync(CancellationToken ct = default)
     {
-        var procesos = clsPuntoCustodiaNombre.PROCESOS_ANALISIS;
         var movilizados = contexto.Set<clsVehiculoMovilizado>().Select(m => m.VehiculoId);
         var hallazgos = from h in contexto.Hallazgos.AsNoTracking()
                         join i in contexto.Inspecciones on h.InspeccionId equals i.Id
                         join e in contexto.Etapas on i.EtapaId equals e.Id
-                        join p in contexto.PuntosCustodia on e.PuntoCustodiaId equals p.Id
-                        where movilizados.Contains(e.VehiculoId) && procesos.Contains(p.Nombre)
-                        select new { Proceso = p.Nombre, Parte = h.ParteVehiculo };
+                        join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id
+                        where movilizados.Contains(e.VehiculoId)
+                        select new { Proceso = p.Codigo, Parte = h.ParteVehiculo };
 
         var porProceso = await hallazgos.GroupBy(x => x.Proceso)
             .Select(g => new { g.Key, Total = g.Count() })

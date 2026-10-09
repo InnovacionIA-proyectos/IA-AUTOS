@@ -89,12 +89,13 @@ al usuario y use `code` (no el texto) para decidir qué hacer.
 | `rol` | `inspector`, `conductor`, `coordinador_calidad`, `comercial`, `admin`, `super_admin` |
 | `subtipo_inspector` | `importacion`, `nacional`, `export_preembarque`, `export_recibido` |
 | `operacion` (vehículo) | `importacion`, `exportacion`, `nacional` |
-| `proceso` (punto de custodia) | `cargue`, `punto_origen`, `certificadora`, `punto_destino`, `transporte`, `descargue`, `concesionario` |
 | `momento` (inspección) | `check_in`, `check_out`, `informe` |
 | `estado` (inspección) | `borrador`, `cerrada` |
-| `clase_dano` | `deformacion`, `rotura`, `cortado`, `perforacion`, `golpe`, `mancha`, `raya_pintar`, `desconchado`, `particulas`, `faltante` |
-| `tamano_dano` | `1_5cm`, `5_10cm`, `10_20cm`, `mas_20cm`, `requiere_reemplazo`, `mas_10_particulas` |
 | `tipo` (listado de vehículos) | `movilizados`, `pendientes`, `novedad` |
+
+> **Catálogos administrables.** El `proceso` (etapa), los lugares, la `clase_dano`, el `tamano_dano`, los tipos de unidad, los niveles de severidad,
+> las vistas de foto y los cuadrantes **no son listas fijas**: se leen de [`GET /api/catalogos`](#catálogos-maestros) y los administra TI o el
+> coordinador de calidad. Los valores iniciales de `proceso` son `cargue`, `transporte` y `descargue`.
 
 ---
 
@@ -309,7 +310,7 @@ transferencia.
   "operacion": "nacional", "created_at": "…", "updated_at": "…",
   "etapas": [
     {
-      "id": "uuid", "orden": 1, "proceso": "cargue", "requiere_inspeccion": true,
+      "id": "uuid", "orden": 1, "proceso": "cargue", "lugar": null, "requiere_inspeccion": true,
       "inspecciones": [
         { "id": "uuid", "etapa_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": 6.2, "lng": -75.5,
           "estado": "cerrada", "conductor_nombre": null, "placa": null, "trailer": null, "notas": null,
@@ -344,18 +345,28 @@ Administración. `201` con la asignación.
 ```
 
 ### `POST /api/etapas`
-Administración. Define una etapa de la ruta de un VIN. `201`.
+Administración. Define un tramo de la ruta de un VIN: una **etapa del catálogo** y, si se conoce, el **lugar** donde se hace. `201`.
 
 ```json
-{ "vehiculo_id": "uuid", "punto_custodia_id": "uuid", "orden": 1, "requiere_inspeccion": true }
+{ "vehiculo_id": "uuid", "etapa_catalogo_id": "uuid", "punto_custodia_id": "uuid", "orden": 1, "requiere_inspeccion": true }
 ```
 
-`orden` es un entero ≥ 1; `requiere_inspeccion` es opcional (por defecto `true`; `false` significa que solo exige firma).
-Un `orden` repetido responde `409`; un vehículo o punto inexistente, `404`.
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `vehiculo_id` | sí | UUID de un vehículo existente |
+| `etapa_catalogo_id` | sí | `id` de un valor **activo** de `etapas` (antes se enviaba `punto_custodia_id` con el proceso) |
+| `punto_custodia_id` | no | `id` de un lugar **activo** de `puntos-custodia`; `null` o ausente = sin lugar |
+| `orden` | sí | entero ≥ 1, único por vehículo |
+| `requiere_inspeccion` | no | por defecto `true`; `false` significa que solo exige firma |
+
+Un `orden` repetido responde `409`; un vehículo inexistente, `404`; una etapa o un lugar inexistente o inactivo, `400`.
 
 ```json
-{ "id": "uuid", "vehiculo_id": "uuid", "punto_custodia_id": "uuid", "orden": 1, "requiere_inspeccion": true, "created_at": "…", "updated_at": "…" }
+{ "id": "uuid", "vehiculo_id": "uuid", "etapa_catalogo_id": "uuid", "punto_custodia_id": null, "orden": 1, "requiere_inspeccion": true, "created_at": "…", "updated_at": "…" }
 ```
+
+Los vehículos que se cargan (`POST /api/vehiculos/cargar` o la ingesta Sofasa) reciben automáticamente una etapa por cada valor **activo**
+de `etapas`, en su `orden`, sin lugar.
 
 ---
 
@@ -402,7 +413,7 @@ Autenticado. Listado de hasta **200** informes. Todos los filtros son opcionales
 | `usuarioId` | UUID del inspector |
 | `momento` | `check_in`, `check_out` o `informe` |
 | `estado` | `borrador` o `cerrada` |
-| `proceso` | `cargue`, `punto_origen`, `certificadora`, `punto_destino`, `transporte`, `descargue` o `concesionario` |
+| `proceso` | `codigo` de una etapa del catálogo `etapas` (por ejemplo `cargue`, `transporte` o `descargue`), activa o no |
 | `desde`, `hasta` | fecha ISO |
 
 Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es el `InspeccionDto` más `vin` y `proceso`.
@@ -414,7 +425,7 @@ Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de
 {
   "id": "uuid", "etapa_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": null, "lng": null,
   "estado": "cerrada", "conductor_nombre": null, "placa": null, "trailer": null, "notas": null, "created_at": "…", "updated_at": "…",
-  "vin": "…", "marca": "…", "modelo": null, "proceso": "cargue", "requiere_inspeccion": true,
+  "vin": "…", "marca": "…", "modelo": null, "proceso": "cargue", "lugar": null, "requiere_inspeccion": true,
   "inspector_nombre": "Ana Pérez", "ninera": "ABC123",
   "hallazgos": [ /* HallazgoDto */ ],
   "evidencias": [ /* EvidenciaDto */ ],
@@ -434,8 +445,8 @@ Campo (creador de la inspección o administrador). `201` con el `HallazgoDto`.
 | Campo | Obligatorio | Regla |
 |---|---|---|
 | `parte_vehiculo` | sí | máximo 80 caracteres |
-| `clase_dano` | sí | catálogo `clase_dano` |
-| `tamano_dano` | sí | catálogo `tamano_dano` |
+| `clase_dano` | sí | `codigo` **activo** del catálogo `clases-dano` |
+| `tamano_dano` | sí | `codigo` **activo** del catálogo `tamanos-dano` |
 | `coords_diagrama` | no | `x` e `y` entre 0 y 1 |
 
 `HallazgoDto`:
@@ -497,6 +508,108 @@ Campo (creador o administrador). Cierra el informe; después ya no admite cambio
 
 Si no cumple los requisitos (evidencias, geolocalización…), responde `400` con la lista de requisitos incumplidos en
 `details`. Si ya estaba cerrada, `409`; **un cliente que reintenta el cierre puede tomar ese `409` como éxito.**
+
+---
+
+## Catálogos maestros
+
+Las etapas, los lugares, los tipos de unidad, las clases y tamaños de daño, los niveles de severidad, las vistas de foto y los
+cuadrantes **ya no son listas fijas en el código**: viven en tablas y los administra TI o el coordinador de calidad desde el portal.
+La web y la app deben leerlos de la API (y guardar una copia para trabajar sin señal), no escribirlos a mano.
+
+| Nombre (ruta y clave) | Qué contiene | Campos de cada valor |
+|---|---|---|
+| `etapas` | Etapas del proceso: `cargue`, `transporte`, `descargue`. Es el `proceso` de un informe o de un tramo de la ruta | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `puntos-custodia` | Lugares donde se hace una etapa: CEDI 1, Origen, Certificadora, Destino, CEDI 2, Concesionario | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `tipos-unidad` | Tipos de unidad transportadora: niñera, nodriza, quintinaria, planchón grúa | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `clases-dano` | Clases de daño de un hallazgo (10 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `tamanos-dano` | Tamaños de daño de un hallazgo (6 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `niveles-severidad` | Niveles V1+, V1, V2 y V3 con su acción | `id`, `codigo`, `nombre`, `orden`, `activo`, `accion` (texto o `null`, máx. 500) |
+| `vistas-foto` | Las 9 vistas de foto: 7 obligatorias y 2 adicionales (`piezas_baul`, `cojineria`) que solo se toman con faltante o daño | `id`, `codigo`, `nombre`, `orden`, `activo`, `obligatoria`, `tipo_vehiculo` (`null` = cualquier tipo) |
+| `cuadrantes` | Regiones numeradas de cada vista, con su geometría. Las vistas adicionales no tienen cuadrantes | `id`, `vista_foto_id`, `vista` (código de la vista), `tipo_vehiculo`, `numero`, `nombre`, `geometria`, `orden`, `activo` |
+
+`codigo` es la **clave estable** (minúsculas, números y `_`, máximo 30 caracteres): es lo que viaja en el resto de la API
+(`proceso`, `clase_dano`, `tamano_dano`) y no cambia nunca. `nombre` es la etiqueta que se muestra y sí puede cambiar. Los valores
+vienen ordenados por `orden`.
+
+### `GET /api/catalogos`
+Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inactivos**, y una versión global.
+
+```json
+{
+  "version": "9f2c4a7b1d3e5f60",
+  "catalogos": {
+    "etapas": [ { "id": "uuid", "codigo": "cargue", "nombre": "Cargue", "orden": 1, "activo": true } ],
+    "clases-dano": [ { "id": "uuid", "codigo": "golpe", "nombre": "Golpe", "orden": 5, "activo": true } ],
+    "niveles-severidad": [ { "id": "uuid", "codigo": "v1", "nombre": "V1", "orden": 2, "activo": true, "accion": null } ],
+    "vistas-foto": [ { "id": "uuid", "codigo": "piezas_baul", "nombre": "Piezas en el baúl", "orden": 8, "activo": true, "obligatoria": false, "tipo_vehiculo": null } ],
+    "cuadrantes": [],
+    "puntos-custodia": [], "tipos-unidad": [], "tamanos-dano": []
+  }
+}
+```
+
+### `GET /api/catalogos/{nombre}`
+Un solo catálogo con **su propia versión**: `{ "version": "…", "items": [ … ] }`. `404` si el nombre no existe (el mensaje lista los
+disponibles).
+
+### Versión y copia sin conexión
+Cada respuesta trae la versión en el encabezado `ETag` (por ejemplo `"9f2c4a7b1d3e5f60"`) y también en el cuerpo. La versión es una
+huella del contenido: **cambia si y solo si cambió algún dato** del catálogo (o de cualquiera, en el global).
+
+1. Guarde la respuesta y su `ETag`.
+2. La próxima vez (al abrir la app, al abrir una inspección con señal) envíe `If-None-Match: "<ETag guardado>"`.
+3. `304` sin cuerpo = su copia está al día. `200` = reemplace la copia por la respuesta nueva.
+4. Sin señal, use la última copia guardada.
+
+Un catálogo cambia al instante cuando se edita; si hay varias instancias de la API, otra puede tardar hasta un minuto en reflejarlo.
+
+**Valores inactivos.** `activo: false` significa que ya no se ofrece, pero sigue siendo válido en lo que ya se guardó. En los selectores
+muestre solo los activos; para dibujar informes viejos use todos (un hallazgo antiguo puede tener una clase hoy inactiva).
+
+### Geometría de los cuadrantes
+Para que la app y el portal dibujen las mismas regiones, `geometria` es un **polígono normalizado**: un objeto con la lista de puntos,
+cada uno `[x, y]` con `x` e `y` entre 0 y 1, medidos sobre la imagen de la vista (el origen es la esquina superior izquierda).
+
+```json
+{ "puntos": [ [0.10, 0.10], [0.55, 0.10], [0.55, 0.48], [0.10, 0.48] ] }
+```
+
+Debe tener al menos 3 puntos. Llega como objeto JSON (no como texto) o `null` si el cuadrante aún no tiene geometría. `numero` es
+único por `tipo_vehiculo` (con `tipo_vehiculo: null` el número es único entre los cuadrantes sin tipo).
+
+### Administración: crear, editar, inactivar y borrar
+Solo `admin`, `super_admin` y `coordinador_calidad`; los demás roles reciben `403`.
+
+| Operación | Ruta | Respuesta |
+|---|---|---|
+| Crear | `POST /api/catalogos/{nombre}` | `201` con el valor creado |
+| Editar | `PATCH /api/catalogos/{nombre}/{id}` | `200` con el valor; cambia solo los campos enviados |
+| Inactivar | `PATCH /api/catalogos/{nombre}/{id}` con `{ "activo": false }` | `200` |
+| Borrar | `DELETE /api/catalogos/{nombre}/{id}` | `204`; `409` si algo lo usa |
+
+Cuerpo de **crear**: `codigo` y `nombre` obligatorios; `orden` (entero ≥ 0, por defecto 0) y `activo` (por defecto `true`) opcionales, más
+los campos propios del catálogo. En **cuadrantes** no hay `codigo`: son obligatorios `vista_foto_id`, `numero` y `nombre`, y opcionales
+`tipo_vehiculo`, `geometria`, `orden` y `activo`. En **vistas** `obligatoria` es opcional (por defecto `true`).
+
+```json
+{ "codigo": "oxidacion", "nombre": "Oxidación", "orden": 11 }
+```
+
+Reglas:
+- `400` con `details.fieldErrors` si un campo es inválido, **si llega un campo que ese catálogo no admite** (por ejemplo `accion` en
+  `etapas`) o si se envía `null` en `nombre`, `orden` o `activo`.
+- El **`codigo` no se puede cambiar** (`400`); se puede reenviar igual. Para reemplazar un código, cree un valor nuevo e inactive el viejo.
+- `409` si el `codigo` ya existe en ese catálogo, o si el `numero` de cuadrante ya existe para ese tipo de vehículo.
+- **Un valor en uso no se borra:** `409` con el mensaje «El valor está en uso y no se puede borrar: solo puede inactivarlo». Está en uso una clase
+  o tamaño usado por algún hallazgo, una etapa o un lugar usado por algún tramo de la ruta, y una vista que tiene cuadrantes.
+- Una vista **con cuadrantes** no puede pasar a `obligatoria: false` (`409`), y no se pueden crear cuadrantes en una vista adicional ni
+  inactiva (`400`).
+- El código `requiere_reemplazo` de `tamanos-dano` lo usa el análisis de patrones para contar los daños que obligan a reemplazar la pieza:
+  no lo borre ni le cambie el código.
+
+**Qué cambia en el resto de la API.** Un hallazgo nuevo solo admite `clase_dano` y `tamano_dano` **activos**; los vehículos nuevos reciben
+como ruta las etapas **activas** de `etapas`, en su `orden`; y el filtro `proceso` de los informes acepta los códigos de `etapas`.
 
 ---
 

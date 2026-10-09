@@ -1,3 +1,4 @@
+using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Dominio.Vehiculos;
 
@@ -12,20 +13,20 @@ namespace IAAutos.Aplicacion.Vehiculos;
 internal sealed class clsMaterializadorVehiculos(
     IVehiculoRepository vehiculos,
     IEtapaRepository etapas,
-    IPuntoCustodiaRepository puntos,
+    ICatalogosLectura catalogos,
     IReloj reloj)
 {
-    private IReadOnlyDictionary<string, Guid>? _puntos;
+    private IReadOnlyList<Guid> _rutaEstandar = [];
     private Dictionary<string, clsVehiculo> _cacheVehiculos = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<Guid, HashSet<int>> _cacheOrdenes = [];
     private bool _cacheValida;
 
-    /// <summary>Carga el catalogo de puntos (falla de inmediato si falta alguno) y precarga los vehiculos del lote.</summary>
+    /// <summary>Carga las etapas activas del catalogo (falla de inmediato si no hay ninguna) y precarga los vehiculos del lote.</summary>
     public async Task PrepararAsync(IReadOnlyCollection<string> vines, CancellationToken ct)
     {
-        _puntos = await puntos.ObtenerIdsPorNombreAsync(clsPuntoCustodiaNombre.RUTA_CARGA, ct);
-        // Valida el catalogo antes de procesar cualquier fila: un catalogo incompleto es un error interno, no de una fila.
-        clsRutaCustodia.CrearEtapasEstandar(Guid.Empty, _puntos, reloj.Ahora);
+        _rutaEstandar = await catalogos.EtapasDeLaRutaAsync(ct);
+        // Valida el catalogo antes de procesar cualquier fila: un catalogo sin etapas es un error interno, no de una fila.
+        clsRutaCustodia.CrearEtapasEstandar(Guid.Empty, _rutaEstandar, reloj.Ahora);
 
         var existentes = await vehiculos.ObtenerPorVinesAsync(vines, ct);
         _cacheVehiculos = new Dictionary<string, clsVehiculo>(existentes, StringComparer.OrdinalIgnoreCase);
@@ -63,7 +64,7 @@ internal sealed class clsMaterializadorVehiculos(
             existentes = consultadas.TryGetValue(vehiculo.Id, out var ordenes) ? ordenes.ToHashSet() : [];
         }
 
-        foreach (var etapa in clsRutaCustodia.CrearEtapasEstandar(vehiculo.Id, _puntos!, reloj.Ahora))
+        foreach (var etapa in clsRutaCustodia.CrearEtapasEstandar(vehiculo.Id, _rutaEstandar, reloj.Ahora))
         {
             if (existentes.Add(etapa.Orden))
             {

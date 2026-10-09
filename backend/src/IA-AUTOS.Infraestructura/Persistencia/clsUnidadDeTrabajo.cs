@@ -26,16 +26,34 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         ("UQ_tblInspecciones_Etapa_Momento", "Esta etapa ya tiene un informe registrado"),
         ("UQ_tblTransferencias_Inspeccion", "Esta inspección ya tiene una transferencia de custodia"),
         ("UQ_tblOrdenesSofasa_SourceId", "Ya existe una orden con ese identificador de origen"),
+        // Catalogos maestros: el codigo es unico dentro de cada catalogo.
+        ("_Codigo", "Ya existe un valor con ese código en el catálogo"),
+        ("UQ_tblCuadrantes_Tipo_Numero", "Ya existe un cuadrante con ese número para ese tipo de vehículo"),
+    ];
+
+    // Borrar un valor de catalogo que algo todavia referencia: se responde que esta en uso y que solo puede inactivarse.
+    private static readonly string[] CATALOGOS_EN_USO =
+    [
+        "FK_tblHallazgos_ClaseDano",
+        "FK_tblHallazgos_TamanoDano",
+        "FK_tblEtapas_EtapaCatalogo",
+        "FK_tblEtapas_PuntoCustodia",
+        "FK_tblCuadrantes_Vista",
     ];
 
     private static readonly (string Restriccion, string Mensaje)[] REFERENCIAS_INVALIDAS =
     [
-        ("FK_tblEtapas_", "El vehículo o el punto de custodia no existen"),
+        ("FK_tblEtapas_EtapaCatalogo", "La etapa no existe en el catálogo"),
+        ("FK_tblEtapas_PuntoCustodia", "El punto de custodia no existe en el catálogo"),
+        ("FK_tblEtapas_", "El vehículo no existe"),
         ("FK_tblInspecciones_", "La etapa o el usuario no existen"),
         ("FK_tblTransferencias_", "Algún usuario (entrega/recibe) no existe"),
         ("FK_tblAsignaciones_", "Referencia inválida (vehículo o usuario)"),
         ("FK_tblEvidencias_", "El hallazgo indicado no pertenece a esta inspección"),
+        ("FK_tblHallazgos_ClaseDano", "La clase de daño no existe en el catálogo"),
+        ("FK_tblHallazgos_TamanoDano", "El tamaño de daño no existe en el catálogo"),
         ("FK_tblHallazgos_", "La inspección indicada no existe"),
+        ("FK_tblCuadrantes_Vista", "La vista no existe"),
     ];
 
     public async Task<int> GuardarCambiosAsync(CancellationToken ct = default)
@@ -75,6 +93,11 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
 
                 if (sql.Message.Contains("DELETE statement", StringComparison.OrdinalIgnoreCase))
                 {
+                    if (CATALOGOS_EN_USO.Any(fk => sql.Message.Contains(fk, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return new clsConflictoException("El valor está en uso y no se puede borrar: solo puede inactivarlo");
+                    }
+
                     return new clsConflictoException("El registro tiene operaciones asociadas y no puede eliminarse");
                 }
 

@@ -31,7 +31,7 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | GET `/api/vehiculos/{vin}/inventario` | autenticado | etapas, inspecciones, hallazgos, evidencias y transferencia |
 | GET `/api/vehiculos/{vin}/inventario/pdf` | autenticado | inventario en PDF (descarga) |
 | POST `/api/asignaciones` | administracion | asigna un VIN a una ninera (placa) y opcionalmente a un conductor |
-| POST `/api/etapas` | administracion | define una etapa de la ruta (`orden`, `requiere_inspeccion`) |
+| POST `/api/etapas` | administracion | define un tramo de la ruta: `etapa_catalogo_id`, `punto_custodia_id` (lugar, opcional), `orden`, `requiere_inspeccion` |
 | POST `/api/inspecciones` | campo | crea el informe de una etapa (siempre en borrador; el usuario sale del token) |
 | GET `/api/inspecciones` | autenticado | listado (maximo 200) con filtros `vin`, `usuarioId`, `momento`, `estado`, `proceso`, `desde`, `hasta` |
 | GET `/api/inspecciones/{id}` | autenticado | informe completo con firmas y nombres |
@@ -43,6 +43,9 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | GET `/api/uploads/{archivo}` | publico por defecto | sirve la imagen |
 | POST `/api/etl/sofasa/ordenes` | token del ETL | ingesta idempotente por `source_id` |
 | GET `/api/sofasa/ordenes` | autenticado | ordenes mas recientes primero (maximo 500) |
+| GET `/api/catalogos` | autenticado | todos los catalogos maestros (etapas, lugares, clases y tamanos de dano, niveles, vistas, cuadrantes...) con version (`ETag`, `304` con `If-None-Match`) |
+| GET `/api/catalogos/{nombre}` | autenticado | un catalogo con su version |
+| POST `/api/catalogos/{nombre}`, PATCH `/api/catalogos/{nombre}/{id}`, DELETE `/api/catalogos/{nombre}/{id}` | admin, super_admin, coordinador_calidad | crea, edita o borra un valor; uno en uso no se borra (`409`), se inactiva |
 | GET `/api/patrones` | autenticado | hallazgos por proceso y zona de unidades movilizadas |
 | GET `/api/patrones/analisis` | autenticado | clases y tamanos de dano con sugerencias |
 | GET `/api/metricas/rechazo` | autenticado | tasa de rechazo frente a la linea base |

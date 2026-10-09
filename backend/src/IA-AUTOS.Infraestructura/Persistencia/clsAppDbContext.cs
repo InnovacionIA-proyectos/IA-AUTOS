@@ -1,3 +1,4 @@
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Asignaciones;
 using IAAutos.Dominio.Auditoria;
 using IAAutos.Dominio.Custodia;
@@ -26,7 +27,14 @@ public sealed class clsAppDbContext : DbContext
 
     public DbSet<clsVehiculo> Vehiculos => Set<clsVehiculo>();
 
+    public DbSet<clsEtapaCatalogo> EtapasCatalogo => Set<clsEtapaCatalogo>();
     public DbSet<clsPuntoCustodia> PuntosCustodia => Set<clsPuntoCustodia>();
+    public DbSet<clsTipoUnidadTransportadora> TiposUnidad => Set<clsTipoUnidadTransportadora>();
+    public DbSet<clsClaseDano> ClasesDano => Set<clsClaseDano>();
+    public DbSet<clsTamanoDano> TamanosDano => Set<clsTamanoDano>();
+    public DbSet<clsNivelSeveridad> NivelesSeveridad => Set<clsNivelSeveridad>();
+    public DbSet<clsVistaFoto> VistasFoto => Set<clsVistaFoto>();
+    public DbSet<clsCuadrante> Cuadrantes => Set<clsCuadrante>();
 
     public DbSet<clsEtapa> Etapas => Set<clsEtapa>();
 
