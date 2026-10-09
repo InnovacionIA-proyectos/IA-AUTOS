@@ -2182,6 +2182,7 @@
           "accion",
           "obligatoria",
           "tipo_vehiculo",
+          "cuadrante_id",
           "vista_foto_id",
           "numero",
           "geometria"
@@ -2230,6 +2231,13 @@
               "null",
               "string"
             ]
+          },
+          "cuadrante_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           },
           "vista_foto_id": {
             "type": [

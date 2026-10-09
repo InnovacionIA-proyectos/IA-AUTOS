@@ -7,12 +7,12 @@ using IAAutos.Tests.Integracion.Infraestructura;
 
 namespace IAAutos.Tests.Integracion.Api;
 
-/// <summary>Catalogos maestros: lectura con version (ETag), administracion por rol, valores en uso y reglas de los cuadrantes.</summary>
+/// <summary>Catalogos maestros: lectura con version (ETag), administracion por rol, valores en uso y reglas de los cuadrantes y sus poligonos.</summary>
 [Collection(clsColeccionBaseDatos.NOMBRE)]
 public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private static readonly string[] NOMBRES =
-        ["etapas", "puntos-custodia", "tipos-unidad", "clases-dano", "tamanos-dano", "niveles-severidad", "vistas-foto", "cuadrantes"];
+        ["etapas", "puntos-custodia", "tipos-unidad", "clases-dano", "tamanos-dano", "niveles-severidad", "vistas-foto", "cuadrantes", "cuadrante-vistas"];
 
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);
 
@@ -63,6 +63,7 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal(7, vistas.Count(v => v.GetProperty("obligatoria").GetBoolean()));
         Assert.Equal(["piezas_baul", "cojineria"], vistas.Where(v => !v.GetProperty("obligatoria").GetBoolean()).Select(v => v.GetProperty("codigo").GetString()).ToList());
         Assert.Equal(0, catalogos.GetProperty("cuadrantes").GetArrayLength());
+        Assert.Equal(0, catalogos.GetProperty("cuadrante-vistas").GetArrayLength());
     }
 
     [Fact]
@@ -467,33 +468,73 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
 
     private const string POLIGONO = """{"puntos":[[0,0],[0.5,0],[0.5,0.5],[0,0.5]]}""";
 
-    private async Task<HttpResponseMessage> CrearCuadranteAsync(HttpClient cliente, Guid vistaId, int numero, string? tipo = "sedan", string geometria = POLIGONO) =>
+    private async Task<HttpResponseMessage> CrearCuadranteAsync(HttpClient cliente, int numero, string? tipo = "sedan") =>
         await cliente.PostAsync(
             "/api/catalogos/cuadrantes",
             new StringContent(
-                $$"""{"vista_foto_id":"{{vistaId}}","tipo_vehiculo":{{(tipo is null ? "null" : $"\"{tipo}\"")}},"numero":{{numero}},"nombre":"Cuadrante {{numero}}","geometria":{{geometria}},"orden":{{numero}}}""",
+                $$"""{"tipo_vehiculo":{{(tipo is null ? "null" : $"\"{tipo}\"")}},"numero":{{numero}},"nombre":"Cuadrante {{numero}}","orden":{{numero}}}""",
                 System.Text.Encoding.UTF8,
                 "application/json"));
 
+    private async Task<Guid> NuevoCuadranteAsync(HttpClient cliente, int numero, string? tipo = "sedan")
+    {
+        var r = await CrearCuadranteAsync(cliente, numero, tipo);
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+        return (await LeerJsonAsync(r)).GetProperty("id").GetGuid();
+    }
+
+    private async Task<HttpResponseMessage> CrearPoligonoAsync(HttpClient cliente, Guid cuadranteId, Guid vistaId, string geometria = POLIGONO) =>
+        await cliente.PostAsync(
+            "/api/catalogos/cuadrante-vistas",
+            new StringContent(
+                $$"""{"cuadrante_id":"{{cuadranteId}}","vista_foto_id":"{{vistaId}}","geometria":{{geometria}}}""",
+                System.Text.Encoding.UTF8,
+                "application/json"));
+
+    private async Task<Guid> VistaIdAsync(string token, string codigo) =>
+        (await ValorAsync(token, "vistas-foto", codigo)).GetProperty("id").GetGuid();
+
     [Fact]
-    public async Task Un_cuadrante_se_sirve_con_su_vista_y_su_geometria_como_objeto_y_con_version()
+    public async Task Un_cuadrante_es_una_zona_y_sus_poligonos_se_sirven_aparte_con_su_version()
     {
         var token = await TokenAsync(clsRol.COORDINADOR_CALIDAD);
         var cliente = Cliente(token);
-        var frontal = await ValorAsync(token, "vistas-foto", "frontal");
-        var versionAntes = (await CatalogoAsync(token, "cuadrantes")).GetProperty("version").GetString();
+        var versionCuadrantes = (await CatalogoAsync(token, "cuadrantes")).GetProperty("version").GetString();
+        var versionPoligonos = (await CatalogoAsync(token, "cuadrante-vistas")).GetProperty("version").GetString();
 
-        var creada = await CrearCuadranteAsync(cliente, frontal.GetProperty("id").GetGuid(), numero: 1);
+        var cuadranteId = await NuevoCuadranteAsync(cliente, 1);
+        var creado = await CrearPoligonoAsync(cliente, cuadranteId, await VistaIdAsync(token, "frontal"));
 
-        Assert.Equal(HttpStatusCode.Created, creada.StatusCode);
-        var catalogo = await CatalogoAsync(token, "cuadrantes");
-        Assert.NotEqual(versionAntes, catalogo.GetProperty("version").GetString());
-        var cuadrante = catalogo.GetProperty("items")[0];
-        Assert.Equal(["id", "vista_foto_id", "vista", "tipo_vehiculo", "numero", "nombre", "geometria", "orden", "activo"], cuadrante.EnumerateObject().Select(p => p.Name).ToList());
-        Assert.Equal("frontal", cuadrante.GetProperty("vista").GetString());
-        Assert.Equal("sedan", cuadrante.GetProperty("tipo_vehiculo").GetString());
-        Assert.Equal(JsonValueKind.Object, cuadrante.GetProperty("geometria").ValueKind);
-        Assert.Equal(4, cuadrante.GetProperty("geometria").GetProperty("puntos").GetArrayLength());
+        Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
+        var cuadrantes = await CatalogoAsync(token, "cuadrantes");
+        Assert.NotEqual(versionCuadrantes, cuadrantes.GetProperty("version").GetString());
+        Assert.Equal(["id", "tipo_vehiculo", "numero", "nombre", "orden", "activo"], cuadrantes.GetProperty("items")[0].EnumerateObject().Select(p => p.Name).ToList());
+        var poligonos = await CatalogoAsync(token, "cuadrante-vistas");
+        Assert.NotEqual(versionPoligonos, poligonos.GetProperty("version").GetString());
+        var poligono = poligonos.GetProperty("items")[0];
+        Assert.Equal(["id", "cuadrante_id", "numero", "vista_foto_id", "vista", "geometria"], poligono.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(cuadranteId, poligono.GetProperty("cuadrante_id").GetGuid());
+        Assert.Equal(1, poligono.GetProperty("numero").GetInt32());
+        Assert.Equal("frontal", poligono.GetProperty("vista").GetString());
+        Assert.Equal(JsonValueKind.Object, poligono.GetProperty("geometria").ValueKind);
+        Assert.Equal(4, poligono.GetProperty("geometria").GetProperty("puntos").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task El_mismo_cuadrante_se_dibuja_en_varias_vistas_pero_una_sola_vez_por_vista()
+    {
+        var token = await TokenAsync();
+        var cliente = Cliente(token);
+        var cuadranteId = await NuevoCuadranteAsync(cliente, 1);
+        var lateral = await VistaIdAsync(token, "lateral_izquierda");
+        var diagonal = await VistaIdAsync(token, "diagonal_trasera_izquierda");
+
+        Assert.Equal(HttpStatusCode.Created, (await CrearPoligonoAsync(cliente, cuadranteId, lateral)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await CrearPoligonoAsync(cliente, cuadranteId, diagonal)).StatusCode);
+        var repetido = await CrearPoligonoAsync(cliente, cuadranteId, lateral);
+
+        Assert.Equal(HttpStatusCode.Conflict, repetido.StatusCode);
+        Assert.Equal(2, (await CatalogoAsync(token, "cuadrante-vistas")).GetProperty("items").GetArrayLength());
     }
 
     [Fact]
@@ -501,21 +542,21 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
     {
         var token = await TokenAsync();
         var cliente = Cliente(token);
-        var frontal = await ValorAsync(token, "vistas-foto", "frontal");
-        var creada = await LeerJsonAsync(await CrearCuadranteAsync(cliente, frontal.GetProperty("id").GetGuid(), numero: 1));
-        var version1 = (await CatalogoAsync(token, "cuadrantes")).GetProperty("version").GetString();
+        var cuadranteId = await NuevoCuadranteAsync(cliente, 1);
+        var creado = await LeerJsonAsync(await CrearPoligonoAsync(cliente, cuadranteId, await VistaIdAsync(token, "frontal")));
+        var id = creado.GetProperty("id").GetGuid();
+        var version1 = (await CatalogoAsync(token, "cuadrante-vistas")).GetProperty("version").GetString();
 
         var editada = await cliente.PatchAsync(
-            $"/api/catalogos/cuadrantes/{creada.GetProperty("id").GetGuid()}",
+            $"/api/catalogos/cuadrante-vistas/{id}",
             new StringContent("""{"geometria":{"puntos":[[0,0],[1,0],[1,1]]}}""", System.Text.Encoding.UTF8, "application/json"));
 
         Assert.Equal(HttpStatusCode.OK, editada.StatusCode);
-        Assert.NotEqual(version1, (await CatalogoAsync(token, "cuadrantes")).GetProperty("version").GetString());
-        var sinGeometria = await cliente.PatchAsync(
-            $"/api/catalogos/cuadrantes/{creada.GetProperty("id").GetGuid()}",
-            new StringContent("""{"geometria":null}""", System.Text.Encoding.UTF8, "application/json"));
-        Assert.Equal(HttpStatusCode.OK, sinGeometria.StatusCode);
-        Assert.Equal(JsonValueKind.Null, (await CatalogoAsync(token, "cuadrantes")).GetProperty("items")[0].GetProperty("geometria").ValueKind);
+        Assert.NotEqual(version1, (await CatalogoAsync(token, "cuadrante-vistas")).GetProperty("version").GetString());
+        var sinGeometria = await cliente.PatchAsync($"/api/catalogos/cuadrante-vistas/{id}", new StringContent("""{"geometria":null}""", System.Text.Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.BadRequest, sinGeometria.StatusCode);
+        var otroCuadrante = await cliente.PatchAsync($"/api/catalogos/cuadrante-vistas/{id}", Cuerpo(new { cuadrante_id = Guid.NewGuid() }));
+        Assert.Equal(HttpStatusCode.BadRequest, otroCuadrante.StatusCode);
     }
 
     [Theory]
@@ -525,51 +566,74 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
     [InlineData("""{"puntos":[[0,0],[1,0],["a",1]]}""")]
     [InlineData("""{"puntos":[[0,0,0],[1,0,0],[1,1,0]]}""")]
     [InlineData("""{"vertices":[[0,0],[1,0],[1,1]]}""")]
+    [InlineData("null")]
     public async Task Una_geometria_invalida_se_rechaza(string geometria)
     {
         var token = await TokenAsync();
-        var frontal = await ValorAsync(token, "vistas-foto", "frontal");
+        var cliente = Cliente(token);
+        var cuadranteId = await NuevoCuadranteAsync(cliente, 1);
 
-        var r = await CrearCuadranteAsync(Cliente(token), frontal.GetProperty("id").GetGuid(), numero: 1, geometria: geometria);
+        var r = await CrearPoligonoAsync(cliente, cuadranteId, await VistaIdAsync(token, "frontal"), geometria);
 
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
         Assert.True((await LeerJsonAsync(r)).GetProperty("details").GetProperty("fieldErrors").TryGetProperty("geometria", out _));
     }
 
     [Fact]
-    public async Task Las_vistas_adicionales_no_tienen_cuadrantes_y_el_numero_es_unico_por_tipo_de_vehiculo()
+    public async Task Las_vistas_adicionales_no_tienen_poligonos_y_el_numero_de_cuadrante_es_unico_por_tipo_de_vehiculo()
     {
         var token = await TokenAsync();
         var cliente = Cliente(token);
-        var frontal = (await ValorAsync(token, "vistas-foto", "frontal")).GetProperty("id").GetGuid();
-        var baul = (await ValorAsync(token, "vistas-foto", "piezas_baul")).GetProperty("id").GetGuid();
+        var cuadranteId = await NuevoCuadranteAsync(cliente, 1);
 
-        var enAdicional = await CrearCuadranteAsync(cliente, baul, numero: 1);
+        var enAdicional = await CrearPoligonoAsync(cliente, cuadranteId, await VistaIdAsync(token, "piezas_baul"));
         Assert.Equal(HttpStatusCode.BadRequest, enAdicional.StatusCode);
         Assert.True((await LeerJsonAsync(enAdicional)).GetProperty("details").GetProperty("fieldErrors").TryGetProperty("vista_foto_id", out _));
+        var sinCuadrante = await CrearPoligonoAsync(cliente, Guid.NewGuid(), await VistaIdAsync(token, "frontal"));
+        Assert.Equal(HttpStatusCode.BadRequest, sinCuadrante.StatusCode);
+        var sinVista = await CrearPoligonoAsync(cliente, cuadranteId, Guid.NewGuid());
+        Assert.Equal(HttpStatusCode.BadRequest, sinVista.StatusCode);
 
-        Assert.Equal(HttpStatusCode.Created, (await CrearCuadranteAsync(cliente, frontal, numero: 1, tipo: "sedan")).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await CrearCuadranteAsync(cliente, frontal, numero: 1, tipo: "sedan")).StatusCode);
-        Assert.Equal(HttpStatusCode.Created, (await CrearCuadranteAsync(cliente, frontal, numero: 1, tipo: "camioneta")).StatusCode);
-        Assert.Equal(HttpStatusCode.Created, (await CrearCuadranteAsync(cliente, frontal, numero: 1, tipo: null)).StatusCode);
-        Assert.Equal(HttpStatusCode.Conflict, (await CrearCuadranteAsync(cliente, frontal, numero: 1, tipo: null)).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await CrearCuadranteAsync(cliente, frontal, numero: 0)).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await CrearCuadranteAsync(cliente, Guid.NewGuid(), numero: 5)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await CrearCuadranteAsync(cliente, 1, tipo: "sedan")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await CrearCuadranteAsync(cliente, 1, tipo: "camioneta")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await CrearCuadranteAsync(cliente, 1, tipo: null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await CrearCuadranteAsync(cliente, 1, tipo: null)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await CrearCuadranteAsync(cliente, 0)).StatusCode);
     }
 
     [Fact]
-    public async Task Una_vista_con_cuadrantes_no_se_borra_ni_pasa_a_ser_adicional()
+    public async Task Una_vista_con_poligonos_no_se_borra_ni_pasa_a_ser_adicional()
     {
         var token = await TokenAsync();
         var cliente = Cliente(token);
-        var frontal = (await ValorAsync(token, "vistas-foto", "frontal")).GetProperty("id").GetGuid();
-        await CrearCuadranteAsync(cliente, frontal, numero: 1);
+        var frontal = await VistaIdAsync(token, "frontal");
+        await CrearPoligonoAsync(cliente, await NuevoCuadranteAsync(cliente, 1), frontal);
 
         var borrar = await cliente.DeleteAsync($"/api/catalogos/vistas-foto/{frontal}");
         var adicional = await cliente.PatchAsync($"/api/catalogos/vistas-foto/{frontal}", Cuerpo(new { obligatoria = false }));
 
         Assert.Equal(HttpStatusCode.Conflict, borrar.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, adicional.StatusCode);
+    }
+
+    [Fact]
+    public async Task Borrar_un_cuadrante_borra_sus_poligonos_y_borrar_un_poligono_deja_el_cuadrante()
+    {
+        var token = await TokenAsync();
+        var cliente = Cliente(token);
+        var frontal = await VistaIdAsync(token, "frontal");
+        var superior = await VistaIdAsync(token, "superior");
+        var uno = await NuevoCuadranteAsync(cliente, 1);
+        var dos = await NuevoCuadranteAsync(cliente, 2);
+        await CrearPoligonoAsync(cliente, uno, frontal);
+        await CrearPoligonoAsync(cliente, uno, superior);
+        var poligonoDeDos = (await LeerJsonAsync(await CrearPoligonoAsync(cliente, dos, frontal))).GetProperty("id").GetGuid();
+
+        Assert.Equal(HttpStatusCode.NoContent, (await cliente.DeleteAsync($"/api/catalogos/cuadrantes/{uno}")).StatusCode);
+        Assert.Equal(1, (await CatalogoAsync(token, "cuadrante-vistas")).GetProperty("items").GetArrayLength());
+        Assert.Equal(HttpStatusCode.NoContent, (await cliente.DeleteAsync($"/api/catalogos/cuadrante-vistas/{poligonoDeDos}")).StatusCode);
+        Assert.Equal(0, (await CatalogoAsync(token, "cuadrante-vistas")).GetProperty("items").GetArrayLength());
+        Assert.Equal(1, (await CatalogoAsync(token, "cuadrantes")).GetProperty("items").GetArrayLength());
     }
 
     [Fact]

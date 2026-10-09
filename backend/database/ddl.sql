@@ -232,28 +232,45 @@ BEGIN
 END
 GO
 
--- Cuadrantes: regiones numeradas de cada vista (las vistas adicionales no tienen). Geometria = poligono normalizado en JSON
--- ({"puntos":[[x,y],...]} con x e y entre 0 y 1 sobre la imagen de la vista) para que la app y el portal dibujen lo mismo.
+-- Cuadrantes: zonas numeradas de la carroceria (puerta delantera, pilar central...), por tipo de vehiculo. Un mismo cuadrante se ve
+-- desde varias vistas, por eso donde se dibuja en cada vista va aparte, en tblCuadranteVistas.
 IF OBJECT_ID(N'dbo.tblCuadrantes', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.tblCuadrantes
     (
         Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblCuadrantes PRIMARY KEY,
-        VistaFotoId   uniqueidentifier  NOT NULL,
         TipoVehiculo  varchar(30)       NULL,
         Numero        int               NOT NULL,
         Nombre        nvarchar(100)     NOT NULL,
-        Geometria     nvarchar(max)     NULL,
         Orden         int               NOT NULL CONSTRAINT DF_tblCuadrantes_Orden DEFAULT (0),
         Activo        bit               NOT NULL CONSTRAINT DF_tblCuadrantes_Activo DEFAULT (1),
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblCuadrantes_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblCuadrantes_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        CONSTRAINT FK_tblCuadrantes_Vista FOREIGN KEY (VistaFotoId) REFERENCES dbo.tblVistasFoto (Id),
         CONSTRAINT UQ_tblCuadrantes_Tipo_Numero UNIQUE (TipoVehiculo, Numero),
-        CONSTRAINT CK_tblCuadrantes_Numero CHECK (Numero >= 1),
-        CONSTRAINT CK_tblCuadrantes_Geometria CHECK (Geometria IS NULL OR ISJSON(Geometria) = 1)
+        CONSTRAINT CK_tblCuadrantes_Numero CHECK (Numero >= 1)
     );
-    CREATE INDEX IX_tblCuadrantes_Vista ON dbo.tblCuadrantes (VistaFotoId);
+END
+GO
+
+-- Poligono de un cuadrante en una vista (las vistas adicionales no tienen). Geometria = poligono normalizado en JSON
+-- ({"puntos":[[x,y],...]} con x e y entre 0 y 1 sobre la imagen de la vista) para que la app y el portal dibujen lo mismo.
+-- Al borrar el cuadrante se borran sus poligonos; una vista con poligonos no se puede borrar.
+IF OBJECT_ID(N'dbo.tblCuadranteVistas', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblCuadranteVistas
+    (
+        Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblCuadranteVistas PRIMARY KEY,
+        CuadranteId   uniqueidentifier  NOT NULL,
+        VistaFotoId   uniqueidentifier  NOT NULL,
+        Geometria     nvarchar(max)     NOT NULL,
+        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblCuadranteVistas_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblCuadranteVistas_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblCuadranteVistas_Cuadrante FOREIGN KEY (CuadranteId) REFERENCES dbo.tblCuadrantes (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_tblCuadranteVistas_Vista FOREIGN KEY (VistaFotoId) REFERENCES dbo.tblVistasFoto (Id),
+        CONSTRAINT UQ_tblCuadranteVistas_Cuadrante_Vista UNIQUE (CuadranteId, VistaFotoId),
+        CONSTRAINT CK_tblCuadranteVistas_Geometria CHECK (ISJSON(Geometria) = 1)
+    );
+    CREATE INDEX IX_tblCuadranteVistas_Vista ON dbo.tblCuadranteVistas (VistaFotoId);
 END
 GO
 

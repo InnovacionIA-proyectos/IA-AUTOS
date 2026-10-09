@@ -134,9 +134,11 @@ INSERT dbo.tblInspecciones (Id, EtapaId, UsuarioId, Momento, Fecha) VALUES (@i3,
 INSERT dbo.tblHallazgos (Id, InspeccionId, ParteVehiculo, ClaseDano, TamanoDano) VALUES (NEWID(), @i3, N'Capot', 'golpe', '1_5cm');
 
 DECLARE @vistaFrontal uniqueidentifier = (SELECT Id FROM dbo.tblVistasFoto WHERE Codigo = 'frontal');
-INSERT dbo.tblCuadrantes (Id, VistaFotoId, TipoVehiculo, Numero, Nombre, Geometria)
-VALUES (NEWID(), @vistaFrontal, 'zz_test', 1, N'ZZ_TEST cuadrante', N'{"puntos":[[0,0],[1,0],[1,1]]}');
-INSERT #r SELECT N'Cuadrante: se guarda con su vista y su geometria', CASE WHEN EXISTS (SELECT 1 FROM dbo.tblCuadrantes WHERE TipoVehiculo = 'zz_test' AND Numero = 1) THEN 1 ELSE 0 END, NULL;
+DECLARE @cuadranteTest uniqueidentifier = NEWID();
+INSERT dbo.tblCuadrantes (Id, TipoVehiculo, Numero, Nombre) VALUES (@cuadranteTest, 'zz_test', 1, N'ZZ_TEST cuadrante');
+INSERT dbo.tblCuadranteVistas (Id, CuadranteId, VistaFotoId, Geometria) VALUES (NEWID(), @cuadranteTest, @vistaFrontal, N'{"puntos":[[0,0],[1,0],[1,1]]}');
+INSERT #r SELECT N'Cuadrante: se guarda su zona y su poligono en una vista',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblCuadranteVistas WHERE CuadranteId = @cuadranteTest AND VistaFotoId = @vistaFrontal) THEN 1 ELSE 0 END, NULL;
 
 DECLARE @casosCat TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
 INSERT @casosCat VALUES
@@ -145,9 +147,10 @@ INSERT @casosCat VALUES
  (N'No se borra un tamano de dano en uso', N'DELETE FROM dbo.tblTamanosDano WHERE Codigo = ''1_5cm''', 547),
  (N'No se borra una etapa del catalogo en uso', N'DELETE FROM dbo.tblEtapasCatalogo WHERE Codigo = ''descargue''', 547),
  (N'No se borra un punto de custodia en uso', N'DELETE FROM dbo.tblPuntosCustodia WHERE Codigo = ''cedi_1''', 547),
- (N'No se borra una vista con cuadrantes', N'DELETE FROM dbo.tblVistasFoto WHERE Codigo = ''frontal''', 547),
- (N'UNIQUE (tipo de vehiculo, numero) en cuadrantes', N'INSERT dbo.tblCuadrantes (Id,VistaFotoId,TipoVehiculo,Numero,Nombre) SELECT NEWID(),VistaFotoId,TipoVehiculo,Numero,Nombre FROM dbo.tblCuadrantes WHERE TipoVehiculo = ''zz_test''', 2627),
- (N'CHECK geometria JSON en cuadrantes', N'INSERT dbo.tblCuadrantes (Id,VistaFotoId,TipoVehiculo,Numero,Nombre,Geometria) SELECT NEWID(),VistaFotoId,''zz_test'',2,N''x'',N''no es json'' FROM dbo.tblCuadrantes WHERE TipoVehiculo = ''zz_test''', 547),
+ (N'No se borra una vista con poligonos de cuadrante', N'DELETE FROM dbo.tblVistasFoto WHERE Codigo = ''frontal''', 547),
+ (N'UNIQUE (tipo de vehiculo, numero) en cuadrantes', N'INSERT dbo.tblCuadrantes (Id,TipoVehiculo,Numero,Nombre) SELECT NEWID(),TipoVehiculo,Numero,Nombre FROM dbo.tblCuadrantes WHERE TipoVehiculo = ''zz_test''', 2627),
+ (N'UNIQUE (cuadrante, vista) en poligonos', N'INSERT dbo.tblCuadranteVistas (Id,CuadranteId,VistaFotoId,Geometria) SELECT NEWID(),CuadranteId,VistaFotoId,Geometria FROM dbo.tblCuadranteVistas WHERE CuadranteId IN (SELECT Id FROM dbo.tblCuadrantes WHERE TipoVehiculo = ''zz_test'')', 2627),
+ (N'CHECK geometria JSON en poligonos', N'INSERT dbo.tblCuadranteVistas (Id,CuadranteId,VistaFotoId,Geometria) SELECT NEWID(),Id,(SELECT Id FROM dbo.tblVistasFoto WHERE Codigo = ''superior''),N''no es json'' FROM dbo.tblCuadrantes WHERE TipoVehiculo = ''zz_test''', 547),
  (N'UNIQUE codigo en catalogos', N'INSERT dbo.tblClasesDano (Id,Codigo,Nombre) VALUES (NEWID(),''GOLPE'',N''Repetido'')', 2627);
 
 DECLARE @pruebaCat nvarchar(200), @sqlCat nvarchar(max), @espCat int;
@@ -170,7 +173,9 @@ CLOSE cCat; DEALLOCATE cCat;
 UPDATE dbo.tblClasesDano SET Activo = 0 WHERE Codigo = 'golpe';
 INSERT #r SELECT N'Inactivar una clase en uso es valido y conserva los hallazgos', CASE WHEN EXISTS (SELECT 1 FROM dbo.tblHallazgos WHERE ClaseDano = 'golpe') THEN 1 ELSE 0 END, NULL;
 UPDATE dbo.tblClasesDano SET Activo = 1 WHERE Codigo = 'golpe';
+-- Borrar el cuadrante borra sus poligonos (cascada).
 DELETE FROM dbo.tblCuadrantes WHERE TipoVehiculo = 'zz_test';
+INSERT #r SELECT N'Borrar un cuadrante borra sus poligonos', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblCuadranteVistas WHERE CuadranteId = @cuadranteTest) THEN 1 ELSE 0 END, NULL;
 DELETE FROM dbo.tblVehiculos WHERE Vin = 'ZZ_TEST_VIN_0003';
 
 -- 5) Cascada: borrar el vehiculo elimina etapas, inspecciones y transferencias (no hay trigger de DELETE)

@@ -108,5 +108,6 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<ICatalogo, clsCatalogoNiveles>();
         servicios.AddScoped<ICatalogo, clsCatalogoVistas>();
         servicios.AddScoped<ICatalogo, clsCatalogoCuadrantes>();
+        servicios.AddScoped<ICatalogo, clsCatalogoCuadranteVistas>();
     }
 }

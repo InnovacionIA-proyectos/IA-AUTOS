@@ -35,6 +35,7 @@ public sealed class clsAppDbContext : DbContext
     public DbSet<clsNivelSeveridad> NivelesSeveridad => Set<clsNivelSeveridad>();
     public DbSet<clsVistaFoto> VistasFoto => Set<clsVistaFoto>();
     public DbSet<clsCuadrante> Cuadrantes => Set<clsCuadrante>();
+    public DbSet<clsCuadranteVista> CuadranteVistas => Set<clsCuadranteVista>();
 
     public DbSet<clsEtapa> Etapas => Set<clsEtapa>();
 

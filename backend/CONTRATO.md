@@ -526,7 +526,8 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | `tamanos-dano` | Tamaños de daño de un hallazgo (6 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `niveles-severidad` | Niveles V1+, V1, V2 y V3 con su acción | `id`, `codigo`, `nombre`, `orden`, `activo`, `accion` (texto o `null`, máx. 500) |
 | `vistas-foto` | Las 9 vistas de foto: 7 obligatorias y 2 adicionales (`piezas_baul`, `cojineria`) que solo se toman con faltante o daño | `id`, `codigo`, `nombre`, `orden`, `activo`, `obligatoria`, `tipo_vehiculo` (`null` = cualquier tipo) |
-| `cuadrantes` | Regiones numeradas de cada vista, con su geometría. Las vistas adicionales no tienen cuadrantes | `id`, `vista_foto_id`, `vista` (código de la vista), `tipo_vehiculo`, `numero`, `nombre`, `geometria`, `orden`, `activo` |
+| `cuadrantes` | Las **zonas** numeradas de la carrocería (puerta delantera, pilar central, capó…). Una zona es la misma aunque se vea desde varias vistas | `id`, `tipo_vehiculo` (`null` = cualquier tipo), `numero`, `nombre`, `orden`, `activo` |
+| `cuadrante-vistas` | El **polígono** de cada zona en cada vista donde aparece (una fila por aparición). Las vistas adicionales no tienen | `id`, `cuadrante_id`, `numero` (de la zona), `vista_foto_id`, `vista` (código de la vista), `geometria` |
 
 `codigo` es la **clave estable** (minúsculas, números y `_`, máximo 30 caracteres): es lo que viaja en el resto de la API
 (`proceso`, `clase_dano`, `tamano_dano`) y no cambia nunca. `nombre` es la etiqueta que se muestra y sí puede cambiar. Los valores
@@ -543,7 +544,8 @@ Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inacti
     "clases-dano": [ { "id": "uuid", "codigo": "golpe", "nombre": "Golpe", "orden": 5, "activo": true } ],
     "niveles-severidad": [ { "id": "uuid", "codigo": "v1", "nombre": "V1", "orden": 2, "activo": true, "accion": null } ],
     "vistas-foto": [ { "id": "uuid", "codigo": "piezas_baul", "nombre": "Piezas en el baúl", "orden": 8, "activo": true, "obligatoria": false, "tipo_vehiculo": null } ],
-    "cuadrantes": [],
+    "cuadrantes": [ { "id": "uuid", "tipo_vehiculo": null, "numero": 1, "nombre": "Puerta delantera: parte alta", "orden": 1, "activo": true } ],
+    "cuadrante-vistas": [ { "id": "uuid", "cuadrante_id": "uuid", "numero": 1, "vista_foto_id": "uuid", "vista": "lateral_izquierda", "geometria": { "puntos": [ [0.34, 0.30], [0.59, 0.30] ] } } ],
     "puntos-custodia": [], "tipos-unidad": [], "tamanos-dano": []
   }
 }
@@ -567,7 +569,12 @@ Un catálogo cambia al instante cuando se edita; si hay varias instancias de la 
 **Valores inactivos.** `activo: false` significa que ya no se ofrece, pero sigue siendo válido en lo que ya se guardó. En los selectores
 muestre solo los activos; para dibujar informes viejos use todos (un hallazgo antiguo puede tener una clase hoy inactiva).
 
-### Geometría de los cuadrantes
+### Cuadrantes y su geometría
+Un cuadrante es una **zona** de la carrocería con un número (`cuadrantes`). Esa misma zona se ve desde varias vistas (la puerta delantera
+aparece de lado y en diagonal), así que **dónde se dibuja** en cada vista va aparte, en `cuadrante-vistas`: una fila por cada vista
+donde aparece. Para dibujar una vista, la app y el portal toman los `cuadrante-vistas` de esa `vista` y le ponen a cada polígono el
+`numero` y el nombre de su zona (`cuadrante_id` → `cuadrantes`).
+
 Para que la app y el portal dibujen las mismas regiones, `geometria` es un **polígono normalizado**: un objeto con la lista de puntos,
 cada uno `[x, y]` con `x` e `y` entre 0 y 1, medidos sobre la imagen de la vista (el origen es la esquina superior izquierda).
 
@@ -575,8 +582,11 @@ cada uno `[x, y]` con `x` e `y` entre 0 y 1, medidos sobre la imagen de la vista
 { "puntos": [ [0.10, 0.10], [0.55, 0.10], [0.55, 0.48], [0.10, 0.48] ] }
 ```
 
-Debe tener al menos 3 puntos. Llega como objeto JSON (no como texto) o `null` si el cuadrante aún no tiene geometría. `numero` es
-único por `tipo_vehiculo` (con `tipo_vehiculo: null` el número es único entre los cuadrantes sin tipo).
+Debe tener al menos 3 puntos y llega como objeto JSON (no como texto). Es obligatoria en cada polígono. `numero` es único por `tipo_vehiculo`
+(con `tipo_vehiculo: null` el número es único entre las zonas sin tipo) y un cuadrante tiene como máximo **un polígono por vista**. Hoy
+están cargadas las 36 zonas de la ficha del vehículo genérico (los números 4 y 12 no existen en la ficha) con 97 polígonos en 5 vistas:
+`superior`, `lateral_izquierda`, `lateral_derecha`, `diagonal_trasera_izquierda` y `diagonal_delantera_derecha`. Las vistas `frontal` y
+`trasera` todavía no tienen cuadrantes dibujados.
 
 ### Administración: crear, editar, inactivar y borrar
 Solo `admin`, `super_admin` y `coordinador_calidad`; los demás roles reciben `403`.
@@ -589,8 +599,9 @@ Solo `admin`, `super_admin` y `coordinador_calidad`; los demás roles reciben `4
 | Borrar | `DELETE /api/catalogos/{nombre}/{id}` | `204`; `409` si algo lo usa |
 
 Cuerpo de **crear**: `codigo` y `nombre` obligatorios; `orden` (entero ≥ 0, por defecto 0) y `activo` (por defecto `true`) opcionales, más
-los campos propios del catálogo. En **cuadrantes** no hay `codigo`: son obligatorios `vista_foto_id`, `numero` y `nombre`, y opcionales
-`tipo_vehiculo`, `geometria`, `orden` y `activo`. En **vistas** `obligatoria` es opcional (por defecto `true`).
+los campos propios del catálogo. En **cuadrantes** no hay `codigo`: son obligatorios `numero` y `nombre`, y opcionales `tipo_vehiculo`, `orden` y `activo`. En
+**cuadrante-vistas** (no tiene `codigo`, `nombre`, `orden` ni `activo`) son obligatorios `cuadrante_id`, `vista_foto_id` y `geometria`; al editar
+solo se cambian `vista_foto_id` y `geometria` (el cuadrante no se puede cambiar). En **vistas** `obligatoria` es opcional (por defecto `true`).
 
 ```json
 { "codigo": "oxidacion", "nombre": "Oxidación", "orden": 11 }
@@ -600,10 +611,10 @@ Reglas:
 - `400` con `details.fieldErrors` si un campo es inválido, **si llega un campo que ese catálogo no admite** (por ejemplo `accion` en
   `etapas`) o si se envía `null` en `nombre`, `orden` o `activo`.
 - El **`codigo` no se puede cambiar** (`400`); se puede reenviar igual. Para reemplazar un código, cree un valor nuevo e inactive el viejo.
-- `409` si el `codigo` ya existe en ese catálogo, o si el `numero` de cuadrante ya existe para ese tipo de vehículo.
+- `409` si el `codigo` ya existe en ese catálogo, o si el `numero` de cuadrante ya existe para ese tipo de vehículo, o si el cuadrante ya tiene un polígono en esa vista.
 - **Un valor en uso no se borra:** `409` con el mensaje «El valor está en uso y no se puede borrar: solo puede inactivarlo». Está en uso una clase
-  o tamaño usado por algún hallazgo, una etapa o un lugar usado por algún tramo de la ruta, y una vista que tiene cuadrantes.
-- Una vista **con cuadrantes** no puede pasar a `obligatoria: false` (`409`), y no se pueden crear cuadrantes en una vista adicional ni
+  o tamaño usado por algún hallazgo, una etapa o un lugar usado por algún tramo de la ruta, y una vista que tiene polígonos de cuadrantes. Borrar un cuadrante borra también sus polígonos.
+- Una vista **con polígonos** no puede pasar a `obligatoria: false` (`409`), y no se pueden crear polígonos en una vista adicional ni
   inactiva (`400`).
 - El código `requiere_reemplazo` de `tamanos-dano` lo usa el análisis de patrones para contar los daños que obligan a reemplazar la pieza:
   no lo borre ni le cambie el código.

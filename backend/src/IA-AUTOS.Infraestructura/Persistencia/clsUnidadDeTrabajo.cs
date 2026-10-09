@@ -29,6 +29,7 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         // Catalogos maestros: el codigo es unico dentro de cada catalogo.
         ("_Codigo", "Ya existe un valor con ese código en el catálogo"),
         ("UQ_tblCuadrantes_Tipo_Numero", "Ya existe un cuadrante con ese número para ese tipo de vehículo"),
+        ("UQ_tblCuadranteVistas_Cuadrante_Vista", "El cuadrante ya tiene un polígono en esa vista"),
     ];
 
     // Borrar un valor de catalogo que algo todavia referencia: se responde que esta en uso y que solo puede inactivarse.
@@ -38,7 +39,7 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         "FK_tblHallazgos_TamanoDano",
         "FK_tblEtapas_EtapaCatalogo",
         "FK_tblEtapas_PuntoCustodia",
-        "FK_tblCuadrantes_Vista",
+        "FK_tblCuadranteVistas_Vista",
     ];
 
     private static readonly (string Restriccion, string Mensaje)[] REFERENCIAS_INVALIDAS =
@@ -53,7 +54,8 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         ("FK_tblHallazgos_ClaseDano", "La clase de daño no existe en el catálogo"),
         ("FK_tblHallazgos_TamanoDano", "El tamaño de daño no existe en el catálogo"),
         ("FK_tblHallazgos_", "La inspección indicada no existe"),
-        ("FK_tblCuadrantes_Vista", "La vista no existe"),
+        ("FK_tblCuadranteVistas_Cuadrante", "El cuadrante no existe"),
+        ("FK_tblCuadranteVistas_Vista", "La vista no existe"),
     ];
 
     public async Task<int> GuardarCambiosAsync(CancellationToken ct = default)
