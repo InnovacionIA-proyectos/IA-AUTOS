@@ -14,6 +14,7 @@ public static class clsCuerpoError
         clsCodigosError.VALIDATION_ERROR => StatusCodes.Status400BadRequest,
         clsCodigosError.UNAUTHORIZED => StatusCodes.Status401Unauthorized,
         clsCodigosError.FORBIDDEN => StatusCodes.Status403Forbidden,
+        clsCodigosError.PORTAL_USER_NOT_LINKED => StatusCodes.Status403Forbidden,
         clsCodigosError.NOT_FOUND => StatusCodes.Status404NotFound,
         clsCodigosError.METHOD_NOT_ALLOWED => StatusCodes.Status405MethodNotAllowed,
         clsCodigosError.CONFLICT => StatusCodes.Status409Conflict,

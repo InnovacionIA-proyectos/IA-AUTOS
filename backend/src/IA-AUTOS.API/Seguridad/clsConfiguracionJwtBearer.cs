@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using IAAutos.API.Errores;
+using IAAutos.Aplicacion.Comun;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Infraestructura.Seguridad;
@@ -30,8 +31,10 @@ internal sealed class clsConfiguracionJwtBearer(IOptions<clsOpcionesJwt> opcione
         opciones.RequireHttpsMetadata = false;
         opciones.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer = false,
-            ValidateAudience = false,
+            ValidateIssuer = opcionesJwt.Value.ExigeEmisor,
+            ValidIssuer = opcionesJwt.Value.Issuer,
+            ValidateAudience = opcionesJwt.Value.ExigeDestinatario,
+            ValidAudience = opcionesJwt.Value.Audience,
             ValidateLifetime = true,
             RequireExpirationTime = true,
             ValidateIssuerSigningKey = true,
@@ -71,13 +74,37 @@ internal sealed class clsConfiguracionJwtBearer(IOptions<clsOpcionesJwt> opcione
             return;
         }
 
+        // Los access tokens de la sesion del portal llevan sid (la familia del refresh token): si la sesion se cerro (logout)
+        // o se revoco por reuso, el access token deja de servir aunque todavia no haya vencido.
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, usuario.Id.ToString()),
+            new(JwtRegisteredClaimNames.Email, usuario.Email),
+            new(clsUsuarioActualHttp.CLAIM_ROL, usuario.Rol),
+        };
+        var sid = contexto.Principal?.FindFirstValue(JwtRegisteredClaimNames.Sid);
+        if (sid is not null)
+        {
+            if (!Guid.TryParse(sid, out var familiaId))
+            {
+                contexto.Fail(new clsFalloAutenticacionException(MENSAJE_TOKEN_INVALIDO));
+                return;
+            }
+
+            var refrescos = contexto.HttpContext.RequestServices.GetRequiredService<IRefreshTokenRepository>();
+            var reloj = contexto.HttpContext.RequestServices.GetRequiredService<IReloj>();
+            if (!await refrescos.FamiliaActivaAsync(familiaId, reloj.Ahora, contexto.HttpContext.RequestAborted))
+            {
+                contexto.Fail(new clsFalloAutenticacionException("La sesión se cerró. Inicia sesión de nuevo."));
+                return;
+            }
+
+            claims.Add(new Claim(JwtRegisteredClaimNames.Sid, sid));
+        }
+
         // Los claims efectivos salen de la base de datos, no del token.
         var identidad = new ClaimsIdentity(
-            [
-                new Claim(JwtRegisteredClaimNames.Sub, usuario.Id.ToString()),
-                new Claim(JwtRegisteredClaimNames.Email, usuario.Email),
-                new Claim(clsUsuarioActualHttp.CLAIM_ROL, usuario.Rol),
-            ],
+            claims,
             JwtBearerDefaults.AuthenticationScheme,
             JwtRegisteredClaimNames.Sub,
             clsUsuarioActualHttp.CLAIM_ROL);

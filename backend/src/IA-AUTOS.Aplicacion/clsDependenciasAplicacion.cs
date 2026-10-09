@@ -1,6 +1,7 @@
 using FluentValidation;
 using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Auth;
+using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Asignaciones;
 using IAAutos.Aplicacion.Inspecciones;
@@ -22,7 +23,13 @@ public static class clsDependenciasAplicacion
         servicios.Configure<clsOpcionesAlmacenamiento>(configuracion.GetSection(clsOpcionesAlmacenamiento.SECCION));
         servicios.AddValidatorsFromAssemblyContaining<clsAuthService>(ServiceLifetime.Singleton);
         servicios.AddScoped<IAuditor, clsAuditor>();
+        servicios.Configure<clsOpcionesSesion>(configuracion.GetSection(clsOpcionesSesion.SECCION));
+        servicios.Configure<clsOpcionesPortalAplicacion>(configuracion.GetSection(clsOpcionesPortalAplicacion.SECCION));
+        servicios.Configure<clsOpcionesCatalogos>(configuracion.GetSection(clsOpcionesCatalogos.SECCION));
+        servicios.AddScoped<clsCatalogosService>();
+        servicios.AddScoped<ICatalogosLectura>(proveedor => proveedor.GetRequiredService<clsCatalogosService>());
         servicios.AddScoped<clsAuthService>();
+        servicios.AddScoped<clsSesionPortalService>();
         servicios.AddScoped<clsUsuariosService>();
         servicios.AddScoped<clsVehiculosService>();
         servicios.AddScoped<clsAsignacionesService>();

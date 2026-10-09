@@ -5,12 +5,13 @@ namespace IAAutos.Tests.Integracion.Api;
 /// <summary>Arma escenarios directamente por SQL (independiente de los endpoints bajo prueba).</summary>
 public sealed class clsSembrador(string cadenaConexion)
 {
-    public async Task<Guid[]> PuntosRutaAsync()
+    /// <summary>Ids de las etapas del catalogo que forman la ruta estandar (cargue, transporte, descargue).</summary>
+    public async Task<Guid[]> EtapasRutaAsync()
     {
         var ids = new List<Guid>();
         foreach (var nombre in new[] { "cargue", "transporte", "descargue" })
         {
-            ids.Add((Guid)(await EscalarAsync("SELECT Id FROM dbo.tblPuntosCustodia WHERE Nombre = @n", ("@n", nombre)))!);
+            ids.Add((Guid)(await EscalarAsync("SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = @n", ("@n", nombre)))!);
         }
 
         return [.. ids];
@@ -26,14 +27,14 @@ public sealed class clsSembrador(string cadenaConexion)
         await EjecutarAsync(
             "INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion) VALUES (@id, @vin, @marca, @op)",
             ("@id", vehiculoId), ("@vin", vin), ("@marca", marca), ("@op", operacion));
-        var puntos = await PuntosRutaAsync();
+        var etapasCatalogo = await EtapasRutaAsync();
         var etapas = new List<Guid>();
         for (var i = 0; i < cantidadEtapas; i++)
         {
             var etapaId = Guid.NewGuid();
             await EjecutarAsync(
-                "INSERT dbo.tblEtapas (Id, VehiculoId, PuntoCustodiaId, Orden) VALUES (@id, @v, @p, @o)",
-                ("@id", etapaId), ("@v", vehiculoId), ("@p", puntos[i]), ("@o", i + 1));
+                "INSERT dbo.tblEtapas (Id, VehiculoId, EtapaCatalogoId, Orden) VALUES (@id, @v, @p, @o)",
+                ("@id", etapaId), ("@v", vehiculoId), ("@p", etapasCatalogo[i]), ("@o", i + 1));
             etapas.Add(etapaId);
         }
 

@@ -8,7 +8,8 @@ public sealed class BaseDatosRealTests
     private static readonly string[] TABLAS =
     [
         "tblUsuarios", "tblVehiculos", "tblPuntosCustodia", "tblEtapas", "tblInspecciones", "tblHallazgos",
-        "tblEvidencias", "tblTransferenciasCustodia", "tblAsignaciones", "tblOrdenesSofasa", "tblAuditLog",
+        "tblEvidencias", "tblTransferenciasCustodia", "tblAsignaciones", "tblOrdenesSofasa", "tblAuditLog", "tblRefreshTokens", "tblEtapasCatalogo", "tblTiposUnidadTransportadora",
+        "tblClasesDano", "tblTamanosDano", "tblNivelesSeveridad", "tblVistasFoto", "tblCuadrantes",
     ];
 
     private static readonly string[] TRIGGERS =
@@ -89,6 +90,67 @@ public sealed class BaseDatosRealTests
             var filas = await EscalarAsync<int>(conexion, $"SELECT COUNT(*) FROM {tabla}");
             Assert.True(filas >= 0, tabla);
         }
+    }
+
+    [FactEntornoReal]
+    public async Task El_esquema_de_la_sesion_del_portal_esta_aplicado_en_la_base()
+    {
+        // Sin la columna PortalUsuarioId ni la tabla de refresh tokens, la API falla en todas las consultas de usuarios: este
+        // chequeo (solo lectura) avisa antes de desplegar si falta ejecutar database/cambios-esquema/01-sesion-portal.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblUsuarios') AND name = N'PortalUsuarioId'");
+        var indice = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.indexes
+             WHERE object_id = OBJECT_ID(N'tblUsuarios') AND name = N'UX_tblUsuarios_PortalUsuarioId'
+               AND is_unique = 1 AND has_filter = 1
+            """);
+
+        Assert.True(columna == 1, "Falta la columna tblUsuarios.PortalUsuarioId (ejecute database/cambios-esquema/01-sesion-portal.sql).");
+        Assert.True(indice == 1, "Falta el indice unico filtrado UX_tblUsuarios_PortalUsuarioId.");
+    }
+
+    [FactEntornoReal]
+    public async Task Los_catalogos_maestros_estan_migrados_con_sus_valores_iniciales()
+    {
+        // Sin esta migracion la API nueva falla en las consultas de etapas y hallazgos: este chequeo (solo lectura) avisa antes de desplegar
+        // si falta ejecutar database/cambios-esquema/02-catalogos-maestros.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/02-catalogos-maestros.sql.";
+
+        async Task<int> Contar(string tabla, string codigos) =>
+            await EscalarAsync<int>(conexion, $"SELECT COUNT(*) FROM {tabla} WHERE Codigo IN ({codigos})");
+
+        Assert.True(await Contar("tblEtapasCatalogo", "'cargue','transporte','descargue'") == 3, $"Faltan etapas del catalogo. {ayuda}");
+        Assert.True(await Contar("tblPuntosCustodia", "'cedi_1','origen','certificadora','destino','cedi_2','concesionario'") == 6, $"Faltan lugares. {ayuda}");
+        Assert.True(await Contar("tblTiposUnidadTransportadora", "'ninera','nodriza','quintinaria','planchon_grua'") == 4, $"Faltan tipos de unidad. {ayuda}");
+        Assert.True(await Contar("tblClasesDano", "'deformacion','rotura','cortado','perforacion','golpe','mancha','raya_pintar','desconchado','particulas','faltante'") == 10, $"Faltan clases de dano. {ayuda}");
+        Assert.True(await Contar("tblTamanosDano", "'1_5cm','5_10cm','10_20cm','mas_20cm','requiere_reemplazo','mas_10_particulas'") == 6, $"Faltan tamanos de dano. {ayuda}");
+        Assert.True(await Contar("tblNivelesSeveridad", "'v1_plus','v1','v2','v3'") == 4, $"Faltan niveles de severidad. {ayuda}");
+        Assert.Equal(9, await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblVistasFoto"));
+        Assert.Equal(7, await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblVistasFoto WHERE Obligatoria = 1"));
+        Assert.Equal(2, await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblVistasFoto WHERE Obligatoria = 0 AND Codigo IN ('piezas_baul','cojineria')"));
+    }
+
+    [FactEntornoReal]
+    public async Task Las_etapas_y_los_hallazgos_referencian_los_catalogos_con_llaves_foraneas()
+    {
+        await using var conexion = await AbrirAsync();
+
+        var etapaNoNula = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblEtapas') AND name = N'EtapaCatalogoId' AND is_nullable = 0");
+        var lugarOpcional = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblEtapas') AND name = N'PuntoCustodiaId' AND is_nullable = 1");
+        var fks = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.foreign_keys
+             WHERE name IN (N'FK_tblEtapas_EtapaCatalogo', N'FK_tblEtapas_PuntoCustodia', N'FK_tblHallazgos_ClaseDano', N'FK_tblHallazgos_TamanoDano', N'FK_tblCuadrantes_Vista')
+            """);
+        var checksViejos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblHallazgos_ClaseDano', N'CK_tblHallazgos_TamanoDano')");
+        var sinEtapa = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblEtapas WHERE EtapaCatalogoId IS NULL");
+
+        Assert.Equal(1, etapaNoNula);
+        Assert.Equal(1, lugarOpcional);
+        Assert.Equal(5, fks);
+        Assert.Equal(0, checksViejos);
+        Assert.Equal(0, sinEtapa);
     }
 
     [FactEntornoReal]

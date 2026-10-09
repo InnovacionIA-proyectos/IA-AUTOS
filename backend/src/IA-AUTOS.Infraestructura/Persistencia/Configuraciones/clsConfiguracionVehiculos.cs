@@ -1,3 +1,4 @@
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using Microsoft.EntityFrameworkCore;
@@ -22,17 +23,6 @@ internal sealed class clsConfiguracionVehiculo : IEntityTypeConfiguration<clsVeh
     }
 }
 
-internal sealed class clsConfiguracionPuntoCustodia : IEntityTypeConfiguration<clsPuntoCustodia>
-{
-    public void Configure(EntityTypeBuilder<clsPuntoCustodia> builder)
-    {
-        builder.ToTable("tblPuntosCustodia");
-        clsConfiguracionBase.Base(builder);
-        builder.Property(p => p.Nombre).HasColumnType("varchar(30)").IsRequired();
-        builder.HasIndex(p => p.Nombre).IsUnique().HasDatabaseName("UQ_tblPuntosCustodia_Nombre");
-    }
-}
-
 internal sealed class clsConfiguracionEtapa : IEntityTypeConfiguration<clsEtapa>
 {
     public void Configure(EntityTypeBuilder<clsEtapa> builder)
@@ -41,6 +31,8 @@ internal sealed class clsConfiguracionEtapa : IEntityTypeConfiguration<clsEtapa>
         clsConfiguracionBase.Base(builder);
         builder.HasOne<clsVehiculo>().WithMany().HasForeignKey(e => e.VehiculoId)
             .HasConstraintName("FK_tblEtapas_Vehiculo").OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<clsEtapaCatalogo>().WithMany().HasForeignKey(e => e.EtapaCatalogoId)
+            .HasConstraintName("FK_tblEtapas_EtapaCatalogo").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsPuntoCustodia>().WithMany().HasForeignKey(e => e.PuntoCustodiaId)
             .HasConstraintName("FK_tblEtapas_PuntoCustodia").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(e => new { e.VehiculoId, e.Orden }).IsUnique().HasDatabaseName("UQ_tblEtapas_Vehiculo_Orden");
@@ -59,5 +51,9 @@ internal sealed class clsConfiguracionUsuario : IEntityTypeConfiguration<clsUsua
         builder.Property(u => u.SubtipoInspector).HasColumnType("varchar(30)");
         builder.Property(u => u.PasswordHash).HasMaxLength(400);
         builder.HasIndex(u => u.Email).IsUnique().HasDatabaseName("UQ_tblUsuarios_Email");
+
+        // Id del portal: unico entre quienes lo tienen (los conductores no tienen usuario del portal y quedan en NULL).
+        builder.Property(u => u.PortalUsuarioId).HasColumnType("bigint");
+        builder.HasIndex(u => u.PortalUsuarioId).IsUnique().HasFilter("[PortalUsuarioId] IS NOT NULL").HasDatabaseName("UX_tblUsuarios_PortalUsuarioId");
     }
 }

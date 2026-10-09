@@ -132,8 +132,8 @@ public class HallazgosYEvidenciasTests
 
     [Theory]
     [InlineData("", "golpe", "5_10cm")]
-    [InlineData("Capot", "no_existe", "5_10cm")]
-    [InlineData("Capot", "golpe", "no_existe")]
+    [InlineData("Capot", "", "5_10cm")]
+    [InlineData("Capot", "golpe", "")]
     public void Hallazgo_rechaza_campos_invalidos(string parte, string clase, string tamano)
     {
         Assert.Throws<clsValidacionException>(() => clsHallazgo.Crear(Guid.NewGuid(), parte, clase, tamano, null, AHORA));

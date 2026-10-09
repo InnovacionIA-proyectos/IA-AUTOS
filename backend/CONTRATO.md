@@ -16,7 +16,7 @@ OpenAPI ([docs/openapi.json](docs/openapi.json)), que la API genera y una prueba
 | Nulos | Los campos opcionales sin valor llegan como `null` (nunca se omiten) |
 | VIN | 17 caracteres alfanuméricos en mayúscula, sin las letras `I`, `O` ni `Q`; se normaliza a mayúscula y sin espacios |
 | Imágenes | Se referencian por `url` **relativa** (`/api/uploads/<archivo>`): anteponga la URL base |
-| CORS | La API solo acepta los orígenes configurados en `Cors__Origins`; la web debe estar en esa lista |
+| CORS | La API solo acepta los orígenes **exactos** de `Cors__Origins` (sin comodín `*`) y expone `Content-Disposition` (nombre del PDF de inventario). La web debe estar en esa lista |
 
 ## Autenticación
 
@@ -65,12 +65,13 @@ Todos los errores son JSON con la misma forma:
 | `VALIDATION_ERROR` | 400 | cuerpo inválido, datos que no cumplen las reglas, filtros mal formados |
 | `UNAUTHORIZED` | 401 | sin token, token inválido o vencido, usuario retirado, credenciales incorrectas |
 | `FORBIDDEN` | 403 | rol insuficiente o inspección ajena |
+| `PORTAL_USER_NOT_LINKED` | 403 | la persona del portal no tiene acceso a IA Autos (solo en `login-portal`) |
 | `NOT_FOUND` | 404 | recurso o ruta inexistente |
 | `METHOD_NOT_ALLOWED` | 405 | método no admitido en una ruta existente |
 | `CONFLICT` | 409 | duplicados, inspección cerrada, transferencia ya firmada |
 | `RATE_LIMITED` | 429 | demasiados intentos de login (10 por minuto por IP, configurable) |
 | `INTERNAL_ERROR` | 500 | error inesperado, sin detalles internos |
-| `DB_UNAVAILABLE` | 503 | reservado |
+| `DB_UNAVAILABLE` | 503 | no se pudo verificar la identidad en la base de usuarios del portal (TI) |
 
 `details` en un `VALIDATION_ERROR` tiene la forma:
 
@@ -88,12 +89,13 @@ al usuario y use `code` (no el texto) para decidir qué hacer.
 | `rol` | `inspector`, `conductor`, `coordinador_calidad`, `comercial`, `admin`, `super_admin` |
 | `subtipo_inspector` | `importacion`, `nacional`, `export_preembarque`, `export_recibido` |
 | `operacion` (vehículo) | `importacion`, `exportacion`, `nacional` |
-| `proceso` (punto de custodia) | `cargue`, `punto_origen`, `certificadora`, `punto_destino`, `transporte`, `descargue`, `concesionario` |
 | `momento` (inspección) | `check_in`, `check_out`, `informe` |
 | `estado` (inspección) | `borrador`, `cerrada` |
-| `clase_dano` | `deformacion`, `rotura`, `cortado`, `perforacion`, `golpe`, `mancha`, `raya_pintar`, `desconchado`, `particulas`, `faltante` |
-| `tamano_dano` | `1_5cm`, `5_10cm`, `10_20cm`, `mas_20cm`, `requiere_reemplazo`, `mas_10_particulas` |
 | `tipo` (listado de vehículos) | `movilizados`, `pendientes`, `novedad` |
+
+> **Catálogos administrables.** El `proceso` (etapa), los lugares, la `clase_dano`, el `tamano_dano`, los tipos de unidad, los niveles de severidad,
+> las vistas de foto y los cuadrantes **no son listas fijas**: se leen de [`GET /api/catalogos`](#catálogos-maestros) y los administra TI o el
+> coordinador de calidad. Los valores iniciales de `proceso` son `cargue`, `transporte` y `descargue`.
 
 ---
 
@@ -119,6 +121,81 @@ Correo y contraseña son obligatorios (`400` si faltan). Credenciales incorrecta
 
 ### `GET /api/auth/me`
 Autenticado. `200`: `{ "id", "nombre", "email", "rol" }` del usuario de la sesión.
+
+### Sesión del portal (inicio de sesión único)
+
+Para quien ya inició sesión en el portal de administración: entra a IA Autos **sin una segunda pantalla de login**. Es el mismo
+esquema de sesión que EmbarQA: el `access` y el `refresh` viajan **en el cuerpo** de las respuestas (no hay cookies, así que no
+hace falta `credentials: 'include'`). Guárdelos con cuidado: el `refresh` dura 30 días.
+
+| Tiempo | Valor por defecto |
+|---|---|
+| access token | 60 minutos |
+| refresh token | 30 días |
+
+#### `POST /api/auth/login-portal`
+Anónimo, con límite de intentos por IP. El cuerpo es **el arreglo del usuario del portal tal cual**, sin objeto envolvente. Se
+usa únicamente el primer elemento y, de él, **solo el `id`**: el servidor no cree el nombre ni los permisos (los puede editar el
+navegador) y revalida el id contra TI.
+
+```json
+[ { "id": 10001, "nombreUsuario": "usuario.portal", "permisos": [ { "id": "53", "descripcion": "AdminIAAUTOS", "idOcion": "56", "opcion": "AdminIAAUTOS" } ] } ]
+```
+
+> **Excepción a la convención de nombres.** Este endpoint NO usa `snake_case`: lee los campos tal como los guarda el portal
+> (`nombreUsuario`, `idOcion`) y **distingue mayúsculas**. Respete además estos tipos, porque la lectura es estricta y un tipo
+> distinto responde `400`:
+>
+> | Campo | Tipo | Notas |
+> |---|---|---|
+> | raíz | arreglo | un objeto o un arreglo vacío responde `400` |
+> | `id` (del usuario) | **entero** | número JSON, no texto ni decimal; obligatorio |
+> | `nombreUsuario` | texto | se ignora para autorizar |
+> | `permisos` | **arreglo** de objetos | no un objeto |
+> | `permisos[].id` | **texto** (`"53"`) | no número |
+> | `permisos[].descripcion`, `permisos[].opcion` | texto | se ignoran para autorizar |
+> | `permisos[].idOcion` | **texto** (`"56"`) | el campo se llama `idOcion`, **sin la «p»** |
+>
+> Los campos que no están en la tabla se ignoran. Las respuestas sí usan `snake_case` como el resto de la API.
+
+`200`:
+
+```json
+{ "access": "eyJhbGciOi...", "refresh": "kQ3x...", "user": { "id": "uuid", "nombre": "Juan Pérez", "email": "jperez@empresa.com", "rol": "admin" } }
+```
+
+La clave es **`user`** (no `usuario`, que es la de `POST /api/auth/login`). `rol` es uno de los valores del catálogo de roles.
+
+- **Rol:** sale de TI. Quien tiene el rol o la opción de permiso `<Rol>IAAUTOS` entra con ese rol: `SuperAdminIAAUTOS`, `AdminIAAUTOS`,
+  `CoordinadorCalidadIAAUTOS`, `ComercialIAAUTOS` o `InspectorIAAUTOS`. Con varios, gana el de mayor privilegio (en ese orden). El
+  conductor no entra por el portal.
+- **Primera vez:** si la persona no existe en IA Autos pero tiene un rol de IA Autos en el portal, se crea su cuenta con ese rol. Si ya
+  existía una cuenta con el mismo correo, se vincula. El rol se sincroniza en cada ingreso.
+- `403` con **`code: "PORTAL_USER_NOT_LINKED"`**: la persona no existe en el portal, no tiene ningún rol de IA Autos o fue retirada de
+  IA Autos. **Es distinto de `FORBIDDEN`** (rol insuficiente): muestre la pantalla de acceso no habilitado, no un error genérico. El mensaje
+  es siempre el mismo: *«Tu usuario no tiene acceso habilitado a IA Autos. Solicita el permiso al administrador del portal.»*
+- `503` con `code: "DB_UNAVAILABLE"`: no se pudo verificar en TI. No se concede acceso; reintente en unos minutos.
+- `400` si el cuerpo no respeta el formato de arriba. `429` si excede el límite de intentos.
+
+#### `POST /api/auth/refresh`
+Anónimo. Recibe `{ "refresh": "..." }` y responde `200` `{ "access": "...", "refresh": "..." }` (sin `user`). **Rota el refresh**: el
+anterior queda revocado y usarlo otra vez responde `401`; si ya pasaron unos segundos desde que rotó, se toma como robo de sesión y se
+**revoca la sesión completa** (también el access vigente). Guarde siempre el refresh nuevo.
+
+- `401` si el refresh venció, fue revocado o no existe. Lleve al usuario de vuelta al portal.
+- `400` si falta `refresh` o el cuerpo no es un objeto JSON.
+- Renueve el access antes de que venza (o ante un `401` por expiración, una sola vez). Si dos pestañas refrescan a la vez con el mismo
+  refresh, la segunda recibe `401` sin que se pierda la sesión: reintente una vez con el refresh que guardó la primera.
+
+#### `POST /api/auth/logout`
+Anónimo. Recibe `{ "refresh": "..." }` y responde `204` vacío. Revoca el refresh y, con él, el access de esa sesión: usarlos después
+responde `401`. Si además envía el `Authorization: Bearer`, también se cierra la sesión de ese access (sirve para salir aunque ya no tenga
+el refresh; en ese caso puede omitir el cuerpo). Siempre responde `204`, haya o no sesión. Cerrar una sesión no afecta a las otras del
+mismo usuario.
+
+#### Cuando expira la sesión del portal
+Si el portal cierra su sesión, el módulo debe llamar a `logout`, borrar sus tokens, mostrar su pantalla de acceso con el mensaje y el
+botón «Volver al portal», y no intentar `refresh`.
 
 ### `GET /health`
 Público. `200` si la base responde, `503` si no:
@@ -233,7 +310,7 @@ transferencia.
   "operacion": "nacional", "created_at": "…", "updated_at": "…",
   "etapas": [
     {
-      "id": "uuid", "orden": 1, "proceso": "cargue", "requiere_inspeccion": true,
+      "id": "uuid", "orden": 1, "proceso": "cargue", "lugar": null, "requiere_inspeccion": true,
       "inspecciones": [
         { "id": "uuid", "etapa_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": 6.2, "lng": -75.5,
           "estado": "cerrada", "conductor_nombre": null, "placa": null, "trailer": null, "notas": null,
@@ -268,18 +345,28 @@ Administración. `201` con la asignación.
 ```
 
 ### `POST /api/etapas`
-Administración. Define una etapa de la ruta de un VIN. `201`.
+Administración. Define un tramo de la ruta de un VIN: una **etapa del catálogo** y, si se conoce, el **lugar** donde se hace. `201`.
 
 ```json
-{ "vehiculo_id": "uuid", "punto_custodia_id": "uuid", "orden": 1, "requiere_inspeccion": true }
+{ "vehiculo_id": "uuid", "etapa_catalogo_id": "uuid", "punto_custodia_id": "uuid", "orden": 1, "requiere_inspeccion": true }
 ```
 
-`orden` es un entero ≥ 1; `requiere_inspeccion` es opcional (por defecto `true`; `false` significa que solo exige firma).
-Un `orden` repetido responde `409`; un vehículo o punto inexistente, `404`.
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `vehiculo_id` | sí | UUID de un vehículo existente |
+| `etapa_catalogo_id` | sí | `id` de un valor **activo** de `etapas` (antes se enviaba `punto_custodia_id` con el proceso) |
+| `punto_custodia_id` | no | `id` de un lugar **activo** de `puntos-custodia`; `null` o ausente = sin lugar |
+| `orden` | sí | entero ≥ 1, único por vehículo |
+| `requiere_inspeccion` | no | por defecto `true`; `false` significa que solo exige firma |
+
+Un `orden` repetido responde `409`; un vehículo inexistente, `404`; una etapa o un lugar inexistente o inactivo, `400`.
 
 ```json
-{ "id": "uuid", "vehiculo_id": "uuid", "punto_custodia_id": "uuid", "orden": 1, "requiere_inspeccion": true, "created_at": "…", "updated_at": "…" }
+{ "id": "uuid", "vehiculo_id": "uuid", "etapa_catalogo_id": "uuid", "punto_custodia_id": null, "orden": 1, "requiere_inspeccion": true, "created_at": "…", "updated_at": "…" }
 ```
+
+Los vehículos que se cargan (`POST /api/vehiculos/cargar` o la ingesta Sofasa) reciben automáticamente una etapa por cada valor **activo**
+de `etapas`, en su `orden`, sin lugar.
 
 ---
 
@@ -326,7 +413,7 @@ Autenticado. Listado de hasta **200** informes. Todos los filtros son opcionales
 | `usuarioId` | UUID del inspector |
 | `momento` | `check_in`, `check_out` o `informe` |
 | `estado` | `borrador` o `cerrada` |
-| `proceso` | `cargue`, `punto_origen`, `certificadora`, `punto_destino`, `transporte`, `descargue` o `concesionario` |
+| `proceso` | `codigo` de una etapa del catálogo `etapas` (por ejemplo `cargue`, `transporte` o `descargue`), activa o no |
 | `desde`, `hasta` | fecha ISO |
 
 Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es el `InspeccionDto` más `vin` y `proceso`.
@@ -338,7 +425,7 @@ Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de
 {
   "id": "uuid", "etapa_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": null, "lng": null,
   "estado": "cerrada", "conductor_nombre": null, "placa": null, "trailer": null, "notas": null, "created_at": "…", "updated_at": "…",
-  "vin": "…", "marca": "…", "modelo": null, "proceso": "cargue", "requiere_inspeccion": true,
+  "vin": "…", "marca": "…", "modelo": null, "proceso": "cargue", "lugar": null, "requiere_inspeccion": true,
   "inspector_nombre": "Ana Pérez", "ninera": "ABC123",
   "hallazgos": [ /* HallazgoDto */ ],
   "evidencias": [ /* EvidenciaDto */ ],
@@ -358,8 +445,8 @@ Campo (creador de la inspección o administrador). `201` con el `HallazgoDto`.
 | Campo | Obligatorio | Regla |
 |---|---|---|
 | `parte_vehiculo` | sí | máximo 80 caracteres |
-| `clase_dano` | sí | catálogo `clase_dano` |
-| `tamano_dano` | sí | catálogo `tamano_dano` |
+| `clase_dano` | sí | `codigo` **activo** del catálogo `clases-dano` |
+| `tamano_dano` | sí | `codigo` **activo** del catálogo `tamanos-dano` |
 | `coords_diagrama` | no | `x` e `y` entre 0 y 1 |
 
 `HallazgoDto`:
@@ -421,6 +508,108 @@ Campo (creador o administrador). Cierra el informe; después ya no admite cambio
 
 Si no cumple los requisitos (evidencias, geolocalización…), responde `400` con la lista de requisitos incumplidos en
 `details`. Si ya estaba cerrada, `409`; **un cliente que reintenta el cierre puede tomar ese `409` como éxito.**
+
+---
+
+## Catálogos maestros
+
+Las etapas, los lugares, los tipos de unidad, las clases y tamaños de daño, los niveles de severidad, las vistas de foto y los
+cuadrantes **ya no son listas fijas en el código**: viven en tablas y los administra TI o el coordinador de calidad desde el portal.
+La web y la app deben leerlos de la API (y guardar una copia para trabajar sin señal), no escribirlos a mano.
+
+| Nombre (ruta y clave) | Qué contiene | Campos de cada valor |
+|---|---|---|
+| `etapas` | Etapas del proceso: `cargue`, `transporte`, `descargue`. Es el `proceso` de un informe o de un tramo de la ruta | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `puntos-custodia` | Lugares donde se hace una etapa: CEDI 1, Origen, Certificadora, Destino, CEDI 2, Concesionario | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `tipos-unidad` | Tipos de unidad transportadora: niñera, nodriza, quintinaria, planchón grúa | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `clases-dano` | Clases de daño de un hallazgo (10 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `tamanos-dano` | Tamaños de daño de un hallazgo (6 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `niveles-severidad` | Niveles V1+, V1, V2 y V3 con su acción | `id`, `codigo`, `nombre`, `orden`, `activo`, `accion` (texto o `null`, máx. 500) |
+| `vistas-foto` | Las 9 vistas de foto: 7 obligatorias y 2 adicionales (`piezas_baul`, `cojineria`) que solo se toman con faltante o daño | `id`, `codigo`, `nombre`, `orden`, `activo`, `obligatoria`, `tipo_vehiculo` (`null` = cualquier tipo) |
+| `cuadrantes` | Regiones numeradas de cada vista, con su geometría. Las vistas adicionales no tienen cuadrantes | `id`, `vista_foto_id`, `vista` (código de la vista), `tipo_vehiculo`, `numero`, `nombre`, `geometria`, `orden`, `activo` |
+
+`codigo` es la **clave estable** (minúsculas, números y `_`, máximo 30 caracteres): es lo que viaja en el resto de la API
+(`proceso`, `clase_dano`, `tamano_dano`) y no cambia nunca. `nombre` es la etiqueta que se muestra y sí puede cambiar. Los valores
+vienen ordenados por `orden`.
+
+### `GET /api/catalogos`
+Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inactivos**, y una versión global.
+
+```json
+{
+  "version": "9f2c4a7b1d3e5f60",
+  "catalogos": {
+    "etapas": [ { "id": "uuid", "codigo": "cargue", "nombre": "Cargue", "orden": 1, "activo": true } ],
+    "clases-dano": [ { "id": "uuid", "codigo": "golpe", "nombre": "Golpe", "orden": 5, "activo": true } ],
+    "niveles-severidad": [ { "id": "uuid", "codigo": "v1", "nombre": "V1", "orden": 2, "activo": true, "accion": null } ],
+    "vistas-foto": [ { "id": "uuid", "codigo": "piezas_baul", "nombre": "Piezas en el baúl", "orden": 8, "activo": true, "obligatoria": false, "tipo_vehiculo": null } ],
+    "cuadrantes": [],
+    "puntos-custodia": [], "tipos-unidad": [], "tamanos-dano": []
+  }
+}
+```
+
+### `GET /api/catalogos/{nombre}`
+Un solo catálogo con **su propia versión**: `{ "version": "…", "items": [ … ] }`. `404` si el nombre no existe (el mensaje lista los
+disponibles).
+
+### Versión y copia sin conexión
+Cada respuesta trae la versión en el encabezado `ETag` (por ejemplo `"9f2c4a7b1d3e5f60"`) y también en el cuerpo. La versión es una
+huella del contenido: **cambia si y solo si cambió algún dato** del catálogo (o de cualquiera, en el global).
+
+1. Guarde la respuesta y su `ETag`.
+2. La próxima vez (al abrir la app, al abrir una inspección con señal) envíe `If-None-Match: "<ETag guardado>"`.
+3. `304` sin cuerpo = su copia está al día. `200` = reemplace la copia por la respuesta nueva.
+4. Sin señal, use la última copia guardada.
+
+Un catálogo cambia al instante cuando se edita; si hay varias instancias de la API, otra puede tardar hasta un minuto en reflejarlo.
+
+**Valores inactivos.** `activo: false` significa que ya no se ofrece, pero sigue siendo válido en lo que ya se guardó. En los selectores
+muestre solo los activos; para dibujar informes viejos use todos (un hallazgo antiguo puede tener una clase hoy inactiva).
+
+### Geometría de los cuadrantes
+Para que la app y el portal dibujen las mismas regiones, `geometria` es un **polígono normalizado**: un objeto con la lista de puntos,
+cada uno `[x, y]` con `x` e `y` entre 0 y 1, medidos sobre la imagen de la vista (el origen es la esquina superior izquierda).
+
+```json
+{ "puntos": [ [0.10, 0.10], [0.55, 0.10], [0.55, 0.48], [0.10, 0.48] ] }
+```
+
+Debe tener al menos 3 puntos. Llega como objeto JSON (no como texto) o `null` si el cuadrante aún no tiene geometría. `numero` es
+único por `tipo_vehiculo` (con `tipo_vehiculo: null` el número es único entre los cuadrantes sin tipo).
+
+### Administración: crear, editar, inactivar y borrar
+Solo `admin`, `super_admin` y `coordinador_calidad`; los demás roles reciben `403`.
+
+| Operación | Ruta | Respuesta |
+|---|---|---|
+| Crear | `POST /api/catalogos/{nombre}` | `201` con el valor creado |
+| Editar | `PATCH /api/catalogos/{nombre}/{id}` | `200` con el valor; cambia solo los campos enviados |
+| Inactivar | `PATCH /api/catalogos/{nombre}/{id}` con `{ "activo": false }` | `200` |
+| Borrar | `DELETE /api/catalogos/{nombre}/{id}` | `204`; `409` si algo lo usa |
+
+Cuerpo de **crear**: `codigo` y `nombre` obligatorios; `orden` (entero ≥ 0, por defecto 0) y `activo` (por defecto `true`) opcionales, más
+los campos propios del catálogo. En **cuadrantes** no hay `codigo`: son obligatorios `vista_foto_id`, `numero` y `nombre`, y opcionales
+`tipo_vehiculo`, `geometria`, `orden` y `activo`. En **vistas** `obligatoria` es opcional (por defecto `true`).
+
+```json
+{ "codigo": "oxidacion", "nombre": "Oxidación", "orden": 11 }
+```
+
+Reglas:
+- `400` con `details.fieldErrors` si un campo es inválido, **si llega un campo que ese catálogo no admite** (por ejemplo `accion` en
+  `etapas`) o si se envía `null` en `nombre`, `orden` o `activo`.
+- El **`codigo` no se puede cambiar** (`400`); se puede reenviar igual. Para reemplazar un código, cree un valor nuevo e inactive el viejo.
+- `409` si el `codigo` ya existe en ese catálogo, o si el `numero` de cuadrante ya existe para ese tipo de vehículo.
+- **Un valor en uso no se borra:** `409` con el mensaje «El valor está en uso y no se puede borrar: solo puede inactivarlo». Está en uso una clase
+  o tamaño usado por algún hallazgo, una etapa o un lugar usado por algún tramo de la ruta, y una vista que tiene cuadrantes.
+- Una vista **con cuadrantes** no puede pasar a `obligatoria: false` (`409`), y no se pueden crear cuadrantes en una vista adicional ni
+  inactiva (`400`).
+- El código `requiere_reemplazo` de `tamanos-dano` lo usa el análisis de patrones para contar los daños que obligan a reemplazar la pieza:
+  no lo borre ni le cambie el código.
+
+**Qué cambia en el resto de la API.** Un hallazgo nuevo solo admite `clase_dano` y `tamano_dano` **activos**; los vehículos nuevos reciben
+como ruta las etapas **activas** de `etapas`, en su `orden`; y el filtro `proceso` de los informes acepta los códigos de `etapas`.
 
 ---
 
@@ -521,7 +710,7 @@ Tasa de rechazo (unidades movilizadas con al menos un hallazgo) frente a la lín
 
 ## Notas para el consumo
 
-- **Mismo origen y CORS.** El navegador solo podrá llamar a la API si su origen está en `Cors__Origins`.
+- **CORS.** El navegador solo podrá llamar a la API si su origen exacto está en `Cors__Origins` (registre el origen del portal: un origen no registrado se bloquea). El nombre del PDF de inventario llega en `Content-Disposition`, que la API expone.
 - **Reintentos.** Reintente solo `401` (tras renovar sesión), `408`, `429` y `5xx`. No reintente `400`, `403`, `404` ni `409`
   (salvo el `409` al cerrar, ver arriba).
 - **Cierre de sesión por inactividad y expiración.** Ante un `401` en una ruta protegida, borre el token y vaya al login.

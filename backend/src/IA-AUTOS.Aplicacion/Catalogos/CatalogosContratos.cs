@@ -1,0 +1,89 @@
+using System.Text.Json;
+
+namespace IAAutos.Aplicacion.Catalogos;
+
+/// <summary>Nombres de los catalogos tal como se usan en la ruta (/api/catalogos/{nombre}) y como claves del conjunto completo.</summary>
+public static class clsNombresCatalogo
+{
+    public const string ETAPAS = "etapas";
+    public const string PUNTOS_CUSTODIA = "puntos-custodia";
+    public const string TIPOS_UNIDAD = "tipos-unidad";
+    public const string CLASES_DANO = "clases-dano";
+    public const string TAMANOS_DANO = "tamanos-dano";
+    public const string NIVELES_SEVERIDAD = "niveles-severidad";
+    public const string VISTAS_FOTO = "vistas-foto";
+    public const string CUADRANTES = "cuadrantes";
+}
+
+/// <summary>Un valor de catalogo tal como lo ve el cliente: solo los campos propios de ese catalogo (snake_case), con id, codigo, nombre, orden y activo.</summary>
+public sealed class ValorCatalogo : Dictionary<string, object?>
+{
+    public ValorCatalogo()
+    {
+    }
+
+    public ValorCatalogo(IDictionary<string, object?> campos)
+        : base(campos)
+    {
+    }
+
+    public Guid Id => (Guid)this["id"]!;
+
+    public bool Activo => this["activo"] is true;
+
+    public string? Codigo => TryGetValue("codigo", out var codigo) ? codigo as string : null;
+}
+
+/// <summary>Un catalogo administrable. Lo implementa la infraestructura sobre su tabla; el servicio de catalogos lo orquesta.</summary>
+public interface ICatalogo
+{
+    /// <summary>Nombre en la ruta (por ejemplo "clases-dano").</summary>
+    string Nombre { get; }
+
+    /// <summary>Todos los valores (activos e inactivos), ordenados por su orden.</summary>
+    Task<IReadOnlyList<ValorCatalogo>> ListarAsync(CancellationToken ct = default);
+
+    /// <summary>Agrega un valor al contexto (no confirma). Valida los campos recibidos.</summary>
+    Task<ValorCatalogo> CrearAsync(IReadOnlyDictionary<string, JsonElement> campos, CancellationToken ct = default);
+
+    /// <summary>Cambia solo los campos recibidos (no confirma).</summary>
+    Task<ValorCatalogo> ActualizarAsync(Guid id, IReadOnlyDictionary<string, JsonElement> campos, CancellationToken ct = default);
+
+    /// <summary>Marca el valor para borrarlo (no confirma). La base impide borrarlo si algo lo usa.</summary>
+    Task EliminarAsync(Guid id, CancellationToken ct = default);
+}
+
+/// <summary>Un catalogo con su version (huella de su contenido) para cache y validacion con ETag.</summary>
+public sealed record CatalogoDto(string Version, IReadOnlyList<ValorCatalogo> Items);
+
+/// <summary>Todos los catalogos con una version global; sirve para que la app detecte si algo cambio con una sola comparacion.</summary>
+public sealed record CatalogosDto(string Version, IReadOnlyDictionary<string, IReadOnlyList<ValorCatalogo>> Catalogos);
+
+/// <summary>Cuerpo de crear o editar un valor. Cada catalogo acepta solo los campos que le corresponden (ver CONTRATO.md).</summary>
+public sealed record CatalogoValorRequest(
+    string? Codigo,
+    string? Nombre,
+    int? Orden,
+    bool? Activo,
+    string? Accion,
+    bool? Obligatoria,
+    string? TipoVehiculo,
+    Guid? VistaFotoId,
+    int? Numero,
+    GeometriaCuadranteDto? Geometria);
+
+/// <summary>Poligono normalizado de un cuadrante: cada punto es [x, y] con x e y entre 0 y 1 sobre la imagen de la vista.</summary>
+public sealed record GeometriaCuadranteDto(IReadOnlyList<IReadOnlyList<double>> Puntos);
+
+/// <summary>Lectura de los catalogos para el resto de la aplicacion (validar entradas, armar la ruta de un vehiculo). Con cache.</summary>
+public interface ICatalogosLectura
+{
+    /// <summary>Codigos del catalogo; <paramref name="soloActivos"/> excluye los inactivos.</summary>
+    Task<IReadOnlySet<string>> CodigosAsync(string catalogo, bool soloActivos, CancellationToken ct = default);
+
+    /// <summary>Ids de las etapas activas del catalogo, en orden: la ruta estandar de un vehiculo nuevo.</summary>
+    Task<IReadOnlyList<Guid>> EtapasDeLaRutaAsync(CancellationToken ct = default);
+
+    /// <summary>True si el valor existe en el catalogo y esta activo (por ejemplo, para crear una etapa con un lugar valido).</summary>
+    Task<bool> ExisteActivoAsync(string catalogo, Guid id, CancellationToken ct = default);
+}

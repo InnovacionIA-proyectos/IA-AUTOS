@@ -17,6 +17,9 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | Metodo y ruta | Acceso | Descripcion |
 |---|---|---|
 | POST `/api/auth/login` | publico, con limite de intentos | correo y contrasena; devuelve `{ token, usuario }` |
+| POST `/api/auth/login-portal` | publico, con limite de intentos | inicio de sesion unico: recibe el arreglo del usuario del portal (usa solo el id y lo revalida en TI); devuelve `{ access, refresh, user }`. 403 `PORTAL_USER_NOT_LINKED` si no tiene acceso a IA Autos |
+| POST `/api/auth/refresh` | publico | recibe `{ refresh }`; devuelve `{ access, refresh }` y rota el refresh (el anterior queda revocado) |
+| POST `/api/auth/logout` | publico | recibe `{ refresh }`; revoca la sesion (refresh y access) y responde 204 |
 | GET `/api/auth/me` | autenticado | datos del usuario actual |
 | GET `/api/usuarios` | autenticado | administradores: datos completos; los demas roles: `id`, `nombre`, `rol` de usuarios activos |
 | POST `/api/usuarios` | super_admin | crea usuario (`nombre`, `email`, `rol`, `password`) |
@@ -28,7 +31,7 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | GET `/api/vehiculos/{vin}/inventario` | autenticado | etapas, inspecciones, hallazgos, evidencias y transferencia |
 | GET `/api/vehiculos/{vin}/inventario/pdf` | autenticado | inventario en PDF (descarga) |
 | POST `/api/asignaciones` | administracion | asigna un VIN a una ninera (placa) y opcionalmente a un conductor |
-| POST `/api/etapas` | administracion | define una etapa de la ruta (`orden`, `requiere_inspeccion`) |
+| POST `/api/etapas` | administracion | define un tramo de la ruta: `etapa_catalogo_id`, `punto_custodia_id` (lugar, opcional), `orden`, `requiere_inspeccion` |
 | POST `/api/inspecciones` | campo | crea el informe de una etapa (siempre en borrador; el usuario sale del token) |
 | GET `/api/inspecciones` | autenticado | listado (maximo 200) con filtros `vin`, `usuarioId`, `momento`, `estado`, `proceso`, `desde`, `hasta` |
 | GET `/api/inspecciones/{id}` | autenticado | informe completo con firmas y nombres |
@@ -40,6 +43,9 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | GET `/api/uploads/{archivo}` | publico por defecto | sirve la imagen |
 | POST `/api/etl/sofasa/ordenes` | token del ETL | ingesta idempotente por `source_id` |
 | GET `/api/sofasa/ordenes` | autenticado | ordenes mas recientes primero (maximo 500) |
+| GET `/api/catalogos` | autenticado | todos los catalogos maestros (etapas, lugares, clases y tamanos de dano, niveles, vistas, cuadrantes...) con version (`ETag`, `304` con `If-None-Match`) |
+| GET `/api/catalogos/{nombre}` | autenticado | un catalogo con su version |
+| POST `/api/catalogos/{nombre}`, PATCH `/api/catalogos/{nombre}/{id}`, DELETE `/api/catalogos/{nombre}/{id}` | admin, super_admin, coordinador_calidad | crea, edita o borra un valor; uno en uso no se borra (`409`), se inactiva |
 | GET `/api/patrones` | autenticado | hallazgos por proceso y zona de unidades movilizadas |
 | GET `/api/patrones/analisis` | autenticado | clases y tamanos de dano con sugerencias |
 | GET `/api/metricas/rechazo` | autenticado | tasa de rechazo frente a la linea base |

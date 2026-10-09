@@ -71,7 +71,7 @@ public sealed record TransferenciaDetalleDto(
     string? FirmaRecibe);
 
 /// <summary>
-/// Informe completo para revision: inspeccion con su contexto (VIN, proceso, inspector), hallazgos, evidencias con URL
+/// Informe completo para revision: inspeccion con su contexto (VIN, proceso, lugar, inspector), hallazgos, evidencias con URL
 /// y transferencia. La placa, el conductor y el trailer capturados en la app tienen prioridad sobre los de la asignacion.
 /// </summary>
 public sealed record InformeDetalleDto(
@@ -93,6 +93,7 @@ public sealed record InformeDetalleDto(
     string Marca,
     string? Modelo,
     string Proceso,
+    string? Lugar,
     bool RequiereInspeccion,
     string? InspectorNombre,
     string? Ninera,

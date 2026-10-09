@@ -36,8 +36,9 @@ public sealed class clsHallazgo : clsEntidadBase
             throw new clsValidacionException($"La parte del vehículo admite máximo {PARTE_MAX} caracteres");
         }
 
-        clsValidador.EnCatalogo(claseDano, clsClaseDano.VALORES, "clase_dano");
-        clsValidador.EnCatalogo(tamanoDano, clsTamanoDano.VALORES, "tamano_dano");
+        // La clase y el tamano se validan contra los catalogos (en la aplicacion y con una FK en la base): aqui solo se exige que vengan.
+        claseDano = clsValidador.Requerido(claseDano, "clase_dano es requerida");
+        tamanoDano = clsValidador.Requerido(tamanoDano, "tamano_dano es requerido");
 
         var hallazgo = new clsHallazgo
         {

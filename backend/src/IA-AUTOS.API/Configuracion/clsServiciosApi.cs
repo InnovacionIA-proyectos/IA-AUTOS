@@ -59,16 +59,11 @@ public static class clsServiciosApi
                     "Demasiados intentos. Intenta de nuevo en un minuto.");
             };
             o.AddPolicy(clsAuthController.POLITICA_LIMITE_LOGIN, contexto =>
-            {
-                var maximo = contexto.RequestServices.GetRequiredService<IOptions<clsOpcionesSeguridad>>().Value.LoginMaxIntentosPorMinuto;
-                var ip = contexto.Connection.RemoteIpAddress?.ToString() ?? "desconocida";
-                return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = Math.Max(maximo, 1),
-                    Window = TimeSpan.FromMinutes(1),
-                    QueueLimit = 0,
-                });
-            });
+                LimitePorIp(contexto, s => s.LoginMaxIntentosPorMinuto));
+            o.AddPolicy(clsAuthController.POLITICA_LIMITE_LOGIN_PORTAL, contexto =>
+                LimitePorIp(contexto, s => s.LoginPortalMaxIntentosPorMinuto));
+            o.AddPolicy(clsAuthController.POLITICA_LIMITE_REFRESH, contexto =>
+                LimitePorIp(contexto, s => s.RefreshMaxPorMinuto));
         });
 
         servicios.AddCors(o =>
@@ -79,22 +74,12 @@ public static class clsServiciosApi
                 return;
             }
 
-            o.AddPolicy(POLITICA_CORS, politica =>
-            {
-                if (origenes.Contains("*"))
-                {
-                    politica.AllowAnyOrigin();
-                }
-                else
-                {
-                    politica.WithOrigins(origenes);
-                }
-
-                politica
-                    .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                    .WithHeaders("Content-Type", "Authorization")
-                    .SetPreflightMaxAge(TimeSpan.FromSeconds(86400));
-            });
+            o.AddPolicy(POLITICA_CORS, politica => politica
+                .WithOrigins(origenes)
+                .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                .WithHeaders("Content-Type", "Authorization")
+                .WithExposedHeaders("Content-Disposition")
+                .SetPreflightMaxAge(TimeSpan.FromSeconds(86400)));
         });
 
         // Detras de un proxy inverso: solo se confia en X-Forwarded-* cuando se habilita de forma explicita.
@@ -112,6 +97,18 @@ public static class clsServiciosApi
         servicios.ConfigureHttpJsonOptions(o => clsJsonApi.Configurar(o.SerializerOptions));
         servicios.AddOpenApi(clsOpenApi.Configurar);
         return servicios;
+    }
+
+    private static RateLimitPartition<string> LimitePorIp(HttpContext contexto, Func<clsOpcionesSeguridad, int> maximo)
+    {
+        var permitidos = maximo(contexto.RequestServices.GetRequiredService<IOptions<clsOpcionesSeguridad>>().Value);
+        var ip = contexto.Connection.RemoteIpAddress?.ToString() ?? "desconocida";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = Math.Max(permitidos, 1),
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
     }
 
     public static WebApplication UsarPipelineApi(this WebApplication app)
@@ -140,6 +137,12 @@ public static class clsServiciosApi
                     break;
             }
         });
+
+        if (OrigenesConfigurados(app.Configuration).Contains("*"))
+        {
+            // Un origen comodin deja a cualquier sitio llamar a la API desde un navegador: se ignora y hay que listar los origenes exactos.
+            app.Logger.LogWarning("Cors:Origins contiene \"*\": se ignora. Liste los origenes exactos de la web (Cors__Origins=https://portal.ejemplo.com,...).");
+        }
 
         var documentacionHabilitada = app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>(CLAVE_DOCUMENTACION);
 
@@ -194,7 +197,10 @@ public static class clsServiciosApi
     }
 
     /// <summary>Lee Cors:Origins como lista (appsettings) o como texto separado por comas (variable Cors__Origins).</summary>
-    internal static string[] LeerOrigenes(IConfiguration configuracion)
+    internal static string[] LeerOrigenes(IConfiguration configuracion) =>
+        [.. OrigenesConfigurados(configuracion).Where(o => o != "*")];
+
+    private static string[] OrigenesConfigurados(IConfiguration configuracion)
     {
         var lista = configuracion.GetSection("Cors:Origins").Get<string[]>() ?? [];
         var plano = configuracion["Cors:Origins"];

@@ -1,3 +1,4 @@
+using IAAutos.Aplicacion.Catalogos;
 using FluentValidation;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
@@ -11,7 +12,7 @@ namespace IAAutos.Aplicacion.Vehiculos;
 public sealed class clsVehiculosService(
     IVehiculoRepository vehiculos,
     IEtapaRepository etapas,
-    IPuntoCustodiaRepository puntos,
+    ICatalogosLectura catalogos,
     IConsultasVehiculos consultas,
     IGeneradorPdfInventario generadorPdf,
     IUnidadDeTrabajo unidadDeTrabajo,
@@ -31,7 +32,7 @@ public sealed class clsVehiculosService(
     {
         await validadorCarga.ValidarOLanzarAsync(solicitud, ct);
         var items = solicitud.Items!;
-        var materializador = new clsMaterializadorVehiculos(vehiculos, etapas, puntos, reloj);
+        var materializador = new clsMaterializadorVehiculos(vehiculos, etapas, catalogos, reloj);
         await materializador.PrepararAsync(items.Select(i => clsVin.Normalizar(i.Vin!)).ToList(), ct);
 
         int creados = 0, actualizados = 0;

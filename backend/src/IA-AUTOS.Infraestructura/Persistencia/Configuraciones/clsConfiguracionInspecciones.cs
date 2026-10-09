@@ -1,3 +1,4 @@
+using IAAutos.Dominio.Catalogos;
 using System.Text.Json;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
@@ -43,6 +44,11 @@ internal sealed class clsConfiguracionHallazgo : IEntityTypeConfiguration<clsHal
     public void Configure(EntityTypeBuilder<clsHallazgo> builder)
     {
         builder.ToTable("tblHallazgos", t => t.HasTrigger("TR_tblHallazgos_NoEnCerrada"));
+        // La clase y el tamano se guardan como codigo y referencian al catalogo (un valor en uso no se puede borrar).
+        builder.HasOne<clsClaseDano>().WithMany().HasForeignKey(h => h.ClaseDano).HasPrincipalKey(c => c.Codigo)
+            .HasConstraintName("FK_tblHallazgos_ClaseDano").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsTamanoDano>().WithMany().HasForeignKey(h => h.TamanoDano).HasPrincipalKey(c => c.Codigo)
+            .HasConstraintName("FK_tblHallazgos_TamanoDano").OnDelete(DeleteBehavior.NoAction);
         clsConfiguracionBase.Base(builder);
         builder.Property(h => h.ParteVehiculo).HasMaxLength(200).IsRequired();
         builder.Property(h => h.ClaseDano).HasColumnType("varchar(30)").IsRequired();

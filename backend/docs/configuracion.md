@@ -8,9 +8,17 @@ La API se configura solo con variables de entorno (o `appsettings`). El doble gu
 |---|---|---|
 | `ConnectionStrings__DefaultConnection` | si | cadena de conexion a SQL Server 2019 (base `IAAutos`), con el usuario de aplicacion |
 | `Jwt__Secret` | si | secreto HS256, minimo 32 caracteres; la API no arranca si falta o es corto |
+| `Jwt__ExpiracionDias` | no (30) | vigencia del token del login directo (app movil) |
+| `Jwt__Issuer`, `Jwt__Audience` | no | emisor y destinatario del JWT. Si se definen, todos los tokens nuevos los llevan y la API EXIGE que coincidan: los tokens emitidos antes (sin emisor) dejan de valer y las personas deben iniciar sesion otra vez. Valores sugeridos: `IA-AUTOS` y `IA-AUTOS.Clientes` |
+| `Sesion__AccessMinutos` | no (60) | vigencia del access token de la sesion del portal (minutos) |
+| `Sesion__RefreshDias` | no (30) | vigencia del refresh token (dias); viaja en el cuerpo, igual que en EmbarQA |
+| `Sesion__RefreshGraciaSegundos` | no (10) | margen en el que un refresh recien rotado no se toma como robo (dos pestanas que refrescan a la vez); 0 lo desactiva |
+| `PortalTi__ConnectionString` | para verificar contra TI | cadena de conexion de SOLO LECTURA a la base de usuarios del portal (`dbSolucionesTI` en produccion; `dbSolucionesTI_Prueba` en pruebas). Sin ella, `login-portal` solo acepta ids ya vinculados |
+| `PortalTi__BaseDatos` | no | base con las tablas del portal; si se omite se usa la de la `ConnectionString` de TI |
+| `PortalTi__DominioCorreo` | no | dominio (sin @) para crear la cuenta de quien no tiene correo en el portal; vacio = esa persona no entra |
 | `Jwt__ExpiracionDias` | no (30) | vigencia del token emitido |
 | `Etl__IngestToken` | si, si se usa el ETL | token compartido con el ETL; sin el, toda ingesta se rechaza |
-| `Cors__Origins` | recomendada | origenes de la web separados por comas; vacio = sin CORS (la app movil no lo necesita) |
+| `Cors__Origins` | recomendada | origenes EXACTOS de la web separados por comas (con protocolo, sin barra final). **No admite comodin `*`** (se ignora y se advierte en el log): registre el origen exacto del portal y de la web, o el navegador bloqueara las llamadas. La API expone `Content-Disposition` (nombre del PDF de inventario). Vacio = sin CORS (la app movil no lo necesita) |
 | `Storage__S3__Endpoint`, `__Bucket`, `__Region`, `__AccessKey`, `__SecretKey` | no | almacenamiento S3 compatible; si Endpoint o Bucket faltan se usa disco |
 | `Storage__LocalPath` | no (`.uploads`) | carpeta para el almacenamiento en disco |
 | `Storage__MaximoBytes` | no (10 MB) | tamano maximo de una imagen |
@@ -18,8 +26,11 @@ La API se configura solo con variables de entorno (o `appsettings`). El doble gu
 | `Seguridad__PasswordMinimo` | no (8) | longitud minima de contrasenas asignadas |
 | `Seguridad__ValidarPropiedadInspeccion` | no (`true`) | solo el creador o un administrador modifica o cierra un informe |
 | `Seguridad__LoginMaxIntentosPorMinuto` | no (10) | limite por IP en el login |
+| `Seguridad__LoginPortalMaxIntentosPorMinuto` | no (30) | limite por IP en `login-portal` (mas alto: detras del proxy corporativo muchas personas comparten IP) |
+| `Seguridad__RefreshMaxPorMinuto` | no (60) | limite por IP en `refresh` |
 | `Proxy__ConfiarEnEncabezadosReenviados` | no (`false`) | `true` solo detras de un proxy de confianza (Railway, nginx): usa `X-Forwarded-For` |
 | `Documentacion__Habilitada` | no (`false`) | publica `/openapi/v1.json` y la interfaz Swagger en `/swagger` |
+| `Catalogos__CacheSegundos` | no (60) | segundos que la API conserva los catalogos en memoria; un cambio hecho por la API los renueva al instante, uno hecho directamente en la base tarda hasta este tiempo |
 | `Contrasenas__Iteraciones` | no (600000) | iteraciones de PBKDF2 para hashes nuevos |
 | `MSSQL_SA_PASSWORD` | solo compose | contrasena del SQL Server local de desarrollo |
 | `SUPERADMIN_PASSWORD` | solo comando | contrasena para `crear-superadmin`; no dejarla en el entorno permanente |

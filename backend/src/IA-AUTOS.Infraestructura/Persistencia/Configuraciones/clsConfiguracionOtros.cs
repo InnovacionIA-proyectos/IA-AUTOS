@@ -64,3 +64,21 @@ internal sealed class clsConfiguracionAuditLog : IEntityTypeConfiguration<clsAud
             .HasConstraintName("FK_tblAuditLog_Usuario").OnDelete(DeleteBehavior.NoAction);
     }
 }
+
+internal sealed class clsConfiguracionRefreshToken : IEntityTypeConfiguration<clsRefreshToken>
+{
+    public void Configure(EntityTypeBuilder<clsRefreshToken> builder)
+    {
+        builder.ToTable("tblRefreshTokens");
+        clsConfiguracionBase.Base(builder);
+        builder.Property(t => t.TokenHash).HasColumnType("char(64)").IsRequired();
+        builder.Property(t => t.ExpiraAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(t => t.RevocadoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(t => t.Ip).HasColumnType("varchar(45)");
+        builder.Property(t => t.Dispositivo).HasMaxLength(300);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.UsuarioId).HasConstraintName("FK_tblRefreshTokens_Usuario");
+        builder.HasIndex(t => t.TokenHash).IsUnique().HasDatabaseName("UQ_tblRefreshTokens_TokenHash");
+        builder.HasIndex(t => t.FamiliaId).HasDatabaseName("IX_tblRefreshTokens_Familia");
+        builder.HasIndex(t => t.UsuarioId).HasDatabaseName("IX_tblRefreshTokens_Usuario");
+    }
+}

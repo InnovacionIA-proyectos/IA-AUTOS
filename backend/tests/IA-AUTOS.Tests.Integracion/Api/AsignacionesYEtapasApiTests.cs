@@ -88,16 +88,20 @@ public sealed class AsignacionesYEtapasApiTests(clsBaseDatosFixture bd) : clsPru
     {
         var (token, _) = await AutenticarAsync(clsRol.ADMIN, "admin@ejemplo.com");
         var (vehiculoId, _) = await Sembrador.VehiculoConRutaAsync("VIN-ETAPA", cantidadEtapas: 0);
-        var puntoId = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblPuntosCustodia WHERE Nombre = 'concesionario'"))!;
+        var etapaId = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'cargue'"))!;
+        var lugarId = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblPuntosCustodia WHERE Codigo = 'concesionario'"))!;
 
-        var r = await Cliente(token).PostAsJsonAsync("/api/etapas", new { vehiculo_id = vehiculoId, punto_custodia_id = puntoId, orden = 1 });
-        var soloFirma = await Cliente(token).PostAsJsonAsync("/api/etapas", new { vehiculo_id = vehiculoId, punto_custodia_id = puntoId, orden = 2, requiere_inspeccion = false });
+        var r = await Cliente(token).PostAsJsonAsync("/api/etapas", new { vehiculo_id = vehiculoId, etapa_catalogo_id = etapaId, punto_custodia_id = lugarId, orden = 1 });
+        var soloFirma = await Cliente(token).PostAsJsonAsync("/api/etapas", new { vehiculo_id = vehiculoId, etapa_catalogo_id = etapaId, orden = 2, requiere_inspeccion = false });
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var e = await ClonarAsync(r);
-        Assert.Equal(["id", "vehiculo_id", "punto_custodia_id", "orden", "requiere_inspeccion", "created_at", "updated_at"], e.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["id", "vehiculo_id", "etapa_catalogo_id", "punto_custodia_id", "orden", "requiere_inspeccion", "created_at", "updated_at"], e.EnumerateObject().Select(p => p.Name).ToList());
         Assert.True(e.GetProperty("requiere_inspeccion").GetBoolean());
-        Assert.False((await ClonarAsync(soloFirma)).GetProperty("requiere_inspeccion").GetBoolean());
+        var sinLugar = await ClonarAsync(soloFirma);
+        Assert.False(sinLugar.GetProperty("requiere_inspeccion").GetBoolean());
+        Assert.Equal(lugarId, e.GetProperty("punto_custodia_id").GetGuid());
+        Assert.Equal(JsonValueKind.Null, sinLugar.GetProperty("punto_custodia_id").ValueKind);
     }
 
     [Fact]
@@ -105,16 +109,16 @@ public sealed class AsignacionesYEtapasApiTests(clsBaseDatosFixture bd) : clsPru
     {
         var (token, _) = await AutenticarAsync(clsRol.ADMIN, "admin@ejemplo.com");
         var (vehiculoId, _) = await Sembrador.VehiculoConRutaAsync("VIN-ETAPA2");
-        var puntoId = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblPuntosCustodia WHERE Nombre = 'concesionario'"))!;
+        var etapaId = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'cargue'"))!;
 
-        var repetido = await Cliente(token).PostAsJsonAsync("/api/etapas", new { vehiculo_id = vehiculoId, punto_custodia_id = puntoId, orden = 1 });
-        var sinVehiculo = await Cliente(token).PostAsJsonAsync("/api/etapas", new { vehiculo_id = Guid.NewGuid(), punto_custodia_id = puntoId, orden = 9 });
-        var ordenCero = await Cliente(token).PostAsJsonAsync("/api/etapas", new { vehiculo_id = vehiculoId, punto_custodia_id = puntoId, orden = 0 });
+        var repetido = await Cliente(token).PostAsJsonAsync("/api/etapas", new { vehiculo_id = vehiculoId, etapa_catalogo_id = etapaId, orden = 1 });
+        var sinVehiculo = await Cliente(token).PostAsJsonAsync("/api/etapas", new { vehiculo_id = Guid.NewGuid(), etapa_catalogo_id = etapaId, orden = 9 });
+        var ordenCero = await Cliente(token).PostAsJsonAsync("/api/etapas", new { vehiculo_id = vehiculoId, etapa_catalogo_id = etapaId, orden = 0 });
 
         Assert.Equal(HttpStatusCode.Conflict, repetido.StatusCode);
         Assert.Equal("Ya existe una etapa con ese orden para el vehículo", (await ClonarAsync(repetido)).GetProperty("message").GetString());
         Assert.Equal(HttpStatusCode.NotFound, sinVehiculo.StatusCode);
-        Assert.Equal("El vehículo o el punto de custodia no existen", (await ClonarAsync(sinVehiculo)).GetProperty("message").GetString());
+        Assert.Equal("El vehículo no existe", (await ClonarAsync(sinVehiculo)).GetProperty("message").GetString());
         Assert.Equal(HttpStatusCode.BadRequest, ordenCero.StatusCode);
         Assert.Equal(3, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas"));
     }

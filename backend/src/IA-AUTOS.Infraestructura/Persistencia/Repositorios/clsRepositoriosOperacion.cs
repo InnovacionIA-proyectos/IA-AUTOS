@@ -20,6 +20,9 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
         return contexto.Usuarios.FirstOrDefaultAsync(u => u.Email == normalizado, ct);
     }
 
+    public Task<clsUsuario?> ObtenerPorPortalIdAsync(long portalUsuarioId, CancellationToken ct = default) =>
+        contexto.Usuarios.FirstOrDefaultAsync(u => u.PortalUsuarioId == portalUsuarioId, ct);
+
     public async Task<IReadOnlyList<clsUsuario>> ListarAsync(CancellationToken ct = default) =>
         await contexto.Usuarios.AsNoTracking().OrderBy(u => u.Nombre).ToListAsync(ct);
 
@@ -82,4 +85,20 @@ internal sealed class clsOrdenSofasaRepository(clsAppDbContext contexto) : IOrde
 internal sealed class clsAuditoriaRepository(clsAppDbContext contexto) : IAuditoriaRepository
 {
     public void Agregar(clsAuditLog registro) => contexto.AuditLog.Add(registro);
+}
+
+internal sealed class clsRefreshTokenRepository(clsAppDbContext contexto) : IRefreshTokenRepository
+{
+    public Task<clsRefreshToken?> ObtenerPorHashAsync(string tokenHash, CancellationToken ct = default) =>
+        contexto.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == tokenHash, ct);
+
+    public void Agregar(clsRefreshToken token) => contexto.RefreshTokens.Add(token);
+
+    public Task<bool> FamiliaActivaAsync(Guid familiaId, DateTimeOffset ahora, CancellationToken ct = default) =>
+        contexto.RefreshTokens.AsNoTracking().AnyAsync(t => t.FamiliaId == familiaId && t.RevocadoAt == null && t.ExpiraAt > ahora, ct);
+
+    public Task RevocarFamiliaAsync(Guid familiaId, DateTimeOffset ahora, CancellationToken ct = default) =>
+        contexto.RefreshTokens
+            .Where(t => t.FamiliaId == familiaId && t.RevocadoAt == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevocadoAt, ahora).SetProperty(t => t.UpdatedAt, ahora), ct);
 }

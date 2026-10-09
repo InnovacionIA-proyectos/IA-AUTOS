@@ -147,7 +147,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(id, h.GetProperty("inspeccion_id").GetGuid());
         Assert.Equal(HttpStatusCode.BadRequest, malo.StatusCode);
         var campos = (await ClonarAsync(malo)).GetProperty("details").GetProperty("fieldErrors").EnumerateObject().Select(p => p.Name).ToList();
-        Assert.Equal(["parte_vehiculo", "clase_dano", "tamano_dano", "coords_diagrama"], campos);
+        // El orden de los errores no importa: llegan los del cuerpo y los del catalogo juntos.
+        Assert.Equal(["clase_dano", "coords_diagrama", "parte_vehiculo", "tamano_dano"], campos.Order().ToList());
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
     }
 

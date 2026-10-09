@@ -21,4 +21,10 @@ public interface IEmisorToken
 {
     /// <summary>Emite el JWT (HS256) con los claims sub, email y user_role.</summary>
     string Emitir(UsuarioAutenticadoDto usuario);
+
+    /// <summary>
+    /// Emite el access token de una sesion del portal: vigencia corta, jti propio y claim sid (la familia del refresh token)
+    /// para poder revocarlo al cerrar sesion.
+    /// </summary>
+    string EmitirSesion(UsuarioAutenticadoDto usuario, Guid familiaId, TimeSpan vigencia);
 }

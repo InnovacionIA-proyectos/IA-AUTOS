@@ -13,4 +13,10 @@ public sealed class clsOpcionesSeguridad
 
     /// <summary>Intentos de login permitidos por minuto y por direccion IP.</summary>
     public int LoginMaxIntentosPorMinuto { get; set; } = 10;
+
+    /// <summary>Intentos de login-portal por minuto y por IP. Mayor que el login directo: detras de un proxy corporativo muchas personas comparten IP.</summary>
+    public int LoginPortalMaxIntentosPorMinuto { get; set; } = 30;
+
+    /// <summary>Renovaciones de sesion (refresh) por minuto y por IP.</summary>
+    public int RefreshMaxPorMinuto { get; set; } = 60;
 }
