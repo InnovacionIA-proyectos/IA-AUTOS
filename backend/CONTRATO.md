@@ -16,7 +16,7 @@ OpenAPI ([docs/openapi.json](docs/openapi.json)), que la API genera y una prueba
 | Nulos | Los campos opcionales sin valor llegan como `null` (nunca se omiten) |
 | VIN | 17 caracteres alfanuméricos en mayúscula, sin las letras `I`, `O` ni `Q`; se normaliza a mayúscula y sin espacios |
 | Imágenes | Se referencian por `url` **relativa** (`/api/uploads/<archivo>`): anteponga la URL base |
-| CORS | La API solo acepta los orígenes configurados en `Cors__Origins`; la web debe estar en esa lista |
+| CORS | La API solo acepta los orígenes **exactos** de `Cors__Origins` (sin comodín `*`) y expone `Content-Disposition` (nombre del PDF de inventario). La web debe estar en esa lista |
 
 ## Autenticación
 
@@ -65,12 +65,13 @@ Todos los errores son JSON con la misma forma:
 | `VALIDATION_ERROR` | 400 | cuerpo inválido, datos que no cumplen las reglas, filtros mal formados |
 | `UNAUTHORIZED` | 401 | sin token, token inválido o vencido, usuario retirado, credenciales incorrectas |
 | `FORBIDDEN` | 403 | rol insuficiente o inspección ajena |
+| `PORTAL_USER_NOT_LINKED` | 403 | la persona del portal no tiene acceso a IA Autos (solo en `login-portal`) |
 | `NOT_FOUND` | 404 | recurso o ruta inexistente |
 | `METHOD_NOT_ALLOWED` | 405 | método no admitido en una ruta existente |
 | `CONFLICT` | 409 | duplicados, inspección cerrada, transferencia ya firmada |
 | `RATE_LIMITED` | 429 | demasiados intentos de login (10 por minuto por IP, configurable) |
 | `INTERNAL_ERROR` | 500 | error inesperado, sin detalles internos |
-| `DB_UNAVAILABLE` | 503 | reservado |
+| `DB_UNAVAILABLE` | 503 | no se pudo verificar la identidad en la base de usuarios del portal (TI) |
 
 `details` en un `VALIDATION_ERROR` tiene la forma:
 
@@ -119,6 +120,81 @@ Correo y contraseña son obligatorios (`400` si faltan). Credenciales incorrecta
 
 ### `GET /api/auth/me`
 Autenticado. `200`: `{ "id", "nombre", "email", "rol" }` del usuario de la sesión.
+
+### Sesión del portal (inicio de sesión único)
+
+Para quien ya inició sesión en el portal de administración: entra a IA Autos **sin una segunda pantalla de login**. Es el mismo
+esquema de sesión que EmbarQA: el `access` y el `refresh` viajan **en el cuerpo** de las respuestas (no hay cookies, así que no
+hace falta `credentials: 'include'`). Guárdelos con cuidado: el `refresh` dura 30 días.
+
+| Tiempo | Valor por defecto |
+|---|---|
+| access token | 60 minutos |
+| refresh token | 30 días |
+
+#### `POST /api/auth/login-portal`
+Anónimo, con límite de intentos por IP. El cuerpo es **el arreglo del usuario del portal tal cual**, sin objeto envolvente. Se
+usa únicamente el primer elemento y, de él, **solo el `id`**: el servidor no cree el nombre ni los permisos (los puede editar el
+navegador) y revalida el id contra TI.
+
+```json
+[ { "id": 10001, "nombreUsuario": "usuario.portal", "permisos": [ { "id": "53", "descripcion": "AdminIAAUTOS", "idOcion": "56", "opcion": "AdminIAAUTOS" } ] } ]
+```
+
+> **Excepción a la convención de nombres.** Este endpoint NO usa `snake_case`: lee los campos tal como los guarda el portal
+> (`nombreUsuario`, `idOcion`) y **distingue mayúsculas**. Respete además estos tipos, porque la lectura es estricta y un tipo
+> distinto responde `400`:
+>
+> | Campo | Tipo | Notas |
+> |---|---|---|
+> | raíz | arreglo | un objeto o un arreglo vacío responde `400` |
+> | `id` (del usuario) | **entero** | número JSON, no texto ni decimal; obligatorio |
+> | `nombreUsuario` | texto | se ignora para autorizar |
+> | `permisos` | **arreglo** de objetos | no un objeto |
+> | `permisos[].id` | **texto** (`"53"`) | no número |
+> | `permisos[].descripcion`, `permisos[].opcion` | texto | se ignoran para autorizar |
+> | `permisos[].idOcion` | **texto** (`"56"`) | el campo se llama `idOcion`, **sin la «p»** |
+>
+> Los campos que no están en la tabla se ignoran. Las respuestas sí usan `snake_case` como el resto de la API.
+
+`200`:
+
+```json
+{ "access": "eyJhbGciOi...", "refresh": "kQ3x...", "user": { "id": "uuid", "nombre": "Juan Pérez", "email": "jperez@empresa.com", "rol": "admin" } }
+```
+
+La clave es **`user`** (no `usuario`, que es la de `POST /api/auth/login`). `rol` es uno de los valores del catálogo de roles.
+
+- **Rol:** sale de TI. Quien tiene el rol o la opción de permiso `<Rol>IAAUTOS` entra con ese rol: `SuperAdminIAAUTOS`, `AdminIAAUTOS`,
+  `CoordinadorCalidadIAAUTOS`, `ComercialIAAUTOS` o `InspectorIAAUTOS`. Con varios, gana el de mayor privilegio (en ese orden). El
+  conductor no entra por el portal.
+- **Primera vez:** si la persona no existe en IA Autos pero tiene un rol de IA Autos en el portal, se crea su cuenta con ese rol. Si ya
+  existía una cuenta con el mismo correo, se vincula. El rol se sincroniza en cada ingreso.
+- `403` con **`code: "PORTAL_USER_NOT_LINKED"`**: la persona no existe en el portal, no tiene ningún rol de IA Autos o fue retirada de
+  IA Autos. **Es distinto de `FORBIDDEN`** (rol insuficiente): muestre la pantalla de acceso no habilitado, no un error genérico. El mensaje
+  es siempre el mismo: *«Tu usuario no tiene acceso habilitado a IA Autos. Solicita el permiso al administrador del portal.»*
+- `503` con `code: "DB_UNAVAILABLE"`: no se pudo verificar en TI. No se concede acceso; reintente en unos minutos.
+- `400` si el cuerpo no respeta el formato de arriba. `429` si excede el límite de intentos.
+
+#### `POST /api/auth/refresh`
+Anónimo. Recibe `{ "refresh": "..." }` y responde `200` `{ "access": "...", "refresh": "..." }` (sin `user`). **Rota el refresh**: el
+anterior queda revocado y usarlo otra vez responde `401`; si ya pasaron unos segundos desde que rotó, se toma como robo de sesión y se
+**revoca la sesión completa** (también el access vigente). Guarde siempre el refresh nuevo.
+
+- `401` si el refresh venció, fue revocado o no existe. Lleve al usuario de vuelta al portal.
+- `400` si falta `refresh` o el cuerpo no es un objeto JSON.
+- Renueve el access antes de que venza (o ante un `401` por expiración, una sola vez). Si dos pestañas refrescan a la vez con el mismo
+  refresh, la segunda recibe `401` sin que se pierda la sesión: reintente una vez con el refresh que guardó la primera.
+
+#### `POST /api/auth/logout`
+Anónimo. Recibe `{ "refresh": "..." }` y responde `204` vacío. Revoca el refresh y, con él, el access de esa sesión: usarlos después
+responde `401`. Si además envía el `Authorization: Bearer`, también se cierra la sesión de ese access (sirve para salir aunque ya no tenga
+el refresh; en ese caso puede omitir el cuerpo). Siempre responde `204`, haya o no sesión. Cerrar una sesión no afecta a las otras del
+mismo usuario.
+
+#### Cuando expira la sesión del portal
+Si el portal cierra su sesión, el módulo debe llamar a `logout`, borrar sus tokens, mostrar su pantalla de acceso con el mensaje y el
+botón «Volver al portal», y no intentar `refresh`.
 
 ### `GET /health`
 Público. `200` si la base responde, `503` si no:
@@ -521,7 +597,7 @@ Tasa de rechazo (unidades movilizadas con al menos un hallazgo) frente a la lín
 
 ## Notas para el consumo
 
-- **Mismo origen y CORS.** El navegador solo podrá llamar a la API si su origen está en `Cors__Origins`.
+- **CORS.** El navegador solo podrá llamar a la API si su origen exacto está en `Cors__Origins` (registre el origen del portal: un origen no registrado se bloquea). El nombre del PDF de inventario llega en `Content-Disposition`, que la API expone.
 - **Reintentos.** Reintente solo `401` (tras renovar sesión), `408`, `429` y `5xx`. No reintente `400`, `403`, `404` ni `409`
   (salvo el `409` al cerrar, ver arriba).
 - **Cierre de sesión por inactividad y expiración.** Ante un `401` en una ruta protegida, borre el token y vaya al login.

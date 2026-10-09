@@ -45,6 +45,43 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
+   Sesion del portal (inicio de sesion unico)
+   - PortalUsuarioId: id de la persona en el portal; NULL para quien no entra por el portal (conductores).
+     Unico entre los que lo tienen (indice filtrado).
+   - tblRefreshTokens: refresh tokens como hash, con familia para detectar el reuso de un token robado.
+   ----------------------------------------------------------------------------- */
+IF COL_LENGTH(N'dbo.tblUsuarios', N'PortalUsuarioId') IS NULL
+    ALTER TABLE dbo.tblUsuarios ADD PortalUsuarioId bigint NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblUsuarios_PortalUsuarioId' AND object_id = OBJECT_ID(N'dbo.tblUsuarios'))
+    CREATE UNIQUE INDEX UX_tblUsuarios_PortalUsuarioId ON dbo.tblUsuarios (PortalUsuarioId) WHERE PortalUsuarioId IS NOT NULL;
+GO
+
+IF OBJECT_ID(N'dbo.tblRefreshTokens', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblRefreshTokens
+    (
+        Id               uniqueidentifier  NOT NULL CONSTRAINT PK_tblRefreshTokens PRIMARY KEY,
+        UsuarioId        uniqueidentifier  NOT NULL,
+        TokenHash        char(64)          NOT NULL,
+        FamiliaId        uniqueidentifier  NOT NULL,
+        ExpiraAt         datetimeoffset(3) NOT NULL,
+        RevocadoAt       datetimeoffset(3) NULL,
+        ReemplazadoPorId uniqueidentifier  NULL,
+        Ip               varchar(45)       NULL,
+        Dispositivo      nvarchar(300)     NULL,
+        CreatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblRefreshTokens_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblRefreshTokens_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblRefreshTokens_TokenHash UNIQUE (TokenHash),
+        CONSTRAINT FK_tblRefreshTokens_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id)
+    );
+    CREATE INDEX IX_tblRefreshTokens_Familia ON dbo.tblRefreshTokens (FamiliaId);
+    CREATE INDEX IX_tblRefreshTokens_Usuario ON dbo.tblRefreshTokens (UsuarioId);
+END
+GO
+
+/* -----------------------------------------------------------------------------
    tblVehiculos (unidad transportada, identificada por VIN; el VIN admite
    numeros de chasis de longitud variable)
    ----------------------------------------------------------------------------- */

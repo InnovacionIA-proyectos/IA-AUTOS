@@ -46,3 +46,21 @@ Cambios intencionales que corrigen riesgos detectados en el diagnostico. Ninguno
 | Cola offline de la app: un 4xx distinto de 409 la marca como fallida y puede perder evidencia | del cliente, no del backend | corregirlo en la migracion de la app a Flutter |
 | El sello de fecha y ubicacion de las fotos lo envia el cliente y el servidor no puede verificarlo | igual que antes | para valor legal, considerar sellos del lado del servidor |
 | La validacion de propiedad puede rechazar jobs de la app si se cambia de usuario en el mismo dispositivo antes de sincronizar | nueva | si ocurre en campo, desactivar `Seguridad__ValidarPropiedadInspeccion` temporalmente |
+
+## Sesion del portal (login-portal, refresh y logout)
+
+- **Verificacion contra TI.** `POST /api/auth/login-portal` recibe el arreglo del usuario del portal pero solo usa el `id` del primer elemento; el nombre y los permisos que envia el navegador se ignoran. El servidor consulta la base de usuarios de TI (solo lectura, `PortalTi__ConnectionString`), nunca lee la contrasena del portal y, si TI no responde, no concede acceso (503). Sin base de TI configurada solo entran los ids ya vinculados a un usuario. Quien no tiene acceso recibe 403 `PORTAL_USER_NOT_LINKED`.
+- **Lectura estricta del cuerpo.** Los tipos del portal se verifican (id entero, `permisos` arreglo, ids de permiso e `idOcion` como texto); un tipo distinto responde 400.
+- **Refresh token.** Valor aleatorio de 256 bits que viaja en el cuerpo (mismo esquema que EmbarQA). En la base solo se guarda su SHA-256 (`tblRefreshTokens`) junto con familia, vencimiento, revocacion, IP y dispositivo. Cada uso lo rota; un refresh ya rotado que se presenta otra vez (pasada la gracia) revoca toda la familia. Como no va en una cookie HttpOnly, el cliente es responsable de guardarlo de forma segura: un XSS en el modulo podria leerlo.
+- **Logout real.** El access token lleva `sid` (la familia): al cerrar sesion o revocarla por reuso, la API lo rechaza en la siguiente solicitud aunque no haya vencido.
+- **CORS** con origenes exactos y `Content-Disposition` expuesta; el comodin `*` se ignora y no se piden credenciales (no hay cookies).
+- **Limite de intentos** por IP en `login-portal` y `refresh`. Detras de un proxy, active `Proxy__ConfiarEnEncabezadosReenviados` para que el limite use la IP real.
+- **JWT con emisor y destinatario** (`Jwt__Issuer`, `Jwt__Audience`) cuando se configuran.
+
+### Limitacion a tener presente
+
+`login-portal` no recibe ninguna credencial: confia en que quien lo llama es el portal. Un id del portal es un numero consecutivo y
+no es secreto, asi que **quien pueda alcanzar el endpoint y conozca (o adivine) el id de una persona con rol de IA Autos puede
+iniciar sesion como ella**. Las mitigaciones actuales (limite de intentos, CORS exacto, revalidacion contra TI) reducen el abuso desde
+navegadores y el sondeo, pero no prueban la identidad. Lo robusto es que el portal entregue una prueba firmada (por ejemplo un token
+corto firmado por el portal) que esta API verifique, o que el endpoint solo sea alcanzable desde la red del portal.

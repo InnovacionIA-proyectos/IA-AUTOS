@@ -17,6 +17,9 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | Metodo y ruta | Acceso | Descripcion |
 |---|---|---|
 | POST `/api/auth/login` | publico, con limite de intentos | correo y contrasena; devuelve `{ token, usuario }` |
+| POST `/api/auth/login-portal` | publico, con limite de intentos | inicio de sesion unico: recibe el arreglo del usuario del portal (usa solo el id y lo revalida en TI); devuelve `{ access, refresh, user }`. 403 `PORTAL_USER_NOT_LINKED` si no tiene acceso a IA Autos |
+| POST `/api/auth/refresh` | publico | recibe `{ refresh }`; devuelve `{ access, refresh }` y rota el refresh (el anterior queda revocado) |
+| POST `/api/auth/logout` | publico | recibe `{ refresh }`; revoca la sesion (refresh y access) y responde 204 |
 | GET `/api/auth/me` | autenticado | datos del usuario actual |
 | GET `/api/usuarios` | autenticado | administradores: datos completos; los demas roles: `id`, `nombre`, `rol` de usuarios activos |
 | POST `/api/usuarios` | super_admin | crea usuario (`nombre`, `email`, `rol`, `password`) |

@@ -8,7 +8,7 @@ public sealed class BaseDatosRealTests
     private static readonly string[] TABLAS =
     [
         "tblUsuarios", "tblVehiculos", "tblPuntosCustodia", "tblEtapas", "tblInspecciones", "tblHallazgos",
-        "tblEvidencias", "tblTransferenciasCustodia", "tblAsignaciones", "tblOrdenesSofasa", "tblAuditLog",
+        "tblEvidencias", "tblTransferenciasCustodia", "tblAsignaciones", "tblOrdenesSofasa", "tblAuditLog", "tblRefreshTokens",
     ];
 
     private static readonly string[] TRIGGERS =
@@ -89,6 +89,24 @@ public sealed class BaseDatosRealTests
             var filas = await EscalarAsync<int>(conexion, $"SELECT COUNT(*) FROM {tabla}");
             Assert.True(filas >= 0, tabla);
         }
+    }
+
+    [FactEntornoReal]
+    public async Task El_esquema_de_la_sesion_del_portal_esta_aplicado_en_la_base()
+    {
+        // Sin la columna PortalUsuarioId ni la tabla de refresh tokens, la API falla en todas las consultas de usuarios: este
+        // chequeo (solo lectura) avisa antes de desplegar si falta ejecutar database/cambios-esquema/01-sesion-portal.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblUsuarios') AND name = N'PortalUsuarioId'");
+        var indice = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.indexes
+             WHERE object_id = OBJECT_ID(N'tblUsuarios') AND name = N'UX_tblUsuarios_PortalUsuarioId'
+               AND is_unique = 1 AND has_filter = 1
+            """);
+
+        Assert.True(columna == 1, "Falta la columna tblUsuarios.PortalUsuarioId (ejecute database/cambios-esquema/01-sesion-portal.sql).");
+        Assert.True(indice == 1, "Falta el indice unico filtrado UX_tblUsuarios_PortalUsuarioId.");
     }
 
     [FactEntornoReal]

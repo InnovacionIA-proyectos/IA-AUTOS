@@ -76,6 +76,7 @@ jobs:
           Storage__S3__Region: ${{ secrets.STORAGE_S3_REGION }}
           Storage__S3__AccessKey: ${{ secrets.STORAGE_S3_ACCESSKEY }}
           Storage__S3__SecretKey: ${{ secrets.STORAGE_S3_SECRETKEY }}
+          PortalTi__ConnectionString: ${{ secrets.PORTALTI_CONNECTIONSTRING }}
         run: dotnet test backend\tests\IA-AUTOS.Tests.EntornoReal -c Release --no-build --logger "trx;LogFileName=entorno-real.trx" --results-directory TestResults
 
       - name: Conservar resultados de las pruebas

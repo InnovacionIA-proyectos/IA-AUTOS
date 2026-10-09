@@ -24,6 +24,8 @@ public sealed class clsUsuarioActualFalso : IUsuarioActual
 public sealed class clsEmisorTokenFalso : IEmisorToken
 {
     public string Emitir(UsuarioAutenticadoDto usuario) => $"token-de-{usuario.Id}";
+
+    public string EmitirSesion(UsuarioAutenticadoDto usuario, Guid familiaId, TimeSpan vigencia) => $"sesion-de-{usuario.Id}-{familiaId}";
 }
 
 /// <summary>
@@ -111,6 +113,9 @@ public sealed class clsUsuarioRepositoryFalso : IUsuarioRepository
     public Task<clsUsuario?> ObtenerPorEmailAsync(string email, CancellationToken ct = default) =>
         Task.FromResult(Usuarios.FirstOrDefault(u => string.Equals(u.Email, email.Trim(), StringComparison.OrdinalIgnoreCase)));
 
+    public Task<clsUsuario?> ObtenerPorPortalIdAsync(long portalUsuarioId, CancellationToken ct = default) =>
+        Task.FromResult(Usuarios.FirstOrDefault(u => u.PortalUsuarioId == portalUsuarioId));
+
     public Task<IReadOnlyList<clsUsuario>> ListarAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<clsUsuario>>(Usuarios.OrderBy(u => u.Nombre).ToList());
 
@@ -120,4 +125,52 @@ public sealed class clsUsuarioRepositoryFalso : IUsuarioRepository
     public void Agregar(clsUsuario usuario) => Usuarios.Add(usuario);
 
     public void Eliminar(clsUsuario usuario) => _pendientesDeEliminar.Add(usuario);
+}
+
+/// <summary>Refresh tokens en memoria (los cambios se aplican al instante, como las revocaciones directas del repositorio real).</summary>
+public sealed class clsRefreshTokenRepositoryFalso : IRefreshTokenRepository
+{
+    public List<clsRefreshToken> Tokens { get; } = [];
+
+    public Task<clsRefreshToken?> ObtenerPorHashAsync(string tokenHash, CancellationToken ct = default) =>
+        Task.FromResult(Tokens.FirstOrDefault(t => t.TokenHash == tokenHash));
+
+    public void Agregar(clsRefreshToken token) => Tokens.Add(token);
+
+    public Task<bool> FamiliaActivaAsync(Guid familiaId, DateTimeOffset ahora, CancellationToken ct = default) =>
+        Task.FromResult(Tokens.Any(t => t.FamiliaId == familiaId && t.EstaVigente(ahora)));
+
+    public Task RevocarFamiliaAsync(Guid familiaId, DateTimeOffset ahora, CancellationToken ct = default)
+    {
+        foreach (var token in Tokens.Where(t => t.FamiliaId == familiaId))
+        {
+            token.Revocar(ahora);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>Base de usuarios del portal (TI) simulada.</summary>
+public sealed class clsPortalUsuariosFalso : IPortalUsuarios
+{
+    public bool Disponible { get; set; } = true;
+
+    /// <summary>Si es true, TI "no responde" y la consulta lanza el error de servicio no disponible.</summary>
+    public bool Falla { get; set; }
+
+    public Dictionary<long, clsUsuarioPortal> Usuarios { get; } = [];
+
+    public int Consultas { get; private set; }
+
+    public Task<clsUsuarioPortal?> ObtenerAsync(long id, CancellationToken ct = default)
+    {
+        Consultas++;
+        if (Falla)
+        {
+            throw new clsServicioNoDisponibleException("TI no responde");
+        }
+
+        return Task.FromResult(Usuarios.GetValueOrDefault(id));
+    }
 }

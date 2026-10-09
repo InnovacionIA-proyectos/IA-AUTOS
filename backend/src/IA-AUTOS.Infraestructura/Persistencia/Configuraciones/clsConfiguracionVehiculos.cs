@@ -59,5 +59,9 @@ internal sealed class clsConfiguracionUsuario : IEntityTypeConfiguration<clsUsua
         builder.Property(u => u.SubtipoInspector).HasColumnType("varchar(30)");
         builder.Property(u => u.PasswordHash).HasMaxLength(400);
         builder.HasIndex(u => u.Email).IsUnique().HasDatabaseName("UQ_tblUsuarios_Email");
+
+        // Id del portal: unico entre quienes lo tienen (los conductores no tienen usuario del portal y quedan en NULL).
+        builder.Property(u => u.PortalUsuarioId).HasColumnType("bigint");
+        builder.HasIndex(u => u.PortalUsuarioId).IsUnique().HasFilter("[PortalUsuarioId] IS NOT NULL").HasDatabaseName("UX_tblUsuarios_PortalUsuarioId");
     }
 }

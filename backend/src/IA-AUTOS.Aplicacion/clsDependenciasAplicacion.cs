@@ -22,7 +22,10 @@ public static class clsDependenciasAplicacion
         servicios.Configure<clsOpcionesAlmacenamiento>(configuracion.GetSection(clsOpcionesAlmacenamiento.SECCION));
         servicios.AddValidatorsFromAssemblyContaining<clsAuthService>(ServiceLifetime.Singleton);
         servicios.AddScoped<IAuditor, clsAuditor>();
+        servicios.Configure<clsOpcionesSesion>(configuracion.GetSection(clsOpcionesSesion.SECCION));
+        servicios.Configure<clsOpcionesPortalAplicacion>(configuracion.GetSection(clsOpcionesPortalAplicacion.SECCION));
         servicios.AddScoped<clsAuthService>();
+        servicios.AddScoped<clsSesionPortalService>();
         servicios.AddScoped<clsUsuariosService>();
         servicios.AddScoped<clsVehiculosService>();
         servicios.AddScoped<clsAsignacionesService>();

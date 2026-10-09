@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using IAAutos.Tests.Integracion.Infraestructura;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -31,9 +32,9 @@ public abstract class clsPruebaApiBase(clsBaseDatosFixture bd) : IAsyncLifetime
         }
     }
 
-    protected clsFabricaApi CrearFabrica(IReadOnlyDictionary<string, string?>? extra = null)
+    protected clsFabricaApi CrearFabrica(IReadOnlyDictionary<string, string?>? extra = null, Action<IServiceCollection>? servicios = null)
     {
-        var fabrica = new clsFabricaApi(BaseDatos.CadenaConexion, extra);
+        var fabrica = new clsFabricaApi(BaseDatos.CadenaConexion, extra, servicios);
         _fabricas.Add(fabrica);
         return fabrica;
     }

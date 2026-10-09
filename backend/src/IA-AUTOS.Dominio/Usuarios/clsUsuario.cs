@@ -23,6 +23,12 @@ public sealed partial class clsUsuario : clsEntidadBase
 
     public string? PasswordHash { get; private set; }
 
+    /// <summary>
+    /// Id de la persona en el portal de administracion (tblSAPUsuariosApp.ID). Nulo en quien no entra por el portal
+    /// (por ejemplo, los conductores). Es unico entre los usuarios que lo tienen.
+    /// </summary>
+    public long? PortalUsuarioId { get; private set; }
+
     public static clsUsuario Crear(
         string nombre,
         string email,
@@ -91,6 +97,18 @@ public sealed partial class clsUsuario : clsEntidadBase
     public void ReemplazarPasswordHash(string passwordHash, DateTimeOffset ahora)
     {
         PasswordHash = passwordHash;
+        Tocar(ahora);
+    }
+
+    /// <summary>Vincula al usuario con su identidad en el portal (inicio de sesion unico).</summary>
+    public void VincularPortal(long portalUsuarioId, DateTimeOffset ahora)
+    {
+        if (portalUsuarioId <= 0)
+        {
+            throw new clsValidacionException("El id del portal debe ser positivo");
+        }
+
+        PortalUsuarioId = portalUsuarioId;
         Tocar(ahora);
     }
 
