@@ -36,6 +36,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
     public async Task LimpiarAsync()
     {
         const string SQL = """
+            DELETE FROM dbo.tblRefreshTokens;
             DELETE FROM dbo.tblAuditLog;
             DELETE FROM dbo.tblOrdenesSofasa;
             DELETE FROM dbo.tblTransferenciasCustodia;
@@ -50,6 +51,15 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
         await using var conexion = new SqlConnection(CadenaConexion);
         await conexion.OpenAsync();
         await using var comando = new SqlCommand(SQL, conexion);
+        await comando.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>Ejecuta una sentencia suelta sobre la base de la prueba (para forzar estados, por ejemplo un token vencido).</summary>
+    public async Task EjecutarAsync(string sql)
+    {
+        await using var conexion = new SqlConnection(CadenaConexion);
+        await conexion.OpenAsync();
+        await using var comando = new SqlCommand(sql, conexion);
         await comando.ExecuteNonQueryAsync();
     }
 

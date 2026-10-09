@@ -1292,6 +1292,142 @@
         }
       }
     },
+    "/api/auth/login-portal": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "Auth_LoginPortal",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/LoginPortalUsuarioDto"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginPortalResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginPortalResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginPortalResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "Auth_Refresh",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefreshResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "Auth_Logout",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/me": {
       "get": {
         "tags": [
@@ -3109,6 +3245,89 @@
           }
         }
       },
+      "LoginPortalResponse": {
+        "required": [
+          "access",
+          "refresh",
+          "user"
+        ],
+        "type": "object",
+        "properties": {
+          "access": {
+            "type": "string"
+          },
+          "refresh": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UsuarioAutenticadoDto"
+          }
+        }
+      },
+      "LoginPortalUsuarioDto": {
+        "required": [
+          "id",
+          "nombreUsuario",
+          "permisos"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int64"
+          },
+          "nombreUsuario": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "permisos": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "required": [
+                "id",
+                "descripcion",
+                "idOcion",
+                "opcion"
+              ],
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "descripcion": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "idOcion": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "opcion": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
       "LoginRequest": {
         "required": [
           "email",
@@ -3309,6 +3528,35 @@
             "items": {
               "$ref": "#/components/schemas/ConteoZonaProcesoDto"
             }
+          }
+        }
+      },
+      "RefreshRequest": {
+        "required": [
+          "refresh"
+        ],
+        "type": "object",
+        "properties": {
+          "refresh": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RefreshResponse": {
+        "required": [
+          "access",
+          "refresh"
+        ],
+        "type": "object",
+        "properties": {
+          "access": {
+            "type": "string"
+          },
+          "refresh": {
+            "type": "string"
           }
         }
       },

@@ -63,3 +63,21 @@ public sealed class clsErrorInternoException : clsExcepcionDominio
     {
     }
 }
+
+/// <summary>La persona del portal no tiene acceso habilitado a IA Autos (sin rol, no vinculada o retirada): 403 PORTAL_USER_NOT_LINKED.</summary>
+public sealed class clsPortalUsuarioNoVinculadoException : clsExcepcionDominio
+{
+    public clsPortalUsuarioNoVinculadoException(string mensaje)
+        : base(clsCodigosError.PORTAL_USER_NOT_LINKED, mensaje)
+    {
+    }
+}
+
+/// <summary>Un servicio externo necesario (por ejemplo, la base de usuarios del portal) no respondio: 503, nunca se concede acceso.</summary>
+public sealed class clsServicioNoDisponibleException : clsExcepcionDominio
+{
+    public clsServicioNoDisponibleException(string mensaje)
+        : base(clsCodigosError.DB_UNAVAILABLE, mensaje)
+    {
+    }
+}

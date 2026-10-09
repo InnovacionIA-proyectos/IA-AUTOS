@@ -15,6 +15,7 @@ using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Infraestructura.Almacenamiento;
 using IAAutos.Infraestructura.Persistencia;
+using IAAutos.Infraestructura.Portal;
 using IAAutos.Infraestructura.Reportes;
 using IAAutos.Infraestructura.Persistencia.Consultas;
 using IAAutos.Infraestructura.Persistencia.Repositorios;
@@ -73,6 +74,9 @@ public static class clsDependenciasInfraestructura
         }
 
         servicios.AddScoped<IUsuarioRepository, clsUsuarioRepository>();
+        servicios.AddScoped<IRefreshTokenRepository, clsRefreshTokenRepository>();
+        servicios.Configure<clsOpcionesPortalTi>(configuracion.GetSection(clsOpcionesPortalTi.SECCION));
+        servicios.AddScoped<IPortalUsuarios, clsPortalUsuarios>();
         servicios.AddScoped<IVehiculoRepository, clsVehiculoRepository>();
         servicios.AddScoped<IPuntoCustodiaRepository, clsPuntoCustodiaRepository>();
         servicios.AddScoped<IEtapaRepository, clsEtapaRepository>();

@@ -3,12 +3,16 @@ using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Usuarios;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace IAAutos.Tests.Integracion.Api;
 
 /// <summary>Arranca la API real en memoria contra la base de pruebas con la configuracion indicada.</summary>
-public sealed class clsFabricaApi(string cadenaConexion, IReadOnlyDictionary<string, string?>? extra = null) : WebApplicationFactory<Program>
+public sealed class clsFabricaApi(
+    string cadenaConexion,
+    IReadOnlyDictionary<string, string?>? extra = null,
+    Action<IServiceCollection>? servicios = null) : WebApplicationFactory<Program>
 {
     public const string SECRETO_JWT = "secreto-de-pruebas-con-mas-de-32-caracteres-aleatorios";
     public const string TOKEN_ETL = "token-etl-de-pruebas";
@@ -35,6 +39,11 @@ public sealed class clsFabricaApi(string cadenaConexion, IReadOnlyDictionary<str
         foreach (var (clave, valor) in valores)
         {
             constructor.UseSetting(clave, valor);
+        }
+
+        if (servicios is not null)
+        {
+            constructor.ConfigureTestServices(servicios);
         }
     }
 

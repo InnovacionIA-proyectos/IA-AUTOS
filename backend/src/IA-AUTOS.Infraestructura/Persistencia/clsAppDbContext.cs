@@ -22,6 +22,7 @@ public sealed class clsAppDbContext : DbContext
     }
 
     public DbSet<clsUsuario> Usuarios => Set<clsUsuario>();
+    public DbSet<clsRefreshToken> RefreshTokens => Set<clsRefreshToken>();
 
     public DbSet<clsVehiculo> Vehiculos => Set<clsVehiculo>();
 

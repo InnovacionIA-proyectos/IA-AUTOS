@@ -53,5 +53,45 @@ public abstract class clsControladorBase : ControllerBase
         }
     }
 
+
     protected ObjectResult Creado<T>(T valor) => StatusCode(StatusCodes.Status201Created, valor);
+
+    /// <summary>Lee un cuerpo que es un arreglo JSON (por ejemplo, el usuario del portal en login-portal).</summary>
+    protected async Task<List<T>> LeerArregloAsync<T>(CancellationToken ct)
+    {
+        JsonDocument documento;
+        try
+        {
+            documento = await JsonDocument.ParseAsync(Request.Body, cancellationToken: ct);
+        }
+        catch (JsonException)
+        {
+            throw new clsValidacionException("El cuerpo debe ser JSON válido");
+        }
+
+        using (documento)
+        {
+            if (documento.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                throw new clsValidacionException("El cuerpo debe ser un arreglo JSON");
+            }
+
+            try
+            {
+                return documento.RootElement.Deserialize<List<T>>(clsJsonApi.OPCIONES)
+                    ?? throw new clsValidacionException("El cuerpo debe ser un arreglo JSON");
+            }
+            catch (JsonException ex)
+            {
+                var campo = (ex.Path ?? string.Empty).TrimStart('$', '.');
+                throw new clsValidacionException(
+                    "Datos inválidos",
+                    new Dictionary<string, object>
+                    {
+                        ["formErrors"] = Array.Empty<string>(),
+                        ["fieldErrors"] = new Dictionary<string, string[]> { [campo] = ["Tipo de dato inválido"] },
+                    });
+            }
+        }
+    }
 }

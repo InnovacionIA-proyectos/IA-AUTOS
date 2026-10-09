@@ -11,6 +11,9 @@ namespace IAAutos.API.Configuracion;
 public sealed class CuerpoSolicitudAttribute(Type tipo) : Attribute
 {
     public Type Tipo { get; } = tipo;
+
+    /// <summary>True si el cuerpo es un arreglo JSON de <see cref="Tipo"/> (por ejemplo, login-portal).</summary>
+    public bool EsArreglo { get; init; }
 }
 
 /// <summary>Forma comun de los errores de la API (ver docs/api.md).</summary>
@@ -73,7 +76,12 @@ internal static class clsOpenApi
                         Required = true,
                         Content = new Dictionary<string, OpenApiMediaType>
                         {
-                            ["application/json"] = new OpenApiMediaType { Schema = new OpenApiSchemaReference(cuerpo.Tipo.Name) },
+                            ["application/json"] = new OpenApiMediaType
+                            {
+                                Schema = cuerpo.EsArreglo
+                                    ? new OpenApiSchema { Type = JsonSchemaType.Array, Items = new OpenApiSchemaReference(cuerpo.Tipo.Name) }
+                                    : new OpenApiSchemaReference(cuerpo.Tipo.Name),
+                            },
                         },
                     };
                 }

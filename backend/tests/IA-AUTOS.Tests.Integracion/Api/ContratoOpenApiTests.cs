@@ -58,6 +58,7 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var conCuerpo = new Dictionary<string, string>
         {
             ["/api/auth/login|post"] = "LoginRequest",
+            ["/api/auth/login-portal|post"] = "LoginPortalUsuarioDto",
             ["/api/usuarios|post"] = "CrearUsuarioRequest",
             ["/api/usuarios/{id}|patch"] = "ActualizarUsuarioRequest",
             ["/api/vehiculos/cargar|post"] = "CargarVinsRequest",
@@ -79,6 +80,11 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
 
         Assert.NotNull(contrato["components"]!["securitySchemes"]!["bearerAuth"]);
         Assert.Null(rutas["/api/auth/login"]!["post"]!["security"]);
+        Assert.Null(rutas["/api/auth/login-portal"]!["post"]!["security"]);
+        Assert.Null(rutas["/api/auth/refresh"]!["post"]!["security"]);
+        Assert.Null(rutas["/api/auth/logout"]!["post"]!["security"]);
+        Assert.Null(rutas["/api/auth/login-portal"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!["properties"]);
+        Assert.Equal("array", rutas["/api/auth/login-portal"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!["type"]!.GetValue<string>());
         Assert.Null(rutas["/health"]!["get"]!["security"]);
         Assert.Null(rutas["/api/etl/sofasa/ordenes"]!["post"]!["security"]);
         Assert.NotNull(rutas["/api/usuarios"]!["get"]!["security"]);
