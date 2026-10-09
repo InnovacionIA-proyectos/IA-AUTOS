@@ -30,6 +30,7 @@ La API se configura solo con variables de entorno (o `appsettings`). El doble gu
 | `Seguridad__RefreshMaxPorMinuto` | no (60) | limite por IP en `refresh` |
 | `Proxy__ConfiarEnEncabezadosReenviados` | no (`false`) | `true` solo detras de un proxy de confianza (Railway, nginx): usa `X-Forwarded-For` |
 | `Documentacion__Habilitada` | no (`false`) | publica `/openapi/v1.json` y la interfaz Swagger en `/swagger` |
+| `Catalogos__CacheSegundos` | no (60) | segundos que la API conserva los catalogos en memoria; un cambio hecho por la API los renueva al instante, uno hecho directamente en la base tarda hasta este tiempo |
 | `Contrasenas__Iteraciones` | no (600000) | iteraciones de PBKDF2 para hashes nuevos |
 | `MSSQL_SA_PASSWORD` | solo compose | contrasena del SQL Server local de desarrollo |
 | `SUPERADMIN_PASSWORD` | solo comando | contrasena para `crear-superadmin`; no dejarla en el entorno permanente |

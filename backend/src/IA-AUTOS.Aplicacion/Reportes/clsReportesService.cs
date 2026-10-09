@@ -1,3 +1,4 @@
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Aplicacion.Reportes.DTOReportes;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Reportes;

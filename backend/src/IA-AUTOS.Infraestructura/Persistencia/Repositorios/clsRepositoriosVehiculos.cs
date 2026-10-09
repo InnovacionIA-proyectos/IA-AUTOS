@@ -38,20 +38,6 @@ internal sealed class clsVehiculoRepository(clsAppDbContext contexto) : IVehicul
     public void Agregar(clsVehiculo vehiculo) => contexto.Vehiculos.Add(vehiculo);
 }
 
-internal sealed class clsPuntoCustodiaRepository(clsAppDbContext contexto) : IPuntoCustodiaRepository
-{
-    public async Task<IReadOnlyDictionary<string, Guid>> ObtenerIdsPorNombreAsync(
-        IReadOnlyCollection<string> nombres,
-        CancellationToken ct = default)
-    {
-        var lista = nombres.ToList();
-        return await contexto.PuntosCustodia
-            .AsNoTracking()
-            .Where(p => lista.Contains(p.Nombre))
-            .ToDictionaryAsync(p => p.Nombre, p => p.Id, ct);
-    }
-}
-
 internal sealed class clsEtapaRepository(clsAppDbContext contexto) : IEtapaRepository
 {
     public Task<clsEtapa?> ObtenerPorIdAsync(Guid id, CancellationToken ct = default) =>

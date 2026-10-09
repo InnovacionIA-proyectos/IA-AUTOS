@@ -66,27 +66,34 @@ public class VehiculosTests
     }
 
     [Fact]
-    public void Ruta_estandar_crea_tres_etapas_ordenadas_que_exigen_inspeccion()
+    public void Ruta_estandar_crea_una_etapa_por_cada_etapa_del_catalogo_en_su_orden_y_exigen_inspeccion()
     {
-        var puntos = clsPuntoCustodiaNombre.VALORES.ToDictionary(n => n, _ => Guid.NewGuid());
+        Guid[] catalogo = [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()];
         var vehiculoId = Guid.NewGuid();
 
-        var etapas = clsRutaCustodia.CrearEtapasEstandar(vehiculoId, puntos, AHORA);
+        var etapas = clsRutaCustodia.CrearEtapasEstandar(vehiculoId, catalogo, AHORA);
 
         Assert.Equal([1, 2, 3], etapas.Select(e => e.Orden));
-        Assert.Equal(
-            [puntos[clsPuntoCustodiaNombre.CARGUE], puntos[clsPuntoCustodiaNombre.TRANSPORTE], puntos[clsPuntoCustodiaNombre.DESCARGUE]],
-            etapas.Select(e => e.PuntoCustodiaId));
+        Assert.Equal(catalogo, etapas.Select(e => e.EtapaCatalogoId));
+        Assert.All(etapas, e => Assert.Null(e.PuntoCustodiaId));
         Assert.All(etapas, e => Assert.True(e.RequiereInspeccion));
         Assert.All(etapas, e => Assert.Equal(vehiculoId, e.VehiculoId));
     }
 
     [Fact]
-    public void Ruta_estandar_falla_como_error_interno_si_el_catalogo_esta_incompleto()
+    public void La_ruta_sigue_el_catalogo_si_se_agrega_o_se_retira_una_etapa()
     {
-        var puntos = new Dictionary<string, Guid> { [clsPuntoCustodiaNombre.CARGUE] = Guid.NewGuid() };
+        var cuatro = clsRutaCustodia.CrearEtapasEstandar(Guid.NewGuid(), [Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()], AHORA);
+        var una = clsRutaCustodia.CrearEtapasEstandar(Guid.NewGuid(), [Guid.NewGuid()], AHORA);
 
-        var ex = Assert.Throws<clsErrorInternoException>(() => clsRutaCustodia.CrearEtapasEstandar(Guid.NewGuid(), puntos, AHORA));
+        Assert.Equal([1, 2, 3, 4], cuatro.Select(e => e.Orden));
+        Assert.Single(una);
+    }
+
+    [Fact]
+    public void Ruta_estandar_falla_como_error_interno_si_el_catalogo_no_tiene_etapas_activas()
+    {
+        var ex = Assert.Throws<clsErrorInternoException>(() => clsRutaCustodia.CrearEtapasEstandar(Guid.NewGuid(), [], AHORA));
 
         Assert.Equal(clsCodigosError.INTERNAL_ERROR, ex.Codigo);
     }
@@ -94,7 +101,7 @@ public class VehiculosTests
     [Fact]
     public void Etapa_exige_orden_positivo()
     {
-        Assert.Throws<clsValidacionException>(() => clsEtapa.Crear(Guid.NewGuid(), Guid.NewGuid(), 0, true, AHORA));
+        Assert.Throws<clsValidacionException>(() => clsEtapa.Crear(Guid.NewGuid(), Guid.NewGuid(), null, 0, true, AHORA));
     }
 }
 

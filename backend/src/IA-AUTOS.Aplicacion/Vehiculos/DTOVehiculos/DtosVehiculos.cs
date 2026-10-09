@@ -53,6 +53,7 @@ public sealed record InventarioEtapaDto(
     Guid Id,
     int Orden,
     string Proceso,
+    string? Lugar,
     bool RequiereInspeccion,
     IReadOnlyList<InventarioInspeccionDto> Inspecciones);
 

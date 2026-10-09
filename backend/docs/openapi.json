@@ -1242,6 +1242,284 @@
         ]
       }
     },
+    "/api/catalogos": {
+      "get": {
+        "tags": [
+          "Catalogos"
+        ],
+        "operationId": "Catalogos_Todos",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogosDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogosDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogosDto"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/catalogos/{nombre}": {
+      "get": {
+        "tags": [
+          "Catalogos"
+        ],
+        "operationId": "Catalogos_Uno",
+        "parameters": [
+          {
+            "name": "nombre",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogoDto"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "post": {
+        "tags": [
+          "Catalogos"
+        ],
+        "operationId": "Catalogos_Crear",
+        "parameters": [
+          {
+            "name": "nombre",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogoValorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "object"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/catalogos/{nombre}/{id}": {
+      "patch": {
+        "tags": [
+          "Catalogos"
+        ],
+        "operationId": "Catalogos_Actualizar",
+        "parameters": [
+          {
+            "name": "nombre",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CatalogoValorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "object"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Catalogos"
+        ],
+        "operationId": "Catalogos_Eliminar",
+        "parameters": [
+          {
+            "name": "nombre",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/auth/login": {
       "post": {
         "tags": [
@@ -1856,6 +2134,137 @@
           }
         }
       },
+      "CatalogoDto": {
+        "required": [
+          "version",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "CatalogosDto": {
+        "required": [
+          "version",
+          "catalogos"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "catalogos": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      },
+      "CatalogoValorRequest": {
+        "required": [
+          "codigo",
+          "nombre",
+          "orden",
+          "activo",
+          "accion",
+          "obligatoria",
+          "tipo_vehiculo",
+          "vista_foto_id",
+          "numero",
+          "geometria"
+        ],
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "orden": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "activo": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "accion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "obligatoria": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "tipo_vehiculo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "vista_foto_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "numero": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "geometria": {
+            "required": [
+              "puntos"
+            ],
+            "type": "object",
+            "properties": {
+              "puntos": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "number",
+                    "format": "double"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       "CerrarInspeccionResponse": {
         "required": [
           "inspeccion",
@@ -2005,6 +2414,7 @@
       "CrearEtapaRequest": {
         "required": [
           "vehiculo_id",
+          "etapa_catalogo_id",
           "punto_custodia_id",
           "orden",
           "requiere_inspeccion"
@@ -2012,6 +2422,13 @@
         "type": "object",
         "properties": {
           "vehiculo_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "etapa_catalogo_id": {
             "type": [
               "null",
               "string"
@@ -2318,6 +2735,7 @@
         "required": [
           "id",
           "vehiculo_id",
+          "etapa_catalogo_id",
           "punto_custodia_id",
           "orden",
           "requiere_inspeccion",
@@ -2334,8 +2752,15 @@
             "type": "string",
             "format": "uuid"
           },
-          "punto_custodia_id": {
+          "etapa_catalogo_id": {
             "type": "string",
+            "format": "uuid"
+          },
+          "punto_custodia_id": {
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "uuid"
           },
           "orden": {
@@ -2518,6 +2943,7 @@
           "marca",
           "modelo",
           "proceso",
+          "lugar",
           "requiere_inspeccion",
           "inspector_nombre",
           "ninera",
@@ -2606,6 +3032,12 @@
           },
           "proceso": {
             "type": "string"
+          },
+          "lugar": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "requiere_inspeccion": {
             "type": "boolean"
@@ -3025,6 +3457,7 @@
           "id",
           "orden",
           "proceso",
+          "lugar",
           "requiere_inspeccion",
           "inspecciones"
         ],
@@ -3040,6 +3473,12 @@
           },
           "proceso": {
             "type": "string"
+          },
+          "lugar": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "requiere_inspeccion": {
             "type": "boolean"
@@ -3982,6 +4421,9 @@
     },
     {
       "name": "clsInspecciones"
+    },
+    {
+      "name": "clsCatalogos"
     },
     {
       "name": "clsAuth"

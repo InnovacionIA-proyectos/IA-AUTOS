@@ -106,25 +106,159 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
-   tblPuntosCustodia (catalogo de los 7 puntos de custodia)
+   Catalogos maestros (administrables desde el portal; nunca se borran valores en uso, se inactivan).
+   Todos comparten: Codigo (clave estable en minusculas que usa la API y no cambia), Nombre (etiqueta),
+   Orden (posicion al mostrarlos) y Activo (un valor inactivo no se ofrece pero sigue siendo valido en lo ya guardado).
    ----------------------------------------------------------------------------- */
-IF OBJECT_ID(N'dbo.tblPuntosCustodia', N'U') IS NULL
+
+-- Etapas del proceso (cargue, transporte, descargue). Es el "proceso" de cada etapa de un vehiculo.
+IF OBJECT_ID(N'dbo.tblEtapasCatalogo', N'U') IS NULL
 BEGIN
-    CREATE TABLE dbo.tblPuntosCustodia
+    CREATE TABLE dbo.tblEtapasCatalogo
     (
-        Id         uniqueidentifier NOT NULL CONSTRAINT PK_tblPuntosCustodia PRIMARY KEY,
-        Nombre     varchar(30)      NOT NULL,
-        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblPuntosCustodia_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblPuntosCustodia_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        CONSTRAINT UQ_tblPuntosCustodia_Nombre UNIQUE (Nombre),
-        CONSTRAINT CK_tblPuntosCustodia_Nombre CHECK (Nombre IN
-            ('cargue', 'punto_origen', 'certificadora', 'punto_destino', 'transporte', 'descargue', 'concesionario'))
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblEtapasCatalogo PRIMARY KEY,
+        Codigo     varchar(30)       NOT NULL,
+        Nombre     nvarchar(100)     NOT NULL,
+        Orden      int               NOT NULL CONSTRAINT DF_tblEtapasCatalogo_Orden DEFAULT (0),
+        Activo     bit               NOT NULL CONSTRAINT DF_tblEtapasCatalogo_Activo DEFAULT (1),
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEtapasCatalogo_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEtapasCatalogo_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblEtapasCatalogo_Codigo UNIQUE (Codigo)
     );
 END
 GO
 
+-- Puntos de custodia = lugares fisicos donde se hace una etapa (CEDI 1, Origen, Certificadora, Destino, CEDI 2, Concesionario).
+IF OBJECT_ID(N'dbo.tblPuntosCustodia', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblPuntosCustodia
+    (
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblPuntosCustodia PRIMARY KEY,
+        Codigo     varchar(30)       NOT NULL,
+        Nombre     nvarchar(100)     NOT NULL,
+        Orden      int               NOT NULL CONSTRAINT DF_tblPuntosCustodia_Orden DEFAULT (0),
+        Activo     bit               NOT NULL CONSTRAINT DF_tblPuntosCustodia_Activo DEFAULT (1),
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblPuntosCustodia_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblPuntosCustodia_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblPuntosCustodia_Codigo UNIQUE (Codigo)
+    );
+END
+GO
+
+IF OBJECT_ID(N'dbo.tblTiposUnidadTransportadora', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblTiposUnidadTransportadora
+    (
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblTiposUnidadTransportadora PRIMARY KEY,
+        Codigo     varchar(30)       NOT NULL,
+        Nombre     nvarchar(100)     NOT NULL,
+        Orden      int               NOT NULL CONSTRAINT DF_tblTiposUnidadTransportadora_Orden DEFAULT (0),
+        Activo     bit               NOT NULL CONSTRAINT DF_tblTiposUnidadTransportadora_Activo DEFAULT (1),
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTiposUnidadTransportadora_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTiposUnidadTransportadora_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblTiposUnidadTransportadora_Codigo UNIQUE (Codigo)
+    );
+END
+GO
+
+-- Clases y tamanos de dano: tblHallazgos guarda el Codigo y lo referencia con una FK (reemplaza los CHECK de antes).
+IF OBJECT_ID(N'dbo.tblClasesDano', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblClasesDano
+    (
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblClasesDano PRIMARY KEY,
+        Codigo     varchar(30)       NOT NULL,
+        Nombre     nvarchar(100)     NOT NULL,
+        Orden      int               NOT NULL CONSTRAINT DF_tblClasesDano_Orden DEFAULT (0),
+        Activo     bit               NOT NULL CONSTRAINT DF_tblClasesDano_Activo DEFAULT (1),
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblClasesDano_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblClasesDano_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblClasesDano_Codigo UNIQUE (Codigo)
+    );
+END
+GO
+
+IF OBJECT_ID(N'dbo.tblTamanosDano', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblTamanosDano
+    (
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblTamanosDano PRIMARY KEY,
+        Codigo     varchar(30)       NOT NULL,
+        Nombre     nvarchar(100)     NOT NULL,
+        Orden      int               NOT NULL CONSTRAINT DF_tblTamanosDano_Orden DEFAULT (0),
+        Activo     bit               NOT NULL CONSTRAINT DF_tblTamanosDano_Activo DEFAULT (1),
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTamanosDano_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTamanosDano_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblTamanosDano_Codigo UNIQUE (Codigo)
+    );
+END
+GO
+
+-- Niveles de severidad (V1+, V1, V2, V3) con la accion que corresponde a cada uno.
+IF OBJECT_ID(N'dbo.tblNivelesSeveridad', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblNivelesSeveridad
+    (
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblNivelesSeveridad PRIMARY KEY,
+        Codigo     varchar(30)       NOT NULL,
+        Nombre     nvarchar(100)     NOT NULL,
+        Accion     nvarchar(500)     NULL,
+        Orden      int               NOT NULL CONSTRAINT DF_tblNivelesSeveridad_Orden DEFAULT (0),
+        Activo     bit               NOT NULL CONSTRAINT DF_tblNivelesSeveridad_Activo DEFAULT (1),
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblNivelesSeveridad_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblNivelesSeveridad_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblNivelesSeveridad_Codigo UNIQUE (Codigo)
+    );
+END
+GO
+
+-- Vistas de foto: Obligatoria = 1 se toman siempre; Obligatoria = 0 (piezas en el baul, cojineria) solo con faltante o dano.
+-- TipoVehiculo NULL = aplica a cualquier tipo de vehiculo.
+IF OBJECT_ID(N'dbo.tblVistasFoto', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblVistasFoto
+    (
+        Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblVistasFoto PRIMARY KEY,
+        Codigo        varchar(30)       NOT NULL,
+        Nombre        nvarchar(100)     NOT NULL,
+        Obligatoria   bit               NOT NULL CONSTRAINT DF_tblVistasFoto_Obligatoria DEFAULT (1),
+        TipoVehiculo  varchar(30)       NULL,
+        Orden         int               NOT NULL CONSTRAINT DF_tblVistasFoto_Orden DEFAULT (0),
+        Activo        bit               NOT NULL CONSTRAINT DF_tblVistasFoto_Activo DEFAULT (1),
+        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblVistasFoto_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblVistasFoto_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblVistasFoto_Codigo UNIQUE (Codigo)
+    );
+END
+GO
+
+-- Cuadrantes: regiones numeradas de cada vista (las vistas adicionales no tienen). Geometria = poligono normalizado en JSON
+-- ({"puntos":[[x,y],...]} con x e y entre 0 y 1 sobre la imagen de la vista) para que la app y el portal dibujen lo mismo.
+IF OBJECT_ID(N'dbo.tblCuadrantes', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblCuadrantes
+    (
+        Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblCuadrantes PRIMARY KEY,
+        VistaFotoId   uniqueidentifier  NOT NULL,
+        TipoVehiculo  varchar(30)       NULL,
+        Numero        int               NOT NULL,
+        Nombre        nvarchar(100)     NOT NULL,
+        Geometria     nvarchar(max)     NULL,
+        Orden         int               NOT NULL CONSTRAINT DF_tblCuadrantes_Orden DEFAULT (0),
+        Activo        bit               NOT NULL CONSTRAINT DF_tblCuadrantes_Activo DEFAULT (1),
+        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblCuadrantes_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblCuadrantes_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblCuadrantes_Vista FOREIGN KEY (VistaFotoId) REFERENCES dbo.tblVistasFoto (Id),
+        CONSTRAINT UQ_tblCuadrantes_Tipo_Numero UNIQUE (TipoVehiculo, Numero),
+        CONSTRAINT CK_tblCuadrantes_Numero CHECK (Numero >= 1),
+        CONSTRAINT CK_tblCuadrantes_Geometria CHECK (Geometria IS NULL OR ISJSON(Geometria) = 1)
+    );
+    CREATE INDEX IX_tblCuadrantes_Vista ON dbo.tblCuadrantes (VistaFotoId);
+END
+GO
+
 /* -----------------------------------------------------------------------------
-   tblEtapas (fase del proceso por vehiculo y punto de custodia)
+   tblEtapas (tramo de la ruta de un vehiculo: etapa del catalogo y, opcionalmente, el lugar donde se hace)
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblEtapas', N'U') IS NULL
 BEGIN
@@ -132,16 +266,19 @@ BEGIN
     (
         Id                  uniqueidentifier NOT NULL CONSTRAINT PK_tblEtapas PRIMARY KEY,
         VehiculoId          uniqueidentifier NOT NULL,
-        PuntoCustodiaId     uniqueidentifier NOT NULL,
+        EtapaCatalogoId     uniqueidentifier NOT NULL,
+        PuntoCustodiaId     uniqueidentifier NULL,
         Orden               int              NOT NULL,
         RequiereInspeccion  bit              NOT NULL CONSTRAINT DF_tblEtapas_RequiereInspeccion DEFAULT (1),
         CreatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEtapas_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEtapas_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblEtapas_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_tblEtapas_EtapaCatalogo FOREIGN KEY (EtapaCatalogoId) REFERENCES dbo.tblEtapasCatalogo (Id),
         CONSTRAINT FK_tblEtapas_PuntoCustodia FOREIGN KEY (PuntoCustodiaId) REFERENCES dbo.tblPuntosCustodia (Id),
         CONSTRAINT UQ_tblEtapas_Vehiculo_Orden UNIQUE (VehiculoId, Orden),
         CONSTRAINT CK_tblEtapas_Orden CHECK (Orden >= 1)
     );
+    CREATE INDEX IX_tblEtapas_EtapaCatalogo ON dbo.tblEtapas (EtapaCatalogoId);
     CREATE INDEX IX_tblEtapas_PuntoCustodia ON dbo.tblEtapas (PuntoCustodiaId);
 END
 GO
@@ -201,11 +338,8 @@ BEGIN
         CreatedAt       datetimeoffset(3) NOT NULL CONSTRAINT DF_tblHallazgos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt       datetimeoffset(3) NOT NULL CONSTRAINT DF_tblHallazgos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblHallazgos_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id) ON DELETE CASCADE,
-        CONSTRAINT CK_tblHallazgos_ClaseDano CHECK (ClaseDano IN
-            ('deformacion', 'rotura', 'cortado', 'perforacion', 'golpe',
-             'mancha', 'raya_pintar', 'desconchado', 'particulas', 'faltante')),
-        CONSTRAINT CK_tblHallazgos_TamanoDano CHECK (TamanoDano IN
-            ('1_5cm', '5_10cm', '10_20cm', 'mas_20cm', 'requiere_reemplazo', 'mas_10_particulas')),
+        CONSTRAINT FK_tblHallazgos_ClaseDano FOREIGN KEY (ClaseDano) REFERENCES dbo.tblClasesDano (Codigo),
+        CONSTRAINT FK_tblHallazgos_TamanoDano FOREIGN KEY (TamanoDano) REFERENCES dbo.tblTamanosDano (Codigo),
         CONSTRAINT CK_tblHallazgos_Coords CHECK (CoordsDiagrama IS NULL OR ISJSON(CoordsDiagrama) = 1)
     );
     CREATE INDEX IX_tblHallazgos_Inspeccion ON dbo.tblHallazgos (InspeccionId);
@@ -353,13 +487,92 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
-   Catalogo: los 7 puntos de custodia (idempotente)
+   Catalogos iniciales (idempotentes: solo agregan lo que falta, por Codigo).
+   Los acentos se escriben con NCHAR para que el archivo siga siendo ASCII: 225=a, 233=e, 237=i, 243=o, 250=u, 241=enie.
+   Las acciones de los niveles de severidad y los cuadrantes no tienen semilla: se cargan o se editan desde el portal.
    ----------------------------------------------------------------------------- */
-INSERT INTO dbo.tblPuntosCustodia (Id, Nombre)
-SELECT NEWID(), v.Nombre
-FROM (VALUES ('cargue'), ('punto_origen'), ('certificadora'), ('punto_destino'),
-             ('transporte'), ('descargue'), ('concesionario')) AS v (Nombre)
-WHERE NOT EXISTS (SELECT 1 FROM dbo.tblPuntosCustodia p WHERE p.Nombre = v.Nombre);
+INSERT INTO dbo.tblEtapasCatalogo (Id, Codigo, Nombre, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
+FROM (VALUES
+    ('cargue',     N'Cargue',     1),
+    ('transporte', N'Transporte', 2),
+    ('descargue',  N'Descargue',  3)) AS v (Codigo, Nombre, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblEtapasCatalogo c WHERE c.Codigo = v.Codigo);
+GO
+
+INSERT INTO dbo.tblPuntosCustodia (Id, Codigo, Nombre, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
+FROM (VALUES
+    ('cedi_1',        N'CEDI 1',        1),
+    ('origen',        N'Origen',        2),
+    ('certificadora', N'Certificadora', 3),
+    ('destino',       N'Destino',       4),
+    ('cedi_2',        N'CEDI 2',        5),
+    ('concesionario', N'Concesionario', 6)) AS v (Codigo, Nombre, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblPuntosCustodia c WHERE c.Codigo = v.Codigo);
+GO
+
+INSERT INTO dbo.tblTiposUnidadTransportadora (Id, Codigo, Nombre, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
+FROM (VALUES
+    ('ninera',        N'Ni' + NCHAR(241) + N'era',                      1),
+    ('nodriza',       N'Nodriza',                                       2),
+    ('quintinaria',   N'Quintinaria',                                   3),
+    ('planchon_grua', N'Planch' + NCHAR(243) + N'n gr' + NCHAR(250) + N'a', 4)) AS v (Codigo, Nombre, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblTiposUnidadTransportadora c WHERE c.Codigo = v.Codigo);
+GO
+
+INSERT INTO dbo.tblClasesDano (Id, Codigo, Nombre, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
+FROM (VALUES
+    ('deformacion', N'Deformaci' + NCHAR(243) + N'n', 1),
+    ('rotura',      N'Rotura',                         2),
+    ('cortado',     N'Cortado',                        3),
+    ('perforacion', N'Perforaci' + NCHAR(243) + N'n', 4),
+    ('golpe',       N'Golpe',                          5),
+    ('mancha',      N'Mancha',                         6),
+    ('raya_pintar', N'Raya para pintar',               7),
+    ('desconchado', N'Desconchado',                    8),
+    ('particulas',  N'Part' + NCHAR(237) + N'culas',  9),
+    ('faltante',    N'Faltante',                       10)) AS v (Codigo, Nombre, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblClasesDano c WHERE c.Codigo = v.Codigo);
+GO
+
+INSERT INTO dbo.tblTamanosDano (Id, Codigo, Nombre, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
+FROM (VALUES
+    ('1_5cm',             N'1 a 5 cm',                                        1),
+    ('5_10cm',            N'5 a 10 cm',                                       2),
+    ('10_20cm',           N'10 a 20 cm',                                      3),
+    ('mas_20cm',          N'M' + NCHAR(225) + N's de 20 cm',                  4),
+    ('requiere_reemplazo', N'Requiere reemplazo',                             5),
+    ('mas_10_particulas', N'M' + NCHAR(225) + N's de 10 part' + NCHAR(237) + N'culas', 6)) AS v (Codigo, Nombre, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblTamanosDano c WHERE c.Codigo = v.Codigo);
+GO
+
+INSERT INTO dbo.tblNivelesSeveridad (Id, Codigo, Nombre, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
+FROM (VALUES
+    ('v1_plus', N'V1+', 1),
+    ('v1',      N'V1',  2),
+    ('v2',      N'V2',  3),
+    ('v3',      N'V3',  4)) AS v (Codigo, Nombre, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblNivelesSeveridad c WHERE c.Codigo = v.Codigo);
+GO
+
+INSERT INTO dbo.tblVistasFoto (Id, Codigo, Nombre, Obligatoria, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.Obligatoria, v.Orden
+FROM (VALUES
+    ('frontal',                    N'Frontal',                       1, 1),
+    ('trasera',                    N'Trasera',                       1, 2),
+    ('lateral_derecha',            N'Lateral derecha',               1, 3),
+    ('lateral_izquierda',          N'Lateral izquierda',             1, 4),
+    ('diagonal_trasera_izquierda', N'Diagonal trasera izquierda',    1, 5),
+    ('diagonal_delantera_derecha', N'Diagonal delantera derecha',    1, 6),
+    ('superior',                   N'Superior',                      1, 7),
+    ('piezas_baul',                N'Piezas en el ba' + NCHAR(250) + N'l', 0, 8),
+    ('cojineria',                  N'Cojiner' + NCHAR(237) + N'a',   0, 9)) AS v (Codigo, Nombre, Obligatoria, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblVistasFoto c WHERE c.Codigo = v.Codigo);
 GO
 
 /* -----------------------------------------------------------------------------

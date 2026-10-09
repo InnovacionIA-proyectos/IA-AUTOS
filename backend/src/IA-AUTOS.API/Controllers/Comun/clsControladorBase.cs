@@ -54,6 +54,39 @@ public abstract class clsControladorBase : ControllerBase
     }
 
 
+    /// <summary>
+    /// Lee un cuerpo objeto como diccionario campo -> valor JSON. Cada valor se clona porque el documento se libera al salir:
+    /// sin el clon, los textos con escapes (ó) fallarian al leerse despues.
+    /// </summary>
+    protected async Task<Dictionary<string, JsonElement>> LeerCamposAsync(CancellationToken ct)
+    {
+        JsonDocument documento;
+        try
+        {
+            documento = await JsonDocument.ParseAsync(Request.Body, cancellationToken: ct);
+        }
+        catch (JsonException)
+        {
+            throw new clsValidacionException("El cuerpo debe ser JSON válido");
+        }
+
+        using (documento)
+        {
+            if (documento.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                throw new clsValidacionException("El cuerpo debe ser un objeto JSON");
+            }
+
+            var campos = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            foreach (var propiedad in documento.RootElement.EnumerateObject())
+            {
+                campos[propiedad.Name] = propiedad.Value.Clone();
+            }
+
+            return campos;
+        }
+    }
+
     protected ObjectResult Creado<T>(T valor) => StatusCode(StatusCodes.Status201Created, valor);
 
     /// <summary>Lee un cuerpo que es un arreglo JSON (por ejemplo, el usuario del portal en login-portal).</summary>

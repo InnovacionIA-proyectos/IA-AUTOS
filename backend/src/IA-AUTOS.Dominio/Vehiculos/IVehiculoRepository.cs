@@ -15,12 +15,6 @@ public interface IVehiculoRepository
     void Agregar(clsVehiculo vehiculo);
 }
 
-public interface IPuntoCustodiaRepository
-{
-    /// <summary>Devuelve el id de cada punto de custodia pedido, indexado por nombre.</summary>
-    Task<IReadOnlyDictionary<string, Guid>> ObtenerIdsPorNombreAsync(IReadOnlyCollection<string> nombres, CancellationToken ct = default);
-}
-
 public interface IEtapaRepository
 {
     Task<clsEtapa?> ObtenerPorIdAsync(Guid id, CancellationToken ct = default);

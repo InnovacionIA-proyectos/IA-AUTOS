@@ -10,18 +10,18 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
         await (from i in contexto.Inspecciones.AsNoTracking()
                join e in contexto.Etapas on i.EtapaId equals e.Id
                join v in contexto.Vehiculos on e.VehiculoId equals v.Id
-               join p in contexto.PuntosCustodia on e.PuntoCustodiaId equals p.Id
+               join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id
                where (f.Vin == null || v.Vin == f.Vin)
                   && (f.UsuarioId == null || i.UsuarioId == f.UsuarioId)
                   && (f.Momento == null || i.Momento == f.Momento)
                   && (f.Estado == null || i.Estado == f.Estado)
-                  && (f.Proceso == null || p.Nombre == f.Proceso)
+                  && (f.Proceso == null || p.Codigo == f.Proceso)
                   && (f.Desde == null || i.Fecha >= f.Desde)
                   && (f.Hasta == null || i.Fecha <= f.Hasta)
                orderby i.Fecha descending
                select new InspeccionListadoDto(
                    i.Id, i.EtapaId, i.UsuarioId, i.Momento, i.Fecha, i.Lat, i.Lng, i.Estado, i.ConductorNombre, i.Placa, i.Trailer, i.Notas,
-                   i.CreatedAt, i.UpdatedAt, v.Vin, p.Nombre))
+                   i.CreatedAt, i.UpdatedAt, v.Vin, p.Codigo))
             .Take(limite)
             .ToListAsync(ct);
 
@@ -30,7 +30,9 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
         var fila = await (from i in contexto.Inspecciones.AsNoTracking()
                           join e in contexto.Etapas on i.EtapaId equals e.Id
                           join v in contexto.Vehiculos on e.VehiculoId equals v.Id
-                          join p in contexto.PuntosCustodia on e.PuntoCustodiaId equals p.Id
+                          join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id
+                          join l in contexto.PuntosCustodia on e.PuntoCustodiaId equals l.Id into lugares
+                          from l in lugares.DefaultIfEmpty()
                           join u in contexto.Usuarios on i.UsuarioId equals u.Id into usuarios
                           from u in usuarios.DefaultIfEmpty()
                           where i.Id == id
@@ -41,7 +43,8 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                               v.Vin,
                               v.Marca,
                               v.Modelo,
-                              Proceso = p.Nombre,
+                              Proceso = p.Codigo,
+                              Lugar = (string?)l.Nombre,
                               e.RequiereInspeccion,
                               InspectorNombre = (string?)u.Nombre,
                           }).FirstOrDefaultAsync(ct);
@@ -86,6 +89,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
             fila.Marca,
             fila.Modelo,
             fila.Proceso,
+            fila.Lugar,
             fila.RequiereInspeccion,
             fila.InspectorNombre,
             insp.Placa ?? asignacion?.Ninera,
