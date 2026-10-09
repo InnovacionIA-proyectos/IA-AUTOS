@@ -208,6 +208,27 @@ public sealed class SesionPortalApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
+    public async Task Cambio_de_usuario_del_portal_con_el_mismo_correo_no_relinkea_la_cuenta()
+    {
+        var (cliente, fabrica, portal) = Preparar();
+        // Misma persona, pero TI le asigno un id de portal nuevo (p. ej. recontratacion) con el mismo correo.
+        portal.Usuarios[456] = new clsUsuarioPortal(456, "jperez2", "jperez@empresa.com", "Juan Pérez", ["AdminIAAUTOS"]);
+
+        await IniciarSesionAsync(cliente, 123);
+        var segunda = await cliente.PostAsync("/api/auth/login-portal", CuerpoPortal(456));
+
+        Assert.Equal(HttpStatusCode.Forbidden, segunda.StatusCode);
+        using var docRechazo = await LeerAsync(segunda);
+        Assert.Equal("PORTAL_USER_NOT_LINKED", docRechazo.RootElement.GetProperty("code").GetString());
+
+        // El vinculo original (123) sigue funcionando: no quedo reasignado al nuevo id.
+        var relogin = await cliente.PostAsync("/api/auth/login-portal", CuerpoPortal(123));
+        Assert.Equal(HttpStatusCode.OK, relogin.StatusCode);
+        using var alcance = fabrica.Services.CreateScope();
+        Assert.Null(await alcance.ServiceProvider.GetRequiredService<IUsuarioRepository>().ObtenerPorPortalIdAsync(456));
+    }
+
+    [Fact]
     public async Task Sin_base_de_TI_configurada_solo_entran_los_ids_ya_vinculados()
     {
         var (cliente, fabrica, portal) = Preparar();
@@ -353,6 +374,46 @@ public sealed class SesionPortalApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         await RefrescarAsync(cliente, refreshInicial);
 
         Assert.Equal(HttpStatusCode.Unauthorized, await LlamarMeAsync(cliente, accessVigente));
+        Assert.Equal(HttpStatusCode.Unauthorized, (await RefrescarAsync(cliente, refreshVigente)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Doble_refresh_concurrente_con_el_mismo_token_no_revoca_la_sesion_ganadora()
+    {
+        // Gracia por defecto (10s): dos pestañas que refrescan casi a la vez con el mismo refresh no deben tumbar la sesión.
+        var (cliente, _, _) = Preparar(new() { ["Sesion:RefreshGraciaSegundos"] = "10" });
+        var (_, refreshInicial, _) = await IniciarSesionAsync(cliente);
+
+        var ganadora = await RefrescarAsync(cliente, refreshInicial);
+        Assert.Equal(HttpStatusCode.OK, ganadora.StatusCode);
+        using var docGanadora = await LeerAsync(ganadora);
+        var accessGanador = docGanadora.RootElement.GetProperty("access").GetString()!;
+        var refreshGanador = docGanadora.RootElement.GetProperty("refresh").GetString()!;
+
+        // La pestaña que perdió la carrera presenta el mismo refresh ya rotado, dentro de la ventana de gracia.
+        var perdedora = await RefrescarAsync(cliente, refreshInicial);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, perdedora.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, await LlamarMeAsync(cliente, accessGanador));
+        Assert.Equal(HttpStatusCode.OK, (await RefrescarAsync(cliente, refreshGanador)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Pasada_la_gracia_reusar_el_refresh_rotado_si_revoca_toda_la_sesion()
+    {
+        var (cliente, _, _) = Preparar(new() { ["Sesion:RefreshGraciaSegundos"] = "10" });
+        var (_, refreshInicial, _) = await IniciarSesionAsync(cliente);
+        using var docRotado = await LeerAsync(await RefrescarAsync(cliente, refreshInicial));
+        var refreshVigente = docRotado.RootElement.GetProperty("refresh").GetString()!;
+
+        // Simula que paso mas tiempo que la ventana de gracia desde la rotacion: ya no es una carrera, es reuso real.
+        // El margen (10 min) es deliberadamente mucho mayor que la gracia (10s) para no depender de que el reloj del
+        // contenedor de SQL Server y el del proceso de pruebas esten perfectamente sincronizados.
+        await BaseDatos.EjecutarAsync("UPDATE dbo.tblRefreshTokens SET RevocadoAt = DATEADD(minute, -10, RevocadoAt) WHERE RevocadoAt IS NOT NULL");
+
+        var reusoTardio = await RefrescarAsync(cliente, refreshInicial);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, reusoTardio.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await RefrescarAsync(cliente, refreshVigente)).StatusCode);
     }
 
