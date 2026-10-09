@@ -43,7 +43,7 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | GET `/api/uploads/{archivo}` | publico por defecto | sirve la imagen |
 | POST `/api/etl/sofasa/ordenes` | token del ETL | ingesta idempotente por `source_id` |
 | GET `/api/sofasa/ordenes` | autenticado | ordenes mas recientes primero (maximo 500) |
-| GET `/api/catalogos` | autenticado | todos los catalogos maestros (etapas, lugares, clases y tamanos de dano, niveles, vistas, cuadrantes...) con version (`ETag`, `304` con `If-None-Match`) |
+| GET `/api/catalogos` | autenticado | todos los catalogos maestros (etapas, lugares, clases y tamanos de dano, niveles, vistas, cuadrantes y sus poligonos...) con version (`ETag`, `304` con `If-None-Match`) |
 | GET `/api/catalogos/{nombre}` | autenticado | un catalogo con su version |
 | POST `/api/catalogos/{nombre}`, PATCH `/api/catalogos/{nombre}/{id}`, DELETE `/api/catalogos/{nombre}/{id}` | admin, super_admin, coordinador_calidad | crea, edita o borra un valor; uno en uso no se borra (`409`), se inactiva |
 | GET `/api/patrones` | autenticado | hallazgos por proceso y zona de unidades movilizadas |

@@ -159,96 +159,13 @@ internal sealed class clsCatalogoVistas(clsAppDbContext contexto, IReloj reloj)
 
     protected override async Task AplicarAsync(clsVistaFoto entidad, clsCamposCatalogo campos, CancellationToken ct)
     {
-        // Las vistas adicionales no tienen cuadrantes: una vista que ya los tiene no puede pasar a ser adicional.
-        if (campos.Booleano("obligatoria") == false && await Contexto.Cuadrantes.AnyAsync(c => c.VistaFotoId == entidad.Id, ct))
+        // Las vistas adicionales no tienen cuadrantes: una vista que ya tiene poligonos no puede pasar a ser adicional.
+        if (campos.Booleano("obligatoria") == false && await Contexto.CuadranteVistas.AnyAsync(c => c.VistaFotoId == entidad.Id, ct))
         {
-            throw new clsConflictoException("La vista tiene cuadrantes, así que no puede ser adicional. Inactive los cuadrantes o la vista");
+            throw new clsConflictoException("La vista tiene cuadrantes dibujados, así que no puede ser adicional. Borre sus polígonos o inactive la vista");
         }
 
         entidad.CambiarVista(campos.Booleano("obligatoria"), campos.Texto("tipo_vehiculo"), campos.Tiene("tipo_vehiculo"), Reloj.Ahora);
     }
 }
 
-internal sealed class clsCatalogoCuadrantes(clsAppDbContext contexto, IReloj reloj)
-    : clsCatalogoEf<clsCuadrante>(contexto, reloj, clsNombresCatalogo.CUADRANTES)
-{
-    protected override IReadOnlyList<string> CamposPermitidos { get; } =
-        ["vista_foto_id", "tipo_vehiculo", "numero", "nombre", "geometria", "orden", "activo"];
-
-    public override async Task<IReadOnlyList<ValorCatalogo>> ListarAsync(CancellationToken ct = default)
-    {
-        var filas = await (from c in Contexto.Cuadrantes.AsNoTracking()
-                           join v in Contexto.VistasFoto.AsNoTracking() on c.VistaFotoId equals v.Id
-                           orderby c.Orden, c.Numero
-                           select new { Cuadrante = c, Vista = v.Codigo }).ToListAsync(ct);
-        return filas.Select(f => Mapear(f.Cuadrante, f.Vista)).ToList();
-    }
-
-    protected override ValorCatalogo Mapear(clsCuadrante c) => Mapear(c, vista: null);
-
-    protected override async Task<ValorCatalogo> MapearAsync(clsCuadrante c, CancellationToken ct) =>
-        Mapear(c, await Contexto.VistasFoto.Where(v => v.Id == c.VistaFotoId).Select(v => v.Codigo).FirstOrDefaultAsync(ct));
-
-    private static ValorCatalogo Mapear(clsCuadrante c, string? vista) => new()
-    {
-        ["id"] = c.Id,
-        ["vista_foto_id"] = c.VistaFotoId,
-        ["vista"] = vista,
-        ["tipo_vehiculo"] = c.TipoVehiculo,
-        ["numero"] = c.Numero,
-        ["nombre"] = c.Nombre,
-        // La geometria sale como objeto JSON (no como texto) para que la app y el portal la lean directamente.
-        ["geometria"] = c.Geometria is null ? null : JsonSerializer.Deserialize<JsonElement>(c.Geometria),
-        ["orden"] = c.Orden,
-        ["activo"] = c.Activo,
-    };
-
-    protected override async Task<clsCuadrante> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct)
-    {
-        var vistaId = campos.Identificador("vista_foto_id") ?? throw clsErroresCampos.De("vista_foto_id", "La vista es requerida");
-        await AsegurarVistaConCuadrantesAsync(vistaId, ct);
-        return clsCuadrante.Crear(
-            vistaId,
-            campos.Texto("tipo_vehiculo"),
-            campos.Entero("numero"),
-            campos.Texto("nombre"),
-            campos.Json("geometria"),
-            campos.Entero("orden"),
-            campos.Booleano("activo"),
-            Reloj.Ahora);
-    }
-
-    protected override async Task AplicarAsync(clsCuadrante entidad, clsCamposCatalogo campos, CancellationToken ct)
-    {
-        var vistaId = campos.Identificador("vista_foto_id");
-        if (vistaId is not null)
-        {
-            await AsegurarVistaConCuadrantesAsync(vistaId.Value, ct);
-        }
-
-        entidad.Cambiar(
-            vistaId,
-            campos.Texto("tipo_vehiculo"),
-            campos.Tiene("tipo_vehiculo"),
-            campos.Entero("numero"),
-            campos.Json("geometria"),
-            campos.Tiene("geometria"),
-            Reloj.Ahora);
-    }
-
-    /// <summary>La vista debe existir, estar activa y ser obligatoria: las vistas adicionales (baul, cojineria) no tienen cuadrantes.</summary>
-    private async Task AsegurarVistaConCuadrantesAsync(Guid vistaId, CancellationToken ct)
-    {
-        var vista = await Contexto.VistasFoto.AsNoTracking().FirstOrDefaultAsync(v => v.Id == vistaId, ct)
-            ?? throw clsErroresCampos.De("vista_foto_id", "La vista no existe");
-        if (!vista.Obligatoria)
-        {
-            throw clsErroresCampos.De("vista_foto_id", "Las vistas adicionales no tienen cuadrantes");
-        }
-
-        if (!vista.Activo)
-        {
-            throw clsErroresCampos.De("vista_foto_id", "La vista está inactiva");
-        }
-    }
-}
