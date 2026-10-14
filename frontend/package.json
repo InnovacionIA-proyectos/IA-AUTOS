@@ -24,7 +24,7 @@
     "@lucide/angular": "^1.49.0",
     "@tailwindcss/postcss": "^4.3.3",
     "exceljs": "^4.4.0",
-    "postcss": "^8.5.28",
+    "postcss": "^8.5.29",
     "qrcode": "^1.5.4",
     "rxjs": "~7.8.0",
     "tailwindcss": "^4.3.3",
