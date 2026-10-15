@@ -19,4 +19,13 @@ public sealed class clsOpcionesSeguridad
 
     /// <summary>Renovaciones de sesion (refresh) por minuto y por IP.</summary>
     public int RefreshMaxPorMinuto { get; set; } = 60;
+
+    /// <summary>Intentos de login-conductor por minuto y por IP. Alto: en una bodega muchos conductores comparten la misma red.</summary>
+    public int LoginConductorMaxIntentosPorMinuto { get; set; } = 60;
+
+    /// <summary>PIN errados seguidos que bloquean la cuenta de una persona.</summary>
+    public int PinMaxIntentos { get; set; } = 5;
+
+    /// <summary>Minutos que dura el bloqueo por PIN errados.</summary>
+    public int PinBloqueoMinutos { get; set; } = 15;
 }

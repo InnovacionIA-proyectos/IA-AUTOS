@@ -1,4 +1,5 @@
 using IAAutos.Aplicacion.Auth.Services;
+using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Usuarios;
 using Microsoft.AspNetCore.Hosting;
@@ -55,12 +56,50 @@ public sealed class clsFabricaApi(
         bool activo = true,
         string? hashExistente = null,
         string nombre = "Usuario de prueba",
-        string? cedula = null)
+        string? cedula = null,
+        Guid? clienteId = null)
     {
         using var alcance = Services.CreateScope();
         var s = alcance.ServiceProvider;
         var hasher = s.GetRequiredService<IServicioContrasenas>();
-        var usuario = clsUsuario.Crear(nombre, email, rol, null, hashExistente ?? hasher.Hashear(password), DateTimeOffset.UtcNow, cedula);
+        // Salvo el super administrador, todo usuario pertenece a un cliente (por defecto, el primero).
+        Guid? cliente = rol == clsRol.SUPER_ADMIN ? null : clienteId ?? await s.GetRequiredService<ICatalogosLectura>().ClienteAsync(null);
+        // El conductor siempre tiene cedula: si la prueba no la da, se le asigna una unica.
+        cedula ??= rol == clsRol.CONDUCTOR ? "T" + Random.Shared.NextInt64(10_000_000, 99_999_999) : null;
+        var usuario = clsUsuario.Crear(nombre, email, rol, null, hashExistente ?? hasher.Hashear(password), DateTimeOffset.UtcNow, cedula, cliente);
+        if (!activo)
+        {
+            usuario.Retirar(DateTimeOffset.UtcNow);
+        }
+
+        s.GetRequiredService<IUsuarioRepository>().Agregar(usuario);
+        await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
+        return usuario;
+    }
+
+    /// <summary>
+    /// Crea un usuario que entra con cedula y PIN (conductor o inspector). Con <paramref name="debeCambiarPin"/> en false el PIN ya no es temporal.
+    /// </summary>
+    public async Task<clsUsuario> SembrarUsuarioConPinAsync(
+        string cedula,
+        string pin,
+        string rol = clsRol.CONDUCTOR,
+        string nombre = "Conductor de prueba",
+        string? email = null,
+        bool activo = true,
+        bool debeCambiarPin = false,
+        Guid? clienteId = null)
+    {
+        using var alcance = Services.CreateScope();
+        var s = alcance.ServiceProvider;
+        var hash = s.GetRequiredService<IServicioContrasenas>().Hashear(pin);
+        var cliente = clienteId ?? await s.GetRequiredService<ICatalogosLectura>().ClienteAsync(null);
+        var usuario = clsUsuario.CrearConPin(nombre, email, rol, null, cedula, hash, DateTimeOffset.UtcNow, cliente);
+        if (!debeCambiarPin)
+        {
+            usuario.CambiarPin(hash, DateTimeOffset.UtcNow);
+        }
+
         if (!activo)
         {
             usuario.Retirar(DateTimeOffset.UtcNow);

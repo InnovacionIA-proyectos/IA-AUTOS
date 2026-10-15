@@ -1,9 +1,11 @@
 using IAAutos.Aplicacion.Auth.DTOAuth;
 using IAAutos.Aplicacion.Auth.Services;
+using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Dominio.Auditoria;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Usuarios;
+using IAAutos.Dominio.Vehiculos;
 
 namespace IAAutos.Tests.Unitarios.Falsos;
 
@@ -19,6 +21,39 @@ public sealed class clsUsuarioActualFalso : IUsuarioActual
     public string? Rol { get; set; }
 
     public string? Email { get; set; }
+
+    public Guid? ClienteId { get; set; }
+}
+
+/// <summary>Clientes en memoria: dos clientes activos (sofasa primero) y la lectura minima del catalogo que usan los servicios de usuarios.</summary>
+public sealed class clsCatalogosLecturaFalso : ICatalogosLectura
+{
+    public static readonly Guid SOFASA = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
+    public static readonly Guid OTRO = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002");
+
+    public List<ValorCatalogo> Clientes { get; } =
+    [
+        new() { ["id"] = SOFASA, ["codigo"] = "sofasa", ["nombre"] = "Sofasa", ["orden"] = 1, ["activo"] = true },
+        new() { ["id"] = OTRO, ["codigo"] = "otro", ["nombre"] = "Otro cliente", ["orden"] = 2, ["activo"] = true },
+    ];
+
+    public Task<IReadOnlySet<string>> CodigosAsync(string catalogo, bool soloActivos, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());
+
+    public Task<IReadOnlyList<clsEtapaDeRuta>> RutaEstandarAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<clsEtapaDeRuta>>([]);
+
+    public Task<IReadOnlyList<ValorCatalogo>> ValoresAsync(string catalogo, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ValorCatalogo>>(catalogo == clsNombresCatalogo.CLIENTES ? Clientes : []);
+
+    public Task<bool> ExisteActivoAsync(string catalogo, Guid id, CancellationToken ct = default) =>
+        Task.FromResult(catalogo == clsNombresCatalogo.CLIENTES && Clientes.Any(c => c.Id == id && c.Activo));
+
+    public Task<Guid> ClienteAsync(string? codigoPreferido, CancellationToken ct = default)
+    {
+        var activos = Clientes.Where(c => c.Activo).ToList();
+        return Task.FromResult((activos.FirstOrDefault(c => c.Codigo == codigoPreferido) ?? activos.First()).Id);
+    }
 }
 
 public sealed class clsEmisorTokenFalso : IEmisorToken
@@ -119,8 +154,30 @@ public sealed class clsUsuarioRepositoryFalso : IUsuarioRepository
     public Task<IReadOnlyDictionary<string, clsUsuario>> ObtenerPorCedulasAsync(IReadOnlyCollection<string> cedulas, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyDictionary<string, clsUsuario>>(Usuarios.Where(u => u.Cedula is not null && cedulas.Contains(u.Cedula)).ToDictionary(u => u.Cedula!));
 
-    public Task<IReadOnlyList<clsUsuario>> ListarAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<clsUsuario>>(Usuarios.OrderBy(u => u.Nombre).ToList());
+    public Task<clsUsuario?> ObtenerPorCedulaAsync(string cedula, CancellationToken ct = default) =>
+        Task.FromResult(Usuarios.FirstOrDefault(u => u.Cedula == cedula));
+
+    public Task<IReadOnlyList<clsUsuario>> ListarAsync(Guid? clienteId = null, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<clsUsuario>>(Usuarios.Where(u => clienteId == null || u.ClienteId == clienteId).OrderBy(u => u.Nombre).ToList());
+
+    public Task<(IReadOnlyList<clsUsuario> Filas, int Total)> BuscarAsync(clsFiltroUsuarios filtro, int saltar, int tomar, CancellationToken ct = default)
+    {
+        var consulta = Usuarios.Where(u =>
+            (filtro.ClienteId == null || u.ClienteId == filtro.ClienteId)
+            && (filtro.Rol == null || u.Rol == filtro.Rol)
+            && (filtro.Activo == null || u.Activo == filtro.Activo)
+            && (string.IsNullOrWhiteSpace(filtro.Texto)
+                || u.Nombre.Contains(filtro.Texto, StringComparison.OrdinalIgnoreCase)
+                || (u.Email?.Contains(filtro.Texto, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (u.Cedula?.Contains(filtro.Texto, StringComparison.OrdinalIgnoreCase) ?? false))).ToList();
+        return Task.FromResult<(IReadOnlyList<clsUsuario>, int)>((consulta.OrderBy(u => u.Nombre).Skip(saltar).Take(tomar).ToList(), consulta.Count));
+    }
+
+    public Task<IReadOnlySet<string>> EmailsExistentesAsync(IReadOnlyCollection<string> emails, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlySet<string>>(Usuarios.Where(u => u.Email is not null && emails.Contains(u.Email)).Select(u => u.Email!).ToHashSet());
+
+    public Task<IReadOnlySet<string>> CedulasExistentesAsync(IReadOnlyCollection<string> cedulas, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlySet<string>>(Usuarios.Where(u => u.Cedula is not null && cedulas.Contains(u.Cedula)).Select(u => u.Cedula!).ToHashSet());
 
     public Task<bool> TieneHistorialAsync(Guid id, CancellationToken ct = default) =>
         Task.FromResult(ConHistorial.Contains(id));

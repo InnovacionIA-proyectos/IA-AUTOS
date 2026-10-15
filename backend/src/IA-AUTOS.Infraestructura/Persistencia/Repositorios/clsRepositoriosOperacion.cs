@@ -19,6 +19,9 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
         return contexto.Usuarios.FirstOrDefaultAsync(u => u.Email == normalizado, ct);
     }
 
+    public Task<clsUsuario?> ObtenerPorCedulaAsync(string cedula, CancellationToken ct = default) =>
+        string.IsNullOrEmpty(cedula) ? Task.FromResult<clsUsuario?>(null) : contexto.Usuarios.FirstOrDefaultAsync(u => u.Cedula == cedula, ct);
+
     public Task<clsUsuario?> ObtenerPorPortalIdAsync(long portalUsuarioId, CancellationToken ct = default) =>
         contexto.Usuarios.FirstOrDefaultAsync(u => u.PortalUsuarioId == portalUsuarioId, ct);
 
@@ -36,8 +39,62 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
         return resultado;
     }
 
-    public async Task<IReadOnlyList<clsUsuario>> ListarAsync(CancellationToken ct = default) =>
-        await contexto.Usuarios.AsNoTracking().OrderBy(u => u.Nombre).ToListAsync(ct);
+    public async Task<IReadOnlyList<clsUsuario>> ListarAsync(Guid? clienteId = null, CancellationToken ct = default) =>
+        await contexto.Usuarios.AsNoTracking()
+            .Where(u => clienteId == null || u.ClienteId == clienteId)
+            .OrderBy(u => u.Nombre)
+            .ToListAsync(ct);
+
+    public async Task<(IReadOnlyList<clsUsuario> Filas, int Total)> BuscarAsync(clsFiltroUsuarios filtro, int saltar, int tomar, CancellationToken ct = default)
+    {
+        var consulta = contexto.Usuarios.AsNoTracking().AsQueryable();
+        if (filtro.ClienteId is { } clienteId)
+        {
+            consulta = consulta.Where(u => u.ClienteId == clienteId);
+        }
+
+        if (filtro.Rol is not null)
+        {
+            consulta = consulta.Where(u => u.Rol == filtro.Rol);
+        }
+
+        if (filtro.Activo is { } activo)
+        {
+            consulta = consulta.Where(u => u.Activo == activo);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtro.Texto))
+        {
+            var texto = filtro.Texto.Trim();
+            consulta = consulta.Where(u => u.Nombre.Contains(texto) || (u.Email != null && u.Email.Contains(texto)) || (u.Cedula != null && u.Cedula.Contains(texto)));
+        }
+
+        var total = await consulta.CountAsync(ct);
+        var filas = await consulta.OrderBy(u => u.Nombre).ThenBy(u => u.Id).Skip(saltar).Take(tomar).ToListAsync(ct);
+        return (filas, total);
+    }
+
+    public async Task<IReadOnlySet<string>> EmailsExistentesAsync(IReadOnlyCollection<string> emails, CancellationToken ct = default)
+    {
+        var existentes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var lote in emails.Distinct(StringComparer.OrdinalIgnoreCase).Chunk(1000))
+        {
+            existentes.UnionWith(await contexto.Usuarios.AsNoTracking().Where(u => u.Email != null && lote.Contains(u.Email)).Select(u => u.Email!).ToListAsync(ct));
+        }
+
+        return existentes;
+    }
+
+    public async Task<IReadOnlySet<string>> CedulasExistentesAsync(IReadOnlyCollection<string> cedulas, CancellationToken ct = default)
+    {
+        var existentes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var lote in cedulas.Distinct(StringComparer.OrdinalIgnoreCase).Chunk(1000))
+        {
+            existentes.UnionWith(await contexto.Usuarios.AsNoTracking().Where(u => u.Cedula != null && lote.Contains(u.Cedula)).Select(u => u.Cedula!).ToListAsync(ct));
+        }
+
+        return existentes;
+    }
 
     public async Task<bool> TieneHistorialAsync(Guid id, CancellationToken ct = default) =>
         await contexto.Inspecciones.AnyAsync(i => i.UsuarioId == id, ct)

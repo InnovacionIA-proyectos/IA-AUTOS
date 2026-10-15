@@ -860,13 +860,13 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
 
         var creado = await Cliente(superAdmin.Token).PostAsync(
             "/api/usuarios",
-            Cuerpo(new { nombre = "Carlos", email = "carlos@ejemplo.com", rol = "conductor", password = "Clave-Segura-1", cedula = "1.234.567" }));
+            Cuerpo(new { nombre = "Carlos", email = "carlos@ejemplo.com", rol = "inspector", password = "Clave-Segura-1", cedula = "1.234.567" }));
         var repetida = await Cliente(superAdmin.Token).PostAsync(
             "/api/usuarios",
-            Cuerpo(new { nombre = "Otro", email = "otro@ejemplo.com", rol = "conductor", password = "Clave-Segura-1", cedula = "1234567" }));
+            Cuerpo(new { nombre = "Otro", email = "otro@ejemplo.com", rol = "inspector", password = "Clave-Segura-1", cedula = "1234567" }));
         var invalida = await Cliente(superAdmin.Token).PostAsync(
             "/api/usuarios",
-            Cuerpo(new { nombre = "Raro", email = "raro@ejemplo.com", rol = "conductor", password = "Clave-Segura-1", cedula = "12$" }));
+            Cuerpo(new { nombre = "Raro", email = "raro@ejemplo.com", rol = "inspector", password = "Clave-Segura-1", cedula = "12$" }));
 
         Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
         var usuario = await LeerJsonAsync(creado);

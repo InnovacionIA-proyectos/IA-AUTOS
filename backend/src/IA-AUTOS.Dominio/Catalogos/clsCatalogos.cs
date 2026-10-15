@@ -173,3 +173,21 @@ public sealed class clsVistaFoto : clsCatalogoCodificado
             : limpio;
     }
 }
+
+/// <summary>Cliente (empresa) al que pertenecen los usuarios y los vehiculos. Cada usuario ve solo lo de su cliente.</summary>
+public sealed class clsCliente : clsCatalogoCodificado
+{
+    /// <summary>Cliente de las ordenes que llegan por la ingesta de Sofasa.</summary>
+    public const string CODIGO_SOFASA = "sofasa";
+
+    private clsCliente()
+    {
+    }
+
+    public static clsCliente Crear(string? codigo, string? nombre, int? orden, bool? activo, DateTimeOffset ahora)
+    {
+        var cliente = new clsCliente();
+        cliente.Iniciar(codigo, nombre, orden, activo, ahora);
+        return cliente;
+    }
+}

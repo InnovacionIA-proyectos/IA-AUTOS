@@ -107,7 +107,7 @@ public class UsuarioTests
     {
         var u = Nuevo();
 
-        u.Actualizar(null, null, clsRol.CONDUCTOR, null, null, null, AHORA.AddDays(1));
+        u.Actualizar(null, null, clsRol.CONDUCTOR, null, null, null, AHORA.AddDays(1), "1234567");
 
         Assert.Equal(clsRol.CONDUCTOR, u.Rol);
         Assert.Equal("Ana Perez", u.Nombre);
@@ -140,6 +140,6 @@ public class UsuarioTests
         Assert.Contains(clsRol.SUPER_ADMIN, clsRol.ADMINISTRACION);
         Assert.Contains(clsRol.ADMIN, clsRol.ADMINISTRACION);
         Assert.DoesNotContain(clsRol.SUPER_ADMIN, clsRol.ESCRITURA);
-        Assert.Equal([clsRol.SUPER_ADMIN], clsRol.GESTION_USUARIOS);
+        Assert.Equal([clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD], clsRol.GESTION_USUARIOS);
     }
 }

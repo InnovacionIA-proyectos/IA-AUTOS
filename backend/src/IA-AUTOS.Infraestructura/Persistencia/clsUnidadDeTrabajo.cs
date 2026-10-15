@@ -20,7 +20,7 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
     // Mensajes por restriccion: coinciden con los de la API original.
     private static readonly (string Restriccion, string Mensaje)[] CONFLICTOS_UNICOS =
     [
-        ("UQ_tblUsuarios_Email", "Ya existe un usuario con ese correo"),
+        ("UX_tblUsuarios_Email", "Ya existe un usuario con ese correo"),
         ("UQ_tblVehiculos_Vin", "Ya existe un vehículo con ese VIN"),
         ("UQ_tblEtapas_Viaje_Vehiculo_Orden", "Ya existe una etapa con ese orden para el vehículo en el viaje"),
         ("UX_tblViajes_CodigoMtrack", "Ya existe un viaje con ese código MTrack"),
@@ -46,6 +46,8 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         "FK_tblViajes_Origen",
         "FK_tblViajes_Destino",
         "FK_tblCuadranteVistas_Vista",
+        "FK_tblUsuarios_Cliente",
+        "FK_tblVehiculos_Cliente",
     ];
 
     private static readonly (string Restriccion, string Mensaje)[] REFERENCIAS_INVALIDAS =
@@ -57,6 +59,8 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         ("FK_tblViajes_TipoUnidad", "La unidad transportadora no existe en el catálogo"),
         ("FK_tblViajes_Origen", "El origen no existe en el catálogo de lugares"),
         ("FK_tblViajes_Destino", "El destino no existe en el catálogo de lugares"),
+        ("FK_tblUsuarios_Cliente", "El cliente no existe en el catálogo"),
+        ("FK_tblVehiculos_Cliente", "El cliente no existe en el catálogo"),
         ("FK_tblViajes_", "El conductor, el inspector o quien crea el viaje no existe"),
         ("FK_tblViajeVehiculos_Viaje", "El viaje no existe"),
         ("FK_tblViajeVehiculos_", "El vehículo no existe"),

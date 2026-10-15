@@ -69,6 +69,13 @@ public sealed class clsCatalogosService(
     public async Task<bool> ExisteActivoAsync(string catalogo, Guid id, CancellationToken ct = default) =>
         (await ObtenerAsync(catalogo, ct)).Items.Any(i => i.Id == id && i.Activo);
 
+    public async Task<Guid> ClienteAsync(string? codigoPreferido, CancellationToken ct = default)
+    {
+        var activos = (await ObtenerAsync(clsNombresCatalogo.CLIENTES, ct)).Items.Where(i => i.Activo).ToList();
+        var elegido = (codigoPreferido is null ? null : activos.FirstOrDefault(c => c.Codigo == codigoPreferido)) ?? activos.FirstOrDefault();
+        return elegido?.Id ?? throw new clsErrorInternoException("No hay clientes activos en el catálogo de clientes");
+    }
+
     // ------------------------------------------------------------------------------------------- administracion
 
     public async Task<ValorCatalogo> CrearAsync(string nombre, IReadOnlyDictionary<string, JsonElement> campos, CancellationToken ct = default)

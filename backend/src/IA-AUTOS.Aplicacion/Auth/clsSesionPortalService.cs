@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using IAAutos.Aplicacion.Auth.DTOAuth;
 using IAAutos.Aplicacion.Auth.Services;
+using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Usuarios;
@@ -25,6 +26,7 @@ public sealed class clsSesionPortalService(
     IUsuarioRepository usuarios,
     IRefreshTokenRepository refrescos,
     IPortalUsuarios portal,
+    ICatalogosLectura catalogos,
     IServicioContrasenas contrasenas,
     IEmisorToken emisor,
     IUnidadDeTrabajo unidadDeTrabajo,
@@ -58,6 +60,7 @@ public sealed class clsSesionPortalService(
             ? await ResolverContraPortalAsync(idPortal, ct)
             : await ResolverSoloVinculadoAsync(idPortal, ct);
 
+        usuario.RegistrarAcceso(reloj.Ahora);
         return await EmitirAsync(usuario, Guid.NewGuid(), cliente, "auth.login_portal", ct);
     }
 
@@ -118,6 +121,13 @@ public sealed class clsSesionPortalService(
             cambios = true;
         }
 
+        if (usuario.ClienteId is null && usuario.Rol != clsRol.SUPER_ADMIN)
+        {
+            // Quien deja de ser super administrador pasa a pertenecer a un cliente.
+            usuario.AsignarCliente(await catalogos.ClienteAsync(null, ct), reloj.Ahora);
+            cambios = true;
+        }
+
         if (cambios)
         {
             await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -149,7 +159,8 @@ public sealed class clsSesionPortalService(
 
         // Cuenta de inicio de sesion unico: la contrasena es un valor aleatorio que nadie conoce, asi que no se puede usar.
         var passwordInerte = contrasenas.Hashear(Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)));
-        var usuario = clsUsuario.Crear(nombre.Trim(), correo, rol, subtipoInspector: null, passwordInerte, reloj.Ahora);
+        var clienteId = rol == clsRol.SUPER_ADMIN ? (Guid?)null : await catalogos.ClienteAsync(null, ct);
+        var usuario = clsUsuario.Crear(nombre.Trim(), correo, rol, subtipoInspector: null, passwordInerte, reloj.Ahora, clienteId: clienteId);
         usuario.VincularPortal(info.Id, reloj.Ahora);
         usuarios.Agregar(usuario);
         auditor.Registrar("usuario.crear_desde_portal", "usuarios", usuario.Id, usuarioId: null);
@@ -284,7 +295,7 @@ public sealed class clsSesionPortalService(
         anterior?.RevocarPorRotacion(nuevo.Id, ahora);
         refrescos.Agregar(nuevo);
 
-        var dto = new UsuarioAutenticadoDto(usuario.Id, usuario.Nombre, usuario.Email, usuario.Rol);
+        var dto = clsAuthService.ADto(usuario);
         var access = emisor.EmitirSesion(dto, familiaId, TimeSpan.FromMinutes(Math.Max(opciones.AccessMinutos, 1)));
 
         auditor.Registrar(accionAuditoria, "usuarios", usuario.Id, usuario.Id);

@@ -30,6 +30,7 @@ public sealed class clsAppDbContext : DbContext
     public DbSet<clsEtapaCatalogo> EtapasCatalogo => Set<clsEtapaCatalogo>();
     public DbSet<clsPuntoCustodia> PuntosCustodia => Set<clsPuntoCustodia>();
     public DbSet<clsTipoUnidadTransportadora> TiposUnidad => Set<clsTipoUnidadTransportadora>();
+    public DbSet<clsCliente> Clientes => Set<clsCliente>();
     public DbSet<clsClaseDano> ClasesDano => Set<clsClaseDano>();
     public DbSet<clsTamanoDano> TamanosDano => Set<clsTamanoDano>();
     public DbSet<clsNivelSeveridad> NivelesSeveridad => Set<clsNivelSeveridad>();

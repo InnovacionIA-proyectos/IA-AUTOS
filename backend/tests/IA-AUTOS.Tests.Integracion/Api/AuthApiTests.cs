@@ -41,7 +41,8 @@ public sealed class AuthApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
         Assert.Equal("Ana Perez", u.GetProperty("nombre").GetString());
         Assert.Equal("ana@ejemplo.com", u.GetProperty("email").GetString());
         Assert.Equal("admin", u.GetProperty("rol").GetString());
-        Assert.Equal(4, u.EnumerateObject().Count());
+        Assert.Equal(["id", "nombre", "email", "rol", "cedula", "debe_cambiar_pin"], u.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.False(u.GetProperty("debe_cambiar_pin").GetBoolean());
     }
 
     [Fact]

@@ -28,6 +28,9 @@ La API se configura solo con variables de entorno (o `appsettings`). El doble gu
 | `Seguridad__LoginMaxIntentosPorMinuto` | no (10) | limite por IP en el login |
 | `Seguridad__LoginPortalMaxIntentosPorMinuto` | no (30) | limite por IP en `login-portal` (mas alto: detras del proxy corporativo muchas personas comparten IP) |
 | `Seguridad__RefreshMaxPorMinuto` | no (60) | limite por IP en `refresh` |
+| `Seguridad__LoginConductorMaxIntentosPorMinuto` | no (60) | limite por IP en `login-conductor` (alto: en una bodega muchos conductores comparten la misma red) |
+| `Seguridad__PinMaxIntentos` | no (5) | PIN errados seguidos que bloquean la cuenta de una persona |
+| `Seguridad__PinBloqueoMinutos` | no (15) | minutos que dura el bloqueo por PIN errados |
 | `Proxy__ConfiarEnEncabezadosReenviados` | no (`false`) | `true` solo detras de un proxy de confianza (Railway, nginx): usa `X-Forwarded-For` |
 | `Documentacion__Habilitada` | no (`false`) | publica `/openapi/v1.json` y la interfaz Swagger en `/swagger` |
 | `Catalogos__CacheSegundos` | no (60) | segundos que la API conserva los catalogos en memoria; un cambio hecho por la API los renueva al instante, uno hecho directamente en la base tarda hasta este tiempo |

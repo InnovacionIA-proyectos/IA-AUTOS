@@ -60,7 +60,12 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         {
             ["/api/auth/login|post"] = "LoginRequest",
             ["/api/auth/login-portal|post"] = "LoginPortalUsuarioDto",
+            ["/api/auth/login-conductor|post"] = "LoginConductorRequest",
+            ["/api/auth/cambiar-pin|post"] = "CambiarPinRequest",
             ["/api/usuarios|post"] = "CrearUsuarioRequest",
+            ["/api/usuarios/{id}/pin|post"] = "AsignarPinRequest",
+            ["/api/usuarios/cargar/previsualizar|post"] = "CargarConductoresRequest",
+            ["/api/usuarios/cargar|post"] = "CargarConductoresRequest",
             ["/api/usuarios/{id}|patch"] = "ActualizarUsuarioRequest",
             ["/api/vehiculos/cargar|post"] = "CargarVinsRequest",
             ["/api/viajes|post"] = "CrearViajeRequest",
@@ -86,6 +91,7 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.NotNull(contrato["components"]!["securitySchemes"]!["bearerAuth"]);
         Assert.Null(rutas["/api/auth/login"]!["post"]!["security"]);
         Assert.Null(rutas["/api/auth/login-portal"]!["post"]!["security"]);
+        Assert.Null(rutas["/api/auth/login-conductor"]!["post"]!["security"]);
         Assert.Null(rutas["/api/auth/refresh"]!["post"]!["security"]);
         Assert.Null(rutas["/api/auth/logout"]!["post"]!["security"]);
         Assert.Null(rutas["/api/auth/login-portal"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!["properties"]);
