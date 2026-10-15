@@ -11,6 +11,8 @@ no esté cerrada, no se puede crear la salida de la etapa siguiente. Los endpoin
 - **Los firmantes son del viaje.** Al crear la transferencia, quien entrega y quien recibe deben ser el conductor o el inspector del viaje de la inspección (`400` con el campo si no).
   `GET /api/viajes/{id}/firmantes` devuelve esa lista para que la app elija solo entre ellos. Una vez creada, los firmantes no se cambian (`409`).
 - **Fecha e IP por firma.** Cada firma guarda cuándo se envió (`FirmaEntregaAt`, `FirmaRecibeAt`) y desde qué IP (`FirmaEntregaIp`, `FirmaRecibeIp`). `FirmadaAt` se sella cuando está la segunda.
+  La IP es la de la conexión que recibe la API: detrás de un proxy inverso, para registrar la de quien firma hay que habilitar `Proxy__ConfiarEnEncabezadosReenviados=true`
+  (ver [configuracion.md](configuracion.md)); sin ello se guarda la del proxy.
 
 ## Cómo se cierra
 
