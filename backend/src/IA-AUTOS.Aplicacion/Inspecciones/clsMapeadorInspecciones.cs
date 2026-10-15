@@ -8,8 +8,12 @@ namespace IAAutos.Aplicacion.Inspecciones;
 /// <summary>Conversiones de entidades de dominio a DTO de lectura, compartidas por inventario, informe y escritura.</summary>
 public static class clsMapeadorInspecciones
 {
-    public static InspeccionDto AInspeccion(clsInspeccion i) => new(
-        i.Id, i.EtapaId, i.UsuarioId, i.Momento, i.Fecha, i.Lat, i.Lng, i.Estado, i.ConductorNombre, i.Placa, i.Trailer, i.Notas,
+    public static InspeccionDto AInspeccion(clsInspeccion i) => AInspeccion(i, null, null, null);
+
+    /// <summary>Con los datos del viaje de respaldo: lo capturado antes de los viajes (si lo hay) tiene prioridad sobre ellos.</summary>
+    public static InspeccionDto AInspeccion(clsInspeccion i, string? placaViaje, string? trailerViaje, string? conductorViaje) => new(
+        i.Id, i.EtapaId, i.ViajeId, i.UsuarioId, i.Momento, i.Fecha, i.Lat, i.Lng, i.Estado,
+        i.ConductorNombre ?? conductorViaje, i.Placa ?? placaViaje, i.Trailer ?? trailerViaje, i.Notas,
         i.CreatedAt, i.UpdatedAt);
 
     public static HallazgoDto AHallazgo(clsHallazgo h) => new(

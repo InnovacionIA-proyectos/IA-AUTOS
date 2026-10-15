@@ -33,7 +33,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     private async Task<(Sesion Sesion, Guid[] Etapas)> EscenarioAsync(string email = "insp@ejemplo.com")
     {
         var sesion = await SesionAsync(email);
-        var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-INSP-0001");
+        var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-INSP-0001", inspectorId: sesion.UsuarioId);
         return (sesion, etapas);
     }
 
@@ -53,21 +53,20 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
             fecha = FECHA,
             lat = 4.60971,
             lng = -74.08175,
-            conductor_nombre = "  María Pérez ",
-            placa = "ABC123",
-            trailer = "T-9",
             notas = "línea 1\nlínea 2",
         });
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var i = await ClonarAsync(r);
         Assert.Equal(
-            ["id", "etapa_id", "usuario_id", "momento", "fecha", "lat", "lng", "estado", "conductor_nombre", "placa", "trailer", "notas", "created_at", "updated_at"],
+            ["id", "etapa_id", "viaje_id", "usuario_id", "momento", "fecha", "lat", "lng", "estado", "conductor_nombre", "placa", "trailer", "notas", "created_at", "updated_at"],
             i.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal(sesion.UsuarioId, i.GetProperty("usuario_id").GetGuid());
         Assert.Equal("borrador", i.GetProperty("estado").GetString());
         Assert.Equal(FECHA, i.GetProperty("fecha").GetString());
-        Assert.Equal("María Pérez", i.GetProperty("conductor_nombre").GetString());
+        Assert.Equal(await Sembrador.ViajeDeEtapaAsync(etapas[0]), i.GetProperty("viaje_id").GetGuid());
+        Assert.Equal(JsonValueKind.Null, i.GetProperty("conductor_nombre").ValueKind);
+        Assert.Equal(await Sembrador.EscalarAsync("SELECT Placa FROM dbo.tblViajes v JOIN dbo.tblEtapas e ON e.ViajeId = v.Id WHERE e.Id = @e", ("@e", etapas[0])), i.GetProperty("placa").GetString());
         Assert.Equal(4.60971, i.GetProperty("lat").GetDouble());
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'inspeccion.crear'"));
     }
@@ -99,7 +98,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var repetido = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[0], momento = "informe", fecha = FECHA });
 
         Assert.Equal(HttpStatusCode.NotFound, inexistente.StatusCode);
-        Assert.Equal("La etapa o el usuario no existen", (await ClonarAsync(inexistente)).GetProperty("message").GetString());
+        Assert.Equal("La etapa indicada no existe", (await ClonarAsync(inexistente)).GetProperty("message").GetString());
         Assert.Equal(HttpStatusCode.Conflict, repetido.StatusCode);
         Assert.Equal("Esta etapa ya tiene un informe registrado", (await ClonarAsync(repetido)).GetProperty("message").GetString());
     }
@@ -400,6 +399,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (sesion, etapas) = await EscenarioAsync();
         var receptor = await SesionAsync("recibe@ejemplo.com", clsRol.CONDUCTOR);
+        // El receptor es el conductor del viaje: solo ve los informes de sus viajes.
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET ConductorId = @c WHERE Id = @v", ("@c", receptor.UsuarioId), ("@v", await Sembrador.ViajeDeEtapaAsync(etapas[0])));
         var id = await CrearInspeccionAsync(sesion, etapas[0]);
         await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new { parte_vehiculo = "Capot", clase_dano = "golpe", tamano_dano = "1_5cm", coords_diagrama = new { x = 0.1, y = 0.2 } });
         await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/evidencias", new { storage_path = "foto.jpg", sello_fecha = FECHA, sello_lat = 4.6, sello_lng = -74.1 });
@@ -425,27 +426,35 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
-    public async Task El_informe_usa_la_asignacion_como_respaldo_de_placa_y_conductor()
+    public async Task La_inspeccion_toma_la_placa_el_trailer_y_el_conductor_del_viaje_y_lo_capturado_antes_tiene_prioridad()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var conductor = await Fabrica.SembrarUsuarioAsync("cond@ejemplo.com", "x", clsRol.CONDUCTOR, nombre: "Conductor Asignado");
-        var vehiculoId = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblVehiculos WHERE Vin = 'VIN-INSP-0001'"))!;
+        var conductor = await Fabrica.SembrarUsuarioAsync("cond@ejemplo.com", "x", clsRol.CONDUCTOR, nombre: "Conductor Del Viaje");
+        var viajeId = await Sembrador.ViajeDeEtapaAsync(etapas[0]);
         await Sembrador.EjecutarAsync(
-            "INSERT dbo.tblAsignaciones (Id, VehiculoId, Ninera, ConductorId, AsignadoPor, CreatedAt) VALUES (NEWID(), @v, N'NIN-VIEJA', NULL, @u, DATEADD(DAY, -2, SYSDATETIMEOFFSET()))",
-            ("@v", vehiculoId), ("@u", sesion.UsuarioId));
+            "UPDATE dbo.tblViajes SET Placa = N'NIN-VIAJE', Trailer = N'TRL-VIAJE', ConductorId = @c, CodigoMtrack = 'MTK-INF-1' WHERE Id = @v",
+            ("@c", conductor.Id), ("@v", viajeId));
+        var nueva = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[0], momento = "informe", fecha = FECHA });
         await Sembrador.EjecutarAsync(
-            "INSERT dbo.tblAsignaciones (Id, VehiculoId, Ninera, ConductorId, AsignadoPor) VALUES (NEWID(), @v, N'NIN-RECIENTE', @c, @u)",
-            ("@v", vehiculoId), ("@c", conductor.Id), ("@u", sesion.UsuarioId));
-        var sinDatos = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[0], momento = "informe", fecha = FECHA });
-        var conDatos = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "informe", fecha = FECHA, placa = "PLACA-APP", conductor_nombre = "Capturado en app" });
+            "INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, Estado, Placa, ConductorNombre) VALUES (NEWID(), @e, @v, @u, 'check_in', SYSDATETIMEOFFSET(), 'borrador', N'PLACA-ANTIGUA', N'Capturado antes de los viajes')",
+            ("@e", etapas[0]), ("@v", viajeId), ("@u", sesion.UsuarioId));
 
-        var a = await ClonarAsync(await Cliente(sesion.Token).GetAsync($"/api/inspecciones/{(await ClonarAsync(sinDatos)).GetProperty("id").GetGuid()}"));
-        var b = await ClonarAsync(await Cliente(sesion.Token).GetAsync($"/api/inspecciones/{(await ClonarAsync(conDatos)).GetProperty("id").GetGuid()}"));
+        var creada = await ClonarAsync(nueva);
+        var informe = await ClonarAsync(await Cliente(sesion.Token).GetAsync($"/api/inspecciones/{creada.GetProperty("id").GetGuid()}"));
+        var antiguaId = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblInspecciones WHERE Momento = 'check_in'"))!;
+        var antigua = await ClonarAsync(await Cliente(sesion.Token).GetAsync($"/api/inspecciones/{antiguaId}"));
 
-        Assert.Equal("NIN-RECIENTE", a.GetProperty("ninera").GetString());
-        Assert.Equal("Conductor Asignado", a.GetProperty("conductor_nombre").GetString());
-        Assert.Equal("PLACA-APP", b.GetProperty("ninera").GetString());
-        Assert.Equal("Capturado en app", b.GetProperty("conductor_nombre").GetString());
+        Assert.Equal("NIN-VIAJE", creada.GetProperty("placa").GetString());
+        Assert.Equal("TRL-VIAJE", creada.GetProperty("trailer").GetString());
+        Assert.Equal("Conductor Del Viaje", creada.GetProperty("conductor_nombre").GetString());
+        Assert.Equal(viajeId, informe.GetProperty("viaje_id").GetGuid());
+        Assert.Equal("NIN-VIAJE", informe.GetProperty("ninera").GetString());
+        Assert.Equal("NIN-VIAJE", informe.GetProperty("placa").GetString());
+        Assert.Equal("Conductor Del Viaje", informe.GetProperty("conductor_nombre").GetString());
+        Assert.Equal("MTK-INF-1", informe.GetProperty("codigo_mtrack").GetString());
+        Assert.Equal("Niñera", informe.GetProperty("unidad").GetString());
+        Assert.Equal("PLACA-ANTIGUA", antigua.GetProperty("placa").GetString());
+        Assert.Equal("Capturado antes de los viajes", antigua.GetProperty("conductor_nombre").GetString());
     }
 
     [Fact]
@@ -463,18 +472,19 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (sesion, etapas) = await EscenarioAsync("uno@ejemplo.com");
         var otra = await SesionAsync("dos@ejemplo.com");
-        var (_, etapas2) = await Sembrador.VehiculoConRutaAsync("9FBHSR4E8PM000999");
+        var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
+        var (_, etapas2) = await Sembrador.VehiculoConRutaAsync("9FBHSR4E8PM000999", inspectorId: otra.UsuarioId);
         var a = await CrearInspeccionAsync(sesion, etapas[0]);
         await Cliente(sesion.Token).PostAsync($"/api/inspecciones/{a}/cerrar", null);
         await Task.Delay(20);
         var b = await CrearInspeccionAsync(otra, etapas2[1]);
 
-        var todas = await ClonarAsync(await Cliente(sesion.Token).GetAsync("/api/inspecciones"));
-        var porUsuario = await ClonarAsync(await Cliente(sesion.Token).GetAsync($"/api/inspecciones?usuarioId={otra.UsuarioId}"));
-        var porEstado = await ClonarAsync(await Cliente(sesion.Token).GetAsync("/api/inspecciones?estado=cerrada"));
-        var porProceso = await ClonarAsync(await Cliente(sesion.Token).GetAsync("/api/inspecciones?proceso=transporte"));
-        var porVin = await ClonarAsync(await Cliente(sesion.Token).GetAsync("/api/inspecciones?vin=9fbhsr4e8pm000999"));
-        var porFecha = await ClonarAsync(await Cliente(sesion.Token).GetAsync("/api/inspecciones?desde=2026-07-01T00:00:00Z&hasta=2026-07-31T00:00:00Z"));
+        var todas = await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones"));
+        var porUsuario = await ClonarAsync(await Cliente(coordinador.Token).GetAsync($"/api/inspecciones?usuarioId={otra.UsuarioId}"));
+        var porEstado = await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?estado=cerrada"));
+        var porProceso = await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?proceso=transporte"));
+        var porVin = await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?vin=9fbhsr4e8pm000999"));
+        var porFecha = await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?desde=2026-07-01T00:00:00Z&hasta=2026-07-31T00:00:00Z"));
 
         Assert.Equal(2, todas.GetArrayLength());
         Assert.Equal(["vin", "proceso"], todas[0].EnumerateObject().Select(p => p.Name).TakeLast(2).ToList());

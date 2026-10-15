@@ -111,9 +111,12 @@ public class GeneradorPdfInventarioTests
             orden == 1 ? "cargue" : "transporte",
             null,
             true,
+            Guid.NewGuid(),
+            "MTK-1",
+            false,
             [
                 new InventarioInspeccionDto(
-                    Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "informe", FECHA, null, null, "cerrada", null, null, null, null, FECHA, FECHA,
+                    Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "informe", FECHA, null, null, "cerrada", null, null, null, null, FECHA, FECHA,
                     Enumerable.Range(0, hallazgos).Select(_ => new HallazgoDto(Guid.NewGuid(), Guid.NewGuid(), parte, "golpe", "5_10cm", null, FECHA, FECHA)).ToList(),
                     [],
                     null),

@@ -6,5 +6,5 @@ namespace IAAutos.Aplicacion.Usuarios;
 internal static class clsMapeadorUsuarios
 {
     public static UsuarioDto ADto(clsUsuario u) =>
-        new(u.Id, u.Nombre, u.Email, u.Rol, u.SubtipoInspector, u.Activo, u.CreatedAt, u.UpdatedAt);
+        new(u.Id, u.Nombre, u.Email, u.Rol, u.SubtipoInspector, u.Cedula, u.Activo, u.CreatedAt, u.UpdatedAt);
 }

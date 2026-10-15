@@ -3,7 +3,7 @@ using IAAutos.Aplicacion.Comun;
 
 namespace IAAutos.Aplicacion.Sofasa.DTOSofasa;
 
-/// <summary>Orden de carga tal como la envia el ETL (nombres snake_case). Solo source_id es obligatorio.</summary>
+/// <summary>Orden de carga tal como la envia el ETL (nombres snake_case). Solo source_id es obligatorio; codigo_mtrack es opcional y, junto con el VIN, identifica el viaje de la orden.</summary>
 public sealed record OrdenSofasaIngestDto(
     [property: JsonConverter(typeof(clsConvertidorLongFlexible))] long? SourceId,
     string? StatusCode,
@@ -20,7 +20,8 @@ public sealed record OrdenSofasaIngestDto(
     string? LoadingDate,
     string? Appointment,
     string? LoadingDock,
-    [property: JsonConverter(typeof(clsConvertidorDecimalFlexible))] decimal? Weight);
+    [property: JsonConverter(typeof(clsConvertidorDecimalFlexible))] decimal? Weight,
+    string? CodigoMtrack = null);
 
 public sealed record IngestarOrdenesRequest(IReadOnlyList<OrdenSofasaIngestDto>? Ordenes);
 
@@ -53,6 +54,8 @@ public sealed record OrdenSofasaDto(
     string? LoadingDock,
     decimal? Weight,
     Guid? VehiculoId,
+    string? CodigoMtrack,
+    Guid? ViajeId,
     DateTimeOffset SyncedAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);

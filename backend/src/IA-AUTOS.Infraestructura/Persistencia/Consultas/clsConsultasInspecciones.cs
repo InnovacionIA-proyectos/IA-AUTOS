@@ -6,24 +6,41 @@ namespace IAAutos.Infraestructura.Persistencia.Consultas;
 
 internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : IConsultasInspecciones
 {
-    public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones f, int limite, CancellationToken ct = default) =>
-        await (from i in contexto.Inspecciones.AsNoTracking()
-               join e in contexto.Etapas on i.EtapaId equals e.Id
-               join v in contexto.Vehiculos on e.VehiculoId equals v.Id
-               join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id
-               where (f.Vin == null || v.Vin == f.Vin)
-                  && (f.UsuarioId == null || i.UsuarioId == f.UsuarioId)
-                  && (f.Momento == null || i.Momento == f.Momento)
-                  && (f.Estado == null || i.Estado == f.Estado)
-                  && (f.Proceso == null || p.Codigo == f.Proceso)
-                  && (f.Desde == null || i.Fecha >= f.Desde)
-                  && (f.Hasta == null || i.Fecha <= f.Hasta)
-               orderby i.Fecha descending
-               select new InspeccionListadoDto(
-                   i.Id, i.EtapaId, i.UsuarioId, i.Momento, i.Fecha, i.Lat, i.Lng, i.Estado, i.ConductorNombre, i.Placa, i.Trailer, i.Notas,
-                   i.CreatedAt, i.UpdatedAt, v.Vin, p.Codigo))
+    public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones f, Guid? soloDeUsuario, int limite, CancellationToken ct = default)
+    {
+        var consulta = from i in contexto.Inspecciones.AsNoTracking()
+                       join e in contexto.Etapas on i.EtapaId equals e.Id
+                       join v in contexto.Vehiculos on e.VehiculoId equals v.Id
+                       join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id
+                       join vj in contexto.Viajes on i.ViajeId equals vj.Id
+                       join c in contexto.Usuarios on vj.ConductorId equals c.Id into conductores
+                       from c in conductores.DefaultIfEmpty()
+                       where (f.Vin == null || v.Vin == f.Vin)
+                          && (f.UsuarioId == null || i.UsuarioId == f.UsuarioId)
+                          && (f.ViajeId == null || i.ViajeId == f.ViajeId)
+                          && (f.Momento == null || i.Momento == f.Momento)
+                          && (f.Estado == null || i.Estado == f.Estado)
+                          && (f.Proceso == null || p.Codigo == f.Proceso)
+                          && (f.Desde == null || i.Fecha >= f.Desde)
+                          && (f.Hasta == null || i.Fecha <= f.Hasta)
+                       select new { Inspeccion = i, v.Vin, Proceso = p.Codigo, vj.Placa, vj.Trailer, Conductor = (string?)c.Nombre };
+        if (soloDeUsuario is { } usuarioId)
+        {
+            var viajesPropios = clsAlcanceViajes.Viajes(contexto, usuarioId);
+            consulta = consulta.Where(x => viajesPropios.Contains(x.Inspeccion.ViajeId));
+        }
+
+        // La placa, el trailer y el conductor son los del viaje; lo capturado a mano antes de los viajes tiene prioridad.
+        return await consulta
+            .OrderByDescending(x => x.Inspeccion.Fecha)
             .Take(limite)
+            .Select(x => new InspeccionListadoDto(
+                x.Inspeccion.Id, x.Inspeccion.EtapaId, x.Inspeccion.ViajeId, x.Inspeccion.UsuarioId, x.Inspeccion.Momento, x.Inspeccion.Fecha,
+                x.Inspeccion.Lat, x.Inspeccion.Lng, x.Inspeccion.Estado,
+                x.Inspeccion.ConductorNombre ?? x.Conductor, x.Inspeccion.Placa ?? x.Placa, x.Inspeccion.Trailer ?? x.Trailer, x.Inspeccion.Notas,
+                x.Inspeccion.CreatedAt, x.Inspeccion.UpdatedAt, x.Vin, x.Proceso))
             .ToListAsync(ct);
+    }
 
     public async Task<InformeDetalleDto?> ObtenerInformeAsync(Guid id, CancellationToken ct = default)
     {
@@ -39,7 +56,6 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                           select new
                           {
                               Inspeccion = i,
-                              VehiculoId = v.Id,
                               v.Vin,
                               v.Marca,
                               v.Modelo,
@@ -53,17 +69,8 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
             return null;
         }
 
-        // Ultima asignacion del vehiculo: ninera (placa) y conductor asignados, como respaldo de lo capturado en la app.
-        var asignacion = await contexto.Asignaciones.AsNoTracking()
-            .Where(a => a.VehiculoId == fila.VehiculoId)
-            .OrderByDescending(a => a.CreatedAt)
-            .Select(a => new { a.Ninera, a.ConductorId })
-            .FirstOrDefaultAsync(ct);
-        string? conductorAsignado = null;
-        if (asignacion?.ConductorId is { } conductorId)
-        {
-            conductorAsignado = await contexto.Usuarios.Where(u => u.Id == conductorId).Select(u => u.Nombre).FirstOrDefaultAsync(ct);
-        }
+        var insp = fila.Inspeccion;
+        var viaje = (await clsDatosDeViaje.CargarAsync(contexto, [insp.ViajeId], ct)).GetValueOrDefault(insp.ViajeId);
 
         var hallazgos = await contexto.Hallazgos.AsNoTracking().Where(h => h.InspeccionId == id).OrderBy(h => h.CreatedAt).ToListAsync(ct);
         var evidencias = await contexto.Evidencias.AsNoTracking().Where(e => e.InspeccionId == id).OrderBy(e => e.CreatedAt).ToListAsync(ct);
@@ -76,12 +83,11 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                                    select new { Transferencia = t, EntregaNombre = (string?)ue.Nombre, RecibeNombre = (string?)ur.Nombre })
             .FirstOrDefaultAsync(ct);
 
-        var insp = fila.Inspeccion;
         return new InformeDetalleDto(
-            insp.Id, insp.EtapaId, insp.UsuarioId, insp.Momento, insp.Fecha, insp.Lat, insp.Lng, insp.Estado,
-            insp.ConductorNombre ?? conductorAsignado,
-            insp.Placa,
-            insp.Trailer,
+            insp.Id, insp.EtapaId, insp.ViajeId, insp.UsuarioId, insp.Momento, insp.Fecha, insp.Lat, insp.Lng, insp.Estado,
+            insp.ConductorNombre ?? viaje?.Conductor,
+            insp.Placa ?? viaje?.Placa,
+            insp.Trailer ?? viaje?.Trailer,
             insp.Notas,
             insp.CreatedAt,
             insp.UpdatedAt,
@@ -92,7 +98,9 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
             fila.Lugar,
             fila.RequiereInspeccion,
             fila.InspectorNombre,
-            insp.Placa ?? asignacion?.Ninera,
+            insp.Placa ?? viaje?.Placa,
+            viaje?.CodigoMtrack,
+            viaje?.Unidad,
             hallazgos.Select(clsMapeadorInspecciones.AHallazgo).ToList(),
             evidencias.Select(clsMapeadorInspecciones.AEvidencia).ToList(),
             transferencia is null

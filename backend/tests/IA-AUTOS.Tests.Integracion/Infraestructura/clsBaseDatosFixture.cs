@@ -32,7 +32,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
 
     public async Task DisposeAsync() => await _contenedor.DisposeAsync();
 
-    /// <summary>Borra todos los datos de negocio (conserva el catalogo de puntos de custodia).</summary>
+    /// <summary>Borra todos los datos de negocio (conserva los catalogos).</summary>
     public async Task LimpiarAsync()
     {
         const string SQL = """
@@ -43,8 +43,9 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             DELETE FROM dbo.tblEvidencias;
             DELETE FROM dbo.tblHallazgos;
             DELETE FROM dbo.tblInspecciones;
-            DELETE FROM dbo.tblAsignaciones;
             DELETE FROM dbo.tblEtapas;
+            DELETE FROM dbo.tblViajeVehiculos;
+            DELETE FROM dbo.tblViajes;
             DELETE FROM dbo.tblVehiculos;
             DELETE FROM dbo.tblUsuarios;
 

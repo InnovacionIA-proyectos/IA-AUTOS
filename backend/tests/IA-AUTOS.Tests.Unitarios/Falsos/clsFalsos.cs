@@ -116,6 +116,9 @@ public sealed class clsUsuarioRepositoryFalso : IUsuarioRepository
     public Task<clsUsuario?> ObtenerPorPortalIdAsync(long portalUsuarioId, CancellationToken ct = default) =>
         Task.FromResult(Usuarios.FirstOrDefault(u => u.PortalUsuarioId == portalUsuarioId));
 
+    public Task<IReadOnlyDictionary<string, clsUsuario>> ObtenerPorCedulasAsync(IReadOnlyCollection<string> cedulas, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<string, clsUsuario>>(Usuarios.Where(u => u.Cedula is not null && cedulas.Contains(u.Cedula)).ToDictionary(u => u.Cedula!));
+
     public Task<IReadOnlyList<clsUsuario>> ListarAsync(CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<clsUsuario>>(Usuarios.OrderBy(u => u.Nombre).ToList());
 

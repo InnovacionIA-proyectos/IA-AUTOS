@@ -6,9 +6,10 @@ namespace IAAutos.Tests.Unitarios.Dominio;
 public class InspeccionesTests
 {
     private static readonly DateTimeOffset AHORA = new(2026, 7, 17, 12, 0, 0, TimeSpan.Zero);
+    private static readonly Guid VIAJE = Guid.NewGuid();
 
     private static clsInspeccion NuevaInspeccion(string momento = clsMomento.INFORME, double? lat = 4.6, double? lng = -74.1, string? notas = null) =>
-        clsInspeccion.Crear(Guid.NewGuid(), Guid.NewGuid(), momento, AHORA, lat, lng, null, "  Juan  ", "ABC123", null, notas, AHORA);
+        clsInspeccion.Crear(Guid.NewGuid(), VIAJE, Guid.NewGuid(), momento, AHORA, lat, lng, null, notas, AHORA);
 
     [Fact]
     public void Crear_valida_estado_borrador_por_defecto_y_limpia_textos()
@@ -17,7 +18,10 @@ public class InspeccionesTests
 
         Assert.Equal(clsEstadoInspeccion.BORRADOR, insp.Estado);
         Assert.False(insp.EstaCerrada);
-        Assert.Equal("Juan", insp.ConductorNombre);
+        Assert.Equal(VIAJE, insp.ViajeId);
+        // La placa, el trailer y el conductor ya no se capturan: salen del viaje.
+        Assert.Null(insp.ConductorNombre);
+        Assert.Null(insp.Placa);
         Assert.Null(insp.Trailer);
         Assert.NotEqual(Guid.Empty, insp.Id);
     }

@@ -8,7 +8,7 @@ public sealed class BaseDatosRealTests
     private static readonly string[] TABLAS =
     [
         "tblUsuarios", "tblVehiculos", "tblPuntosCustodia", "tblEtapas", "tblInspecciones", "tblHallazgos",
-        "tblEvidencias", "tblTransferenciasCustodia", "tblAsignaciones", "tblOrdenesSofasa", "tblAuditLog", "tblRefreshTokens", "tblEtapasCatalogo", "tblTiposUnidadTransportadora",
+        "tblEvidencias", "tblTransferenciasCustodia", "tblViajes", "tblViajeVehiculos", "tblOrdenesSofasa", "tblAuditLog", "tblRefreshTokens", "tblEtapasCatalogo", "tblTiposUnidadTransportadora",
         "tblClasesDano", "tblTamanosDano", "tblNivelesSeveridad", "tblVistasFoto", "tblCuadrantes", "tblCuadranteVistas",
     ];
 
@@ -160,6 +160,59 @@ public sealed class BaseDatosRealTests
         Assert.Equal(0, sinPoligono);
         Assert.Equal(0, enVistaAdicional);
         Assert.Equal(0, geometriaInvalida);
+    }
+
+    [FactEntornoReal]
+    public async Task Los_viajes_estan_migrados_y_la_vista_nueva_reemplaza_a_la_anterior()
+    {
+        // Sin esta migracion la API nueva falla en etapas, inspecciones y listados: este chequeo (solo lectura) avisa antes de
+        // desplegar si falta ejecutar database/cambios-esquema/05-viajes.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/05-viajes.sql.";
+
+        async Task<int> Columnas(string tabla, string columna, bool? obligatoria = null) => await EscalarAsync<int>(
+            conexion,
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(@t, N'U') AND name = @c" + (obligatoria is null ? string.Empty : $" AND is_nullable = {(obligatoria.Value ? 0 : 1)}"),
+            ("@t", tabla), ("@c", columna));
+
+        Assert.True(await Columnas("tblEtapas", "ViajeId", obligatoria: true) == 1, $"tblEtapas.ViajeId debe existir y ser obligatoria. {ayuda}");
+        Assert.True(await Columnas("tblEtapas", "ConPersonalApoyo") == 1, $"Falta tblEtapas.ConPersonalApoyo. {ayuda}");
+        Assert.True(await Columnas("tblInspecciones", "ViajeId", obligatoria: true) == 1, $"tblInspecciones.ViajeId debe existir y ser obligatoria. {ayuda}");
+        Assert.True(await Columnas("tblUsuarios", "Cedula") == 1, $"Falta tblUsuarios.Cedula. {ayuda}");
+        Assert.True(await Columnas("tblOrdenesSofasa", "ViajeId") == 1, $"Falta tblOrdenesSofasa.ViajeId. {ayuda}");
+        Assert.True(await Columnas("tblOrdenesSofasa", "CodigoMtrack") == 1, $"Falta tblOrdenesSofasa.CodigoMtrack. {ayuda}");
+
+        var objetos = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.objects
+             WHERE name IN (N'FK_tblEtapas_Viaje', N'FK_tblInspecciones_Viaje', N'FK_tblViajeVehiculos_Viaje', N'FK_tblViajeVehiculos_Vehiculo',
+                            N'FK_tblOrdenesSofasa_Viaje', N'UQ_tblEtapas_Viaje_Vehiculo_Orden', N'UQ_tblViajeVehiculos_Viaje_Vehiculo')
+            """);
+        var indices = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name IN (N'UX_tblViajes_CodigoMtrack', N'UX_tblUsuarios_Cedula') AND is_unique = 1 AND has_filter = 1");
+        var vistaNueva = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE name = N'vwViajesCompletos'");
+        var vistaVieja = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE name = N'vwVehiculosMovilizados'");
+        var asignaciones = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblAsignaciones'");
+        var etapasSinViaje = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblEtapas WHERE ViajeId IS NULL");
+        var inspeccionesSinViaje = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblInspecciones WHERE ViajeId IS NULL");
+
+        Assert.True(objetos == 7, $"Faltan llaves foraneas o restricciones de unicidad de los viajes. {ayuda}");
+        Assert.True(indices == 2, $"Faltan los indices unicos del codigo MTrack y de la cedula. {ayuda}");
+        Assert.True(vistaNueva == 1, $"Falta la vista vwViajesCompletos. {ayuda}");
+        Assert.True(vistaVieja == 0, "Sigue existiendo la vista vwVehiculosMovilizados: la reemplaza vwViajesCompletos.");
+        Assert.True(asignaciones == 0, "Sigue existiendo tblAsignaciones: se retira al migrar a viajes.");
+        Assert.Equal(0, etapasSinViaje);
+        Assert.Equal(0, inspeccionesSinViaje);
+    }
+
+    [FactEntornoReal]
+    public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
+    {
+        await using var conexion = await AbrirAsync();
+
+        var inspeccionDeOtroViaje = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblInspecciones i JOIN tblEtapas e ON e.Id = i.EtapaId WHERE i.ViajeId <> e.ViajeId");
+        var etapaFueraDeSuViaje = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblEtapas e WHERE NOT EXISTS (SELECT 1 FROM tblViajeVehiculos vv WHERE vv.ViajeId = e.ViajeId AND vv.VehiculoId = e.VehiculoId)");
+
+        Assert.Equal(0, inspeccionDeOtroViaje);
+        Assert.Equal(0, etapaFueraDeSuViaje);
     }
 
     [FactEntornoReal]

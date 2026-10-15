@@ -23,7 +23,7 @@ OpenAPI ([docs/openapi.json](docs/openapi.json)), que la API genera y una prueba
 1. `POST /api/auth/login` devuelve un `token` (JWT HS256, vigencia de 30 días por defecto).
 2. Cada solicitud protegida envía `Authorization: Bearer <token>`.
 3. Si responde `401`, el token falta, es inválido o venció, o el usuario fue retirado: lleve al usuario al login.
-4. Si responde `403`, el rol no alcanza o la inspección es ajena. No es un problema de sesión.
+4. Si responde `403`, el rol no alcanza, la inspección es ajena o el VIN, viaje o informe no es de uno de sus viajes (inspector y conductor). No es un problema de sesión.
 
 El rol efectivo se lee de la base de datos en cada solicitud, no del token; un cambio de rol aplica de inmediato.
 
@@ -41,7 +41,8 @@ El rol efectivo se lee de la base de datos en cada solicitud, no del token; un c
 | Grupo | Roles | Se usa en |
 |---|---|---|
 | Campo | `inspector`, `conductor`, `admin` | informes, hallazgos, evidencias, firmas, subida de fotos |
-| Administración | `admin`, `super_admin` | carga masiva de VIN, asignaciones, etapas |
+| Administración | `admin`, `super_admin` | carga masiva de VIN |
+| Gestión de viajes | `admin`, `super_admin`, `coordinador_calidad` | crear y administrar viajes, asignar VIN, cargar viajes por Excel |
 | Gestión de usuarios | `super_admin` | alta, cambio y baja de usuarios |
 
 "Autenticado" significa cualquier rol con sesión válida.
@@ -64,11 +65,11 @@ Todos los errores son JSON con la misma forma:
 |---|---|---|
 | `VALIDATION_ERROR` | 400 | cuerpo inválido, datos que no cumplen las reglas, filtros mal formados |
 | `UNAUTHORIZED` | 401 | sin token, token inválido o vencido, usuario retirado, credenciales incorrectas |
-| `FORBIDDEN` | 403 | rol insuficiente o inspección ajena |
+| `FORBIDDEN` | 403 | rol insuficiente, inspección ajena, o VIN, viaje o informe fuera de los viajes del usuario |
 | `PORTAL_USER_NOT_LINKED` | 403 | la persona del portal no tiene acceso a IA Autos (solo en `login-portal`) |
 | `NOT_FOUND` | 404 | recurso o ruta inexistente |
 | `METHOD_NOT_ALLOWED` | 405 | método no admitido en una ruta existente |
-| `CONFLICT` | 409 | duplicados, inspección cerrada, transferencia ya firmada |
+| `CONFLICT` | 409 | duplicados (por ejemplo un código MTrack repetido), inspección cerrada, transferencia ya firmada, viaje finalizado o cancelado |
 | `RATE_LIMITED` | 429 | demasiados intentos de login (10 por minuto por IP, configurable) |
 | `INTERNAL_ERROR` | 500 | error inesperado, sin detalles internos |
 | `DB_UNAVAILABLE` | 503 | no se pudo verificar la identidad en la base de usuarios del portal (TI) |
@@ -214,12 +215,12 @@ Autenticado. La respuesta depende del rol:
 - `admin` y `super_admin`: lista completa de `UsuarioDto`.
 - Los demás roles: solo usuarios activos con `{ id, nombre, rol }` (sirve para el selector de quién entrega y quién recibe).
 
-`UsuarioDto`:
+`UsuarioDto` (la lista reducida para los demás roles no trae la cédula):
 
 ```json
 {
   "id": "uuid", "nombre": "Ana Pérez", "email": "ana@empresa.com", "rol": "inspector",
-  "subtipo_inspector": null, "activo": true,
+  "subtipo_inspector": null, "cedula": null, "activo": true,
   "created_at": "2026-07-17T12:30:15.123Z", "updated_at": "2026-07-17T12:30:15.123Z"
 }
 ```
@@ -233,11 +234,12 @@ Solo `super_admin`. `201` con el `UsuarioDto` creado.
 | `email` | sí | formato de correo; único |
 | `rol` | sí | uno de los roles |
 | `subtipo_inspector` | no | uno de los subtipos o `null` |
+| `cedula` | no | de 4 a 20 letras, números o guion; se guarda sin puntos ni espacios y en mayúscula; **única** entre quienes la tienen (`409` si se repite). Con ella se identifica al conductor en la carga de viajes |
 | `password` | sí | mínimo 8 caracteres (configurable) |
 
 ### `PATCH /api/usuarios/{id}`
 Solo `super_admin`. Cambia únicamente los campos enviados: `nombre`, `email`, `rol`, `subtipo_inspector`, `password`,
-`activo` (mismas reglas que al crear). `200` con el `UsuarioDto` actualizado.
+`activo`, `cedula` (mismas reglas que al crear; `""` borra la cédula). `200` con el `UsuarioDto` actualizado.
 
 ### `DELETE /api/usuarios/{id}`
 Solo `super_admin`. `200`: `{ "modo": "eliminado" }` (borrado real) o `{ "modo": "retirado" }` (baja lógica, porque tiene
@@ -248,8 +250,8 @@ historial). No permite eliminarse a sí mismo.
 ## Vehículos
 
 ### `POST /api/vehiculos/cargar`
-Administración. Carga masiva (máximo **5000** filas), idempotente por VIN. Cada VIN queda con la ruta
-Cargue → Transporte → Descargue. `201`.
+Administración. Carga masiva (máximo **5000** filas), idempotente por VIN. Solo crea o actualiza el vehículo: **las etapas (Cargue → Transporte → Descargue) nacen
+cuando el VIN se agrega a un viaje**, no aquí. `201`.
 
 ```json
 {
@@ -275,14 +277,15 @@ Respuesta:
 Los errores por fila no cancelan la carga: vienen en `errores` y suman a `fallidos`.
 
 ### `GET /api/vehiculos?vin=`
-Autenticado. Autocompletado por fragmento de VIN o marca (máximo **8** resultados).
+Autenticado. Autocompletado por fragmento de VIN o marca (máximo **8** resultados). Inspector y conductor solo encuentran los VIN de sus viajes.
 
 ```json
 [ { "vin": "9BWZZZ377VT004251", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional" } ]
 ```
 
 ### `GET /api/vehiculos/listado?tipo=&vin=&page=`
-Autenticado. Listado paginado, **500** filas por página.
+Autenticado. Listado paginado, **500** filas por página. `movilizados` son los VIN que completaron su ruta (todas sus etapas con informe cerrado) en algún viaje; `pendientes`, el resto,
+incluidos los que aún no están en un viaje. Inspector y conductor solo ven los VIN de sus viajes.
 
 | Parámetro | Descripción |
 |---|---|
@@ -301,8 +304,8 @@ Autenticado. Listado paginado, **500** filas por página.
 ```
 
 ### `GET /api/vehiculos/{vin}/inventario`
-Autenticado. Inventario completo de un VIN: etapas, y dentro de cada una sus inspecciones con hallazgos, evidencias y
-transferencia.
+Autenticado. Inventario completo de un VIN: etapas (de todos sus viajes), y dentro de cada una sus inspecciones con hallazgos, evidencias y
+transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus viajes (`404` si no existe) y, del VIN, ve solo las etapas de sus viajes.
 
 ```json
 {
@@ -310,9 +313,10 @@ transferencia.
   "operacion": "nacional", "created_at": "…", "updated_at": "…",
   "etapas": [
     {
-      "id": "uuid", "orden": 1, "proceso": "cargue", "lugar": null, "requiere_inspeccion": true,
+      "id": "uuid", "orden": 1, "proceso": "cargue", "lugar": "CEDI 1", "requiere_inspeccion": true,
+      "viaje_id": "uuid", "codigo_mtrack": "MTK-001", "con_personal_apoyo": false,
       "inspecciones": [
-        { "id": "uuid", "etapa_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": 6.2, "lng": -75.5,
+        { "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": 6.2, "lng": -75.5,
           "estado": "cerrada", "conductor_nombre": null, "placa": null, "trailer": null, "notas": null,
           "created_at": "…", "updated_at": "…",
           "hallazgos": [ /* HallazgoDto */ ], "evidencias": [ /* EvidenciaDto */ ], "transferencia": null }
@@ -329,44 +333,175 @@ use `fetch` con el token y descargue el `blob` (un enlace directo no lo envía).
 
 ---
 
-## Asignaciones y etapas
+## Viajes
 
-### `POST /api/asignaciones`
-Administración. `201` con la asignación.
+El **viaje es el eje del modelo**: una unidad transportadora (tipo, placa, tráiler) lleva uno o varios VIN con un conductor (y, si hay, un
+inspector) entre un origen y un destino. Cada etapa e inspección cuelga de un viaje, y **inspectores y conductores solo ven lo de sus
+viajes** (ver [Visibilidad por viaje](#visibilidad-por-viaje)). No hay integración con MTrack: el `codigo_mtrack` se digita o llega en el Excel.
+
+Crear y administrar viajes es de `coordinador_calidad`, `admin` y `super_admin` (grupo *Gestión de viajes*); cualquier otro rol recibe `403`.
+Las lecturas son para cualquier usuario autenticado, filtradas por la visibilidad.
+
+Los VIN **no se crean aquí**: deben existir ya en el inventario (`POST /api/vehiculos/cargar` o la ingesta Sofasa). Al agregar un VIN a un viaje se
+crean sus etapas, una por cada valor **activo** del catálogo `etapas` (hoy Cargue, Transporte y Descargue): el **Cargue** se hace en el
+`origen` del viaje, el **Descargue** en su `destino` y el Transporte no tiene lugar. Si el viaje tiene `con_personal_apoyo`, el Cargue queda marcado
+(con personal de apoyo la inspección de salida la hace un inspector; sin él, la hace el conductor).
+
+Estados: `programado` → `en_curso` → `finalizado`; un viaje `programado` o `en_curso` también puede pasar a `cancelado`. `finalizado` y `cancelado`
+son finales: el viaje ya no admite cambios ni inspecciones nuevas. La primera inspección de un viaje `programado` lo pasa a `en_curso`. Un viaje
+`cancelado` deja de ser visible para inspectores y conductores.
+
+Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viajes activos** (`programado` o `en_curso`) a la vez.
+
+`ViajeDto`:
 
 ```json
-{ "vehiculo_id": "uuid", "ninera": "ABC123", "conductor_id": "uuid" }
+{
+  "id": "uuid", "codigo_mtrack": "MTK-001", "tipo_unidad_id": "uuid", "unidad": "Niñera", "placa": "ABC123", "trailer": "T-9",
+  "conductor_id": "uuid", "conductor_nombre": "Carlos Gómez", "inspector_id": null, "inspector_nombre": null,
+  "origen_id": "uuid", "origen": "CEDI 1", "destino_id": "uuid", "destino": "Concesionario",
+  "estado": "programado", "con_personal_apoyo": false,
+  "vehiculos": [
+    { "vehiculo_id": "uuid", "vin": "9BWZZZ377VT004251", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional",
+      "etapas": 3, "completas": 0 }
+  ],
+  "created_at": "…", "updated_at": "…"
+}
 ```
 
-`vehiculo_id` y `ninera` (placa) son obligatorios; `conductor_id` es opcional.
+`codigo_mtrack`, `tipo_unidad_id` y `placa` pueden ser `null` solo en los viajes migrados desde las asignaciones anteriores. `etapas` y `completas`
+de cada VIN cuentan sus etapas del viaje y las que ya tienen informe cerrado.
+
+### `POST /api/viajes`
+Gestión de viajes. `201` con el `ViajeDto`.
 
 ```json
-{ "id": "uuid", "vehiculo_id": "uuid", "ninera": "ABC123", "conductor_id": "uuid", "asignado_por": "uuid", "created_at": "…", "updated_at": "…" }
-```
-
-### `POST /api/etapas`
-Administración. Define un tramo de la ruta de un VIN: una **etapa del catálogo** y, si se conoce, el **lugar** donde se hace. `201`.
-
-```json
-{ "vehiculo_id": "uuid", "etapa_catalogo_id": "uuid", "punto_custodia_id": "uuid", "orden": 1, "requiere_inspeccion": true }
+{
+  "codigo_mtrack": "MTK-001", "tipo_unidad_id": "uuid", "placa": "ABC123", "trailer": "T-9",
+  "conductor_id": "uuid", "inspector_id": null, "origen_id": "uuid", "destino_id": "uuid",
+  "con_personal_apoyo": false, "vines": ["9BWZZZ377VT004251", "9BWZZZ377VT004252"]
+}
 ```
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
-| `vehiculo_id` | sí | UUID de un vehículo existente |
-| `etapa_catalogo_id` | sí | `id` de un valor **activo** de `etapas` (antes se enviaba `punto_custodia_id` con el proceso) |
-| `punto_custodia_id` | no | `id` de un lugar **activo** de `puntos-custodia`; `null` o ausente = sin lugar |
-| `orden` | sí | entero ≥ 1, único por vehículo |
-| `requiere_inspeccion` | no | por defecto `true`; `false` significa que solo exige firma |
+| `codigo_mtrack` | sí | letras, números y `. _ - /`, máximo 50; **único** (sin distinguir mayúsculas) |
+| `tipo_unidad_id` | sí | `id` de un valor **activo** del catálogo `tipos-unidad` |
+| `placa` | sí | máximo 50 caracteres |
+| `trailer` | no | máximo 50 caracteres |
+| `conductor_id` | no | usuario activo con rol `conductor` |
+| `inspector_id` | no | usuario activo con rol `inspector` |
+| `origen_id`, `destino_id` | no | `id` de un lugar **activo** del catálogo `puntos-custodia` |
+| `con_personal_apoyo` | no | por defecto `false` |
+| `vines` | no | hasta 500 VIN que ya existan; sin repetidos |
 
-Un `orden` repetido responde `409`; un vehículo inexistente, `404`; una etapa o un lugar inexistente o inactivo, `400`.
+Errores: `409` si el `codigo_mtrack` ya existe (el viaje **no se crea**) o si algún VIN ya está en otro viaje activo; `400` con `details.fieldErrors` si un
+campo es inválido, una referencia no existe, está inactiva o es de otro rol, o algún VIN no existe (`vines`). Todo o nada: si algo falla no se crea el viaje ni
+ninguna etapa.
+
+### `GET /api/viajes`
+Autenticado. Hasta **200** viajes, los más recientes primero, como `ViajeResumenDto` (los campos del viaje sin `vehiculos`, más `total_vehiculos` y
+`vehiculos_completos`: cuántos VIN ya completaron su ruta en el viaje). Filtros opcionales en la consulta: `estado`, `codigoMtrack` (fragmento),
+`vin` (fragmento), `conductorId`, `desde`, `hasta` (fecha ISO sobre la creación). Un filtro mal formado responde `400` con `fieldErrors`. Inspectores y
+conductores solo reciben sus viajes.
+
+### `GET /api/viajes/mios`
+Autenticado. Los viajes del usuario (donde es conductor o inspector) **con sus VIN**, como `ViajeDto`. Sin parámetros trae los `programado` y `en_curso`;
+con `?estado=` trae los de ese estado (`finalizado`, por ejemplo). Es la entrada de «Mis viajes» en la app.
+
+### `GET /api/viajes/{id}`
+Autenticado. El `ViajeDto`. `403` si es un inspector o conductor y el viaje no es suyo; `404` si no existe.
+
+### `PATCH /api/viajes/{id}`
+Gestión de viajes. Cambia **solo los campos enviados** de un viaje `programado` o `en_curso`; responde `200` con el `ViajeDto`. Campos: `codigo_mtrack`,
+`tipo_unidad_id`, `placa`, `trailer`, `conductor_id`, `inspector_id`, `origen_id`, `destino_id`, `con_personal_apoyo` (mismas reglas que al crear).
+`trailer`, `conductor_id`, `inspector_id`, `origen_id` y `destino_id` admiten `null` para quitarlos; `codigo_mtrack`, `tipo_unidad_id`, `placa` y
+`con_personal_apoyo` no. Un campo que no existe responde `400`; un `codigo_mtrack` repetido, `409`; un viaje finalizado o cancelado, `409`.
+
+Al cambiar `origen_id` o `destino_id` se actualiza el lugar del Cargue o del Descargue de los VIN del viaje, y `con_personal_apoyo` marca el Cargue; las etapas que
+ya tienen un informe cerrado no cambian.
+
+### `PATCH /api/viajes/{id}/estado`
+Gestión de viajes. Cuerpo `{ "estado": "en_curso" }`. `200` con el `ViajeDto`. Un estado desconocido responde `400`; un cambio que el ciclo no permite
+(por ejemplo `programado` a `finalizado`, o salir de `finalizado`), `409`.
+
+### `POST /api/viajes/{id}/vehiculos`
+Gestión de viajes. Asigna VIN a un viaje activo y crea sus etapas. Cuerpo `{ "vines": ["…"] }` (de 1 a 500). `200` con el `ViajeDto`. **Todo o nada:** `400`
+si algún VIN no existe; `409` si alguno ya está en este viaje o en otro viaje activo (el mensaje dice cuáles).
+
+### `DELETE /api/viajes/{id}/vehiculos/{vin}`
+Gestión de viajes. Quita un VIN del viaje y borra sus etapas. `200` con el `ViajeDto`. `404` si el VIN no está en el viaje; `409` si el VIN ya tiene inspecciones
+en este viaje.
+
+### `DELETE /api/viajes/{id}`
+Gestión de viajes. Borra el viaje con sus VIN y etapas, solo si **no tiene inspecciones** (`204`); si las tiene, `409` y debe cancelarse con el cambio de estado.
+
+### Carga de viajes por Excel
+El archivo tiene **una fila por VIN**: VIN, placa, tráiler, cédula del conductor, unidad y código MTrack. El cliente lee el Excel y envía las filas como JSON; las filas con el
+mismo `codigo_mtrack` forman **un solo viaje**. Son dos pasos: primero una **vista previa** con el error de cada fila (no guarda nada) y, al confirmar,
+**solo se guardan los viajes de las filas válidas**.
 
 ```json
-{ "id": "uuid", "vehiculo_id": "uuid", "etapa_catalogo_id": "uuid", "punto_custodia_id": null, "orden": 1, "requiere_inspeccion": true, "created_at": "…", "updated_at": "…" }
+{
+  "filas": [
+    { "fila": 2, "vin": "9BWZZZ377VT004251", "placa": "ABC123", "trailer": "T-9", "cedula_conductor": "1.234.567", "unidad": "Niñera", "codigo_mtrack": "MTK-001" },
+    { "fila": 3, "vin": "9BWZZZ377VT004252", "placa": "ABC123", "trailer": "T-9", "cedula_conductor": "1.234.567", "unidad": "Niñera", "codigo_mtrack": "MTK-001" }
+  ]
+}
 ```
 
-Los vehículos que se cargan (`POST /api/vehiculos/cargar` o la ingesta Sofasa) reciben automáticamente una etapa por cada valor **activo**
-de `etapas`, en su `orden`, sin lugar.
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `fila` | no | número de la fila en el archivo, para mostrar el error donde está; si falta se usa la posición (desde 1) |
+| `vin` | sí | debe existir en el inventario |
+| `placa` | sí | máximo 50 caracteres |
+| `trailer` | no | máximo 50 caracteres |
+| `cedula_conductor` | no | con o sin puntos; debe ser la de un usuario activo con rol `conductor`. Vacía = viaje sin conductor |
+| `unidad` | sí | el `codigo` o el nombre de un valor **activo** de `tipos-unidad` (sin distinguir tildes ni mayúsculas) |
+| `codigo_mtrack` | sí | formato y unicidad como en `POST /api/viajes` |
+
+Una fila es inválida si falla un campo, si su `codigo_mtrack` ya existe, si su VIN ya está en un viaje activo, si repite un VIN dentro de su viaje, si el mismo VIN
+aparece bajo dos códigos del archivo, o si no coincide en placa, tráiler, conductor o unidad con la primera fila válida de su mismo `codigo_mtrack`. Máximo **5000** filas;
+una lista vacía o más grande responde `400`.
+
+- `POST /api/viajes/cargar/previsualizar` (gestión de viajes) → `200`, sin guardar nada.
+- `POST /api/viajes/cargar` (gestión de viajes) → `201`, guarda los viajes de las filas válidas; cada viaje se confirma por separado.
+
+Ambos responden con la misma forma:
+
+```json
+{
+  "confirmado": false, "total": 3, "validas": 2, "invalidas": 1, "viajes": 1,
+  "filas": [
+    { "fila": 2, "vin": "9BWZZZ377VT004251", "codigo_mtrack": "MTK-001", "valida": true, "errores": [], "viaje_id": null },
+    { "fila": 3, "vin": "9BWZZZ377VT004252", "codigo_mtrack": "MTK-001", "valida": true, "errores": [], "viaje_id": null },
+    { "fila": 4, "vin": "NO-EXISTE", "codigo_mtrack": "MTK-002", "valida": false, "errores": ["El VIN NO-EXISTE no existe en el inventario: cárguelo antes"], "viaje_id": null }
+  ]
+}
+```
+
+`confirmado` es `false` en la vista previa; `viajes` es cuántos viajes se crearían (vista previa) o se crearon (confirmación). Al confirmar, `viaje_id` trae el viaje de cada
+fila guardada. La confirmación vuelve a validar todo: no depende de la vista previa.
+
+### Visibilidad por viaje
+`inspector` y `conductor` ven **solo lo de los viajes en los que participan** (son su conductor o su inspector, y el viaje no está cancelado); el resto de roles ven todo.
+Se aplica a:
+
+| Recurso | Para un inspector o conductor |
+|---|---|
+| `GET /api/viajes`, `GET /api/viajes/{id}` | solo sus viajes; el detalle de otro viaje responde `403` |
+| `GET /api/vehiculos?vin=` y `GET /api/vehiculos/listado` | solo los VIN de sus viajes |
+| `GET /api/vehiculos/{vin}/inventario` (y `/pdf`) | `403` si el VIN no está en sus viajes (`404` si no existe); del VIN ve solo las etapas de sus viajes |
+| `GET /api/inspecciones` | solo los informes de sus viajes |
+| `GET /api/inspecciones/{id}` | `403` si el informe es de otro viaje |
+| `POST /api/inspecciones` | `403` si la etapa es de otro viaje |
+| `GET /api/sofasa/ordenes` | solo las órdenes vinculadas a sus viajes |
+
+Los reportes (`/api/patrones`, `/api/metricas/rechazo`) son agregados y no se filtran. La visibilidad por **cliente** (unidades de un cliente y ningún otro) no
+está en este servicio.
+
+> **Retirados.** `POST /api/asignaciones` y `POST /api/etapas` ya no existen (responden `404`): las asignaciones pasaron a ser viajes y las etapas nacen al
+> agregar un VIN a un viaje.
 
 ---
 
@@ -376,13 +511,13 @@ Flujo típico: crear la inspección (siempre en `borrador`) → subir fotos → 
 transferencia → cerrar.
 
 ### `POST /api/inspecciones`
-Campo. `201` con la inspección. El usuario sale del token (no se envía).
+Campo. `201` con la inspección. El usuario sale del token (no se envía) y **la placa, el tráiler y el conductor salen del viaje de la etapa**: ya no se piden como texto.
+Inspector y conductor reciben `403` si la etapa es de un viaje que no es suyo; un viaje finalizado o cancelado responde `409`; una etapa inexistente, `404`.
 
 ```json
 {
   "etapa_id": "uuid", "momento": "informe", "fecha": "2026-07-17T12:30:15.123Z",
-  "lat": 6.2442, "lng": -75.5812,
-  "conductor_nombre": "Juan", "placa": "ABC123", "trailer": "T-01", "notas": "…"
+  "lat": 6.2442, "lng": -75.5812, "notas": "…"
 }
 ```
 
@@ -394,15 +529,16 @@ Campo. `201` con la inspección. El usuario sale del token (no se envía).
 | `lat` / `lng` | no | −90 a 90 / −180 a 180 |
 | `estado` | no | si se envía, solo `borrador`; **no puede crearse cerrada** |
 | `notas` | no | máximo 1000 caracteres |
-| `conductor_nombre`, `placa`, `trailer` | no | texto |
 
 ```json
 {
-  "id": "uuid", "etapa_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": 6.2442, "lng": -75.5812,
+  "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": 6.2442, "lng": -75.5812,
   "estado": "borrador", "conductor_nombre": "Juan", "placa": "ABC123", "trailer": "T-01", "notas": "…",
   "created_at": "…", "updated_at": "…"
 }
 ```
+
+`conductor_nombre`, `placa` y `trailer` de la respuesta son los del viaje (en los informes anteriores a los viajes, lo que se capturó a mano).
 
 ### `GET /api/inspecciones`
 Autenticado. Listado de hasta **200** informes. Todos los filtros son opcionales y van en la consulta:
@@ -411,29 +547,30 @@ Autenticado. Listado de hasta **200** informes. Todos los filtros son opcionales
 |---|---|
 | `vin` | VIN completo válido (17 caracteres) |
 | `usuarioId` | UUID del inspector |
+| `viajeId` | UUID del viaje |
 | `momento` | `check_in`, `check_out` o `informe` |
 | `estado` | `borrador` o `cerrada` |
 | `proceso` | `codigo` de una etapa del catálogo `etapas` (por ejemplo `cargue`, `transporte` o `descargue`), activa o no |
 | `desde`, `hasta` | fecha ISO |
 
-Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es el `InspeccionDto` más `vin` y `proceso`.
+Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es el `InspeccionDto` más `vin` y `proceso`. Inspector y conductor solo reciben los informes de sus viajes.
 
 ### `GET /api/inspecciones/{id}`
-Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de la inspección más el contexto y sus partes.
+Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de la inspección más el contexto y sus partes. Inspector y conductor reciben `403` si el informe es de un viaje que no es suyo.
 
 ```json
 {
-  "id": "uuid", "etapa_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": null, "lng": null,
-  "estado": "cerrada", "conductor_nombre": null, "placa": null, "trailer": null, "notas": null, "created_at": "…", "updated_at": "…",
+  "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": null, "lng": null,
+  "estado": "cerrada", "conductor_nombre": "Carlos Gómez", "placa": "ABC123", "trailer": "T-9", "notas": null, "created_at": "…", "updated_at": "…",
   "vin": "…", "marca": "…", "modelo": null, "proceso": "cargue", "lugar": null, "requiere_inspeccion": true,
-  "inspector_nombre": "Ana Pérez", "ninera": "ABC123",
+  "inspector_nombre": "Ana Pérez", "ninera": "ABC123", "codigo_mtrack": "MTK-001", "unidad": "Niñera",
   "hallazgos": [ /* HallazgoDto */ ],
   "evidencias": [ /* EvidenciaDto */ ],
   "transferencia": { /* TransferenciaDetalleDto o null */ }
 }
 ```
 
-La placa, el conductor y el trailer capturados en el informe tienen prioridad sobre los de la asignación.
+La placa, el conductor y el tráiler son los **del viaje**; en un informe anterior a los viajes, lo que se capturó a mano tiene prioridad. `ninera` es la placa del viaje (nombre heredado, igual a `placa`).
 
 ### `POST /api/inspecciones/{id}/hallazgos`
 Campo (creador de la inspección o administrador). `201` con el `HallazgoDto`.
@@ -654,7 +791,7 @@ completa); si el despliegue configura la lectura privada, exige el header `Autho
 
 ### `GET /api/sofasa/ordenes`
 Autenticado. Hasta **500** órdenes, las más recientes primero. Filtros opcionales: `vin`, `estado`, `ciudad`, `desde`, `hasta`
-(fechas ISO; una fecha inválida responde `400`).
+(fechas ISO; una fecha inválida responde `400`). Inspector y conductor solo reciben las órdenes vinculadas a sus viajes.
 
 ```json
 [
@@ -663,14 +800,16 @@ Autenticado. Hasta **500** órdenes, las más recientes primero. Filtros opciona
     "orden_number": "…", "orden_sap": "…", "origin_cedi": "…", "vin": "…", "make": "…", "model_description": "…",
     "dealer_code": "…", "destination_city": "…", "destination_address": "…",
     "loading_date": null, "appointment": null, "loading_dock": null, "weight": 1250.5,
-    "vehiculo_id": "uuid", "synced_at": "…", "created_at": "…", "updated_at": "…"
+    "vehiculo_id": "uuid", "codigo_mtrack": null, "viaje_id": "uuid", "synced_at": "…", "created_at": "…", "updated_at": "…"
   }
 ]
 ```
 
 ### `POST /api/etl/sofasa/ordenes` *(solo el ETL; el frontend no lo usa)*
 No usa el JWT de usuario: exige `Authorization: Bearer <token del ETL>` (el valor de `Etl__IngestToken`). Ingesta idempotente por
-`source_id` (máximo 5000 órdenes por lote). Respuesta en `camelCase`:
+`source_id` (máximo 5000 órdenes por lote). Cada orden materializa su VIN como vehículo (sin etapas: nacen con el viaje). La orden puede traer un `codigo_mtrack` opcional;
+si el VIN ya está en un viaje (y, cuando trae código, el código coincide) la orden queda vinculada a ese viaje (`viaje_id`); si el VIN entra a un viaje después, se vincula al
+agregarlo o en la siguiente ingesta. Respuesta en `camelCase`:
 
 ```json
 { "recibidas": 2, "guardadas": 2, "vehiculosCreados": 1, "vehiculosActualizados": 1, "errores": [ { "source_id": 1, "error": "…" } ] }

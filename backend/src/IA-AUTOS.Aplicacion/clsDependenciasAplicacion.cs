@@ -3,12 +3,12 @@ using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Auth;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
-using IAAutos.Aplicacion.Asignaciones;
 using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Reportes;
 using IAAutos.Aplicacion.Sofasa;
 using IAAutos.Aplicacion.Usuarios;
 using IAAutos.Aplicacion.Vehiculos;
+using IAAutos.Aplicacion.Viajes;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -32,8 +32,9 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsSesionPortalService>();
         servicios.AddScoped<clsUsuariosService>();
         servicios.AddScoped<clsVehiculosService>();
-        servicios.AddScoped<clsAsignacionesService>();
-        servicios.AddScoped<clsEtapasService>();
+        servicios.AddScoped<clsEnsamblajeViajes>();
+        servicios.AddScoped<clsViajesService>();
+        servicios.AddScoped<clsCargaViajesService>();
         servicios.AddScoped<clsSofasaService>();
         servicios.AddScoped<clsReportesService>();
         servicios.AddScoped<clsInspeccionesService>();

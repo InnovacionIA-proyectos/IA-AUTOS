@@ -18,6 +18,8 @@
     <Content Include="..\..\database\00-crear-base.sql" Link="database\00-crear-base.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\ddl.sql" Link="database\ddl.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\02-catalogos-maestros.sql" Link="database\cambios-esquema\02-catalogos-maestros.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\05-viajes.sql" Link="database\cambios-esquema\05-viajes.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-viajes.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>

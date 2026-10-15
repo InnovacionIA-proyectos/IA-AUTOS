@@ -1,6 +1,7 @@
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
+using IAAutos.Dominio.Viajes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -35,7 +36,10 @@ internal sealed class clsConfiguracionEtapa : IEntityTypeConfiguration<clsEtapa>
             .HasConstraintName("FK_tblEtapas_EtapaCatalogo").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsPuntoCustodia>().WithMany().HasForeignKey(e => e.PuntoCustodiaId)
             .HasConstraintName("FK_tblEtapas_PuntoCustodia").OnDelete(DeleteBehavior.NoAction);
-        builder.HasIndex(e => new { e.VehiculoId, e.Orden }).IsUnique().HasDatabaseName("UQ_tblEtapas_Vehiculo_Orden");
+        builder.HasOne<clsViaje>().WithMany().HasForeignKey(e => e.ViajeId)
+            .HasConstraintName("FK_tblEtapas_Viaje").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(e => new { e.ViajeId, e.VehiculoId, e.Orden }).IsUnique().HasDatabaseName("UQ_tblEtapas_Viaje_Vehiculo_Orden");
+        builder.HasIndex(e => e.VehiculoId).HasDatabaseName("IX_tblEtapas_Vehiculo");
     }
 }
 
@@ -55,5 +59,9 @@ internal sealed class clsConfiguracionUsuario : IEntityTypeConfiguration<clsUsua
         // Id del portal: unico entre quienes lo tienen (los conductores no tienen usuario del portal y quedan en NULL).
         builder.Property(u => u.PortalUsuarioId).HasColumnType("bigint");
         builder.HasIndex(u => u.PortalUsuarioId).IsUnique().HasFilter("[PortalUsuarioId] IS NOT NULL").HasDatabaseName("UX_tblUsuarios_PortalUsuarioId");
+
+        // Cedula: unica entre quienes la tienen (el conductor se identifica por ella en la carga de viajes).
+        builder.Property(u => u.Cedula).HasColumnType("varchar(20)");
+        builder.HasIndex(u => u.Cedula).IsUnique().HasFilter("[Cedula] IS NOT NULL").HasDatabaseName("UX_tblUsuarios_Cedula");
     }
 }

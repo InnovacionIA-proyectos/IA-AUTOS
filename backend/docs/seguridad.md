@@ -14,7 +14,7 @@ Cambios intencionales que corrigen riesgos detectados en el diagnostico. Ninguno
 | Acceso a informes ajenos | cualquier usuario autenticado escribia en cualquier inspeccion | solo el creador o un administrador agrega hallazgos y evidencias o cierra (configurable) |
 | Firmas | una transferencia firmada podia sobrescribirse | inmutable cuando ambas partes firmaron (repetir los mismos datos es idempotente) |
 | Informe nuevo | admitia `estado: cerrada` al crear, saltando las reglas de cierre | siempre nace en borrador; se cierra con `/cerrar` |
-| Rol `super_admin` | no podia usar carga de VIN, asignaciones ni etapas | incluido en esas rutas |
+| Rol `super_admin` | no podia usar carga de VIN, asignaciones ni etapas | incluido en la carga de VIN y en la gestion de viajes |
 | Lista de usuarios | todos los autenticados veian correos y estados | los no administradores reciben solo `id`, `nombre` y `rol` de usuarios activos |
 | Subida de fotos | sin limite ni validacion de contenido | tamano maximo, tipo verificado por la firma binaria (JPEG o PNG) y extension decidida por el contenido |
 | `storage_path` de evidencias | cualquier texto | solo nombres planos de archivo (sin carpetas ni `..`) |
@@ -42,7 +42,7 @@ Cambios intencionales que corrigen riesgos detectados en el diagnostico. Ninguno
 | El token dura 30 dias y no hay refresh | se mantiene por compatibilidad con la app instalada | la revocacion es inmediata por baja del usuario; evaluar tokens cortos con refresh al migrar la app a Flutter |
 | Una consulta a la base por solicitud para validar al usuario | costo bajo (clave primaria) | si el volumen lo exige, agregar un cache de pocos segundos |
 | El limite de intentos es por IP y en memoria de la instancia | basico | con varias instancias, mover el limite a un almacen compartido o al proxy |
-| Todo usuario autenticado puede leer inspecciones, inventarios y reportes | igual que antes | si el negocio lo requiere, restringir la lectura por asignacion (la tabla de asignaciones ya existe) |
+| Inspectores y conductores leen solo lo de sus viajes (VIN, viajes, informes, ordenes Sofasa); el resto de roles lee todo | la visibilidad sale del conductor o inspector del viaje | la visibilidad por cliente (unidades de un cliente y ningun otro) no esta en este servicio; los reportes son agregados y no se filtran |
 | Cola offline de la app: un 4xx distinto de 409 la marca como fallida y puede perder evidencia | del cliente, no del backend | corregirlo en la migracion de la app a Flutter |
 | El sello de fecha y ubicacion de las fotos lo envia el cliente y el servidor no puede verificarlo | igual que antes | para valor legal, considerar sellos del lado del servidor |
 | La validacion de propiedad puede rechazar jobs de la app si se cambia de usuario en el mismo dispositivo antes de sincronizar | nueva | si ocurre en campo, desactivar `Seguridad__ValidarPropiedadInspeccion` temporalmente |

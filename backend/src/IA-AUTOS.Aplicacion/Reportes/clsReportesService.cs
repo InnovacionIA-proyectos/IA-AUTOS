@@ -7,7 +7,7 @@ namespace IAAutos.Aplicacion.Reportes;
 
 /// <summary>
 /// Consultas analiticas (lecturas dedicadas, sin CQRS general). Todas consideran solo unidades movilizadas, con la misma
-/// definicion que los listados: la vista vwVehiculosMovilizados.
+/// definicion que los listados: la vista vwViajesCompletos.
 /// </summary>
 public interface IConsultasReportes
 {

@@ -11,7 +11,7 @@ namespace IAAutos.API.Controllers.Inspecciones;
 [Route("api/inspecciones")]
 public sealed class clsInspeccionesController(clsInspeccionesService servicio) : clsControladorBase
 {
-    /// <summary>Crea la inspeccion de una etapa. El usuario sale del token y el estado inicial es siempre borrador.</summary>
+    /// <summary>Crea la inspeccion de una etapa. El usuario sale del token, el estado inicial es siempre borrador y la placa, el trailer y el conductor salen del viaje de la etapa.</summary>
     [HttpPost]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
     [ProducesResponseType<InspeccionDto>(StatusCodes.Status201Created)]
@@ -22,19 +22,20 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio) :
         return Creado(await servicio.CrearAsync(solicitud, ct));
     }
 
-    /// <summary>Listado (maximo 200, mas recientes primero) con filtros por VIN, usuario, momento, estado, proceso y fechas.</summary>
+    /// <summary>Listado (maximo 200, mas recientes primero) con filtros por VIN, usuario, viaje, momento, estado, proceso y fechas. Inspectores y conductores ven solo los informes de sus viajes.</summary>
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<InspeccionListadoDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Listar(
         [FromQuery] string? vin,
         [FromQuery] string? usuarioId,
+        [FromQuery] string? viajeId,
         [FromQuery] string? momento,
         [FromQuery] string? estado,
         [FromQuery] string? proceso,
         [FromQuery] string? desde,
         [FromQuery] string? hasta,
         CancellationToken ct) =>
-        Ok(await servicio.ListarAsync(new FiltrosInspeccionesRequest(vin, usuarioId, momento, estado, proceso, desde, hasta), ct));
+        Ok(await servicio.ListarAsync(new FiltrosInspeccionesRequest(vin, usuarioId, viajeId, momento, estado, proceso, desde, hasta), ct));
 
     /// <summary>Informe completo para revision: contexto, hallazgos, evidencias con URL y transferencia con firmas.</summary>
     [HttpGet("{id:guid}")]

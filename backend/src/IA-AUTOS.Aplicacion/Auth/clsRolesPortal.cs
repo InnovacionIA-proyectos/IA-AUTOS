@@ -1,5 +1,3 @@
-using System.Globalization;
-using System.Text;
 using IAAutos.Dominio.Usuarios;
 
 namespace IAAutos.Aplicacion.Auth;
@@ -52,25 +50,5 @@ public static class clsRolesPortal
     /// <summary>El rol de mayor privilegio entre los roles del portal, o null si ninguno da acceso a IA Autos.</summary>
     public static string? Resolver(IEnumerable<string?> rolesPortal) => Coincidencias(rolesPortal).FirstOrDefault();
 
-    internal static string Normalizar(string? texto)
-    {
-        if (string.IsNullOrWhiteSpace(texto))
-        {
-            return string.Empty;
-        }
-
-        var descompuesto = texto.Normalize(NormalizationForm.FormD);
-        var resultado = new StringBuilder(descompuesto.Length);
-        foreach (var c in descompuesto)
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark || !char.IsLetterOrDigit(c))
-            {
-                continue;
-            }
-
-            resultado.Append(char.ToUpperInvariant(c));
-        }
-
-        return resultado.ToString();
-    }
+    internal static string Normalizar(string? texto) => IAAutos.Aplicacion.Comun.clsTextoComparable.Normalizar(texto);
 }

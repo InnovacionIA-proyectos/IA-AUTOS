@@ -1,4 +1,3 @@
-using IAAutos.Dominio.Asignaciones;
 using IAAutos.Dominio.Auditoria;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
@@ -23,13 +22,27 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
     public Task<clsUsuario?> ObtenerPorPortalIdAsync(long portalUsuarioId, CancellationToken ct = default) =>
         contexto.Usuarios.FirstOrDefaultAsync(u => u.PortalUsuarioId == portalUsuarioId, ct);
 
+    public async Task<IReadOnlyDictionary<string, clsUsuario>> ObtenerPorCedulasAsync(IReadOnlyCollection<string> cedulas, CancellationToken ct = default)
+    {
+        var resultado = new Dictionary<string, clsUsuario>(StringComparer.OrdinalIgnoreCase);
+        foreach (var lote in cedulas.Distinct(StringComparer.OrdinalIgnoreCase).Chunk(1000))
+        {
+            foreach (var usuario in await contexto.Usuarios.AsNoTracking().Where(u => u.Cedula != null && lote.Contains(u.Cedula)).ToListAsync(ct))
+            {
+                resultado[usuario.Cedula!] = usuario;
+            }
+        }
+
+        return resultado;
+    }
+
     public async Task<IReadOnlyList<clsUsuario>> ListarAsync(CancellationToken ct = default) =>
         await contexto.Usuarios.AsNoTracking().OrderBy(u => u.Nombre).ToListAsync(ct);
 
     public async Task<bool> TieneHistorialAsync(Guid id, CancellationToken ct = default) =>
         await contexto.Inspecciones.AnyAsync(i => i.UsuarioId == id, ct)
         || await contexto.Transferencias.AnyAsync(t => t.EntregaUsuarioId == id || t.RecibeUsuarioId == id, ct)
-        || await contexto.Asignaciones.AnyAsync(a => a.AsignadoPor == id, ct)
+        || await contexto.Viajes.AnyAsync(v => v.ConductorId == id || v.InspectorId == id || v.CreadoPor == id, ct)
         || await contexto.AuditLog.AnyAsync(a => a.UsuarioId == id, ct);
 
     public void Agregar(clsUsuario usuario) => contexto.Usuarios.Add(usuario);
@@ -69,15 +82,21 @@ internal sealed class clsTransferenciaCustodiaRepository(clsAppDbContext context
     public void Agregar(clsTransferenciaCustodia transferencia) => contexto.Transferencias.Add(transferencia);
 }
 
-internal sealed class clsAsignacionRepository(clsAppDbContext contexto) : IAsignacionRepository
-{
-    public void Agregar(clsAsignacion asignacion) => contexto.Asignaciones.Add(asignacion);
-}
-
 internal sealed class clsOrdenSofasaRepository(clsAppDbContext contexto) : IOrdenSofasaRepository
 {
     public Task<clsOrdenSofasa?> ObtenerPorSourceIdAsync(long sourceId, CancellationToken ct = default) =>
         contexto.OrdenesSofasa.FirstOrDefaultAsync(o => o.SourceId == sourceId, ct);
+
+    public async Task<IReadOnlyList<clsOrdenSofasa>> ObtenerSinViajePorVinesAsync(IReadOnlyCollection<string> vines, CancellationToken ct = default)
+    {
+        var resultado = new List<clsOrdenSofasa>();
+        foreach (var lote in vines.Distinct(StringComparer.OrdinalIgnoreCase).Chunk(1000))
+        {
+            resultado.AddRange(await contexto.OrdenesSofasa.Where(o => o.ViajeId == null && o.Vin != null && lote.Contains(o.Vin)).ToListAsync(ct));
+        }
+
+        return resultado;
+    }
 
     public void Agregar(clsOrdenSofasa orden) => contexto.OrdenesSofasa.Add(orden);
 }
