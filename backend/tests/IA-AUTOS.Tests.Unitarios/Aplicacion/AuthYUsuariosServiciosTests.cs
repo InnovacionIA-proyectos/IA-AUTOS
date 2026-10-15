@@ -36,18 +36,46 @@ internal sealed class clsContexto
 
     public clsServicioContrasenas Contrasenas { get; } = new(Options.Create(new clsOpcionesContrasenas { Iteraciones = 1000 }));
 
-    private readonly IOptions<clsOpcionesSeguridad> _seguridad = Options.Create(new clsOpcionesSeguridad { PasswordMinimo = 8 });
+    public clsCatalogosLecturaFalso Catalogos { get; } = new();
+
+    private readonly IOptions<clsOpcionesSeguridad> _seguridad = Options.Create(new clsOpcionesSeguridad { PasswordMinimo = 8, PinMaxIntentos = 5, PinBloqueoMinutos = 15 });
 
     public clsAuthService Auth() => new(Usuarios, Contrasenas, new clsEmisorTokenFalso(), UnidadDeTrabajo,
-        new clsAuditor(Auditoria, Actual, Reloj), Reloj, new LoginRequestValidator());
+        new clsAuditor(Auditoria, Actual, Reloj), Reloj, Catalogos, _seguridad,
+        new LoginRequestValidator(), new LoginConductorRequestValidator(), new CambiarPinRequestValidator());
 
     public clsUsuariosService ServicioUsuarios() => new(Usuarios, Contrasenas, UnidadDeTrabajo,
-        new clsAuditor(Auditoria, Actual, Reloj), Actual, Reloj,
-        new CrearUsuarioRequestValidator(_seguridad), new ActualizarUsuarioRequestValidator(_seguridad));
+        new clsAuditor(Auditoria, Actual, Reloj), Actual, Reloj, Catalogos, _seguridad,
+        new CrearUsuarioRequestValidator(_seguridad));
+
+    public clsCargaConductoresService CargaConductores() => new(Usuarios, Contrasenas, Catalogos, UnidadDeTrabajo,
+        new clsAuditor(Auditoria, Actual, Reloj), Actual, Reloj, new CargarConductoresRequestValidator(),
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<clsCargaConductoresService>.Instance);
+
+    /// <summary>Conductor (o inspector) que entra con cedula y PIN. <paramref name="debeCambiar"/> en false deja el PIN como ya cambiado por la persona.</summary>
+    public clsUsuario SembrarConPin(string cedula, string pin, string rol = clsRol.CONDUCTOR, bool debeCambiar = false, bool activo = true, Guid? clienteId = null)
+    {
+        var hash = Contrasenas.Hashear(pin);
+        var usuario = clsUsuario.CrearConPin("Persona " + cedula, null, rol, null, cedula, hash, AHORA, clienteId ?? clsCatalogosLecturaFalso.SOFASA);
+        if (!debeCambiar)
+        {
+            usuario.CambiarPin(hash, AHORA);
+        }
+
+        if (!activo)
+        {
+            usuario.Retirar(AHORA);
+        }
+
+        Usuarios.Agregar(usuario);
+        return usuario;
+    }
 
     public clsUsuario Sembrar(string email, string password, string rol = clsRol.INSPECTOR, bool activo = true, string? hash = null)
     {
-        var usuario = clsUsuario.Crear("Usuario " + email, email, rol, null, hash ?? Contrasenas.Hashear(password), AHORA);
+        // El conductor siempre tiene cedula.
+        var cedula = rol == clsRol.CONDUCTOR ? "C" + Math.Abs(email.GetHashCode()) : null;
+        var usuario = clsUsuario.Crear("Usuario " + email, email, rol, null, hash ?? Contrasenas.Hashear(password), AHORA, cedula);
         if (!activo)
         {
             usuario.Retirar(AHORA);
@@ -161,7 +189,7 @@ public class UsuariosServiceTests
         var c = new clsContexto();
         c.Actual.Id = Guid.NewGuid();
 
-        var dto = await c.ServicioUsuarios().CrearAsync(new CrearUsuarioRequest("  Luis  ", " LUIS@Ejemplo.com ", clsRol.CONDUCTOR, null, "Clave-Segura-1"));
+        var dto = await c.ServicioUsuarios().CrearAsync(new CrearUsuarioRequest("  Luis  ", " LUIS@Ejemplo.com ", clsRol.CONDUCTOR, null, "Clave-Segura-1", "1234567"));
 
         Assert.Equal("Luis", dto.Nombre);
         Assert.Equal("luis@ejemplo.com", dto.Email);
@@ -184,7 +212,7 @@ public class UsuariosServiceTests
         Assert.Equal("Datos inválidos", ex.Message);
         var detalle = Assert.IsType<Dictionary<string, object>>(ex.Detalles);
         var campos = Assert.IsType<Dictionary<string, string[]>>(detalle["fieldErrors"]);
-        Assert.Equal(["nombre", "email", "rol", "subtipo_inspector", "password"], campos.Keys.ToArray());
+        Assert.Equal(["nombre", "rol", "subtipo_inspector", "email", "password"], campos.Keys.ToArray());
         Assert.Equal("La contraseña debe tener al menos 8 caracteres", campos["password"][0]);
         Assert.Empty(c.Usuarios.Usuarios);
         Assert.Equal(0, c.UnidadDeTrabajo.Confirmaciones);
@@ -282,8 +310,9 @@ public class UsuariosServiceTests
         c.Sembrar("zeta@ejemplo.com", "Clave-Segura-1");
         c.Sembrar("alfa@ejemplo.com", "Clave-Segura-1");
 
-        var lista = await c.ServicioUsuarios().ListarAsync();
+        var lista = await c.ServicioUsuarios().ListarAsync(new FiltrosUsuariosRequest(null, null, null, null, null, null));
 
-        Assert.Equal(["alfa@ejemplo.com", "zeta@ejemplo.com"], lista.Select(u => u.Email));
+        Assert.Equal(["alfa@ejemplo.com", "zeta@ejemplo.com"], lista.Items.Select(u => u.Email));
+        Assert.Equal(2, lista.Total);
     }
 }

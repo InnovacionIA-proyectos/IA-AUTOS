@@ -19,7 +19,7 @@ public interface IServicioContrasenas
 
 public interface IEmisorToken
 {
-    /// <summary>Emite el JWT (HS256) con los claims sub, email y user_role.</summary>
+    /// <summary>Emite el JWT (HS256) con los claims sub, email (si el usuario tiene) y user_role.</summary>
     string Emitir(UsuarioAutenticadoDto usuario);
 
     /// <summary>

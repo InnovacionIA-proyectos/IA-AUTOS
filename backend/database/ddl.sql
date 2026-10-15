@@ -20,7 +20,29 @@ SET ANSI_NULLS ON;
 GO
 
 /* -----------------------------------------------------------------------------
+   tblClientes: el cliente (empresa) al que pertenecen usuarios y vehiculos. Es un catalogo administrable como los demas
+   (Codigo estable, Nombre, Orden y Activo); el primero activo por Orden es el cliente por defecto.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblClientes', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblClientes
+    (
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblClientes PRIMARY KEY,
+        Codigo     varchar(30)       NOT NULL,
+        Nombre     nvarchar(100)     NOT NULL,
+        Orden      int               NOT NULL CONSTRAINT DF_tblClientes_Orden DEFAULT (0),
+        Activo     bit               NOT NULL CONSTRAINT DF_tblClientes_Activo DEFAULT (1),
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblClientes_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblClientes_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblClientes_Codigo UNIQUE (Codigo)
+    );
+END
+GO
+
+/* -----------------------------------------------------------------------------
    tblUsuarios
+   Identidad: un usuario entra con correo y contrasena (TipoCredencial 'password') o con cedula y PIN (TipoCredencial 'pin',
+   para conductores e inspectores, que pueden no tener correo). Ver las columnas agregadas mas abajo.
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblUsuarios', N'U') IS NULL
 BEGIN
@@ -28,14 +50,13 @@ BEGIN
     (
         Id                uniqueidentifier NOT NULL CONSTRAINT PK_tblUsuarios PRIMARY KEY,
         Nombre            nvarchar(200)    NOT NULL,
-        Email             nvarchar(320)    NOT NULL,
+        Email             nvarchar(320)    NULL,
         Rol               varchar(30)      NOT NULL,
         SubtipoInspector  varchar(30)      NULL,
         Activo            bit              NOT NULL CONSTRAINT DF_tblUsuarios_Activo DEFAULT (1),
         PasswordHash      nvarchar(400)    NULL,
         CreatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblUsuarios_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblUsuarios_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        CONSTRAINT UQ_tblUsuarios_Email UNIQUE (Email),
         CONSTRAINT CK_tblUsuarios_Rol CHECK (Rol IN
             ('inspector', 'conductor', 'coordinador_calidad', 'comercial', 'admin', 'super_admin')),
         CONSTRAINT CK_tblUsuarios_Subtipo CHECK (SubtipoInspector IS NULL OR SubtipoInspector IN
@@ -65,6 +86,47 @@ GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblUsuarios_Cedula' AND object_id = OBJECT_ID(N'dbo.tblUsuarios'))
     CREATE UNIQUE INDEX UX_tblUsuarios_Cedula ON dbo.tblUsuarios (Cedula) WHERE Cedula IS NOT NULL;
+GO
+
+-- Credencial y bloqueo del usuario:
+--   PinHash: hash del PIN (mismo algoritmo que la contrasena); nunca se guarda en claro.
+--   TipoCredencial: 'password' (correo y contrasena) o 'pin' (cedula y PIN).
+--   DebeCambiarPin: el PIN lo asigno o reinicio un administrador, asi que el usuario debe cambiarlo antes de continuar.
+--   IntentosFallidos / BloqueadoHasta: PIN errado seguidos y hasta cuando esta bloqueada la cuenta.
+--   UltimoAccesoAt: ultimo inicio de sesion exitoso.
+--   ClienteId: cliente al que pertenece (nulo en el super administrador, que ve todos los clientes).
+IF COL_LENGTH(N'dbo.tblUsuarios', N'TipoCredencial') IS NULL
+    ALTER TABLE dbo.tblUsuarios ADD
+        PinHash          nvarchar(400)     NULL,
+        TipoCredencial   varchar(20)       NOT NULL CONSTRAINT DF_tblUsuarios_TipoCredencial DEFAULT ('password'),
+        DebeCambiarPin   bit               NOT NULL CONSTRAINT DF_tblUsuarios_DebeCambiarPin DEFAULT (0),
+        IntentosFallidos int               NOT NULL CONSTRAINT DF_tblUsuarios_IntentosFallidos DEFAULT (0),
+        BloqueadoHasta   datetimeoffset(3) NULL,
+        UltimoAccesoAt   datetimeoffset(3) NULL,
+        ClienteId        uniqueidentifier  NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblUsuarios_TipoCredencial')
+    ALTER TABLE dbo.tblUsuarios ADD CONSTRAINT CK_tblUsuarios_TipoCredencial CHECK (TipoCredencial IN ('password', 'pin'));
+GO
+
+-- Quien entra con contrasena necesita correo; quien entra con PIN necesita cedula.
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblUsuarios_Identidad')
+    ALTER TABLE dbo.tblUsuarios ADD CONSTRAINT CK_tblUsuarios_Identidad CHECK
+        ((TipoCredencial = 'password' AND Email IS NOT NULL) OR (TipoCredencial = 'pin' AND Cedula IS NOT NULL));
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblUsuarios_Cliente')
+    ALTER TABLE dbo.tblUsuarios ADD CONSTRAINT FK_tblUsuarios_Cliente FOREIGN KEY (ClienteId) REFERENCES dbo.tblClientes (Id);
+GO
+
+-- El correo es unico entre los usuarios que lo tienen (los conductores e inspectores sin correo pueden ser varios).
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblUsuarios_Email' AND object_id = OBJECT_ID(N'dbo.tblUsuarios'))
+    CREATE UNIQUE INDEX UX_tblUsuarios_Email ON dbo.tblUsuarios (Email) WHERE Email IS NOT NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblUsuarios_Cliente' AND object_id = OBJECT_ID(N'dbo.tblUsuarios'))
+    CREATE INDEX IX_tblUsuarios_Cliente ON dbo.tblUsuarios (ClienteId);
 GO
 
 IF OBJECT_ID(N'dbo.tblRefreshTokens', N'U') IS NULL
@@ -106,11 +168,14 @@ BEGIN
         Chasis        nvarchar(100)    NULL,
         Color         nvarchar(100)    NULL,
         Operacion     varchar(20)      NOT NULL,
+        ClienteId     uniqueidentifier NOT NULL,
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblVehiculos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblVehiculos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT UQ_tblVehiculos_Vin UNIQUE (Vin),
+        CONSTRAINT FK_tblVehiculos_Cliente FOREIGN KEY (ClienteId) REFERENCES dbo.tblClientes (Id),
         CONSTRAINT CK_tblVehiculos_Operacion CHECK (Operacion IN ('importacion', 'exportacion', 'nacional'))
     );
+    CREATE INDEX IX_tblVehiculos_Cliente ON dbo.tblVehiculos (ClienteId);
 END
 GO
 
@@ -572,6 +637,12 @@ GO
    Los acentos se escriben con NCHAR para que el archivo siga siendo ASCII: 225=a, 233=e, 237=i, 243=o, 250=u, 241=enie.
    Las acciones de los niveles de severidad y los cuadrantes no tienen semilla: se cargan o se editan desde el portal.
    ----------------------------------------------------------------------------- */
+-- Cliente inicial: el actual. Los usuarios y vehiculos nuevos pertenecen al primer cliente activo si no se indica otro.
+INSERT INTO dbo.tblClientes (Id, Codigo, Nombre, Orden)
+SELECT NEWID(), 'sofasa', N'Sofasa', 1
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblClientes c WHERE c.Codigo = 'sofasa');
+GO
+
 INSERT INTO dbo.tblEtapasCatalogo (Id, Codigo, Nombre, Orden)
 SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
 FROM (VALUES

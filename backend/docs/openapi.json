@@ -939,32 +939,69 @@
           "Usuarios"
         ],
         "operationId": "Usuarios_Listar",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rol",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "activo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clienteId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "tamano",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UsuarioDto"
-                  }
+                  "$ref": "#/components/schemas/ListadoUsuariosDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UsuarioDto"
-                  }
+                  "$ref": "#/components/schemas/ListadoUsuariosDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/UsuarioDto"
-                  }
+                  "$ref": "#/components/schemas/ListadoUsuariosDto"
                 }
               }
             }
@@ -1132,6 +1169,284 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EliminarUsuarioResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/usuarios/{id}/pin": {
+      "post": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_AsignarPin",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AsignarPinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/usuarios/{id}/pin/forzar-cambio": {
+      "post": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_ForzarCambioDePin",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/usuarios/{id}/desbloquear": {
+      "post": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_Desbloquear",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/usuarios/cargar/previsualizar": {
+      "post": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_PrevisualizarCarga",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CargarConductoresRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaConductoresDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaConductoresDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaConductoresDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/usuarios/cargar": {
+      "post": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_Cargar",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CargarConductoresRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaConductoresDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaConductoresDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaConductoresDto"
                 }
               }
             }
@@ -2232,6 +2547,92 @@
         }
       }
     },
+    "/api/auth/login-conductor": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "Auth_LoginConductor",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginConductorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/cambiar-pin": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "operationId": "Auth_CambiarPin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CambiarPinRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/auth/login-portal": {
       "post": {
         "tags": [
@@ -2380,17 +2781,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/UsuarioAutenticadoDto"
+                  "$ref": "#/components/schemas/PerfilDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UsuarioAutenticadoDto"
+                  "$ref": "#/components/schemas/PerfilDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UsuarioAutenticadoDto"
+                  "$ref": "#/components/schemas/PerfilDto"
                 }
               }
             }
@@ -2552,6 +2953,13 @@
               "null",
               "string"
             ]
+          },
+          "cliente_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -2690,6 +3098,20 @@
           }
         }
       },
+      "AsignarPinRequest": {
+        "required": [
+          "pin"
+        ],
+        "type": "object",
+        "properties": {
+          "pin": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CambiarEstadoViajeRequest": {
         "required": [
           "estado"
@@ -2701,6 +3123,77 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "CambiarPinRequest": {
+        "required": [
+          "pin_actual",
+          "pin_nuevo"
+        ],
+        "type": "object",
+        "properties": {
+          "pin_actual": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pin_nuevo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CargarConductoresRequest": {
+        "required": [
+          "filas"
+        ],
+        "type": "object",
+        "properties": {
+          "filas": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "required": [
+                "fila",
+                "nombre",
+                "cedula",
+                "email"
+              ],
+              "type": "object",
+              "properties": {
+                "fila": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "format": "int32"
+                },
+                "nombre": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "cedula": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "email": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -2982,6 +3475,26 @@
           },
           "resumen": {
             "$ref": "#/components/schemas/ResumenCierreDto"
+          }
+        }
+      },
+      "ClienteDto": {
+        "required": [
+          "id",
+          "codigo",
+          "nombre"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "codigo": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
           }
         }
       },
@@ -3275,6 +3788,19 @@
               "null",
               "string"
             ]
+          },
+          "pin": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cliente_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -3487,6 +4013,58 @@
           },
           "updated_at": {
             "format": "date-time"
+          }
+        }
+      },
+      "FilaCargaConductorDto": {
+        "required": [
+          "fila",
+          "nombre",
+          "cedula",
+          "valida",
+          "errores",
+          "usuario_id",
+          "pin_temporal"
+        ],
+        "type": "object",
+        "properties": {
+          "fila": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "valida": {
+            "type": "boolean"
+          },
+          "errores": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "pin_temporal": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -4384,6 +4962,35 @@
           }
         }
       },
+      "ListadoUsuariosDto": {
+        "required": [
+          "items",
+          "total",
+          "pagina",
+          "tamano"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsuarioDto"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pagina": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tamano": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "ListadoVehiculoDto": {
         "required": [
           "id",
@@ -4434,6 +5041,27 @@
           "novedades": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "LoginConductorRequest": {
+        "required": [
+          "cedula",
+          "pin"
+        ],
+        "type": "object",
+        "properties": {
+          "cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pin": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -4738,6 +5366,73 @@
           }
         }
       },
+      "PerfilDto": {
+        "required": [
+          "id",
+          "nombre",
+          "email",
+          "rol",
+          "subtipo_inspector",
+          "cedula",
+          "tipo_credencial",
+          "debe_cambiar_pin",
+          "cliente",
+          "capacidades"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "email": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rol": {
+            "type": "string"
+          },
+          "subtipo_inspector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo_credencial": {
+            "type": "string"
+          },
+          "debe_cambiar_pin": {
+            "type": "boolean"
+          },
+          "cliente": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClienteDto"
+              }
+            ]
+          },
+          "capacidades": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "RefreshRequest": {
         "required": [
           "refresh"
@@ -4764,6 +5459,44 @@
           },
           "refresh": {
             "type": "string"
+          }
+        }
+      },
+      "ResultadoCargaConductoresDto": {
+        "required": [
+          "confirmado",
+          "total",
+          "validas",
+          "invalidas",
+          "creados",
+          "filas"
+        ],
+        "type": "object",
+        "properties": {
+          "confirmado": {
+            "type": "boolean"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "validas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "invalidas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "creados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaCargaConductorDto"
+            }
           }
         }
       },
@@ -5117,10 +5850,23 @@
             "type": "string"
           },
           "email": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "rol": {
             "type": "string"
+          },
+          "cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "debe_cambiar_pin": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -5133,6 +5879,11 @@
           "subtipo_inspector",
           "cedula",
           "activo",
+          "tipo_credencial",
+          "debe_cambiar_pin",
+          "bloqueado_hasta",
+          "ultimo_acceso_at",
+          "cliente_id",
           "created_at",
           "updated_at"
         ],
@@ -5146,7 +5897,10 @@
             "type": "string"
           },
           "email": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "rol": {
             "type": "string"
@@ -5166,11 +5920,36 @@
           "activo": {
             "type": "boolean"
           },
+          "tipo_credencial": {
+            "type": "string"
+          },
+          "debe_cambiar_pin": {
+            "type": "boolean"
+          },
+          "bloqueado_hasta": {
+            "format": "date-time"
+          },
+          "ultimo_acceso_at": {
+            "format": "date-time"
+          },
+          "cliente_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "created_at": {
             "format": "date-time"
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "pin_temporal": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

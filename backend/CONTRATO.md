@@ -20,10 +20,11 @@ OpenAPI ([docs/openapi.json](docs/openapi.json)), que la API genera y una prueba
 
 ## Autenticación
 
-1. `POST /api/auth/login` devuelve un `token` (JWT HS256, vigencia de 30 días por defecto).
+1. `POST /api/auth/login` (correo y contraseña) o `POST /api/auth/login-conductor` (cédula y PIN, para el personal de campo) devuelven un `token` (JWT HS256, vigencia de 30 días por defecto).
 2. Cada solicitud protegida envía `Authorization: Bearer <token>`.
 3. Si responde `401`, el token falta, es inválido o venció, o el usuario fue retirado: lleve al usuario al login.
 4. Si responde `403`, el rol no alcanza, la inspección es ajena o el VIN, viaje o informe no es de uno de sus viajes (inspector y conductor). No es un problema de sesión.
+5. Si responde `403` con `code: "PIN_CHANGE_REQUIRED"`, el PIN es temporal: lleve a la persona a cambiarlo con `POST /api/auth/cambiar-pin` (hasta entonces solo funcionan `cambiar-pin`, `me` y `logout`). El `token` sigue siendo válido: tras cambiar el PIN se usa el mismo.
 
 El rol efectivo se lee de la base de datos en cada solicitud, no del token; un cambio de rol aplica de inmediato.
 
@@ -43,9 +44,11 @@ El rol efectivo se lee de la base de datos en cada solicitud, no del token; un c
 | Campo | `inspector`, `conductor`, `admin` | informes, hallazgos, evidencias, firmas, subida de fotos |
 | Administración | `admin`, `super_admin` | carga masiva de VIN |
 | Gestión de viajes | `admin`, `super_admin`, `coordinador_calidad` | crear y administrar viajes, asignar VIN, cargar viajes por Excel |
-| Gestión de usuarios | `super_admin` | alta, cambio y baja de usuarios |
+| Gestión de usuarios | `admin`, `super_admin`, `coordinador_calidad` | alta, cambio, baja y PIN de usuarios, carga de conductores por Excel. Solo `super_admin` asigna o modifica el nivel `super_admin` y cambia el cliente de alguien |
 
-"Autenticado" significa cualquier rol con sesión válida.
+"Autenticado" significa cualquier rol con sesión válida. Cada usuario pertenece a un **cliente** (empresa): quien no es `super_admin`
+solo ve y administra a los usuarios de su cliente; el `super_admin` no tiene cliente y ve todos. `GET /api/auth/me` devuelve las
+`capacidades` del usuario, que sirven para armar el menú según el rol.
 
 ## Errores
 
@@ -67,10 +70,12 @@ Todos los errores son JSON con la misma forma:
 | `UNAUTHORIZED` | 401 | sin token, token inválido o vencido, usuario retirado, credenciales incorrectas |
 | `FORBIDDEN` | 403 | rol insuficiente, inspección ajena, o VIN, viaje o informe fuera de los viajes del usuario |
 | `PORTAL_USER_NOT_LINKED` | 403 | la persona del portal no tiene acceso a IA Autos (solo en `login-portal`) |
+| `PIN_CHANGE_REQUIRED` | 403 | el PIN fue asignado o reiniciado por un administrador: hay que cambiarlo (`POST /api/auth/cambiar-pin`) antes de usar el resto de la API |
+| `ACCOUNT_LOCKED` | 423 | la cuenta está bloqueada por PIN errados seguidos; `details.bloqueado_hasta` (ISO 8601) dice hasta cuándo, o un administrador la desbloquea |
 | `NOT_FOUND` | 404 | recurso o ruta inexistente |
 | `METHOD_NOT_ALLOWED` | 405 | método no admitido en una ruta existente |
 | `CONFLICT` | 409 | duplicados (por ejemplo un código MTrack repetido), inspección cerrada, transferencia ya firmada, viaje finalizado o cancelado |
-| `RATE_LIMITED` | 429 | demasiados intentos de login (10 por minuto por IP, configurable) |
+| `RATE_LIMITED` | 429 | demasiados intentos de login (10 por minuto por IP en `login`, 60 en `login-conductor`; configurable) |
 | `INTERNAL_ERROR` | 500 | error inesperado, sin detalles internos |
 | `DB_UNAVAILABLE` | 503 | no se pudo verificar la identidad en la base de usuarios del portal (TI) |
 
@@ -114,14 +119,72 @@ Público, con límite de intentos.
 ```json
 {
   "token": "eyJhbGciOi...",
-  "usuario": { "id": "uuid", "nombre": "Ana Pérez", "email": "ana@empresa.com", "rol": "inspector" }
+  "usuario": { "id": "uuid", "nombre": "Ana Pérez", "email": "ana@empresa.com", "rol": "inspector", "cedula": null, "debe_cambiar_pin": false }
 }
 ```
 
-Correo y contraseña son obligatorios (`400` si faltan). Credenciales incorrectas: `401`.
+Correo y contraseña son obligatorios (`400` si faltan). Credenciales incorrectas: `401`. Quien entra con cédula y PIN no puede
+entrar por aquí (`401`), ni quien entra con correo y contraseña por `login-conductor`.
+
+### `POST /api/auth/login-conductor`
+Público, con límite de intentos. Para el conductor y el inspector que entran con **cédula y PIN** (pueden no tener correo).
+
+```json
+{ "cedula": "1.234.567", "pin": "482915" }
+```
+
+La cédula se normaliza (puntos y espacios fuera, mayúscula). `200`: igual que `login`, con `usuario.email` en `null` si no tiene correo y el
+`rol` real (`conductor` o `inspector`):
+
+```json
+{
+  "token": "eyJhbGciOi...",
+  "usuario": { "id": "uuid", "nombre": "Luis Gómez", "email": null, "rol": "conductor", "cedula": "1234567", "debe_cambiar_pin": false }
+}
+```
+
+- Cédula o PIN incorrectos (exista o no la cédula): `401` «Cédula o PIN incorrectos»; cédula o PIN vacíos: `400`; usuario retirado: `401`.
+- **Bloqueo.** Cada PIN errado de una cuenta existente se cuenta y queda en la auditoría. Al llegar a **5 seguidos** (`Seguridad__PinMaxIntentos`) la
+  cuenta se bloquea **15 minutos** (`Seguridad__PinBloqueoMinutos`): ese intento y los siguientes responden `423 ACCOUNT_LOCKED` con
+  `details.bloqueado_hasta`, aunque el PIN sea el correcto. El bloqueo se levanta solo al vencer, con un ingreso correcto posterior o cuando un
+  administrador usa `POST /api/usuarios/{id}/desbloquear`. Un ingreso correcto reinicia el contador.
+- **PIN temporal.** Si `usuario.debe_cambiar_pin` es `true`, el PIN lo asignó o reinició un administrador: el `token` sirve, pero el resto de la
+  API responde `403 PIN_CHANGE_REQUIRED` hasta que la persona llame a `cambiar-pin`.
+
+### `POST /api/auth/cambiar-pin`
+Autenticado (también con PIN temporal). Cambia el PIN de quien entra con cédula y PIN.
+
+```json
+{ "pin_actual": "482915", "pin_nuevo": "730194" }
+```
+
+`204` sin cuerpo. El PIN nuevo son **solo números, de 4 a 8 dígitos**, distinto del actual y no trivial (nada de `1111` ni `1234`): si no, `400` con
+`details.fieldErrors.pin_nuevo`. Un `pin_actual` errado es `400` (`fieldErrors.pin_actual`) y **cuenta como intento fallido** (puede bloquear la cuenta, `423`).
+Quien entra con contraseña no tiene PIN: `409`. Tras el cambio, `debe_cambiar_pin` pasa a `false` y el mismo `token` ya sirve para todo.
 
 ### `GET /api/auth/me`
-Autenticado. `200`: `{ "id", "nombre", "email", "rol" }` del usuario de la sesión.
+Autenticado (también con PIN temporal). `200`: el perfil del usuario de la sesión, con su cliente y lo que puede hacer:
+
+```json
+{
+  "id": "uuid", "nombre": "Luis Gómez", "email": null, "rol": "conductor", "subtipo_inspector": null,
+  "cedula": "1234567", "tipo_credencial": "pin", "debe_cambiar_pin": false,
+  "cliente": { "id": "uuid", "codigo": "sofasa", "nombre": "Sofasa" },
+  "capacidades": ["ver_inspecciones", "ver_viajes", "ver_reportes", "registrar_inspecciones"]
+}
+```
+
+`cliente` es `null` para el `super_admin`. `tipo_credencial` es `password` o `pin`. Las `capacidades` salen del rol (las mismas listas que
+autorizan los endpoints), así que el menú nunca ofrece algo que la API rechace:
+
+| Capacidad | Roles |
+|---|---|
+| `ver_inspecciones`, `ver_viajes`, `ver_reportes` | todos |
+| `registrar_inspecciones` | `inspector`, `conductor`, `admin` |
+| `gestionar_viajes` | `admin`, `super_admin`, `coordinador_calidad` |
+| `gestionar_usuarios` | `admin`, `super_admin`, `coordinador_calidad` |
+| `administrar_catalogos` | `admin`, `super_admin`, `coordinador_calidad` |
+| `cargar_vehiculos` | `admin`, `super_admin` |
 
 ### Sesión del portal (inicio de sesión único)
 
@@ -209,41 +272,116 @@ Público. `200` si la base responde, `503` si no:
 
 ## Usuarios
 
+Un usuario entra de una de dos formas (`tipo_credencial`): con **correo y contraseña** (`password`, para todos los roles) o con **cédula y PIN**
+(`pin`, solo `conductor` e `inspector`, sin necesidad de correo). El inspector que ya entraba con correo y contraseña lo sigue haciendo.
+
+| Regla | Detalle |
+|---|---|
+| Con contraseña | el correo es obligatorio y único |
+| Con PIN | la cédula es obligatoria; el correo es opcional (muchos pueden no tenerlo) y, si lo tienen, único |
+| Conductor | siempre tiene cédula (con ella se le asignan viajes y entra a la app) |
+| Quién administra | `admin`, `coordinador_calidad` y `super_admin`; cada uno solo a los usuarios de **su cliente** (los de otro cliente responden `404`) |
+| Nivel `super_admin` | solo lo asigna o modifica un `super_admin` (`403` para los demás; un `super_admin` no existe para quien no lo es: `404`) |
+| Cliente | al crear, el del que crea; solo el `super_admin` puede elegir otro (`cliente_id`) o cambiar el de alguien. El `super_admin` no tiene cliente |
+
 ### `GET /api/usuarios`
 Autenticado. La respuesta depende del rol:
 
-- `admin` y `super_admin`: lista completa de `UsuarioDto`.
-- Los demás roles: solo usuarios activos con `{ id, nombre, rol }` (sirve para el selector de quién entrega y quién recibe).
+- `admin`, `coordinador_calidad` y `super_admin`: **una página** de `UsuarioDto` completos, ordenados por nombre. Filtros opcionales: `q` (texto en nombre,
+  correo o cédula), `rol`, `activo` (`true` o `false`), `clienteId` (solo `super_admin`; los demás siempre ven su cliente), `pagina` (desde 1) y `tamano`
+  (50 por defecto, máximo 200). Un filtro mal formado es `400`.
+- Los demás roles: solo usuarios activos de su cliente con `{ id, nombre, rol }`, sin paginar (sirve para el selector de quién entrega y quién recibe).
 
-`UsuarioDto` (la lista reducida para los demás roles no trae la cédula):
+```json
+{ "items": [ { "...UsuarioDto..." } ], "total": 132, "pagina": 1, "tamano": 50 }
+```
+
+`UsuarioDto` (la lista reducida para los demás roles no trae nada de esto):
 
 ```json
 {
-  "id": "uuid", "nombre": "Ana Pérez", "email": "ana@empresa.com", "rol": "inspector",
-  "subtipo_inspector": null, "cedula": null, "activo": true,
-  "created_at": "2026-07-17T12:30:15.123Z", "updated_at": "2026-07-17T12:30:15.123Z"
+  "id": "uuid", "nombre": "Luis Gómez", "email": null, "rol": "conductor",
+  "subtipo_inspector": null, "cedula": "1234567", "activo": true,
+  "tipo_credencial": "pin", "debe_cambiar_pin": true,
+  "bloqueado_hasta": null, "ultimo_acceso_at": null, "cliente_id": "uuid",
+  "created_at": "2026-07-17T12:30:15.123Z", "updated_at": "2026-07-17T12:30:15.123Z",
+  "pin_temporal": null
 }
 ```
 
+`bloqueado_hasta` tiene fecha mientras la cuenta está bloqueada por PIN errados. `pin_temporal` solo viene en las respuestas que **generan** un PIN
+(alta sin PIN, asignar o reiniciar sin `pin`) y se muestra **una única vez**: no se guarda en claro ni se puede volver a consultar.
+
 ### `POST /api/usuarios`
-Solo `super_admin`. `201` con el `UsuarioDto` creado.
+`admin`, `coordinador_calidad` y `super_admin`. `201` con el `UsuarioDto` creado.
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
 | `nombre` | sí | no vacío |
-| `email` | sí | formato de correo; único |
 | `rol` | sí | uno de los roles |
-| `subtipo_inspector` | no | uno de los subtipos o `null` |
-| `cedula` | no | de 4 a 20 letras, números o guion; se guarda sin puntos ni espacios y en mayúscula; **única** entre quienes la tienen (`409` si se repite). Con ella se identifica al conductor en la carga de viajes |
-| `password` | sí | mínimo 8 caracteres (configurable) |
+| `password` | con contraseña | mínimo 8 caracteres (configurable). Si se envía, entra con correo y contraseña; si no, con cédula y PIN |
+| `email` | con contraseña | formato de correo; único entre quienes lo tienen. Opcional con PIN |
+| `cedula` | con PIN y para el conductor | de 4 a 20 letras, números o guion; se guarda sin puntos ni espacios y en mayúscula; **única** entre quienes la tienen (`409` si se repite) |
+| `pin` | no | solo con PIN: de 4 a 8 dígitos, no trivial. Si no se envía se **genera uno de 6 dígitos** y viene en `pin_temporal`. Siempre nace temporal: la persona debe cambiarlo |
+| `subtipo_inspector` | no | uno de los subtipos (solo se conserva en inspectores) |
+| `cliente_id` | no | solo el `super_admin`; por defecto, el cliente de quien crea (o el primero activo) |
+
+Sin contraseña, solo el conductor y el inspector pueden crearse (`400` para los demás roles, que necesitan contraseña). Errores `400` por campo en
+`details.fieldErrors` (por ejemplo, conductor sin `cedula`).
 
 ### `PATCH /api/usuarios/{id}`
-Solo `super_admin`. Cambia únicamente los campos enviados: `nombre`, `email`, `rol`, `subtipo_inspector`, `password`,
-`activo`, `cedula` (mismas reglas que al crear; `""` borra la cédula). `200` con el `UsuarioDto` actualizado.
+Mismos roles. Cambia únicamente los campos enviados: `nombre`, `email`, `rol`, `subtipo_inspector`, `password`, `activo`, `cedula` y, solo `super_admin`,
+`cliente_id`. Un campo desconocido es `400`.
+
+- **`null` limpia** `subtipo_inspector` (y también `email` y `cedula`, siempre que el usuario conserve con qué entrar: el correo si entra con contraseña, la
+  cédula si entra con PIN o es conductor). `""` equivale a `null` en `cedula` y `email`. `nombre`, `rol`, `password` y `activo` no admiten `null` (`400`).
+- Al cambiar el `rol` a uno que no es `inspector`, el `subtipo_inspector` se limpia solo.
+- Una `password` nueva pasa al usuario a entrar con contraseña (requiere correo) y descarta su PIN.
+- No se puede desactivar el propio usuario (`409`).
+
+`200` con el `UsuarioDto` actualizado.
 
 ### `DELETE /api/usuarios/{id}`
-Solo `super_admin`. `200`: `{ "modo": "eliminado" }` (borrado real) o `{ "modo": "retirado" }` (baja lógica, porque tiene
+Mismos roles. `200`: `{ "modo": "eliminado" }` (borrado real) o `{ "modo": "retirado" }` (baja lógica, porque tiene
 historial). No permite eliminarse a sí mismo.
+
+### PIN y bloqueo
+
+Mismos roles que arriba, sobre usuarios de su cliente. Todos devuelven `200` con el `UsuarioDto`.
+
+| Ruta | Qué hace |
+|---|---|
+| `POST /api/usuarios/{id}/pin` | **Asigna o reinicia** el PIN. Cuerpo opcional `{ "pin": "730194" }`; sin él se genera uno temporal (`pin_temporal`, una sola vez). El usuario pasa a entrar con cédula y PIN (si tenía contraseña, se descarta), **debe cambiarlo antes de continuar** y se levanta su bloqueo. Exige que sea conductor o inspector con cédula (`400`) |
+| `POST /api/usuarios/{id}/pin/forzar-cambio` | Obliga a cambiar el PIN en el próximo uso, sin cambiarlo (`400` si no entra con PIN) |
+| `POST /api/usuarios/{id}/desbloquear` | Levanta el bloqueo por PIN errados antes de que venza |
+
+### Carga de conductores por Excel
+
+Igual que la carga de viajes: la web lee el Excel y envía las filas como JSON; **primero la vista previa** (valida todo y no guarda nada) y luego la
+confirmación. Máximo 500 filas por carga. Mismos roles que la gestión de usuarios.
+
+```json
+{ "filas": [ { "fila": 2, "nombre": "Ana Ruiz", "cedula": "2.000.001", "email": "ana@empresa.com" } ] }
+```
+
+`fila` (opcional) es el número de fila del archivo, para mostrar el error donde está; `email` es opcional. Columnas del Excel esperadas: nombre, cédula, correo.
+
+- `POST /api/usuarios/cargar/previsualizar` → `200`.
+- `POST /api/usuarios/cargar` → `201`. Crea **un conductor con PIN temporal por cada fila válida**, en el cliente de quien carga; las filas inválidas no frenan a las demás.
+
+```json
+{
+  "confirmado": true, "total": 3, "validas": 2, "invalidas": 1, "creados": 2,
+  "filas": [
+    { "fila": 2, "nombre": "Ana Ruiz", "cedula": "2000001", "valida": true, "errores": [], "usuario_id": "uuid", "pin_temporal": "730194" },
+    { "fila": 4, "nombre": "Repetido", "cedula": "1000001", "valida": false, "errores": ["Ya existe un usuario con la cédula 1000001"], "usuario_id": null, "pin_temporal": null }
+  ]
+}
+```
+
+Una fila es inválida si falta el nombre o la cédula, la cédula o el correo no tienen formato válido, ya existen en la base o están repetidos en el archivo. Los
+`pin_temporal` salen **una sola vez** en la respuesta de confirmar: entrégueselos a cada conductor (o descargue la lista) antes de cerrar la pantalla. Cada conductor
+debe cambiar el suyo en su primer ingreso.
 
 ---
 
@@ -275,6 +413,8 @@ Respuesta:
 ```
 
 Los errores por fila no cancelan la carga: vienen en `errores` y suman a `fallidos`.
+
+Los vehículos **nuevos** quedan en el cliente de quien carga (el `super_admin`, que no tiene, usa el cliente por defecto); un VIN que ya existe conserva el suyo.
 
 ### `GET /api/vehiculos?vin=`
 Autenticado. Autocompletado por fragmento de VIN o marca (máximo **8** resultados). Inspector y conductor solo encuentran los VIN de sus viajes.
@@ -650,8 +790,8 @@ Si no cumple los requisitos (evidencias, geolocalización…), responde `400` co
 
 ## Catálogos maestros
 
-Las etapas, los lugares, los tipos de unidad, las clases y tamaños de daño, los niveles de severidad, las vistas de foto y los
-cuadrantes **ya no son listas fijas en el código**: viven en tablas y los administra TI o el coordinador de calidad desde el portal.
+Las etapas, los lugares, los tipos de unidad, las clases y tamaños de daño, los niveles de severidad, las vistas de foto, los
+cuadrantes y los clientes **ya no son listas fijas en el código**: viven en tablas y los administra TI o el coordinador de calidad desde el portal.
 La web y la app deben leerlos de la API (y guardar una copia para trabajar sin señal), no escribirlos a mano.
 
 | Nombre (ruta y clave) | Qué contiene | Campos de cada valor |
@@ -665,6 +805,7 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | `vistas-foto` | Las 9 vistas de foto: 7 obligatorias y 2 adicionales (`piezas_baul`, `cojineria`) que solo se toman con faltante o daño | `id`, `codigo`, `nombre`, `orden`, `activo`, `obligatoria`, `tipo_vehiculo` (`null` = cualquier tipo) |
 | `cuadrantes` | Las **zonas** numeradas de la carrocería (puerta delantera, pilar central, capó…). Una zona es la misma aunque se vea desde varias vistas | `id`, `tipo_vehiculo` (`null` = cualquier tipo), `numero`, `nombre`, `orden`, `activo` |
 | `cuadrante-vistas` | El **polígono** de cada zona en cada vista donde aparece (una fila por aparición). Las vistas adicionales no tienen | `id`, `cuadrante_id`, `numero` (de la zona), `vista_foto_id`, `vista` (código de la vista), `geometria` |
+| `clientes` | Las empresas a las que pertenecen los usuarios y los vehículos (hoy `sofasa`). El primero activo por `orden` es el cliente por defecto de lo que se crea sin cliente explícito | `id`, `codigo`, `nombre`, `orden`, `activo` |
 
 `codigo` es la **clave estable** (minúsculas, números y `_`, máximo 30 caracteres): es lo que viaja en el resto de la API
 (`proceso`, `clase_dano`, `tamano_dano`) y no cambia nunca. `nombre` es la etiqueta que se muestra y sí puede cambiar. Los valores
@@ -683,7 +824,7 @@ Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inacti
     "vistas-foto": [ { "id": "uuid", "codigo": "piezas_baul", "nombre": "Piezas en el baúl", "orden": 8, "activo": true, "obligatoria": false, "tipo_vehiculo": null } ],
     "cuadrantes": [ { "id": "uuid", "tipo_vehiculo": null, "numero": 1, "nombre": "Puerta delantera: parte alta", "orden": 1, "activo": true } ],
     "cuadrante-vistas": [ { "id": "uuid", "cuadrante_id": "uuid", "numero": 1, "vista_foto_id": "uuid", "vista": "lateral_izquierda", "geometria": { "puntos": [ [0.34, 0.30], [0.59, 0.30] ] } } ],
-    "puntos-custodia": [], "tipos-unidad": [], "tamanos-dano": []
+    "puntos-custodia": [], "tipos-unidad": [], "tamanos-dano": [], "clientes": []
   }
 }
 ```
@@ -750,7 +891,7 @@ Reglas:
 - El **`codigo` no se puede cambiar** (`400`); se puede reenviar igual. Para reemplazar un código, cree un valor nuevo e inactive el viejo.
 - `409` si el `codigo` ya existe en ese catálogo, o si el `numero` de cuadrante ya existe para ese tipo de vehículo, o si el cuadrante ya tiene un polígono en esa vista.
 - **Un valor en uso no se borra:** `409` con el mensaje «El valor está en uso y no se puede borrar: solo puede inactivarlo». Está en uso una clase
-  o tamaño usado por algún hallazgo, una etapa o un lugar usado por algún tramo de la ruta, y una vista que tiene polígonos de cuadrantes. Borrar un cuadrante borra también sus polígonos.
+  o tamaño usado por algún hallazgo, una etapa o un lugar usado por algún tramo de la ruta, un cliente con usuarios o vehículos, y una vista que tiene polígonos de cuadrantes. Borrar un cuadrante borra también sus polígonos.
 - Una vista **con polígonos** no puede pasar a `obligatoria: false` (`409`), y no se pueden crear polígonos en una vista adicional ni
   inactiva (`400`).
 - El código `requiere_reemplazo` de `tamanos-dano` lo usa el análisis de patrones para contar los daños que obligan a reemplazar la pieza:
@@ -807,7 +948,7 @@ Autenticado. Hasta **500** órdenes, las más recientes primero. Filtros opciona
 
 ### `POST /api/etl/sofasa/ordenes` *(solo el ETL; el frontend no lo usa)*
 No usa el JWT de usuario: exige `Authorization: Bearer <token del ETL>` (el valor de `Etl__IngestToken`). Ingesta idempotente por
-`source_id` (máximo 5000 órdenes por lote). Cada orden materializa su VIN como vehículo (sin etapas: nacen con el viaje). La orden puede traer un `codigo_mtrack` opcional;
+`source_id` (máximo 5000 órdenes por lote). Cada orden materializa su VIN como vehículo, del cliente `sofasa` (sin etapas: nacen con el viaje). La orden puede traer un `codigo_mtrack` opcional;
 si el VIN ya está en un viaje (y, cuando trae código, el código coincide) la orden queda vinculada a ese viaje (`viaje_id`); si el VIN entra a un viaje después, se vincula al
 agregarlo o en la siguiente ingesta. Respuesta en `camelCase`:
 

@@ -26,12 +26,17 @@ public sealed class UsuariosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
 
         Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
         using var doc = await LeerAsync(respuesta);
-        var nombres = doc.RootElement.EnumerateArray().Select(u => u.GetProperty("nombre").GetString()).ToList();
+        Assert.Equal(["items", "total", "pagina", "tamano"], doc.RootElement.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(2, doc.RootElement.GetProperty("total").GetInt32());
+        var items = doc.RootElement.GetProperty("items");
+        var nombres = items.EnumerateArray().Select(u => u.GetProperty("nombre").GetString()).ToList();
         Assert.Equal(["Alfa", "Zeta"], nombres);
-        var primero = doc.RootElement[0];
+        var primero = items[0];
         Assert.Equal(
-            ["id", "nombre", "email", "rol", "subtipo_inspector", "cedula", "activo", "created_at", "updated_at"],
+            ["id", "nombre", "email", "rol", "subtipo_inspector", "cedula", "activo", "tipo_credencial", "debe_cambiar_pin", "bloqueado_hasta", "ultimo_acceso_at", "cliente_id", "created_at", "updated_at", "pin_temporal"],
             primero.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Null(primero.GetProperty("pin_temporal").GetString());
+        Assert.False(primero.TryGetProperty("pin_hash", out _));
         Assert.Matches(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", primero.GetProperty("created_at").GetString()!);
         Assert.Equal(JsonValueKind.Null, primero.GetProperty("subtipo_inspector").ValueKind);
         Assert.False(primero.TryGetProperty("password_hash", out _));
@@ -74,10 +79,10 @@ public sealed class UsuariosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
     }
 
     [Theory]
-    [InlineData(clsRol.ADMIN)]
+    [InlineData(clsRol.COMERCIAL)]
     [InlineData(clsRol.INSPECTOR)]
     [InlineData(clsRol.CONDUCTOR)]
-    public async Task Solo_el_super_admin_gestiona_usuarios(string rol)
+    public async Task Solo_admin_coordinador_y_super_admin_gestionan_usuarios(string rol)
     {
         await Fabrica.SembrarUsuarioAsync("otro@ejemplo.com", "x", rol);
         var token = await LoginAsync("otro@ejemplo.com", "x");
@@ -87,7 +92,7 @@ public sealed class UsuariosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         Assert.Equal(HttpStatusCode.Forbidden, respuesta.StatusCode);
         using var doc = await LeerAsync(respuesta);
         Assert.Equal("FORBIDDEN", doc.RootElement.GetProperty("code").GetString());
-        Assert.Equal("No tiene permisos para esta acción (rol requerido: super_admin)", doc.RootElement.GetProperty("message").GetString());
+        Assert.Equal("No tiene permisos para esta acción (rol requerido: admin, super_admin, coordinador_calidad)", doc.RootElement.GetProperty("message").GetString());
     }
 
     [Fact]
@@ -100,7 +105,7 @@ public sealed class UsuariosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         {
             nombre = "Repetido",
             email = "EXISTE@ejemplo.com",
-            rol = "conductor",
+            rol = "inspector",
             password = "Clave-Nueva-22",
         });
 
@@ -130,7 +135,7 @@ public sealed class UsuariosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         var detalle = doc.RootElement.GetProperty("details");
         Assert.Equal(0, detalle.GetProperty("formErrors").GetArrayLength());
         var campos = detalle.GetProperty("fieldErrors").EnumerateObject().Select(p => p.Name).ToList();
-        Assert.Equal(["nombre", "email", "rol", "password"], campos);
+        Assert.Equal(["nombre", "rol", "email", "password"], campos);
     }
 
     [Fact]
@@ -151,11 +156,11 @@ public sealed class UsuariosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         var token = await TokenSuperAdminAsync();
         var usuario = await Fabrica.SembrarUsuarioAsync("ana@ejemplo.com", "Clave-Vieja-1", clsRol.INSPECTOR, nombre: "Ana");
 
-        var respuesta = await Cliente(token).PatchAsync($"/api/usuarios/{usuario.Id}", JsonContent.Create(new { rol = "conductor", password = "Clave-Nueva-22" }));
+        var respuesta = await Cliente(token).PatchAsync($"/api/usuarios/{usuario.Id}", JsonContent.Create(new { rol = "comercial", password = "Clave-Nueva-22" }));
 
         Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
         using var doc = await LeerAsync(respuesta);
-        Assert.Equal("conductor", doc.RootElement.GetProperty("rol").GetString());
+        Assert.Equal("comercial", doc.RootElement.GetProperty("rol").GetString());
         Assert.Equal("Ana", doc.RootElement.GetProperty("nombre").GetString());
         Assert.Equal(HttpStatusCode.Unauthorized, (await Cliente().PostAsJsonAsync("/api/auth/login", new { email = "ana@ejemplo.com", password = "Clave-Vieja-1" })).StatusCode);
         await LoginAsync("ana@ejemplo.com", "Clave-Nueva-22");
@@ -217,9 +222,9 @@ public sealed class UsuariosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         Assert.Equal("retirado", d2.RootElement.GetProperty("modo").GetString());
 
         var lista = await (await Cliente(token).GetAsync("/api/usuarios")).Content.ReadFromJsonAsync<JsonElement>();
-        var correos = lista.EnumerateArray().Select(u => u.GetProperty("email").GetString()).ToList();
+        var correos = lista.GetProperty("items").EnumerateArray().Select(u => u.GetProperty("email").GetString()).ToList();
         Assert.DoesNotContain("libre@ejemplo.com", correos);
-        var retirado = lista.EnumerateArray().Single(u => u.GetProperty("email").GetString() == "activo@ejemplo.com");
+        var retirado = lista.GetProperty("items").EnumerateArray().Single(u => u.GetProperty("email").GetString() == "activo@ejemplo.com");
         Assert.False(retirado.GetProperty("activo").GetBoolean());
     }
 

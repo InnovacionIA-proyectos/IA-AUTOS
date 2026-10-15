@@ -27,8 +27,8 @@ public static class clsEscenario
     }
 
     public static clsUsuario NuevoUsuario(string email = "uno@ejemplo.com", string rol = clsRol.INSPECTOR) =>
-        clsUsuario.Crear("Usuario " + email, email, rol, null, "scrypt:aa:bb", AHORA);
+        clsUsuario.Crear("Usuario " + email, email, rol, null, "scrypt:aa:bb", AHORA, rol == clsRol.CONDUCTOR ? "C" + Math.Abs(email.GetHashCode()) : null);
 
-    public static clsVehiculo NuevoVehiculo(string vin = "9FBHSR4E8PM000123") =>
-        clsVehiculo.Crear(vin, "Renault", "Sandero", "Rojo", clsOperacion.NACIONAL, AHORA);
+    public static clsVehiculo NuevoVehiculo(Guid clienteId, string vin = "9FBHSR4E8PM000123") =>
+        clsVehiculo.Crear(vin, "Renault", "Sandero", "Rojo", clsOperacion.NACIONAL, clienteId, AHORA);
 }

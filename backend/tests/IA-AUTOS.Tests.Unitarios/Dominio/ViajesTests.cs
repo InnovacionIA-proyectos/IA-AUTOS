@@ -208,7 +208,7 @@ public class CedulaYTextoTests
     public void Un_usuario_conserva_su_cedula_normalizada_y_un_texto_vacio_al_actualizar_la_borra()
     {
         var ahora = new DateTimeOffset(2026, 7, 17, 12, 0, 0, TimeSpan.Zero);
-        var usuario = clsUsuario.Crear("Carlos", "c@e.com", clsRol.CONDUCTOR, null, "hash", ahora, "1.234.567");
+        var usuario = clsUsuario.Crear("Carlos", "c@e.com", clsRol.INSPECTOR, null, "hash", ahora, "1.234.567");
         Assert.Equal("1234567", usuario.Cedula);
 
         usuario.Actualizar(null, null, null, null, null, null, ahora, null);

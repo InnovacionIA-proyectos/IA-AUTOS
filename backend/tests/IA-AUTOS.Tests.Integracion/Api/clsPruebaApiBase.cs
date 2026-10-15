@@ -65,14 +65,14 @@ public abstract class clsPruebaApiBase(clsBaseDatosFixture bd) : IAsyncLifetime
         JsonDocument.Parse(await respuesta.Content.ReadAsStringAsync());
 
     /// <summary>Genera un token HS256 con los mismos claims que emitia el sistema anterior (sub, email, user_role).</summary>
-    protected static string CrearToken(Guid sub, string email, string rol, string? secreto = null, DateTime? expira = null)
+    protected static string CrearToken(Guid sub, string? email, string rol, string? secreto = null, DateTime? expira = null)
     {
         var descriptor = new SecurityTokenDescriptor
         {
             Claims = new Dictionary<string, object>
             {
                 ["sub"] = sub.ToString(),
-                ["email"] = email,
+                ["email"] = email ?? string.Empty,
                 ["user_role"] = rol,
             },
             IssuedAt = DateTime.UtcNow.AddMinutes(-1),

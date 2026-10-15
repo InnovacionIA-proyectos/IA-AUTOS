@@ -44,7 +44,7 @@ public sealed class clsOpcionesJwt
     }
 }
 
-/// <summary>Emite el JWT HS256 con los mismos claims que el sistema anterior (sub, email, user_role).</summary>
+/// <summary>Emite el JWT HS256 con los mismos claims que el sistema anterior (sub, email si lo tiene, user_role).</summary>
 internal sealed class clsEmisorTokenJwt(IOptions<clsOpcionesJwt> opciones, IReloj reloj) : IEmisorToken
 {
     public const string CLAIM_ROL = "user_role";
@@ -66,9 +66,13 @@ internal sealed class clsEmisorTokenJwt(IOptions<clsOpcionesJwt> opciones, IRelo
         var claims = new Dictionary<string, object>
         {
             [JwtRegisteredClaimNames.Sub] = usuario.Id.ToString(),
-            [JwtRegisteredClaimNames.Email] = usuario.Email,
             [CLAIM_ROL] = usuario.Rol,
         };
+        if (usuario.Email is not null)
+        {
+            claims[JwtRegisteredClaimNames.Email] = usuario.Email;
+        }
+
         if (familiaId is not null)
         {
             claims[JwtRegisteredClaimNames.Jti] = Guid.NewGuid().ToString("N");

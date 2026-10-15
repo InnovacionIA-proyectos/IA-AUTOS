@@ -15,6 +15,7 @@ public static class clsNombresCatalogo
     public const string VISTAS_FOTO = "vistas-foto";
     public const string CUADRANTES = "cuadrantes";
     public const string CUADRANTE_VISTAS = "cuadrante-vistas";
+    public const string CLIENTES = "clientes";
 }
 
 /// <summary>Un valor de catalogo tal como lo ve el cliente: solo los campos propios de ese catalogo (snake_case), con id, codigo, nombre, orden y activo.</summary>
@@ -92,4 +93,10 @@ public interface ICatalogosLectura
 
     /// <summary>True si el valor existe en el catalogo y esta activo (por ejemplo, para crear una etapa con un lugar valido).</summary>
     Task<bool> ExisteActivoAsync(string catalogo, Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Id del cliente activo con ese codigo; si no existe o no se indica, el primer cliente activo por orden. Es el cliente que se asigna a
+    /// lo que se crea sin un cliente explicito (por ejemplo, los vehiculos de la ingesta).
+    /// </summary>
+    Task<Guid> ClienteAsync(string? codigoPreferido, CancellationToken ct = default);
 }

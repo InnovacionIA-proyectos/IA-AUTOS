@@ -1,4 +1,5 @@
 using FluentValidation;
+using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
 using IAAutos.Dominio.Comun;
@@ -14,6 +15,7 @@ public sealed class clsVehiculosService(
     IConsultasVehiculos consultas,
     IConsultasViajes consultasViajes,
     IGeneradorPdfInventario generadorPdf,
+    ICatalogosLectura catalogos,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -25,7 +27,8 @@ public sealed class clsVehiculosService(
 
     /// <summary>
     /// Carga masiva de vehiculos. Cada VIN se inserta (o se actualiza si ya existe). Las etapas no se crean aqui: nacen cuando el VIN
-    /// se agrega a un viaje. Re-subir el mismo archivo no duplica. Los errores se reportan por VIN sin detener el resto del lote.
+    /// se agrega a un viaje. Re-subir el mismo archivo no duplica. Los errores se reportan por VIN sin detener el resto del lote. Los
+    /// vehiculos nuevos quedan en el cliente de quien carga (el super administrador, que no tiene, usa el cliente por defecto).
     /// </summary>
     public async Task<ResultadoCargaDto> CargarVinsAsync(CargarVinsRequest solicitud, CancellationToken ct = default)
     {
@@ -36,6 +39,7 @@ public sealed class clsVehiculosService(
 
         int creados = 0, actualizados = 0;
         var errores = new List<ErrorCargaDto>();
+        var clienteId = actual.ClienteId ?? await catalogos.ClienteAsync(null, ct);
 
         foreach (var item in items)
         {
@@ -47,7 +51,7 @@ public sealed class clsVehiculosService(
                 var vehiculo = existente;
                 if (vehiculo is null)
                 {
-                    vehiculo = clsVehiculo.Crear(vin, item.Marca!, item.Modelo, item.Color, item.Operacion!, reloj.Ahora);
+                    vehiculo = clsVehiculo.Crear(vin, item.Marca!, item.Modelo, item.Color, item.Operacion!, clienteId, reloj.Ahora);
                     vehiculos.Agregar(vehiculo);
                 }
                 else

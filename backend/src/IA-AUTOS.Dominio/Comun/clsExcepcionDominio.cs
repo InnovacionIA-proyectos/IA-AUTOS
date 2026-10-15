@@ -73,6 +73,27 @@ public sealed class clsPortalUsuarioNoVinculadoException : clsExcepcionDominio
     }
 }
 
+/// <summary>La cuenta esta bloqueada por demasiados PIN errados: 423 ACCOUNT_LOCKED con la hora en que se levanta.</summary>
+public sealed class clsCuentaBloqueadaException : clsExcepcionDominio
+{
+    public clsCuentaBloqueadaException(DateTimeOffset bloqueadoHasta)
+        : base(
+            clsCodigosError.ACCOUNT_LOCKED,
+            "Cuenta bloqueada por intentos fallidos. Intenta de nuevo más tarde o pide a tu administrador que la desbloquee.",
+            new Dictionary<string, object> { ["bloqueado_hasta"] = bloqueadoHasta.UtcDateTime })
+    {
+    }
+}
+
+/// <summary>El PIN es temporal: hasta cambiarlo (POST /api/auth/cambiar-pin) el resto de la API responde 403 PIN_CHANGE_REQUIRED.</summary>
+public sealed class clsCambioPinRequeridoException : clsExcepcionDominio
+{
+    public clsCambioPinRequeridoException()
+        : base(clsCodigosError.PIN_CHANGE_REQUIRED, "Debes cambiar tu PIN antes de continuar")
+    {
+    }
+}
+
 /// <summary>Un servicio externo necesario (por ejemplo, la base de usuarios del portal) no respondio: 503, nunca se concede acceso.</summary>
 public sealed class clsServicioNoDisponibleException : clsExcepcionDominio
 {

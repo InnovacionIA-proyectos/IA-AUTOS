@@ -75,6 +75,17 @@ public sealed class SofasaApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     }
 
     [Fact]
+    public async Task Los_vehiculos_de_la_ingesta_quedan_en_el_cliente_sofasa()
+    {
+        await BaseDatos.EjecutarAsync("INSERT dbo.tblClientes (Id, Codigo, Nombre, Orden) VALUES (NEWID(), 'aaa_otro', N'Otro', 0)");
+
+        var r = await ClienteEtl().PostAsJsonAsync(RUTA_ETL, new { ordenes = new[] { FilaEtl(7001, "VIN-SOF-CLI-1") } });
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal("sofasa", await Sembrador.EscalarAsync("SELECT c.Codigo FROM dbo.tblVehiculos v JOIN dbo.tblClientes c ON c.Id = v.ClienteId WHERE v.Vin = 'VIN-SOF-CLI-1'"));
+    }
+
+    [Fact]
     public async Task Reingestar_el_mismo_lote_es_idempotente_y_actualiza_los_datos()
     {
         await ClienteEtl().PostAsJsonAsync(RUTA_ETL, new { ordenes = new[] { FilaEtl(2001, "VIN-SOF-0001") } });

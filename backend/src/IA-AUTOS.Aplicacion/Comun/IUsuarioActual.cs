@@ -10,6 +10,9 @@ public interface IUsuarioActual
     string? Rol { get; }
 
     string? Email { get; }
+
+    /// <summary>Cliente del usuario; nulo en el super administrador (ve todos los clientes).</summary>
+    Guid? ClienteId { get; }
 }
 
 public static class clsUsuarioActualExtensiones

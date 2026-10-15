@@ -26,8 +26,8 @@ public static class clsRol
     /// <summary>Creacion y administracion de viajes (incluida la carga por Excel).</summary>
     public static readonly string[] GESTION_VIAJES = [ADMIN, SUPER_ADMIN, COORDINADOR_CALIDAD];
 
-    /// <summary>Gestion de usuarios.</summary>
-    public static readonly string[] GESTION_USUARIOS = [SUPER_ADMIN];
+    /// <summary>Gestion de usuarios (crear, editar, desactivar, PIN). Solo el super administrador asigna o modifica el nivel super_admin.</summary>
+    public static readonly string[] GESTION_USUARIOS = [ADMIN, SUPER_ADMIN, COORDINADOR_CALIDAD];
 
     public static bool EsAdministrador(string rol) => rol is ADMIN or SUPER_ADMIN;
 

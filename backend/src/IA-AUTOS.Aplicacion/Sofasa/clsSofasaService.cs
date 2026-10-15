@@ -1,8 +1,10 @@
 using System.Globalization;
 using FluentValidation;
+using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Sofasa.DTOSofasa;
 using IAAutos.Aplicacion.Vehiculos;
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Sofasa;
 using IAAutos.Dominio.Vehiculos;
@@ -40,6 +42,7 @@ public sealed class clsSofasaService(
     IVehiculoRepository vehiculos,
     IViajeRepository viajes,
     IOrdenSofasaRepository ordenes,
+    ICatalogosLectura catalogos,
     IConsultasSofasa consultas,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
@@ -64,6 +67,8 @@ public sealed class clsSofasaService(
         await materializador.PrepararAsync(vines, ct);
 
         int guardadas = 0, vehiculosCreados = 0, vehiculosActualizados = 0;
+        // Los vehiculos de las ordenes Sofasa son del cliente Sofasa (o del cliente por defecto si ese codigo no esta activo).
+        var clienteId = await catalogos.ClienteAsync(clsCliente.CODIGO_SOFASA, ct);
         var errores = new List<ErrorIngestaDto>();
 
         foreach (var orden in lote)
@@ -85,7 +90,7 @@ public sealed class clsSofasaService(
                     var vehiculo = existente;
                     if (vehiculo is null)
                     {
-                        vehiculo = clsVehiculo.CrearDesdeSofasa(vin, orden.Make, orden.ModelDescription, reloj.Ahora);
+                        vehiculo = clsVehiculo.CrearDesdeSofasa(vin, orden.Make, orden.ModelDescription, clienteId, reloj.Ahora);
                         vehiculos.Agregar(vehiculo);
                         vehiculoNuevo = vehiculo;
                     }

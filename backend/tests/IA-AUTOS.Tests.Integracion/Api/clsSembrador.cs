@@ -32,7 +32,7 @@ public sealed class clsSembrador(string cadenaConexion)
     {
         var vehiculoId = Guid.NewGuid();
         await EjecutarAsync(
-            "INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion) VALUES (@id, @vin, @marca, @op)",
+            "INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion, ClienteId) SELECT @id, @vin, @marca, @op, Id FROM dbo.tblClientes WHERE Codigo = 'sofasa'",
             ("@id", vehiculoId), ("@vin", vin), ("@marca", marca), ("@op", operacion));
         var viaje = viajeId ?? await ViajeAsync(conductorId, inspectorId);
         await EjecutarAsync(
@@ -57,7 +57,7 @@ public sealed class clsSembrador(string cadenaConexion)
     {
         var id = Guid.NewGuid();
         await EjecutarAsync(
-            "INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion) VALUES (@id, @vin, @marca, @op)",
+            "INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion, ClienteId) SELECT @id, @vin, @marca, @op, Id FROM dbo.tblClientes WHERE Codigo = 'sofasa'",
             ("@id", id), ("@vin", vin), ("@marca", marca), ("@op", operacion));
         return id;
     }

@@ -29,8 +29,8 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         using var alcance = proveedor.CreateScope();
         var s = alcance.ServiceProvider;
         var usuario = NuevoUsuario(email);
-        var vehiculo = NuevoVehiculo(vin);
         var contexto = s.GetRequiredService<clsAppDbContext>();
+        var vehiculo = NuevoVehiculo(await contexto.Clientes.Select(c => c.Id).FirstAsync(), vin);
         var ruta = await contexto.EtapasCatalogo.OrderBy(e => e.Orden).Select(e => new clsEtapaDeRuta(e.Id, e.Codigo)).ToListAsync();
         var tipoUnidadId = await contexto.TiposUnidad.Select(t => t.Id).FirstAsync();
         var viaje = clsViaje.Crear("MTK-" + vin, tipoUnidadId, "ABC123", null, null, null, null, null, usuario.Id, AHORA);
@@ -148,7 +148,7 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         using var proveedor = Proveedor();
         using var alcance = proveedor.CreateScope();
         var s = alcance.ServiceProvider;
-        s.GetRequiredService<IVehiculoRepository>().Agregar(NuevoVehiculo("9FBHSR4E8PM000123"));
+        s.GetRequiredService<IVehiculoRepository>().Agregar(NuevoVehiculo(await s.GetRequiredService<clsAppDbContext>().Clientes.Select(c => c.Id).FirstAsync(), "9FBHSR4E8PM000123"));
 
         var ex = await Assert.ThrowsAsync<clsConflictoException>(() => s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync());
 

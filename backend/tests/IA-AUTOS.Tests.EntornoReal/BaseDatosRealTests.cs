@@ -9,7 +9,7 @@ public sealed class BaseDatosRealTests
     [
         "tblUsuarios", "tblVehiculos", "tblPuntosCustodia", "tblEtapas", "tblInspecciones", "tblHallazgos",
         "tblEvidencias", "tblTransferenciasCustodia", "tblViajes", "tblViajeVehiculos", "tblOrdenesSofasa", "tblAuditLog", "tblRefreshTokens", "tblEtapasCatalogo", "tblTiposUnidadTransportadora",
-        "tblClasesDano", "tblTamanosDano", "tblNivelesSeveridad", "tblVistasFoto", "tblCuadrantes", "tblCuadranteVistas",
+        "tblClasesDano", "tblTamanosDano", "tblNivelesSeveridad", "tblVistasFoto", "tblCuadrantes", "tblCuadranteVistas", "tblClientes",
     ];
 
     private static readonly string[] TRIGGERS =
@@ -201,6 +201,50 @@ public sealed class BaseDatosRealTests
         Assert.True(asignaciones == 0, "Sigue existiendo tblAsignaciones: se retira al migrar a viajes.");
         Assert.Equal(0, etapasSinViaje);
         Assert.Equal(0, inspeccionesSinViaje);
+    }
+
+    [FactEntornoReal]
+    public async Task La_identidad_por_cedula_y_pin_y_los_clientes_estan_migrados()
+    {
+        // Sin esta migracion la API nueva falla al leer usuarios (columnas de credencial) y al cargar vehiculos (cliente): este
+        // chequeo (solo lectura) avisa antes de desplegar si falta ejecutar database/cambios-esquema/06-identidad.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/06-identidad.sql.";
+
+        async Task<int> Columnas(string tabla, string columna, bool? obligatoria = null) => await EscalarAsync<int>(
+            conexion,
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(@t, N'U') AND name = @c" + (obligatoria is null ? string.Empty : $" AND is_nullable = {(obligatoria.Value ? 0 : 1)}"),
+            ("@t", tabla), ("@c", columna));
+
+        foreach (var columna in new[] { "PinHash", "BloqueadoHasta", "UltimoAccesoAt", "ClienteId" })
+        {
+            Assert.True(await Columnas("tblUsuarios", columna, obligatoria: false) == 1, $"Falta tblUsuarios.{columna} (opcional). {ayuda}");
+        }
+
+        foreach (var columna in new[] { "TipoCredencial", "DebeCambiarPin", "IntentosFallidos" })
+        {
+            Assert.True(await Columnas("tblUsuarios", columna, obligatoria: true) == 1, $"Falta tblUsuarios.{columna} (obligatoria). {ayuda}");
+        }
+
+        Assert.True(await Columnas("tblUsuarios", "Email", obligatoria: false) == 1, $"tblUsuarios.Email debe admitir nulos (quien entra con cedula y PIN puede no tener correo). {ayuda}");
+        Assert.True(await Columnas("tblVehiculos", "ClienteId", obligatoria: true) == 1, $"tblVehiculos.ClienteId debe existir y ser obligatoria. {ayuda}");
+
+        var restricciones = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.objects
+             WHERE name IN (N'FK_tblUsuarios_Cliente', N'FK_tblVehiculos_Cliente', N'CK_tblUsuarios_TipoCredencial', N'CK_tblUsuarios_Identidad', N'UQ_tblClientes_Codigo')
+            """);
+        var indiceCorreo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblUsuarios_Email' AND is_unique = 1 AND has_filter = 1");
+        var restriccionVieja = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.key_constraints WHERE name = N'UQ_tblUsuarios_Email'");
+        var clientes = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblClientes WHERE Activo = 1");
+        var vehiculosSinCliente = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblVehiculos WHERE ClienteId IS NULL");
+        var usuariosSinCliente = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblUsuarios WHERE ClienteId IS NULL AND Rol <> 'super_admin'");
+
+        Assert.True(restricciones == 5, $"Faltan llaves foraneas o restricciones de la identidad y los clientes. {ayuda}");
+        Assert.True(indiceCorreo == 1, $"Falta el indice unico del correo entre quienes lo tienen (UX_tblUsuarios_Email). {ayuda}");
+        Assert.True(restriccionVieja == 0, $"Sigue existiendo UQ_tblUsuarios_Email: el correo ya no es obligatorio. {ayuda}");
+        Assert.True(clientes >= 1, $"No hay ningun cliente activo. {ayuda}");
+        Assert.Equal(0, vehiculosSinCliente);
+        Assert.Equal(0, usuariosSinCliente);
     }
 
     [FactEntornoReal]

@@ -11,6 +11,7 @@ vistas de foto, cuadrantes, tipos de unidad) viven ahora en tablas y se administ
 | `tblEtapasCatalogo` | Etapas del proceso. Es el `proceso` de cada tramo de la ruta de un vehículo | `cargue`, `transporte`, `descargue` |
 | `tblPuntosCustodia` | **Lugares** físicos donde se hace una etapa (la tabla se rehízo) | `cedi_1`, `origen`, `certificadora`, `destino`, `cedi_2`, `concesionario` |
 | `tblTiposUnidadTransportadora` | Tipos de unidad transportadora | `ninera`, `nodriza`, `quintinaria`, `planchon_grua` |
+| `tblClientes` | Clientes (empresas) a los que pertenecen los usuarios y los vehículos (ver [identidad.md](identidad.md)) | `sofasa` |
 | `tblClasesDano` | Clases de daño de un hallazgo | 10 (`deformacion`, `rotura`, `cortado`, `perforacion`, `golpe`, `mancha`, `raya_pintar`, `desconchado`, `particulas`, `faltante`) |
 | `tblTamanosDano` | Tamaños de daño de un hallazgo | 6 (`1_5cm`, `5_10cm`, `10_20cm`, `mas_20cm`, `requiere_reemplazo`, `mas_10_particulas`) |
 | `tblNivelesSeveridad` | Niveles V1+, V1, V2, V3 con su `Accion` | 4, **sin acción** (se carga desde el portal) |

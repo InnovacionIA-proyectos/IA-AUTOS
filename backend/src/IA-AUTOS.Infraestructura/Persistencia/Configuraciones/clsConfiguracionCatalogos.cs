@@ -34,6 +34,11 @@ internal sealed class clsConfiguracionTipoUnidad : IEntityTypeConfiguration<clsT
         clsConfiguracionCatalogo.Codificado(builder, "tblTiposUnidadTransportadora");
 }
 
+internal sealed class clsConfiguracionCliente : IEntityTypeConfiguration<clsCliente>
+{
+    public void Configure(EntityTypeBuilder<clsCliente> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblClientes");
+}
+
 internal sealed class clsConfiguracionClaseDano : IEntityTypeConfiguration<clsClaseDano>
 {
     public void Configure(EntityTypeBuilder<clsClaseDano> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblClasesDano");

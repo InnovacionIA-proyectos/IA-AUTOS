@@ -12,7 +12,7 @@ namespace IAAutos.Tests.Integracion.Api;
 public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private static readonly string[] NOMBRES =
-        ["etapas", "puntos-custodia", "tipos-unidad", "clases-dano", "tamanos-dano", "niveles-severidad", "vistas-foto", "cuadrantes", "cuadrante-vistas"];
+        ["etapas", "puntos-custodia", "tipos-unidad", "clases-dano", "tamanos-dano", "niveles-severidad", "vistas-foto", "cuadrantes", "cuadrante-vistas", "clientes"];
 
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);
 
@@ -64,6 +64,7 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal(["piezas_baul", "cojineria"], vistas.Where(v => !v.GetProperty("obligatoria").GetBoolean()).Select(v => v.GetProperty("codigo").GetString()).ToList());
         Assert.Equal(0, catalogos.GetProperty("cuadrantes").GetArrayLength());
         Assert.Equal(0, catalogos.GetProperty("cuadrante-vistas").GetArrayLength());
+        Assert.Equal(["sofasa"], catalogos.GetProperty("clientes").EnumerateArray().Select(i => i.GetProperty("codigo").GetString()).ToList());
     }
 
     [Fact]

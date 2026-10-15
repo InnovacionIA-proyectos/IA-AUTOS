@@ -53,6 +53,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             DELETE FROM dbo.tblCuadrantes;
             DELETE FROM dbo.tblEtapasCatalogo WHERE Codigo NOT IN ('cargue', 'transporte', 'descargue');
             DELETE FROM dbo.tblPuntosCustodia WHERE Codigo NOT IN ('cedi_1', 'origen', 'certificadora', 'destino', 'cedi_2', 'concesionario');
+            DELETE FROM dbo.tblClientes WHERE Codigo <> 'sofasa';
             DELETE FROM dbo.tblTiposUnidadTransportadora WHERE Codigo NOT IN ('ninera', 'nodriza', 'quintinaria', 'planchon_grua');
             DELETE FROM dbo.tblClasesDano WHERE Codigo NOT IN ('deformacion', 'rotura', 'cortado', 'perforacion', 'golpe', 'mancha', 'raya_pintar', 'desconchado', 'particulas', 'faltante');
             DELETE FROM dbo.tblTamanosDano WHERE Codigo NOT IN ('1_5cm', '5_10cm', '10_20cm', 'mas_20cm', 'requiere_reemplazo', 'mas_10_particulas');
@@ -61,6 +62,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             UPDATE dbo.tblEtapasCatalogo SET Activo = 1;
             UPDATE dbo.tblPuntosCustodia SET Activo = 1;
             UPDATE dbo.tblTiposUnidadTransportadora SET Activo = 1;
+            UPDATE dbo.tblClientes SET Activo = 1, Orden = 1;
             UPDATE dbo.tblClasesDano SET Activo = 1;
             UPDATE dbo.tblTamanosDano SET Activo = 1;
             UPDATE dbo.tblNivelesSeveridad SET Activo = 1, Accion = NULL;
