@@ -534,6 +534,8 @@ GO
    dispositivo (SelloFecha, SelloLat, SelloLng y Precision en metros) y el del servidor (SelloServidorAt, al recibirla) y el hash SHA-256
    del archivo. SelloLat y SelloLng son obligatorios: una foto tomada sin senal de GPS se guarda en (0, 0) y se muestra como
    `sin ubicacion`. Nota = el faltante o dano de las fotos adicionales (piezas en el baul, cojineria).
+   EsConstancia = 1 marca la foto de la constancia de no firma de una transferencia: no es de una vista ni de un hallazgo, no cuenta para
+   el cierre de la inspeccion y se puede registrar aunque la inspeccion ya este cerrada (la transferencia se firma despues del cierre).
    HallazgoId usa NO ACTION: SQL Server no permite SET NULL junto a la cascada
    desde tblInspecciones (varias rutas de cascada). La aplicacion no elimina hallazgos.
    ----------------------------------------------------------------------------- */
@@ -554,6 +556,7 @@ BEGIN
         Precision     float            NULL,
         DispositivoId nvarchar(100)    NULL,
         Nota          nvarchar(500)    NULL,
+        EsConstancia  bit              NOT NULL CONSTRAINT DF_tblEvidencias_EsConstancia DEFAULT (0),
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblEvidencias_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id) ON DELETE CASCADE,
@@ -571,7 +574,12 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
-   tblTransferenciasCustodia (entrega y recibo firmados; una por inspeccion)
+   tblTransferenciasCustodia (entrega y recibo; una por inspeccion)
+   Cada firma la envia su titular (quien entrega o quien recibe) y guarda su fecha e IP. La transferencia se cierra con un TipoCierre:
+     firmada      ambas partes firmaron;
+     con_reservas ambas firmaron y quien recibe dejo sus observaciones (ReservasTexto);
+     no_firma     una parte (NoFirmaParte) se nego a firmar: queda el motivo, un testigo con usuario y la foto de la constancia.
+   Mientras TipoCierre es NULL la transferencia esta abierta; con un tipo de cierre es inmutable y la etapa siguiente puede iniciarse.
    FirmaEntrega / FirmaRecibe: ruta de la imagen de la firma o trazo de la firma dibujada.
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NULL
@@ -585,12 +593,34 @@ BEGIN
         FirmaEntrega      nvarchar(max)    NULL,
         FirmaRecibe       nvarchar(max)    NULL,
         FirmadaAt         datetimeoffset(3) NULL,
+        FirmaEntregaAt    datetimeoffset(3) NULL,
+        FirmaEntregaIp    varchar(45)      NULL,
+        FirmaRecibeAt     datetimeoffset(3) NULL,
+        FirmaRecibeIp     varchar(45)      NULL,
+        TipoCierre        varchar(20)      NULL,
+        ReservasTexto     nvarchar(1000)   NULL,
+        NoFirmaParte      varchar(10)      NULL,
+        MotivoNoFirma     nvarchar(1000)   NULL,
+        TestigoUsuarioId  uniqueidentifier NULL,
+        EvidenciaConstanciaId uniqueidentifier NULL,
         CreatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTransferenciasCustodia_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTransferenciasCustodia_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblTransferencias_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id) ON DELETE CASCADE,
         CONSTRAINT FK_tblTransferencias_Entrega FOREIGN KEY (EntregaUsuarioId) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT FK_tblTransferencias_Recibe FOREIGN KEY (RecibeUsuarioId) REFERENCES dbo.tblUsuarios (Id),
-        CONSTRAINT UQ_tblTransferencias_Inspeccion UNIQUE (InspeccionId)
+        CONSTRAINT FK_tblTransferencias_Testigo FOREIGN KEY (TestigoUsuarioId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblTransferencias_Constancia FOREIGN KEY (EvidenciaConstanciaId) REFERENCES dbo.tblEvidencias (Id),
+        CONSTRAINT UQ_tblTransferencias_Inspeccion UNIQUE (InspeccionId),
+        CONSTRAINT CK_tblTransferencias_TipoCierre CHECK (TipoCierre IS NULL OR TipoCierre IN ('firmada', 'con_reservas', 'no_firma')),
+        CONSTRAINT CK_tblTransferencias_Parte CHECK (NoFirmaParte IS NULL OR NoFirmaParte IN ('entrega', 'recibe')),
+        -- El testigo es una tercera persona: ni quien entrega ni quien recibe.
+        CONSTRAINT CK_tblTransferencias_Testigo CHECK (TestigoUsuarioId IS NULL OR (TestigoUsuarioId <> EntregaUsuarioId AND TestigoUsuarioId <> RecibeUsuarioId)),
+        -- Cada tipo de cierre exige lo suyo: las dos firmas (con o sin reservas) o el motivo, el testigo y la foto de la constancia.
+        CONSTRAINT CK_tblTransferencias_Cierre CHECK (
+            TipoCierre IS NULL
+            OR (TipoCierre = 'firmada' AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> '' AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '' AND ReservasTexto IS NULL)
+            OR (TipoCierre = 'con_reservas' AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> '' AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '' AND ReservasTexto IS NOT NULL AND ReservasTexto <> '')
+            OR (TipoCierre = 'no_firma' AND NoFirmaParte IS NOT NULL AND MotivoNoFirma IS NOT NULL AND MotivoNoFirma <> '' AND TestigoUsuarioId IS NOT NULL AND EvidenciaConstanciaId IS NOT NULL))
     );
     CREATE INDEX IX_tblTransferencias_Entrega ON dbo.tblTransferenciasCustodia (EntregaUsuarioId);
     CREATE INDEX IX_tblTransferencias_Recibe ON dbo.tblTransferenciasCustodia (RecibeUsuarioId);
@@ -811,7 +841,10 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER TRIGGER dbo.TR_tblEvidencias_NoEnCerrada
+-- La foto de la constancia de no firma (EsConstancia = 1) si se admite: la transferencia se firma despues del cierre. Se crea con SQL
+-- dinamico y solo si la columna existe, para poder ejecutar este script tambien sobre una base que aun no tiene la columna.
+IF COL_LENGTH(N'dbo.tblEvidencias', N'EsConstancia') IS NOT NULL
+    EXEC (N'CREATE OR ALTER TRIGGER dbo.TR_tblEvidencias_NoEnCerrada
 ON dbo.tblEvidencias
 AFTER INSERT
 AS
@@ -819,9 +852,9 @@ BEGIN
     SET NOCOUNT ON;
     IF EXISTS (SELECT 1 FROM inserted i
                JOIN dbo.tblInspecciones n ON n.Id = i.InspeccionId
-               WHERE n.Estado = 'cerrada')
-        THROW 51002, 'La inspeccion esta cerrada y es inmutable; no admite evidencias nuevas', 1;
-END
+               WHERE n.Estado = ''cerrada'' AND i.EsConstancia = 0)
+        THROW 51002, ''La inspeccion esta cerrada y es inmutable; no admite evidencias nuevas'', 1;
+END');
 GO
 
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';

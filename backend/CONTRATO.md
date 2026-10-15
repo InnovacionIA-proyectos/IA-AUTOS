@@ -70,12 +70,12 @@ Todos los errores son JSON con la misma forma:
 | `UNAUTHORIZED` | 401 | sin token, token inválido o vencido, usuario retirado, credenciales incorrectas |
 | `FORBIDDEN` | 403 | rol insuficiente, inspección ajena, o VIN, viaje o informe fuera de los viajes del usuario |
 | `PORTAL_USER_NOT_LINKED` | 403 | la persona del portal no tiene acceso a IA Autos (solo en `login-portal`) |
-| `ETAPA_PREVIA_SIN_CIERRE` | 409 | la etapa anterior del VIN no tiene su llegada cerrada: no se puede crear la salida de la siguiente (`details.etapa_previa` dice cuál) |
+| `ETAPA_PREVIA_SIN_CIERRE` | 409 | la etapa anterior del VIN no está terminada: no tiene su llegada cerrada (`details.motivo: "etapa_previa_sin_cierre"`) o su transferencia no tiene tipo de cierre (`"transferencia_sin_cierre"`); no se puede crear la salida de la siguiente (`details.etapa_previa` dice cuál) |
 | `PIN_CHANGE_REQUIRED` | 403 | el PIN fue asignado o reiniciado por un administrador: hay que cambiarlo (`POST /api/auth/cambiar-pin`) antes de usar el resto de la API |
 | `ACCOUNT_LOCKED` | 423 | la cuenta está bloqueada por PIN errados seguidos; `details.bloqueado_hasta` (ISO 8601) dice hasta cuándo, o un administrador la desbloquea |
 | `NOT_FOUND` | 404 | recurso o ruta inexistente |
 | `METHOD_NOT_ALLOWED` | 405 | método no admitido en una ruta existente |
-| `CONFLICT` | 409 | duplicados (por ejemplo un código MTrack repetido), inspección cerrada, transferencia ya firmada, viaje finalizado o cancelado |
+| `CONFLICT` | 409 | duplicados (por ejemplo un código MTrack repetido), inspección cerrada, transferencia ya cerrada (firmada, con reservas o con constancia de no firma), firmantes que no se pueden cambiar, viaje finalizado o cancelado |
 | `RATE_LIMITED` | 429 | demasiados intentos de login (10 por minuto por IP en `login`, 60 en `login-conductor`; configurable) |
 | `INTERNAL_ERROR` | 500 | error inesperado, sin detalles internos |
 | `DB_UNAVAILABLE` | 503 | no se pudo verificar la identidad en la base de usuarios del portal (TI) |
@@ -553,6 +553,10 @@ con `?estado=` trae los de ese estado (`finalizado`, por ejemplo). Es la entrada
 ### `GET /api/viajes/{id}`
 Autenticado. El `ViajeDto`. `403` si es un inspector o conductor y el viaje no es suyo; `404` si no existe.
 
+### `GET /api/viajes/{id}/firmantes`
+Autenticado. Los usuarios del viaje que pueden firmar una transferencia: su **conductor** y su **inspector** activos, como lista de `{ id, nombre, rol }`. Es la lista de la que la app elige
+quién entrega y quién recibe. `403` si es un inspector o conductor y el viaje no es suyo; `404` si no existe.
+
 ### `PATCH /api/viajes/{id}`
 Gestión de viajes. Cambia **solo los campos enviados** de un viaje `programado` o `en_curso`; responde `200` con el `ViajeDto`. Campos: `codigo_mtrack`,
 `tipo_unidad_id`, `placa`, `trailer`, `conductor_id`, `inspector_id`, `origen_id`, `destino_id`, `con_personal_apoyo` (mismas reglas que al crear).
@@ -652,7 +656,7 @@ Por cada etapa de un VIN hay una **inspección de salida** (al entregar) y una *
 `InspeccionDto` trae `momento_nombre` («Inspección de salida» o «Inspección de llegada») listo para mostrar.
 
 Flujo típico: crear la inspección (siempre en `borrador`) → subir las fotos con `POST /api/uploads` → registrarlas como evidencias de cada vista y
-agregar hallazgos (cada uno con su foto) → firmar la transferencia → cerrar. Un error en una inspección cerrada **no se edita**: se corrige con una
+agregar hallazgos (cada uno con su foto) → cerrar → cerrar la transferencia (cada parte firma lo suyo, antes o después del cierre de la inspección; ver «Transferencia de custodia»). Un error en una inspección cerrada **no se edita**: se corrige con una
 versión nueva (`POST /api/inspecciones/{id}/corregir`).
 
 | Etapa | Qué exige el cierre |
@@ -666,9 +670,10 @@ Las mismas reglas valen para quien haga la inspección: cuando el cargue no tien
 Campo. `201` con la inspección. El usuario sale del token (no se envía) y **la placa, el tráiler y el conductor salen del viaje de la etapa**: ya no se piden como texto.
 Inspector y conductor reciben `403` si la etapa es de un viaje que no es suyo; un viaje finalizado o cancelado responde `409`; una etapa inexistente, `404`.
 
-**La salida exige la etapa anterior cerrada.** Si el VIN tiene una etapa anterior en el viaje (por su `orden`) y esa etapa no tiene su **llegada cerrada**, la salida responde
-`409` con `code: "ETAPA_PREVIA_SIN_CIERRE"` y `details` con `motivo: "etapa_previa_sin_cierre"`, `etapa_previa_id` y `etapa_previa` (el nombre de la etapa que falta cerrar), para
-que la app muestre el bloqueo. La primera etapa y la llegada no tienen este bloqueo. Una etapa ya tiene su inspección original de ese momento: crear otra responde `409` (para
+**La salida exige la etapa anterior terminada.** Si el VIN tiene una etapa anterior en el viaje (por su `orden`) y esa etapa no tiene su **llegada cerrada**, o tiene una
+**transferencia sin tipo de cierre**, la salida responde `409` con `code: "ETAPA_PREVIA_SIN_CIERRE"` y `details` con `motivo` (`etapa_previa_sin_cierre` si falta cerrar la llegada,
+`transferencia_sin_cierre` si falta cerrar la transferencia), `etapa_previa_id` y `etapa_previa` (el nombre de la etapa que falta terminar), para que la app muestre el bloqueo. La primera
+etapa y la llegada no tienen este bloqueo. Una etapa ya tiene su inspección original de ese momento: crear otra responde `409` (para
 cambiarla, se corrige).
 
 ```json
@@ -800,32 +805,11 @@ Es lo que hace la app cuando una foto quedó «sin ubicación».
 ```json
 { "id": "uuid", "inspeccion_id": "uuid", "hallazgo_id": null, "sello_fecha": "…", "sello_lat": 6.24, "sello_lng": -75.58,
   "url": "/api/uploads/3f2b…c1.png", "created_at": "…", "updated_at": "…",
-  "vista_id": "uuid", "hash_sha256": "…", "sello_servidor_at": "…", "precision": 4.5, "dispositivo_id": "tablet-7", "nota": null, "sin_ubicacion": false }
+  "vista_id": "uuid", "hash_sha256": "…", "sello_servidor_at": "…", "precision": 4.5, "dispositivo_id": "tablet-7", "nota": null, "sin_ubicacion": false, "es_constancia": false }
 ```
 
-`sin_ubicacion` es `true` cuando la foto se tomó sin señal de GPS (`sello_lat` y `sello_lng` valen 0): muéstrela marcada y pida repetirla antes de cerrar.
-
-### `POST /api/inspecciones/{id}/transferencia`
-Campo. Firma de entrega y/o recibo. Puede firmarse en dos pasos (parcial) y se completa cuando están ambas. `201`.
-
-```json
-{ "entrega_usuario_id": "uuid", "recibe_usuario_id": "uuid", "firma_entrega": "<trazo SVG o ruta>", "firma_recibe": null }
-```
-
-| Campo | Obligatorio | Regla |
-|---|---|---|
-| `entrega_usuario_id`, `recibe_usuario_id` | sí | UUID, y deben ser usuarios distintos |
-| `firma_entrega`, `firma_recibe` | no | texto de hasta 200 000 caracteres |
-
-Una transferencia ya firmada responde `409`. Respuesta (`TransferenciaDto`, sin las firmas):
-
-```json
-{ "id": "uuid", "inspeccion_id": "uuid", "entrega_usuario_id": "uuid", "recibe_usuario_id": "uuid",
-  "firmada": false, "firmada_at": null, "created_at": "…", "updated_at": "…" }
-```
-
-En el detalle del informe (`GET /api/inspecciones/{id}`) la transferencia llega como `TransferenciaDetalleDto`: los mismos
-campos más `entrega_nombre`, `recibe_nombre`, `firma_entrega` y `firma_recibe`.
+`sin_ubicacion` es `true` cuando la foto se tomó sin señal de GPS (`sello_lat` y `sello_lng` valen 0): muéstrela marcada y pida repetirla antes de cerrar. `es_constancia` es `true` en la foto de
+una constancia de no firma (se registra con `POST /api/inspecciones/{id}/transferencia/no-firma`, no con este endpoint) y esa foto no cuenta como foto de una vista.
 
 ### `POST /api/inspecciones/{id}/cerrar`
 Campo (creador o administrador). Cierra el informe; después ya no admite cambios. Sin cuerpo. `200`:
@@ -845,6 +829,90 @@ cada vista que falta, con su nombre**:
 Si ya estaba cerrada, `409`; **un cliente que reintenta el cierre puede tomar ese `409` como éxito.**
 
 ---
+
+## Transferencia de custodia
+
+Entrega y recibo de la unidad entre dos personas **del viaje** (su conductor y su inspector; `GET /api/viajes/{id}/firmantes` dice quiénes). **Cada firma la envía su titular**: la
+identidad sale del token y **nadie firma por otro** (`403`). Cada firma guarda su propia **fecha y la IP** desde la que se envió. La transferencia se **cierra** con un tipo de cierre
+(`tipo_cierre`) y, cerrada, es inmutable; mientras no tiene tipo de cierre está **abierta** y **bloquea la salida de la etapa siguiente**.
+
+| `tipo_cierre` | Cómo se llega |
+|---|---|
+| `firmada` | ambas partes firman |
+| `con_reservas` | ambas firman y quien recibe dejó sus observaciones (`reservas`) |
+| `no_firma` | una parte se negó a firmar: se deja la constancia (motivo, testigo con usuario y foto) |
+| `null` | abierta: falta una firma (o ninguna se ha enviado) |
+
+La primera llamada (sea cual sea la firma) crea la transferencia y exige `entrega_usuario_id` y `recibe_usuario_id`; en las siguientes pueden omitirse y, si se envían, deben ser los mismos
+(`409` si no: los firmantes no se cambian). Quien envía debe ser uno de los dos (`403` si no) y los dos deben ser usuarios del viaje de la inspección (`400` con el campo y el motivo).
+El rol de quien entrega y el de quien recibe no se fijan por el tipo de usuario: son los ids que se envían.
+
+### `POST /api/inspecciones/{id}/transferencia`
+Campo. Firma la **propia parte**: quien entrega firma la entrega y quien recibe, el recibo. `201`.
+
+```json
+{ "entrega_usuario_id": "uuid", "recibe_usuario_id": "uuid", "firma": "<trazo SVG o ruta>" }
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `entrega_usuario_id`, `recibe_usuario_id` | solo en la primera llamada | UUID, usuarios distintos y del viaje |
+| `firma` | sí | texto de hasta 200 000 caracteres: el trazo SVG o la ruta de la imagen |
+
+Mientras está abierta, cada uno puede repetir su firma. Una vez cerrada responde `409` salvo que se repita exactamente la misma firma (reintento idempotente). Si quien recibe firma por este
+endpoint después de haber dejado reservas, esas reservas se descartan.
+
+> Cambio respecto a la versión anterior: ya no existen `firma_entrega` ni `firma_recibe` en el cuerpo. Ese diseño dejaba que un cliente enviara las dos firmas de golpe y cada firma
+> quedaba sin dueño; ahora se envía una sola `firma` y se guarda en la parte que corresponde al usuario del token.
+
+### `POST /api/inspecciones/{id}/transferencia/reservas`
+Campo. **Quien recibe** firma «con reservas»: su firma y las observaciones (`reservas`, obligatorias, máximo 1 000 caracteres). `201`. Solo quien recibe puede (`403` para quien entrega o
+cualquier otro) y sin observaciones responde `400` con el campo `reservas`. Cuando ya está la firma de quien entrega, la transferencia queda `con_reservas`.
+
+```json
+{ "entrega_usuario_id": "uuid", "recibe_usuario_id": "uuid", "firma": "<trazo SVG o ruta>", "reservas": "El parachoques tiene un rayón" }
+```
+
+### `POST /api/inspecciones/{id}/transferencia/no-firma`
+Campo. **Constancia de no firma**: una parte se negó a firmar y la **otra parte** deja constancia (nadie declara su propia negativa: `403`). Exige el motivo, un **testigo con usuario** y la
+**foto** de la constancia; cierra la transferencia como `no_firma`. `201`. La parte que se negó no debe haber firmado antes (`409` si ya firmó).
+
+```json
+{
+  "entrega_usuario_id": "uuid", "recibe_usuario_id": "uuid",
+  "parte": "recibe", "motivo": "Se niega a firmar el recibo", "testigo_usuario_id": "uuid",
+  "evidencia": { "storage_path": "3f2b…c1.png", "sello_fecha": "2026-07-17T12:30:15.123Z", "sello_lat": 6.24, "sello_lng": -75.58, "precision": 4.5, "dispositivo_id": "tablet-7", "hash_sha256": "…" }
+}
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `parte` | sí | quién se negó: `entrega` o `recibe` (no puede ser quien envía) |
+| `motivo` | sí | máximo 1 000 caracteres |
+| `testigo_usuario_id` | sí | usuario **activo**, distinto de quien entrega y de quien recibe (y del mismo cliente si quien envía es de un cliente); `400` si no |
+| `evidencia` | sí | la foto de la constancia, con las mismas reglas de sello que una foto de inspección (archivo ya subido, sello de fecha y ubicación, hash opcional) |
+
+La foto se guarda como una evidencia marcada `es_constancia: true`, que **se admite aunque la inspección ya esté cerrada** y no cuenta como foto de una vista ni de un hallazgo.
+
+### `GET /api/inspecciones/{id}/transferencia/constancia/pdf`
+Autenticado. La **constancia de la transferencia en PDF** (`application/pdf`): datos de la unidad, tipo de cierre, las dos firmas con su fecha e IP, las reservas o el motivo de la no firma,
+el testigo y la foto de la constancia. Inspector y conductor solo la descargan de sus viajes (`403` si es de otro). `404` si la inspección no existe o no tiene transferencia.
+
+### Respuesta de las firmas
+`TransferenciaDto` (sin las firmas ni las IP):
+
+```json
+{ "id": "uuid", "inspeccion_id": "uuid", "entrega_usuario_id": "uuid", "recibe_usuario_id": "uuid",
+  "firmada": false, "firmada_at": null, "created_at": "…", "updated_at": "…",
+  "tipo_cierre": null, "entrega_firmada_at": "…", "recibe_firmada_at": null,
+  "reservas_texto": null, "no_firma_parte": null, "motivo_no_firma": null, "testigo_usuario_id": null, "evidencia_constancia_id": null }
+```
+
+`firmada` es `true` cuando están las dos firmas (también si fue con reservas); `firmada_at` se sella cuando está la segunda. En el detalle del informe (`GET /api/inspecciones/{id}`) la
+transferencia llega como `TransferenciaDetalleDto`: los mismos campos más `entrega_nombre`, `recibe_nombre`, `firma_entrega`, `firma_recibe`, `entrega_firma_ip`, `recibe_firma_ip` y `testigo_nombre`.
+
+**El conductor recibe sin revisar los hallazgos.** En el cargue, quien recibe puede firmar el recibo sin abrir la lista de hallazgos: la firma no depende de ellos y su respuesta no los incluye.
+Que la app no se los muestre ni se los notifique en esa pantalla es una regla de la app; la API no la impone.
 
 ## Catálogos maestros
 

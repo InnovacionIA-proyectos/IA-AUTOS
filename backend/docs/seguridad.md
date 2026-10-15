@@ -12,7 +12,7 @@ Cambios intencionales que corrigen riesgos detectados en el diagnostico. Ninguno
 | Token del ETL | comparacion con `!==` | comparacion en tiempo constante; sin token configurado se rechaza todo |
 | Contrasenas nuevas | scrypt, minimo 6 caracteres | PBKDF2-SHA256 con 600000 iteraciones, minimo 8 caracteres; los hashes scrypt se aceptan y se regeneran al primer ingreso |
 | Acceso a informes ajenos | cualquier usuario autenticado escribia en cualquier inspeccion | solo el creador o un administrador agrega hallazgos y evidencias o cierra (configurable) |
-| Firmas | una transferencia firmada podia sobrescribirse | inmutable cuando ambas partes firmaron (repetir los mismos datos es idempotente) |
+| Firmas | una transferencia firmada podia sobrescribirse, y el cliente enviaba las dos firmas y los dos ids en la misma llamada | cada firma la envia su titular (la identidad sale del token; `403` si no es una de las dos partes) y guarda su fecha e IP; inmutable cuando se cierra como firmada, con reservas o con constancia de no firma (repetir la misma firma es idempotente); los firmantes son usuarios del viaje |
 | Informe nuevo | admitia `estado: cerrada` al crear, saltando las reglas de cierre | siempre nace en borrador; se cierra con `/cerrar` |
 | Rol `super_admin` | no podia usar carga de VIN, asignaciones ni etapas | incluido en la carga de VIN y en la gestion de viajes |
 | Lista de usuarios | todos los autenticados veian correos y estados | los que no gestionan usuarios reciben solo `id`, `nombre` y `rol` de los usuarios activos de su cliente |

@@ -408,7 +408,7 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Transferencia_se_completa_en_dos_firmas_y_solo_hay_una_por_inspeccion()
+    public async Task Transferencia_se_completa_en_dos_firmas_con_su_fecha_e_ip_y_solo_hay_una_por_inspeccion()
     {
         var (usuarioId, _, etapas) = await SembrarRutaAsync();
         Guid receptorId;
@@ -421,8 +421,9 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
             s.GetRequiredService<IUsuarioRepository>().Agregar(receptor);
             var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, null, null, null, null, AHORA);
             s.GetRequiredService<IInspeccionRepository>().Agregar(inspeccion);
-            s.GetRequiredService<ITransferenciaCustodiaRepository>().Agregar(
-                clsTransferenciaCustodia.Crear(inspeccion.Id, usuarioId, receptor.Id, "entrega.png", null, AHORA));
+            var transferencia = clsTransferenciaCustodia.Crear(inspeccion.Id, usuarioId, receptor.Id, AHORA);
+            transferencia.Firmar(usuarioId, "entrega.png", "10.0.0.1", AHORA);
+            s.GetRequiredService<ITransferenciaCustodiaRepository>().Agregar(transferencia);
             await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
             receptorId = receptor.Id;
             inspeccionId = inspeccion.Id;
@@ -436,7 +437,9 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
             var t = await repo.ObtenerPorInspeccionAsync(inspeccionId);
             Assert.NotNull(t);
             Assert.Null(t.FirmadaAt);
-            t.AplicarFirma(usuarioId, receptorId, null, "recibe.png", AHORA.AddMinutes(2));
+            Assert.Null(t.TipoCierre);
+            Assert.Equal("10.0.0.1", t.FirmaEntregaIp);
+            t.Firmar(receptorId, "recibe.png", "10.0.0.2", AHORA.AddMinutes(2));
             await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
         }
 
@@ -447,10 +450,112 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
             var t = await s.GetRequiredService<ITransferenciaCustodiaRepository>().ObtenerPorInspeccionAsync(inspeccionId);
             Assert.True(t!.EstaCompleta);
             Assert.Equal(AHORA.AddMinutes(2), t.FirmadaAt);
+            Assert.Equal(AHORA, t.FirmaEntregaAt);
+            Assert.Equal(AHORA.AddMinutes(2), t.FirmaRecibeAt);
+            Assert.Equal("10.0.0.2", t.FirmaRecibeIp);
+            Assert.Equal(clsTipoCierre.FIRMADA, t.TipoCierre);
 
-            s.GetRequiredService<ITransferenciaCustodiaRepository>().Agregar(
-                clsTransferenciaCustodia.Crear(inspeccionId, usuarioId, receptorId, "a.png", "b.png", AHORA));
+            s.GetRequiredService<ITransferenciaCustodiaRepository>().Agregar(clsTransferenciaCustodia.Crear(inspeccionId, usuarioId, receptorId, AHORA));
             await Assert.ThrowsAsync<clsConflictoException>(() => s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync());
+        }
+    }
+
+    [Fact]
+    public async Task Una_transferencia_sin_tipo_de_cierre_bloquea_la_etapa_y_con_reservas_la_libera()
+    {
+        var (usuarioId, _, etapas) = await SembrarRutaAsync();
+        Guid receptorId;
+        Guid inspeccionId;
+        using (var proveedor = Proveedor())
+        using (var alcance = proveedor.CreateScope())
+        {
+            var s = alcance.ServiceProvider;
+            var receptor = NuevoUsuario("reservas@ejemplo.com", clsRol.CONDUCTOR);
+            s.GetRequiredService<IUsuarioRepository>().Agregar(receptor);
+            var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.LLEGADA, AHORA, null, null, null, null, AHORA);
+            s.GetRequiredService<IInspeccionRepository>().Agregar(inspeccion);
+            var transferencia = clsTransferenciaCustodia.Crear(inspeccion.Id, usuarioId, receptor.Id, AHORA);
+            transferencia.Firmar(usuarioId, "entrega.png", null, AHORA);
+            s.GetRequiredService<ITransferenciaCustodiaRepository>().Agregar(transferencia);
+            await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
+            receptorId = receptor.Id;
+            inspeccionId = inspeccion.Id;
+        }
+
+        using (var proveedor = Proveedor())
+        using (var alcance = proveedor.CreateScope())
+        {
+            var s = alcance.ServiceProvider;
+            Assert.True(await s.GetRequiredService<IInspeccionRepository>().TieneTransferenciaSinCierreAsync(etapas[0].Id));
+            Assert.False(await s.GetRequiredService<IInspeccionRepository>().TieneTransferenciaSinCierreAsync(etapas[1].Id));
+
+            var t = await s.GetRequiredService<ITransferenciaCustodiaRepository>().ObtenerPorInspeccionAsync(inspeccionId);
+            t!.FirmarConReservas(receptorId, "recibe.png", "El espejo está rayado", "10.0.0.7", AHORA.AddMinutes(1));
+            await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
+        }
+
+        using (var proveedor = Proveedor())
+        using (var alcance = proveedor.CreateScope())
+        {
+            var s = alcance.ServiceProvider;
+            Assert.False(await s.GetRequiredService<IInspeccionRepository>().TieneTransferenciaSinCierreAsync(etapas[0].Id));
+            var t = await s.GetRequiredService<ITransferenciaCustodiaRepository>().ObtenerPorInspeccionAsync(inspeccionId);
+            Assert.Equal(clsTipoCierre.CON_RESERVAS, t!.TipoCierre);
+            Assert.Equal("El espejo está rayado", t.ReservasTexto);
+        }
+    }
+
+    [Fact]
+    public async Task La_constancia_de_no_firma_se_guarda_y_su_foto_se_admite_aunque_la_inspeccion_este_cerrada()
+    {
+        var (usuarioId, _, etapas) = await SembrarRutaAsync();
+        Guid receptorId;
+        Guid testigoId;
+        Guid inspeccionId;
+        using (var proveedor = Proveedor())
+        using (var alcance = proveedor.CreateScope())
+        {
+            var s = alcance.ServiceProvider;
+            var receptor = NuevoUsuario("niega@ejemplo.com", clsRol.CONDUCTOR);
+            var testigo = NuevoUsuario("testigo@ejemplo.com", clsRol.INSPECTOR);
+            s.GetRequiredService<IUsuarioRepository>().Agregar(receptor);
+            s.GetRequiredService<IUsuarioRepository>().Agregar(testigo);
+            var repo = s.GetRequiredService<IInspeccionRepository>();
+            var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.LLEGADA, AHORA, null, null, null, null, AHORA);
+            repo.Agregar(inspeccion);
+            await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
+            inspeccion.Cerrar(await repo.ObtenerResumenCierreAsync(inspeccion.Id), [], false, AHORA.AddMinutes(1));
+            await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
+            receptorId = receptor.Id;
+            testigoId = testigo.Id;
+            inspeccionId = inspeccion.Id;
+        }
+
+        Guid fotoId;
+        using (var proveedor = Proveedor())
+        using (var alcance = proveedor.CreateScope())
+        {
+            var s = alcance.ServiceProvider;
+            var repo = s.GetRequiredService<IInspeccionRepository>();
+            var foto = clsEvidencia.CrearConstancia(inspeccionId, "constancia.jpg", AHORA, 4.6, -74.1, null, "tablet-1", new string('c', 64), null, AHORA.AddMinutes(2));
+            repo.Agregar(foto);
+            var transferencia = clsTransferenciaCustodia.Crear(inspeccionId, usuarioId, receptorId, AHORA);
+            transferencia.RegistrarNoFirma(usuarioId, clsParteFirmante.RECIBE, "Se niega a firmar", testigoId, foto.Id, AHORA.AddMinutes(2));
+            s.GetRequiredService<ITransferenciaCustodiaRepository>().Agregar(transferencia);
+            await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
+            fotoId = foto.Id;
+        }
+
+        using (var proveedor = Proveedor())
+        using (var alcance = proveedor.CreateScope())
+        {
+            var s = alcance.ServiceProvider;
+            var t = await s.GetRequiredService<ITransferenciaCustodiaRepository>().ObtenerPorInspeccionAsync(inspeccionId);
+            Assert.Equal(clsTipoCierre.NO_FIRMA, t!.TipoCierre);
+            Assert.Equal(testigoId, t.TestigoUsuarioId);
+            Assert.Equal(fotoId, t.EvidenciaConstanciaId);
+            Assert.True((await s.GetRequiredService<IInspeccionRepository>().ObtenerEvidenciaAsync(fotoId))!.EsConstancia);
+            Assert.Equal(0, (await s.GetRequiredService<IInspeccionRepository>().ObtenerResumenCierreAsync(inspeccionId)).TotalEvidencias);
         }
     }
 

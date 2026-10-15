@@ -246,7 +246,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         await Fabrica.SembrarUsuarioAsync("receptor@ejemplo.com", "x", clsRol.CONDUCTOR);
         var receptorId = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblUsuarios WHERE Email = 'receptor@ejemplo.com'"))!;
         await Sembrador.EjecutarAsync(
-            "INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId, FirmaEntrega, FirmaRecibe, FirmadaAt) VALUES (NEWID(), @i, @e, @r, N'f1.png', N'f2.png', SYSDATETIMEOFFSET())",
+            "INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId, FirmaEntrega, FirmaRecibe, FirmadaAt, TipoCierre) VALUES (NEWID(), @i, @e, @r, N'f1.png', N'f2.png', SYSDATETIMEOFFSET(), 'firmada')",
             ("@i", informeId), ("@e", usuarioId), ("@r", receptorId));
 
         var r = await Cliente(token).GetAsync("/api/vehiculos/inv-vin-0001/inventario");
@@ -278,6 +278,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.False(evidencias[0].TryGetProperty("storage_path", out _));
         var transferencia = insp.GetProperty("transferencia");
         Assert.True(transferencia.GetProperty("firmada").GetBoolean());
+        Assert.Equal("firmada", transferencia.GetProperty("tipo_cierre").GetString());
         Assert.False(transferencia.TryGetProperty("firma_entrega", out _));
     }
 

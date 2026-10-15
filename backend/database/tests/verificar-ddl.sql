@@ -343,6 +343,63 @@ BEGIN
 END
 CLOSE cInsp; DEALLOCATE cInsp;
 
+-- Transferencias: cada tipo de cierre exige lo suyo, el testigo es una tercera persona y la foto de la constancia se admite sobre una inspeccion cerrada
+DECLARE @u3 uniqueidentifier = NEWID(), @evc uniqueidentifier = NEWID();
+INSERT dbo.tblUsuarios (Id, Nombre, Email, Rol) VALUES (@u3, N'ZZ_TEST Testigo', N'zz_test_testigo@ejemplo.com', 'inspector');
+BEGIN TRY
+    INSERT dbo.tblEvidencias (Id, InspeccionId, StoragePath, SelloFecha, SelloLat, SelloLng, EsConstancia) VALUES (@evc, @s5, N'zz-constancia.jpg', SYSDATETIMEOFFSET(), 4.6, -74.1, 1);
+    INSERT #r VALUES (N'Constancia: la foto de una constancia se admite sobre una inspeccion cerrada', 1, NULL);
+END TRY
+BEGIN CATCH
+    INSERT #r VALUES (N'Constancia: la foto de una constancia se admite sobre una inspeccion cerrada', 0, ERROR_MESSAGE());
+END CATCH
+
+DECLARE @cabTr nvarchar(max) = N'INSERT dbo.tblTransferenciasCustodia (Id,InspeccionId,EntregaUsuarioId,RecibeUsuarioId,FirmaEntrega,FirmaRecibe,TipoCierre,ReservasTexto,NoFirmaParte,MotivoNoFirma,TestigoUsuarioId,EvidenciaConstanciaId) VALUES (NEWID(),'''
+    + CAST(@l5 AS nvarchar(36)) + N''',''' + CAST(@u1 AS nvarchar(36)) + N''',''' + CAST(@u2 AS nvarchar(36)) + N''',';
+DECLARE @casosTr TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosTr VALUES
+ (N'CHECK tipo de cierre desconocido', @cabTr + N'N''A'',N''B'',''otro'',NULL,NULL,NULL,NULL,NULL)', 547),
+ (N'CHECK firmada exige las dos firmas', @cabTr + N'N''A'',NULL,''firmada'',NULL,NULL,NULL,NULL,NULL)', 547),
+ (N'CHECK firmada no lleva reservas', @cabTr + N'N''A'',N''B'',''firmada'',N''algo'',NULL,NULL,NULL,NULL)', 547),
+ (N'CHECK con reservas exige las observaciones', @cabTr + N'N''A'',N''B'',''con_reservas'',NULL,NULL,NULL,NULL,NULL)', 547),
+ (N'CHECK no firma exige el testigo', @cabTr + N'NULL,NULL,''no_firma'',NULL,''recibe'',N''Se niega'',NULL,''' + CAST(@evc AS nvarchar(36)) + N''')', 547),
+ (N'CHECK no firma exige la foto de la constancia', @cabTr + N'NULL,NULL,''no_firma'',NULL,''recibe'',N''Se niega'',''' + CAST(@u3 AS nvarchar(36)) + N''',NULL)', 547),
+ (N'CHECK no firma exige el motivo', @cabTr + N'NULL,NULL,''no_firma'',NULL,''recibe'',N'''',''' + CAST(@u3 AS nvarchar(36)) + N''',''' + CAST(@evc AS nvarchar(36)) + N''')', 547),
+ (N'CHECK el testigo no es quien entrega', @cabTr + N'NULL,NULL,''no_firma'',NULL,''recibe'',N''Se niega'',''' + CAST(@u1 AS nvarchar(36)) + N''',''' + CAST(@evc AS nvarchar(36)) + N''')', 547),
+ (N'CHECK el testigo no es quien recibe', @cabTr + N'NULL,NULL,''no_firma'',NULL,''recibe'',N''Se niega'',''' + CAST(@u2 AS nvarchar(36)) + N''',''' + CAST(@evc AS nvarchar(36)) + N''')', 547),
+ (N'CHECK la parte que no firma es entrega o recibe', @cabTr + N'NULL,NULL,NULL,NULL,''otro'',NULL,NULL,NULL)', 547),
+ (N'FK el testigo debe existir', @cabTr + N'NULL,NULL,''no_firma'',NULL,''recibe'',N''Se niega'',NEWID(),''' + CAST(@evc AS nvarchar(36)) + N''')', 547),
+ (N'FK la foto de la constancia debe existir', @cabTr + N'NULL,NULL,''no_firma'',NULL,''recibe'',N''Se niega'',''' + CAST(@u3 AS nvarchar(36)) + N''',NEWID())', 547);
+
+DECLARE @pruebaTr nvarchar(200), @sqlTr nvarchar(max), @espTr int;
+DECLARE cTr CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosTr;
+OPEN cTr; FETCH NEXT FROM cTr INTO @pruebaTr, @sqlTr, @espTr;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    BEGIN TRY
+        EXEC (@sqlTr);
+        INSERT #r VALUES (@pruebaTr, 0, N'la sentencia no fallo');
+    END TRY
+    BEGIN CATCH
+        INSERT #r VALUES (@pruebaTr, CASE WHEN ERROR_NUMBER() = @espTr THEN 1 ELSE 0 END, N'error ' + CAST(ERROR_NUMBER() AS nvarchar(10)) + N': ' + LEFT(ERROR_MESSAGE(), 150));
+    END CATCH
+    FETCH NEXT FROM cTr INTO @pruebaTr, @sqlTr, @espTr;
+END
+CLOSE cTr; DEALLOCATE cTr;
+
+-- Los tres cierres validos: firmada, con reservas y no firma (con su testigo y su foto)
+BEGIN TRY
+    INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId, FirmaEntrega, FirmaRecibe, FirmaEntregaAt, FirmaEntregaIp, FirmaRecibeAt, FirmaRecibeIp, FirmadaAt, TipoCierre, ReservasTexto)
+    VALUES (NEWID(), @c5, @u1, @u2, N'A', N'B', SYSDATETIMEOFFSET(), '10.0.0.1', SYSDATETIMEOFFSET(), '10.0.0.2', SYSDATETIMEOFFSET(), 'con_reservas', N'El espejo esta rayado');
+    INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId, FirmaEntrega, NoFirmaParte, MotivoNoFirma, TestigoUsuarioId, EvidenciaConstanciaId, TipoCierre)
+    VALUES (NEWID(), @l5, @u1, @u2, N'A', 'recibe', N'Se niega a firmar', @u3, @evc, 'no_firma');
+    INSERT #r SELECT N'Transferencia: cierre con reservas y cierre por no firma se guardan con sus datos',
+        CASE WHEN EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @c5 AND TipoCierre = 'con_reservas' AND ReservasTexto IS NOT NULL AND FirmaEntregaIp = '10.0.0.1' AND FirmaRecibeIp = '10.0.0.2')
+              AND EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @l5 AND TipoCierre = 'no_firma' AND TestigoUsuarioId = @u3 AND EvidenciaConstanciaId = @evc) THEN 1 ELSE 0 END, NULL;
+END TRY
+BEGIN CATCH
+    INSERT #r VALUES (N'Transferencia: cierre con reservas y cierre por no firma se guardan con sus datos', 0, ERROR_MESSAGE());
+END CATCH
 -- Borrar el vehiculo de la prueba se lleva sus inspecciones, versiones y fotos (cascada); la cadena de versiones no la impide.
 DELETE FROM dbo.tblVehiculos WHERE Vin = 'ZZ_TEST_VIN_0006';
 DELETE FROM dbo.tblViajes WHERE CodigoMtrack = 'ZZ_TEST_MTK_6';

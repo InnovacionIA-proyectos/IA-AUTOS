@@ -82,8 +82,10 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                                    from ue in entregas.DefaultIfEmpty()
                                    join ur in contexto.Usuarios on t.RecibeUsuarioId equals ur.Id into recibes
                                    from ur in recibes.DefaultIfEmpty()
+                                   join ut in contexto.Usuarios on t.TestigoUsuarioId equals ut.Id into testigos
+                                   from ut in testigos.DefaultIfEmpty()
                                    where t.InspeccionId == id
-                                   select new { Transferencia = t, EntregaNombre = (string?)ue.Nombre, RecibeNombre = (string?)ur.Nombre })
+                                   select new { Transferencia = t, EntregaNombre = (string?)ue.Nombre, RecibeNombre = (string?)ur.Nombre, TestigoNombre = (string?)ut.Nombre })
             .FirstOrDefaultAsync(ct);
 
         return new InformeDetalleDto(
@@ -120,7 +122,18 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                     transferencia.EntregaNombre,
                     transferencia.RecibeNombre,
                     transferencia.Transferencia.FirmaEntrega,
-                    transferencia.Transferencia.FirmaRecibe),
+                    transferencia.Transferencia.FirmaRecibe,
+                    transferencia.Transferencia.TipoCierre,
+                    transferencia.Transferencia.FirmaEntregaAt,
+                    transferencia.Transferencia.FirmaRecibeAt,
+                    transferencia.Transferencia.FirmaEntregaIp,
+                    transferencia.Transferencia.FirmaRecibeIp,
+                    transferencia.Transferencia.ReservasTexto,
+                    transferencia.Transferencia.NoFirmaParte,
+                    transferencia.Transferencia.MotivoNoFirma,
+                    transferencia.Transferencia.TestigoUsuarioId,
+                    transferencia.TestigoNombre,
+                    transferencia.Transferencia.EvidenciaConstanciaId),
             insp.IniciadaAt,
             insp.CerradaAt,
             insp.Version,

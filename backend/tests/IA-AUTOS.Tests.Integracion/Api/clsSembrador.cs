@@ -97,8 +97,8 @@ public sealed class clsSembrador(string cadenaConexion)
         for (var i = 0; i < evidencias; i++)
         {
             await EjecutarAsync(
-                "INSERT dbo.tblEvidencias (Id, InspeccionId, StoragePath, SelloFecha, SelloLat, SelloLng) VALUES (NEWID(), @i, @p, SYSDATETIMEOFFSET(), 4.6, -74.1)",
-                ("@i", id), ("@p", $"foto-{i}.jpg"));
+                "INSERT dbo.tblEvidencias (Id, InspeccionId, StoragePath, SelloFecha, SelloLat, SelloLng, CreatedAt) VALUES (NEWID(), @i, @p, SYSDATETIMEOFFSET(), 4.6, -74.1, DATEADD(MILLISECOND, @n, SYSDATETIMEOFFSET()))",
+                ("@i", id), ("@p", $"foto-{i}.jpg"), ("@n", i * 5));
         }
 
         if (cerrada)

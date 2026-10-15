@@ -69,6 +69,8 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         ("FK_tblInspecciones_Viaje", "El viaje no existe"),
         ("FK_tblInspecciones_Corrige", "La inspección que se corrige no existe"),
         ("FK_tblInspecciones_", "La etapa o el usuario no existen"),
+        ("FK_tblTransferencias_Testigo", "El testigo no existe"),
+        ("FK_tblTransferencias_Constancia", "La foto de la constancia no existe"),
         ("FK_tblTransferencias_", "Algún usuario (entrega/recibe) no existe"),
         ("FK_tblAsignaciones_", "Referencia inválida (vehículo o usuario)"),
         ("FK_tblEvidencias_Vista", "La vista de foto no existe en el catálogo"),

@@ -41,18 +41,22 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | GET `/api/viajes` | autenticado | listado (maximo 200) con filtros `estado`, `codigoMtrack`, `vin`, `conductorId`, `desde`, `hasta`; inspector y conductor solo ven los suyos |
 | GET `/api/viajes/mios` | autenticado | los viajes del usuario (conductor o inspector) con sus VIN; por defecto programados y en curso |
 | GET `/api/viajes/{id}` | autenticado | un viaje con sus VIN; `403` si no es de un inspector o conductor |
+| GET `/api/viajes/{id}/firmantes` | autenticado | los usuarios del viaje que pueden firmar una transferencia (su conductor y su inspector activos) |
 | PATCH `/api/viajes/{id}` | gestion de viajes | cambia los campos enviados de un viaje programado o en curso |
 | PATCH `/api/viajes/{id}/estado` | gestion de viajes | programado a en curso a finalizado, o cancelar |
 | POST `/api/viajes/{id}/vehiculos`, DELETE `/api/viajes/{id}/vehiculos/{vin}` | gestion de viajes | asigna o quita VIN (todo o nada; no se quita un VIN con inspecciones) |
 | DELETE `/api/viajes/{id}` | gestion de viajes | borra un viaje sin inspecciones (`409` si las tiene) |
 | POST `/api/viajes/cargar/previsualizar`, POST `/api/viajes/cargar` | gestion de viajes | carga por Excel: vista previa con el error de cada fila y confirmacion que guarda solo las filas validas |
-| POST `/api/inspecciones` | campo | crea la inspeccion de salida o de llegada de una etapa (`momento`: `salida` o `llegada`; siempre en borrador; el usuario sale del token; placa, trailer y conductor salen del viaje; `403` si la etapa es de un viaje ajeno; `409 ETAPA_PREVIA_SIN_CIERRE` si es una salida y la etapa anterior no tiene su llegada cerrada) |
+| POST `/api/inspecciones` | campo | crea la inspeccion de salida o de llegada de una etapa (`momento`: `salida` o `llegada`; siempre en borrador; el usuario sale del token; placa, trailer y conductor salen del viaje; `403` si la etapa es de un viaje ajeno; `409 ETAPA_PREVIA_SIN_CIERRE` si es una salida y la etapa anterior no tiene su llegada cerrada o su transferencia no tiene tipo de cierre) |
 | POST `/api/inspecciones/{id}/corregir` | campo | corrige una inspeccion cerrada: crea la version siguiente (borrador, vacia) que referencia a la anterior; la anterior no cambia; `409` si no esta cerrada o ya fue corregida |
 | GET `/api/inspecciones` | autenticado | listado (maximo 200) con filtros `vin`, `usuarioId`, `viajeId`, `momento`, `estado`, `proceso`, `desde`, `hasta`; inspector y conductor solo ven los informes de sus viajes |
 | GET `/api/inspecciones/{id}` | autenticado | informe completo con firmas, nombres y el sello de cada foto |
 | POST `/api/inspecciones/{id}/evidencias` | campo, creador o administrador | registra una foto ya subida de una vista (`vista_id`) o de un hallazgo (`hallazgo_id`), con su sello (fecha, GPS, precision, dispositivo); el servidor agrega su sello y el hash SHA-256; las vistas adicionales exigen `nota` |
 | POST `/api/inspecciones/{id}/hallazgos` | campo, creador o administrador | agrega un hallazgo **con su foto propia** (`evidencia` obligatoria; sin ella `400`) |
-| POST `/api/inspecciones/{id}/transferencia` | campo | firma de entrega y/o recibo (parcial o completa) |
+| POST `/api/inspecciones/{id}/transferencia` | campo | firma la propia parte (quien entrega firma la entrega y quien recibe, el recibo; la identidad sale del token, `403` si no es ninguna de las dos partes); la primera firma crea la transferencia con los dos ids, que deben ser usuarios del viaje; guarda la fecha y la IP de cada firma |
+| POST `/api/inspecciones/{id}/transferencia/reservas` | campo | quien recibe firma con reservas: observaciones obligatorias (`400` sin ellas, `403` si no es quien recibe) |
+| POST `/api/inspecciones/{id}/transferencia/no-firma` | campo | constancia de no firma: la registra la otra parte con motivo, testigo con usuario y foto; cierra la transferencia como `no_firma` |
+| GET `/api/inspecciones/{id}/transferencia/constancia/pdf` | autenticado | constancia en PDF: firmas con fecha e IP, reservas o motivo de la no firma, testigo y foto; `403` si es de un viaje ajeno, `404` sin transferencia |
 | POST `/api/inspecciones/{id}/cerrar` | campo, creador o administrador | cierra el informe; `{ inspeccion, resumen }`. En Cargue y Descargue exige las 7 vistas obligatorias (`400` con el nombre de la que falta), una foto propia por hallazgo y ubicacion en toda foto; en Transporte exige el GPS del registro |
 | POST `/api/uploads` | campo | sube una foto en base64 (JSON) o como `multipart/form-data` (campo `archivo`); JPG o PNG; `{ storage_path, url, hash_sha256 }` |
 | GET `/api/uploads/{archivo}` | publico por defecto | sirve la imagen |
@@ -83,8 +87,8 @@ Siempre JSON:
 | ACCOUNT_LOCKED | 423 | cuenta bloqueada por PIN errados seguidos; `details.bloqueado_hasta` |
 | NOT_FOUND | 404 | recurso o ruta inexistente |
 | METHOD_NOT_ALLOWED | 405 | metodo no admitido en una ruta existente |
-| CONFLICT | 409 | duplicados, inspeccion cerrada, transferencia ya firmada |
-| ETAPA_PREVIA_SIN_CIERRE | 409 | la etapa anterior del VIN no tiene su llegada cerrada: no se puede crear la salida de la siguiente |
+| CONFLICT | 409 | duplicados, inspeccion cerrada, transferencia ya cerrada, firmantes de la transferencia que no se pueden cambiar |
+| ETAPA_PREVIA_SIN_CIERRE | 409 | la etapa anterior del VIN no esta terminada (sin llegada cerrada o con la transferencia sin tipo de cierre): no se puede crear la salida de la siguiente |
 | RATE_LIMITED | 429 | demasiados intentos de login |
 | INTERNAL_ERROR | 500 | error inesperado (sin detalles internos) |
 | DB_UNAVAILABLE | 503 | reservado |

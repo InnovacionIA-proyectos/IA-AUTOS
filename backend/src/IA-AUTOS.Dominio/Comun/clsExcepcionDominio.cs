@@ -74,17 +74,22 @@ public sealed class clsPortalUsuarioNoVinculadoException : clsExcepcionDominio
 }
 
 /// <summary>
-/// La etapa anterior no tiene la inspeccion de llegada cerrada: 409 ETAPA_PREVIA_SIN_CIERRE con la etapa que falta cerrar en <c>details</c>.
+/// La etapa anterior no tiene la llegada cerrada o su transferencia no tiene tipo de cierre: 409 ETAPA_PREVIA_SIN_CIERRE con la etapa y el motivo en <c>details</c>.
 /// </summary>
 public sealed class clsEtapaPreviaSinCierreException : clsExcepcionDominio
 {
-    public clsEtapaPreviaSinCierreException(Guid etapaPreviaId, string etapaPrevia)
+    public const string MOTIVO_SIN_LLEGADA = "etapa_previa_sin_cierre";
+    public const string MOTIVO_TRANSFERENCIA_ABIERTA = "transferencia_sin_cierre";
+
+    public clsEtapaPreviaSinCierreException(Guid etapaPreviaId, string etapaPrevia, string motivo = MOTIVO_SIN_LLEGADA)
         : base(
             clsCodigosError.ETAPA_PREVIA_SIN_CIERRE,
-            $"La etapa anterior ({etapaPrevia}) no tiene cerrada su inspección de llegada: ciérrela antes de crear la salida",
+            motivo == MOTIVO_TRANSFERENCIA_ABIERTA
+                ? $"La transferencia de la etapa anterior ({etapaPrevia}) no tiene tipo de cierre: fírmela, recíbala con reservas o registre la no firma antes de crear la salida"
+                : $"La etapa anterior ({etapaPrevia}) no tiene cerrada su inspección de llegada: ciérrela antes de crear la salida",
             new Dictionary<string, object>
             {
-                ["motivo"] = "etapa_previa_sin_cierre",
+                ["motivo"] = motivo,
                 ["etapa_previa_id"] = etapaPreviaId,
                 ["etapa_previa"] = etapaPrevia,
             })

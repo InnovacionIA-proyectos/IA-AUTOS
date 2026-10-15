@@ -214,6 +214,69 @@
         ]
       }
     },
+    "/api/viajes/{id}/firmantes": {
+      "get": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_Firmantes",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FirmanteDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FirmanteDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FirmanteDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/viajes/{id}": {
       "get": {
         "tags": [
@@ -2165,12 +2228,66 @@
         ]
       }
     },
-    "/api/inspecciones/{id}/transferencia": {
+    "/api/inspecciones/{id}/cerrar": {
       "post": {
         "tags": [
           "Inspecciones"
         ],
-        "operationId": "Inspecciones_FirmarTransferencia",
+        "operationId": "Inspecciones_Cerrar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CerrarInspeccionResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CerrarInspeccionResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CerrarInspeccionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/inspecciones/{id}/transferencia": {
+      "post": {
+        "tags": [
+          "Transferencias"
+        ],
+        "operationId": "Transferencias_Firmar",
         "parameters": [
           {
             "name": "id",
@@ -2229,12 +2346,140 @@
         ]
       }
     },
-    "/api/inspecciones/{id}/cerrar": {
+    "/api/inspecciones/{id}/transferencia/reservas": {
       "post": {
         "tags": [
-          "Inspecciones"
+          "Transferencias"
         ],
-        "operationId": "Inspecciones_Cerrar",
+        "operationId": "Transferencias_RecibirConReservas",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecibirConReservasRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferenciaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferenciaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferenciaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/inspecciones/{id}/transferencia/no-firma": {
+      "post": {
+        "tags": [
+          "Transferencias"
+        ],
+        "operationId": "Transferencias_RegistrarNoFirma",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrarNoFirmaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferenciaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferenciaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferenciaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/inspecciones/{id}/transferencia/constancia/pdf": {
+      "get": {
+        "tags": [
+          "Transferencias"
+        ],
+        "operationId": "Transferencias_ConstanciaPdf",
         "parameters": [
           {
             "name": "id",
@@ -2250,21 +2495,7 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/CerrarInspeccionResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CerrarInspeccionResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CerrarInspeccionResponse"
-                }
-              }
+              "application/pdf": {}
             }
           },
           "default": {
@@ -4190,7 +4421,8 @@
           "precision",
           "dispositivo_id",
           "nota",
-          "sin_ubicacion"
+          "sin_ubicacion",
+          "es_constancia"
         ],
         "type": "object",
         "properties": {
@@ -4268,6 +4500,9 @@
             ]
           },
           "sin_ubicacion": {
+            "type": "boolean"
+          },
+          "es_constancia": {
             "type": "boolean"
           }
         }
@@ -4369,12 +4604,31 @@
           }
         }
       },
+      "FirmanteDto": {
+        "required": [
+          "id",
+          "nombre",
+          "rol"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "rol": {
+            "type": "string"
+          }
+        }
+      },
       "FirmarTransferenciaRequest": {
         "required": [
           "entrega_usuario_id",
           "recibe_usuario_id",
-          "firma_entrega",
-          "firma_recibe"
+          "firma"
         ],
         "type": "object",
         "properties": {
@@ -4392,13 +4646,7 @@
             ],
             "format": "uuid"
           },
-          "firma_entrega": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "firma_recibe": {
+          "firma": {
             "type": [
               "null",
               "string"
@@ -5841,6 +6089,43 @@
           }
         }
       },
+      "RecibirConReservasRequest": {
+        "required": [
+          "entrega_usuario_id",
+          "recibe_usuario_id",
+          "firma",
+          "reservas"
+        ],
+        "type": "object",
+        "properties": {
+          "entrega_usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "recibe_usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "firma": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reservas": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "RefreshRequest": {
         "required": [
           "refresh"
@@ -5867,6 +6152,115 @@
           },
           "refresh": {
             "type": "string"
+          }
+        }
+      },
+      "RegistrarNoFirmaRequest": {
+        "required": [
+          "entrega_usuario_id",
+          "recibe_usuario_id",
+          "parte",
+          "motivo",
+          "testigo_usuario_id",
+          "evidencia"
+        ],
+        "type": "object",
+        "properties": {
+          "entrega_usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "recibe_usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "parte": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "testigo_usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "evidencia": {
+            "required": [
+              "storage_path",
+              "sello_fecha",
+              "sello_lat",
+              "sello_lng",
+              "precision",
+              "dispositivo_id",
+              "nota",
+              "hash_sha256"
+            ],
+            "type": "object",
+            "properties": {
+              "storage_path": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "sello_fecha": {
+                "format": "date-time"
+              },
+              "sello_lat": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "sello_lng": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "precision": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "dispositivo_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "nota": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "hash_sha256": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            }
           }
         }
       },
@@ -6140,7 +6534,18 @@
           "entrega_nombre",
           "recibe_nombre",
           "firma_entrega",
-          "firma_recibe"
+          "firma_recibe",
+          "tipo_cierre",
+          "entrega_firmada_at",
+          "recibe_firmada_at",
+          "entrega_firma_ip",
+          "recibe_firma_ip",
+          "reservas_texto",
+          "no_firma_parte",
+          "motivo_no_firma",
+          "testigo_usuario_id",
+          "testigo_nombre",
+          "evidencia_constancia_id"
         ],
         "type": "object",
         "properties": {
@@ -6195,6 +6600,68 @@
               "null",
               "string"
             ]
+          },
+          "tipo_cierre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entrega_firmada_at": {
+            "format": "date-time"
+          },
+          "recibe_firmada_at": {
+            "format": "date-time"
+          },
+          "entrega_firma_ip": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recibe_firma_ip": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reservas_texto": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "no_firma_parte": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_no_firma": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "testigo_usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "testigo_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "evidencia_constancia_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -6207,7 +6674,15 @@
           "firmada",
           "firmada_at",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "tipo_cierre",
+          "entrega_firmada_at",
+          "recibe_firmada_at",
+          "reservas_texto",
+          "no_firma_parte",
+          "motivo_no_firma",
+          "testigo_usuario_id",
+          "evidencia_constancia_id"
         ],
         "type": "object",
         "properties": {
@@ -6238,6 +6713,50 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "tipo_cierre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entrega_firmada_at": {
+            "format": "date-time"
+          },
+          "recibe_firmada_at": {
+            "format": "date-time"
+          },
+          "reservas_texto": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "no_firma_parte": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_no_firma": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "testigo_usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "evidencia_constancia_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -6737,6 +7256,9 @@
     },
     {
       "name": "clsInspecciones"
+    },
+    {
+      "name": "clsTransferencias"
     },
     {
       "name": "clsCatalogos"

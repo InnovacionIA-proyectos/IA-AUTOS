@@ -115,7 +115,7 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
     public async Task<clsResumenCierre> ObtenerResumenCierreAsync(Guid inspeccionId, CancellationToken ct = default)
     {
         var evidencias = await contexto.Evidencias.AsNoTracking()
-            .Where(e => e.InspeccionId == inspeccionId)
+            .Where(e => e.InspeccionId == inspeccionId && !e.EsConstancia)
             .Select(e => new { e.Id, e.VistaId, e.HallazgoId, e.SelloLat, e.SelloLng, e.SelloServidorAt })
             .ToListAsync(ct);
         var hallazgos = await contexto.Hallazgos.AsNoTracking().Where(h => h.InspeccionId == inspeccionId).Select(h => h.Id).ToListAsync(ct);
@@ -134,6 +134,15 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
 
     public Task<bool> TieneLlegadaCerradaAsync(Guid etapaId, CancellationToken ct = default) =>
         contexto.Inspecciones.AnyAsync(i => i.EtapaId == etapaId && i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA, ct);
+
+    public Task<bool> TieneTransferenciaSinCierreAsync(Guid etapaId, CancellationToken ct = default) =>
+        (from t in contexto.Transferencias
+         join i in contexto.Inspecciones on t.InspeccionId equals i.Id
+         where i.EtapaId == etapaId && t.TipoCierre == null
+         select t.Id).AnyAsync(ct);
+
+    public Task<clsEvidencia?> ObtenerEvidenciaAsync(Guid id, CancellationToken ct = default) =>
+        contexto.Evidencias.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id, ct);
 
     public Task<Guid?> ObtenerCorreccionIdAsync(Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Inspecciones.AsNoTracking().Where(i => i.CorrigeInspeccionId == inspeccionId).Select(i => (Guid?)i.Id).FirstOrDefaultAsync(ct);

@@ -363,7 +363,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(
             [
                 "id", "inspeccion_id", "hallazgo_id", "sello_fecha", "sello_lat", "sello_lng", "url", "created_at", "updated_at", "vista_id", "hash_sha256",
-                "sello_servidor_at", "precision", "dispositivo_id", "nota", "sin_ubicacion",
+                "sello_servidor_at", "precision", "dispositivo_id", "nota", "sin_ubicacion", "es_constancia",
             ],
             e.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal(vista, e.GetProperty("vista_id").GetGuid());
@@ -958,78 +958,349 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
 
     // ---------------------------------------------------------------- transferencia
 
-    [Fact]
-    public async Task La_firma_parcial_se_acumula_y_el_sello_se_fija_al_completarla()
+    /// <summary>Viaje con inspector y conductor: son los dos firmantes posibles de la transferencia.</summary>
+    private async Task<(Sesion Inspector, Sesion Conductor, Guid[] Etapas)> EscenarioConConductorAsync()
     {
-        var (sesion, etapas) = await EscenarioAsync();
-        var receptor = await SesionAsync("recibe@ejemplo.com", clsRol.CONDUCTOR);
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var inspector = await SesionAsync("insp@ejemplo.com");
+        var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
+        var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-INSP-0001", conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
+        return (inspector, conductor, etapas);
+    }
 
-        var primera = await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia",
-            new { entrega_usuario_id = sesion.UsuarioId, recibe_usuario_id = receptor.UsuarioId, firma_entrega = "M0 0 L10 10" });
+    private Task<HttpResponseMessage> FirmarAsync(Sesion quien, Guid inspeccionId, Sesion entrega, Sesion recibe, string firma) =>
+        Cliente(quien.Token).PostAsJsonAsync($"/api/inspecciones/{inspeccionId}/transferencia",
+            new { entrega_usuario_id = entrega.UsuarioId, recibe_usuario_id = recibe.UsuarioId, firma });
+
+    private Task<HttpResponseMessage> FirmarSoloConFirmaAsync(Sesion quien, Guid inspeccionId, string firma) =>
+        Cliente(quien.Token).PostAsJsonAsync($"/api/inspecciones/{inspeccionId}/transferencia", new { firma });
+
+    private async Task<object> FotoConstanciaAsync(Sesion quien)
+    {
+        var (ruta, hash) = await SubirAsync(quien);
+        return new { storage_path = ruta, sello_fecha = FECHA, sello_lat = 4.6, sello_lng = -74.1, precision = 4.5, dispositivo_id = "tablet-1", hash_sha256 = hash };
+    }
+
+    [Fact]
+    public async Task Cada_firma_la_envia_su_titular_y_guarda_su_propia_fecha_y_el_cierre_se_fija_con_la_segunda()
+    {
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+
+        var primera = await FirmarAsync(inspector, id, inspector, conductor, "M0 0 L10 10");
         var t1 = await ClonarAsync(primera);
-        var segunda = await Cliente(receptor.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia",
-            new { entrega_usuario_id = sesion.UsuarioId, recibe_usuario_id = receptor.UsuarioId, firma_recibe = "M5 5 L20 20" });
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia WHERE FirmaEntregaAt IS NOT NULL AND FirmaRecibeAt IS NULL AND TipoCierre IS NULL"));
+        var segunda = await FirmarSoloConFirmaAsync(conductor, id, "M5 5 L20 20");
         var t2 = await ClonarAsync(segunda);
 
         Assert.Equal(HttpStatusCode.Created, primera.StatusCode);
         Assert.Equal(
-            ["id", "inspeccion_id", "entrega_usuario_id", "recibe_usuario_id", "firmada", "firmada_at", "created_at", "updated_at"],
+            [
+                "id", "inspeccion_id", "entrega_usuario_id", "recibe_usuario_id", "firmada", "firmada_at", "created_at", "updated_at", "tipo_cierre",
+                "entrega_firmada_at", "recibe_firmada_at", "reservas_texto", "no_firma_parte", "motivo_no_firma", "testigo_usuario_id", "evidencia_constancia_id",
+            ],
             t1.EnumerateObject().Select(p => p.Name).ToList());
         Assert.False(t1.GetProperty("firmada").GetBoolean());
         Assert.Equal(JsonValueKind.Null, t1.GetProperty("firmada_at").ValueKind);
+        Assert.Equal(JsonValueKind.Null, t1.GetProperty("tipo_cierre").ValueKind);
+        Assert.Equal(JsonValueKind.String, t1.GetProperty("entrega_firmada_at").ValueKind);
+        Assert.Equal(JsonValueKind.Null, t1.GetProperty("recibe_firmada_at").ValueKind);
         Assert.Equal(HttpStatusCode.Created, segunda.StatusCode);
         Assert.True(t2.GetProperty("firmada").GetBoolean());
+        Assert.Equal("firmada", t2.GetProperty("tipo_cierre").GetString());
         Assert.Equal(JsonValueKind.String, t2.GetProperty("firmada_at").ValueKind);
+        Assert.Equal(JsonValueKind.String, t2.GetProperty("recibe_firmada_at").ValueKind);
         Assert.Equal(t1.GetProperty("id").GetGuid(), t2.GetProperty("id").GetGuid());
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia"));
         Assert.Equal("M0 0 L10 10", (string?)await Sembrador.EscalarAsync("SELECT FirmaEntrega FROM dbo.tblTransferenciasCustodia"));
+        Assert.Equal("M5 5 L20 20", (string?)await Sembrador.EscalarAsync("SELECT FirmaRecibe FROM dbo.tblTransferenciasCustodia"));
+        Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'transferencia.firmar'"));
     }
 
     [Fact]
-    public async Task Se_puede_firmar_despues_de_cerrar_con_cualquier_usuario_de_campo_pero_una_transferencia_completa_es_inmutable()
+    public async Task Nadie_firma_por_otro_ni_crea_una_transferencia_ajena()
     {
-        var (creador, etapas) = await EscenarioAsync("creador@ejemplo.com");
-        var tercero = await SesionAsync("tercero@ejemplo.com");
-        var receptor = await SesionAsync("recibe@ejemplo.com", clsRol.CONDUCTOR);
-        var id = await CrearInspeccionAsync(creador, etapas[0]);
-        await TomarVistasObligatoriasAsync(creador, id);
-        Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(creador, id)).StatusCode);
-        var cuerpo = new { entrega_usuario_id = creador.UsuarioId, recibe_usuario_id = receptor.UsuarioId, firma_entrega = "A", firma_recibe = "B" };
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        var intruso = await SesionAsync("intruso@ejemplo.com");
+        var id = await CrearInspeccionAsync(inspector, etapas[0]);
 
-        var firma = await Cliente(tercero.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", cuerpo);
-        var repetida = await Cliente(tercero.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", cuerpo);
-        var alterada = await Cliente(tercero.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia",
-            new { entrega_usuario_id = creador.UsuarioId, recibe_usuario_id = receptor.UsuarioId, firma_entrega = "OTRA", firma_recibe = "B" });
+        var creaAjena = await FirmarAsync(intruso, id, inspector, conductor, "FIRMA-FALSA");
+        Assert.Equal(HttpStatusCode.Forbidden, creaAjena.StatusCode);
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia"));
+
+        Assert.Equal(HttpStatusCode.Created, (await FirmarAsync(inspector, id, inspector, conductor, "FIRMA-INSPECTOR")).StatusCode);
+        var firmaAjena = await FirmarSoloConFirmaAsync(intruso, id, "FIRMA-FALSA");
+        var reservasAjenas = await Cliente(intruso.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia/reservas", new { firma = "X", reservas = "Observación" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, firmaAjena.StatusCode);
+        Assert.Equal("FORBIDDEN", (await ClonarAsync(firmaAjena)).GetProperty("code").GetString());
+        Assert.Equal(HttpStatusCode.Forbidden, reservasAjenas.StatusCode);
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia WHERE FirmaEntrega = N'FIRMA-INSPECTOR' AND FirmaRecibe IS NULL AND TipoCierre IS NULL"));
+    }
+
+    [Fact]
+    public async Task Cada_uno_firma_su_parte_aunque_envie_los_dos_ids_y_los_firmantes_no_se_pueden_cambiar()
+    {
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        await FirmarAsync(inspector, id, inspector, conductor, "A");
+
+        // El conductor envia los dos ids y su firma: se guarda como el recibo, nunca como la entrega.
+        var r = await FirmarAsync(conductor, id, inspector, conductor, "B");
+        var cambio = await FirmarAsync(inspector, id, conductor, inspector, "C");
+
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+        Assert.Equal("A", (string?)await Sembrador.EscalarAsync("SELECT FirmaEntrega FROM dbo.tblTransferenciasCustodia"));
+        Assert.Equal("B", (string?)await Sembrador.EscalarAsync("SELECT FirmaRecibe FROM dbo.tblTransferenciasCustodia"));
+        Assert.Equal(HttpStatusCode.Conflict, cambio.StatusCode);
+        Assert.Equal("Los firmantes de la transferencia no se pueden cambiar", (await ClonarAsync(cambio)).GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task Una_transferencia_firmada_es_inmutable_pero_acepta_el_reintento_identico()
+    {
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        await TomarVistasObligatoriasAsync(inspector, id);
+        Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(inspector, id)).StatusCode);
+
+        var firma = await FirmarAsync(inspector, id, inspector, conductor, "A");
+        await FirmarSoloConFirmaAsync(conductor, id, "B");
+        var repetida = await FirmarSoloConFirmaAsync(inspector, id, "A");
+        var alterada = await FirmarSoloConFirmaAsync(inspector, id, "OTRA");
 
         Assert.Equal(HttpStatusCode.Created, firma.StatusCode);
-        Assert.True((await ClonarAsync(firma)).GetProperty("firmada").GetBoolean());
         Assert.Equal(HttpStatusCode.Created, repetida.StatusCode);
+        Assert.True((await ClonarAsync(repetida)).GetProperty("firmada").GetBoolean());
         Assert.Equal(HttpStatusCode.Conflict, alterada.StatusCode);
         Assert.Equal("La transferencia ya está firmada por ambas partes y es inmutable", (await ClonarAsync(alterada)).GetProperty("message").GetString());
         Assert.Equal("A", (string?)await Sembrador.EscalarAsync("SELECT FirmaEntrega FROM dbo.tblTransferenciasCustodia"));
     }
 
     [Fact]
-    public async Task La_transferencia_valida_usuarios_distintos_y_existentes()
+    public async Task La_transferencia_valida_los_ids_y_que_los_firmantes_sean_del_viaje()
     {
-        var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        var ajeno = await SesionAsync("ajeno@ejemplo.com", clsRol.CONDUCTOR);
+        var id = await CrearInspeccionAsync(inspector, etapas[0]);
 
-        var mismo = await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { entrega_usuario_id = sesion.UsuarioId, recibe_usuario_id = sesion.UsuarioId });
-        var inexistente = await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { entrega_usuario_id = sesion.UsuarioId, recibe_usuario_id = Guid.NewGuid() });
-        var sinIds = await Cliente(sesion.Token).PostAsync($"/api/inspecciones/{id}/transferencia", Json("{}"));
-        var inspeccionAjena = await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{Guid.NewGuid()}/transferencia", new { entrega_usuario_id = sesion.UsuarioId, recibe_usuario_id = Guid.NewGuid() });
+        var mismo = await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { entrega_usuario_id = inspector.UsuarioId, recibe_usuario_id = inspector.UsuarioId, firma = "A" });
+        var inexistente = await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { entrega_usuario_id = inspector.UsuarioId, recibe_usuario_id = Guid.NewGuid(), firma = "A" });
+        var fueraDelViaje = await FirmarAsync(inspector, id, inspector, ajeno, "A");
+        var sinIds = await FirmarSoloConFirmaAsync(inspector, id, "A");
+        var sinFirma = await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { entrega_usuario_id = inspector.UsuarioId, recibe_usuario_id = conductor.UsuarioId });
+        var inspeccionAjena = await FirmarAsync(inspector, Guid.NewGuid(), inspector, conductor, "A");
 
         Assert.Equal(HttpStatusCode.BadRequest, mismo.StatusCode);
         Assert.Equal(
             ["Quien entrega y quien recibe deben ser usuarios distintos"],
             (await ClonarAsync(mismo)).GetProperty("details").GetProperty("fieldErrors").GetProperty("recibe_usuario_id").EnumerateArray().Select(m => m.GetString()).ToList());
-        Assert.Equal(HttpStatusCode.NotFound, inexistente.StatusCode);
-        Assert.Equal("Algún usuario (entrega/recibe) no existe", (await ClonarAsync(inexistente)).GetProperty("message").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, inexistente.StatusCode);
+        Assert.Equal(["Quien recibe debe ser un usuario del viaje"], MensajesDe(await ClonarAsync(inexistente), "recibe_usuario_id"));
+        Assert.Equal(HttpStatusCode.BadRequest, fueraDelViaje.StatusCode);
+        Assert.Equal(["Quien recibe debe ser un usuario del viaje"], MensajesDe(await ClonarAsync(fueraDelViaje), "recibe_usuario_id"));
         Assert.Equal(HttpStatusCode.BadRequest, sinIds.StatusCode);
+        Assert.Equal(["Indique quién entrega: la primera firma crea la transferencia"], MensajesDe(await ClonarAsync(sinIds), "entrega_usuario_id"));
+        Assert.Equal(HttpStatusCode.BadRequest, sinFirma.StatusCode);
+        Assert.Equal(["La firma es obligatoria"], MensajesDe(await ClonarAsync(sinFirma), "firma"));
         Assert.Equal(HttpStatusCode.NotFound, inspeccionAjena.StatusCode);
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia"));
+    }
+
+    private static List<string?> MensajesDe(JsonElement error, string campo) =>
+        error.GetProperty("details").GetProperty("fieldErrors").GetProperty(campo).EnumerateArray().Select(m => m.GetString()).ToList();
+
+    [Fact]
+    public async Task Recibir_con_reservas_exige_las_observaciones_y_solo_lo_hace_quien_recibe()
+    {
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        await FirmarAsync(inspector, id, inspector, conductor, "A");
+
+        var sinTexto = await Cliente(conductor.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia/reservas", new { firma = "B", reservas = "   " });
+        var quienEntrega = await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia/reservas", new { firma = "A", reservas = "Algo" });
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia WHERE TipoCierre IS NOT NULL OR FirmaRecibe IS NOT NULL"));
+        var ok = await Cliente(conductor.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia/reservas", new { firma = "B", reservas = "  El parachoques tiene un rayón  " });
+        var cuerpo = await ClonarAsync(ok);
+
+        Assert.Equal(HttpStatusCode.BadRequest, sinTexto.StatusCode);
+        Assert.Equal(["Escriba las observaciones: no se puede recibir con reservas sin ellas"], MensajesDe(await ClonarAsync(sinTexto), "reservas"));
+        Assert.Equal(HttpStatusCode.Forbidden, quienEntrega.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, ok.StatusCode);
+        Assert.Equal("con_reservas", cuerpo.GetProperty("tipo_cierre").GetString());
+        Assert.Equal("El parachoques tiene un rayón", cuerpo.GetProperty("reservas_texto").GetString());
+        Assert.True(cuerpo.GetProperty("firmada").GetBoolean());
+        Assert.Equal("El parachoques tiene un rayón", (string?)await Sembrador.EscalarAsync("SELECT ReservasTexto FROM dbo.tblTransferenciasCustodia"));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'transferencia.reservas'"));
+        Assert.Equal(HttpStatusCode.Conflict, (await FirmarSoloConFirmaAsync(conductor, id, "OTRA")).StatusCode);
+    }
+
+    [Fact]
+    public async Task La_constancia_de_no_firma_exige_motivo_testigo_con_usuario_y_foto_y_cierra_la_transferencia()
+    {
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        var testigo = await SesionAsync("testigo@ejemplo.com");
+        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        await FirmarAsync(inspector, id, inspector, conductor, "A");
+        var foto = await FotoConstanciaAsync(inspector);
+        var ruta = $"/api/inspecciones/{id}/transferencia/no-firma";
+
+        var sinMotivo = await Cliente(inspector.Token).PostAsJsonAsync(ruta, new { parte = "recibe", testigo_usuario_id = testigo.UsuarioId, evidencia = foto });
+        var sinTestigo = await Cliente(inspector.Token).PostAsJsonAsync(ruta, new { parte = "recibe", motivo = "Se niega a firmar", evidencia = foto });
+        var sinFoto = await Cliente(inspector.Token).PostAsJsonAsync(ruta, new { parte = "recibe", motivo = "Se niega a firmar", testigo_usuario_id = testigo.UsuarioId });
+        var testigoInexistente = await Cliente(inspector.Token).PostAsJsonAsync(ruta, new { parte = "recibe", motivo = "Se niega a firmar", testigo_usuario_id = Guid.NewGuid(), evidencia = foto });
+        var testigoEsUnaParte = await Cliente(inspector.Token).PostAsJsonAsync(ruta, new { parte = "recibe", motivo = "Se niega a firmar", testigo_usuario_id = conductor.UsuarioId, evidencia = foto });
+        var unoMismo = await Cliente(inspector.Token).PostAsJsonAsync(ruta, new { parte = "entrega", motivo = "Me niego", testigo_usuario_id = testigo.UsuarioId, evidencia = foto });
+        var porElQueSeNiega = await Cliente(conductor.Token).PostAsJsonAsync(ruta, new { parte = "recibe", motivo = "No quiero", testigo_usuario_id = testigo.UsuarioId, evidencia = await FotoConstanciaAsync(conductor) });
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia WHERE TipoCierre IS NOT NULL"));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEvidencias"));
+
+        var ok = await Cliente(inspector.Token).PostAsJsonAsync(ruta, new { parte = "recibe", motivo = "  Se niega a firmar el recibo  ", testigo_usuario_id = testigo.UsuarioId, evidencia = foto });
+        var cuerpo = await ClonarAsync(ok);
+
+        Assert.Equal(HttpStatusCode.BadRequest, sinMotivo.StatusCode);
+        Assert.Equal(["El motivo de la no firma es obligatorio"], MensajesDe(await ClonarAsync(sinMotivo), "motivo"));
+        Assert.Equal(HttpStatusCode.BadRequest, sinTestigo.StatusCode);
+        Assert.Equal(["La constancia exige un testigo con usuario"], MensajesDe(await ClonarAsync(sinTestigo), "testigo_usuario_id"));
+        Assert.Equal(HttpStatusCode.BadRequest, sinFoto.StatusCode);
+        Assert.Equal(["La constancia exige una foto"], MensajesDe(await ClonarAsync(sinFoto), "evidencia"));
+        Assert.Equal(HttpStatusCode.BadRequest, testigoInexistente.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, testigoEsUnaParte.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, unoMismo.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, porElQueSeNiega.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, ok.StatusCode);
+        Assert.Equal("no_firma", cuerpo.GetProperty("tipo_cierre").GetString());
+        Assert.Equal("recibe", cuerpo.GetProperty("no_firma_parte").GetString());
+        Assert.Equal("Se niega a firmar el recibo", cuerpo.GetProperty("motivo_no_firma").GetString());
+        Assert.Equal(testigo.UsuarioId, cuerpo.GetProperty("testigo_usuario_id").GetGuid());
+        Assert.Equal(JsonValueKind.String, cuerpo.GetProperty("evidencia_constancia_id").ValueKind);
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEvidencias e JOIN dbo.tblTransferenciasCustodia t ON t.EvidenciaConstanciaId = e.Id WHERE e.EsConstancia = 1 AND e.VistaId IS NULL AND e.HallazgoId IS NULL"));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'transferencia.no_firma'"));
+        Assert.Equal(HttpStatusCode.Conflict, (await FirmarSoloConFirmaAsync(conductor, id, "TARDE")).StatusCode);
+    }
+
+    [Fact]
+    public async Task La_foto_de_la_constancia_se_admite_aunque_la_inspeccion_ya_este_cerrada_y_no_cuenta_como_foto_de_vista()
+    {
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        var testigo = await SesionAsync("testigo@ejemplo.com");
+        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        await TomarVistasObligatoriasAsync(inspector, id);
+        Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(inspector, id)).StatusCode);
+
+        var r = await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia/no-firma", new
+        {
+            entrega_usuario_id = inspector.UsuarioId,
+            recibe_usuario_id = conductor.UsuarioId,
+            parte = "recibe",
+            motivo = "Se niega a firmar",
+            testigo_usuario_id = testigo.UsuarioId,
+            evidencia = await FotoConstanciaAsync(inspector),
+        });
+
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+        Assert.Equal(7, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEvidencias WHERE EsConstancia = 0"));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEvidencias WHERE EsConstancia = 1"));
+    }
+
+    [Fact]
+    public async Task Una_transferencia_sin_cierre_bloquea_la_salida_de_la_etapa_siguiente_hasta_que_se_cierra()
+    {
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        await LlegadaCerradaAsync(etapas[0], inspector.UsuarioId);
+        var llegada = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblInspecciones WHERE EtapaId = @e", ("@e", etapas[0])))!;
+        await FirmarAsync(inspector, llegada, inspector, conductor, "A");
+        var salida = new { etapa_id = etapas[1], momento = "salida", fecha = FECHA };
+
+        var bloqueada = await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", salida);
+        var error = await ClonarAsync(bloqueada);
+        Assert.Equal(HttpStatusCode.Conflict, bloqueada.StatusCode);
+        Assert.Equal("ETAPA_PREVIA_SIN_CIERRE", error.GetProperty("code").GetString());
+        Assert.Equal("transferencia_sin_cierre", error.GetProperty("details").GetProperty("motivo").GetString());
+        Assert.Equal(etapas[0], error.GetProperty("details").GetProperty("etapa_previa_id").GetGuid());
+
+        Assert.Equal(HttpStatusCode.Created, (await Cliente(conductor.Token).PostAsJsonAsync($"/api/inspecciones/{llegada}/transferencia/reservas", new { firma = "B", reservas = "Rayón" })).StatusCode);
+
+        Assert.Equal(HttpStatusCode.Created, (await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", salida)).StatusCode);
+    }
+
+    [Fact]
+    public async Task El_conductor_recibe_en_el_cargue_sin_que_la_respuesta_le_muestre_los_hallazgos()
+    {
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var (ruta, _) = await SubirAsync(inspector);
+        Assert.Equal(HttpStatusCode.Created, (await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new
+        {
+            parte_vehiculo = "Capot",
+            clase_dano = "golpe",
+            tamano_dano = "1_5cm",
+            evidencia = new { storage_path = ruta, sello_fecha = FECHA, sello_lat = 4.6, sello_lng = -74.1 },
+        })).StatusCode);
+        await FirmarAsync(inspector, id, inspector, conductor, "A");
+
+        var recibo = await FirmarSoloConFirmaAsync(conductor, id, "B");
+        var cuerpo = await ClonarAsync(recibo);
+
+        Assert.Equal(HttpStatusCode.Created, recibo.StatusCode);
+        Assert.False(cuerpo.TryGetProperty("hallazgos", out _));
+        Assert.Equal("firmada", cuerpo.GetProperty("tipo_cierre").GetString());
+    }
+
+    [Fact]
+    public async Task La_constancia_en_pdf_la_descargan_los_del_viaje_y_no_un_inspector_ajeno()
+    {
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        var ajeno = await SesionAsync("ajeno@ejemplo.com");
+        var testigo = await SesionAsync("testigo@ejemplo.com");
+        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var ruta = $"/api/inspecciones/{id}/transferencia/constancia/pdf";
+        Assert.Equal(HttpStatusCode.NotFound, (await Cliente(inspector.Token).GetAsync(ruta)).StatusCode);
+        await FirmarAsync(inspector, id, inspector, conductor, "M0 0 L10 10 L20 0");
+        await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia/no-firma", new
+        {
+            parte = "recibe",
+            motivo = "Se niega a firmar (sin motivo adicional)",
+            testigo_usuario_id = testigo.UsuarioId,
+            evidencia = await FotoConstanciaAsync(inspector),
+        });
+
+        var delInspector = await Cliente(inspector.Token).GetAsync(ruta);
+        var delConductor = await Cliente(conductor.Token).GetAsync(ruta);
+        var delAjeno = await Cliente(ajeno.Token).GetAsync(ruta);
+        var inexistente = await Cliente(inspector.Token).GetAsync($"/api/inspecciones/{Guid.NewGuid()}/transferencia/constancia/pdf");
+
+        Assert.Equal(HttpStatusCode.OK, delInspector.StatusCode);
+        Assert.Equal("application/pdf", delInspector.Content.Headers.ContentType?.MediaType);
+        var bytes = await delInspector.Content.ReadAsByteArrayAsync();
+        Assert.StartsWith("%PDF-", System.Text.Encoding.ASCII.GetString(bytes, 0, 5));
+        Assert.Contains("%%EOF", System.Text.Encoding.ASCII.GetString(bytes[^16..]));
+        Assert.Equal(HttpStatusCode.OK, delConductor.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, delAjeno.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, inexistente.StatusCode);
+    }
+
+    [Fact]
+    public async Task Los_firmantes_del_viaje_son_su_inspector_y_su_conductor_y_un_ajeno_no_los_ve()
+    {
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        var ajeno = await SesionAsync("ajeno@ejemplo.com");
+        var viajeId = await Sembrador.ViajeDeEtapaAsync(etapas[0]);
+
+        var r = await Cliente(inspector.Token).GetAsync($"/api/viajes/{viajeId}/firmantes");
+        var delConductor = await Cliente(conductor.Token).GetAsync($"/api/viajes/{viajeId}/firmantes");
+        var delAjeno = await Cliente(ajeno.Token).GetAsync($"/api/viajes/{viajeId}/firmantes");
+        var inexistente = await Cliente(inspector.Token).GetAsync($"/api/viajes/{Guid.NewGuid()}/firmantes");
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var firmantes = await ClonarAsync(r);
+        Assert.Equal(2, firmantes.GetArrayLength());
+        Assert.Equal(["id", "nombre", "rol"], firmantes[0].EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(
+            new[] { inspector.UsuarioId, conductor.UsuarioId }.Order(),
+            firmantes.EnumerateArray().Select(f => f.GetProperty("id").GetGuid()).Order());
+        Assert.Equal(HttpStatusCode.OK, delConductor.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, delAjeno.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, inexistente.StatusCode);
     }
 
     // ---------------------------------------------------------------- informe y listado
@@ -1051,7 +1322,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
             coords_diagrama = new { x = 0.1, y = 0.2 },
             evidencia = new { storage_path = ruta, sello_fecha = FECHA, sello_lat = 4.6, sello_lng = -74.1 },
         });
-        await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { entrega_usuario_id = sesion.UsuarioId, recibe_usuario_id = receptor.UsuarioId, firma_entrega = "TRAZO-A", firma_recibe = "TRAZO-B" });
+        await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { entrega_usuario_id = sesion.UsuarioId, recibe_usuario_id = receptor.UsuarioId, firma = "TRAZO-A" });
+        await Cliente(receptor.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { firma = "TRAZO-B" });
 
         var r = await Cliente(receptor.Token).GetAsync($"/api/inspecciones/{id}");
 

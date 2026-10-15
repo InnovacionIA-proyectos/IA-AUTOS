@@ -32,6 +32,8 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsSesionPortalService>();
         servicios.AddScoped<clsUsuariosService>();
         servicios.AddScoped<clsCargaConductoresService>();
+        servicios.AddScoped<clsFabricaEvidencias>();
+        servicios.AddScoped<clsTransferenciasService>();
         servicios.AddScoped<clsVehiculosService>();
         servicios.AddScoped<clsEnsamblajeViajes>();
         servicios.AddScoped<clsViajesService>();
