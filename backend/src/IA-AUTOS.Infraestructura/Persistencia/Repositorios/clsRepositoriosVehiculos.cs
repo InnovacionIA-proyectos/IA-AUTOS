@@ -43,5 +43,11 @@ internal sealed class clsEtapaRepository(clsAppDbContext contexto) : IEtapaRepos
     public Task<clsEtapa?> ObtenerPorIdAsync(Guid id, CancellationToken ct = default) =>
         contexto.Etapas.FirstOrDefaultAsync(e => e.Id == id, ct);
 
+    public Task<clsEtapa?> ObtenerPreviaAsync(Guid viajeId, Guid vehiculoId, int orden, CancellationToken ct = default) =>
+        contexto.Etapas.AsNoTracking()
+            .Where(e => e.ViajeId == viajeId && e.VehiculoId == vehiculoId && e.Orden < orden)
+            .OrderByDescending(e => e.Orden)
+            .FirstOrDefaultAsync(ct);
+
     public void Agregar(clsEtapa etapa) => contexto.Etapas.Add(etapa);
 }

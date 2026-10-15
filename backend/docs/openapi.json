@@ -1919,6 +1919,70 @@
         ]
       }
     },
+    "/api/inspecciones/{id}/corregir": {
+      "post": {
+        "tags": [
+          "Inspecciones"
+        ],
+        "operationId": "Inspecciones_Corregir",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorregirInspeccionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspeccionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspeccionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspeccionDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/inspecciones/{id}": {
       "get": {
         "tags": [
@@ -2070,17 +2134,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/HallazgoDto"
+                  "$ref": "#/components/schemas/HallazgoCreadoDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HallazgoDto"
+                  "$ref": "#/components/schemas/HallazgoCreadoDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HallazgoDto"
+                  "$ref": "#/components/schemas/HallazgoCreadoDto"
                 }
               }
             }
@@ -2824,6 +2888,20 @@
               "schema": {
                 "$ref": "#/components/schemas/SubirArchivoRequest"
               }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "required": [
+                  "archivo"
+                ],
+                "type": "object",
+                "properties": {
+                  "archivo": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
             }
           },
           "required": true
@@ -3086,7 +3164,8 @@
       "ArchivoSubidoDto": {
         "required": [
           "storage_path",
-          "url"
+          "url",
+          "hash_sha256"
         ],
         "type": "object",
         "properties": {
@@ -3094,6 +3173,9 @@
             "type": "string"
           },
           "url": {
+            "type": "string"
+          },
+          "hash_sha256": {
             "type": "string"
           }
         }
@@ -3599,17 +3681,63 @@
           }
         }
       },
+      "CorregirInspeccionRequest": {
+        "required": [
+          "fecha",
+          "lat",
+          "lng",
+          "notas"
+        ],
+        "type": "object",
+        "properties": {
+          "fecha": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "notas": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CrearEvidenciaRequest": {
         "required": [
           "hallazgo_id",
+          "vista_id",
           "storage_path",
           "sello_fecha",
           "sello_lat",
-          "sello_lng"
+          "sello_lng",
+          "precision",
+          "dispositivo_id",
+          "nota",
+          "hash_sha256"
         ],
         "type": "object",
         "properties": {
           "hallazgo_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "vista_id": {
             "type": [
               "null",
               "string"
@@ -3638,6 +3766,31 @@
               "number"
             ],
             "format": "double"
+          },
+          "precision": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "dispositivo_id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nota": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hash_sha256": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -3646,7 +3799,8 @@
           "parte_vehiculo",
           "clase_dano",
           "tamano_dano",
-          "coords_diagrama"
+          "coords_diagrama",
+          "evidencia"
         ],
         "type": "object",
         "properties": {
@@ -3682,6 +3836,69 @@
               "y": {
                 "type": "number",
                 "format": "double"
+              }
+            }
+          },
+          "evidencia": {
+            "required": [
+              "storage_path",
+              "sello_fecha",
+              "sello_lat",
+              "sello_lng",
+              "precision",
+              "dispositivo_id",
+              "nota",
+              "hash_sha256"
+            ],
+            "type": "object",
+            "properties": {
+              "storage_path": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "sello_fecha": {
+                "format": "date-time"
+              },
+              "sello_lat": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "sello_lng": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "precision": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "dispositivo_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "nota": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "hash_sha256": {
+                "type": [
+                  "null",
+                  "string"
+                ]
               }
             }
           }
@@ -3966,7 +4183,14 @@
           "sello_lng",
           "url",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "vista_id",
+          "hash_sha256",
+          "sello_servidor_at",
+          "precision",
+          "dispositivo_id",
+          "nota",
+          "sin_ubicacion"
         ],
         "type": "object",
         "properties": {
@@ -3989,17 +4213,11 @@
             "format": "date-time"
           },
           "sello_lat": {
-            "type": [
-              "null",
-              "number"
-            ],
+            "type": "number",
             "format": "double"
           },
           "sello_lng": {
-            "type": [
-              "null",
-              "number"
-            ],
+            "type": "number",
             "format": "double"
           },
           "url": {
@@ -4013,6 +4231,44 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "vista_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "hash_sha256": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sello_servidor_at": {
+            "format": "date-time"
+          },
+          "precision": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "dispositivo_id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nota": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sin_ubicacion": {
+            "type": "boolean"
           }
         }
       },
@@ -4150,6 +4406,58 @@
           }
         }
       },
+      "HallazgoCreadoDto": {
+        "required": [
+          "id",
+          "inspeccion_id",
+          "parte_vehiculo",
+          "clase_dano",
+          "tamano_dano",
+          "coords_diagrama",
+          "created_at",
+          "updated_at",
+          "evidencia"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inspeccion_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parte_vehiculo": {
+            "type": "string"
+          },
+          "clase_dano": {
+            "type": "string"
+          },
+          "tamano_dano": {
+            "type": "string"
+          },
+          "coords_diagrama": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CoordsDiagramaDto"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          },
+          "evidencia": {
+            "$ref": "#/components/schemas/EvidenciaDto"
+          }
+        }
+      },
       "HallazgoDto": {
         "required": [
           "id",
@@ -4227,7 +4535,12 @@
           "unidad",
           "hallazgos",
           "evidencias",
-          "transferencia"
+          "transferencia",
+          "iniciada_at",
+          "cerrada_at",
+          "version",
+          "corrige_inspeccion_id",
+          "momento_nombre"
         ],
         "type": "object",
         "properties": {
@@ -4369,6 +4682,26 @@
                 "$ref": "#/components/schemas/TransferenciaDetalleDto"
               }
             ]
+          },
+          "iniciada_at": {
+            "format": "date-time"
+          },
+          "cerrada_at": {
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "corrige_inspeccion_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "momento_nombre": {
+            "type": "string"
           }
         }
       },
@@ -4521,7 +4854,12 @@
           "trailer",
           "notas",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "iniciada_at",
+          "cerrada_at",
+          "version",
+          "corrige_inspeccion_id",
+          "momento_nombre"
         ],
         "type": "object",
         "properties": {
@@ -4593,6 +4931,26 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "iniciada_at": {
+            "format": "date-time"
+          },
+          "cerrada_at": {
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "corrige_inspeccion_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "momento_nombre": {
+            "type": "string"
           }
         }
       },
@@ -4614,7 +4972,12 @@
           "created_at",
           "updated_at",
           "vin",
-          "proceso"
+          "proceso",
+          "iniciada_at",
+          "cerrada_at",
+          "version",
+          "corrige_inspeccion_id",
+          "momento_nombre"
         ],
         "type": "object",
         "properties": {
@@ -4691,6 +5054,26 @@
             "type": "string"
           },
           "proceso": {
+            "type": "string"
+          },
+          "iniciada_at": {
+            "format": "date-time"
+          },
+          "cerrada_at": {
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "corrige_inspeccion_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "momento_nombre": {
             "type": "string"
           }
         }
@@ -4834,6 +5217,11 @@
           "notas",
           "created_at",
           "updated_at",
+          "iniciada_at",
+          "cerrada_at",
+          "version",
+          "corrige_inspeccion_id",
+          "momento_nombre",
           "hallazgos",
           "evidencias",
           "transferencia"
@@ -4908,6 +5296,26 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "iniciada_at": {
+            "format": "date-time"
+          },
+          "cerrada_at": {
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "corrige_inspeccion_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "momento_nombre": {
+            "type": "string"
           },
           "hallazgos": {
             "type": "array",

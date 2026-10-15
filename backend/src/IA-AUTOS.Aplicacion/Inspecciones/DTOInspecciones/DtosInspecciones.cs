@@ -1,6 +1,9 @@
 namespace IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 
-/// <summary>La inspeccion toma del viaje de la etapa la placa, el trailer y el conductor: no se piden como texto.</summary>
+/// <summary>
+/// La inspeccion toma del viaje de la etapa la placa, el trailer y el conductor: no se piden como texto. <c>Momento</c> es <c>salida</c> o
+/// <c>llegada</c>.
+/// </summary>
 public sealed record CrearInspeccionRequest(
     Guid? EtapaId,
     string? Momento,
@@ -10,14 +13,46 @@ public sealed record CrearInspeccionRequest(
     string? Estado,
     string? Notas);
 
-public sealed record CrearHallazgoRequest(string? ParteVehiculo, string? ClaseDano, string? TamanoDano, CoordsDiagramaDto? CoordsDiagrama);
+/// <summary>Cuerpo (opcional) de la correccion: la fecha por defecto es ahora y las notas empiezan vacias.</summary>
+public sealed record CorregirInspeccionRequest(DateTimeOffset? Fecha, double? Lat, double? Lng, string? Notas);
 
-public sealed record CrearEvidenciaRequest(
-    Guid? HallazgoId,
+/// <summary>
+/// La foto de un hallazgo. <c>StoragePath</c> es el nombre del archivo que devolvio <c>POST /api/uploads</c>. <c>HashSha256</c> es opcional: si
+/// llega se compara con el del archivo recibido y debe coincidir.
+/// </summary>
+public sealed record FotoHallazgoRequest(
     string? StoragePath,
     DateTimeOffset? SelloFecha,
     double? SelloLat,
-    double? SelloLng);
+    double? SelloLng,
+    double? Precision,
+    string? DispositivoId,
+    string? Nota,
+    string? HashSha256);
+
+/// <summary>Un hallazgo exige su foto propia: <c>Evidencia</c> es obligatoria y se guarda junto con el hallazgo.</summary>
+public sealed record CrearHallazgoRequest(
+    string? ParteVehiculo,
+    string? ClaseDano,
+    string? TamanoDano,
+    CoordsDiagramaDto? CoordsDiagrama,
+    FotoHallazgoRequest? Evidencia);
+
+/// <summary>
+/// Foto de una inspeccion: de una vista (<c>VistaId</c>, del catalogo vistas-foto) o de un hallazgo (<c>HallazgoId</c>). Sin ubicacion
+/// completa (<c>SelloLat</c> y <c>SelloLng</c>) la foto queda «sin ubicacion». Las fotos de vistas adicionales exigen <c>Nota</c>.
+/// </summary>
+public sealed record CrearEvidenciaRequest(
+    Guid? HallazgoId,
+    Guid? VistaId,
+    string? StoragePath,
+    DateTimeOffset? SelloFecha,
+    double? SelloLat,
+    double? SelloLng,
+    double? Precision,
+    string? DispositivoId,
+    string? Nota,
+    string? HashSha256);
 
 /// <summary>Firma parcial permitida: quien entrega y quien recibe pueden firmar por separado.</summary>
 public sealed record FirmarTransferenciaRequest(Guid? EntregaUsuarioId, Guid? RecibeUsuarioId, string? FirmaEntrega, string? FirmaRecibe);
@@ -53,7 +88,12 @@ public sealed record InspeccionListadoDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string Vin,
-    string Proceso);
+    string Proceso,
+    DateTimeOffset IniciadaAt,
+    DateTimeOffset? CerradaAt,
+    int Version,
+    Guid? CorrigeInspeccionId,
+    string MomentoNombre);
 
 /// <summary>Transferencia con nombres y firmas dibujadas, para la revision del informe en la web.</summary>
 public sealed record TransferenciaDetalleDto(
@@ -102,7 +142,12 @@ public sealed record InformeDetalleDto(
     string? Unidad,
     IReadOnlyList<HallazgoDto> Hallazgos,
     IReadOnlyList<EvidenciaDto> Evidencias,
-    TransferenciaDetalleDto? Transferencia);
+    TransferenciaDetalleDto? Transferencia,
+    DateTimeOffset IniciadaAt,
+    DateTimeOffset? CerradaAt,
+    int Version,
+    Guid? CorrigeInspeccionId,
+    string MomentoNombre);
 
 public sealed record ResumenCierreDto(int Evidencias, int Hallazgos);
 

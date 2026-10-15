@@ -46,7 +46,7 @@ internal sealed class clsGeneradorPdfInventario : IGeneradorPdfInventario
             foreach (var inspeccion in etapa.Inspecciones)
             {
                 var fecha = inspeccion.Fecha.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
-                elementos.Add(new Linea($"  {inspeccion.Momento} — {inspeccion.Estado} — {fecha}", 11, false));
+                elementos.Add(new Linea($"  {inspeccion.MomentoNombre} — {inspeccion.Estado} — {fecha}", 11, false));
                 foreach (var hallazgo in inspeccion.Hallazgos)
                 {
                     elementos.Add(new Linea($"    • {hallazgo.ParteVehiculo}: {hallazgo.ClaseDano} ({hallazgo.TamanoDano})", 11, false));

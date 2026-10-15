@@ -17,6 +17,9 @@ public static class clsCodigosError
     /// <summary>La cuenta esta bloqueada por intentos de PIN fallidos (423); details.bloqueado_hasta dice hasta cuando.</summary>
     public const string ACCOUNT_LOCKED = "ACCOUNT_LOCKED";
 
+    /// <summary>La etapa anterior del VIN no tiene su inspeccion de llegada cerrada: no se puede crear la salida de la siguiente (409).</summary>
+    public const string ETAPA_PREVIA_SIN_CIERRE = "ETAPA_PREVIA_SIN_CIERRE";
+
     /// <summary>El PIN fue asignado o reiniciado y hay que cambiarlo antes de usar el resto de la API (403).</summary>
     public const string PIN_CHANGE_REQUIRED = "PIN_CHANGE_REQUIRED";
 

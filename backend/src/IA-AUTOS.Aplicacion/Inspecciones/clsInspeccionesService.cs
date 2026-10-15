@@ -1,8 +1,11 @@
+using System.Security.Cryptography;
 using FluentValidation;
+using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Dominio.Comun;
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Usuarios;
@@ -22,13 +25,15 @@ public interface IConsultasInspecciones
 }
 
 /// <summary>
-/// Flujo de campo: crear la inspeccion de una etapa, agregar hallazgos y evidencias, registrar la transferencia de custodia
-/// (firma parcial acumulada) y cerrarla como evidencia inmutable.
+/// Flujo de campo: crear la inspeccion de salida o de llegada de una etapa, agregar fotos y hallazgos (cada uno con su foto), registrar la
+/// transferencia de custodia (firma parcial acumulada), cerrarla como evidencia inmutable y, si hay un error, corregirla con una version nueva.
 /// </summary>
 public sealed class clsInspeccionesService(
     IInspeccionRepository inspecciones,
     IEtapaRepository etapas,
     IViajeRepository viajes,
+    IVehiculoRepository vehiculos,
+    IAlmacenArchivos almacen,
     IUsuarioRepository usuarios,
     ITransferenciaCustodiaRepository transferencias,
     IConsultasInspecciones consultas,
@@ -39,6 +44,7 @@ public sealed class clsInspeccionesService(
     ICatalogosLectura catalogos,
     IOptions<clsOpcionesSeguridad> seguridad,
     IValidator<CrearInspeccionRequest> validadorInspeccion,
+    IValidator<CorregirInspeccionRequest> validadorCorreccion,
     IValidator<CrearHallazgoRequest> validadorHallazgo,
     IValidator<CrearEvidenciaRequest> validadorEvidencia,
     IValidator<FirmarTransferenciaRequest> validadorTransferencia)
@@ -64,6 +70,12 @@ public sealed class clsInspeccionesService(
             throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite inspecciones nuevas");
         }
 
+        // La salida de una etapa solo se crea cuando la etapa anterior del VIN ya termino (su llegada esta cerrada).
+        if (solicitud.Momento == clsMomento.SALIDA)
+        {
+            await AsegurarEtapaPreviaCerradaAsync(etapa, ct);
+        }
+
         // El usuario siempre sale del token: el cliente no puede crear informes a nombre de otro.
         var inspeccion = clsInspeccion.Crear(
             etapa.Id,
@@ -80,10 +92,47 @@ public sealed class clsInspeccionesService(
         inspecciones.Agregar(inspeccion);
         auditor.Registrar("inspeccion.crear", "inspecciones", inspeccion.Id);
 
-        // Un usuario inexistente (404) y un segundo informe en la misma etapa (409) se traducen al confirmar.
+        // Un usuario inexistente (404) y una segunda inspeccion original del mismo momento en la etapa (409) se traducen al confirmar.
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         var conductor = viaje.ConductorId is { } conductorId ? (await usuarios.ObtenerPorIdAsync(conductorId, ct))?.Nombre : null;
         return clsMapeadorInspecciones.AInspeccion(inspeccion, viaje.Placa, viaje.Trailer, conductor);
+    }
+
+    /// <summary>
+    /// Corrige una inspeccion CERRADA: crea la version siguiente (en borrador y vacia) que referencia a la anterior; la anterior no cambia. Solo
+    /// se corrige la ultima version y mientras el viaje siga activo. Quien corrige es quien participa en el viaje (o un administrador).
+    /// </summary>
+    public async Task<InspeccionDto> CorregirAsync(Guid inspeccionId, CorregirInspeccionRequest solicitud, CancellationToken ct = default)
+    {
+        await validadorCorreccion.ValidarOLanzarAsync(solicitud, ct);
+        var original = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct)
+            ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
+        var viaje = await viajes.ObtenerPorIdAsync(original.ViajeId, ct)
+            ?? throw new clsEntidadNoEncontradaException("El viaje de la inspección no existe");
+
+        if (actual.SoloSusViajes() is { } usuarioViaje && !viaje.Participa(usuarioViaje))
+        {
+            throw new clsProhibidoException("El viaje de esta inspección no está asignado a su usuario");
+        }
+
+        if (!viaje.EstaActivo)
+        {
+            throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite correcciones");
+        }
+
+        if (await inspecciones.ObtenerCorreccionIdAsync(inspeccionId, ct) is { } corregidaPor)
+        {
+            throw new clsConflictoException($"Esta inspección ya fue corregida (versión {corregidaPor}): corrija la última versión");
+        }
+
+        var ahora = reloj.Ahora;
+        var nueva = original.Corregir(actual.IdObligatorio(), solicitud.Fecha ?? ahora, solicitud.Lat, solicitud.Lng, solicitud.Notas, ahora);
+        viaje.RegistrarActividad(ahora);
+        inspecciones.Agregar(nueva);
+        auditor.Registrar("inspeccion.corregir", "inspecciones", nueva.Id);
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        var conductor = viaje.ConductorId is { } conductorId ? (await usuarios.ObtenerPorIdAsync(conductorId, ct))?.Nombre : null;
+        return clsMapeadorInspecciones.AInspeccion(nueva, viaje.Placa, viaje.Trailer, conductor);
     }
 
     public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspeccionesRequest solicitud, CancellationToken ct = default) =>
@@ -106,11 +155,13 @@ public sealed class clsInspeccionesService(
         return informe;
     }
 
-    public async Task<HallazgoDto> AgregarHallazgoAsync(Guid inspeccionId, CrearHallazgoRequest solicitud, CancellationToken ct = default)
+    /// <summary>Guarda el hallazgo junto con su foto propia (un hallazgo sin foto no se guarda: 400).</summary>
+    public async Task<HallazgoCreadoDto> AgregarHallazgoAsync(Guid inspeccionId, CrearHallazgoRequest solicitud, CancellationToken ct = default)
     {
         await ValidarHallazgoAsync(solicitud, ct);
         var inspeccion = await ObtenerParaEscrituraAsync(inspeccionId, ct);
         inspeccion.AsegurarEditable();
+        var foto = solicitud.Evidencia!;
 
         var hallazgo = clsHallazgo.Crear(
             inspeccionId,
@@ -119,10 +170,15 @@ public sealed class clsInspeccionesService(
             solicitud.TamanoDano!,
             solicitud.CoordsDiagrama is null ? null : new clsCoordsDiagrama(solicitud.CoordsDiagrama.X, solicitud.CoordsDiagrama.Y),
             reloj.Ahora);
+        var evidencia = await CrearEvidenciaAsync(
+            inspeccionId, hallazgo.Id, null, foto.StoragePath!, foto.SelloFecha!.Value, foto.SelloLat, foto.SelloLng, foto.Precision,
+            foto.DispositivoId, foto.Nota, foto.HashSha256, ct);
         inspecciones.Agregar(hallazgo);
+        inspecciones.Agregar(evidencia);
         auditor.Registrar("hallazgo.crear", "hallazgos", hallazgo.Id);
+        auditor.Registrar("evidencia.crear", "evidencias", evidencia.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        return clsMapeadorInspecciones.AHallazgo(hallazgo);
+        return clsMapeadorInspecciones.AHallazgoCreado(hallazgo, evidencia);
     }
 
     public async Task<EvidenciaDto> AgregarEvidenciaAsync(Guid inspeccionId, CrearEvidenciaRequest solicitud, CancellationToken ct = default)
@@ -131,20 +187,26 @@ public sealed class clsInspeccionesService(
         var inspeccion = await ObtenerParaEscrituraAsync(inspeccionId, ct);
         inspeccion.AsegurarEditable();
 
+        // Una foto es de una vista o de un hallazgo, no de las dos cosas.
+        if (solicitud.HallazgoId is not null && solicitud.VistaId is not null)
+        {
+            throw clsErroresCampos.De("vista_id", "Una foto es de una vista o de un hallazgo, no de ambos");
+        }
+
         if (solicitud.HallazgoId is { } hallazgoId
             && !await inspecciones.ExisteHallazgoEnInspeccionAsync(hallazgoId, inspeccionId, ct))
         {
             throw new clsEntidadNoEncontradaException("El hallazgo indicado no pertenece a esta inspección");
         }
 
-        var evidencia = clsEvidencia.Crear(
-            inspeccionId,
-            solicitud.HallazgoId,
-            solicitud.StoragePath!,
-            solicitud.SelloFecha!.Value,
-            solicitud.SelloLat,
-            solicitud.SelloLng,
-            reloj.Ahora);
+        if (solicitud.VistaId is { } vistaId)
+        {
+            await ValidarVistaAsync(vistaId, solicitud.Nota, ct);
+        }
+
+        var evidencia = await CrearEvidenciaAsync(
+            inspeccionId, solicitud.HallazgoId, solicitud.VistaId, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat,
+            solicitud.SelloLng, solicitud.Precision, solicitud.DispositivoId, solicitud.Nota, solicitud.HashSha256, ct);
         inspecciones.Agregar(evidencia);
         auditor.Registrar("evidencia.crear", "evidencias", evidencia.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -185,19 +247,100 @@ public sealed class clsInspeccionesService(
     }
 
     /// <summary>
-    /// Cierra la inspeccion como evidencia inmutable. Las fotos solo son obligatorias si hay una novedad (hallazgo) y toda
-    /// foto presente debe estar geolocalizada.
+    /// Cierra la inspeccion como evidencia inmutable. En Cargue y Descargue exige la foto de cada vista obligatoria (segun el tipo del
+    /// vehiculo; 400 con el nombre de la que falta), una foto propia por hallazgo y que toda foto tenga ubicacion; las fotos adicionales
+    /// (baul y cojineria) no bloquean. En Transporte (registro del conductor) no exige las vistas, pero si el GPS del registro.
     /// </summary>
     public async Task<CerrarInspeccionResponse> CerrarAsync(Guid inspeccionId, CancellationToken ct = default)
     {
         var inspeccion = await ObtenerParaEscrituraAsync(inspeccionId, ct);
         var resumen = await inspecciones.ObtenerResumenCierreAsync(inspeccionId, ct);
-        inspeccion.Cerrar(resumen, reloj.Ahora);
+        var etapa = await etapas.ObtenerPorIdAsync(inspeccion.EtapaId, ct)
+            ?? throw new clsEntidadNoEncontradaException("La etapa de la inspección no existe");
+        var codigoEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
+        var exigeVistas = clsEtapaCatalogo.ExigeVistas(codigoEtapa);
+        var faltantes = exigeVistas && !inspeccion.EstaCerrada ? await VistasFaltantesAsync(etapa, resumen, ct) : [];
+        inspeccion.Cerrar(resumen, faltantes, exigeUbicacionPropia: !exigeVistas, reloj.Ahora);
         auditor.Registrar("inspeccion.cerrar", "inspecciones", inspeccion.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return new CerrarInspeccionResponse(
             clsMapeadorInspecciones.AInspeccion(inspeccion),
             new ResumenCierreDto(resumen.TotalEvidencias, resumen.TotalHallazgos));
+    }
+
+    /// <summary>
+    /// La salida de una etapa exige que la etapa anterior del mismo VIN en el viaje tenga cerrada su inspeccion de llegada (409
+    /// ETAPA_PREVIA_SIN_CIERRE con la etapa que falta cerrar). La primera etapa no tiene anterior.
+    /// </summary>
+    private async Task AsegurarEtapaPreviaCerradaAsync(clsEtapa etapa, CancellationToken ct)
+    {
+        var previa = await etapas.ObtenerPreviaAsync(etapa.ViajeId, etapa.VehiculoId, etapa.Orden, ct);
+        if (previa is null || await inspecciones.TieneLlegadaCerradaAsync(previa.Id, ct))
+        {
+            return;
+        }
+
+        var nombre = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == previa.EtapaCatalogoId);
+        throw new clsEtapaPreviaSinCierreException(previa.Id, nombre?["nombre"] as string ?? nombre?.Codigo ?? "anterior");
+    }
+
+    /// <summary>Nombres de las vistas obligatorias (activas, del tipo del vehiculo o de cualquier tipo) que aun no tienen foto, en el orden del catalogo.</summary>
+    private async Task<IReadOnlyList<string>> VistasFaltantesAsync(clsEtapa etapa, clsResumenCierre resumen, CancellationToken ct)
+    {
+        var vehiculo = await vehiculos.ObtenerPorIdAsync(etapa.VehiculoId, ct)
+            ?? throw new clsEntidadNoEncontradaException("El vehículo de la etapa no existe");
+        return (await catalogos.ValoresAsync(clsNombresCatalogo.VISTAS_FOTO, ct))
+            .Where(v => v.Activo && v["obligatoria"] is true
+                && (v["tipo_vehiculo"] is not string tipo || string.Equals(tipo, vehiculo.TipoVehiculo, StringComparison.OrdinalIgnoreCase))
+                && !resumen.VistasFotografiadas.Contains(v.Id))
+            .OrderBy(v => v["orden"] as int? ?? 0)
+            .Select(v => v["nombre"] as string ?? v.Codigo ?? v.Id.ToString())
+            .ToList();
+    }
+
+    /// <summary>La vista debe existir y estar activa; la foto de una vista adicional (baul, cojineria) exige la nota del faltante o dano.</summary>
+    private async Task ValidarVistaAsync(Guid vistaId, string? nota, CancellationToken ct)
+    {
+        var vista = (await catalogos.ValoresAsync(clsNombresCatalogo.VISTAS_FOTO, ct)).FirstOrDefault(v => v.Id == vistaId)
+            ?? throw clsErroresCampos.De("vista_id", "La vista no existe en el catálogo");
+        if (!vista.Activo)
+        {
+            throw clsErroresCampos.De("vista_id", "La vista está inactiva");
+        }
+
+        if (vista["obligatoria"] is false && string.IsNullOrWhiteSpace(nota))
+        {
+            throw clsErroresCampos.De("nota", "La foto de una vista adicional exige una nota con el faltante o daño");
+        }
+    }
+
+    /// <summary>
+    /// Arma la evidencia con el sello del servidor y el hash SHA-256 del archivo tal como quedo guardado. El archivo debe haberse subido
+    /// antes (POST /api/uploads); si el cliente envia su hash, debe coincidir con el del archivo recibido.
+    /// </summary>
+    private async Task<clsEvidencia> CrearEvidenciaAsync(
+        Guid inspeccionId,
+        Guid? hallazgoId,
+        Guid? vistaId,
+        string storagePath,
+        DateTimeOffset selloFecha,
+        double? lat,
+        double? lng,
+        double? precision,
+        string? dispositivoId,
+        string? nota,
+        string? hashCliente,
+        CancellationToken ct)
+    {
+        var contenido = await almacen.LeerAsync(storagePath.Trim(), ct)
+            ?? throw clsErroresCampos.De("storage_path", "El archivo no se ha subido: suba la foto con POST /api/uploads antes de registrarla");
+        var hash = Convert.ToHexString(SHA256.HashData(contenido)).ToLowerInvariant();
+        if (clsValidador.Opcional(hashCliente) is { } declarado && !string.Equals(declarado, hash, StringComparison.OrdinalIgnoreCase))
+        {
+            throw clsErroresCampos.De("hash_sha256", "El hash no coincide con el del archivo recibido: vuelva a subir la foto");
+        }
+
+        return clsEvidencia.Crear(inspeccionId, hallazgoId, vistaId, storagePath, selloFecha, lat, lng, precision, dispositivoId, hash, nota, reloj.Ahora);
     }
 
     /// <summary>Obtiene la inspeccion (404 si no existe) y verifica que el usuario pueda modificarla.</summary>

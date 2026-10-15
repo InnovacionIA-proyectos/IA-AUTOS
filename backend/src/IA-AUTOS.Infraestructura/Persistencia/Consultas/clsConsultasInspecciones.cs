@@ -1,5 +1,6 @@
 using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
+using IAAutos.Dominio.Inspecciones;
 using Microsoft.EntityFrameworkCore;
 
 namespace IAAutos.Infraestructura.Persistencia.Consultas;
@@ -38,7 +39,9 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                 x.Inspeccion.Id, x.Inspeccion.EtapaId, x.Inspeccion.ViajeId, x.Inspeccion.UsuarioId, x.Inspeccion.Momento, x.Inspeccion.Fecha,
                 x.Inspeccion.Lat, x.Inspeccion.Lng, x.Inspeccion.Estado,
                 x.Inspeccion.ConductorNombre ?? x.Conductor, x.Inspeccion.Placa ?? x.Placa, x.Inspeccion.Trailer ?? x.Trailer, x.Inspeccion.Notas,
-                x.Inspeccion.CreatedAt, x.Inspeccion.UpdatedAt, x.Vin, x.Proceso))
+                x.Inspeccion.CreatedAt, x.Inspeccion.UpdatedAt, x.Vin, x.Proceso,
+                x.Inspeccion.IniciadaAt, x.Inspeccion.CerradaAt, x.Inspeccion.Version, x.Inspeccion.CorrigeInspeccionId,
+                x.Inspeccion.Momento == clsMomento.SALIDA ? "Inspección de salida" : x.Inspeccion.Momento == clsMomento.LLEGADA ? "Inspección de llegada" : x.Inspeccion.Momento))
             .ToListAsync(ct);
     }
 
@@ -117,6 +120,11 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                     transferencia.EntregaNombre,
                     transferencia.RecibeNombre,
                     transferencia.Transferencia.FirmaEntrega,
-                    transferencia.Transferencia.FirmaRecibe));
+                    transferencia.Transferencia.FirmaRecibe),
+            insp.IniciadaAt,
+            insp.CerradaAt,
+            insp.Version,
+            insp.CorrigeInspeccionId,
+            clsMomento.Nombre(insp.Momento));
     }
 }

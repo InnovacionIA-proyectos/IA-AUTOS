@@ -248,6 +248,58 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Las_inspecciones_de_salida_y_llegada_y_las_fotos_selladas_estan_migradas()
+    {
+        // Sin esta migracion la API nueva falla al leer inspecciones y fotos (columnas nuevas) y al crear la salida o la llegada: este
+        // chequeo (solo lectura) avisa antes de desplegar si falta ejecutar database/cambios-esquema/07-inspecciones-salida-llegada.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/07-inspecciones-salida-llegada.sql.";
+
+        async Task<int> Columnas(string tabla, string columna, bool? obligatoria = null) => await EscalarAsync<int>(
+            conexion,
+            "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(@t, N'U') AND name = @c" + (obligatoria is null ? string.Empty : $" AND is_nullable = {(obligatoria.Value ? 0 : 1)}"),
+            ("@t", tabla), ("@c", columna));
+
+        foreach (var columna in new[] { "IniciadaAt", "Version" })
+        {
+            Assert.True(await Columnas("tblInspecciones", columna, obligatoria: true) == 1, $"Falta tblInspecciones.{columna} (obligatoria). {ayuda}");
+        }
+
+        foreach (var columna in new[] { "CerradaAt", "CorrigeInspeccionId" })
+        {
+            Assert.True(await Columnas("tblInspecciones", columna, obligatoria: false) == 1, $"Falta tblInspecciones.{columna} (opcional). {ayuda}");
+        }
+
+        foreach (var columna in new[] { "VistaId", "HashSha256", "Precision", "DispositivoId", "Nota" })
+        {
+            Assert.True(await Columnas("tblEvidencias", columna, obligatoria: false) == 1, $"Falta tblEvidencias.{columna} (opcional). {ayuda}");
+        }
+
+        foreach (var columna in new[] { "SelloServidorAt", "SelloLat", "SelloLng" })
+        {
+            Assert.True(await Columnas("tblEvidencias", columna, obligatoria: true) == 1, $"tblEvidencias.{columna} debe existir y ser obligatoria. {ayuda}");
+        }
+
+        var restricciones = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.objects
+             WHERE name IN (N'FK_tblInspecciones_Corrige', N'FK_tblEvidencias_Vista', N'CK_tblInspecciones_Momento', N'CK_tblInspecciones_Cierre',
+                            N'CK_tblInspecciones_Version', N'CK_tblEvidencias_Precision', N'CK_tblEvidencias_Hash')
+            """);
+        var indices = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name IN (N'UX_tblInspecciones_Etapa_Momento_Original', N'UX_tblInspecciones_Corrige') AND is_unique = 1 AND has_filter = 1");
+        var restriccionVieja = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.key_constraints WHERE name = N'UQ_tblInspecciones_Etapa_Momento'");
+        var momentosViejos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblInspecciones WHERE Momento NOT IN ('salida', 'llegada')");
+        var cerradasSinHora = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblInspecciones WHERE Estado = 'cerrada' AND CerradaAt IS NULL");
+        var triggerInactivo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE name = N'TR_tblInspecciones_Inmutable' AND is_disabled = 1");
+
+        Assert.True(restricciones == 7, $"Faltan llaves foraneas o restricciones de las inspecciones y las fotos. {ayuda}");
+        Assert.True(indices == 2, $"Faltan los indices unicos de la inspeccion original y de la correccion. {ayuda}");
+        Assert.True(restriccionVieja == 0, $"Sigue existiendo UQ_tblInspecciones_Etapa_Momento: la reemplazan los indices filtrados. {ayuda}");
+        Assert.Equal(0, momentosViejos);
+        Assert.Equal(0, cerradasSinHora);
+        Assert.Equal(0, triggerInactivo);
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

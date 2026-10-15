@@ -73,6 +73,25 @@ public sealed class clsPortalUsuarioNoVinculadoException : clsExcepcionDominio
     }
 }
 
+/// <summary>
+/// La etapa anterior no tiene la inspeccion de llegada cerrada: 409 ETAPA_PREVIA_SIN_CIERRE con la etapa que falta cerrar en <c>details</c>.
+/// </summary>
+public sealed class clsEtapaPreviaSinCierreException : clsExcepcionDominio
+{
+    public clsEtapaPreviaSinCierreException(Guid etapaPreviaId, string etapaPrevia)
+        : base(
+            clsCodigosError.ETAPA_PREVIA_SIN_CIERRE,
+            $"La etapa anterior ({etapaPrevia}) no tiene cerrada su inspección de llegada: ciérrela antes de crear la salida",
+            new Dictionary<string, object>
+            {
+                ["motivo"] = "etapa_previa_sin_cierre",
+                ["etapa_previa_id"] = etapaPreviaId,
+                ["etapa_previa"] = etapaPrevia,
+            })
+    {
+    }
+}
+
 /// <summary>La cuenta esta bloqueada por demasiados PIN errados: 423 ACCOUNT_LOCKED con la hora en que se levanta.</summary>
 public sealed class clsCuentaBloqueadaException : clsExcepcionDominio
 {

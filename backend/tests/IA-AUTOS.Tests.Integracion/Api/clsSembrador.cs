@@ -81,7 +81,7 @@ public sealed class clsSembrador(string cadenaConexion)
         (Guid)(await EscalarAsync("SELECT ViajeId FROM dbo.tblEtapas WHERE Id = @e", ("@e", etapaId)))!;
 
     /// <summary>Crea un informe con hallazgos y evidencias; si queda cerrado, lo cierra al final (los triggers impiden agregar despues).</summary>
-    public async Task<Guid> InformeAsync(Guid etapaId, Guid usuarioId, bool cerrada, int hallazgos = 0, int evidencias = 0, string momento = "informe")
+    public async Task<Guid> InformeAsync(Guid etapaId, Guid usuarioId, bool cerrada, int hallazgos = 0, int evidencias = 0, string momento = "salida")
     {
         var id = Guid.NewGuid();
         await EjecutarAsync(
@@ -103,7 +103,7 @@ public sealed class clsSembrador(string cadenaConexion)
 
         if (cerrada)
         {
-            await EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada' WHERE Id = @i", ("@i", id));
+            await EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i", ("@i", id));
         }
 
         return id;
@@ -122,10 +122,26 @@ public sealed class clsSembrador(string cadenaConexion)
 
         if (cerrada)
         {
-            await EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada' WHERE Id = @i", ("@i", id));
+            await EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i", ("@i", id));
         }
 
         return id;
+    }
+
+    /// <summary>Las vistas de foto activas (obligatorias o adicionales) del catalogo, en su orden: id y nombre.</summary>
+    public async Task<List<(Guid Id, string Nombre)>> VistasAsync(bool obligatoria)
+    {
+        await using var conexion = new SqlConnection(cadenaConexion);
+        await conexion.OpenAsync();
+        await using var comando = Crear(conexion, "SELECT Id, Nombre FROM dbo.tblVistasFoto WHERE Obligatoria = @o AND Activo = 1 ORDER BY Orden", [("@o", obligatoria)]);
+        await using var lector = await comando.ExecuteReaderAsync();
+        var vistas = new List<(Guid, string)>();
+        while (await lector.ReadAsync())
+        {
+            vistas.Add((lector.GetGuid(0), lector.GetString(1)));
+        }
+
+        return vistas;
     }
 
     public async Task EjecutarAsync(string sql, params (string Nombre, object Valor)[] parametros)

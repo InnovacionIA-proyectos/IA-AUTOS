@@ -684,9 +684,9 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         await ViajeConVinesAsync(coordinador, "MTK-IN2", ["VIN-IN-02"]);
         Guid EtapaDe(string vin) => (Guid)Sembrador.EscalarAsync("SELECT TOP 1 e.Id FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = @v ORDER BY e.Orden", ("@v", vin)).Result!;
 
-        var propia = await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-IN-01"), momento = "informe", fecha = FECHA });
-        var ajena = await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-IN-02"), momento = "informe", fecha = FECHA });
-        var delAdmin = await Cliente(admin.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-IN-02"), momento = "informe", fecha = FECHA });
+        var propia = await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-IN-01"), momento = "salida", fecha = FECHA });
+        var ajena = await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-IN-02"), momento = "salida", fecha = FECHA });
+        var delAdmin = await Cliente(admin.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-IN-02"), momento = "salida", fecha = FECHA });
 
         Assert.Equal(HttpStatusCode.Created, propia.StatusCode);
         Assert.Equal(await Sembrador.ViajeDeEtapaAsync(EtapaDe("VIN-IN-01")), (await LeerJsonAsync(propia)).GetProperty("viaje_id").GetGuid());
@@ -703,10 +703,10 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var viaje = await ViajeConVinesAsync(coordinador, "MTK-ST", ["VIN-ST-01", "VIN-ST-02"], conductor.UsuarioId);
         Guid EtapaDe(string vin, int orden) => (Guid)Sembrador.EscalarAsync("SELECT e.Id FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = @v AND e.Orden = @o", ("@v", vin), ("@o", orden)).Result!;
 
-        var primera = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-01", 1), momento = "informe", fecha = FECHA });
+        var primera = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-01", 1), momento = "salida", fecha = FECHA });
         var estadoTras = (string)(await Sembrador.EscalarAsync("SELECT Estado FROM dbo.tblViajes WHERE Id = @v", ("@v", viaje)))!;
         await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{viaje}/estado", Cuerpo(new { estado = "finalizado" }));
-        var enFinalizado = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-01", 2), momento = "informe", fecha = FECHA });
+        var enFinalizado = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-01", 2), momento = "salida", fecha = FECHA });
 
         Assert.Equal(HttpStatusCode.Created, primera.StatusCode);
         Assert.Equal("en_curso", estadoTras);
@@ -716,7 +716,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var cancelado = await ViajeConVinesAsync(coordinador, "MTK-ST2", ["VIN-ST-03"], conductor.UsuarioId);
         await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{cancelado}/estado", Cuerpo(new { estado = "cancelado" }));
         var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
-        var enCancelado = await Cliente(admin.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-03", 1), momento = "informe", fecha = FECHA });
+        var enCancelado = await Cliente(admin.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-03", 1), momento = "salida", fecha = FECHA });
         Assert.Equal(HttpStatusCode.Conflict, enCancelado.StatusCode);
     }
 
