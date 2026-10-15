@@ -1,5 +1,6 @@
 namespace IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 
+/// <summary>La inspeccion toma del viaje de la etapa la placa, el trailer y el conductor: no se piden como texto.</summary>
 public sealed record CrearInspeccionRequest(
     Guid? EtapaId,
     string? Momento,
@@ -7,9 +8,6 @@ public sealed record CrearInspeccionRequest(
     double? Lat,
     double? Lng,
     string? Estado,
-    string? ConductorNombre,
-    string? Placa,
-    string? Trailer,
     string? Notas);
 
 public sealed record CrearHallazgoRequest(string? ParteVehiculo, string? ClaseDano, string? TamanoDano, CoordsDiagramaDto? CoordsDiagrama);
@@ -25,21 +23,23 @@ public sealed record CrearEvidenciaRequest(
 public sealed record FirmarTransferenciaRequest(Guid? EntregaUsuarioId, Guid? RecibeUsuarioId, string? FirmaEntrega, string? FirmaRecibe);
 
 /// <summary>Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio.</summary>
-public sealed record FiltrosInspeccionesRequest(string? Vin, string? UsuarioId, string? Momento, string? Estado, string? Proceso, string? Desde, string? Hasta);
+public sealed record FiltrosInspeccionesRequest(string? Vin, string? UsuarioId, string? ViajeId, string? Momento, string? Estado, string? Proceso, string? Desde, string? Hasta);
 
 public sealed record FiltrosInspecciones(
     string? Vin,
     Guid? UsuarioId,
+    Guid? ViajeId,
     string? Momento,
     string? Estado,
     string? Proceso,
     DateTimeOffset? Desde,
     DateTimeOffset? Hasta);
 
-/// <summary>Fila del listado de inspecciones: los datos de la inspeccion mas el VIN y el proceso (punto de custodia).</summary>
+/// <summary>Fila del listado de inspecciones: los datos de la inspeccion mas el VIN y el proceso. La placa, el trailer y el conductor salen del viaje.</summary>
 public sealed record InspeccionListadoDto(
     Guid Id,
     Guid EtapaId,
+    Guid ViajeId,
     Guid UsuarioId,
     string Momento,
     DateTimeOffset Fecha,
@@ -72,11 +72,12 @@ public sealed record TransferenciaDetalleDto(
 
 /// <summary>
 /// Informe completo para revision: inspeccion con su contexto (VIN, proceso, lugar, inspector), hallazgos, evidencias con URL
-/// y transferencia. La placa, el conductor y el trailer capturados en la app tienen prioridad sobre los de la asignacion.
+/// y transferencia. La placa, el conductor y el trailer son los del viaje (en informes anteriores a los viajes, los capturados en la app).
 /// </summary>
 public sealed record InformeDetalleDto(
     Guid Id,
     Guid EtapaId,
+    Guid ViajeId,
     Guid UsuarioId,
     string Momento,
     DateTimeOffset Fecha,
@@ -97,6 +98,8 @@ public sealed record InformeDetalleDto(
     bool RequiereInspeccion,
     string? InspectorNombre,
     string? Ninera,
+    string? CodigoMtrack,
+    string? Unidad,
     IReadOnlyList<HallazgoDto> Hallazgos,
     IReadOnlyList<EvidenciaDto> Evidencias,
     TransferenciaDetalleDto? Transferencia);

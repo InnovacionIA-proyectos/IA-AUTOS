@@ -351,9 +351,10 @@ public sealed class CatalogosServiceTests
     {
         var servicio = Servicio();
 
-        var ruta = await servicio.EtapasDeLaRutaAsync();
+        var ruta = await servicio.RutaEstandarAsync();
 
-        Assert.Equal(_etapas.Valores.Where(v => v.Activo).Select(v => v.Id), ruta);
+        Assert.Equal(_etapas.Valores.Where(v => v.Activo).Select(v => v.Id), ruta.Select(e => e.Id));
+        Assert.Equal(_etapas.Valores.Where(v => v.Activo).Select(v => v.Codigo), ruta.Select(e => e.Codigo));
     }
 
     [Fact]

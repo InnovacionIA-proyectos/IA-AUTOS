@@ -1,6 +1,6 @@
 namespace IAAutos.Aplicacion.Usuarios.DTOUsuarios;
 
-public sealed record CrearUsuarioRequest(string? Nombre, string? Email, string? Rol, string? SubtipoInspector, string? Password);
+public sealed record CrearUsuarioRequest(string? Nombre, string? Email, string? Rol, string? SubtipoInspector, string? Password, string? Cedula = null);
 
 public sealed record ActualizarUsuarioRequest(
     string? Nombre,
@@ -8,7 +8,8 @@ public sealed record ActualizarUsuarioRequest(
     string? Rol,
     string? SubtipoInspector,
     string? Password,
-    bool? Activo);
+    bool? Activo,
+    string? Cedula = null);
 
 public sealed record UsuarioDto(
     Guid Id,
@@ -16,6 +17,7 @@ public sealed record UsuarioDto(
     string Email,
     string Rol,
     string? SubtipoInspector,
+    string? Cedula,
     bool Activo,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);

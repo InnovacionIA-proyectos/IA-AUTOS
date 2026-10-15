@@ -1,4 +1,3 @@
-using System.Globalization;
 using FluentValidation;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
@@ -6,7 +5,9 @@ using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
+using IAAutos.Dominio.Viajes;
 using Microsoft.Extensions.Options;
 
 namespace IAAutos.Aplicacion.Inspecciones;
@@ -14,7 +15,8 @@ namespace IAAutos.Aplicacion.Inspecciones;
 /// <summary>Consultas de solo lectura de inspecciones (listado e informe detallado).</summary>
 public interface IConsultasInspecciones
 {
-    Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones filtros, int limite, CancellationToken ct = default);
+    /// <summary>Listado; con <paramref name="soloDeUsuario"/>, solo informes de los viajes de ese usuario.</summary>
+    Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones filtros, Guid? soloDeUsuario, int limite, CancellationToken ct = default);
 
     Task<InformeDetalleDto?> ObtenerInformeAsync(Guid id, CancellationToken ct = default);
 }
@@ -25,6 +27,9 @@ public interface IConsultasInspecciones
 /// </summary>
 public sealed class clsInspeccionesService(
     IInspeccionRepository inspecciones,
+    IEtapaRepository etapas,
+    IViajeRepository viajes,
+    IUsuarioRepository usuarios,
     ITransferenciaCustodiaRepository transferencias,
     IConsultasInspecciones consultas,
     IUnidadDeTrabajo unidadDeTrabajo,
@@ -43,34 +48,63 @@ public sealed class clsInspeccionesService(
     public async Task<InspeccionDto> CrearAsync(CrearInspeccionRequest solicitud, CancellationToken ct = default)
     {
         await validadorInspeccion.ValidarOLanzarAsync(solicitud, ct);
+        var etapa = await etapas.ObtenerPorIdAsync(solicitud.EtapaId!.Value, ct)
+            ?? throw new clsEntidadNoEncontradaException("La etapa indicada no existe");
+        var viaje = await viajes.ObtenerPorIdAsync(etapa.ViajeId, ct)
+            ?? throw new clsEntidadNoEncontradaException("El viaje de la etapa no existe");
+
+        // Inspectores y conductores solo inspeccionan los viajes en los que participan, y solo mientras el viaje siga activo.
+        if (actual.SoloSusViajes() is { } usuarioViaje && !viaje.Participa(usuarioViaje))
+        {
+            throw new clsProhibidoException("El viaje de esta etapa no está asignado a su usuario");
+        }
+
+        if (!viaje.EstaActivo)
+        {
+            throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite inspecciones nuevas");
+        }
+
         // El usuario siempre sale del token: el cliente no puede crear informes a nombre de otro.
         var inspeccion = clsInspeccion.Crear(
-            solicitud.EtapaId!.Value,
+            etapa.Id,
+            viaje.Id,
             actual.IdObligatorio(),
             solicitud.Momento!,
             solicitud.Fecha!.Value,
             solicitud.Lat,
             solicitud.Lng,
             null,
-            solicitud.ConductorNombre,
-            solicitud.Placa,
-            solicitud.Trailer,
             solicitud.Notas,
             reloj.Ahora);
+        viaje.RegistrarActividad(reloj.Ahora);
         inspecciones.Agregar(inspeccion);
         auditor.Registrar("inspeccion.crear", "inspecciones", inspeccion.Id);
 
-        // Etapa o usuario inexistentes (404) y un segundo informe en la misma etapa (409) se traducen al confirmar.
+        // Un usuario inexistente (404) y un segundo informe en la misma etapa (409) se traducen al confirmar.
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        return clsMapeadorInspecciones.AInspeccion(inspeccion);
+        var conductor = viaje.ConductorId is { } conductorId ? (await usuarios.ObtenerPorIdAsync(conductorId, ct))?.Nombre : null;
+        return clsMapeadorInspecciones.AInspeccion(inspeccion, viaje.Placa, viaje.Trailer, conductor);
     }
 
     public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspeccionesRequest solicitud, CancellationToken ct = default) =>
-        await consultas.ListarAsync(await ParsearFiltrosAsync(solicitud, ct), LIMITE_LISTADO, ct);
+        await consultas.ListarAsync(await ParsearFiltrosAsync(solicitud, ct), actual.SoloSusViajes(), LIMITE_LISTADO, ct);
 
-    public async Task<InformeDetalleDto> ObtenerInformeAsync(Guid id, CancellationToken ct = default) =>
-        await consultas.ObtenerInformeAsync(id, ct)
+    /// <summary>Informe completo. Inspectores y conductores solo abren los informes de sus viajes (403 si es de otro).</summary>
+    public async Task<InformeDetalleDto> ObtenerInformeAsync(Guid id, CancellationToken ct = default)
+    {
+        var informe = await consultas.ObtenerInformeAsync(id, ct)
             ?? throw new clsEntidadNoEncontradaException($"Inspección {id} no encontrada");
+        if (actual.SoloSusViajes() is { } usuarioViaje)
+        {
+            var viaje = await viajes.ObtenerPorIdAsync(informe.ViajeId, ct);
+            if (viaje is null || !viaje.Participa(usuarioViaje))
+            {
+                throw new clsProhibidoException("La inspección pertenece a un viaje que no está asignado a su usuario");
+            }
+        }
+
+        return informe;
+    }
 
     public async Task<HallazgoDto> AgregarHallazgoAsync(Guid inspeccionId, CrearHallazgoRequest solicitud, CancellationToken ct = default)
     {
@@ -237,25 +271,14 @@ public sealed class clsInspeccionesService(
             }
         }
 
-        Guid? usuarioId = null;
-        if (!string.IsNullOrWhiteSpace(s.UsuarioId))
-        {
-            if (Guid.TryParse(s.UsuarioId, out var id))
-            {
-                usuarioId = id;
-            }
-            else
-            {
-                errores["usuarioId"] = ["usuarioId debe ser UUID"];
-            }
-        }
-
-        var momento = Catalogo(s.Momento, clsMomento.VALORES, "momento", errores);
-        var estado = Catalogo(s.Estado, clsEstadoInspeccion.VALORES, "estado", errores);
+        var usuarioId = clsParseoFiltros.Uuid(s.UsuarioId, "usuarioId", errores);
+        var viajeId = clsParseoFiltros.Uuid(s.ViajeId, "viajeId", errores);
+        var momento = clsParseoFiltros.Catalogo(s.Momento, clsMomento.VALORES, "momento", errores);
+        var estado = clsParseoFiltros.Catalogo(s.Estado, clsEstadoInspeccion.VALORES, "estado", errores);
         // El proceso es una etapa del catalogo; se aceptan tambien las inactivas porque hay informes historicos de ellas.
-        var proceso = Catalogo(s.Proceso, await catalogos.CodigosAsync(clsNombresCatalogo.ETAPAS, soloActivos: false, ct), "proceso", errores);
-        var desde = Fecha(s.Desde, "desde", errores);
-        var hasta = Fecha(s.Hasta, "hasta", errores);
+        var proceso = clsParseoFiltros.Catalogo(s.Proceso, await catalogos.CodigosAsync(clsNombresCatalogo.ETAPAS, soloActivos: false, ct), "proceso", errores);
+        var desde = clsParseoFiltros.Fecha(s.Desde, "desde", errores);
+        var hasta = clsParseoFiltros.Fecha(s.Hasta, "hasta", errores);
 
         if (errores.Count > 0)
         {
@@ -264,41 +287,6 @@ public sealed class clsInspeccionesService(
                 new Dictionary<string, object> { ["formErrors"] = Array.Empty<string>(), ["fieldErrors"] = errores });
         }
 
-        return new FiltrosInspecciones(vin, usuarioId, momento, estado, proceso, desde, hasta);
-    }
-
-    private static string? Catalogo(string? valor, IReadOnlySet<string> catalogo, string campo, Dictionary<string, string[]> errores)
-    {
-        if (string.IsNullOrWhiteSpace(valor))
-        {
-            return null;
-        }
-
-        if (catalogo.Contains(valor))
-        {
-            return valor;
-        }
-
-        errores[campo] = [$"Valor inválido. Permitidos: {string.Join(", ", catalogo.Order())}"];
-        return null;
-    }
-
-    /// <summary>Como el esquema original: fecha ISO 8601 con zona horaria explicita (Z o desfase).</summary>
-    private static DateTimeOffset? Fecha(string? texto, string campo, Dictionary<string, string[]> errores)
-    {
-        if (string.IsNullOrWhiteSpace(texto))
-        {
-            return null;
-        }
-
-        var t = texto.Trim();
-        var conZona = t.EndsWith('Z') || t.EndsWith('z') || (t.Length > 6 && (t[^6] is '+' or '-') && t[^3] == ':');
-        if (conZona && DateTimeOffset.TryParse(t, CultureInfo.InvariantCulture, DateTimeStyles.None, out var fecha))
-        {
-            return fecha;
-        }
-
-        errores[campo] = [$"{campo} debe ser fecha ISO"];
-        return null;
+        return new FiltrosInspecciones(vin, usuarioId, viajeId, momento, estado, proceso, desde, hasta);
     }
 }

@@ -6,9 +6,15 @@ namespace IAAutos.Infraestructura.Persistencia.Consultas;
 
 internal sealed class clsConsultasSofasa(clsAppDbContext contexto) : IConsultasSofasa
 {
-    public async Task<IReadOnlyList<OrdenSofasaDto>> ListarAsync(FiltrosOrdenesSofasa f, int limite, CancellationToken ct = default)
+    public async Task<IReadOnlyList<OrdenSofasaDto>> ListarAsync(FiltrosOrdenesSofasa f, Guid? soloDeUsuario, int limite, CancellationToken ct = default)
     {
         var consulta = contexto.OrdenesSofasa.AsNoTracking().AsQueryable();
+        if (soloDeUsuario is { } usuarioId)
+        {
+            var viajesPropios = clsAlcanceViajes.Viajes(contexto, usuarioId);
+            consulta = consulta.Where(o => o.ViajeId != null && viajesPropios.Contains(o.ViajeId.Value));
+        }
+
         if (f.Vin is not null)
         {
             consulta = consulta.Where(o => o.Vin != null && o.Vin.Contains(f.Vin));
@@ -41,7 +47,7 @@ internal sealed class clsConsultasSofasa(clsAppDbContext contexto) : IConsultasS
             .Select(o => new OrdenSofasaDto(
                 o.Id, o.SourceId, o.StatusCode, o.DatetimeEvent, o.OrdenNumber, o.OrdenSap, o.OriginCedi, o.Vin, o.Make,
                 o.ModelDescription, o.DealerCode, o.DestinationCity, o.DestinationAddress, o.LoadingDate, o.Appointment,
-                o.LoadingDock, o.Weight, o.VehiculoId, o.SyncedAt, o.CreatedAt, o.UpdatedAt))
+                o.LoadingDock, o.Weight, o.VehiculoId, o.CodigoMtrack, o.ViajeId, o.SyncedAt, o.CreatedAt, o.UpdatedAt))
             .ToListAsync(ct);
     }
 }

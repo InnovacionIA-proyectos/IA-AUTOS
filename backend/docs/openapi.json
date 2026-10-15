@@ -6,6 +6,661 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/viajes": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_Crear",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CrearViajeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "get": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_Listar",
+        "parameters": [
+          {
+            "name": "estado",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "codigoMtrack",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "vin",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "conductorId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ViajeResumenDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ViajeResumenDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ViajeResumenDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/mios": {
+      "get": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_Mios",
+        "parameters": [
+          {
+            "name": "estado",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ViajeDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ViajeDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ViajeDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}": {
+      "get": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_Obtener",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_Actualizar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActualizarViajeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_Eliminar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/estado": {
+      "patch": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_CambiarEstado",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CambiarEstadoViajeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/vehiculos": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_AgregarVines",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgregarVinesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/vehiculos/{vin}": {
+      "delete": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_QuitarVin",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "vin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/cargar/previsualizar": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_PrevisualizarCarga",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CargarViajesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaViajesDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaViajesDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaViajesDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/cargar": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_Cargar",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CargarViajesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaViajesDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaViajesDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResultadoCargaViajesDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/vehiculos/cargar": {
       "post": {
         "tags": [
@@ -855,6 +1510,13 @@
           },
           {
             "name": "usuarioId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "viajeId",
             "in": "query",
             "schema": {
               "type": "string"
@@ -1749,112 +2411,6 @@
         ]
       }
     },
-    "/api/asignaciones": {
-      "post": {
-        "tags": [
-          "Asignaciones"
-        ],
-        "operationId": "Asignaciones_CrearAsignacion",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CrearAsignacionRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/AsignacionDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AsignacionDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AsignacionDto"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorApiDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {}
-        ]
-      }
-    },
-    "/api/etapas": {
-      "post": {
-        "tags": [
-          "Asignaciones"
-        ],
-        "operationId": "Asignaciones_CrearEtapa",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CrearEtapaRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Created",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/EtapaDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EtapaDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EtapaDto"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorApiDto"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {}
-        ]
-      }
-    },
     "/api/uploads": {
       "post": {
         "tags": [
@@ -1990,6 +2546,104 @@
               "null",
               "boolean"
             ]
+          },
+          "cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ActualizarViajeRequest": {
+        "required": [
+          "codigo_mtrack",
+          "tipo_unidad_id",
+          "placa",
+          "trailer",
+          "conductor_id",
+          "inspector_id",
+          "origen_id",
+          "destino_id",
+          "con_personal_apoyo"
+        ],
+        "type": "object",
+        "properties": {
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo_unidad_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "placa": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trailer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conductor_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "inspector_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "origen_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "destino_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "con_personal_apoyo": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        }
+      },
+      "AgregarVinesRequest": {
+        "required": [
+          "vines"
+        ],
+        "type": "object",
+        "properties": {
+          "vines": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -2036,45 +2690,88 @@
           }
         }
       },
-      "AsignacionDto": {
+      "CambiarEstadoViajeRequest": {
         "required": [
-          "id",
-          "vehiculo_id",
-          "ninera",
-          "conductor_id",
-          "asignado_por",
-          "created_at",
-          "updated_at"
+          "estado"
         ],
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "vehiculo_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "ninera": {
-            "type": "string"
-          },
-          "conductor_id": {
+          "estado": {
             "type": [
               "null",
               "string"
+            ]
+          }
+        }
+      },
+      "CargarViajesRequest": {
+        "required": [
+          "filas"
+        ],
+        "type": "object",
+        "properties": {
+          "filas": {
+            "type": [
+              "null",
+              "array"
             ],
-            "format": "uuid"
-          },
-          "asignado_por": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "created_at": {
-            "format": "date-time"
-          },
-          "updated_at": {
-            "format": "date-time"
+            "items": {
+              "required": [
+                "fila",
+                "vin",
+                "placa",
+                "trailer",
+                "cedula_conductor",
+                "unidad",
+                "codigo_mtrack"
+              ],
+              "type": "object",
+              "properties": {
+                "fila": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "format": "int32"
+                },
+                "vin": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "placa": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "trailer": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "cedula_conductor": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "unidad": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "codigo_mtrack": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -2389,82 +3086,6 @@
           }
         }
       },
-      "CrearAsignacionRequest": {
-        "required": [
-          "vehiculo_id",
-          "ninera",
-          "conductor_id"
-        ],
-        "type": "object",
-        "properties": {
-          "vehiculo_id": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "ninera": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "conductor_id": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          }
-        }
-      },
-      "CrearEtapaRequest": {
-        "required": [
-          "vehiculo_id",
-          "etapa_catalogo_id",
-          "punto_custodia_id",
-          "orden",
-          "requiere_inspeccion"
-        ],
-        "type": "object",
-        "properties": {
-          "vehiculo_id": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "etapa_catalogo_id": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "punto_custodia_id": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "orden": {
-            "type": [
-              "null",
-              "integer"
-            ],
-            "format": "int32"
-          },
-          "requiere_inspeccion": {
-            "type": [
-              "null",
-              "boolean"
-            ]
-          }
-        }
-      },
       "CrearEvidenciaRequest": {
         "required": [
           "hallazgo_id",
@@ -2561,9 +3182,6 @@
           "lat",
           "lng",
           "estado",
-          "conductor_nombre",
-          "placa",
-          "trailer",
           "notas"
         ],
         "type": "object",
@@ -2599,24 +3217,6 @@
             "format": "double"
           },
           "estado": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "conductor_nombre": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "placa": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "trailer": {
             "type": [
               "null",
               "string"
@@ -2669,6 +3269,97 @@
               "null",
               "string"
             ]
+          },
+          "cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CrearViajeRequest": {
+        "required": [
+          "codigo_mtrack",
+          "tipo_unidad_id",
+          "placa",
+          "trailer",
+          "conductor_id",
+          "inspector_id",
+          "origen_id",
+          "destino_id",
+          "con_personal_apoyo",
+          "vines"
+        ],
+        "type": "object",
+        "properties": {
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo_unidad_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "placa": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trailer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conductor_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "inspector_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "origen_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "destino_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "con_personal_apoyo": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "vines": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -2739,53 +3430,6 @@
           }
         }
       },
-      "EtapaDto": {
-        "required": [
-          "id",
-          "vehiculo_id",
-          "etapa_catalogo_id",
-          "punto_custodia_id",
-          "orden",
-          "requiere_inspeccion",
-          "created_at",
-          "updated_at"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "vehiculo_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "etapa_catalogo_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "punto_custodia_id": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "orden": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "requiere_inspeccion": {
-            "type": "boolean"
-          },
-          "created_at": {
-            "format": "date-time"
-          },
-          "updated_at": {
-            "format": "date-time"
-          }
-        }
-      },
       "EvidenciaDto": {
         "required": [
           "id",
@@ -2843,6 +3487,51 @@
           },
           "updated_at": {
             "format": "date-time"
+          }
+        }
+      },
+      "FilaCargaViajeDto": {
+        "required": [
+          "fila",
+          "vin",
+          "codigo_mtrack",
+          "valida",
+          "errores",
+          "viaje_id"
+        ],
+        "type": "object",
+        "properties": {
+          "fila": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "vin": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "valida": {
+            "type": "boolean"
+          },
+          "errores": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "viaje_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -2935,6 +3624,7 @@
         "required": [
           "id",
           "etapa_id",
+          "viaje_id",
           "usuario_id",
           "momento",
           "fecha",
@@ -2955,6 +3645,8 @@
           "requiere_inspeccion",
           "inspector_nombre",
           "ninera",
+          "codigo_mtrack",
+          "unidad",
           "hallazgos",
           "evidencias",
           "transferencia"
@@ -2966,6 +3658,10 @@
             "format": "uuid"
           },
           "etapa_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "viaje_id": {
             "type": "string",
             "format": "uuid"
           },
@@ -3057,6 +3753,18 @@
             ]
           },
           "ninera": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unidad": {
             "type": [
               "null",
               "string"
@@ -3207,6 +3915,12 @@
                 },
                 "weight": {
                   "format": "double"
+                },
+                "codigo_mtrack": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
                 }
               }
             }
@@ -3217,6 +3931,7 @@
         "required": [
           "id",
           "etapa_id",
+          "viaje_id",
           "usuario_id",
           "momento",
           "fecha",
@@ -3237,6 +3952,10 @@
             "format": "uuid"
           },
           "etapa_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "viaje_id": {
             "type": "string",
             "format": "uuid"
           },
@@ -3303,6 +4022,7 @@
         "required": [
           "id",
           "etapa_id",
+          "viaje_id",
           "usuario_id",
           "momento",
           "fecha",
@@ -3325,6 +4045,10 @@
             "format": "uuid"
           },
           "etapa_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "viaje_id": {
             "type": "string",
             "format": "uuid"
           },
@@ -3467,6 +4191,9 @@
           "proceso",
           "lugar",
           "requiere_inspeccion",
+          "viaje_id",
+          "codigo_mtrack",
+          "con_personal_apoyo",
           "inspecciones"
         ],
         "type": "object",
@@ -3491,6 +4218,19 @@
           "requiere_inspeccion": {
             "type": "boolean"
           },
+          "viaje_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "con_personal_apoyo": {
+            "type": "boolean"
+          },
           "inspecciones": {
             "type": "array",
             "items": {
@@ -3503,6 +4243,7 @@
         "required": [
           "id",
           "etapa_id",
+          "viaje_id",
           "usuario_id",
           "momento",
           "fecha",
@@ -3526,6 +4267,10 @@
             "format": "uuid"
           },
           "etapa_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "viaje_id": {
             "type": "string",
             "format": "uuid"
           },
@@ -3831,6 +4576,8 @@
           "loading_dock",
           "weight",
           "vehiculo_id",
+          "codigo_mtrack",
+          "viaje_id",
           "synced_at",
           "created_at",
           "updated_at"
@@ -3928,6 +4675,19 @@
             "format": "double"
           },
           "vehiculo_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "viaje_id": {
             "type": [
               "null",
               "string"
@@ -4037,6 +4797,44 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ErrorCargaDto"
+            }
+          }
+        }
+      },
+      "ResultadoCargaViajesDto": {
+        "required": [
+          "confirmado",
+          "total",
+          "validas",
+          "invalidas",
+          "viajes",
+          "filas"
+        ],
+        "type": "object",
+        "properties": {
+          "confirmado": {
+            "type": "boolean"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "validas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "invalidas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "viajes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "filas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FilaCargaViajeDto"
             }
           }
         }
@@ -4333,6 +5131,7 @@
           "email",
           "rol",
           "subtipo_inspector",
+          "cedula",
           "activo",
           "created_at",
           "updated_at"
@@ -4353,6 +5152,12 @@
             "type": "string"
           },
           "subtipo_inspector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cedula": {
             "type": [
               "null",
               "string"
@@ -4401,6 +5206,319 @@
             "type": "string"
           }
         }
+      },
+      "ViajeDto": {
+        "required": [
+          "id",
+          "codigo_mtrack",
+          "tipo_unidad_id",
+          "unidad",
+          "placa",
+          "trailer",
+          "conductor_id",
+          "conductor_nombre",
+          "inspector_id",
+          "inspector_nombre",
+          "origen_id",
+          "origen",
+          "destino_id",
+          "destino",
+          "estado",
+          "con_personal_apoyo",
+          "vehiculos",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo_unidad_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "unidad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "placa": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trailer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conductor_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "conductor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inspector_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "inspector_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "origen_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "origen": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "destino_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "destino": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "estado": {
+            "type": "string"
+          },
+          "con_personal_apoyo": {
+            "type": "boolean"
+          },
+          "vehiculos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViajeVehiculoDto"
+            }
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "ViajeResumenDto": {
+        "required": [
+          "id",
+          "codigo_mtrack",
+          "tipo_unidad_id",
+          "unidad",
+          "placa",
+          "trailer",
+          "conductor_id",
+          "conductor_nombre",
+          "inspector_id",
+          "inspector_nombre",
+          "origen_id",
+          "origen",
+          "destino_id",
+          "destino",
+          "estado",
+          "con_personal_apoyo",
+          "total_vehiculos",
+          "vehiculos_completos",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo_unidad_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "unidad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "placa": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "trailer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conductor_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "conductor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inspector_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "inspector_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "origen_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "origen": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "destino_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "destino": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "estado": {
+            "type": "string"
+          },
+          "con_personal_apoyo": {
+            "type": "boolean"
+          },
+          "total_vehiculos": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "vehiculos_completos": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "ViajeVehiculoDto": {
+        "required": [
+          "vehiculo_id",
+          "vin",
+          "marca",
+          "modelo",
+          "color",
+          "operacion",
+          "etapas",
+          "completas"
+        ],
+        "type": "object",
+        "properties": {
+          "vehiculo_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "vin": {
+            "type": "string"
+          },
+          "marca": {
+            "type": "string"
+          },
+          "modelo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "color": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "operacion": {
+            "type": "string"
+          },
+          "etapas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completas": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
       }
     },
     "securitySchemes": {
@@ -4412,6 +5530,9 @@
     }
   },
   "tags": [
+    {
+      "name": "clsViajes"
+    },
     {
       "name": "clsVehiculos"
     },
@@ -4435,9 +5556,6 @@
     },
     {
       "name": "clsAuth"
-    },
-    {
-      "name": "clsAsignaciones"
     },
     {
       "name": "clsArchivos"

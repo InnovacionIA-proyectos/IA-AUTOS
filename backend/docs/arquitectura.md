@@ -18,7 +18,7 @@ Infraestructura  ->  Aplicacion y Dominio      (la API enlaza la infraestructura
 
 ## Modulos
 
-Auth, Usuarios, Vehiculos (carga masiva, listados, inventario, PDF, etapas), Asignaciones, Inspecciones (informes, hallazgos, evidencias, cierre, custodia), Archivos, Sofasa (ingesta y consulta), Reportes (patrones, analisis, tasa de rechazo) y Auditoria (transversal).
+Auth, Usuarios, Vehiculos (carga masiva, listados, inventario, PDF), Viajes (alta, asignacion de VIN, estados, carga por Excel, visibilidad), Inspecciones (informes, hallazgos, evidencias, cierre, custodia), Archivos, Sofasa (ingesta y consulta), Reportes (patrones, analisis, tasa de rechazo) y Auditoria (transversal).
 
 Cada capa se organiza por grupo funcional (por ejemplo `Aplicacion/Inspecciones/{DTOInspecciones, Validators}`), no por tipo tecnico.
 
@@ -30,18 +30,19 @@ Clases con prefijo `cls`, variables en camelCase, constantes en MAYUSCULAS_SOSTE
 
 - Una inspeccion cerrada es inmutable: no admite hallazgos ni evidencias. El cierre exige al menos una foto si hay hallazgos y que toda foto este geolocalizada. Cerrarla dos veces responde 409.
 - La transferencia de custodia admite firma parcial acumulada; la fecha de firma se sella solo cuando estan ambas. Se puede firmar despues del cierre. Una vez firmada por las dos partes es inmutable (repetir exactamente los mismos datos es idempotente).
-- Un vehiculo esta movilizado cuando todas sus etapas (y al menos una) tienen un informe cerrado. La definicion vive en la vista `vwVehiculosMovilizados` y la usan los listados y todos los reportes.
+- El viaje es el eje: cada etapa e inspeccion cuelga de un viaje, y la inspeccion toma de el la placa, el trailer y el conductor. Inspectores y conductores solo ven (y abren) los VIN, viajes e informes de los viajes en los que participan; el resto de roles ve todo. Un VIN no puede estar en dos viajes activos a la vez.
+- Un vehiculo esta movilizado cuando completa su ruta en un viaje: todas sus etapas de ese viaje (y al menos una) tienen un informe cerrado. La definicion vive en la vista `vwViajesCompletos` (una fila por VIN y viaje) y la usan los listados y todos los reportes.
 - La tasa de rechazo es el porcentaje de unidades movilizadas con al menos un hallazgo, por operacion, frente a la linea base del PRD (importacion 8,81; exportacion 8,34; nacional 1,95).
-- La carga masiva de VIN y la ingesta de Sofasa son idempotentes: re-procesar no duplica vehiculos ni etapas, y un error en una fila no detiene el lote.
+- La carga masiva de VIN y la ingesta de Sofasa son idempotentes: re-procesar no duplica vehiculos, y un error en una fila no detiene el lote. Las etapas no se crean ahi: nacen al agregar el VIN a un viaje. La ingesta vincula cada orden al viaje del VIN (y del codigo MTrack, si lo trae).
 - Baja de usuario: se elimina si no tiene historial; si lo tiene, se marca como retirado.
 
 ## Base de datos
 
-El esquema lo crea `database/ddl.sql` (no se usan migraciones de EF). Ademas de las tablas incluye la vista de movilizados y tres triggers de ultima defensa: no se puede modificar una inspeccion cerrada ni agregarle hallazgos o evidencias. SQL Server no admite en este modelo `SET NULL` junto a la cascada desde inspecciones, por eso `tblEvidencias.HallazgoId` usa `NO ACTION` (la aplicacion no elimina hallazgos).
+El esquema lo crea `database/ddl.sql` (no se usan migraciones de EF). Ademas de las tablas incluye la vista de viajes completos y tres triggers de ultima defensa: no se puede modificar una inspeccion cerrada ni agregarle hallazgos o evidencias. SQL Server no admite en este modelo `SET NULL` junto a la cascada desde inspecciones, por eso `tblEvidencias.HallazgoId` usa `NO ACTION` (la aplicacion no elimina hallazgos).
 
 ## Auditoria
 
-Toda accion relevante se registra en `tblAuditLog` dentro de la misma transaccion del caso de uso (login, altas y cambios de usuarios, carga de VIN, asignaciones, etapas, inspecciones, hallazgos, evidencias, firmas, cierres). La ingesta del ETL se registra como accion del sistema (usuario nulo). Los logs estructurados con correlacion de solicitudes no se implementan por defecto (solo si el requerimiento lo solicita).
+Toda accion relevante se registra en `tblAuditLog` dentro de la misma transaccion del caso de uso (login, altas y cambios de usuarios, carga de VIN, viajes y su carga por Excel, inspecciones, hallazgos, evidencias, firmas, cierres). La ingesta del ETL se registra como accion del sistema (usuario nulo). Los logs estructurados con correlacion de solicitudes no se implementan por defecto (solo si el requerimiento lo solicita).
 
 ## Decisiones respecto al plan inicial
 

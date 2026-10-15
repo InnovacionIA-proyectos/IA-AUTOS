@@ -4,6 +4,7 @@ using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
+using IAAutos.Dominio.Viajes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
@@ -26,6 +27,8 @@ internal sealed class clsConfiguracionInspeccion : IEntityTypeConfiguration<clsI
         builder.Property(i => i.Notas).HasMaxLength(1000);
         builder.HasOne<clsEtapa>().WithMany().HasForeignKey(i => i.EtapaId)
             .HasConstraintName("FK_tblInspecciones_Etapa").OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<clsViaje>().WithMany().HasForeignKey(i => i.ViajeId)
+            .HasConstraintName("FK_tblInspecciones_Viaje").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(i => i.UsuarioId)
             .HasConstraintName("FK_tblInspecciones_Usuario").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(i => new { i.EtapaId, i.Momento }).IsUnique().HasDatabaseName("UQ_tblInspecciones_Etapa_Momento");

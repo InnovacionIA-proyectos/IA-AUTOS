@@ -58,6 +58,15 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblUsuarios_PortalUsu
     CREATE UNIQUE INDEX UX_tblUsuarios_PortalUsuarioId ON dbo.tblUsuarios (PortalUsuarioId) WHERE PortalUsuarioId IS NOT NULL;
 GO
 
+-- Cedula: documento de la persona (el conductor se identifica por ella en la carga de viajes por Excel). Unica entre quienes la tienen.
+IF COL_LENGTH(N'dbo.tblUsuarios', N'Cedula') IS NULL
+    ALTER TABLE dbo.tblUsuarios ADD Cedula varchar(20) NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblUsuarios_Cedula' AND object_id = OBJECT_ID(N'dbo.tblUsuarios'))
+    CREATE UNIQUE INDEX UX_tblUsuarios_Cedula ON dbo.tblUsuarios (Cedula) WHERE Cedula IS NOT NULL;
+GO
+
 IF OBJECT_ID(N'dbo.tblRefreshTokens', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.tblRefreshTokens
@@ -275,7 +284,74 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
-   tblEtapas (tramo de la ruta de un vehiculo: etapa del catalogo y, opcionalmente, el lugar donde se hace)
+   tblViajes: el viaje es el eje del modelo. Una unidad transportadora (tipo, placa, trailer) lleva uno o varios VIN con un
+   conductor (y, si hay, un inspector) entre un origen y un destino. Cada etapa e inspeccion cuelga de un viaje.
+   - CodigoMtrack: codigo del viaje en MTrack (se digita o llega en el Excel; aun no hay integracion). Unico entre los que lo tienen.
+   - Estado: programado -> en_curso -> finalizado, o cancelado (un viaje cancelado deja de ser visible para inspectores y conductores).
+   - Los viajes que vienen de las asignaciones e inspecciones anteriores a esta tabla pueden no tener tipo de unidad, placa ni codigo.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblViajes', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblViajes
+    (
+        Id             uniqueidentifier  NOT NULL CONSTRAINT PK_tblViajes PRIMARY KEY,
+        CodigoMtrack   varchar(50)       NULL,
+        TipoUnidadId   uniqueidentifier  NULL,
+        Placa          nvarchar(50)      NULL,
+        Trailer        nvarchar(50)      NULL,
+        ConductorId    uniqueidentifier  NULL,
+        InspectorId    uniqueidentifier  NULL,
+        OrigenId       uniqueidentifier  NULL,
+        DestinoId      uniqueidentifier  NULL,
+        Estado         varchar(20)       NOT NULL CONSTRAINT DF_tblViajes_Estado DEFAULT ('programado'),
+        CreadoPor      uniqueidentifier  NULL,
+        CreatedAt      datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajes_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt      datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajes_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblViajes_TipoUnidad FOREIGN KEY (TipoUnidadId) REFERENCES dbo.tblTiposUnidadTransportadora (Id),
+        CONSTRAINT FK_tblViajes_Conductor FOREIGN KEY (ConductorId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblViajes_Inspector FOREIGN KEY (InspectorId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblViajes_Origen FOREIGN KEY (OrigenId) REFERENCES dbo.tblPuntosCustodia (Id),
+        CONSTRAINT FK_tblViajes_Destino FOREIGN KEY (DestinoId) REFERENCES dbo.tblPuntosCustodia (Id),
+        CONSTRAINT FK_tblViajes_CreadoPor FOREIGN KEY (CreadoPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT CK_tblViajes_Estado CHECK (Estado IN ('programado', 'en_curso', 'finalizado', 'cancelado'))
+    );
+    CREATE UNIQUE INDEX UX_tblViajes_CodigoMtrack ON dbo.tblViajes (CodigoMtrack) WHERE CodigoMtrack IS NOT NULL;
+    CREATE INDEX IX_tblViajes_Conductor ON dbo.tblViajes (ConductorId);
+    CREATE INDEX IX_tblViajes_Inspector ON dbo.tblViajes (InspectorId);
+    CREATE INDEX IX_tblViajes_Estado ON dbo.tblViajes (Estado, CreatedAt DESC);
+    CREATE INDEX IX_tblViajes_TipoUnidad ON dbo.tblViajes (TipoUnidadId);
+    CREATE INDEX IX_tblViajes_Origen ON dbo.tblViajes (OrigenId);
+    CREATE INDEX IX_tblViajes_Destino ON dbo.tblViajes (DestinoId);
+    CREATE INDEX IX_tblViajes_CreadoPor ON dbo.tblViajes (CreadoPor);
+END
+GO
+
+/* -----------------------------------------------------------------------------
+   tblViajeVehiculos: los VIN de un viaje. Un VIN puede estar en varios viajes a lo largo del tiempo (la aplicacion no admite
+   dos viajes activos con el mismo VIN).
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblViajeVehiculos', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblViajeVehiculos
+    (
+        Id          uniqueidentifier  NOT NULL CONSTRAINT PK_tblViajeVehiculos PRIMARY KEY,
+        ViajeId     uniqueidentifier  NOT NULL,
+        VehiculoId  uniqueidentifier  NOT NULL,
+        CreatedAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajeVehiculos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajeVehiculos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblViajeVehiculos_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_tblViajeVehiculos_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE CASCADE,
+        CONSTRAINT UQ_tblViajeVehiculos_Viaje_Vehiculo UNIQUE (ViajeId, VehiculoId)
+    );
+    CREATE INDEX IX_tblViajeVehiculos_Vehiculo ON dbo.tblViajeVehiculos (VehiculoId);
+END
+GO
+
+/* -----------------------------------------------------------------------------
+   tblEtapas (tramo de un VIN dentro de un viaje: etapa del catalogo y el lugar donde se hace)
+   - Al agregar un VIN a un viaje se crean sus etapas: Cargue en el origen, Transporte y Descargue en el destino.
+   - ConPersonalApoyo (solo en la etapa de Cargue): con personal de apoyo la inspeccion de salida la hace un inspector; sin el,
+     la hace el conductor.
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblEtapas', N'U') IS NULL
 BEGIN
@@ -285,23 +361,28 @@ BEGIN
         VehiculoId          uniqueidentifier NOT NULL,
         EtapaCatalogoId     uniqueidentifier NOT NULL,
         PuntoCustodiaId     uniqueidentifier NULL,
+        ViajeId             uniqueidentifier NOT NULL,
         Orden               int              NOT NULL,
         RequiereInspeccion  bit              NOT NULL CONSTRAINT DF_tblEtapas_RequiereInspeccion DEFAULT (1),
+        ConPersonalApoyo    bit              NOT NULL CONSTRAINT DF_tblEtapas_ConPersonalApoyo DEFAULT (0),
         CreatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEtapas_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEtapas_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblEtapas_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE CASCADE,
         CONSTRAINT FK_tblEtapas_EtapaCatalogo FOREIGN KEY (EtapaCatalogoId) REFERENCES dbo.tblEtapasCatalogo (Id),
         CONSTRAINT FK_tblEtapas_PuntoCustodia FOREIGN KEY (PuntoCustodiaId) REFERENCES dbo.tblPuntosCustodia (Id),
-        CONSTRAINT UQ_tblEtapas_Vehiculo_Orden UNIQUE (VehiculoId, Orden),
+        CONSTRAINT FK_tblEtapas_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
+        CONSTRAINT UQ_tblEtapas_Viaje_Vehiculo_Orden UNIQUE (ViajeId, VehiculoId, Orden),
         CONSTRAINT CK_tblEtapas_Orden CHECK (Orden >= 1)
     );
     CREATE INDEX IX_tblEtapas_EtapaCatalogo ON dbo.tblEtapas (EtapaCatalogoId);
     CREATE INDEX IX_tblEtapas_PuntoCustodia ON dbo.tblEtapas (PuntoCustodiaId);
+    CREATE INDEX IX_tblEtapas_Vehiculo ON dbo.tblEtapas (VehiculoId);
 END
 GO
 
 /* -----------------------------------------------------------------------------
-   tblInspecciones (un informe por etapa; al cerrarse es inmutable)
+   tblInspecciones (un informe por etapa; al cerrarse es inmutable). ViajeId es el viaje de la etapa: la inspeccion toma de el la placa,
+   el trailer y el conductor. Las columnas ConductorNombre, Placa y Trailer solo conservan lo capturado antes de existir los viajes.
    Latitud y longitud en float (precision GPS completa).
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblInspecciones', N'U') IS NULL
@@ -310,6 +391,7 @@ BEGIN
     (
         Id               uniqueidentifier NOT NULL CONSTRAINT PK_tblInspecciones PRIMARY KEY,
         EtapaId          uniqueidentifier NOT NULL,
+        ViajeId          uniqueidentifier NOT NULL,
         UsuarioId        uniqueidentifier NOT NULL,
         Momento          varchar(20)      NOT NULL,
         Fecha            datetimeoffset(3) NOT NULL,
@@ -324,6 +406,7 @@ BEGIN
         UpdatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspecciones_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblInspecciones_Etapa FOREIGN KEY (EtapaId) REFERENCES dbo.tblEtapas (Id) ON DELETE CASCADE,
         CONSTRAINT FK_tblInspecciones_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblInspecciones_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
         -- A lo sumo un informe por etapa y momento (los valores check_in/check_out se conservan por historico).
         CONSTRAINT UQ_tblInspecciones_Etapa_Momento UNIQUE (EtapaId, Momento),
         CONSTRAINT CK_tblInspecciones_Momento CHECK (Momento IN ('check_in', 'check_out', 'informe')),
@@ -332,6 +415,7 @@ BEGIN
         CONSTRAINT CK_tblInspecciones_Lng CHECK (Lng IS NULL OR (Lng BETWEEN -180 AND 180))
     );
     CREATE INDEX IX_tblInspecciones_Usuario ON dbo.tblInspecciones (UsuarioId);
+    CREATE INDEX IX_tblInspecciones_Viaje ON dbo.tblInspecciones (ViajeId);
     CREATE INDEX IX_tblInspecciones_Fecha ON dbo.tblInspecciones (Fecha DESC);
     -- Soporta la definicion de "movilizado" (existe informe cerrado por etapa).
     CREATE INDEX IX_tblInspecciones_Etapa_Estado ON dbo.tblInspecciones (EtapaId, Estado);
@@ -421,30 +505,6 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
-   tblAsignaciones (el admin asigna que VIN se transporta en cual ninera)
-   ----------------------------------------------------------------------------- */
-IF OBJECT_ID(N'dbo.tblAsignaciones', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.tblAsignaciones
-    (
-        Id            uniqueidentifier NOT NULL CONSTRAINT PK_tblAsignaciones PRIMARY KEY,
-        VehiculoId    uniqueidentifier NOT NULL,
-        Ninera        nvarchar(100)    NOT NULL,
-        ConductorId   uniqueidentifier NULL,
-        AsignadoPor   uniqueidentifier NOT NULL,
-        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblAsignaciones_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblAsignaciones_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        CONSTRAINT FK_tblAsignaciones_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE CASCADE,
-        CONSTRAINT FK_tblAsignaciones_Conductor FOREIGN KEY (ConductorId) REFERENCES dbo.tblUsuarios (Id) ON DELETE SET NULL,
-        CONSTRAINT FK_tblAsignaciones_AsignadoPor FOREIGN KEY (AsignadoPor) REFERENCES dbo.tblUsuarios (Id)
-    );
-    CREATE INDEX IX_tblAsignaciones_Vehiculo ON dbo.tblAsignaciones (VehiculoId, CreatedAt DESC);
-    CREATE INDEX IX_tblAsignaciones_Conductor ON dbo.tblAsignaciones (ConductorId);
-    CREATE INDEX IX_tblAsignaciones_AsignadoPor ON dbo.tblAsignaciones (AsignadoPor);
-END
-GO
-
-/* -----------------------------------------------------------------------------
    tblOrdenesSofasa (ordenes de carga ingeridas por el ETL; idempotente por SourceId)
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblOrdenesSofasa', N'U') IS NULL
@@ -469,15 +529,19 @@ BEGIN
         LoadingDock         nvarchar(255)    NULL,
         Weight              decimal(18, 4)   NULL,
         VehiculoId          uniqueidentifier NULL,
+        CodigoMtrack        varchar(50)      NULL,
+        ViajeId             uniqueidentifier NULL,
         SyncedAt            datetimeoffset(3) NOT NULL CONSTRAINT DF_tblOrdenesSofasa_SyncedAt DEFAULT (SYSDATETIMEOFFSET()),
         CreatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblOrdenesSofasa_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblOrdenesSofasa_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT UQ_tblOrdenesSofasa_SourceId UNIQUE (SourceId),
-        CONSTRAINT FK_tblOrdenesSofasa_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE SET NULL
+        CONSTRAINT FK_tblOrdenesSofasa_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE SET NULL,
+        CONSTRAINT FK_tblOrdenesSofasa_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id) ON DELETE SET NULL
     );
     CREATE INDEX IX_tblOrdenesSofasa_Vin ON dbo.tblOrdenesSofasa (Vin);
     CREATE INDEX IX_tblOrdenesSofasa_DatetimeEvent ON dbo.tblOrdenesSofasa (DatetimeEvent DESC);
     CREATE INDEX IX_tblOrdenesSofasa_Vehiculo ON dbo.tblOrdenesSofasa (VehiculoId);
+    CREATE INDEX IX_tblOrdenesSofasa_Viaje ON dbo.tblOrdenesSofasa (ViajeId);
 END
 GO
 
@@ -593,23 +657,27 @@ WHERE NOT EXISTS (SELECT 1 FROM dbo.tblVistasFoto c WHERE c.Codigo = v.Codigo);
 GO
 
 /* -----------------------------------------------------------------------------
-   Vista: vehiculos movilizados.
-   Un vehiculo esta movilizado cuando TODAS sus etapas (y al menos una) tienen su
-   informe cerrado. Los VINs recien cargados, con la ruta creada pero sin informes,
-   NO cuentan: quedan como "pendientes por movilizar".
+   Vista: viajes completos (reemplaza a vwVehiculosMovilizados).
+   Una fila por VIN y viaje en el que el VIN ya completo su ruta: TODAS sus etapas del viaje (y al menos una) tienen su informe
+   cerrado. Un VIN recien asignado a un viaje, sin informes, NO cuenta: queda como "pendiente por movilizar".
+   Un vehiculo esta movilizado si tiene al menos una fila; un viaje esta completo cuando todos sus VIN tienen fila.
    Es la unica definicion de "movilizado" usada por listados, metricas y patrones.
    ----------------------------------------------------------------------------- */
-CREATE OR ALTER VIEW dbo.vwVehiculosMovilizados
+IF OBJECT_ID(N'dbo.vwVehiculosMovilizados', N'V') IS NOT NULL
+    DROP VIEW dbo.vwVehiculosMovilizados;
+GO
+
+CREATE OR ALTER VIEW dbo.vwViajesCompletos
 AS
-SELECT x.VehiculoId
+SELECT x.ViajeId, x.VehiculoId
 FROM (
-    SELECT e.VehiculoId,
+    SELECT e.ViajeId, e.VehiculoId,
            CASE WHEN EXISTS (SELECT 1 FROM dbo.tblInspecciones i
                               WHERE i.EtapaId = e.Id AND i.Estado = 'cerrada')
                 THEN 1 ELSE 0 END AS Cerrada
     FROM dbo.tblEtapas e
 ) AS x
-GROUP BY x.VehiculoId
+GROUP BY x.ViajeId, x.VehiculoId
 HAVING COUNT(*) > 0 AND COUNT(*) = SUM(x.Cerrada);
 GO
 

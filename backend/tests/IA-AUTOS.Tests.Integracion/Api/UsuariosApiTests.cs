@@ -30,7 +30,7 @@ public sealed class UsuariosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         Assert.Equal(["Alfa", "Zeta"], nombres);
         var primero = doc.RootElement[0];
         Assert.Equal(
-            ["id", "nombre", "email", "rol", "subtipo_inspector", "activo", "created_at", "updated_at"],
+            ["id", "nombre", "email", "rol", "subtipo_inspector", "cedula", "activo", "created_at", "updated_at"],
             primero.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Matches(@"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$", primero.GetProperty("created_at").GetString()!);
         Assert.Equal(JsonValueKind.Null, primero.GetProperty("subtipo_inspector").ValueKind);

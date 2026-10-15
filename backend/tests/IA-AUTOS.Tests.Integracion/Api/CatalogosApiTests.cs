@@ -337,21 +337,26 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
     }
 
     [Fact]
-    public async Task Un_lugar_asignado_a_una_etapa_tampoco_se_borra()
+    public async Task Un_lugar_asignado_a_una_etapa_o_a_un_viaje_tampoco_se_borra()
     {
         var token = await TokenAsync();
         var cliente = Cliente(token);
-        var (vehiculoId, _) = await Sembrador.VehiculoConRutaAsync("VIN-LUGAR", cantidadEtapas: 0);
-        var etapaId = (await ValorAsync(token, "etapas", "cargue")).GetProperty("id").GetGuid();
+        var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-LUGAR");
         var lugar = await ValorAsync(token, "puntos-custodia", "cedi_1");
-        var asignada = await cliente.PostAsync(
-            "/api/etapas",
-            Cuerpo(new { vehiculo_id = vehiculoId, etapa_catalogo_id = etapaId, punto_custodia_id = lugar.GetProperty("id").GetGuid(), orden = 1 }));
-        Assert.Equal(HttpStatusCode.Created, asignada.StatusCode);
+        var otro = await ValorAsync(token, "puntos-custodia", "certificadora");
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET PuntoCustodiaId = @l WHERE Id = @e", ("@l", lugar.GetProperty("id").GetGuid()), ("@e", etapas[0]));
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET OrigenId = @l WHERE Id = (SELECT ViajeId FROM dbo.tblEtapas WHERE Id = @e)", ("@l", otro.GetProperty("id").GetGuid()), ("@e", etapas[0]));
 
-        var borrar = await cliente.DeleteAsync($"/api/catalogos/puntos-custodia/{lugar.GetProperty("id").GetGuid()}");
+        var borrarDeEtapa = await cliente.DeleteAsync($"/api/catalogos/puntos-custodia/{lugar.GetProperty("id").GetGuid()}");
+        var borrarDeViaje = await cliente.DeleteAsync($"/api/catalogos/puntos-custodia/{otro.GetProperty("id").GetGuid()}");
+        var unidad = await ValorAsync(token, "tipos-unidad", "ninera");
+        var borrarUnidad = await cliente.DeleteAsync($"/api/catalogos/tipos-unidad/{unidad.GetProperty("id").GetGuid()}");
 
-        Assert.Equal(HttpStatusCode.Conflict, borrar.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, borrarDeEtapa.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, borrarDeViaje.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, borrarUnidad.StatusCode);
+        Assert.Contains("en uso", (await LeerJsonAsync(borrarDeViaje)).GetProperty("message").GetString());
+        Assert.Contains("en uso", (await LeerJsonAsync(borrarUnidad)).GetProperty("message").GetString());
     }
 
     [Fact]
@@ -362,7 +367,7 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var inspectorEmail = "insp2@ejemplo.com";
         var inspector = await Fabrica.SembrarUsuarioAsync(inspectorEmail, "Clave-Segura-1", clsRol.INSPECTOR);
         var inspectorToken = await LoginAsync(inspectorEmail, "Clave-Segura-1");
-        var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-INACTIVA");
+        var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-INACTIVA", inspectorId: inspector.Id);
         var inspeccionId = await Sembrador.InformeAsync(etapas[0], inspector.Id, cerrada: false, hallazgos: 1);
         var claseId = (await ValorAsync(adminToken, "clases-dano", "golpe")).GetProperty("id").GetGuid();
 
@@ -404,44 +409,52 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
     // ----------------------------------------------------------------------------------- la ruta y los filtros
 
     [Fact]
-    public async Task La_ruta_de_un_vehiculo_nuevo_sigue_las_etapas_activas_del_catalogo()
+    public async Task La_ruta_de_los_vin_de_un_viaje_sigue_las_etapas_activas_del_catalogo()
     {
         var token = await TokenAsync();
         var cliente = Cliente(token);
         var descargue = await ValorAsync(token, "etapas", "descargue");
+        var unidad = (await ValorAsync(token, "tipos-unidad", "ninera")).GetProperty("id").GetGuid();
+        await cliente.PostAsync("/api/vehiculos/cargar", Cuerpo(new { items = new[]
+        {
+            new { vin = "9FBHSR4E8PM000001", marca = "Renault", operacion = "nacional" },
+            new { vin = "9FBHSR4E8PM000002", marca = "Renault", operacion = "nacional" },
+        } }));
 
         await cliente.PatchAsync($"/api/catalogos/etapas/{descargue.GetProperty("id").GetGuid()}", Cuerpo(new { activo = false }));
-        var sinDescargue = await cliente.PostAsync("/api/vehiculos/cargar", Cuerpo(new { items = new[] { new { vin = "9FBHSR4E8PM000001", marca = "Renault", operacion = "nacional" } } }));
+        var sinDescargue = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-RUTA-1", tipo_unidad_id = unidad, placa = "ABC123", vines = new[] { "9FBHSR4E8PM000001" } }));
         Assert.Equal(HttpStatusCode.Created, sinDescargue.StatusCode);
         Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = '9FBHSR4E8PM000001'"));
 
         await cliente.PatchAsync($"/api/catalogos/etapas/{descargue.GetProperty("id").GetGuid()}", Cuerpo(new { activo = true }));
         await cliente.PostAsync("/api/catalogos/etapas", Cuerpo(new { codigo = "entrega_final", nombre = "Entrega final", orden = 4 }));
-        await cliente.PostAsync("/api/vehiculos/cargar", Cuerpo(new { items = new[] { new { vin = "9FBHSR4E8PM000002", marca = "Renault", operacion = "nacional" } } }));
+        var conCuatro = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-RUTA-2", tipo_unidad_id = unidad, placa = "ABC123", vines = new[] { "9FBHSR4E8PM000002" } }));
+        Assert.Equal(HttpStatusCode.Created, conCuatro.StatusCode);
         Assert.Equal(4, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = '9FBHSR4E8PM000002'"));
     }
 
     [Fact]
-    public async Task Una_etapa_o_un_lugar_inactivo_no_se_ofrece_para_etapas_nuevas()
+    public async Task Una_unidad_o_un_lugar_inactivo_no_se_ofrece_para_viajes_nuevos()
     {
         var token = await TokenAsync();
         var cliente = Cliente(token);
-        var (vehiculoId, _) = await Sembrador.VehiculoConRutaAsync("VIN-INACT-ET", cantidadEtapas: 0);
-        var cargue = await ValorAsync(token, "etapas", "cargue");
+        var unidad = await ValorAsync(token, "tipos-unidad", "nodriza");
         var origen = await ValorAsync(token, "puntos-custodia", "origen");
         await cliente.PatchAsync($"/api/catalogos/puntos-custodia/{origen.GetProperty("id").GetGuid()}", Cuerpo(new { activo = false }));
+        await cliente.PatchAsync($"/api/catalogos/tipos-unidad/{unidad.GetProperty("id").GetGuid()}", Cuerpo(new { activo = false }));
 
-        var lugarInactivo = await cliente.PostAsync(
-            "/api/etapas",
-            Cuerpo(new { vehiculo_id = vehiculoId, etapa_catalogo_id = cargue.GetProperty("id").GetGuid(), punto_custodia_id = origen.GetProperty("id").GetGuid(), orden = 1 }));
-        var etapaInexistente = await cliente.PostAsync(
-            "/api/etapas",
-            Cuerpo(new { vehiculo_id = vehiculoId, etapa_catalogo_id = Guid.NewGuid(), orden = 1 }));
-        var sinEtapa = await cliente.PostAsync("/api/etapas", Cuerpo(new { vehiculo_id = vehiculoId, orden = 1 }));
+        var inactivos = await cliente.PostAsync(
+            "/api/viajes",
+            Cuerpo(new { codigo_mtrack = "MTK-INACT", tipo_unidad_id = unidad.GetProperty("id").GetGuid(), placa = "ABC123", origen_id = origen.GetProperty("id").GetGuid() }));
+        var inexistente = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-INEX", tipo_unidad_id = Guid.NewGuid(), placa = "ABC123" }));
+        var sinUnidad = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-SIN", placa = "ABC123" }));
 
-        Assert.Equal(HttpStatusCode.BadRequest, lugarInactivo.StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, etapaInexistente.StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, sinEtapa.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, inactivos.StatusCode);
+        var errores = (await LeerJsonAsync(inactivos)).GetProperty("details").GetProperty("fieldErrors");
+        Assert.True(errores.TryGetProperty("tipo_unidad_id", out _));
+        Assert.True(errores.TryGetProperty("origen_id", out _));
+        Assert.Equal(HttpStatusCode.BadRequest, inexistente.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, sinUnidad.StatusCode);
     }
 
     [Fact]

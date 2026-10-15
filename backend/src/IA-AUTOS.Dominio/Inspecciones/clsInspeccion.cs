@@ -15,6 +15,9 @@ public sealed class clsInspeccion : clsEntidadBase
 
     public Guid EtapaId { get; private set; }
 
+    /// <summary>Viaje de la etapa: de el salen la placa, el trailer y el conductor.</summary>
+    public Guid ViajeId { get; private set; }
+
     public Guid UsuarioId { get; private set; }
 
     public string Momento { get; private set; } = string.Empty;
@@ -27,7 +30,7 @@ public sealed class clsInspeccion : clsEntidadBase
 
     public string Estado { get; private set; } = clsEstadoInspeccion.BORRADOR;
 
-    /// <summary>Datos del transporte capturados al iniciar la inspeccion en la app.</summary>
+    /// <summary>Datos del transporte capturados en la app antes de que existieran los viajes. Las inspecciones nuevas no los llenan: los toman del viaje.</summary>
     public string? ConductorNombre { get; private set; }
 
     public string? Placa { get; private set; }
@@ -40,15 +43,13 @@ public sealed class clsInspeccion : clsEntidadBase
 
     public static clsInspeccion Crear(
         Guid etapaId,
+        Guid viajeId,
         Guid usuarioId,
         string momento,
         DateTimeOffset fecha,
         double? lat,
         double? lng,
         string? estado,
-        string? conductorNombre,
-        string? placa,
-        string? trailer,
         string? notas,
         DateTimeOffset ahora)
     {
@@ -66,15 +67,13 @@ public sealed class clsInspeccion : clsEntidadBase
         var inspeccion = new clsInspeccion
         {
             EtapaId = etapaId,
+            ViajeId = viajeId,
             UsuarioId = usuarioId,
             Momento = momento,
             Fecha = fecha,
             Lat = lat,
             Lng = lng,
             Estado = estadoFinal,
-            ConductorNombre = clsValidador.Opcional(conductorNombre),
-            Placa = clsValidador.Opcional(placa),
-            Trailer = clsValidador.Opcional(trailer),
             Notas = notasLimpias,
         };
         inspeccion.Inicializar(ahora);

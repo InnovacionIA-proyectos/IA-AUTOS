@@ -9,7 +9,8 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | Grupo | Roles | Se usa en |
 |---|---|---|
 | Campo | inspector, conductor, admin | informes, hallazgos, evidencias, firmas, subida de fotos |
-| Administracion | admin, super_admin | carga masiva de VIN, asignaciones, etapas |
+| Administracion | admin, super_admin | carga masiva de VIN |
+| Gestion de viajes | coordinador_calidad, admin, super_admin | crear y administrar viajes, asignar VIN, cargar viajes por Excel |
 | Gestion de usuarios | super_admin | alta, cambio y baja de usuarios |
 
 ## Endpoints
@@ -25,15 +26,22 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | POST `/api/usuarios` | super_admin | crea usuario (`nombre`, `email`, `rol`, `password`) |
 | PATCH `/api/usuarios/{id}` | super_admin | cambia solo los campos enviados (incluye `password` y `activo`) |
 | DELETE `/api/usuarios/{id}` | super_admin | `{ modo: "eliminado" \| "retirado" }`; no permite auto-eliminacion |
-| POST `/api/vehiculos/cargar` | administracion | hasta 5000 VIN con su ruta Cargue, Transporte, Descargue; idempotente |
-| GET `/api/vehiculos?vin=` | autenticado | autocompletado por fragmento de VIN o marca (maximo 8) |
+| POST `/api/vehiculos/cargar` | administracion | hasta 5000 VIN; idempotente (las etapas nacen cuando el VIN entra a un viaje) |
+| GET `/api/vehiculos?vin=` | autenticado | autocompletado por fragmento de VIN o marca (maximo 8); inspector y conductor solo ven los VIN de sus viajes |
 | GET `/api/vehiculos/listado?tipo=&vin=&page=` | autenticado | `tipo` = movilizados, pendientes o novedad; 500 por pagina |
-| GET `/api/vehiculos/{vin}/inventario` | autenticado | etapas, inspecciones, hallazgos, evidencias y transferencia |
+| GET `/api/vehiculos/{vin}/inventario` | autenticado | etapas (de todos sus viajes), inspecciones, hallazgos, evidencias y transferencia; `403` si inspector o conductor y el VIN no esta en sus viajes |
 | GET `/api/vehiculos/{vin}/inventario/pdf` | autenticado | inventario en PDF (descarga) |
-| POST `/api/asignaciones` | administracion | asigna un VIN a una ninera (placa) y opcionalmente a un conductor |
-| POST `/api/etapas` | administracion | define un tramo de la ruta: `etapa_catalogo_id`, `punto_custodia_id` (lugar, opcional), `orden`, `requiere_inspeccion` |
-| POST `/api/inspecciones` | campo | crea el informe de una etapa (siempre en borrador; el usuario sale del token) |
-| GET `/api/inspecciones` | autenticado | listado (maximo 200) con filtros `vin`, `usuarioId`, `momento`, `estado`, `proceso`, `desde`, `hasta` |
+| POST `/api/viajes` | gestion de viajes | crea un viaje con unidad, placa, trailer, conductor, codigo MTrack (unico, `409` si se repite) y sus VIN; crea las etapas de cada VIN |
+| GET `/api/viajes` | autenticado | listado (maximo 200) con filtros `estado`, `codigoMtrack`, `vin`, `conductorId`, `desde`, `hasta`; inspector y conductor solo ven los suyos |
+| GET `/api/viajes/mios` | autenticado | los viajes del usuario (conductor o inspector) con sus VIN; por defecto programados y en curso |
+| GET `/api/viajes/{id}` | autenticado | un viaje con sus VIN; `403` si no es de un inspector o conductor |
+| PATCH `/api/viajes/{id}` | gestion de viajes | cambia los campos enviados de un viaje programado o en curso |
+| PATCH `/api/viajes/{id}/estado` | gestion de viajes | programado a en curso a finalizado, o cancelar |
+| POST `/api/viajes/{id}/vehiculos`, DELETE `/api/viajes/{id}/vehiculos/{vin}` | gestion de viajes | asigna o quita VIN (todo o nada; no se quita un VIN con inspecciones) |
+| DELETE `/api/viajes/{id}` | gestion de viajes | borra un viaje sin inspecciones (`409` si las tiene) |
+| POST `/api/viajes/cargar/previsualizar`, POST `/api/viajes/cargar` | gestion de viajes | carga por Excel: vista previa con el error de cada fila y confirmacion que guarda solo las filas validas |
+| POST `/api/inspecciones` | campo | crea el informe de una etapa (siempre en borrador; el usuario sale del token; placa, trailer y conductor salen del viaje; `403` si la etapa es de un viaje ajeno) |
+| GET `/api/inspecciones` | autenticado | listado (maximo 200) con filtros `vin`, `usuarioId`, `viajeId`, `momento`, `estado`, `proceso`, `desde`, `hasta`; inspector y conductor solo ven los informes de sus viajes |
 | GET `/api/inspecciones/{id}` | autenticado | informe completo con firmas y nombres |
 | POST `/api/inspecciones/{id}/evidencias` | campo, creador o administrador | agrega una foto ya subida |
 | POST `/api/inspecciones/{id}/hallazgos` | campo, creador o administrador | agrega un hallazgo |
@@ -42,7 +50,7 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | POST `/api/uploads` | campo | sube una foto en base64 (JPG o PNG); `{ storage_path, url }` |
 | GET `/api/uploads/{archivo}` | publico por defecto | sirve la imagen |
 | POST `/api/etl/sofasa/ordenes` | token del ETL | ingesta idempotente por `source_id` |
-| GET `/api/sofasa/ordenes` | autenticado | ordenes mas recientes primero (maximo 500) |
+| GET `/api/sofasa/ordenes` | autenticado | ordenes mas recientes primero (maximo 500), con `viaje_id` y `codigo_mtrack`; inspector y conductor solo ven las de sus viajes |
 | GET `/api/catalogos` | autenticado | todos los catalogos maestros (etapas, lugares, clases y tamanos de dano, niveles, vistas, cuadrantes y sus poligonos...) con version (`ETag`, `304` con `If-None-Match`) |
 | GET `/api/catalogos/{nombre}` | autenticado | un catalogo con su version |
 | POST `/api/catalogos/{nombre}`, PATCH `/api/catalogos/{nombre}/{id}`, DELETE `/api/catalogos/{nombre}/{id}` | admin, super_admin, coordinador_calidad | crea, edita o borra un valor; uno en uso no se borra (`409`), se inactiva |

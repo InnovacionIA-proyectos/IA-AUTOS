@@ -6,6 +6,9 @@ namespace IAAutos.Dominio.Usuarios;
 /// <summary>Usuario del sistema (inspector, conductor, administrador, etc.). Admite baja logica.</summary>
 public sealed partial class clsUsuario : clsEntidadBase
 {
+    public const int CEDULA_MIN = 4;
+    public const int CEDULA_MAX = 20;
+
     private clsUsuario()
     {
     }
@@ -29,13 +32,17 @@ public sealed partial class clsUsuario : clsEntidadBase
     /// </summary>
     public long? PortalUsuarioId { get; private set; }
 
+    /// <summary>Documento de la persona, sin puntos ni espacios. El conductor se identifica por ella en la carga de viajes. Unica entre quienes la tienen.</summary>
+    public string? Cedula { get; private set; }
+
     public static clsUsuario Crear(
         string nombre,
         string email,
         string rol,
         string? subtipoInspector,
         string passwordHash,
-        DateTimeOffset ahora)
+        DateTimeOffset ahora,
+        string? cedula = null)
     {
         var usuario = new clsUsuario
         {
@@ -44,6 +51,7 @@ public sealed partial class clsUsuario : clsEntidadBase
             Rol = ValidarRol(rol),
             SubtipoInspector = ValidarSubtipo(subtipoInspector),
             PasswordHash = passwordHash,
+            Cedula = NormalizarCedula(cedula),
             Activo = true,
         };
         usuario.Inicializar(ahora);
@@ -58,7 +66,8 @@ public sealed partial class clsUsuario : clsEntidadBase
         string? subtipoInspector,
         string? nuevoPasswordHash,
         bool? activo,
-        DateTimeOffset ahora)
+        DateTimeOffset ahora,
+        string? cedula = null)
     {
         if (nombre is not null)
         {
@@ -88,6 +97,12 @@ public sealed partial class clsUsuario : clsEntidadBase
         if (activo is not null)
         {
             Activo = activo.Value;
+        }
+
+        // Texto vacio borra la cedula.
+        if (cedula is not null)
+        {
+            Cedula = NormalizarCedula(cedula);
         }
 
         Tocar(ahora);
@@ -126,6 +141,20 @@ public sealed partial class clsUsuario : clsEntidadBase
         {
             throw new clsConflictoException("No puedes eliminar tu propio usuario");
         }
+    }
+
+    /// <summary>Quita puntos, comas y espacios y pasa a mayuscula, para que "1.234.567" y "1234567" sean la misma cedula. Vacio = sin cedula.</summary>
+    public static string? NormalizarCedula(string? cedula)
+    {
+        var limpia = cedula is null ? string.Empty : new string(cedula.Where(c => c is not ('.' or ',') && !char.IsWhiteSpace(c)).ToArray()).ToUpperInvariant();
+        if (limpia.Length == 0)
+        {
+            return null;
+        }
+
+        return CEDULA_MIN <= limpia.Length && limpia.Length <= CEDULA_MAX && limpia.All(c => char.IsAsciiLetterOrDigit(c) || c == '-')
+            ? limpia
+            : throw clsErroresCampos.De("cedula", $"La cédula admite letras, números y guion (de {CEDULA_MIN} a {CEDULA_MAX} caracteres)");
     }
 
     private static string NormalizarEmail(string email)

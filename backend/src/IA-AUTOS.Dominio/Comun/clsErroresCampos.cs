@@ -4,11 +4,15 @@ namespace IAAutos.Dominio.Comun;
 public static class clsErroresCampos
 {
     public static clsValidacionException De(string campo, string mensaje) =>
+        Varios(new Dictionary<string, string[]> { [campo] = [mensaje] });
+
+    /// <summary>Varios campos con error a la vez (por ejemplo, todas las referencias invalidas de un viaje).</summary>
+    public static clsValidacionException Varios(IReadOnlyDictionary<string, string[]> porCampo) =>
         new(
             "Datos inválidos",
             new Dictionary<string, object>
             {
                 ["formErrors"] = Array.Empty<string>(),
-                ["fieldErrors"] = new Dictionary<string, string[]> { [campo] = [mensaje] },
+                ["fieldErrors"] = porCampo.ToDictionary(c => c.Key, c => c.Value),
             });
 }

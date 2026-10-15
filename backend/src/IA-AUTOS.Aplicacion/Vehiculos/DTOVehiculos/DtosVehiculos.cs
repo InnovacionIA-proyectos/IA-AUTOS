@@ -33,6 +33,7 @@ public sealed record ListadoPaginadoDto(
 public sealed record InventarioInspeccionDto(
     Guid Id,
     Guid EtapaId,
+    Guid ViajeId,
     Guid UsuarioId,
     string Momento,
     DateTimeOffset Fecha,
@@ -55,6 +56,9 @@ public sealed record InventarioEtapaDto(
     string Proceso,
     string? Lugar,
     bool RequiereInspeccion,
+    Guid ViajeId,
+    string? CodigoMtrack,
+    bool ConPersonalApoyo,
     IReadOnlyList<InventarioInspeccionDto> Inspecciones);
 
 public sealed record InventarioDto(

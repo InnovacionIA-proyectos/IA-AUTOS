@@ -1,8 +1,8 @@
-using IAAutos.Aplicacion.Catalogos;
 using FluentValidation;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
 using IAAutos.Dominio.Comun;
+using IAAutos.Aplicacion.Viajes;
 using IAAutos.Dominio.Vehiculos;
 using Microsoft.Extensions.Logging;
 
@@ -11,12 +11,12 @@ namespace IAAutos.Aplicacion.Vehiculos;
 /// <summary>Carga masiva de VINs, busqueda, listados del tablero e inventario por VIN.</summary>
 public sealed class clsVehiculosService(
     IVehiculoRepository vehiculos,
-    IEtapaRepository etapas,
-    ICatalogosLectura catalogos,
     IConsultasVehiculos consultas,
+    IConsultasViajes consultasViajes,
     IGeneradorPdfInventario generadorPdf,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
+    IUsuarioActual actual,
     IReloj reloj,
     IValidator<CargarVinsRequest> validadorCarga,
     ILogger<clsVehiculosService> registro)
@@ -24,15 +24,14 @@ public sealed class clsVehiculosService(
     public const int TAMANO_PAGINA = 500;
 
     /// <summary>
-    /// Carga masiva de vehiculos con su ruta Cargue, Transporte, Descargue. Cada VIN se inserta (o se actualiza si ya existe)
-    /// y recibe las etapas que le falten. Re-subir el mismo archivo no duplica. Los errores se reportan por VIN sin
-    /// detener el resto del lote.
+    /// Carga masiva de vehiculos. Cada VIN se inserta (o se actualiza si ya existe). Las etapas no se crean aqui: nacen cuando el VIN
+    /// se agrega a un viaje. Re-subir el mismo archivo no duplica. Los errores se reportan por VIN sin detener el resto del lote.
     /// </summary>
     public async Task<ResultadoCargaDto> CargarVinsAsync(CargarVinsRequest solicitud, CancellationToken ct = default)
     {
         await validadorCarga.ValidarOLanzarAsync(solicitud, ct);
         var items = solicitud.Items!;
-        var materializador = new clsMaterializadorVehiculos(vehiculos, etapas, catalogos, reloj);
+        var materializador = new clsMaterializadorVehiculos(vehiculos);
         await materializador.PrepararAsync(items.Select(i => clsVin.Normalizar(i.Vin!)).ToList(), ct);
 
         int creados = 0, actualizados = 0;
@@ -56,7 +55,6 @@ public sealed class clsVehiculosService(
                     vehiculo.ActualizarDesdeCarga(item.Marca!, item.Modelo, item.Color, item.Operacion!, reloj.Ahora);
                 }
 
-                await materializador.AgregarRutaFaltanteAsync(vehiculo, esNuevo, ct);
                 await unidadDeTrabajo.GuardarCambiosAsync(ct);
 
                 if (esNuevo)
@@ -82,8 +80,9 @@ public sealed class clsVehiculosService(
         return new ResultadoCargaDto(items.Count, creados, actualizados, errores.Count, errores);
     }
 
+    /// <summary>Autocompletado. Inspectores y conductores solo encuentran los VIN de sus viajes.</summary>
     public async Task<IReadOnlyList<VehiculoBusquedaDto>> BuscarAsync(string? termino, CancellationToken ct = default) =>
-        string.IsNullOrWhiteSpace(termino) ? [] : await consultas.BuscarAsync(termino.Trim(), ct);
+        string.IsNullOrWhiteSpace(termino) ? [] : await consultas.BuscarAsync(termino.Trim(), actual.SoloSusViajes(), ct);
 
     public async Task<ListadoPaginadoDto> ListarAsync(string? tipo, string? vin, int pagina, CancellationToken ct = default)
     {
@@ -103,15 +102,36 @@ public sealed class clsVehiculosService(
         var (filas, total) = await consultas.ListarAsync(
             tipoFinal,
             string.IsNullOrWhiteSpace(vin) ? null : vin.Trim(),
+            actual.SoloSusViajes(),
             TAMANO_PAGINA,
             (paginaFinal - 1) * TAMANO_PAGINA,
             ct);
         return new ListadoPaginadoDto(filas, total, paginaFinal, TAMANO_PAGINA);
     }
 
-    public async Task<InventarioDto> ObtenerInventarioAsync(string vin, CancellationToken ct = default) =>
-        await consultas.ObtenerInventarioAsync(vin, ct)
+    /// <summary>
+    /// Inventario del VIN. Un inspector o conductor solo puede abrir los VIN de sus viajes (403 si no es de ellos); de ese VIN ve unicamente
+    /// las etapas de sus viajes.
+    /// </summary>
+    public async Task<InventarioDto> ObtenerInventarioAsync(string vin, CancellationToken ct = default)
+    {
+        var soloDeUsuario = actual.SoloSusViajes();
+        if (soloDeUsuario is { } usuarioId)
+        {
+            if (await vehiculos.ObtenerPorVinAsync(vin, ct) is null)
+            {
+                throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
+            }
+
+            if (!await consultasViajes.UsuarioVeVinAsync(vin, usuarioId, ct))
+            {
+                throw new clsProhibidoException("El VIN no pertenece a ninguno de sus viajes");
+            }
+        }
+
+        return await consultas.ObtenerInventarioAsync(vin, soloDeUsuario, ct)
             ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
+    }
 
     /// <summary>Inventario del VIN en PDF (soporte de rechazo).</summary>
     public async Task<byte[]> ObtenerInventarioPdfAsync(string vin, CancellationToken ct = default) =>

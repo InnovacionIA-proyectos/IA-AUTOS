@@ -54,12 +54,13 @@ public sealed class clsFabricaApi(
         string rol = clsRol.INSPECTOR,
         bool activo = true,
         string? hashExistente = null,
-        string nombre = "Usuario de prueba")
+        string nombre = "Usuario de prueba",
+        string? cedula = null)
     {
         using var alcance = Services.CreateScope();
         var s = alcance.ServiceProvider;
         var hasher = s.GetRequiredService<IServicioContrasenas>();
-        var usuario = clsUsuario.Crear(nombre, email, rol, null, hashExistente ?? hasher.Hashear(password), DateTimeOffset.UtcNow);
+        var usuario = clsUsuario.Crear(nombre, email, rol, null, hashExistente ?? hasher.Hashear(password), DateTimeOffset.UtcNow, cedula);
         if (!activo)
         {
             usuario.Retirar(DateTimeOffset.UtcNow);

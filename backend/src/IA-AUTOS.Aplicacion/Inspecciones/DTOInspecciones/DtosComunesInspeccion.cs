@@ -6,6 +6,7 @@ public sealed record CoordsDiagramaDto(double X, double Y);
 public sealed record InspeccionDto(
     Guid Id,
     Guid EtapaId,
+    Guid ViajeId,
     Guid UsuarioId,
     string Momento,
     DateTimeOffset Fecha,

@@ -51,9 +51,9 @@ Los datos existentes migran sin pérdida: cada etapa conserva su proceso (en la 
 | Antes | Ahora |
 |---|---|
 | `proceso` salía de los 7 puntos de custodia | `proceso` es el `codigo` de una etapa del catálogo (`cargue`, `transporte`, `descargue`); el filtro `proceso` de los informes valida contra `etapas` |
-| `POST /api/etapas` recibía `punto_custodia_id` (el proceso) | recibe `etapa_catalogo_id` (obligatorio) y `punto_custodia_id` (el **lugar**, opcional) |
+| `POST /api/etapas` recibía `punto_custodia_id` (el proceso) | recibía `etapa_catalogo_id` y `punto_custodia_id` (el **lugar**); ya no existe: las etapas nacen al agregar un VIN a un viaje (ver [viajes.md](viajes.md)) |
 | `clase_dano` y `tamano_dano` validados contra listas fijas | validados contra los valores **activos** de `clases-dano` y `tamanos-dano` |
-| Los vehículos nuevos recibían siempre Cargue, Transporte y Descargue | reciben una etapa por cada valor **activo** de `etapas`, en su `orden` |
+| Los vehículos nuevos recibían siempre Cargue, Transporte y Descargue | cada VIN que entra a un viaje recibe una etapa por cada valor **activo** de `etapas`, en su `orden` |
 | inventario e informe | agregan `lugar` (nombre del lugar o `null`) |
 
 ## Aplicar el cambio en una base existente

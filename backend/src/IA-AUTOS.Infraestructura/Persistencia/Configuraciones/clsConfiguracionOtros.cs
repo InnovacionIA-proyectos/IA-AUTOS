@@ -1,28 +1,12 @@
-using IAAutos.Dominio.Asignaciones;
 using IAAutos.Dominio.Auditoria;
 using IAAutos.Dominio.Sofasa;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
+using IAAutos.Dominio.Viajes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace IAAutos.Infraestructura.Persistencia.Configuraciones;
-
-internal sealed class clsConfiguracionAsignacion : IEntityTypeConfiguration<clsAsignacion>
-{
-    public void Configure(EntityTypeBuilder<clsAsignacion> builder)
-    {
-        builder.ToTable("tblAsignaciones");
-        clsConfiguracionBase.Base(builder);
-        builder.Property(a => a.Ninera).HasMaxLength(100).IsRequired();
-        builder.HasOne<clsVehiculo>().WithMany().HasForeignKey(a => a.VehiculoId)
-            .HasConstraintName("FK_tblAsignaciones_Vehiculo").OnDelete(DeleteBehavior.Cascade);
-        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(a => a.ConductorId)
-            .HasConstraintName("FK_tblAsignaciones_Conductor").OnDelete(DeleteBehavior.SetNull);
-        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(a => a.AsignadoPor)
-            .HasConstraintName("FK_tblAsignaciones_AsignadoPor").OnDelete(DeleteBehavior.NoAction);
-    }
-}
 
 internal sealed class clsConfiguracionOrdenSofasa : IEntityTypeConfiguration<clsOrdenSofasa>
 {
@@ -45,9 +29,12 @@ internal sealed class clsConfiguracionOrdenSofasa : IEntityTypeConfiguration<cls
         builder.Property(o => o.Appointment).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
         builder.Property(o => o.LoadingDock).HasMaxLength(255);
         builder.Property(o => o.Weight).HasColumnType("decimal(18,4)");
+        builder.Property(o => o.CodigoMtrack).HasColumnType("varchar(50)");
         builder.Property(o => o.SyncedAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
         builder.HasOne<clsVehiculo>().WithMany().HasForeignKey(o => o.VehiculoId)
             .HasConstraintName("FK_tblOrdenesSofasa_Vehiculo").OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<clsViaje>().WithMany().HasForeignKey(o => o.ViajeId)
+            .HasConstraintName("FK_tblOrdenesSofasa_Viaje").OnDelete(DeleteBehavior.SetNull);
         builder.HasIndex(o => o.SourceId).IsUnique().HasDatabaseName("UQ_tblOrdenesSofasa_SourceId");
     }
 }

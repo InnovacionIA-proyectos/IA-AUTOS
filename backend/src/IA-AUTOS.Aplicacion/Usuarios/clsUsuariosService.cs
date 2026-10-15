@@ -34,7 +34,8 @@ public sealed class clsUsuariosService(
             solicitud.Rol!,
             solicitud.SubtipoInspector,
             contrasenas.Hashear(solicitud.Password!),
-            reloj.Ahora);
+            reloj.Ahora,
+            solicitud.Cedula);
         usuarios.Agregar(usuario);
         auditor.Registrar("usuario.crear", "usuarios", usuario.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -54,7 +55,8 @@ public sealed class clsUsuariosService(
             solicitud.SubtipoInspector,
             solicitud.Password is null ? null : contrasenas.Hashear(solicitud.Password),
             solicitud.Activo,
-            reloj.Ahora);
+            reloj.Ahora,
+            solicitud.Cedula);
         auditor.Registrar("usuario.actualizar", "usuarios", usuario.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorUsuarios.ADto(usuario);

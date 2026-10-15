@@ -22,7 +22,10 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
     [
         ("UQ_tblUsuarios_Email", "Ya existe un usuario con ese correo"),
         ("UQ_tblVehiculos_Vin", "Ya existe un vehículo con ese VIN"),
-        ("UQ_tblEtapas_Vehiculo_Orden", "Ya existe una etapa con ese orden para el vehículo"),
+        ("UQ_tblEtapas_Viaje_Vehiculo_Orden", "Ya existe una etapa con ese orden para el vehículo en el viaje"),
+        ("UX_tblViajes_CodigoMtrack", "Ya existe un viaje con ese código MTrack"),
+        ("UQ_tblViajeVehiculos_Viaje_Vehiculo", "El VIN ya está en el viaje"),
+        ("UX_tblUsuarios_Cedula", "Ya existe un usuario con esa cédula"),
         ("UQ_tblInspecciones_Etapa_Momento", "Esta etapa ya tiene un informe registrado"),
         ("UQ_tblTransferencias_Inspeccion", "Esta inspección ya tiene una transferencia de custodia"),
         ("UQ_tblOrdenesSofasa_SourceId", "Ya existe una orden con ese identificador de origen"),
@@ -39,6 +42,9 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         "FK_tblHallazgos_TamanoDano",
         "FK_tblEtapas_EtapaCatalogo",
         "FK_tblEtapas_PuntoCustodia",
+        "FK_tblViajes_TipoUnidad",
+        "FK_tblViajes_Origen",
+        "FK_tblViajes_Destino",
         "FK_tblCuadranteVistas_Vista",
     ];
 
@@ -46,7 +52,15 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
     [
         ("FK_tblEtapas_EtapaCatalogo", "La etapa no existe en el catálogo"),
         ("FK_tblEtapas_PuntoCustodia", "El punto de custodia no existe en el catálogo"),
+        ("FK_tblEtapas_Viaje", "El viaje no existe"),
         ("FK_tblEtapas_", "El vehículo no existe"),
+        ("FK_tblViajes_TipoUnidad", "La unidad transportadora no existe en el catálogo"),
+        ("FK_tblViajes_Origen", "El origen no existe en el catálogo de lugares"),
+        ("FK_tblViajes_Destino", "El destino no existe en el catálogo de lugares"),
+        ("FK_tblViajes_", "El conductor, el inspector o quien crea el viaje no existe"),
+        ("FK_tblViajeVehiculos_Viaje", "El viaje no existe"),
+        ("FK_tblViajeVehiculos_", "El vehículo no existe"),
+        ("FK_tblInspecciones_Viaje", "El viaje no existe"),
         ("FK_tblInspecciones_", "La etapa o el usuario no existen"),
         ("FK_tblTransferencias_", "Algún usuario (entrega/recibe) no existe"),
         ("FK_tblAsignaciones_", "Referencia inválida (vehículo o usuario)"),
