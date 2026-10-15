@@ -13,6 +13,7 @@ public static class clsNombresCatalogo
     public const string NIVELES_SEVERIDAD = "niveles-severidad";
     public const string VISTAS_FOTO = "vistas-foto";
     public const string CUADRANTES = "cuadrantes";
+    public const string CUADRANTE_VISTAS = "cuadrante-vistas";
 }
 
 /// <summary>Un valor de catalogo tal como lo ve el cliente: solo los campos propios de ese catalogo (snake_case), con id, codigo, nombre, orden y activo.</summary>
@@ -68,11 +69,12 @@ public sealed record CatalogoValorRequest(
     string? Accion,
     bool? Obligatoria,
     string? TipoVehiculo,
+    Guid? CuadranteId,
     Guid? VistaFotoId,
     int? Numero,
     GeometriaCuadranteDto? Geometria);
 
-/// <summary>Poligono normalizado de un cuadrante: cada punto es [x, y] con x e y entre 0 y 1 sobre la imagen de la vista.</summary>
+/// <summary>Poligono normalizado de un cuadrante en una vista: cada punto es [x, y] con x e y entre 0 y 1 sobre la imagen de la vista.</summary>
 public sealed record GeometriaCuadranteDto(IReadOnlyList<IReadOnlyList<double>> Puntos);
 
 /// <summary>Lectura de los catalogos para el resto de la aplicacion (validar entradas, armar la ruta de un vehiculo). Con cache.</summary>

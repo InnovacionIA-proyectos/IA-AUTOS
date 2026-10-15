@@ -9,7 +9,7 @@ public sealed class BaseDatosRealTests
     [
         "tblUsuarios", "tblVehiculos", "tblPuntosCustodia", "tblEtapas", "tblInspecciones", "tblHallazgos",
         "tblEvidencias", "tblTransferenciasCustodia", "tblAsignaciones", "tblOrdenesSofasa", "tblAuditLog", "tblRefreshTokens", "tblEtapasCatalogo", "tblTiposUnidadTransportadora",
-        "tblClasesDano", "tblTamanosDano", "tblNivelesSeveridad", "tblVistasFoto", "tblCuadrantes",
+        "tblClasesDano", "tblTamanosDano", "tblNivelesSeveridad", "tblVistasFoto", "tblCuadrantes", "tblCuadranteVistas",
     ];
 
     private static readonly string[] TRIGGERS =
@@ -133,6 +133,36 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Los_cuadrantes_cargados_son_la_ficha_completa_con_geometria_valida()
+    {
+        // Los cuadrantes son zonas (36 numeros de la ficha; el 4 y el 12 no existen) y cada zona se dibuja en las vistas donde aparece.
+        // Se carga con database/cambios-esquema/04-cargar-cuadrantes-ficha.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/03-cuadrantes-por-zona.sql y luego 04-cargar-cuadrantes-ficha.sql.";
+
+        var zonas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadrantes");
+        var poligonos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadranteVistas");
+        var vistasConPoligonos = await EscalarAsync<int>(conexion, "SELECT COUNT(DISTINCT VistaFotoId) FROM tblCuadranteVistas");
+        var sinPoligono = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadrantes c WHERE NOT EXISTS (SELECT 1 FROM tblCuadranteVistas p WHERE p.CuadranteId = c.Id)");
+        var enVistaAdicional = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadranteVistas p JOIN tblVistasFoto v ON v.Id = p.VistaFotoId WHERE v.Obligatoria = 0");
+        var geometriaInvalida = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM tblCuadranteVistas p
+             WHERE ISJSON(p.Geometria) = 0
+                OR (SELECT COUNT(*) FROM OPENJSON(p.Geometria, '$.puntos')) < 3
+                OR EXISTS (SELECT 1 FROM OPENJSON(p.Geometria, '$.puntos') pt
+                            WHERE TRY_CAST(JSON_VALUE(pt.value, '$[0]') AS float) IS NULL OR TRY_CAST(JSON_VALUE(pt.value, '$[0]') AS float) NOT BETWEEN 0 AND 1
+                               OR TRY_CAST(JSON_VALUE(pt.value, '$[1]') AS float) IS NULL OR TRY_CAST(JSON_VALUE(pt.value, '$[1]') AS float) NOT BETWEEN 0 AND 1)
+            """);
+
+        Assert.True(zonas == 36, $"Se esperaban 36 cuadrantes (zonas) y hay {zonas}. {ayuda}");
+        Assert.True(poligonos == 97, $"Se esperaban 97 poligonos por vista y hay {poligonos}. {ayuda}");
+        Assert.Equal(5, vistasConPoligonos);
+        Assert.Equal(0, sinPoligono);
+        Assert.Equal(0, enVistaAdicional);
+        Assert.Equal(0, geometriaInvalida);
+    }
+
+    [FactEntornoReal]
     public async Task Las_etapas_y_los_hallazgos_referencian_los_catalogos_con_llaves_foraneas()
     {
         await using var conexion = await AbrirAsync();
@@ -141,14 +171,14 @@ public sealed class BaseDatosRealTests
         var lugarOpcional = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblEtapas') AND name = N'PuntoCustodiaId' AND is_nullable = 1");
         var fks = await EscalarAsync<int>(conexion, """
             SELECT COUNT(*) FROM sys.foreign_keys
-             WHERE name IN (N'FK_tblEtapas_EtapaCatalogo', N'FK_tblEtapas_PuntoCustodia', N'FK_tblHallazgos_ClaseDano', N'FK_tblHallazgos_TamanoDano', N'FK_tblCuadrantes_Vista')
+             WHERE name IN (N'FK_tblEtapas_EtapaCatalogo', N'FK_tblEtapas_PuntoCustodia', N'FK_tblHallazgos_ClaseDano', N'FK_tblHallazgos_TamanoDano', N'FK_tblCuadranteVistas_Cuadrante', N'FK_tblCuadranteVistas_Vista')
             """);
         var checksViejos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblHallazgos_ClaseDano', N'CK_tblHallazgos_TamanoDano')");
         var sinEtapa = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblEtapas WHERE EtapaCatalogoId IS NULL");
 
         Assert.Equal(1, etapaNoNula);
         Assert.Equal(1, lugarOpcional);
-        Assert.Equal(5, fks);
+        Assert.Equal(6, fks);
         Assert.Equal(0, checksViejos);
         Assert.Equal(0, sinEtapa);
     }
