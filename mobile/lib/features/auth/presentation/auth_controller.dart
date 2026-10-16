@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/proveedores.dart';
 import '../../../core/errores/error_api.dart';
 import '../domain/sesion.dart';
+import '../providers.dart';
 
 enum FaseAuth { cargando, autenticado, noAutenticado }
 

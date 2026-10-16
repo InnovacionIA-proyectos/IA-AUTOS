@@ -10,6 +10,7 @@ import '../../../core/dispositivo/servicios.dart';
 import '../../../core/errores/error_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../sync/presentation/sync_controller.dart';
+import '../../sync/providers.dart';
 import '../../vehiculos/domain/coords_diagrama.dart';
 import '../../vehiculos/domain/etiquetas.dart';
 import '../../vehiculos/presentation/diagrama_vehiculo.dart';

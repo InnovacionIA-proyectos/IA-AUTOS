@@ -1,9 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/proveedores.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../domain/inspeccion_resumen.dart';
+import '../providers.dart';
 
 enum FaseLista { cargando, listo, error, sinConexion }
 

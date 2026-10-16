@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/proveedores.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../providers.dart';
 
 class EstadoSync {
   const EstadoSync({this.online = true, this.sincronizando = false, this.pendientes = 0, this.fallidos = 0});

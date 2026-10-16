@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/proveedores.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
 import '../domain/job.dart';
+import '../providers.dart';
 import 'sync_controller.dart';
 
 final _jobsProvider = FutureProvider.autoDispose<List<Job>>((ref) {

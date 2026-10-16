@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/proveedores.dart';
 import '../../../core/errores/error_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
 import '../domain/orden_sofasa.dart';
+import '../providers.dart';
 
 const _retardoBusqueda = Duration(milliseconds: 350);
 
