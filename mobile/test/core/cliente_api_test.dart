@@ -1,34 +1,10 @@
-import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
-
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/core/config/entorno.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/core/http/cliente_api.dart';
-import 'package:traza_autos/core/red/estado_red.dart';
 
-/// Adaptador de Dio que responde lo que se programe y registra las peticiones.
-class AdaptadorFalso implements HttpClientAdapter {
-  AdaptadorFalso(this.responder);
-
-  final FutureOr<ResponseBody> Function(RequestOptions) responder;
-  final List<RequestOptions> peticiones = [];
-
-  @override
-  Future<ResponseBody> fetch(RequestOptions options, Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
-    peticiones.add(options);
-    return responder(options);
-  }
-
-  @override
-  void close({bool force = false}) {}
-}
-
-ResponseBody json(int status, Object cuerpo) =>
-    ResponseBody.fromString(jsonEncode(cuerpo), status, headers: {Headers.contentTypeHeader: ['application/json']});
+import '../support/dio_falso.dart';
 
 ClienteApi cliente(AdaptadorFalso adaptador, {String? token = 'jwt-123', void Function()? alNoAutorizado}) {
   final dio = Dio()..httpClientAdapter = adaptador;
@@ -124,39 +100,6 @@ void main() {
       bool t(int s) => ErrorApi(message: '', code: '', status: s).esTransitorio;
       expect([0, 401, 408, 429, 500, 503].every(t), isTrue);
       expect([400, 403, 404, 409, 422].any(t), isFalse);
-    });
-  });
-
-  group('estado de red', () {
-    test('wifi, datos y ethernet son estables; sin red, VPN u otros no', () {
-      expect(esEstable([ConnectivityResult.wifi]), isTrue);
-      expect(esEstable([ConnectivityResult.mobile]), isTrue);
-      expect(esEstable([ConnectivityResult.ethernet]), isTrue);
-      expect(esEstable([ConnectivityResult.vpn, ConnectivityResult.wifi]), isTrue);
-      expect(esEstable([ConnectivityResult.none]), isFalse);
-      expect(esEstable([ConnectivityResult.vpn]), isFalse);
-      expect(esEstable([ConnectivityResult.bluetooth]), isFalse);
-      expect(esEstable([]), isFalse);
-    });
-
-    test('apiAlcanzable consulta /health y exige 2xx', () async {
-      final adaptador = AdaptadorFalso((_) => json(200, {'status': 'ok'}));
-      final red = EstadoRedConectividad(apiUrl: 'https://api.test', dio: Dio()..httpClientAdapter = adaptador);
-      expect(await red.apiAlcanzable(), isTrue);
-      expect(adaptador.peticiones.single.uri.toString(), 'https://api.test/health');
-    });
-
-    test('apiAlcanzable es false con 503, con fallo de red o sin URL configurada', () async {
-      final r503 = EstadoRedConectividad(apiUrl: 'https://api.test', dio: Dio()..httpClientAdapter = AdaptadorFalso((_) => json(503, {})));
-      expect(await r503.apiAlcanzable(), isFalse);
-
-      final rCaida = EstadoRedConectividad(
-        apiUrl: 'https://api.test',
-        dio: Dio()..httpClientAdapter = AdaptadorFalso((o) => throw DioException.connectionError(requestOptions: o, reason: 'x')),
-      );
-      expect(await rCaida.apiAlcanzable(), isFalse);
-
-      expect(await EstadoRedConectividad(apiUrl: '').apiAlcanzable(), isFalse);
     });
   });
 

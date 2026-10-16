@@ -1,8 +1,8 @@
 import 'dart:convert';
 
-import '../../../core/db/cache_lecturas.dart';
 import '../../../core/http/cliente_api.dart';
 import '../domain/inspeccion_resumen.dart';
+import 'cache_lecturas.dart';
 
 /// Listado de inspecciones con caché local: sin señal se muestra lo último sincronizado.
 class InspeccionesRepositorio {

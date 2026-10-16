@@ -1,7 +1,7 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 
-import '../../features/sync/domain/puertos.dart';
+import '../domain/puertos.dart';
 
 /// "Señal estable" = conectado por wifi, datos (celular) o ethernet. `none` y `other` (por ejemplo solo VPN o
 /// bluetooth) no cuentan. El acceso real a internet se comprueba aparte con [EstadoRedConectividad.apiAlcanzable].
@@ -18,7 +18,7 @@ class EstadoRedConectividad implements EstadoRed {
   final Connectivity _conectividad;
   final Dio _dio;
 
-  /// Emite true cuando la conexión pasa a ser estable y false cuando se pierde.
+  @override
   Stream<bool> get cambios => _conectividad.onConnectivityChanged.map(esEstable).distinct();
 
   @override

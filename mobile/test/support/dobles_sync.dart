@@ -1,6 +1,9 @@
 import 'package:traza_autos/core/errores/error_api.dart';
+import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
+import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/sync/domain/puertos.dart';
+import 'package:traza_autos/features/vehiculos/domain/coords_diagrama.dart';
 
 class ColaEnMemoria implements ColaRepositorio {
   final List<Job> jobs = [];
@@ -28,6 +31,9 @@ class RedFalsa implements EstadoRed {
   /// Cuántas consultas a `redEstable` responden true antes de "caerse" (null = nunca).
   int? consultasEstables;
   int consultas = 0;
+
+  @override
+  Stream<bool> get cambios => const Stream.empty();
 
   @override
   Future<bool> redEstable() async {

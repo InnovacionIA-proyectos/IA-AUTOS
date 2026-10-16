@@ -26,19 +26,20 @@ muerto de la app original).
 
 ```
 lib/
-  app/        proveedores (Riverpod), router (go_router), TrazaApp
-  core/       config (entornos), http (Dio), red, db (Drift), seguridad, dispositivo, tema, ui
+  app/        proveedores transversales (entorno, BD, HTTP, dispositivo), router (go_router), TrazaApp
+  core/       config (entornos), http (Dio), db (Drift), dispositivo, errores, tema, ui, util
   features/
-    auth/         sesión y login
+    auth/         sesión, login y almacén seguro del token
     vehiculos/    inventario, catálogo de partes del diagrama, etiquetas
-    inspecciones/ listado, captura, reglas de cierre
+    inspecciones/ listado con caché, captura, reglas de cierre, fotos y hallazgos
     custodia/     firma
     sofasa/
-    sync/         cola offline (dominio, Drift, API) y barra de sincronización
+    sync/         cola offline (dominio, Drift, API, estado de red) y barra de sincronización
 test/             unitarias, de widgets y de contrato con la API
 ```
 
-Cada funcionalidad se organiza en `domain` (reglas y modelos, sin Flutter), `data` (API y persistencia) y `presentation`.
+Cada funcionalidad se organiza en `domain` (reglas y modelos, sin Flutter), `data` (API y persistencia) y `presentation`,
+y declara sus providers de Riverpod en `providers.dart`. `core` no depende de ninguna funcionalidad.
 Más detalle en [docs/arquitectura.md](docs/arquitectura.md); la cola en [docs/cola-offline.md](docs/cola-offline.md).
 
 ## Puesta en marcha

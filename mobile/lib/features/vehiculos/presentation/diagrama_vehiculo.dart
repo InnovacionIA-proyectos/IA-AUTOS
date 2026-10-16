@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/tema/tema.dart';
-import '../../sync/domain/job.dart';
+import '../domain/coords_diagrama.dart';
 import '../domain/partes.dart';
 
 /// Proporción de la imagen del diagrama (704 x 1536).

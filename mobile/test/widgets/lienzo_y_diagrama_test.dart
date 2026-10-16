@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/features/custodia/presentation/lienzo_firma.dart';
-import 'package:traza_autos/features/sync/domain/job.dart';
+import 'package:traza_autos/features/vehiculos/domain/coords_diagrama.dart';
 import 'package:traza_autos/features/vehiculos/presentation/diagrama_vehiculo.dart';
 
 Widget envolver(Widget hijo) => MaterialApp(theme: crearTema(), home: Scaffold(body: SingleChildScrollView(child: hijo)));

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/features/inspecciones/domain/reglas_informe.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
+import 'package:traza_autos/features/vehiculos/domain/coords_diagrama.dart';
 
 import '../support/dobles_sync.dart';
 
