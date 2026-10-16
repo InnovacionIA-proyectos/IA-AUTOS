@@ -70,6 +70,7 @@ Todos los errores son JSON con la misma forma:
 | `UNAUTHORIZED` | 401 | sin token, token inválido o vencido, usuario retirado, credenciales incorrectas |
 | `FORBIDDEN` | 403 | rol insuficiente, inspección ajena, o VIN, viaje o informe fuera de los viajes del usuario |
 | `PORTAL_USER_NOT_LINKED` | 403 | la persona del portal no tiene acceso a IA Autos (solo en `login-portal`) |
+| `ETAPA_PREVIA_SIN_CIERRE` | 409 | la etapa anterior del VIN no tiene su llegada cerrada: no se puede crear la salida de la siguiente (`details.etapa_previa` dice cuál) |
 | `PIN_CHANGE_REQUIRED` | 403 | el PIN fue asignado o reiniciado por un administrador: hay que cambiarlo (`POST /api/auth/cambiar-pin`) antes de usar el resto de la API |
 | `ACCOUNT_LOCKED` | 423 | la cuenta está bloqueada por PIN errados seguidos; `details.bloqueado_hasta` (ISO 8601) dice hasta cuándo, o un administrador la desbloquea |
 | `NOT_FOUND` | 404 | recurso o ruta inexistente |
@@ -95,7 +96,7 @@ al usuario y use `code` (no el texto) para decidir qué hacer.
 | `rol` | `inspector`, `conductor`, `coordinador_calidad`, `comercial`, `admin`, `super_admin` |
 | `subtipo_inspector` | `importacion`, `nacional`, `export_preembarque`, `export_recibido` |
 | `operacion` (vehículo) | `importacion`, `exportacion`, `nacional` |
-| `momento` (inspección) | `check_in`, `check_out`, `informe` |
+| `momento` (inspección) | `salida`, `llegada` (en pantalla: «inspección de salida» y «inspección de llegada») |
 | `estado` (inspección) | `borrador`, `cerrada` |
 | `tipo` (listado de vehículos) | `movilizados`, `pendientes`, `novedad` |
 
@@ -456,7 +457,7 @@ transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus v
       "id": "uuid", "orden": 1, "proceso": "cargue", "lugar": "CEDI 1", "requiere_inspeccion": true,
       "viaje_id": "uuid", "codigo_mtrack": "MTK-001", "con_personal_apoyo": false,
       "inspecciones": [
-        { "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": 6.2, "lng": -75.5,
+        { "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "salida", "fecha": "…", "lat": 6.2, "lng": -75.5,
           "estado": "cerrada", "conductor_nombre": null, "placa": null, "trailer": null, "notas": null,
           "created_at": "…", "updated_at": "…",
           "hallazgos": [ /* HallazgoDto */ ], "evidencias": [ /* EvidenciaDto */ ], "transferencia": null }
@@ -647,16 +648,32 @@ está en este servicio.
 
 ## Inspecciones (informes)
 
-Flujo típico: crear la inspección (siempre en `borrador`) → subir fotos → agregar evidencias y hallazgos → firmar la
-transferencia → cerrar.
+Por cada etapa de un VIN hay una **inspección de salida** (al entregar) y una **inspección de llegada** (al recibir). En pantalla se llaman así: el
+`InspeccionDto` trae `momento_nombre` («Inspección de salida» o «Inspección de llegada») listo para mostrar.
+
+Flujo típico: crear la inspección (siempre en `borrador`) → subir las fotos con `POST /api/uploads` → registrarlas como evidencias de cada vista y
+agregar hallazgos (cada uno con su foto) → firmar la transferencia → cerrar. Un error en una inspección cerrada **no se edita**: se corrige con una
+versión nueva (`POST /api/inspecciones/{id}/corregir`).
+
+| Etapa | Qué exige el cierre |
+|---|---|
+| Cargue y Descargue | la foto de **cada una de las 7 vistas obligatorias** (las activas de `vistas-foto` con `obligatoria: true` para el tipo del vehículo); una foto propia por hallazgo; ubicación en toda foto. Las 2 vistas adicionales (piezas en el baúl y cojinería) **no bloquean** el cierre |
+| Transporte (registro del conductor) | no exige las 7 vistas, pero sí la **ubicación (GPS) y la hora del propio registro** (`lat`/`lng` de la inspección); si hay una novedad, el hallazgo lleva su foto. Cuenta para la cobertura |
+
+Las mismas reglas valen para quien haga la inspección: cuando el cargue no tiene personal de apoyo la hace el conductor, con las mismas 7 vistas, sello y hallazgos.
 
 ### `POST /api/inspecciones`
 Campo. `201` con la inspección. El usuario sale del token (no se envía) y **la placa, el tráiler y el conductor salen del viaje de la etapa**: ya no se piden como texto.
 Inspector y conductor reciben `403` si la etapa es de un viaje que no es suyo; un viaje finalizado o cancelado responde `409`; una etapa inexistente, `404`.
 
+**La salida exige la etapa anterior cerrada.** Si el VIN tiene una etapa anterior en el viaje (por su `orden`) y esa etapa no tiene su **llegada cerrada**, la salida responde
+`409` con `code: "ETAPA_PREVIA_SIN_CIERRE"` y `details` con `motivo: "etapa_previa_sin_cierre"`, `etapa_previa_id` y `etapa_previa` (el nombre de la etapa que falta cerrar), para
+que la app muestre el bloqueo. La primera etapa y la llegada no tienen este bloqueo. Una etapa ya tiene su inspección original de ese momento: crear otra responde `409` (para
+cambiarla, se corrige).
+
 ```json
 {
-  "etapa_id": "uuid", "momento": "informe", "fecha": "2026-07-17T12:30:15.123Z",
+  "etapa_id": "uuid", "momento": "salida", "fecha": "2026-07-17T12:30:15.123Z",
   "lat": 6.2442, "lng": -75.5812, "notas": "…"
 }
 ```
@@ -664,21 +681,31 @@ Inspector y conductor reciben `403` si la etapa es de un viaje que no es suyo; u
 | Campo | Obligatorio | Regla |
 |---|---|---|
 | `etapa_id` | sí | UUID |
-| `momento` | sí | `check_in`, `check_out` o `informe` |
+| `momento` | sí | `salida` o `llegada` (los valores `check_in`, `check_out` e `informe` se retiraron: `400`) |
 | `fecha` | sí | ISO 8601 con zona horaria |
-| `lat` / `lng` | no | −90 a 90 / −180 a 180 |
+| `lat` / `lng` | no (sí para cerrar en Transporte) | −90 a 90 / −180 a 180 |
 | `estado` | no | si se envía, solo `borrador`; **no puede crearse cerrada** |
 | `notas` | no | máximo 1000 caracteres |
 
 ```json
 {
-  "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": 6.2442, "lng": -75.5812,
+  "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "salida", "fecha": "…", "lat": 6.2442, "lng": -75.5812,
   "estado": "borrador", "conductor_nombre": "Juan", "placa": "ABC123", "trailer": "T-01", "notas": "…",
-  "created_at": "…", "updated_at": "…"
+  "created_at": "…", "updated_at": "…",
+  "iniciada_at": "…", "cerrada_at": null, "version": 1, "corrige_inspeccion_id": null, "momento_nombre": "Inspección de salida"
 }
 ```
 
-`conductor_nombre`, `placa` y `trailer` de la respuesta son los del viaje (en los informes anteriores a los viajes, lo que se capturó a mano).
+`conductor_nombre`, `placa` y `trailer` de la respuesta son los del viaje (en los informes anteriores a los viajes, lo que se capturó a mano). `iniciada_at` y `cerrada_at`
+son la hora del servidor al crear y al cerrar (`cerrada_at` es `null` en borrador). `version` es 1 en la original y 2, 3… en las correcciones, que traen en
+`corrige_inspeccion_id` la versión que corrigen.
+
+### `POST /api/inspecciones/{id}/corregir`
+Campo (quien participa en el viaje, o un administrador). Corrige una inspección **cerrada**: crea la **versión siguiente** (en `borrador` y vacía: se vuelven a tomar las fotos)
+que referencia a la anterior; **la anterior no cambia**. `201` con la `InspeccionDto` nueva. Cuerpo opcional (`fecha`, `lat`, `lng`, `notas`; por defecto la fecha es ahora).
+
+- `409` si la inspección no está cerrada (se sigue editando), si ya fue corregida (se corrige la última versión) o si el viaje está finalizado o cancelado. `403` si el viaje no es del usuario. `404` si no existe.
+- La versión nueva tiene sus propias fotos, hallazgos, transferencia y reglas de cierre. Una etapa puede tener varias versiones; los listados e informes las muestran todas con su `version`.
 
 ### `GET /api/inspecciones`
 Autenticado. Listado de hasta **200** informes. Todos los filtros son opcionales y van en la consulta:
@@ -688,7 +715,7 @@ Autenticado. Listado de hasta **200** informes. Todos los filtros son opcionales
 | `vin` | VIN completo válido (17 caracteres) |
 | `usuarioId` | UUID del inspector |
 | `viajeId` | UUID del viaje |
-| `momento` | `check_in`, `check_out` o `informe` |
+| `momento` | `salida` o `llegada` |
 | `estado` | `borrador` o `cerrada` |
 | `proceso` | `codigo` de una etapa del catálogo `etapas` (por ejemplo `cargue`, `transporte` o `descargue`), activa o no |
 | `desde`, `hasta` | fecha ISO |
@@ -700,23 +727,27 @@ Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de
 
 ```json
 {
-  "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "informe", "fecha": "…", "lat": null, "lng": null,
+  "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "salida", "fecha": "…", "lat": null, "lng": null,
   "estado": "cerrada", "conductor_nombre": "Carlos Gómez", "placa": "ABC123", "trailer": "T-9", "notas": null, "created_at": "…", "updated_at": "…",
   "vin": "…", "marca": "…", "modelo": null, "proceso": "cargue", "lugar": null, "requiere_inspeccion": true,
   "inspector_nombre": "Ana Pérez", "ninera": "ABC123", "codigo_mtrack": "MTK-001", "unidad": "Niñera",
   "hallazgos": [ /* HallazgoDto */ ],
-  "evidencias": [ /* EvidenciaDto */ ],
-  "transferencia": { /* TransferenciaDetalleDto o null */ }
+  "evidencias": [ /* EvidenciaDto, cada una con su propio sello */ ],
+  "transferencia": { /* TransferenciaDetalleDto o null */ },
+  "iniciada_at": "…", "cerrada_at": "…", "version": 1, "corrige_inspeccion_id": null, "momento_nombre": "Inspección de salida"
 }
 ```
 
 La placa, el conductor y el tráiler son los **del viaje**; en un informe anterior a los viajes, lo que se capturó a mano tiene prioridad. `ninera` es la placa del viaje (nombre heredado, igual a `placa`).
 
 ### `POST /api/inspecciones/{id}/hallazgos`
-Campo (creador de la inspección o administrador). `201` con el `HallazgoDto`.
+Campo (creador de la inspección o administrador). **Un hallazgo exige su foto propia**: se guarda junto con ella (`evidencia`, obligatoria; sin ella `400` y no se guarda nada). `201` con el hallazgo y su foto.
 
 ```json
-{ "parte_vehiculo": "Puerta delantera izquierda", "clase_dano": "rotura", "tamano_dano": "5_10cm", "coords_diagrama": { "x": 0.42, "y": 0.18 } }
+{
+  "parte_vehiculo": "Puerta delantera izquierda", "clase_dano": "rotura", "tamano_dano": "5_10cm", "coords_diagrama": { "x": 0.42, "y": 0.18 },
+  "evidencia": { "storage_path": "3f2b…c1.png", "sello_fecha": "2026-07-17T12:30:15.123Z", "sello_lat": 6.24, "sello_lng": -75.58, "precision": 4.5, "dispositivo_id": "tablet-7", "nota": null, "hash_sha256": "…" }
+}
 ```
 
 | Campo | Obligatorio | Regla |
@@ -725,34 +756,54 @@ Campo (creador de la inspección o administrador). `201` con el `HallazgoDto`.
 | `clase_dano` | sí | `codigo` **activo** del catálogo `clases-dano` |
 | `tamano_dano` | sí | `codigo` **activo** del catálogo `tamanos-dano` |
 | `coords_diagrama` | no | `x` e `y` entre 0 y 1 |
+| `evidencia` | sí | la foto del hallazgo, con los mismos campos y reglas que una evidencia (sin `vista_id` ni `hallazgo_id`) |
 
-`HallazgoDto`:
+Respuesta (`HallazgoCreadoDto`): el hallazgo más su `evidencia` (`EvidenciaDto`):
 
 ```json
 { "id": "uuid", "inspeccion_id": "uuid", "parte_vehiculo": "…", "clase_dano": "rotura", "tamano_dano": "5_10cm",
-  "coords_diagrama": { "x": 0.42, "y": 0.18 }, "created_at": "…", "updated_at": "…" }
+  "coords_diagrama": { "x": 0.42, "y": 0.18 }, "created_at": "…", "updated_at": "…", "evidencia": { /* EvidenciaDto */ } }
 ```
 
+En el informe y el inventario, los hallazgos llegan como `HallazgoDto` (el mismo objeto sin `evidencia`) y sus fotos en `evidencias`, con `hallazgo_id`.
+
 ### `POST /api/inspecciones/{id}/evidencias`
-Campo (creador o administrador). Agrega una foto **ya subida** con `POST /api/uploads`. `201` con el `EvidenciaDto`.
+Campo (creador o administrador). Registra una foto **ya subida** con `POST /api/uploads`: de una **vista** (`vista_id`) o de un **hallazgo** (`hallazgo_id`), no de ambos. `201` con el `EvidenciaDto`.
 
 ```json
-{ "hallazgo_id": "uuid", "storage_path": "3f2b…c1.jpg", "sello_fecha": "2026-07-17T12:30:15.123Z", "sello_lat": 6.24, "sello_lng": -75.58 }
+{
+  "vista_id": "uuid", "storage_path": "3f2b…c1.png", "sello_fecha": "2026-07-17T12:30:15.123Z", "sello_lat": 6.24, "sello_lng": -75.58,
+  "precision": 4.5, "dispositivo_id": "tablet-7", "nota": null, "hash_sha256": "…"
+}
 ```
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
-| `storage_path` | sí | el `storage_path` que devolvió la subida (nombre plano, sin carpetas) |
-| `sello_fecha` | sí | ISO 8601 con zona horaria |
-| `hallazgo_id` | no | UUID del hallazgo al que pertenece |
-| `sello_lat` / `sello_lng` | no | −90 a 90 / −180 a 180 |
+| `vista_id` | sí, si no hay `hallazgo_id` | UUID de una vista **activa** del catálogo `vistas-foto` (una de las 7 obligatorias o de las 2 adicionales) |
+| `hallazgo_id` | sí, si no hay `vista_id` | UUID de un hallazgo **de esta inspección** (`404` si es de otra) |
+| `storage_path` | sí | el `storage_path` que devolvió la subida (nombre plano, sin carpetas). **El archivo debe existir**: si no se subió, `400` |
+| `sello_fecha` | sí | ISO 8601 con zona horaria: fecha y hora de la foto según el dispositivo |
+| `sello_lat` / `sello_lng` | no | −90 a 90 / −180 a 180. Si falta alguna, la foto queda **sin ubicación** (`sin_ubicacion: true`) |
+| `precision` | no | precisión del GPS en metros (≥ 0) |
+| `dispositivo_id` | no | máximo 100 caracteres |
+| `nota` | **sí en las vistas adicionales** | el faltante o daño (piezas en el baúl, cojinería); máximo 500 caracteres |
+| `hash_sha256` | no | 64 caracteres hexadecimales. Si se envía, debe coincidir con el del archivo recibido (`400` si no) |
+
+El servidor agrega a cada foto su **sello de servidor** (`sello_servidor_at`, la hora a la que la recibió, que el cliente no puede fijar) y el **hash SHA-256** del archivo tal como quedó
+guardado (el mismo que devolvió la subida). Cada foto conserva así su propio sello: fecha, hora y ubicación del dispositivo, y el del servidor.
+
+**Repetir una foto.** Se puede volver a tomar la foto de una vista: la última de cada vista es la que cuenta para el cierre; las anteriores quedan guardadas (son evidencia) pero ya no bloquean.
+Es lo que hace la app cuando una foto quedó «sin ubicación».
 
 `EvidenciaDto`:
 
 ```json
 { "id": "uuid", "inspeccion_id": "uuid", "hallazgo_id": null, "sello_fecha": "…", "sello_lat": 6.24, "sello_lng": -75.58,
-  "url": "/api/uploads/3f2b…c1.jpg", "created_at": "…", "updated_at": "…" }
+  "url": "/api/uploads/3f2b…c1.png", "created_at": "…", "updated_at": "…",
+  "vista_id": "uuid", "hash_sha256": "…", "sello_servidor_at": "…", "precision": 4.5, "dispositivo_id": "tablet-7", "nota": null, "sin_ubicacion": false }
 ```
+
+`sin_ubicacion` es `true` cuando la foto se tomó sin señal de GPS (`sello_lat` y `sello_lng` valen 0): muéstrela marcada y pida repetirla antes de cerrar.
 
 ### `POST /api/inspecciones/{id}/transferencia`
 Campo. Firma de entrega y/o recibo. Puede firmarse en dos pasos (parcial) y se completa cuando están ambas. `201`.
@@ -780,11 +831,18 @@ campos más `entrega_nombre`, `recibe_nombre`, `firma_entrega` y `firma_recibe`.
 Campo (creador o administrador). Cierra el informe; después ya no admite cambios. Sin cuerpo. `200`:
 
 ```json
-{ "inspeccion": { /* InspeccionDto, estado "cerrada" */ }, "resumen": { "evidencias": 4, "hallazgos": 2 } }
+{ "inspeccion": { /* InspeccionDto, estado "cerrada", con cerrada_at */ }, "resumen": { "evidencias": 8, "hallazgos": 1 } }
 ```
 
-Si no cumple los requisitos (evidencias, geolocalización…), responde `400` con la lista de requisitos incumplidos en
-`details`. Si ya estaba cerrada, `409`; **un cliente que reintenta el cierre puede tomar ese `409` como éxito.**
+Si no cumple los requisitos de la tabla de arriba, responde `400` («La inspección no cumple los requisitos para cerrarse») con la lista de requisitos incumplidos en `details`, **uno por
+cada vista que falta, con su nombre**:
+
+```json
+{ "code": "VALIDATION_ERROR", "message": "La inspección no cumple los requisitos para cerrarse",
+  "details": [ "Falta la foto de la vista «Superior»", "1 foto(s) sin ubicación: repítalas con GPS antes de cerrar" ] }
+```
+
+Si ya estaba cerrada, `409`; **un cliente que reintenta el cierre puede tomar ese `409` como éxito.**
 
 ---
 
@@ -905,7 +963,8 @@ como ruta las etapas **activas** de `etapas`, en su `orden`; y el filtro `proces
 ## Fotos
 
 ### `POST /api/uploads`
-Campo. Sube una foto en base64. `201`.
+Campo. Sube una foto de dos formas (la app móvil puede usar la que prefiera): como **JSON con la imagen en base64**, o como **`multipart/form-data`** con el archivo en el campo
+`archivo` (sin la sobrecarga de 33 % del base64). `201`.
 
 ```json
 { "data": "<base64, con o sin prefijo data:image/jpeg;base64,>", "ext": "jpg" }
@@ -913,14 +972,16 @@ Campo. Sube una foto en base64. `201`.
 
 | Campo | Regla |
 |---|---|
-| `data` | obligatorio; imagen JPG o PNG válida (se verifica el contenido, no solo la extensión); máximo 10 MB por defecto |
-| `ext` | opcional: `jpg`, `jpeg` o `png` |
+| `data` (JSON) | obligatorio; imagen JPG o PNG válida (se verifica el contenido, no solo la extensión); máximo 10 MB por defecto |
+| `ext` (JSON) | opcional: `jpg`, `jpeg` o `png` |
+| `archivo` (multipart) | obligatorio; el archivo de la imagen. Mismas reglas de contenido y tamaño; `400` si falta, está vacío o no es JPG o PNG |
 
 ```json
-{ "storage_path": "3f2b9c6e-….jpg", "url": "/api/uploads/3f2b9c6e-….jpg" }
+{ "storage_path": "3f2b9c6e-….jpg", "url": "/api/uploads/3f2b9c6e-….jpg", "hash_sha256": "9f86d0…" }
 ```
 
-Use `storage_path` al crear la evidencia y `url` para mostrarla.
+Use `storage_path` al registrar la evidencia (el archivo debe haberse subido antes) y `url` para mostrarla. `hash_sha256` es el hash que **calculó el servidor** al recibir el archivo: es el mismo que
+queda en la evidencia, y si la app lo reenvía como `hash_sha256` la evidencia comprueba que coincide.
 
 ### `GET /api/uploads/{archivo}`
 Sirve la imagen (`image/jpeg` o `image/png`). Por defecto es **público** (se puede usar directo en un `<img src>` con la URL

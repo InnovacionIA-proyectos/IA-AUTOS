@@ -6,9 +6,19 @@ namespace IAAutos.Dominio.Catalogos;
 /// <summary>Etapa del proceso (cargue, transporte, descargue). Es el "proceso" de cada tramo de la ruta de un vehiculo.</summary>
 public sealed class clsEtapaCatalogo : clsCatalogoCodificado
 {
+    public const string CARGUE = "cargue";
+    public const string TRANSPORTE = "transporte";
+    public const string DESCARGUE = "descargue";
+
     private clsEtapaCatalogo()
     {
     }
+
+    /// <summary>
+    /// Las inspecciones de Cargue y Descargue exigen las fotos de las vistas obligatorias; en Transporte la salida y la llegada son registros
+    /// del conductor y no las exigen.
+    /// </summary>
+    public static bool ExigeVistas(string? codigo) => codigo is CARGUE or DESCARGUE;
 
     public static clsEtapaCatalogo Crear(string? codigo, string? nombre, int? orden, bool? activo, DateTimeOffset ahora)
     {

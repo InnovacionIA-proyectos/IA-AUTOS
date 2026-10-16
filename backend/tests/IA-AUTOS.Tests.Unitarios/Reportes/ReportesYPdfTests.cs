@@ -116,7 +116,7 @@ public class GeneradorPdfInventarioTests
             false,
             [
                 new InventarioInspeccionDto(
-                    Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "informe", FECHA, null, null, "cerrada", null, null, null, null, FECHA, FECHA,
+                    Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "salida", FECHA, null, null, "cerrada", null, null, null, null, FECHA, FECHA, FECHA, FECHA, 1, null, "Inspección de salida",
                     Enumerable.Range(0, hallazgos).Select(_ => new HallazgoDto(Guid.NewGuid(), Guid.NewGuid(), parte, "golpe", "5_10cm", null, FECHA, FECHA)).ToList(),
                     [],
                     null),
@@ -163,7 +163,7 @@ public class GeneradorPdfInventarioTests
         Assert.Contains("Proceso: cargue \\(orden 1\\)".Replace("\\(", "\\(").Replace("\\)", "\\)"), texto);
         Assert.Contains("\\225 Capot: golpe \\(5_10cm\\)", texto);
         Assert.Contains("Evidencias: 0", texto);
-        Assert.Contains("informe \\227 cerrada \\227 2026-07-17T12:30:15.123Z", texto);
+        Assert.Contains("Inspecci\\363n de salida \\227 cerrada \\227 2026-07-17T12:30:15.123Z", texto);
     }
 
     [Fact]

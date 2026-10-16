@@ -26,7 +26,8 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         ("UX_tblViajes_CodigoMtrack", "Ya existe un viaje con ese código MTrack"),
         ("UQ_tblViajeVehiculos_Viaje_Vehiculo", "El VIN ya está en el viaje"),
         ("UX_tblUsuarios_Cedula", "Ya existe un usuario con esa cédula"),
-        ("UQ_tblInspecciones_Etapa_Momento", "Esta etapa ya tiene un informe registrado"),
+        ("UX_tblInspecciones_Etapa_Momento_Original", "Esta etapa ya tiene una inspección de ese momento: para cambiarla cree una corrección"),
+        ("UX_tblInspecciones_Corrige", "Esa inspección ya fue corregida: corrija la última versión"),
         ("UQ_tblTransferencias_Inspeccion", "Esta inspección ya tiene una transferencia de custodia"),
         ("UQ_tblOrdenesSofasa_SourceId", "Ya existe una orden con ese identificador de origen"),
         // Catalogos maestros: el codigo es unico dentro de cada catalogo.
@@ -48,6 +49,7 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         "FK_tblCuadranteVistas_Vista",
         "FK_tblUsuarios_Cliente",
         "FK_tblVehiculos_Cliente",
+        "FK_tblEvidencias_Vista",
     ];
 
     private static readonly (string Restriccion, string Mensaje)[] REFERENCIAS_INVALIDAS =
@@ -65,9 +67,11 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         ("FK_tblViajeVehiculos_Viaje", "El viaje no existe"),
         ("FK_tblViajeVehiculos_", "El vehículo no existe"),
         ("FK_tblInspecciones_Viaje", "El viaje no existe"),
+        ("FK_tblInspecciones_Corrige", "La inspección que se corrige no existe"),
         ("FK_tblInspecciones_", "La etapa o el usuario no existen"),
         ("FK_tblTransferencias_", "Algún usuario (entrega/recibe) no existe"),
         ("FK_tblAsignaciones_", "Referencia inválida (vehículo o usuario)"),
+        ("FK_tblEvidencias_Vista", "La vista de foto no existe en el catálogo"),
         ("FK_tblEvidencias_", "El hallazgo indicado no pertenece a esta inspección"),
         ("FK_tblHallazgos_ClaseDano", "La clase de daño no existe en el catálogo"),
         ("FK_tblHallazgos_TamanoDano", "El tamaño de daño no existe en el catálogo"),

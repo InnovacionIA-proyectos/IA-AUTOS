@@ -20,6 +20,7 @@ public static class clsCuerpoError
         clsCodigosError.NOT_FOUND => StatusCodes.Status404NotFound,
         clsCodigosError.METHOD_NOT_ALLOWED => StatusCodes.Status405MethodNotAllowed,
         clsCodigosError.CONFLICT => StatusCodes.Status409Conflict,
+        clsCodigosError.ETAPA_PREVIA_SIN_CIERRE => StatusCodes.Status409Conflict,
         clsCodigosError.RATE_LIMITED => StatusCodes.Status429TooManyRequests,
         clsCodigosError.NOT_IMPLEMENTED => StatusCodes.Status501NotImplemented,
         clsCodigosError.DB_UNAVAILABLE => StatusCodes.Status503ServiceUnavailable,

@@ -446,9 +446,11 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
-   tblInspecciones (un informe por etapa; al cerrarse es inmutable). ViajeId es el viaje de la etapa: la inspeccion toma de el la placa,
-   el trailer y el conductor. Las columnas ConductorNombre, Placa y Trailer solo conservan lo capturado antes de existir los viajes.
-   Latitud y longitud en float (precision GPS completa).
+   tblInspecciones: por etapa hay una inspeccion de salida y una de llegada; al cerrarse es inmutable. ViajeId es el viaje de la etapa: la
+   inspeccion toma de el la placa, el trailer y el conductor. Las columnas ConductorNombre, Placa y Trailer solo conservan lo capturado
+   antes de existir los viajes. Latitud y longitud en float (precision GPS completa).
+   Una correccion NO modifica la inspeccion cerrada: crea una version nueva (Version = 2, 3...) que referencia a la anterior en
+   CorrigeInspeccionId. Por etapa y momento hay una sola inspeccion original (indice filtrado) y cada version se corrige una sola vez.
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblInspecciones', N'U') IS NULL
 BEGIN
@@ -467,18 +469,30 @@ BEGIN
         Placa            nvarchar(50)     NULL,
         Trailer          nvarchar(50)     NULL,
         Notas            nvarchar(1000)   NULL,
+        IniciadaAt       datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspecciones_IniciadaAt DEFAULT (SYSDATETIMEOFFSET()),
+        CerradaAt        datetimeoffset(3) NULL,
+        Version          int              NOT NULL CONSTRAINT DF_tblInspecciones_Version DEFAULT (1),
+        CorrigeInspeccionId uniqueidentifier NULL,
         CreatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspecciones_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspecciones_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblInspecciones_Etapa FOREIGN KEY (EtapaId) REFERENCES dbo.tblEtapas (Id) ON DELETE CASCADE,
         CONSTRAINT FK_tblInspecciones_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT FK_tblInspecciones_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
-        -- A lo sumo un informe por etapa y momento (los valores check_in/check_out se conservan por historico).
-        CONSTRAINT UQ_tblInspecciones_Etapa_Momento UNIQUE (EtapaId, Momento),
-        CONSTRAINT CK_tblInspecciones_Momento CHECK (Momento IN ('check_in', 'check_out', 'informe')),
+        CONSTRAINT FK_tblInspecciones_Corrige FOREIGN KEY (CorrigeInspeccionId) REFERENCES dbo.tblInspecciones (Id),
+        CONSTRAINT CK_tblInspecciones_Momento CHECK (Momento IN ('salida', 'llegada')),
         CONSTRAINT CK_tblInspecciones_Estado CHECK (Estado IN ('borrador', 'cerrada')),
+        -- Una inspeccion cerrada tiene hora de cierre y una en borrador no.
+        CONSTRAINT CK_tblInspecciones_Cierre CHECK ((Estado = 'borrador' AND CerradaAt IS NULL) OR (Estado = 'cerrada' AND CerradaAt IS NOT NULL)),
+        -- La version 1 es la original; las siguientes son correcciones y referencian a la version que corrigen.
+        CONSTRAINT CK_tblInspecciones_Version CHECK ((Version = 1 AND CorrigeInspeccionId IS NULL) OR (Version > 1 AND CorrigeInspeccionId IS NOT NULL)),
         CONSTRAINT CK_tblInspecciones_Lat CHECK (Lat IS NULL OR (Lat BETWEEN -90 AND 90)),
         CONSTRAINT CK_tblInspecciones_Lng CHECK (Lng IS NULL OR (Lng BETWEEN -180 AND 180))
     );
+    -- A lo sumo una inspeccion ORIGINAL por etapa y momento; las correcciones (con CorrigeInspeccionId) no cuentan.
+    -- Los indices se crean con SQL dinamico para que este script se pueda ejecutar tambien sobre una base que aun tiene la tabla anterior.
+    EXEC (N'CREATE UNIQUE INDEX UX_tblInspecciones_Etapa_Momento_Original ON dbo.tblInspecciones (EtapaId, Momento) WHERE CorrigeInspeccionId IS NULL');
+    -- Cada version se corrige a lo sumo una vez: las versiones forman una cadena.
+    EXEC (N'CREATE UNIQUE INDEX UX_tblInspecciones_Corrige ON dbo.tblInspecciones (CorrigeInspeccionId) WHERE CorrigeInspeccionId IS NOT NULL');
     CREATE INDEX IX_tblInspecciones_Usuario ON dbo.tblInspecciones (UsuarioId);
     CREATE INDEX IX_tblInspecciones_Viaje ON dbo.tblInspecciones (ViajeId);
     CREATE INDEX IX_tblInspecciones_Fecha ON dbo.tblInspecciones (Fecha DESC);
@@ -516,6 +530,10 @@ GO
 
 /* -----------------------------------------------------------------------------
    tblEvidencias (foto sellada; append-only por diseno)
+   Una foto es de una vista (VistaId: una de las 7 obligatorias o de las 2 adicionales) o de un hallazgo (HallazgoId). Lleva el sello del
+   dispositivo (SelloFecha, SelloLat, SelloLng y Precision en metros) y el del servidor (SelloServidorAt, al recibirla) y el hash SHA-256
+   del archivo. SelloLat y SelloLng son obligatorios: una foto tomada sin senal de GPS se guarda en (0, 0) y se muestra como
+   `sin ubicacion`. Nota = el faltante o dano de las fotos adicionales (piezas en el baul, cojineria).
    HallazgoId usa NO ACTION: SQL Server no permite SET NULL junto a la cascada
    desde tblInspecciones (varias rutas de cascada). La aplicacion no elimina hallazgos.
    ----------------------------------------------------------------------------- */
@@ -528,15 +546,25 @@ BEGIN
         HallazgoId    uniqueidentifier NULL,
         StoragePath   nvarchar(500)    NOT NULL,
         SelloFecha    datetimeoffset(3) NOT NULL,
-        SelloLat      float            NULL,
-        SelloLng      float            NULL,
+        SelloLat      float            NOT NULL,
+        SelloLng      float            NOT NULL,
+        VistaId       uniqueidentifier NULL,
+        HashSha256    char(64)         NULL,
+        SelloServidorAt datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_SelloServidorAt DEFAULT (SYSDATETIMEOFFSET()),
+        Precision     float            NULL,
+        DispositivoId nvarchar(100)    NULL,
+        Nota          nvarchar(500)    NULL,
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblEvidencias_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id) ON DELETE CASCADE,
         CONSTRAINT FK_tblEvidencias_Hallazgo FOREIGN KEY (HallazgoId) REFERENCES dbo.tblHallazgos (Id),
-        CONSTRAINT CK_tblEvidencias_Lat CHECK (SelloLat IS NULL OR (SelloLat BETWEEN -90 AND 90)),
-        CONSTRAINT CK_tblEvidencias_Lng CHECK (SelloLng IS NULL OR (SelloLng BETWEEN -180 AND 180))
+        CONSTRAINT FK_tblEvidencias_Vista FOREIGN KEY (VistaId) REFERENCES dbo.tblVistasFoto (Id),
+        CONSTRAINT CK_tblEvidencias_Lat CHECK (SelloLat BETWEEN -90 AND 90),
+        CONSTRAINT CK_tblEvidencias_Lng CHECK (SelloLng BETWEEN -180 AND 180),
+        CONSTRAINT CK_tblEvidencias_Precision CHECK (Precision IS NULL OR Precision >= 0),
+        CONSTRAINT CK_tblEvidencias_Hash CHECK (HashSha256 IS NULL OR HashSha256 NOT LIKE '%[^0-9a-f]%')
     );
+    EXEC (N'CREATE INDEX IX_tblEvidencias_Vista ON dbo.tblEvidencias (VistaId)');
     CREATE INDEX IX_tblEvidencias_Inspeccion ON dbo.tblEvidencias (InspeccionId);
     CREATE INDEX IX_tblEvidencias_Hallazgo ON dbo.tblEvidencias (HallazgoId);
 END

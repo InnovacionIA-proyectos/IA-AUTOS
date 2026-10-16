@@ -72,10 +72,10 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         using (var alcance = proveedor.CreateScope())
         {
             var s = alcance.ServiceProvider;
-            var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.INFORME, AHORA, 4.60971, -74.08175, null,
+            var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, 4.60971, -74.08175, null,
                 "nota con \"comillas\"", AHORA);
             var hallazgo = clsHallazgo.Crear(inspeccion.Id, "Capot", "golpe", "5_10cm", new clsCoordsDiagrama(0.25, 0.75), AHORA);
-            var evidencia = clsEvidencia.Crear(inspeccion.Id, hallazgo.Id, "foto.jpg", AHORA, 4.6, -74.1, AHORA);
+            var evidencia = clsEvidencia.Crear(inspeccion.Id, hallazgo.Id, null, "foto.jpg", AHORA, 4.6, -74.1, 7.5, "tablet-1", new string('b', 64), "nota", AHORA.AddSeconds(2));
             var repo = s.GetRequiredService<IInspeccionRepository>();
             repo.Agregar(inspeccion);
             repo.Agregar(hallazgo);
@@ -102,28 +102,122 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         var ev = await contexto.Evidencias.SingleAsync(x => x.InspeccionId == inspeccionId);
         Assert.Equal(hallazgoId, ev.HallazgoId);
         Assert.Equal(AHORA, ev.SelloFecha);
+        Assert.Equal(AHORA.AddSeconds(2), ev.SelloServidorAt);
+        Assert.Equal(7.5, ev.Precision);
+        Assert.Equal("tablet-1", ev.DispositivoId);
+        Assert.Equal(new string('b', 64), ev.HashSha256);
+        Assert.Equal("nota", ev.Nota);
+        Assert.Equal(AHORA, leida.IniciadaAt);
+        Assert.Null(leida.CerradaAt);
+        Assert.Equal(1, leida.Version);
     }
 
     [Fact]
-    public async Task Resumen_de_cierre_cuenta_evidencias_sin_geo_y_hallazgos()
+    public async Task Resumen_de_cierre_cuenta_fotos_sin_ubicacion_hallazgos_sin_foto_y_vistas_fotografiadas()
     {
         var (usuarioId, _, etapas) = await SembrarRutaAsync();
         using var proveedor = Proveedor();
         using var alcance = proveedor.CreateScope();
         var s = alcance.ServiceProvider;
-        var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.INFORME, AHORA, null, null, null, null, AHORA);
+        var vistas = await s.GetRequiredService<clsAppDbContext>().VistasFoto.OrderBy(v => v.Orden).Select(v => v.Id).Take(3).ToListAsync();
+        var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, null, null, null, null, AHORA);
         var repo = s.GetRequiredService<IInspeccionRepository>();
         repo.Agregar(inspeccion);
-        repo.Agregar(clsHallazgo.Crear(inspeccion.Id, "Capot", "golpe", "1_5cm", null, AHORA));
+        var conFoto = clsHallazgo.Crear(inspeccion.Id, "Capot", "golpe", "1_5cm", null, AHORA);
+        repo.Agregar(conFoto);
         repo.Agregar(clsHallazgo.Crear(inspeccion.Id, "Techo", "mancha", "1_5cm", null, AHORA));
-        repo.Agregar(clsEvidencia.Crear(inspeccion.Id, null, "a.jpg", AHORA, 4.6, -74.1, AHORA));
-        repo.Agregar(clsEvidencia.Crear(inspeccion.Id, null, "b.jpg", AHORA, null, null, AHORA));
-        repo.Agregar(clsEvidencia.Crear(inspeccion.Id, null, "c.jpg", AHORA, 4.6, null, AHORA));
+        repo.Agregar(clsEvidencia.Crear(inspeccion.Id, conFoto.Id, null, "h.jpg", AHORA, 4.6, -74.1, null, null, null, null, AHORA));
+        // Vista 0: primero sin ubicacion y luego repetida con ubicacion (la ultima reemplaza a la anterior).
+        repo.Agregar(clsEvidencia.Crear(inspeccion.Id, null, vistas[0], "a1.jpg", AHORA, null, null, null, null, null, null, AHORA));
+        repo.Agregar(clsEvidencia.Crear(inspeccion.Id, null, vistas[0], "a2.jpg", AHORA, 4.6, -74.1, null, null, null, null, AHORA.AddSeconds(5)));
+        // Vista 1: con ubicacion; vista 2: sin ubicacion y sin repetir.
+        repo.Agregar(clsEvidencia.Crear(inspeccion.Id, null, vistas[1], "b.jpg", AHORA, 4.6, -74.1, null, null, null, null, AHORA));
+        repo.Agregar(clsEvidencia.Crear(inspeccion.Id, null, vistas[2], "c.jpg", AHORA, 4.6, null, null, null, null, null, AHORA));
         await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
 
         var resumen = await repo.ObtenerResumenCierreAsync(inspeccion.Id);
 
-        Assert.Equal(new clsResumenCierre(3, 2, 2), resumen);
+        Assert.Equal(5, resumen.TotalEvidencias);
+        Assert.Equal(1, resumen.EvidenciasSinUbicacion);
+        Assert.Equal(2, resumen.TotalHallazgos);
+        Assert.Equal(1, resumen.HallazgosSinEvidencia);
+        Assert.Equal(3, resumen.VistasFotografiadas.Count);
+        Assert.All(vistas, v => Assert.Contains(v, resumen.VistasFotografiadas));
+    }
+
+    [Fact]
+    public async Task Las_correcciones_forman_una_cadena_y_la_base_impide_corregir_dos_veces_la_misma_version()
+    {
+        var (usuarioId, _, etapas) = await SembrarRutaAsync();
+        Guid originalId;
+        using (var proveedor = Proveedor())
+        using (var alcance = proveedor.CreateScope())
+        {
+            var s = alcance.ServiceProvider;
+            var repo = s.GetRequiredService<IInspeccionRepository>();
+            var original = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, null, null, null, null, AHORA);
+            repo.Agregar(original);
+            await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
+            original.Cerrar(await repo.ObtenerResumenCierreAsync(original.Id), [], false, AHORA.AddMinutes(1));
+            repo.Agregar(original.Corregir(usuarioId, AHORA.AddHours(1), null, null, null, AHORA.AddHours(1)));
+            await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
+            originalId = original.Id;
+        }
+
+        using var proveedor2 = Proveedor();
+        using var alcance2 = proveedor2.CreateScope();
+        var s2 = alcance2.ServiceProvider;
+        var repo2 = s2.GetRequiredService<IInspeccionRepository>();
+        var version2 = await repo2.ObtenerCorreccionIdAsync(originalId);
+        Assert.NotNull(version2);
+        var leida = await repo2.ObtenerPorIdAsync(originalId);
+        Assert.True(leida!.EstaCerrada);
+        Assert.NotNull(leida.CerradaAt);
+
+        // Una segunda correccion de la misma version no entra (cada version se corrige una sola vez).
+        repo2.Agregar(leida.Corregir(usuarioId, AHORA.AddHours(2), null, null, null, AHORA.AddHours(2)));
+        var ex = await Assert.ThrowsAsync<clsConflictoException>(() => s2.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync());
+        Assert.Equal("Esa inspección ya fue corregida: corrija la última versión", ex.Message);
+    }
+
+    [Fact]
+    public async Task La_etapa_tiene_llegada_cerrada_solo_si_su_llegada_esta_cerrada()
+    {
+        var (usuarioId, _, etapas) = await SembrarRutaAsync();
+        using var proveedor = Proveedor();
+        using var alcance = proveedor.CreateScope();
+        var s = alcance.ServiceProvider;
+        var repo = s.GetRequiredService<IInspeccionRepository>();
+        var uow = s.GetRequiredService<IUnidadDeTrabajo>();
+        var salida = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, null, null, null, null, AHORA);
+        var llegada = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.LLEGADA, AHORA, null, null, null, null, AHORA);
+        repo.Agregar(salida);
+        repo.Agregar(llegada);
+        await uow.GuardarCambiosAsync();
+        Assert.False(await repo.TieneLlegadaCerradaAsync(etapas[0].Id));
+
+        salida.Cerrar(await repo.ObtenerResumenCierreAsync(salida.Id), [], false, AHORA);
+        await uow.GuardarCambiosAsync();
+        Assert.False(await repo.TieneLlegadaCerradaAsync(etapas[0].Id));
+
+        llegada.Cerrar(await repo.ObtenerResumenCierreAsync(llegada.Id), [], false, AHORA);
+        await uow.GuardarCambiosAsync();
+        Assert.True(await repo.TieneLlegadaCerradaAsync(etapas[0].Id));
+        Assert.False(await repo.TieneLlegadaCerradaAsync(etapas[1].Id));
+    }
+
+    [Fact]
+    public async Task La_etapa_previa_es_la_de_mayor_orden_menor_del_mismo_vin_y_viaje()
+    {
+        var (_, vehiculoId, etapas) = await SembrarRutaAsync();
+        using var proveedor = Proveedor();
+        using var alcance = proveedor.CreateScope();
+        var repo = alcance.ServiceProvider.GetRequiredService<IEtapaRepository>();
+
+        Assert.Null(await repo.ObtenerPreviaAsync(etapas[0].ViajeId, vehiculoId, 1));
+        Assert.Equal(etapas[0].Id, (await repo.ObtenerPreviaAsync(etapas[0].ViajeId, vehiculoId, 2))!.Id);
+        Assert.Equal(etapas[1].Id, (await repo.ObtenerPreviaAsync(etapas[0].ViajeId, vehiculoId, 3))!.Id);
+        Assert.Null(await repo.ObtenerPreviaAsync(Guid.NewGuid(), vehiculoId, 3));
     }
 
     [Fact]
@@ -173,7 +267,7 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         {
             var s = alcance.ServiceProvider;
             var repo = s.GetRequiredService<IInspeccionRepository>();
-            repo.Agregar(clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.INFORME, AHORA, null, null, null, null, AHORA));
+            repo.Agregar(clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, null, null, null, null, AHORA));
             await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
         }
 
@@ -181,9 +275,9 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         {
             var s = alcance.ServiceProvider;
             s.GetRequiredService<IInspeccionRepository>().Agregar(
-                clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.INFORME, AHORA, null, null, null, null, AHORA));
+                clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, null, null, null, null, AHORA));
             var ex = await Assert.ThrowsAsync<clsConflictoException>(() => s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync());
-            Assert.Equal("Esta etapa ya tiene un informe registrado", ex.Message);
+            Assert.Equal("Esta etapa ya tiene una inspección de ese momento: para cambiarla cree una corrección", ex.Message);
         }
     }
 
@@ -195,7 +289,7 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         using var alcance = proveedor.CreateScope();
         var s = alcance.ServiceProvider;
         s.GetRequiredService<IInspeccionRepository>().Agregar(
-            clsInspeccion.Crear(Guid.NewGuid(), etapas[0].ViajeId, usuarioId, clsMomento.INFORME, AHORA, null, null, null, null, AHORA));
+            clsInspeccion.Crear(Guid.NewGuid(), etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, null, null, null, null, AHORA));
 
         var ex = await Assert.ThrowsAsync<clsEntidadNoEncontradaException>(() => s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync());
 
@@ -213,19 +307,25 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         {
             var s = alcance.ServiceProvider;
             var repo = s.GetRequiredService<IInspeccionRepository>();
-            var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.INFORME, AHORA, null, null, null, null, AHORA);
+            var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, null, null, null, null, AHORA);
             repo.Agregar(inspeccion);
             await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
-            inspeccion.Cerrar(await repo.ObtenerResumenCierreAsync(inspeccion.Id), AHORA.AddMinutes(1));
+            inspeccion.Cerrar(await repo.ObtenerResumenCierreAsync(inspeccion.Id), [], false, AHORA.AddMinutes(1));
             await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
             inspeccionId = inspeccion.Id;
         }
 
         using var proveedor2 = Proveedor();
+        Guid vistaId;
+        using (var alcanceVista = proveedor2.CreateScope())
+        {
+            vistaId = await alcanceVista.ServiceProvider.GetRequiredService<clsAppDbContext>().VistasFoto.Select(v => v.Id).FirstAsync();
+        }
+
         foreach (var agregar in new Action<IInspeccionRepository>[]
         {
             r => r.Agregar(clsHallazgo.Crear(inspeccionId, "Capot", "golpe", "1_5cm", null, AHORA)),
-            r => r.Agregar(clsEvidencia.Crear(inspeccionId, null, "x.jpg", AHORA, null, null, AHORA)),
+            r => r.Agregar(clsEvidencia.Crear(inspeccionId, null, vistaId, "x.jpg", AHORA, 4.6, -74.1, null, null, null, null, AHORA)),
         })
         {
             using var alcance2 = proveedor2.CreateScope();
@@ -244,10 +344,10 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         using var alcance = proveedor.CreateScope();
         var s = alcance.ServiceProvider;
         var repo = s.GetRequiredService<IInspeccionRepository>();
-        var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.INFORME, AHORA, null, null, null, null, AHORA);
+        var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, null, null, null, null, AHORA);
         repo.Agregar(inspeccion);
         await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
-        inspeccion.Cerrar(await repo.ObtenerResumenCierreAsync(inspeccion.Id), AHORA.AddMinutes(1));
+        inspeccion.Cerrar(await repo.ObtenerResumenCierreAsync(inspeccion.Id), [], false, AHORA.AddMinutes(1));
         await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
 
         var contexto = s.GetRequiredService<clsAppDbContext>();
@@ -274,7 +374,7 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
             var libre = NuevoUsuario("libre@ejemplo.com");
             repoU.Agregar(libre);
             s.GetRequiredService<IInspeccionRepository>().Agregar(
-                clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.INFORME, AHORA, null, null, null, null, AHORA));
+                clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, null, null, null, null, AHORA));
             await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
             libreId = libre.Id;
         }
@@ -319,7 +419,7 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
             var s = alcance.ServiceProvider;
             var receptor = NuevoUsuario("recibe@ejemplo.com", clsRol.CONDUCTOR);
             s.GetRequiredService<IUsuarioRepository>().Agregar(receptor);
-            var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.INFORME, AHORA, null, null, null, null, AHORA);
+            var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, null, null, null, null, AHORA);
             s.GetRequiredService<IInspeccionRepository>().Agregar(inspeccion);
             s.GetRequiredService<ITransferenciaCustodiaRepository>().Agregar(
                 clsTransferenciaCustodia.Crear(inspeccion.Id, usuarioId, receptor.Id, "entrega.png", null, AHORA));

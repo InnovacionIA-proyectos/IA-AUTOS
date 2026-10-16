@@ -114,12 +114,29 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
 
     public async Task<clsResumenCierre> ObtenerResumenCierreAsync(Guid inspeccionId, CancellationToken ct = default)
     {
-        var evidencias = contexto.Evidencias.Where(e => e.InspeccionId == inspeccionId);
-        var totalEvidencias = await evidencias.CountAsync(ct);
-        var sinGeo = await evidencias.CountAsync(e => e.SelloLat == null || e.SelloLng == null, ct);
-        var totalHallazgos = await contexto.Hallazgos.CountAsync(h => h.InspeccionId == inspeccionId, ct);
-        return new clsResumenCierre(totalEvidencias, sinGeo, totalHallazgos);
+        var evidencias = await contexto.Evidencias.AsNoTracking()
+            .Where(e => e.InspeccionId == inspeccionId)
+            .Select(e => new { e.Id, e.VistaId, e.HallazgoId, e.SelloLat, e.SelloLng, e.SelloServidorAt })
+            .ToListAsync(ct);
+        var hallazgos = await contexto.Hallazgos.AsNoTracking().Where(h => h.InspeccionId == inspeccionId).Select(h => h.Id).ToListAsync(ct);
+
+        // Una foto repetida reemplaza a la anterior de la misma vista (o del mismo hallazgo): lo que cuenta para la ubicacion es la ultima.
+        // Las fotos anteriores quedan guardadas (son evidencia) pero ya no bloquean el cierre.
+        var ultimas = evidencias
+            .GroupBy(e => e.VistaId is { } vista ? $"v:{vista}" : e.HallazgoId is { } hallazgo ? $"h:{hallazgo}" : $"f:{e.Id}")
+            .Select(g => g.OrderByDescending(e => e.SelloServidorAt).First())
+            .ToList();
+        var sinUbicacion = ultimas.Count(e => e.SelloLat == 0 && e.SelloLng == 0);
+        var conFoto = evidencias.Where(e => e.HallazgoId is not null).Select(e => e.HallazgoId!.Value).ToHashSet();
+        var vistas = evidencias.Where(e => e.VistaId is not null).Select(e => e.VistaId!.Value).Distinct().ToList();
+        return new clsResumenCierre(evidencias.Count, sinUbicacion, hallazgos.Count, hallazgos.Count(h => !conFoto.Contains(h)), vistas);
     }
+
+    public Task<bool> TieneLlegadaCerradaAsync(Guid etapaId, CancellationToken ct = default) =>
+        contexto.Inspecciones.AnyAsync(i => i.EtapaId == etapaId && i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA, ct);
+
+    public Task<Guid?> ObtenerCorreccionIdAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        contexto.Inspecciones.AsNoTracking().Where(i => i.CorrigeInspeccionId == inspeccionId).Select(i => (Guid?)i.Id).FirstOrDefaultAsync(ct);
 
     public Task<bool> ExisteHallazgoEnInspeccionAsync(Guid hallazgoId, Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Hallazgos.AnyAsync(h => h.Id == hallazgoId && h.InspeccionId == inspeccionId, ct);

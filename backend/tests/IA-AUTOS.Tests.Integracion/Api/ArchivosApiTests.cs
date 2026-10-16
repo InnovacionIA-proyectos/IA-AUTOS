@@ -57,7 +57,8 @@ public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var subida = await ClonarAsync(r);
-        Assert.Equal(["storage_path", "url"], subida.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["storage_path", "url", "hash_sha256"], subida.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(JPEG)).ToLowerInvariant(), subida.GetProperty("hash_sha256").GetString());
         var nombre = subida.GetProperty("storage_path").GetString()!;
         Assert.Matches(@"^[0-9a-f-]{36}\.jpg$", nombre);
         Assert.Equal("/api/uploads/" + nombre, subida.GetProperty("url").GetString());
@@ -67,6 +68,55 @@ public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         Assert.Equal("image/jpeg", lectura.Content.Headers.ContentType!.MediaType);
         Assert.Equal("public, max-age=31536000", lectura.Headers.CacheControl!.ToString());
         Assert.Equal(JPEG, await lectura.Content.ReadAsByteArrayAsync());
+    }
+
+    private static MultipartFormDataContent Formulario(byte[] contenido, string campo = "archivo", string nombre = "foto.jpg")
+    {
+        var formulario = new MultipartFormDataContent();
+        formulario.Add(new ByteArrayContent(contenido), campo, nombre);
+        return formulario;
+    }
+
+    [Fact]
+    public async Task Sube_una_foto_por_multipart_con_las_mismas_reglas_y_devuelve_su_hash()
+    {
+        var token = await TokenAsync();
+
+        var jpeg = await Cliente(token).PostAsync("/api/uploads", Formulario(JPEG));
+        var png = await Cliente(token).PostAsync("/api/uploads", Formulario(PNG, nombre: "otra.png"));
+
+        Assert.Equal(HttpStatusCode.Created, jpeg.StatusCode);
+        var subida = await ClonarAsync(jpeg);
+        Assert.Equal(["storage_path", "url", "hash_sha256"], subida.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.EndsWith(".jpg", subida.GetProperty("storage_path").GetString());
+        Assert.Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(JPEG)).ToLowerInvariant(), subida.GetProperty("hash_sha256").GetString());
+        var lectura = await Cliente().GetAsync(subida.GetProperty("url").GetString());
+        Assert.Equal(JPEG, await lectura.Content.ReadAsByteArrayAsync());
+        Assert.Equal(HttpStatusCode.Created, png.StatusCode);
+        Assert.EndsWith(".png", (await ClonarAsync(png)).GetProperty("storage_path").GetString());
+    }
+
+    [Fact]
+    public async Task Multipart_rechaza_lo_que_no_es_imagen_el_archivo_ausente_el_vacio_y_el_exceso_de_tamano()
+    {
+        var token = await TokenAsync();
+        var limitada = CrearFabrica(new Dictionary<string, string?> { ["Storage:MaximoBytes"] = "100" });
+        await limitada.SembrarUsuarioAsync("foto2@ejemplo.com", "Clave-Segura-1");
+        var tokenLimitada = await LoginAsync("foto2@ejemplo.com", "Clave-Segura-1", limitada);
+
+        var texto = await Cliente(token).PostAsync("/api/uploads", Formulario("esto no es una imagen"u8.ToArray()));
+        var vacio = await Cliente(token).PostAsync("/api/uploads", Formulario([]));
+        var sinArchivo = await Cliente(token).PostAsync("/api/uploads", new MultipartFormDataContent { { new StringContent("hola"), "otro" } });
+        var grande = await Cliente(tokenLimitada, limitada).PostAsync("/api/uploads", Formulario(JPEG));
+        var sinToken = await Cliente().PostAsync("/api/uploads", Formulario(JPEG));
+
+        Assert.Equal(HttpStatusCode.BadRequest, texto.StatusCode);
+        Assert.Equal("El contenido no es una imagen JPG o PNG válida", (await ClonarAsync(texto)).GetProperty("message").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, vacio.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, sinArchivo.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, grande.StatusCode);
+        Assert.Contains("tamaño máximo", (await ClonarAsync(grande)).GetProperty("message").GetString());
+        Assert.Equal(HttpStatusCode.Unauthorized, sinToken.StatusCode);
     }
 
     [Fact]

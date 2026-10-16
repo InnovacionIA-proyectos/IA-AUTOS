@@ -125,6 +125,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                 i.Id, i.EtapaId, i.ViajeId, i.UsuarioId, i.Momento, i.Fecha, i.Lat, i.Lng, i.Estado,
                 i.ConductorNombre ?? viaje?.Conductor, i.Placa ?? viaje?.Placa, i.Trailer ?? viaje?.Trailer, i.Notas,
                 i.CreatedAt, i.UpdatedAt,
+                i.IniciadaAt, i.CerradaAt, i.Version, i.CorrigeInspeccionId, clsMomento.Nombre(i.Momento),
                 hallazgos.Where(h => h.InspeccionId == i.Id).Select(clsMapeadorInspecciones.AHallazgo).ToList(),
                 evidencias.Where(ev => ev.InspeccionId == i.Id).Select(clsMapeadorInspecciones.AEvidencia).ToList(),
                 transferencias.Where(t => t.InspeccionId == i.Id).Select(clsMapeadorInspecciones.ATransferencia).FirstOrDefault());

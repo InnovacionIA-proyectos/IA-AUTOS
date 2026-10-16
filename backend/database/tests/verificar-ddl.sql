@@ -34,14 +34,14 @@ INSERT dbo.tblViajes (Id, CodigoMtrack, TipoUnidadId, Placa, ConductorId, Inspec
 INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vj, @v);
 INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@e1, @v, @vj, @pc, 1);
 INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@e2, @v, @vj, @pt, 2);
-INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@i1, @e1, @vj, @u1, 'informe', SYSDATETIMEOFFSET());
-INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@i2, @e2, @vj, @u1, 'informe', SYSDATETIMEOFFSET());
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@i1, @e1, @vj, @u1, 'salida', SYSDATETIMEOFFSET());
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@i2, @e2, @vj, @u1, 'salida', SYSDATETIMEOFFSET());
 
 -- 1) Vista de viajes completos (un VIN completa su ruta en un viaje cuando todas sus etapas tienen informe cerrado)
 INSERT #r SELECT N'Vista: sin informes cerrados no esta movilizado', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.vwViajesCompletos WHERE ViajeId = @vj AND VehiculoId = @v) THEN 1 ELSE 0 END, NULL;
-UPDATE dbo.tblInspecciones SET Estado = 'cerrada' WHERE Id = @i1;
+UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i1;
 INSERT #r SELECT N'Vista: con una de dos etapas cerrada sigue pendiente', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.vwViajesCompletos WHERE ViajeId = @vj AND VehiculoId = @v) THEN 1 ELSE 0 END, NULL;
-UPDATE dbo.tblInspecciones SET Estado = 'cerrada' WHERE Id = @i2;
+UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i2;
 INSERT #r SELECT N'Vista: con todas las etapas cerradas esta movilizado', CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos WHERE ViajeId = @vj AND VehiculoId = @v) THEN 1 ELSE 0 END, NULL;
 
 -- 2) Triggers de inmutabilidad
@@ -62,7 +62,7 @@ BEGIN CATCH
 END CATCH
 
 BEGIN TRY
-    INSERT dbo.tblEvidencias (Id, InspeccionId, StoragePath, SelloFecha) VALUES (NEWID(), @i1, N'zz.jpg', SYSDATETIMEOFFSET());
+    INSERT dbo.tblEvidencias (Id, InspeccionId, StoragePath, SelloFecha, SelloLat, SelloLng) VALUES (NEWID(), @i1, N'zz.jpg', SYSDATETIMEOFFSET(), 4.6, -74.1);
     INSERT #r VALUES (N'Trigger: evidencia en inspeccion cerrada debe fallar', 0, N'no fallo');
 END TRY
 BEGIN CATCH
@@ -87,9 +87,9 @@ INSERT @casos VALUES
  (N'CHECK operacion invalida', N'INSERT dbo.tblVehiculos (Id,Vin,Marca,Operacion,ClienteId) SELECT NEWID(),''ZZ_TEST_VIN_0002'',N''X'',''otra'',Id FROM dbo.tblClientes WHERE Codigo=''sofasa''', 547),
  (N'UNIQUE (viaje, vehiculo, orden) en etapas', N'INSERT dbo.tblEtapas (Id,VehiculoId,ViajeId,EtapaCatalogoId,Orden) SELECT NEWID(),VehiculoId,ViajeId,EtapaCatalogoId,Orden FROM dbo.tblEtapas WHERE Orden=1 AND VehiculoId=(SELECT Id FROM dbo.tblVehiculos WHERE Vin=''ZZ_TEST_VIN_0001'')', 2627),
  (N'CHECK orden >= 1', N'INSERT dbo.tblEtapas (Id,VehiculoId,ViajeId,EtapaCatalogoId,Orden) SELECT NEWID(),(SELECT Id FROM dbo.tblVehiculos WHERE Vin=''ZZ_TEST_VIN_0001''),(SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack=''ZZ_TEST_MTK_1''),(SELECT TOP 1 Id FROM dbo.tblEtapasCatalogo WHERE Codigo=''descargue''),0', 547),
- (N'UNIQUE (etapa, momento) en inspecciones', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha) SELECT NEWID(),EtapaId,ViajeId,UsuarioId,Momento,Fecha FROM dbo.tblInspecciones WHERE Estado=''cerrada'' AND UsuarioId=(SELECT Id FROM dbo.tblUsuarios WHERE Email=N''zz_test_uno@ejemplo.com'')', 2627),
- (N'CHECK latitud fuera de rango', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha,Lat) SELECT NEWID(),(SELECT TOP 1 e.Id FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id=e.VehiculoId WHERE v.Vin=''ZZ_TEST_VIN_0001'' AND e.Orden=1),(SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack=''ZZ_TEST_MTK_1''),(SELECT Id FROM dbo.tblUsuarios WHERE Email=N''zz_test_uno@ejemplo.com''),''check_in'',SYSDATETIMEOFFSET(),95', 547),
- (N'CHECK estado de inspeccion', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha,Estado) SELECT NEWID(),(SELECT TOP 1 e.Id FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id=e.VehiculoId WHERE v.Vin=''ZZ_TEST_VIN_0001'' AND e.Orden=1),(SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack=''ZZ_TEST_MTK_1''),(SELECT Id FROM dbo.tblUsuarios WHERE Email=N''zz_test_uno@ejemplo.com''),''check_out'',SYSDATETIMEOFFSET(),''otro''', 547),
+ (N'UNIQUE (etapa, momento) original en inspecciones', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha) SELECT NEWID(),EtapaId,ViajeId,UsuarioId,Momento,Fecha FROM dbo.tblInspecciones WHERE Estado=''cerrada'' AND UsuarioId=(SELECT Id FROM dbo.tblUsuarios WHERE Email=N''zz_test_uno@ejemplo.com'')', 2601),
+ (N'CHECK latitud fuera de rango', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha,Lat) SELECT NEWID(),(SELECT TOP 1 e.Id FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id=e.VehiculoId WHERE v.Vin=''ZZ_TEST_VIN_0001'' AND e.Orden=1),(SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack=''ZZ_TEST_MTK_1''),(SELECT Id FROM dbo.tblUsuarios WHERE Email=N''zz_test_uno@ejemplo.com''),''llegada'',SYSDATETIMEOFFSET(),95', 547),
+ (N'CHECK estado de inspeccion', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha,Estado) SELECT NEWID(),(SELECT TOP 1 e.Id FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id=e.VehiculoId WHERE v.Vin=''ZZ_TEST_VIN_0001'' AND e.Orden=1),(SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack=''ZZ_TEST_MTK_1''),(SELECT Id FROM dbo.tblUsuarios WHERE Email=N''zz_test_uno@ejemplo.com''),''llegada'',SYSDATETIMEOFFSET(),''otro''', 547),
  (N'FK inspeccion inexistente en hallazgos', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ParteVehiculo,ClaseDano,TamanoDano) VALUES (NEWID(),NEWID(),N''Capot'',''golpe'',''1_5cm'')', 547),
  (N'FK clase de dano invalida', N'DECLARE @ins uniqueidentifier=(SELECT TOP 1 i.Id FROM dbo.tblInspecciones i JOIN dbo.tblEtapas e ON e.Id=i.EtapaId JOIN dbo.tblVehiculos v ON v.Id=e.VehiculoId WHERE v.Vin=''ZZ_TEST_VIN_0001''); INSERT dbo.tblHallazgos (Id,InspeccionId,ParteVehiculo,ClaseDano,TamanoDano) VALUES (NEWID(),@ins,N''Capot'',''inventada'',''1_5cm'')', 547),
  (N'CHECK JSON de coordenadas', N'DECLARE @ins uniqueidentifier=(SELECT TOP 1 i.Id FROM dbo.tblInspecciones i JOIN dbo.tblEtapas e ON e.Id=i.EtapaId JOIN dbo.tblVehiculos v ON v.Id=e.VehiculoId WHERE v.Vin=''ZZ_TEST_VIN_0001''); INSERT dbo.tblHallazgos (Id,InspeccionId,ParteVehiculo,ClaseDano,TamanoDano,CoordsDiagrama) VALUES (NEWID(),@ins,N''Capot'',''golpe'',''1_5cm'',N''no es json'')', 547),
@@ -137,7 +137,7 @@ INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion, ClienteId) VALUES (@v3, 'ZZ_
 INSERT dbo.tblViajes (Id, CodigoMtrack, TipoUnidadId, Placa, OrigenId) VALUES (@vj3, 'ZZ_TEST_MTK_3', @tipoUnidad, N'ZZT333', @lugar);
 INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vj3, @v3);
 INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, PuntoCustodiaId, Orden) VALUES (@e3, @v3, @vj3, @etapaDescargue, @lugar, 1);
-INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@i3, @e3, @vj3, @u1, 'informe', SYSDATETIMEOFFSET());
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@i3, @e3, @vj3, @u1, 'salida', SYSDATETIMEOFFSET());
 INSERT dbo.tblHallazgos (Id, InspeccionId, ParteVehiculo, ClaseDano, TamanoDano) VALUES (NEWID(), @i3, N'Capot', 'golpe', '1_5cm');
 
 DECLARE @vistaFrontal uniqueidentifier = (SELECT Id FROM dbo.tblVistasFoto WHERE Codigo = 'frontal');
@@ -202,7 +202,7 @@ INSERT @casosViaje VALUES
  (N'FK unidad inexistente en viajes', N'INSERT dbo.tblViajes (Id, CodigoMtrack, TipoUnidadId) VALUES (NEWID(), ''ZZ_TEST_MTK_U'', NEWID())', 547),
  (N'UNIQUE (viaje, vehiculo) en tblViajeVehiculos', N'INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) SELECT NEWID(), ViajeId, VehiculoId FROM dbo.tblViajeVehiculos WHERE VehiculoId = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0001'')', 2627),
  (N'Una etapa exige un viaje existente', N'INSERT dbo.tblEtapas (Id,VehiculoId,ViajeId,EtapaCatalogoId,Orden) SELECT NEWID(),(SELECT Id FROM dbo.tblVehiculos WHERE Vin=''ZZ_TEST_VIN_0001''),NEWID(),(SELECT TOP 1 Id FROM dbo.tblEtapasCatalogo WHERE Codigo=''descargue''),7', 547),
- (N'Una inspeccion exige un viaje existente', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha) SELECT NEWID(),(SELECT TOP 1 e.Id FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id=e.VehiculoId WHERE v.Vin=''ZZ_TEST_VIN_0001'' AND e.Orden=1),NEWID(),(SELECT Id FROM dbo.tblUsuarios WHERE Email=N''zz_test_uno@ejemplo.com''),''check_out'',SYSDATETIMEOFFSET()', 547),
+ (N'Una inspeccion exige un viaje existente', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha) SELECT NEWID(),(SELECT TOP 1 e.Id FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id=e.VehiculoId WHERE v.Vin=''ZZ_TEST_VIN_0001'' AND e.Orden=1),NEWID(),(SELECT Id FROM dbo.tblUsuarios WHERE Email=N''zz_test_uno@ejemplo.com''),''llegada'',SYSDATETIMEOFFSET()', 547),
  (N'No se borra un viaje con etapas', N'DELETE FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_1''', 547),
  (N'No se borra un usuario que es conductor de un viaje', N'DELETE FROM dbo.tblUsuarios WHERE Email = N''zz_test_dos@ejemplo.com''', 547),
  (N'UNIQUE cedula (entre quienes la tienen)', N'INSERT dbo.tblUsuarios (Id,Nombre,Email,Rol,Cedula) VALUES (NEWID(),N''ZZ_TEST'',N''zz_test_c1@e.com'',''conductor'',''ZZ99999''); INSERT dbo.tblUsuarios (Id,Nombre,Email,Rol,Cedula) VALUES (NEWID(),N''ZZ_TEST'',N''zz_test_c2@e.com'',''conductor'',''ZZ99999'')', 2601);
@@ -283,7 +283,73 @@ INSERT dbo.tblClientes (Id, Codigo, Nombre) VALUES (NEWID(), 'zz_test', N'ZZ_TES
 DELETE FROM dbo.tblClientes WHERE Codigo = 'zz_test';
 INSERT #r SELECT N'Un cliente sin usuarios ni vehiculos se puede borrar', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblClientes WHERE Codigo = 'zz_test') THEN 1 ELSE 0 END, NULL;
 
--- 7) Cascada: borrar el vehiculo elimina etapas, inspecciones, transferencias y su lugar en los viajes (no hay trigger de DELETE)
+-- 7) Inspeccion de salida y de llegada: versiones, hora de cierre y fotos selladas
+DECLARE @vistaFrontal2 uniqueidentifier = (SELECT Id FROM dbo.tblVistasFoto WHERE Codigo = 'frontal');
+DECLARE @v5 uniqueidentifier = NEWID(), @vj5 uniqueidentifier = NEWID(), @e5 uniqueidentifier = NEWID();
+DECLARE @s5 uniqueidentifier = NEWID(), @l5 uniqueidentifier = NEWID(), @c5 uniqueidentifier = NEWID();
+INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion, ClienteId) VALUES (@v5, 'ZZ_TEST_VIN_0006', N'Renault', 'nacional', @cli);
+INSERT dbo.tblViajes (Id, CodigoMtrack) VALUES (@vj5, 'ZZ_TEST_MTK_6');
+INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vj5, @v5);
+INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@e5, @v5, @vj5, @pc, 1);
+INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (NEWID(), @v5, @vj5, @pt, 2);
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@s5, @e5, @vj5, @u1, 'salida', SYSDATETIMEOFFSET());
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@l5, @e5, @vj5, @u1, 'llegada', SYSDATETIMEOFFSET());
+INSERT #r SELECT N'Inspeccion: una etapa admite una salida y una llegada originales',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblInspecciones WHERE EtapaId = @e5) = 2 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Inspeccion: nace en version 1, sin hora de cierre y con hora de inicio',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id = @s5 AND Version = 1 AND CorrigeInspeccionId IS NULL AND CerradaAt IS NULL AND IniciadaAt IS NOT NULL) THEN 1 ELSE 0 END, NULL;
+
+-- Una foto de una vista con todos sus sellos (la del dispositivo y la del servidor) y su nota
+INSERT dbo.tblEvidencias (Id, InspeccionId, VistaId, StoragePath, SelloFecha, SelloLat, SelloLng, Precision, DispositivoId, HashSha256, Nota)
+VALUES (NEWID(), @s5, @vistaFrontal2, N'zz-vista.jpg', SYSDATETIMEOFFSET(), 4.6, -74.1, 5.5, N'zz-dispositivo', REPLICATE('a', 64), N'Falta una pieza');
+INSERT #r SELECT N'Evidencia: una foto de una vista guarda su sello, precision, dispositivo, hash y nota',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblEvidencias WHERE InspeccionId = @s5 AND VistaId = @vistaFrontal2 AND SelloServidorAt IS NOT NULL AND Precision = 5.5 AND Nota = N'Falta una pieza') THEN 1 ELSE 0 END, NULL;
+
+-- Cerrar la salida y corregirla: la correccion es una version nueva que referencia a la anterior
+UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @s5;
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, Version, CorrigeInspeccionId) VALUES (@c5, @e5, @vj5, @u1, 'salida', SYSDATETIMEOFFSET(), 2, @s5);
+INSERT #r SELECT N'Inspeccion: una correccion es una version nueva que referencia a la anterior y la anterior sigue cerrada',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id = @c5 AND Version = 2 AND CorrigeInspeccionId = @s5)
+          AND EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id = @s5 AND Estado = 'cerrada') THEN 1 ELSE 0 END, NULL;
+
+DECLARE @casosInsp TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosInsp VALUES
+ (N'CHECK momento invalido (informe ya no existe)', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha) SELECT NEWID(),EtapaId,ViajeId,UsuarioId,''informe'',Fecha FROM dbo.tblInspecciones WHERE Version = 2 AND Momento = ''salida'' AND Fecha > ''2000-01-01''', 547),
+ (N'UNIQUE una sola inspeccion original por etapa y momento', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha) SELECT NEWID(),EtapaId,ViajeId,UsuarioId,Momento,Fecha FROM dbo.tblInspecciones WHERE Version = 1 AND Momento = ''llegada'' AND ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_6'')', 2601),
+ (N'UNIQUE una version se corrige una sola vez', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha,Version,CorrigeInspeccionId) SELECT NEWID(),EtapaId,ViajeId,UsuarioId,Momento,Fecha,3,CorrigeInspeccionId FROM dbo.tblInspecciones WHERE Version = 2 AND ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_6'')', 2601),
+ (N'CHECK version 1 no corrige a otra inspeccion', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha,Version,CorrigeInspeccionId) SELECT NEWID(),EtapaId,ViajeId,UsuarioId,''llegada'',Fecha,1,Id FROM dbo.tblInspecciones WHERE Version = 2 AND ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_6'')', 547),
+ (N'CHECK una version mayor a 1 debe referenciar a la que corrige', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha,Version) SELECT NEWID(),Id,ViajeId,(SELECT Id FROM dbo.tblUsuarios WHERE Email=N''zz_test_uno@ejemplo.com''),''llegada'',SYSDATETIMEOFFSET(),2 FROM dbo.tblEtapas WHERE Orden = 2 AND ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_6'')', 547),
+ (N'CHECK una inspeccion cerrada tiene hora de cierre', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha,Estado) SELECT NEWID(),Id,ViajeId,(SELECT Id FROM dbo.tblUsuarios WHERE Email=N''zz_test_uno@ejemplo.com''),''llegada'',SYSDATETIMEOFFSET(),''cerrada'' FROM dbo.tblEtapas WHERE Orden = 2 AND ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_6'')', 547),
+ (N'FK la version corregida debe existir', N'INSERT dbo.tblInspecciones (Id,EtapaId,ViajeId,UsuarioId,Momento,Fecha,Version,CorrigeInspeccionId) SELECT NEWID(),EtapaId,ViajeId,UsuarioId,''llegada'',Fecha,2,NEWID() FROM dbo.tblInspecciones WHERE Version = 2 AND ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_6'')', 547),
+ (N'Una evidencia exige ubicacion (NOT NULL)', N'INSERT dbo.tblEvidencias (Id,InspeccionId,StoragePath,SelloFecha,SelloLat,SelloLng) VALUES (NEWID(),(SELECT Id FROM dbo.tblInspecciones WHERE Version = 2 AND ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_6'')),N''zz-sin-gps.jpg'',SYSDATETIMEOFFSET(),NULL,NULL)', 515),
+ (N'CHECK precision negativa', N'INSERT dbo.tblEvidencias (Id,InspeccionId,StoragePath,SelloFecha,SelloLat,SelloLng,Precision) VALUES (NEWID(),(SELECT Id FROM dbo.tblInspecciones WHERE Version = 2 AND ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_6'')),N''zz-p.jpg'',SYSDATETIMEOFFSET(),4.6,-74.1,-1)', 547),
+ (N'CHECK hash invalido', N'INSERT dbo.tblEvidencias (Id,InspeccionId,StoragePath,SelloFecha,SelloLat,SelloLng,HashSha256) VALUES (NEWID(),(SELECT Id FROM dbo.tblInspecciones WHERE Version = 2 AND ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_6'')),N''zz-h.jpg'',SYSDATETIMEOFFSET(),4.6,-74.1,REPLICATE(''Z'', 64))', 547),
+ (N'FK vista inexistente en evidencias', N'INSERT dbo.tblEvidencias (Id,InspeccionId,VistaId,StoragePath,SelloFecha,SelloLat,SelloLng) VALUES (NEWID(),(SELECT Id FROM dbo.tblInspecciones WHERE Version = 2 AND ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_6'')),NEWID(),N''zz-v.jpg'',SYSDATETIMEOFFSET(),4.6,-74.1)', 547),
+ (N'No se borra una vista de foto con evidencias', N'DELETE FROM dbo.tblVistasFoto WHERE Codigo = ''frontal''', 547);
+
+DECLARE @pruebaInsp nvarchar(200), @sqlInsp nvarchar(max), @espInsp int;
+DECLARE cInsp CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosInsp;
+OPEN cInsp; FETCH NEXT FROM cInsp INTO @pruebaInsp, @sqlInsp, @espInsp;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    BEGIN TRY
+        EXEC (@sqlInsp);
+        INSERT #r VALUES (@pruebaInsp, 0, N'la sentencia no fallo');
+    END TRY
+    BEGIN CATCH
+        INSERT #r VALUES (@pruebaInsp, CASE WHEN ERROR_NUMBER() = @espInsp THEN 1 ELSE 0 END, N'error ' + CAST(ERROR_NUMBER() AS nvarchar(10)) + N': ' + LEFT(ERROR_MESSAGE(), 150));
+    END CATCH
+    FETCH NEXT FROM cInsp INTO @pruebaInsp, @sqlInsp, @espInsp;
+END
+CLOSE cInsp; DEALLOCATE cInsp;
+
+-- Borrar el vehiculo de la prueba se lleva sus inspecciones, versiones y fotos (cascada); la cadena de versiones no la impide.
+DELETE FROM dbo.tblVehiculos WHERE Vin = 'ZZ_TEST_VIN_0006';
+DELETE FROM dbo.tblViajes WHERE CodigoMtrack = 'ZZ_TEST_MTK_6';
+INSERT #r SELECT N'Cascada: borrar el vehiculo borra sus inspecciones con versiones y fotos',
+    CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id IN (@s5, @l5, @c5)) AND NOT EXISTS (SELECT 1 FROM dbo.tblEvidencias WHERE StoragePath LIKE N'zz-%') THEN 1 ELSE 0 END, NULL;
+
+-- 8) Cascada: borrar el vehiculo elimina etapas, inspecciones, transferencias y su lugar en los viajes (no hay trigger de DELETE)
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 DELETE FROM dbo.tblVehiculos WHERE Vin = 'ZZ_TEST_VIN_0001';
 INSERT #r SELECT N'Cascada: borrar vehiculo elimina etapas e inspecciones', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblEtapas WHERE VehiculoId = @v) AND NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id IN (@i1, @i2)) THEN 1 ELSE 0 END, NULL;

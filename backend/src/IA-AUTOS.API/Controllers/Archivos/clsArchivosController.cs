@@ -14,15 +14,38 @@ namespace IAAutos.API.Controllers.Archivos;
 [Route("api/uploads")]
 public sealed class clsArchivosController(clsArchivosService servicio, IOptions<clsOpcionesAlmacenamiento> opciones) : clsControladorBase
 {
-    /// <summary>Sube una foto (base64, con o sin prefijo data URI). Solo JPG y PNG; el tipo se verifica por contenido.</summary>
+    /// <summary>
+    /// Sube una foto como JSON (base64, con o sin prefijo data URI) o como multipart/form-data (campo <c>archivo</c>). Solo JPG y PNG; el
+    /// tipo se verifica por contenido. Devuelve el nombre del archivo, su URL y el hash SHA-256 calculado por el servidor.
+    /// </summary>
     [HttpPost]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
     [ProducesResponseType<ArchivoSubidoDto>(StatusCodes.Status201Created)]
-    [CuerpoSolicitud(typeof(IAAutos.Aplicacion.Archivos.DTOArchivos.SubirArchivoRequest))]
+    [CuerpoSolicitud(typeof(IAAutos.Aplicacion.Archivos.DTOArchivos.SubirArchivoRequest), TambienMultipart = true)]
     public async Task<IActionResult> Subir(CancellationToken ct)
     {
-        var solicitud = await LeerCuerpoAsync<SubirArchivoRequest>(ct);
-        return Creado(await servicio.SubirAsync(solicitud, ct));
+        if (!Request.HasFormContentType)
+        {
+            var solicitud = await LeerCuerpoAsync<SubirArchivoRequest>(ct);
+            return Creado(await servicio.SubirAsync(solicitud, ct));
+        }
+
+        IFormCollection formulario;
+        try
+        {
+            formulario = await Request.ReadFormAsync(ct);
+        }
+        catch (InvalidDataException)
+        {
+            throw new clsValidacionException("El cuerpo multipart no es válido");
+        }
+
+        var archivo = formulario.Files.GetFile("archivo") ?? formulario.Files.FirstOrDefault()
+            ?? throw new clsValidacionException("Falta el archivo: envíelo en el campo «archivo»");
+        servicio.AsegurarTamano(archivo.Length);
+        using var memoria = new MemoryStream();
+        await archivo.CopyToAsync(memoria, ct);
+        return Creado(await servicio.SubirBytesAsync(memoria.ToArray(), ct));
     }
 
     /// <summary>

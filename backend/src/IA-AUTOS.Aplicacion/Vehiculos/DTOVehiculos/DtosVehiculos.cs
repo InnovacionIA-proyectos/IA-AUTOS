@@ -46,6 +46,11 @@ public sealed record InventarioInspeccionDto(
     string? Notas,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
+    DateTimeOffset IniciadaAt,
+    DateTimeOffset? CerradaAt,
+    int Version,
+    Guid? CorrigeInspeccionId,
+    string MomentoNombre,
     IReadOnlyList<HallazgoDto> Hallazgos,
     IReadOnlyList<EvidenciaDto> Evidencias,
     TransferenciaDto? Transferencia);

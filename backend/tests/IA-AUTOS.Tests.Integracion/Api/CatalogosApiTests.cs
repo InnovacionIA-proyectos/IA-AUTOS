@@ -360,6 +360,22 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Contains("en uso", (await LeerJsonAsync(borrarUnidad)).GetProperty("message").GetString());
     }
 
+    /// <summary>Sube una foto y arma el cuerpo de un hallazgo con ella (un hallazgo exige su foto propia).</summary>
+    private async Task<object> HallazgoConFotoAsync(string token, string parte, string clase, string tamano)
+    {
+        var bytes = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }.Concat(Guid.NewGuid().ToByteArray()).ToArray();
+        var subida = await Cliente(token).PostAsJsonAsync("/api/uploads", new { data = Convert.ToBase64String(bytes), ext = "png" });
+        Assert.Equal(HttpStatusCode.Created, subida.StatusCode);
+        var ruta = (await LeerJsonAsync(subida)).GetProperty("storage_path").GetString();
+        return new
+        {
+            parte_vehiculo = parte,
+            clase_dano = clase,
+            tamano_dano = tamano,
+            evidencia = new { storage_path = ruta, sello_fecha = "2026-07-17T12:30:15.123Z", sello_lat = 4.6, sello_lng = -74.1 },
+        };
+    }
+
     [Fact]
     public async Task Inactivar_una_clase_la_retira_de_los_hallazgos_nuevos_pero_los_guardados_se_siguen_viendo()
     {
@@ -376,7 +392,7 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
 
         var nuevo = await Cliente(inspectorToken).PostAsJsonAsync(
             $"/api/inspecciones/{inspeccionId}/hallazgos",
-            new { parte_vehiculo = "Puerta", clase_dano = "golpe", tamano_dano = "5_10cm" });
+            await HallazgoConFotoAsync(inspectorToken, "Puerta", "golpe", "5_10cm"));
         Assert.Equal(HttpStatusCode.BadRequest, nuevo.StatusCode);
         Assert.True((await LeerJsonAsync(nuevo)).GetProperty("details").GetProperty("fieldErrors").TryGetProperty("clase_dano", out _));
 
@@ -386,7 +402,7 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         await admin.PatchAsync($"/api/catalogos/clases-dano/{claseId}", Cuerpo(new { activo = true }));
         var otraVez = await Cliente(inspectorToken).PostAsJsonAsync(
             $"/api/inspecciones/{inspeccionId}/hallazgos",
-            new { parte_vehiculo = "Puerta", clase_dano = "golpe", tamano_dano = "5_10cm" });
+            await HallazgoConFotoAsync(inspectorToken, "Puerta", "golpe", "5_10cm"));
         Assert.Equal(HttpStatusCode.Created, otraVez.StatusCode);
     }
 
@@ -403,7 +419,7 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
 
         var r = await Cliente(inspectorToken).PostAsJsonAsync(
             $"/api/inspecciones/{inspeccionId}/hallazgos",
-            new { parte_vehiculo = "Capot", clase_dano = "oxidacion", tamano_dano = "1_5cm" });
+            await HallazgoConFotoAsync(inspectorToken, "Capot", "oxidacion", "1_5cm"));
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
     }
 

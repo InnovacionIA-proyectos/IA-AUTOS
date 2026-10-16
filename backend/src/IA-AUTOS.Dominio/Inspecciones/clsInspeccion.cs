@@ -3,7 +3,8 @@ using IAAutos.Dominio.Comun;
 namespace IAAutos.Dominio.Inspecciones;
 
 /// <summary>
-/// Acto de revision de una etapa (un informe por etapa). Al cerrarse es evidencia inmutable.
+/// Acto de revision de una etapa: por etapa hay una inspeccion de salida y una de llegada. Al cerrarse es evidencia inmutable; un error se
+/// corrige creando una version nueva que referencia a la anterior (la anterior no cambia).
 /// </summary>
 public sealed class clsInspeccion : clsEntidadBase
 {
@@ -20,6 +21,7 @@ public sealed class clsInspeccion : clsEntidadBase
 
     public Guid UsuarioId { get; private set; }
 
+    /// <summary><see cref="clsMomento"/>: salida o llegada.</summary>
     public string Momento { get; private set; } = string.Empty;
 
     public DateTimeOffset Fecha { get; private set; }
@@ -39,6 +41,18 @@ public sealed class clsInspeccion : clsEntidadBase
 
     public string? Notas { get; private set; }
 
+    /// <summary>Cuando se empezo la inspeccion (hora del servidor).</summary>
+    public DateTimeOffset IniciadaAt { get; private set; }
+
+    /// <summary>Cuando se cerro (hora del servidor). Nulo mientras esta en borrador.</summary>
+    public DateTimeOffset? CerradaAt { get; private set; }
+
+    /// <summary>1 en la original; 2, 3... en las correcciones.</summary>
+    public int Version { get; private set; } = 1;
+
+    /// <summary>La version que esta corrige. Nulo en la original.</summary>
+    public Guid? CorrigeInspeccionId { get; private set; }
+
     public bool EstaCerrada => Estado == clsEstadoInspeccion.CERRADA;
 
     public static clsInspeccion Crear(
@@ -51,6 +65,35 @@ public sealed class clsInspeccion : clsEntidadBase
         double? lng,
         string? estado,
         string? notas,
+        DateTimeOffset ahora) =>
+        Nueva(etapaId, viajeId, usuarioId, momento, fecha, lat, lng, estado, notas, version: 1, corrigeInspeccionId: null, ahora);
+
+    /// <summary>
+    /// Crea la version siguiente de una inspeccion CERRADA para corregirla: misma etapa, viaje y momento, en borrador y vacia (se vuelven a
+    /// tomar las fotos). Esta inspeccion no cambia. Solo se corrige la ultima version: quien llame debe comprobar que nadie la corrigio ya.
+    /// </summary>
+    public clsInspeccion Corregir(Guid usuarioId, DateTimeOffset fecha, double? lat, double? lng, string? notas, DateTimeOffset ahora)
+    {
+        if (!EstaCerrada)
+        {
+            throw new clsConflictoException("Solo se puede corregir una inspección cerrada: la que está en borrador se sigue editando");
+        }
+
+        return Nueva(EtapaId, ViajeId, usuarioId, Momento, fecha, lat, lng, null, notas, Version + 1, Id, ahora);
+    }
+
+    private static clsInspeccion Nueva(
+        Guid etapaId,
+        Guid viajeId,
+        Guid usuarioId,
+        string momento,
+        DateTimeOffset fecha,
+        double? lat,
+        double? lng,
+        string? estado,
+        string? notas,
+        int version,
+        Guid? corrigeInspeccionId,
         DateTimeOffset ahora)
     {
         clsValidador.EnCatalogo(momento, clsMomento.VALORES, "momento");
@@ -75,6 +118,10 @@ public sealed class clsInspeccion : clsEntidadBase
             Lng = lng,
             Estado = estadoFinal,
             Notas = notasLimpias,
+            IniciadaAt = ahora,
+            CerradaAt = estadoFinal == clsEstadoInspeccion.CERRADA ? ahora : null,
+            Version = version,
+            CorrigeInspeccionId = corrigeInspeccionId,
         };
         inspeccion.Inicializar(ahora);
         return inspeccion;
@@ -90,10 +137,12 @@ public sealed class clsInspeccion : clsEntidadBase
     }
 
     /// <summary>
-    /// Cierra la inspeccion como evidencia inmutable. Las fotos solo son obligatorias cuando hay una novedad
-    /// (al menos una por inspeccion con hallazgos) y toda foto presente debe estar geolocalizada.
+    /// Cierra la inspeccion como evidencia inmutable. Exige: las fotos de todas las vistas obligatorias (<paramref name="vistasFaltantes"/>,
+    /// que la aplicacion calcula segun la etapa y el tipo de vehiculo), una foto propia por cada hallazgo y que toda foto tenga ubicacion.
+    /// Las fotos adicionales (piezas en el baul y cojineria) nunca bloquean el cierre. Donde no hay vistas obligatorias (Transporte) el registro
+    /// del conductor es su propia hora y ubicacion: con <paramref name="exigeUbicacionPropia"/> la inspeccion debe traer su GPS.
     /// </summary>
-    public void Cerrar(clsResumenCierre resumen, DateTimeOffset ahora)
+    public void Cerrar(clsResumenCierre resumen, IReadOnlyList<string> vistasFaltantes, bool exigeUbicacionPropia, DateTimeOffset ahora)
     {
         if (EstaCerrada)
         {
@@ -101,14 +150,21 @@ public sealed class clsInspeccion : clsEntidadBase
         }
 
         var errores = new List<string>();
-        if (resumen.TotalHallazgos > 0 && resumen.TotalEvidencias < 1)
+        errores.AddRange(vistasFaltantes.Select(vista => $"Falta la foto de la vista «{vista}»"));
+
+        if (exigeUbicacionPropia && (Lat is null || Lng is null))
         {
-            errores.Add("Hay una novedad registrada: adjunta al menos una foto de la novedad");
+            errores.Add("El registro no tiene ubicación (GPS): regístrelo con la ubicación del dispositivo");
         }
 
-        if (resumen.EvidenciasSinGeo > 0)
+        if (resumen.HallazgosSinEvidencia > 0)
         {
-            errores.Add($"{resumen.EvidenciasSinGeo} foto(s) sin geolocalización del sello");
+            errores.Add($"{resumen.HallazgosSinEvidencia} hallazgo(s) sin foto propia: cada hallazgo exige su foto");
+        }
+
+        if (resumen.EvidenciasSinUbicacion > 0)
+        {
+            errores.Add($"{resumen.EvidenciasSinUbicacion} foto(s) sin ubicación: repítalas con GPS antes de cerrar");
         }
 
         if (errores.Count > 0)
@@ -117,6 +173,7 @@ public sealed class clsInspeccion : clsEntidadBase
         }
 
         Estado = clsEstadoInspeccion.CERRADA;
+        CerradaAt = ahora;
         Tocar(ahora);
     }
 }

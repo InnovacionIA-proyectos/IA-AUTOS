@@ -46,14 +46,15 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | POST `/api/viajes/{id}/vehiculos`, DELETE `/api/viajes/{id}/vehiculos/{vin}` | gestion de viajes | asigna o quita VIN (todo o nada; no se quita un VIN con inspecciones) |
 | DELETE `/api/viajes/{id}` | gestion de viajes | borra un viaje sin inspecciones (`409` si las tiene) |
 | POST `/api/viajes/cargar/previsualizar`, POST `/api/viajes/cargar` | gestion de viajes | carga por Excel: vista previa con el error de cada fila y confirmacion que guarda solo las filas validas |
-| POST `/api/inspecciones` | campo | crea el informe de una etapa (siempre en borrador; el usuario sale del token; placa, trailer y conductor salen del viaje; `403` si la etapa es de un viaje ajeno) |
+| POST `/api/inspecciones` | campo | crea la inspeccion de salida o de llegada de una etapa (`momento`: `salida` o `llegada`; siempre en borrador; el usuario sale del token; placa, trailer y conductor salen del viaje; `403` si la etapa es de un viaje ajeno; `409 ETAPA_PREVIA_SIN_CIERRE` si es una salida y la etapa anterior no tiene su llegada cerrada) |
+| POST `/api/inspecciones/{id}/corregir` | campo | corrige una inspeccion cerrada: crea la version siguiente (borrador, vacia) que referencia a la anterior; la anterior no cambia; `409` si no esta cerrada o ya fue corregida |
 | GET `/api/inspecciones` | autenticado | listado (maximo 200) con filtros `vin`, `usuarioId`, `viajeId`, `momento`, `estado`, `proceso`, `desde`, `hasta`; inspector y conductor solo ven los informes de sus viajes |
-| GET `/api/inspecciones/{id}` | autenticado | informe completo con firmas y nombres |
-| POST `/api/inspecciones/{id}/evidencias` | campo, creador o administrador | agrega una foto ya subida |
-| POST `/api/inspecciones/{id}/hallazgos` | campo, creador o administrador | agrega un hallazgo |
+| GET `/api/inspecciones/{id}` | autenticado | informe completo con firmas, nombres y el sello de cada foto |
+| POST `/api/inspecciones/{id}/evidencias` | campo, creador o administrador | registra una foto ya subida de una vista (`vista_id`) o de un hallazgo (`hallazgo_id`), con su sello (fecha, GPS, precision, dispositivo); el servidor agrega su sello y el hash SHA-256; las vistas adicionales exigen `nota` |
+| POST `/api/inspecciones/{id}/hallazgos` | campo, creador o administrador | agrega un hallazgo **con su foto propia** (`evidencia` obligatoria; sin ella `400`) |
 | POST `/api/inspecciones/{id}/transferencia` | campo | firma de entrega y/o recibo (parcial o completa) |
-| POST `/api/inspecciones/{id}/cerrar` | campo, creador o administrador | cierra el informe; `{ inspeccion, resumen }` |
-| POST `/api/uploads` | campo | sube una foto en base64 (JPG o PNG); `{ storage_path, url }` |
+| POST `/api/inspecciones/{id}/cerrar` | campo, creador o administrador | cierra el informe; `{ inspeccion, resumen }`. En Cargue y Descargue exige las 7 vistas obligatorias (`400` con el nombre de la que falta), una foto propia por hallazgo y ubicacion en toda foto; en Transporte exige el GPS del registro |
+| POST `/api/uploads` | campo | sube una foto en base64 (JSON) o como `multipart/form-data` (campo `archivo`); JPG o PNG; `{ storage_path, url, hash_sha256 }` |
 | GET `/api/uploads/{archivo}` | publico por defecto | sirve la imagen |
 | POST `/api/etl/sofasa/ordenes` | token del ETL | ingesta idempotente por `source_id` |
 | GET `/api/sofasa/ordenes` | autenticado | ordenes mas recientes primero (maximo 500), con `viaje_id` y `codigo_mtrack`; inspector y conductor solo ven las de sus viajes |
@@ -83,6 +84,7 @@ Siempre JSON:
 | NOT_FOUND | 404 | recurso o ruta inexistente |
 | METHOD_NOT_ALLOWED | 405 | metodo no admitido en una ruta existente |
 | CONFLICT | 409 | duplicados, inspeccion cerrada, transferencia ya firmada |
+| ETAPA_PREVIA_SIN_CIERRE | 409 | la etapa anterior del VIN no tiene su llegada cerrada: no se puede crear la salida de la siguiente |
 | RATE_LIMITED | 429 | demasiados intentos de login |
 | INTERNAL_ERROR | 500 | error inesperado (sin detalles internos) |
 | DB_UNAVAILABLE | 503 | reservado |
