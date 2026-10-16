@@ -1,3 +1,4 @@
+import '../../inspecciones/domain/hallazgo_local.dart';
 import 'job.dart';
 
 /// Persistencia de la cola. El orden de `listar` es el de inserción (FIFO).

@@ -1,4 +1,4 @@
-import '../../sync/domain/job.dart';
+import 'coords_diagrama.dart';
 
 /// Catálogo de partes del vehículo para marcar novedades sobre el diagrama de cuadrantes
 /// (assets/diagrama-novedades.png, 704x1536).
