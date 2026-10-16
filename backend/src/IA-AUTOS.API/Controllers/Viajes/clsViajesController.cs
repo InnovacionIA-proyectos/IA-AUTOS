@@ -1,6 +1,8 @@
 using IAAutos.API.Configuracion;
 using IAAutos.API.Controllers.Comun;
 using IAAutos.API.Seguridad;
+using IAAutos.Aplicacion.Inspecciones;
+using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Viajes;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Usuarios;
@@ -13,7 +15,7 @@ namespace IAAutos.API.Controllers.Viajes;
 /// solo ven los viajes en los que participan.
 /// </summary>
 [Route("api/viajes")]
-public sealed class clsViajesController(clsViajesService servicio, clsCargaViajesService carga) : clsControladorBase
+public sealed class clsViajesController(clsViajesService servicio, clsCargaViajesService carga, clsTransferenciasService transferencias) : clsControladorBase
 {
     /// <summary>Crea un viaje con su unidad, placa, trailer, conductor, codigo MTrack y, opcionalmente, sus VIN (se crean sus etapas). 409 si el codigo MTrack ya existe.</summary>
     [HttpPost]
@@ -44,6 +46,11 @@ public sealed class clsViajesController(clsViajesService servicio, clsCargaViaje
     [ProducesResponseType<IReadOnlyList<ViajeDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Mios([FromQuery] string? estado, CancellationToken ct) =>
         Ok(await servicio.MiosAsync(estado, ct));
+
+    /// <summary>Los usuarios del viaje que pueden firmar una transferencia (su conductor y su inspector activos): solo ellos aparecen al elegir los firmantes.</summary>
+    [HttpGet("{id:guid}/firmantes")]
+    [ProducesResponseType<IReadOnlyList<FirmanteDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Firmantes(Guid id, CancellationToken ct) => Ok(await transferencias.FirmantesDelViajeAsync(id, ct));
 
     [HttpGet("{id:guid}")]
     [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]

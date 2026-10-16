@@ -46,10 +46,10 @@ para el cierre (las anteriores quedan guardadas, son evidencia). Mientras la úl
 
 `POST /api/inspecciones/{id}/hallazgos` recibe el hallazgo **y** su foto (`evidencia`) y los guarda juntos: sin foto, `400` y no se guarda nada. Al cerrar, un hallazgo histórico sin foto también bloquea.
 
-## La etapa anterior debe estar cerrada
+## La etapa anterior debe estar terminada
 
-Para crear la **salida** de una etapa, la etapa anterior del mismo VIN en el viaje (la de mayor `orden` menor) debe tener su **llegada cerrada**. Si no, `409` con `code: "ETAPA_PREVIA_SIN_CIERRE"`
-y `details`: `motivo` (`etapa_previa_sin_cierre`), `etapa_previa_id` y `etapa_previa` (el nombre de la etapa que falta cerrar), para que la app muestre el bloqueo. La primera etapa y la llegada
+Para crear la **salida** de una etapa, la etapa anterior del mismo VIN en el viaje (la de mayor `orden` menor) debe tener su **llegada cerrada** y ninguna **transferencia sin tipo de cierre**. Si no, `409` con `code: "ETAPA_PREVIA_SIN_CIERRE"`
+y `details`: `motivo` (`etapa_previa_sin_cierre` si falta cerrar la llegada, `transferencia_sin_cierre` si falta cerrar la transferencia, ver [transferencias.md](transferencias.md)), `etapa_previa_id` y `etapa_previa` (el nombre de la etapa que falta terminar), para que la app muestre el bloqueo. La primera etapa y la llegada
 no tienen este bloqueo.
 
 ## Corrección sin modificar lo cerrado
@@ -66,7 +66,7 @@ El `momento` viaja como `salida` o `llegada`; para mostrar, use `momento_nombre`
 
 - **Qué es «movilizado».** La vista `vwViajesCompletos` sigue contando una etapa como completa cuando tiene **alguna inspección cerrada** (de salida o de llegada, de cualquier versión).
   No exige todavía la llegada; los reportes y listados no cambian.
-- **Tipo de cierre de la transferencia.** La regla de la etapa anterior comprueba la llegada cerrada; el tipo de cierre de la transferencia no existe aún en el modelo, así que no se comprueba.
+- **Tipo de cierre de la transferencia.** Lo comprueba la regla de la etapa anterior; su modelo y sus endpoints están en [transferencias.md](transferencias.md).
 - **Fotos de la app.** Capturar el GPS y la hora, pedir repetir la foto sin ubicación y mostrar el bloqueo son de la app móvil y de la web; aquí está la regla y el dato.
 
 ## Aplicar el cambio en una base existente

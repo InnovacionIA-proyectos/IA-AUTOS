@@ -85,17 +85,6 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio) :
         return Creado(await servicio.AgregarHallazgoAsync(id, solicitud, ct));
     }
 
-    /// <summary>Firma de entrega y recibo (parcial o completa). Se acumulan las firmas hasta completar ambas.</summary>
-    [HttpPost("{id:guid}/transferencia")]
-    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
-    [ProducesResponseType<TransferenciaDto>(StatusCodes.Status201Created)]
-    [CuerpoSolicitud(typeof(IAAutos.Aplicacion.Inspecciones.DTOInspecciones.FirmarTransferenciaRequest))]
-    public async Task<IActionResult> FirmarTransferencia(Guid id, CancellationToken ct)
-    {
-        var solicitud = await LeerCuerpoAsync<FirmarTransferenciaRequest>(ct);
-        return Creado(await servicio.FirmarTransferenciaAsync(id, solicitud, ct));
-    }
-
     /// <summary>
     /// Cierra la inspeccion como evidencia inmutable (409 si ya estaba cerrada). En Cargue y Descargue exige la foto de cada vista obligatoria
     /// (400 con el nombre de la que falta), una foto propia por hallazgo y que toda foto tenga ubicacion.

@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using FluentValidation;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
+using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
 
 namespace IAAutos.Aplicacion.Inspecciones.Validators;
@@ -106,9 +107,9 @@ public sealed class CrearEvidenciaRequestValidator : AbstractValidator<CrearEvid
     }
 }
 
-public sealed class FotoHallazgoRequestValidator : AbstractValidator<FotoHallazgoRequest>
+public sealed class FotoEvidenciaRequestValidator : AbstractValidator<FotoEvidenciaRequest>
 {
-    public FotoHallazgoRequestValidator() =>
+    public FotoEvidenciaRequestValidator() =>
         clsReglasFoto.Aplicar(this, x => x.StoragePath, x => x.SelloFecha, x => x.SelloLat, x => x.SelloLng, x => x.Precision, x => x.DispositivoId, x => x.Nota, x => x.HashSha256);
 }
 
@@ -126,24 +127,70 @@ public sealed class CrearHallazgoRequestValidator : AbstractValidator<CrearHalla
             .WithMessage("Las coordenadas del diagrama deben estar entre 0 y 1");
         // Un hallazgo sin foto propia no se guarda.
         RuleFor(x => x.Evidencia).NotNull().WithMessage("Un hallazgo exige su foto: envíe la evidencia junto con el hallazgo");
-        RuleFor(x => x.Evidencia!).SetValidator(new FotoHallazgoRequestValidator()).When(x => x.Evidencia is not null);
+        RuleFor(x => x.Evidencia!).SetValidator(new FotoEvidenciaRequestValidator()).When(x => x.Evidencia is not null);
     }
 }
 
-public sealed class FirmarTransferenciaRequestValidator : AbstractValidator<FirmarTransferenciaRequest>
+/// <summary>Reglas de forma comunes a las solicitudes de la transferencia: los dos ids (opcionales aqui; el servicio los exige al crearla) y la firma.</summary>
+internal static class clsReglasTransferencia
 {
     /// <summary>Limite de una firma dibujada (trazo SVG o ruta de imagen): 200 KB de texto.</summary>
     public const int FIRMA_MAX = 200_000;
 
+    public static void Ids<T>(AbstractValidator<T> validador, Func<T, Guid?> entrega, Func<T, Guid?> recibe)
+    {
+        validador.RuleFor(x => entrega(x)).Must(clsReglasComunes.UuidValido).When(x => entrega(x) is not null)
+            .WithMessage(clsReglasComunes.MENSAJE_UUID).OverridePropertyName("EntregaUsuarioId");
+        validador.RuleFor(x => recibe(x)).Must(clsReglasComunes.UuidValido).When(x => recibe(x) is not null)
+            .WithMessage(clsReglasComunes.MENSAJE_UUID).OverridePropertyName("RecibeUsuarioId");
+        validador.RuleFor(x => recibe(x))
+            .Must((x, r) => r != entrega(x))
+            .When(x => clsReglasComunes.UuidValido(entrega(x)) && clsReglasComunes.UuidValido(recibe(x)))
+            .WithMessage("Quien entrega y quien recibe deben ser usuarios distintos").OverridePropertyName("RecibeUsuarioId");
+    }
+
+    public static void Firma<T>(AbstractValidator<T> validador, Func<T, string?> firma) =>
+        validador.RuleFor(x => firma(x))
+            .Must(f => !string.IsNullOrEmpty(f)).WithMessage("La firma es obligatoria")
+            .Must(f => f is null || f.Length <= FIRMA_MAX).WithMessage("La firma excede el tamaño máximo permitido")
+            .OverridePropertyName("Firma");
+}
+
+public sealed class FirmarTransferenciaRequestValidator : AbstractValidator<FirmarTransferenciaRequest>
+{
     public FirmarTransferenciaRequestValidator()
     {
-        RuleFor(x => x.EntregaUsuarioId).Must(clsReglasComunes.UuidValido).WithMessage(clsReglasComunes.MENSAJE_UUID);
-        RuleFor(x => x.RecibeUsuarioId).Must(clsReglasComunes.UuidValido).WithMessage(clsReglasComunes.MENSAJE_UUID);
-        RuleFor(x => x.RecibeUsuarioId)
-            .Must((x, recibe) => recibe != x.EntregaUsuarioId)
-            .When(x => clsReglasComunes.UuidValido(x.EntregaUsuarioId) && clsReglasComunes.UuidValido(x.RecibeUsuarioId))
-            .WithMessage("Quien entrega y quien recibe deben ser usuarios distintos");
-        RuleFor(x => x.FirmaEntrega).Must(f => f is null || f.Length <= FIRMA_MAX).WithMessage("La firma excede el tamaño máximo permitido");
-        RuleFor(x => x.FirmaRecibe).Must(f => f is null || f.Length <= FIRMA_MAX).WithMessage("La firma excede el tamaño máximo permitido");
+        clsReglasTransferencia.Ids(this, x => x.EntregaUsuarioId, x => x.RecibeUsuarioId);
+        clsReglasTransferencia.Firma(this, x => x.Firma);
+    }
+}
+
+public sealed class RecibirConReservasRequestValidator : AbstractValidator<RecibirConReservasRequest>
+{
+    public RecibirConReservasRequestValidator()
+    {
+        clsReglasTransferencia.Ids(this, x => x.EntregaUsuarioId, x => x.RecibeUsuarioId);
+        clsReglasTransferencia.Firma(this, x => x.Firma);
+        // Recibir con reservas sin escribir las observaciones no se permite.
+        RuleFor(x => x.Reservas).Must(r => !string.IsNullOrWhiteSpace(r))
+            .WithMessage("Escriba las observaciones: no se puede recibir con reservas sin ellas")
+            .Must(r => r is null || r.Trim().Length <= clsTransferenciaCustodia.RESERVAS_MAX)
+            .WithMessage($"Las observaciones admiten máximo {clsTransferenciaCustodia.RESERVAS_MAX} caracteres");
+    }
+}
+
+public sealed class RegistrarNoFirmaRequestValidator : AbstractValidator<RegistrarNoFirmaRequest>
+{
+    public RegistrarNoFirmaRequestValidator()
+    {
+        clsReglasTransferencia.Ids(this, x => x.EntregaUsuarioId, x => x.RecibeUsuarioId);
+        RuleFor(x => x.Parte).Must(p => p is not null && clsParteFirmante.VALORES.Contains(p))
+            .WithMessage("Indique quien no firmó: entrega o recibe");
+        RuleFor(x => x.Motivo).Must(m => !string.IsNullOrWhiteSpace(m)).WithMessage("El motivo de la no firma es obligatorio")
+            .Must(m => m is null || m.Trim().Length <= clsTransferenciaCustodia.MOTIVO_MAX)
+            .WithMessage($"El motivo admite máximo {clsTransferenciaCustodia.MOTIVO_MAX} caracteres");
+        RuleFor(x => x.TestigoUsuarioId).Must(clsReglasComunes.UuidValido).WithMessage("La constancia exige un testigo con usuario");
+        RuleFor(x => x.Evidencia).NotNull().WithMessage("La constancia exige una foto");
+        RuleFor(x => x.Evidencia!).SetValidator(new FotoEvidenciaRequestValidator()).When(x => x.Evidencia is not null);
     }
 }

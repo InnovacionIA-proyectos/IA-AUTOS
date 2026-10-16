@@ -300,6 +300,52 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Las_transferencias_con_tipo_de_cierre_y_la_foto_de_constancia_estan_migradas()
+    {
+        // Sin esta migracion la API nueva falla al leer y firmar transferencias (columnas nuevas): este chequeo (solo lectura) avisa antes de
+        // desplegar si falta ejecutar database/cambios-esquema/08-transferencias-custodia.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/08-transferencias-custodia.sql.";
+
+        async Task<int> Columnas(string tabla, string columna) => await EscalarAsync<int>(
+            conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(@t, N'U') AND name = @c", ("@t", tabla), ("@c", columna));
+
+        foreach (var columna in new[]
+        {
+            "FirmaEntregaAt", "FirmaEntregaIp", "FirmaRecibeAt", "FirmaRecibeIp", "TipoCierre", "ReservasTexto", "NoFirmaParte", "MotivoNoFirma",
+            "TestigoUsuarioId", "EvidenciaConstanciaId",
+        })
+        {
+            Assert.True(await Columnas("tblTransferenciasCustodia", columna) == 1, $"Falta tblTransferenciasCustodia.{columna}. {ayuda}");
+        }
+
+        Assert.True(await Columnas("tblEvidencias", "EsConstancia") == 1, $"Falta tblEvidencias.EsConstancia. {ayuda}");
+
+        var restricciones = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.objects
+             WHERE name IN (N'FK_tblTransferencias_Testigo', N'FK_tblTransferencias_Constancia', N'CK_tblTransferencias_TipoCierre',
+                            N'CK_tblTransferencias_Parte', N'CK_tblTransferencias_Testigo', N'CK_tblTransferencias_Cierre')
+            """);
+        var disparadorAdmiteConstancia = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.triggers t JOIN sys.sql_modules m ON m.object_id = t.object_id
+             WHERE t.name = N'TR_tblEvidencias_NoEnCerrada' AND t.is_disabled = 0 AND m.definition LIKE N'%EsConstancia%'
+            """);
+        var completasSinCierre = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM tblTransferenciasCustodia
+             WHERE TipoCierre IS NULL AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> N'' AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> N''
+            """);
+        var firmasSinFecha = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM tblTransferenciasCustodia
+             WHERE (FirmaEntrega IS NOT NULL AND FirmaEntrega <> N'' AND FirmaEntregaAt IS NULL) OR (FirmaRecibe IS NOT NULL AND FirmaRecibe <> N'' AND FirmaRecibeAt IS NULL)
+            """);
+
+        Assert.True(restricciones == 6, $"Faltan llaves foraneas o restricciones de las transferencias. {ayuda}");
+        Assert.True(disparadorAdmiteConstancia == 1, $"El trigger de evidencias no admite la foto de una constancia en una inspeccion cerrada. {ayuda}");
+        Assert.Equal(0, completasSinCierre);
+        Assert.Equal(0, firmasSinFecha);
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

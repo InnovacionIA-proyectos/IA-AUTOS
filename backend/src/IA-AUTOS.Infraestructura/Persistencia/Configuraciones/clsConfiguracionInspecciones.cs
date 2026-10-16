@@ -99,6 +99,7 @@ internal sealed class clsConfiguracionEvidencia : IEntityTypeConfiguration<clsEv
         builder.HasOne<clsVistaFoto>().WithMany().HasForeignKey(e => e.VistaId)
             .HasConstraintName("FK_tblEvidencias_Vista").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(e => e.VistaId).HasDatabaseName("IX_tblEvidencias_Vista");
+        builder.Property(e => e.EsConstancia).HasDefaultValue(false);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(e => e.InspeccionId)
             .HasConstraintName("FK_tblEvidencias_Inspeccion").OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(e => e.HallazgoId)
@@ -113,6 +114,19 @@ internal sealed class clsConfiguracionTransferencia : IEntityTypeConfiguration<c
         builder.ToTable("tblTransferenciasCustodia");
         clsConfiguracionBase.Base(builder);
         builder.Property(t => t.FirmadaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(t => t.FirmaEntregaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(t => t.FirmaRecibeAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(t => t.FirmaEntregaIp).HasColumnType("varchar(45)");
+        builder.Property(t => t.FirmaRecibeIp).HasColumnType("varchar(45)");
+        builder.Property(t => t.TipoCierre).HasColumnType("varchar(20)");
+        builder.Property(t => t.NoFirmaParte).HasColumnType("varchar(10)");
+        builder.Property(t => t.ReservasTexto).HasMaxLength(clsTransferenciaCustodia.RESERVAS_MAX);
+        builder.Property(t => t.MotivoNoFirma).HasMaxLength(clsTransferenciaCustodia.MOTIVO_MAX);
+        // El testigo y la foto de la constancia: ningun borrado en cascada (la inspeccion arrastra la transferencia y la foto a la vez).
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.TestigoUsuarioId)
+            .HasConstraintName("FK_tblTransferencias_Testigo").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsEvidencia>().WithMany().HasForeignKey(t => t.EvidenciaConstanciaId)
+            .HasConstraintName("FK_tblTransferencias_Constancia").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(t => t.InspeccionId)
             .HasConstraintName("FK_tblTransferencias_Inspeccion").OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.EntregaUsuarioId)

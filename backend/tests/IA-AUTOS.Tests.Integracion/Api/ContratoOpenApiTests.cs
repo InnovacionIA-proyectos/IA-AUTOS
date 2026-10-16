@@ -78,6 +78,8 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
             ["/api/inspecciones/{id}/evidencias|post"] = "CrearEvidenciaRequest",
             ["/api/inspecciones/{id}/hallazgos|post"] = "CrearHallazgoRequest",
             ["/api/inspecciones/{id}/transferencia|post"] = "FirmarTransferenciaRequest",
+            ["/api/inspecciones/{id}/transferencia/reservas|post"] = "RecibirConReservasRequest",
+            ["/api/inspecciones/{id}/transferencia/no-firma|post"] = "RegistrarNoFirmaRequest",
             ["/api/uploads|post"] = "SubirArchivoRequest",
             ["/api/etl/sofasa/ordenes|post"] = "IngestarOrdenesRequest",
         };

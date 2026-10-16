@@ -1,12 +1,9 @@
-using System.Security.Cryptography;
 using FluentValidation;
-using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Catalogos;
-using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
@@ -33,9 +30,8 @@ public sealed class clsInspeccionesService(
     IEtapaRepository etapas,
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
-    IAlmacenArchivos almacen,
+    clsFabricaEvidencias fabricaEvidencias,
     IUsuarioRepository usuarios,
-    ITransferenciaCustodiaRepository transferencias,
     IConsultasInspecciones consultas,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
@@ -46,8 +42,7 @@ public sealed class clsInspeccionesService(
     IValidator<CrearInspeccionRequest> validadorInspeccion,
     IValidator<CorregirInspeccionRequest> validadorCorreccion,
     IValidator<CrearHallazgoRequest> validadorHallazgo,
-    IValidator<CrearEvidenciaRequest> validadorEvidencia,
-    IValidator<FirmarTransferenciaRequest> validadorTransferencia)
+    IValidator<CrearEvidenciaRequest> validadorEvidencia)
 {
     public const int LIMITE_LISTADO = 200;
 
@@ -170,8 +165,8 @@ public sealed class clsInspeccionesService(
             solicitud.TamanoDano!,
             solicitud.CoordsDiagrama is null ? null : new clsCoordsDiagrama(solicitud.CoordsDiagrama.X, solicitud.CoordsDiagrama.Y),
             reloj.Ahora);
-        var evidencia = await CrearEvidenciaAsync(
-            inspeccionId, hallazgo.Id, null, foto.StoragePath!, foto.SelloFecha!.Value, foto.SelloLat, foto.SelloLng, foto.Precision,
+        var evidencia = await fabricaEvidencias.CrearAsync(
+            inspeccionId, hallazgo.Id, null, esConstancia: false, foto.StoragePath!, foto.SelloFecha!.Value, foto.SelloLat, foto.SelloLng, foto.Precision,
             foto.DispositivoId, foto.Nota, foto.HashSha256, ct);
         inspecciones.Agregar(hallazgo);
         inspecciones.Agregar(evidencia);
@@ -204,46 +199,13 @@ public sealed class clsInspeccionesService(
             await ValidarVistaAsync(vistaId, solicitud.Nota, ct);
         }
 
-        var evidencia = await CrearEvidenciaAsync(
-            inspeccionId, solicitud.HallazgoId, solicitud.VistaId, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat,
+        var evidencia = await fabricaEvidencias.CrearAsync(
+            inspeccionId, solicitud.HallazgoId, solicitud.VistaId, esConstancia: false, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat,
             solicitud.SelloLng, solicitud.Precision, solicitud.DispositivoId, solicitud.Nota, solicitud.HashSha256, ct);
         inspecciones.Agregar(evidencia);
         auditor.Registrar("evidencia.crear", "evidencias", evidencia.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.AEvidencia(evidencia);
-    }
-
-    /// <summary>
-    /// Registra la transferencia de custodia. Admite firma parcial (entrega o recibe por separado, incluso desde dispositivos
-    /// distintos): si ya existe, acumula las firmas y sella la fecha solo cuando estan ambas. Se puede firmar tambien despues
-    /// de cerrar la inspeccion (firma sobre el ultimo informe); una vez firmada por ambas partes es inmutable.
-    /// </summary>
-    public async Task<TransferenciaDto> FirmarTransferenciaAsync(Guid inspeccionId, FirmarTransferenciaRequest solicitud, CancellationToken ct = default)
-    {
-        await validadorTransferencia.ValidarOLanzarAsync(solicitud, ct);
-        _ = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct)
-            ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
-
-        var existente = await transferencias.ObtenerPorInspeccionAsync(inspeccionId, ct);
-        clsTransferenciaCustodia transferencia;
-        if (existente is null)
-        {
-            transferencia = clsTransferenciaCustodia.Crear(
-                inspeccionId, solicitud.EntregaUsuarioId!.Value, solicitud.RecibeUsuarioId!.Value, solicitud.FirmaEntrega, solicitud.FirmaRecibe, reloj.Ahora);
-            transferencias.Agregar(transferencia);
-        }
-        else
-        {
-            transferencia = existente;
-            transferencia.AplicarFirma(
-                solicitud.EntregaUsuarioId!.Value, solicitud.RecibeUsuarioId!.Value, solicitud.FirmaEntrega, solicitud.FirmaRecibe, reloj.Ahora);
-        }
-
-        auditor.Registrar("transferencia.firmar", "transferencias_custodia", transferencia.Id);
-
-        // Un usuario inexistente se traduce a 404 al confirmar.
-        await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        return clsMapeadorInspecciones.ATransferencia(transferencia);
     }
 
     /// <summary>
@@ -269,19 +231,27 @@ public sealed class clsInspeccionesService(
     }
 
     /// <summary>
-    /// La salida de una etapa exige que la etapa anterior del mismo VIN en el viaje tenga cerrada su inspeccion de llegada (409
-    /// ETAPA_PREVIA_SIN_CIERRE con la etapa que falta cerrar). La primera etapa no tiene anterior.
+    /// La salida de una etapa exige que la etapa anterior del mismo VIN en el viaje este terminada: su inspeccion de llegada cerrada y ninguna
+    /// transferencia suya sin tipo de cierre (409 ETAPA_PREVIA_SIN_CIERRE con la etapa que falta cerrar y el motivo). La primera etapa no tiene anterior.
     /// </summary>
     private async Task AsegurarEtapaPreviaCerradaAsync(clsEtapa etapa, CancellationToken ct)
     {
         var previa = await etapas.ObtenerPreviaAsync(etapa.ViajeId, etapa.VehiculoId, etapa.Orden, ct);
-        if (previa is null || await inspecciones.TieneLlegadaCerradaAsync(previa.Id, ct))
+        if (previa is null)
+        {
+            return;
+        }
+
+        var motivo = !await inspecciones.TieneLlegadaCerradaAsync(previa.Id, ct)
+            ? clsEtapaPreviaSinCierreException.MOTIVO_SIN_LLEGADA
+            : await inspecciones.TieneTransferenciaSinCierreAsync(previa.Id, ct) ? clsEtapaPreviaSinCierreException.MOTIVO_TRANSFERENCIA_ABIERTA : null;
+        if (motivo is null)
         {
             return;
         }
 
         var nombre = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == previa.EtapaCatalogoId);
-        throw new clsEtapaPreviaSinCierreException(previa.Id, nombre?["nombre"] as string ?? nombre?.Codigo ?? "anterior");
+        throw new clsEtapaPreviaSinCierreException(previa.Id, nombre?["nombre"] as string ?? nombre?.Codigo ?? "anterior", motivo);
     }
 
     /// <summary>Nombres de las vistas obligatorias (activas, del tipo del vehiculo o de cualquier tipo) que aun no tienen foto, en el orden del catalogo.</summary>
@@ -312,35 +282,6 @@ public sealed class clsInspeccionesService(
         {
             throw clsErroresCampos.De("nota", "La foto de una vista adicional exige una nota con el faltante o daño");
         }
-    }
-
-    /// <summary>
-    /// Arma la evidencia con el sello del servidor y el hash SHA-256 del archivo tal como quedo guardado. El archivo debe haberse subido
-    /// antes (POST /api/uploads); si el cliente envia su hash, debe coincidir con el del archivo recibido.
-    /// </summary>
-    private async Task<clsEvidencia> CrearEvidenciaAsync(
-        Guid inspeccionId,
-        Guid? hallazgoId,
-        Guid? vistaId,
-        string storagePath,
-        DateTimeOffset selloFecha,
-        double? lat,
-        double? lng,
-        double? precision,
-        string? dispositivoId,
-        string? nota,
-        string? hashCliente,
-        CancellationToken ct)
-    {
-        var contenido = await almacen.LeerAsync(storagePath.Trim(), ct)
-            ?? throw clsErroresCampos.De("storage_path", "El archivo no se ha subido: suba la foto con POST /api/uploads antes de registrarla");
-        var hash = Convert.ToHexString(SHA256.HashData(contenido)).ToLowerInvariant();
-        if (clsValidador.Opcional(hashCliente) is { } declarado && !string.Equals(declarado, hash, StringComparison.OrdinalIgnoreCase))
-        {
-            throw clsErroresCampos.De("hash_sha256", "El hash no coincide con el del archivo recibido: vuelva a subir la foto");
-        }
-
-        return clsEvidencia.Crear(inspeccionId, hallazgoId, vistaId, storagePath, selloFecha, lat, lng, precision, dispositivoId, hash, nota, reloj.Ahora);
     }
 
     /// <summary>Obtiene la inspeccion (404 si no existe) y verifica que el usuario pueda modificarla.</summary>

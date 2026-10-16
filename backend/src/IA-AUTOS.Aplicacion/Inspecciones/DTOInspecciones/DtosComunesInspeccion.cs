@@ -72,9 +72,13 @@ public sealed record EvidenciaDto(
     double? Precision,
     string? DispositivoId,
     string? Nota,
-    bool SinUbicacion);
+    bool SinUbicacion,
+    bool EsConstancia);
 
-/// <summary>Las firmas dibujadas no se exponen en los listados: solo el indicador de transferencia firmada.</summary>
+/// <summary>
+/// Las firmas dibujadas no se exponen en los listados. <c>Firmada</c> es true cuando estan las dos firmas (tambien si fue con reservas);
+/// <c>TipoCierre</c> dice como se cerro (<c>firmada</c>, <c>con_reservas</c> o <c>no_firma</c>) y es nulo mientras la transferencia esta abierta.
+/// </summary>
 public sealed record TransferenciaDto(
     Guid Id,
     Guid InspeccionId,
@@ -83,4 +87,12 @@ public sealed record TransferenciaDto(
     bool Firmada,
     DateTimeOffset? FirmadaAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? TipoCierre,
+    DateTimeOffset? EntregaFirmadaAt,
+    DateTimeOffset? RecibeFirmadaAt,
+    string? ReservasTexto,
+    string? NoFirmaParte,
+    string? MotivoNoFirma,
+    Guid? TestigoUsuarioId,
+    Guid? EvidenciaConstanciaId);

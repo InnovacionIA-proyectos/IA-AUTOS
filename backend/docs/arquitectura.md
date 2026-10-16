@@ -29,13 +29,13 @@ Clases con prefijo `cls`, variables en camelCase, constantes en MAYUSCULAS_SOSTE
 ## Reglas de negocio en el dominio
 
 - Una inspeccion cerrada es inmutable: no admite hallazgos ni evidencias. El cierre exige al menos una foto si hay hallazgos y que toda foto este geolocalizada. Cerrarla dos veces responde 409.
-- La transferencia de custodia admite firma parcial acumulada; la fecha de firma se sella solo cuando estan ambas. Se puede firmar despues del cierre. Una vez firmada por las dos partes es inmutable (repetir exactamente los mismos datos es idempotente).
+- La transferencia de custodia la firma cada parte por su cuenta: la identidad sale del token y nadie firma por otro; cada firma guarda su fecha e IP, y los firmantes son del viaje. Se cierra como firmada, con reservas o con constancia de no firma (motivo, testigo y foto); cerrada es inmutable (repetir exactamente la misma firma es idempotente) y, sin tipo de cierre, bloquea la salida de la etapa siguiente. Se puede firmar despues del cierre de la inspeccion. Detalle en [transferencias.md](transferencias.md).
 - El viaje es el eje: cada etapa e inspeccion cuelga de un viaje, y la inspeccion toma de el la placa, el trailer y el conductor. Inspectores y conductores solo ven (y abren) los VIN, viajes e informes de los viajes en los que participan; el resto de roles ve todo. Un VIN no puede estar en dos viajes activos a la vez.
 - Un vehiculo esta movilizado cuando completa su ruta en un viaje: todas sus etapas de ese viaje (y al menos una) tienen un informe cerrado. La definicion vive en la vista `vwViajesCompletos` (una fila por VIN y viaje) y la usan los listados y todos los reportes.
 - La tasa de rechazo es el porcentaje de unidades movilizadas con al menos un hallazgo, por operacion, frente a la linea base del PRD (importacion 8,81; exportacion 8,34; nacional 1,95).
 - La carga masiva de VIN y la ingesta de Sofasa son idempotentes: re-procesar no duplica vehiculos, y un error en una fila no detiene el lote. Las etapas no se crean ahi: nacen al agregar el VIN a un viaje. La ingesta vincula cada orden al viaje del VIN (y del codigo MTrack, si lo trae).
 - Baja de usuario: se elimina si no tiene historial; si lo tiene, se marca como retirado.
-- Inspecciones: por etapa hay una inspeccion de salida y una de llegada, y cada foto lleva su sello (el del dispositivo y el del servidor) y su hash. Detalle en [inspecciones.md](inspecciones.md).
+- Inspecciones: por etapa hay una inspeccion de salida y una de llegada, y cada foto lleva su sello (el del dispositivo y el del servidor) y su hash. Detalle en [inspecciones.md](inspecciones.md) y, para la transferencia de custodia, en [transferencias.md](transferencias.md).
 - Identidad: un usuario entra con correo y contrasena o con cedula y PIN (conductor e inspector, el correo es opcional). Cada usuario y cada vehiculo pertenecen a un cliente (catalogo `clientes`); el super administrador no tiene cliente. Detalle en [identidad.md](identidad.md).
 
 ## Base de datos

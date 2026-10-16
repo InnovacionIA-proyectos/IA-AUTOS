@@ -30,8 +30,9 @@ public static class clsMapeadorInspecciones
     public static EvidenciaDto AEvidencia(clsEvidencia e) => new(
         e.Id, e.InspeccionId, e.HallazgoId, e.SelloFecha, e.SelloLat, e.SelloLng,
         clsUrlsArchivos.ParaStoragePath(e.StoragePath), e.CreatedAt, e.UpdatedAt,
-        e.VistaId, e.HashSha256, e.SelloServidorAt, e.Precision, e.DispositivoId, e.Nota, e.SinUbicacion);
+        e.VistaId, e.HashSha256, e.SelloServidorAt, e.Precision, e.DispositivoId, e.Nota, e.SinUbicacion, e.EsConstancia);
 
     public static TransferenciaDto ATransferencia(clsTransferenciaCustodia t) => new(
-        t.Id, t.InspeccionId, t.EntregaUsuarioId, t.RecibeUsuarioId, t.EstaCompleta, t.FirmadaAt, t.CreatedAt, t.UpdatedAt);
+        t.Id, t.InspeccionId, t.EntregaUsuarioId, t.RecibeUsuarioId, t.EstaCompleta, t.FirmadaAt, t.CreatedAt, t.UpdatedAt,
+        t.TipoCierre, t.FirmaEntregaAt, t.FirmaRecibeAt, t.ReservasTexto, t.NoFirmaParte, t.MotivoNoFirma, t.TestigoUsuarioId, t.EvidenciaConstanciaId);
 }

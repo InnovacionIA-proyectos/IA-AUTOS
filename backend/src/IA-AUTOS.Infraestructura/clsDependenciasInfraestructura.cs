@@ -65,6 +65,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IConsultasInspecciones, clsConsultasInspecciones>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();
         servicios.AddSingleton<IGeneradorPdfInventario, clsGeneradorPdfInventario>();
+        servicios.AddSingleton<IGeneradorPdfConstancia, clsGeneradorPdfConstancia>();
 
         servicios.Configure<clsOpcionesAlmacenamiento>(configuracion.GetSection(clsOpcionesAlmacenamiento.SECCION));
         servicios.Configure<clsOpcionesS3>(configuracion.GetSection(clsOpcionesS3.SECCION));

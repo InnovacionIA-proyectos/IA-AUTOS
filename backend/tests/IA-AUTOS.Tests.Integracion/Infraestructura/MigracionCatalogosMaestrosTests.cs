@@ -4,8 +4,8 @@ using Testcontainers.MsSql;
 namespace IAAutos.Tests.Integracion.Infraestructura;
 
 /// <summary>
-/// Ejecuta el script real de migracion (database/cambios-esquema/02-catalogos-maestros.sql, PR #128 / issue #82 - QA) contra un
-/// SQL Server 2019 con el esquema y los datos PREVIOS a esta PR (el que ya esta desplegado), para confirmar que la migracion no
+/// Ejecuta el script real de migracion (database/cambios-esquema/02-catalogos-maestros.sql) contra un
+/// SQL Server 2019 con el esquema y los datos PREVIOS a la migracion (el que ya esta desplegado), para confirmar que la migracion no
 /// pierde ni corrompe datos existentes. Los demas tests de integracion usan ddl.sql ya migrado (base nueva, sin datos previos) y
 /// nunca ejercitan el script de migracion en si mismo contra datos reales.
 /// </summary>
@@ -43,8 +43,8 @@ public sealed class MigracionCatalogosMaestrosTests : IAsyncLifetime
         return resultado is null or DBNull ? default : (T)Convert.ChangeType(resultado, typeof(T));
     }
 
-    /// <summary>El esquema de dbo.tblVehiculos, dbo.tblPuntosCustodia y dbo.tblEtapas tal como estaban ANTES de esta PR (ddl.sql en QA
-    /// antes de mergear S5-HU-21), con una ruta de 3 etapas real (cargue, transporte, descargue) ya creada.</summary>
+    /// <summary>El esquema de dbo.tblVehiculos, dbo.tblPuntosCustodia y dbo.tblEtapas tal como estaban ANTES de la migracion (el ddl.sql
+    /// desplegado en QA), con una ruta de 3 etapas real (cargue, transporte, descargue) ya creada.</summary>
     private const string ESQUEMA_PREVIO = """
         CREATE TABLE dbo.tblVehiculos
         (
