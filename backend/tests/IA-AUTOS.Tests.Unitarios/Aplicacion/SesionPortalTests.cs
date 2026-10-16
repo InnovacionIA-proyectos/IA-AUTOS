@@ -36,6 +36,7 @@ public sealed class SesionPortalTests
         _usuarios,
         _refrescos,
         _portal,
+        new clsCatalogosLecturaFalso(),
         _contrasenas,
         new clsEmisorTokenFalso(),
         _uow,

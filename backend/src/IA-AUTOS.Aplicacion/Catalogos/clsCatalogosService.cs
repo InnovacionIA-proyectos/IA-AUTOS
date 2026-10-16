@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Dominio.Comun;
+using IAAutos.Dominio.Vehiculos;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 
@@ -59,11 +60,21 @@ public sealed class clsCatalogosService(
         return items.Where(i => !soloActivos || i.Activo).Select(i => i.Codigo).OfType<string>().ToHashSet(StringComparer.Ordinal);
     }
 
-    public async Task<IReadOnlyList<Guid>> EtapasDeLaRutaAsync(CancellationToken ct = default) =>
-        (await ObtenerAsync(clsNombresCatalogo.ETAPAS, ct)).Items.Where(i => i.Activo).Select(i => i.Id).ToList();
+    public async Task<IReadOnlyList<clsEtapaDeRuta>> RutaEstandarAsync(CancellationToken ct = default) =>
+        (await ObtenerAsync(clsNombresCatalogo.ETAPAS, ct)).Items.Where(i => i.Activo).Select(i => new clsEtapaDeRuta(i.Id, i.Codigo ?? string.Empty)).ToList();
+
+    public async Task<IReadOnlyList<ValorCatalogo>> ValoresAsync(string catalogo, CancellationToken ct = default) =>
+        (await ObtenerAsync(catalogo, ct)).Items;
 
     public async Task<bool> ExisteActivoAsync(string catalogo, Guid id, CancellationToken ct = default) =>
         (await ObtenerAsync(catalogo, ct)).Items.Any(i => i.Id == id && i.Activo);
+
+    public async Task<Guid> ClienteAsync(string? codigoPreferido, CancellationToken ct = default)
+    {
+        var activos = (await ObtenerAsync(clsNombresCatalogo.CLIENTES, ct)).Items.Where(i => i.Activo).ToList();
+        var elegido = (codigoPreferido is null ? null : activos.FirstOrDefault(c => c.Codigo == codigoPreferido)) ?? activos.FirstOrDefault();
+        return elegido?.Id ?? throw new clsErrorInternoException("No hay clientes activos en el catálogo de clientes");
+    }
 
     // ------------------------------------------------------------------------------------------- administracion
 

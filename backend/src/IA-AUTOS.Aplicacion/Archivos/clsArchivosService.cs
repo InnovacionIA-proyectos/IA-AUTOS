@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using FluentValidation;
 using IAAutos.Aplicacion.Archivos.DTOArchivos;
@@ -41,8 +42,8 @@ public sealed class SubirArchivoRequestValidator : AbstractValidator<SubirArchiv
 }
 
 /// <summary>
-/// Subida y lectura de fotos de evidencia. El tipo real se determina por el contenido (firma binaria JPEG o PNG),
-/// no por lo que declare el cliente, y se aplica un tamano maximo.
+/// Subida y lectura de fotos de evidencia (base64 o multipart). El tipo real se determina por el contenido (firma binaria JPEG o PNG),
+/// no por lo que declare el cliente, y se aplica un tamano maximo. Al recibir el archivo se calcula su hash SHA-256.
 /// </summary>
 public sealed partial class clsArchivosService(
     IAlmacenArchivos almacen,
@@ -79,13 +80,38 @@ public sealed partial class clsArchivosService(
             throw TamanoExcedido(maximo);
         }
 
-        var bytes = contenido.AsSpan(0, escritos).ToArray();
+        return await GuardarAsync(contenido.AsSpan(0, escritos).ToArray(), ct);
+    }
+
+    /// <summary>Sube una foto recibida como archivo (multipart): mismas reglas de tamano y de contenido que el base64.</summary>
+    public async Task<ArchivoSubidoDto> SubirBytesAsync(byte[] contenido, CancellationToken ct = default)
+    {
+        AsegurarTamano(contenido.LongLength);
+        if (contenido.Length == 0)
+        {
+            throw new clsValidacionException("La imagen está vacía");
+        }
+
+        return await GuardarAsync(contenido, ct);
+    }
+
+    /// <summary>Rechaza un archivo mas grande que el maximo configurado, antes de leerlo en memoria.</summary>
+    public void AsegurarTamano(long bytes)
+    {
+        if (bytes > opciones.Value.MaximoBytes)
+        {
+            throw TamanoExcedido(opciones.Value.MaximoBytes);
+        }
+    }
+
+    private async Task<ArchivoSubidoDto> GuardarAsync(byte[] bytes, CancellationToken ct)
+    {
         var (extension, tipoContenido) = DetectarTipo(bytes)
             ?? throw new clsValidacionException("El contenido no es una imagen JPG o PNG válida");
 
         var nombre = $"{Guid.NewGuid()}.{extension}";
         await almacen.GuardarAsync(nombre, bytes, tipoContenido, ct);
-        return new ArchivoSubidoDto(nombre, clsUrlsArchivos.RUTA_BASE + nombre);
+        return new ArchivoSubidoDto(nombre, clsUrlsArchivos.RUTA_BASE + nombre, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
     }
 
     public async Task<ArchivoLeidoDto> LeerAsync(string archivo, CancellationToken ct = default)

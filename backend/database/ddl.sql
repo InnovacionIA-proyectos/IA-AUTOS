@@ -20,7 +20,29 @@ SET ANSI_NULLS ON;
 GO
 
 /* -----------------------------------------------------------------------------
+   tblClientes: el cliente (empresa) al que pertenecen usuarios y vehiculos. Es un catalogo administrable como los demas
+   (Codigo estable, Nombre, Orden y Activo); el primero activo por Orden es el cliente por defecto.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblClientes', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblClientes
+    (
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblClientes PRIMARY KEY,
+        Codigo     varchar(30)       NOT NULL,
+        Nombre     nvarchar(100)     NOT NULL,
+        Orden      int               NOT NULL CONSTRAINT DF_tblClientes_Orden DEFAULT (0),
+        Activo     bit               NOT NULL CONSTRAINT DF_tblClientes_Activo DEFAULT (1),
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblClientes_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblClientes_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblClientes_Codigo UNIQUE (Codigo)
+    );
+END
+GO
+
+/* -----------------------------------------------------------------------------
    tblUsuarios
+   Identidad: un usuario entra con correo y contrasena (TipoCredencial 'password') o con cedula y PIN (TipoCredencial 'pin',
+   para conductores e inspectores, que pueden no tener correo). Ver las columnas agregadas mas abajo.
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblUsuarios', N'U') IS NULL
 BEGIN
@@ -28,14 +50,13 @@ BEGIN
     (
         Id                uniqueidentifier NOT NULL CONSTRAINT PK_tblUsuarios PRIMARY KEY,
         Nombre            nvarchar(200)    NOT NULL,
-        Email             nvarchar(320)    NOT NULL,
+        Email             nvarchar(320)    NULL,
         Rol               varchar(30)      NOT NULL,
         SubtipoInspector  varchar(30)      NULL,
         Activo            bit              NOT NULL CONSTRAINT DF_tblUsuarios_Activo DEFAULT (1),
         PasswordHash      nvarchar(400)    NULL,
         CreatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblUsuarios_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblUsuarios_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        CONSTRAINT UQ_tblUsuarios_Email UNIQUE (Email),
         CONSTRAINT CK_tblUsuarios_Rol CHECK (Rol IN
             ('inspector', 'conductor', 'coordinador_calidad', 'comercial', 'admin', 'super_admin')),
         CONSTRAINT CK_tblUsuarios_Subtipo CHECK (SubtipoInspector IS NULL OR SubtipoInspector IN
@@ -56,6 +77,56 @@ GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblUsuarios_PortalUsuarioId' AND object_id = OBJECT_ID(N'dbo.tblUsuarios'))
     CREATE UNIQUE INDEX UX_tblUsuarios_PortalUsuarioId ON dbo.tblUsuarios (PortalUsuarioId) WHERE PortalUsuarioId IS NOT NULL;
+GO
+
+-- Cedula: documento de la persona (el conductor se identifica por ella en la carga de viajes por Excel). Unica entre quienes la tienen.
+IF COL_LENGTH(N'dbo.tblUsuarios', N'Cedula') IS NULL
+    ALTER TABLE dbo.tblUsuarios ADD Cedula varchar(20) NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblUsuarios_Cedula' AND object_id = OBJECT_ID(N'dbo.tblUsuarios'))
+    CREATE UNIQUE INDEX UX_tblUsuarios_Cedula ON dbo.tblUsuarios (Cedula) WHERE Cedula IS NOT NULL;
+GO
+
+-- Credencial y bloqueo del usuario:
+--   PinHash: hash del PIN (mismo algoritmo que la contrasena); nunca se guarda en claro.
+--   TipoCredencial: 'password' (correo y contrasena) o 'pin' (cedula y PIN).
+--   DebeCambiarPin: el PIN lo asigno o reinicio un administrador, asi que el usuario debe cambiarlo antes de continuar.
+--   IntentosFallidos / BloqueadoHasta: PIN errado seguidos y hasta cuando esta bloqueada la cuenta.
+--   UltimoAccesoAt: ultimo inicio de sesion exitoso.
+--   ClienteId: cliente al que pertenece (nulo en el super administrador, que ve todos los clientes).
+IF COL_LENGTH(N'dbo.tblUsuarios', N'TipoCredencial') IS NULL
+    ALTER TABLE dbo.tblUsuarios ADD
+        PinHash          nvarchar(400)     NULL,
+        TipoCredencial   varchar(20)       NOT NULL CONSTRAINT DF_tblUsuarios_TipoCredencial DEFAULT ('password'),
+        DebeCambiarPin   bit               NOT NULL CONSTRAINT DF_tblUsuarios_DebeCambiarPin DEFAULT (0),
+        IntentosFallidos int               NOT NULL CONSTRAINT DF_tblUsuarios_IntentosFallidos DEFAULT (0),
+        BloqueadoHasta   datetimeoffset(3) NULL,
+        UltimoAccesoAt   datetimeoffset(3) NULL,
+        ClienteId        uniqueidentifier  NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblUsuarios_TipoCredencial')
+    ALTER TABLE dbo.tblUsuarios ADD CONSTRAINT CK_tblUsuarios_TipoCredencial CHECK (TipoCredencial IN ('password', 'pin'));
+GO
+
+-- Quien entra con contrasena necesita correo; quien entra con PIN necesita cedula.
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblUsuarios_Identidad')
+    ALTER TABLE dbo.tblUsuarios ADD CONSTRAINT CK_tblUsuarios_Identidad CHECK
+        ((TipoCredencial = 'password' AND Email IS NOT NULL) OR (TipoCredencial = 'pin' AND Cedula IS NOT NULL));
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblUsuarios_Cliente')
+    ALTER TABLE dbo.tblUsuarios ADD CONSTRAINT FK_tblUsuarios_Cliente FOREIGN KEY (ClienteId) REFERENCES dbo.tblClientes (Id);
+GO
+
+-- El correo es unico entre los usuarios que lo tienen (los conductores e inspectores sin correo pueden ser varios).
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblUsuarios_Email' AND object_id = OBJECT_ID(N'dbo.tblUsuarios'))
+    CREATE UNIQUE INDEX UX_tblUsuarios_Email ON dbo.tblUsuarios (Email) WHERE Email IS NOT NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblUsuarios_Cliente' AND object_id = OBJECT_ID(N'dbo.tblUsuarios'))
+    CREATE INDEX IX_tblUsuarios_Cliente ON dbo.tblUsuarios (ClienteId);
 GO
 
 IF OBJECT_ID(N'dbo.tblRefreshTokens', N'U') IS NULL
@@ -97,11 +168,14 @@ BEGIN
         Chasis        nvarchar(100)    NULL,
         Color         nvarchar(100)    NULL,
         Operacion     varchar(20)      NOT NULL,
+        ClienteId     uniqueidentifier NOT NULL,
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblVehiculos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblVehiculos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT UQ_tblVehiculos_Vin UNIQUE (Vin),
+        CONSTRAINT FK_tblVehiculos_Cliente FOREIGN KEY (ClienteId) REFERENCES dbo.tblClientes (Id),
         CONSTRAINT CK_tblVehiculos_Operacion CHECK (Operacion IN ('importacion', 'exportacion', 'nacional'))
     );
+    CREATE INDEX IX_tblVehiculos_Cliente ON dbo.tblVehiculos (ClienteId);
 END
 GO
 
@@ -232,33 +306,117 @@ BEGIN
 END
 GO
 
--- Cuadrantes: regiones numeradas de cada vista (las vistas adicionales no tienen). Geometria = poligono normalizado en JSON
--- ({"puntos":[[x,y],...]} con x e y entre 0 y 1 sobre la imagen de la vista) para que la app y el portal dibujen lo mismo.
+-- Cuadrantes: zonas numeradas de la carroceria (puerta delantera, pilar central...), por tipo de vehiculo. Un mismo cuadrante se ve
+-- desde varias vistas, por eso donde se dibuja en cada vista va aparte, en tblCuadranteVistas.
 IF OBJECT_ID(N'dbo.tblCuadrantes', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.tblCuadrantes
     (
         Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblCuadrantes PRIMARY KEY,
-        VistaFotoId   uniqueidentifier  NOT NULL,
         TipoVehiculo  varchar(30)       NULL,
         Numero        int               NOT NULL,
         Nombre        nvarchar(100)     NOT NULL,
-        Geometria     nvarchar(max)     NULL,
         Orden         int               NOT NULL CONSTRAINT DF_tblCuadrantes_Orden DEFAULT (0),
         Activo        bit               NOT NULL CONSTRAINT DF_tblCuadrantes_Activo DEFAULT (1),
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblCuadrantes_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblCuadrantes_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        CONSTRAINT FK_tblCuadrantes_Vista FOREIGN KEY (VistaFotoId) REFERENCES dbo.tblVistasFoto (Id),
         CONSTRAINT UQ_tblCuadrantes_Tipo_Numero UNIQUE (TipoVehiculo, Numero),
-        CONSTRAINT CK_tblCuadrantes_Numero CHECK (Numero >= 1),
-        CONSTRAINT CK_tblCuadrantes_Geometria CHECK (Geometria IS NULL OR ISJSON(Geometria) = 1)
+        CONSTRAINT CK_tblCuadrantes_Numero CHECK (Numero >= 1)
     );
-    CREATE INDEX IX_tblCuadrantes_Vista ON dbo.tblCuadrantes (VistaFotoId);
+END
+GO
+
+-- Poligono de un cuadrante en una vista (las vistas adicionales no tienen). Geometria = poligono normalizado en JSON
+-- ({"puntos":[[x,y],...]} con x e y entre 0 y 1 sobre la imagen de la vista) para que la app y el portal dibujen lo mismo.
+-- Al borrar el cuadrante se borran sus poligonos; una vista con poligonos no se puede borrar.
+IF OBJECT_ID(N'dbo.tblCuadranteVistas', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblCuadranteVistas
+    (
+        Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblCuadranteVistas PRIMARY KEY,
+        CuadranteId   uniqueidentifier  NOT NULL,
+        VistaFotoId   uniqueidentifier  NOT NULL,
+        Geometria     nvarchar(max)     NOT NULL,
+        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblCuadranteVistas_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblCuadranteVistas_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblCuadranteVistas_Cuadrante FOREIGN KEY (CuadranteId) REFERENCES dbo.tblCuadrantes (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_tblCuadranteVistas_Vista FOREIGN KEY (VistaFotoId) REFERENCES dbo.tblVistasFoto (Id),
+        CONSTRAINT UQ_tblCuadranteVistas_Cuadrante_Vista UNIQUE (CuadranteId, VistaFotoId),
+        CONSTRAINT CK_tblCuadranteVistas_Geometria CHECK (ISJSON(Geometria) = 1)
+    );
+    CREATE INDEX IX_tblCuadranteVistas_Vista ON dbo.tblCuadranteVistas (VistaFotoId);
 END
 GO
 
 /* -----------------------------------------------------------------------------
-   tblEtapas (tramo de la ruta de un vehiculo: etapa del catalogo y, opcionalmente, el lugar donde se hace)
+   tblViajes: el viaje es el eje del modelo. Una unidad transportadora (tipo, placa, trailer) lleva uno o varios VIN con un
+   conductor (y, si hay, un inspector) entre un origen y un destino. Cada etapa e inspeccion cuelga de un viaje.
+   - CodigoMtrack: codigo del viaje en MTrack (se digita o llega en el Excel; aun no hay integracion). Unico entre los que lo tienen.
+   - Estado: programado -> en_curso -> finalizado, o cancelado (un viaje cancelado deja de ser visible para inspectores y conductores).
+   - Los viajes que vienen de las asignaciones e inspecciones anteriores a esta tabla pueden no tener tipo de unidad, placa ni codigo.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblViajes', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblViajes
+    (
+        Id             uniqueidentifier  NOT NULL CONSTRAINT PK_tblViajes PRIMARY KEY,
+        CodigoMtrack   varchar(50)       NULL,
+        TipoUnidadId   uniqueidentifier  NULL,
+        Placa          nvarchar(50)      NULL,
+        Trailer        nvarchar(50)      NULL,
+        ConductorId    uniqueidentifier  NULL,
+        InspectorId    uniqueidentifier  NULL,
+        OrigenId       uniqueidentifier  NULL,
+        DestinoId      uniqueidentifier  NULL,
+        Estado         varchar(20)       NOT NULL CONSTRAINT DF_tblViajes_Estado DEFAULT ('programado'),
+        CreadoPor      uniqueidentifier  NULL,
+        CreatedAt      datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajes_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt      datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajes_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblViajes_TipoUnidad FOREIGN KEY (TipoUnidadId) REFERENCES dbo.tblTiposUnidadTransportadora (Id),
+        CONSTRAINT FK_tblViajes_Conductor FOREIGN KEY (ConductorId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblViajes_Inspector FOREIGN KEY (InspectorId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblViajes_Origen FOREIGN KEY (OrigenId) REFERENCES dbo.tblPuntosCustodia (Id),
+        CONSTRAINT FK_tblViajes_Destino FOREIGN KEY (DestinoId) REFERENCES dbo.tblPuntosCustodia (Id),
+        CONSTRAINT FK_tblViajes_CreadoPor FOREIGN KEY (CreadoPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT CK_tblViajes_Estado CHECK (Estado IN ('programado', 'en_curso', 'finalizado', 'cancelado'))
+    );
+    CREATE UNIQUE INDEX UX_tblViajes_CodigoMtrack ON dbo.tblViajes (CodigoMtrack) WHERE CodigoMtrack IS NOT NULL;
+    CREATE INDEX IX_tblViajes_Conductor ON dbo.tblViajes (ConductorId);
+    CREATE INDEX IX_tblViajes_Inspector ON dbo.tblViajes (InspectorId);
+    CREATE INDEX IX_tblViajes_Estado ON dbo.tblViajes (Estado, CreatedAt DESC);
+    CREATE INDEX IX_tblViajes_TipoUnidad ON dbo.tblViajes (TipoUnidadId);
+    CREATE INDEX IX_tblViajes_Origen ON dbo.tblViajes (OrigenId);
+    CREATE INDEX IX_tblViajes_Destino ON dbo.tblViajes (DestinoId);
+    CREATE INDEX IX_tblViajes_CreadoPor ON dbo.tblViajes (CreadoPor);
+END
+GO
+
+/* -----------------------------------------------------------------------------
+   tblViajeVehiculos: los VIN de un viaje. Un VIN puede estar en varios viajes a lo largo del tiempo (la aplicacion no admite
+   dos viajes activos con el mismo VIN).
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblViajeVehiculos', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblViajeVehiculos
+    (
+        Id          uniqueidentifier  NOT NULL CONSTRAINT PK_tblViajeVehiculos PRIMARY KEY,
+        ViajeId     uniqueidentifier  NOT NULL,
+        VehiculoId  uniqueidentifier  NOT NULL,
+        CreatedAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajeVehiculos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajeVehiculos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblViajeVehiculos_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_tblViajeVehiculos_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE CASCADE,
+        CONSTRAINT UQ_tblViajeVehiculos_Viaje_Vehiculo UNIQUE (ViajeId, VehiculoId)
+    );
+    CREATE INDEX IX_tblViajeVehiculos_Vehiculo ON dbo.tblViajeVehiculos (VehiculoId);
+END
+GO
+
+/* -----------------------------------------------------------------------------
+   tblEtapas (tramo de un VIN dentro de un viaje: etapa del catalogo y el lugar donde se hace)
+   - Al agregar un VIN a un viaje se crean sus etapas: Cargue en el origen, Transporte y Descargue en el destino.
+   - ConPersonalApoyo (solo en la etapa de Cargue): con personal de apoyo la inspeccion de salida la hace un inspector; sin el,
+     la hace el conductor.
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblEtapas', N'U') IS NULL
 BEGIN
@@ -268,24 +426,31 @@ BEGIN
         VehiculoId          uniqueidentifier NOT NULL,
         EtapaCatalogoId     uniqueidentifier NOT NULL,
         PuntoCustodiaId     uniqueidentifier NULL,
+        ViajeId             uniqueidentifier NOT NULL,
         Orden               int              NOT NULL,
         RequiereInspeccion  bit              NOT NULL CONSTRAINT DF_tblEtapas_RequiereInspeccion DEFAULT (1),
+        ConPersonalApoyo    bit              NOT NULL CONSTRAINT DF_tblEtapas_ConPersonalApoyo DEFAULT (0),
         CreatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEtapas_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEtapas_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblEtapas_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE CASCADE,
         CONSTRAINT FK_tblEtapas_EtapaCatalogo FOREIGN KEY (EtapaCatalogoId) REFERENCES dbo.tblEtapasCatalogo (Id),
         CONSTRAINT FK_tblEtapas_PuntoCustodia FOREIGN KEY (PuntoCustodiaId) REFERENCES dbo.tblPuntosCustodia (Id),
-        CONSTRAINT UQ_tblEtapas_Vehiculo_Orden UNIQUE (VehiculoId, Orden),
+        CONSTRAINT FK_tblEtapas_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
+        CONSTRAINT UQ_tblEtapas_Viaje_Vehiculo_Orden UNIQUE (ViajeId, VehiculoId, Orden),
         CONSTRAINT CK_tblEtapas_Orden CHECK (Orden >= 1)
     );
     CREATE INDEX IX_tblEtapas_EtapaCatalogo ON dbo.tblEtapas (EtapaCatalogoId);
     CREATE INDEX IX_tblEtapas_PuntoCustodia ON dbo.tblEtapas (PuntoCustodiaId);
+    CREATE INDEX IX_tblEtapas_Vehiculo ON dbo.tblEtapas (VehiculoId);
 END
 GO
 
 /* -----------------------------------------------------------------------------
-   tblInspecciones (un informe por etapa; al cerrarse es inmutable)
-   Latitud y longitud en float (precision GPS completa).
+   tblInspecciones: por etapa hay una inspeccion de salida y una de llegada; al cerrarse es inmutable. ViajeId es el viaje de la etapa: la
+   inspeccion toma de el la placa, el trailer y el conductor. Las columnas ConductorNombre, Placa y Trailer solo conservan lo capturado
+   antes de existir los viajes. Latitud y longitud en float (precision GPS completa).
+   Una correccion NO modifica la inspeccion cerrada: crea una version nueva (Version = 2, 3...) que referencia a la anterior en
+   CorrigeInspeccionId. Por etapa y momento hay una sola inspeccion original (indice filtrado) y cada version se corrige una sola vez.
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblInspecciones', N'U') IS NULL
 BEGIN
@@ -293,6 +458,7 @@ BEGIN
     (
         Id               uniqueidentifier NOT NULL CONSTRAINT PK_tblInspecciones PRIMARY KEY,
         EtapaId          uniqueidentifier NOT NULL,
+        ViajeId          uniqueidentifier NOT NULL,
         UsuarioId        uniqueidentifier NOT NULL,
         Momento          varchar(20)      NOT NULL,
         Fecha            datetimeoffset(3) NOT NULL,
@@ -303,18 +469,32 @@ BEGIN
         Placa            nvarchar(50)     NULL,
         Trailer          nvarchar(50)     NULL,
         Notas            nvarchar(1000)   NULL,
+        IniciadaAt       datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspecciones_IniciadaAt DEFAULT (SYSDATETIMEOFFSET()),
+        CerradaAt        datetimeoffset(3) NULL,
+        Version          int              NOT NULL CONSTRAINT DF_tblInspecciones_Version DEFAULT (1),
+        CorrigeInspeccionId uniqueidentifier NULL,
         CreatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspecciones_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspecciones_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblInspecciones_Etapa FOREIGN KEY (EtapaId) REFERENCES dbo.tblEtapas (Id) ON DELETE CASCADE,
         CONSTRAINT FK_tblInspecciones_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id),
-        -- A lo sumo un informe por etapa y momento (los valores check_in/check_out se conservan por historico).
-        CONSTRAINT UQ_tblInspecciones_Etapa_Momento UNIQUE (EtapaId, Momento),
-        CONSTRAINT CK_tblInspecciones_Momento CHECK (Momento IN ('check_in', 'check_out', 'informe')),
+        CONSTRAINT FK_tblInspecciones_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
+        CONSTRAINT FK_tblInspecciones_Corrige FOREIGN KEY (CorrigeInspeccionId) REFERENCES dbo.tblInspecciones (Id),
+        CONSTRAINT CK_tblInspecciones_Momento CHECK (Momento IN ('salida', 'llegada')),
         CONSTRAINT CK_tblInspecciones_Estado CHECK (Estado IN ('borrador', 'cerrada')),
+        -- Una inspeccion cerrada tiene hora de cierre y una en borrador no.
+        CONSTRAINT CK_tblInspecciones_Cierre CHECK ((Estado = 'borrador' AND CerradaAt IS NULL) OR (Estado = 'cerrada' AND CerradaAt IS NOT NULL)),
+        -- La version 1 es la original; las siguientes son correcciones y referencian a la version que corrigen.
+        CONSTRAINT CK_tblInspecciones_Version CHECK ((Version = 1 AND CorrigeInspeccionId IS NULL) OR (Version > 1 AND CorrigeInspeccionId IS NOT NULL)),
         CONSTRAINT CK_tblInspecciones_Lat CHECK (Lat IS NULL OR (Lat BETWEEN -90 AND 90)),
         CONSTRAINT CK_tblInspecciones_Lng CHECK (Lng IS NULL OR (Lng BETWEEN -180 AND 180))
     );
+    -- A lo sumo una inspeccion ORIGINAL por etapa y momento; las correcciones (con CorrigeInspeccionId) no cuentan.
+    -- Los indices se crean con SQL dinamico para que este script se pueda ejecutar tambien sobre una base que aun tiene la tabla anterior.
+    EXEC (N'CREATE UNIQUE INDEX UX_tblInspecciones_Etapa_Momento_Original ON dbo.tblInspecciones (EtapaId, Momento) WHERE CorrigeInspeccionId IS NULL');
+    -- Cada version se corrige a lo sumo una vez: las versiones forman una cadena.
+    EXEC (N'CREATE UNIQUE INDEX UX_tblInspecciones_Corrige ON dbo.tblInspecciones (CorrigeInspeccionId) WHERE CorrigeInspeccionId IS NOT NULL');
     CREATE INDEX IX_tblInspecciones_Usuario ON dbo.tblInspecciones (UsuarioId);
+    CREATE INDEX IX_tblInspecciones_Viaje ON dbo.tblInspecciones (ViajeId);
     CREATE INDEX IX_tblInspecciones_Fecha ON dbo.tblInspecciones (Fecha DESC);
     -- Soporta la definicion de "movilizado" (existe informe cerrado por etapa).
     CREATE INDEX IX_tblInspecciones_Etapa_Estado ON dbo.tblInspecciones (EtapaId, Estado);
@@ -350,6 +530,12 @@ GO
 
 /* -----------------------------------------------------------------------------
    tblEvidencias (foto sellada; append-only por diseno)
+   Una foto es de una vista (VistaId: una de las 7 obligatorias o de las 2 adicionales) o de un hallazgo (HallazgoId). Lleva el sello del
+   dispositivo (SelloFecha, SelloLat, SelloLng y Precision en metros) y el del servidor (SelloServidorAt, al recibirla) y el hash SHA-256
+   del archivo. SelloLat y SelloLng son obligatorios: una foto tomada sin senal de GPS se guarda en (0, 0) y se muestra como
+   `sin ubicacion`. Nota = el faltante o dano de las fotos adicionales (piezas en el baul, cojineria).
+   EsConstancia = 1 marca la foto de la constancia de no firma de una transferencia: no es de una vista ni de un hallazgo, no cuenta para
+   el cierre de la inspeccion y se puede registrar aunque la inspeccion ya este cerrada (la transferencia se firma despues del cierre).
    HallazgoId usa NO ACTION: SQL Server no permite SET NULL junto a la cascada
    desde tblInspecciones (varias rutas de cascada). La aplicacion no elimina hallazgos.
    ----------------------------------------------------------------------------- */
@@ -362,22 +548,38 @@ BEGIN
         HallazgoId    uniqueidentifier NULL,
         StoragePath   nvarchar(500)    NOT NULL,
         SelloFecha    datetimeoffset(3) NOT NULL,
-        SelloLat      float            NULL,
-        SelloLng      float            NULL,
+        SelloLat      float            NOT NULL,
+        SelloLng      float            NOT NULL,
+        VistaId       uniqueidentifier NULL,
+        HashSha256    char(64)         NULL,
+        SelloServidorAt datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_SelloServidorAt DEFAULT (SYSDATETIMEOFFSET()),
+        Precision     float            NULL,
+        DispositivoId nvarchar(100)    NULL,
+        Nota          nvarchar(500)    NULL,
+        EsConstancia  bit              NOT NULL CONSTRAINT DF_tblEvidencias_EsConstancia DEFAULT (0),
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblEvidencias_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id) ON DELETE CASCADE,
         CONSTRAINT FK_tblEvidencias_Hallazgo FOREIGN KEY (HallazgoId) REFERENCES dbo.tblHallazgos (Id),
-        CONSTRAINT CK_tblEvidencias_Lat CHECK (SelloLat IS NULL OR (SelloLat BETWEEN -90 AND 90)),
-        CONSTRAINT CK_tblEvidencias_Lng CHECK (SelloLng IS NULL OR (SelloLng BETWEEN -180 AND 180))
+        CONSTRAINT FK_tblEvidencias_Vista FOREIGN KEY (VistaId) REFERENCES dbo.tblVistasFoto (Id),
+        CONSTRAINT CK_tblEvidencias_Lat CHECK (SelloLat BETWEEN -90 AND 90),
+        CONSTRAINT CK_tblEvidencias_Lng CHECK (SelloLng BETWEEN -180 AND 180),
+        CONSTRAINT CK_tblEvidencias_Precision CHECK (Precision IS NULL OR Precision >= 0),
+        CONSTRAINT CK_tblEvidencias_Hash CHECK (HashSha256 IS NULL OR HashSha256 NOT LIKE '%[^0-9a-f]%')
     );
+    EXEC (N'CREATE INDEX IX_tblEvidencias_Vista ON dbo.tblEvidencias (VistaId)');
     CREATE INDEX IX_tblEvidencias_Inspeccion ON dbo.tblEvidencias (InspeccionId);
     CREATE INDEX IX_tblEvidencias_Hallazgo ON dbo.tblEvidencias (HallazgoId);
 END
 GO
 
 /* -----------------------------------------------------------------------------
-   tblTransferenciasCustodia (entrega y recibo firmados; una por inspeccion)
+   tblTransferenciasCustodia (entrega y recibo; una por inspeccion)
+   Cada firma la envia su titular (quien entrega o quien recibe) y guarda su fecha e IP. La transferencia se cierra con un TipoCierre:
+     firmada      ambas partes firmaron;
+     con_reservas ambas firmaron y quien recibe dejo sus observaciones (ReservasTexto);
+     no_firma     una parte (NoFirmaParte) se nego a firmar: queda el motivo, un testigo con usuario y la foto de la constancia.
+   Mientras TipoCierre es NULL la transferencia esta abierta; con un tipo de cierre es inmutable y la etapa siguiente puede iniciarse.
    FirmaEntrega / FirmaRecibe: ruta de la imagen de la firma o trazo de la firma dibujada.
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NULL
@@ -391,39 +593,37 @@ BEGIN
         FirmaEntrega      nvarchar(max)    NULL,
         FirmaRecibe       nvarchar(max)    NULL,
         FirmadaAt         datetimeoffset(3) NULL,
+        FirmaEntregaAt    datetimeoffset(3) NULL,
+        FirmaEntregaIp    varchar(45)      NULL,
+        FirmaRecibeAt     datetimeoffset(3) NULL,
+        FirmaRecibeIp     varchar(45)      NULL,
+        TipoCierre        varchar(20)      NULL,
+        ReservasTexto     nvarchar(1000)   NULL,
+        NoFirmaParte      varchar(10)      NULL,
+        MotivoNoFirma     nvarchar(1000)   NULL,
+        TestigoUsuarioId  uniqueidentifier NULL,
+        EvidenciaConstanciaId uniqueidentifier NULL,
         CreatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTransferenciasCustodia_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTransferenciasCustodia_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblTransferencias_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id) ON DELETE CASCADE,
         CONSTRAINT FK_tblTransferencias_Entrega FOREIGN KEY (EntregaUsuarioId) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT FK_tblTransferencias_Recibe FOREIGN KEY (RecibeUsuarioId) REFERENCES dbo.tblUsuarios (Id),
-        CONSTRAINT UQ_tblTransferencias_Inspeccion UNIQUE (InspeccionId)
+        CONSTRAINT FK_tblTransferencias_Testigo FOREIGN KEY (TestigoUsuarioId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblTransferencias_Constancia FOREIGN KEY (EvidenciaConstanciaId) REFERENCES dbo.tblEvidencias (Id),
+        CONSTRAINT UQ_tblTransferencias_Inspeccion UNIQUE (InspeccionId),
+        CONSTRAINT CK_tblTransferencias_TipoCierre CHECK (TipoCierre IS NULL OR TipoCierre IN ('firmada', 'con_reservas', 'no_firma')),
+        CONSTRAINT CK_tblTransferencias_Parte CHECK (NoFirmaParte IS NULL OR NoFirmaParte IN ('entrega', 'recibe')),
+        -- El testigo es una tercera persona: ni quien entrega ni quien recibe.
+        CONSTRAINT CK_tblTransferencias_Testigo CHECK (TestigoUsuarioId IS NULL OR (TestigoUsuarioId <> EntregaUsuarioId AND TestigoUsuarioId <> RecibeUsuarioId)),
+        -- Cada tipo de cierre exige lo suyo: las dos firmas (con o sin reservas) o el motivo, el testigo y la foto de la constancia.
+        CONSTRAINT CK_tblTransferencias_Cierre CHECK (
+            TipoCierre IS NULL
+            OR (TipoCierre = 'firmada' AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> '' AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '' AND ReservasTexto IS NULL)
+            OR (TipoCierre = 'con_reservas' AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> '' AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '' AND ReservasTexto IS NOT NULL AND ReservasTexto <> '')
+            OR (TipoCierre = 'no_firma' AND NoFirmaParte IS NOT NULL AND MotivoNoFirma IS NOT NULL AND MotivoNoFirma <> '' AND TestigoUsuarioId IS NOT NULL AND EvidenciaConstanciaId IS NOT NULL))
     );
     CREATE INDEX IX_tblTransferencias_Entrega ON dbo.tblTransferenciasCustodia (EntregaUsuarioId);
     CREATE INDEX IX_tblTransferencias_Recibe ON dbo.tblTransferenciasCustodia (RecibeUsuarioId);
-END
-GO
-
-/* -----------------------------------------------------------------------------
-   tblAsignaciones (el admin asigna que VIN se transporta en cual ninera)
-   ----------------------------------------------------------------------------- */
-IF OBJECT_ID(N'dbo.tblAsignaciones', N'U') IS NULL
-BEGIN
-    CREATE TABLE dbo.tblAsignaciones
-    (
-        Id            uniqueidentifier NOT NULL CONSTRAINT PK_tblAsignaciones PRIMARY KEY,
-        VehiculoId    uniqueidentifier NOT NULL,
-        Ninera        nvarchar(100)    NOT NULL,
-        ConductorId   uniqueidentifier NULL,
-        AsignadoPor   uniqueidentifier NOT NULL,
-        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblAsignaciones_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblAsignaciones_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        CONSTRAINT FK_tblAsignaciones_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE CASCADE,
-        CONSTRAINT FK_tblAsignaciones_Conductor FOREIGN KEY (ConductorId) REFERENCES dbo.tblUsuarios (Id) ON DELETE SET NULL,
-        CONSTRAINT FK_tblAsignaciones_AsignadoPor FOREIGN KEY (AsignadoPor) REFERENCES dbo.tblUsuarios (Id)
-    );
-    CREATE INDEX IX_tblAsignaciones_Vehiculo ON dbo.tblAsignaciones (VehiculoId, CreatedAt DESC);
-    CREATE INDEX IX_tblAsignaciones_Conductor ON dbo.tblAsignaciones (ConductorId);
-    CREATE INDEX IX_tblAsignaciones_AsignadoPor ON dbo.tblAsignaciones (AsignadoPor);
 END
 GO
 
@@ -452,15 +652,19 @@ BEGIN
         LoadingDock         nvarchar(255)    NULL,
         Weight              decimal(18, 4)   NULL,
         VehiculoId          uniqueidentifier NULL,
+        CodigoMtrack        varchar(50)      NULL,
+        ViajeId             uniqueidentifier NULL,
         SyncedAt            datetimeoffset(3) NOT NULL CONSTRAINT DF_tblOrdenesSofasa_SyncedAt DEFAULT (SYSDATETIMEOFFSET()),
         CreatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblOrdenesSofasa_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblOrdenesSofasa_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT UQ_tblOrdenesSofasa_SourceId UNIQUE (SourceId),
-        CONSTRAINT FK_tblOrdenesSofasa_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE SET NULL
+        CONSTRAINT FK_tblOrdenesSofasa_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE SET NULL,
+        CONSTRAINT FK_tblOrdenesSofasa_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id) ON DELETE SET NULL
     );
     CREATE INDEX IX_tblOrdenesSofasa_Vin ON dbo.tblOrdenesSofasa (Vin);
     CREATE INDEX IX_tblOrdenesSofasa_DatetimeEvent ON dbo.tblOrdenesSofasa (DatetimeEvent DESC);
     CREATE INDEX IX_tblOrdenesSofasa_Vehiculo ON dbo.tblOrdenesSofasa (VehiculoId);
+    CREATE INDEX IX_tblOrdenesSofasa_Viaje ON dbo.tblOrdenesSofasa (ViajeId);
 END
 GO
 
@@ -491,6 +695,12 @@ GO
    Los acentos se escriben con NCHAR para que el archivo siga siendo ASCII: 225=a, 233=e, 237=i, 243=o, 250=u, 241=enie.
    Las acciones de los niveles de severidad y los cuadrantes no tienen semilla: se cargan o se editan desde el portal.
    ----------------------------------------------------------------------------- */
+-- Cliente inicial: el actual. Los usuarios y vehiculos nuevos pertenecen al primer cliente activo si no se indica otro.
+INSERT INTO dbo.tblClientes (Id, Codigo, Nombre, Orden)
+SELECT NEWID(), 'sofasa', N'Sofasa', 1
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblClientes c WHERE c.Codigo = 'sofasa');
+GO
+
 INSERT INTO dbo.tblEtapasCatalogo (Id, Codigo, Nombre, Orden)
 SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
 FROM (VALUES
@@ -576,23 +786,27 @@ WHERE NOT EXISTS (SELECT 1 FROM dbo.tblVistasFoto c WHERE c.Codigo = v.Codigo);
 GO
 
 /* -----------------------------------------------------------------------------
-   Vista: vehiculos movilizados.
-   Un vehiculo esta movilizado cuando TODAS sus etapas (y al menos una) tienen su
-   informe cerrado. Los VINs recien cargados, con la ruta creada pero sin informes,
-   NO cuentan: quedan como "pendientes por movilizar".
+   Vista: viajes completos (reemplaza a vwVehiculosMovilizados).
+   Una fila por VIN y viaje en el que el VIN ya completo su ruta: TODAS sus etapas del viaje (y al menos una) tienen su informe
+   cerrado. Un VIN recien asignado a un viaje, sin informes, NO cuenta: queda como "pendiente por movilizar".
+   Un vehiculo esta movilizado si tiene al menos una fila; un viaje esta completo cuando todos sus VIN tienen fila.
    Es la unica definicion de "movilizado" usada por listados, metricas y patrones.
    ----------------------------------------------------------------------------- */
-CREATE OR ALTER VIEW dbo.vwVehiculosMovilizados
+IF OBJECT_ID(N'dbo.vwVehiculosMovilizados', N'V') IS NOT NULL
+    DROP VIEW dbo.vwVehiculosMovilizados;
+GO
+
+CREATE OR ALTER VIEW dbo.vwViajesCompletos
 AS
-SELECT x.VehiculoId
+SELECT x.ViajeId, x.VehiculoId
 FROM (
-    SELECT e.VehiculoId,
+    SELECT e.ViajeId, e.VehiculoId,
            CASE WHEN EXISTS (SELECT 1 FROM dbo.tblInspecciones i
                               WHERE i.EtapaId = e.Id AND i.Estado = 'cerrada')
                 THEN 1 ELSE 0 END AS Cerrada
     FROM dbo.tblEtapas e
 ) AS x
-GROUP BY x.VehiculoId
+GROUP BY x.ViajeId, x.VehiculoId
 HAVING COUNT(*) > 0 AND COUNT(*) = SUM(x.Cerrada);
 GO
 
@@ -627,7 +841,10 @@ BEGIN
 END
 GO
 
-CREATE OR ALTER TRIGGER dbo.TR_tblEvidencias_NoEnCerrada
+-- La foto de la constancia de no firma (EsConstancia = 1) si se admite: la transferencia se firma despues del cierre. Se crea con SQL
+-- dinamico y solo si la columna existe, para poder ejecutar este script tambien sobre una base que aun no tiene la columna.
+IF COL_LENGTH(N'dbo.tblEvidencias', N'EsConstancia') IS NOT NULL
+    EXEC (N'CREATE OR ALTER TRIGGER dbo.TR_tblEvidencias_NoEnCerrada
 ON dbo.tblEvidencias
 AFTER INSERT
 AS
@@ -635,9 +852,9 @@ BEGIN
     SET NOCOUNT ON;
     IF EXISTS (SELECT 1 FROM inserted i
                JOIN dbo.tblInspecciones n ON n.Id = i.InspeccionId
-               WHERE n.Estado = 'cerrada')
-        THROW 51002, 'La inspeccion esta cerrada y es inmutable; no admite evidencias nuevas', 1;
-END
+               WHERE n.Estado = ''cerrada'' AND i.EsConstancia = 0)
+        THROW 51002, ''La inspeccion esta cerrada y es inmutable; no admite evidencias nuevas'', 1;
+END');
 GO
 
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';

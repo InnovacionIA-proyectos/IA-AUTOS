@@ -1,11 +1,11 @@
 using IAAutos.Dominio.Catalogos;
-using IAAutos.Dominio.Asignaciones;
 using IAAutos.Dominio.Auditoria;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Sofasa;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
+using IAAutos.Dominio.Viajes;
 using IAAutos.Infraestructura.Persistencia.Consultas;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,11 +30,13 @@ public sealed class clsAppDbContext : DbContext
     public DbSet<clsEtapaCatalogo> EtapasCatalogo => Set<clsEtapaCatalogo>();
     public DbSet<clsPuntoCustodia> PuntosCustodia => Set<clsPuntoCustodia>();
     public DbSet<clsTipoUnidadTransportadora> TiposUnidad => Set<clsTipoUnidadTransportadora>();
+    public DbSet<clsCliente> Clientes => Set<clsCliente>();
     public DbSet<clsClaseDano> ClasesDano => Set<clsClaseDano>();
     public DbSet<clsTamanoDano> TamanosDano => Set<clsTamanoDano>();
     public DbSet<clsNivelSeveridad> NivelesSeveridad => Set<clsNivelSeveridad>();
     public DbSet<clsVistaFoto> VistasFoto => Set<clsVistaFoto>();
     public DbSet<clsCuadrante> Cuadrantes => Set<clsCuadrante>();
+    public DbSet<clsCuadranteVista> CuadranteVistas => Set<clsCuadranteVista>();
 
     public DbSet<clsEtapa> Etapas => Set<clsEtapa>();
 
@@ -46,7 +48,9 @@ public sealed class clsAppDbContext : DbContext
 
     public DbSet<clsTransferenciaCustodia> Transferencias => Set<clsTransferenciaCustodia>();
 
-    public DbSet<clsAsignacion> Asignaciones => Set<clsAsignacion>();
+    public DbSet<clsViaje> Viajes => Set<clsViaje>();
+
+    public DbSet<clsViajeVehiculo> ViajeVehiculos => Set<clsViajeVehiculo>();
 
     public DbSet<clsOrdenSofasa> OrdenesSofasa => Set<clsOrdenSofasa>();
 
@@ -55,6 +59,6 @@ public sealed class clsAppDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(clsAppDbContext).Assembly);
-        modelBuilder.Entity<clsVehiculoMovilizado>().HasNoKey().ToView("vwVehiculosMovilizados");
+        modelBuilder.Entity<clsViajeCompleto>().HasNoKey().ToView("vwViajesCompletos");
     }
 }

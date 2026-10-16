@@ -116,26 +116,29 @@ public sealed class CatalogosDominioTests
     }
 
     [Fact]
-    public void Un_cuadrante_exige_numero_positivo_y_guarda_su_poligono_compacto()
+    public void Un_cuadrante_exige_numero_positivo_y_guarda_su_tipo_de_vehiculo()
     {
-        var cuadrante = clsCuadrante.Crear(Guid.NewGuid(), "sedan", 3, "Cuadrante 3", """ { "puntos": [ [0, 0], [0.5, 0], [0.5, 0.5] ] } """, 3, null, AHORA);
+        var cuadrante = clsCuadrante.Crear("sedan", 3, "Cuadrante 3", 3, null, AHORA);
 
         Assert.Equal(3, cuadrante.Numero);
-        Assert.Equal("""{"puntos":[[0,0],[0.5,0],[0.5,0.5]]}""", cuadrante.Geometria);
-        Assert.Equal("numero", CampoDelError(Assert.Throws<clsValidacionException>(() => clsCuadrante.Crear(Guid.NewGuid(), null, 0, "X", null, null, null, AHORA))));
-        Assert.Equal("numero", CampoDelError(Assert.Throws<clsValidacionException>(() => clsCuadrante.Crear(Guid.NewGuid(), null, null, "X", null, null, null, AHORA))));
+        Assert.Equal("sedan", cuadrante.TipoVehiculo);
+        Assert.Equal("numero", CampoDelError(Assert.Throws<clsValidacionException>(() => clsCuadrante.Crear(null, 0, "X", null, null, AHORA))));
+        Assert.Equal("numero", CampoDelError(Assert.Throws<clsValidacionException>(() => clsCuadrante.Crear(null, null, "X", null, null, AHORA))));
+    }
+
+    [Fact]
+    public void Un_poligono_de_cuadrante_guarda_su_geometria_compacta_y_la_exige()
+    {
+        var poligono = clsCuadranteVista.Crear(Guid.NewGuid(), Guid.NewGuid(), """ { "puntos": [ [0, 0], [0.5, 0], [0.5, 0.5] ] } """, AHORA);
+
+        Assert.Equal("""{"puntos":[[0,0],[0.5,0],[0.5,0.5]]}""", poligono.Geometria);
+        Assert.Equal("geometria", CampoDelError(Assert.Throws<clsValidacionException>(() => clsCuadranteVista.Crear(Guid.NewGuid(), Guid.NewGuid(), null, AHORA))));
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void Sin_geometria_es_valido(string? geometria)
-    {
-        Assert.Null(clsCuadrante.GeometriaValida(geometria));
-    }
-
-    [Theory]
     [InlineData("no es json")]
     [InlineData("[]")]
     [InlineData("""{"puntos":[[0,0],[1,0]]}""")]
@@ -145,9 +148,9 @@ public sealed class CatalogosDominioTests
     [InlineData("""{"puntos":[[0,0],[1,0],[1]]}""")]
     [InlineData("""{"puntos":"nada"}""")]
     [InlineData("""{"otro":[[0,0],[1,0],[1,1]]}""")]
-    public void Rechaza_geometrias_que_no_son_un_poligono_normalizado(string geometria)
+    public void Rechaza_geometrias_que_no_son_un_poligono_normalizado(string? geometria)
     {
-        Assert.Equal("geometria", CampoDelError(Assert.Throws<clsValidacionException>(() => clsCuadrante.GeometriaValida(geometria))));
+        Assert.Equal("geometria", CampoDelError(Assert.Throws<clsValidacionException>(() => clsCuadranteVista.GeometriaValida(geometria))));
     }
 }
 
@@ -348,9 +351,10 @@ public sealed class CatalogosServiceTests
     {
         var servicio = Servicio();
 
-        var ruta = await servicio.EtapasDeLaRutaAsync();
+        var ruta = await servicio.RutaEstandarAsync();
 
-        Assert.Equal(_etapas.Valores.Where(v => v.Activo).Select(v => v.Id), ruta);
+        Assert.Equal(_etapas.Valores.Where(v => v.Activo).Select(v => v.Id), ruta.Select(e => e.Id));
+        Assert.Equal(_etapas.Valores.Where(v => v.Activo).Select(v => v.Codigo), ruta.Select(e => e.Codigo));
     }
 
     [Fact]

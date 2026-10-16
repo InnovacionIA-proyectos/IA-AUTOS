@@ -76,14 +76,14 @@ public sealed class clsCamposCatalogo(IReadOnlyDictionary<string, JsonElement> c
         return Leer(campo, valor.GetRawText);
     }
 
-    /// <summary>Falla si llego algun campo que este catalogo no admite.</summary>
-    public void SoloPermitidos(IEnumerable<string> permitidos)
+    /// <summary>Falla si llego algun campo que no se admite en <paramref name="donde"/> (por defecto, el catalogo).</summary>
+    public void SoloPermitidos(IEnumerable<string> permitidos, string donde = "este catálogo")
     {
         var admitidos = permitidos.ToHashSet();
         var sobrantes = campos.Keys.Where(c => !admitidos.Contains(c)).Order().ToList();
         if (sobrantes.Count > 0)
         {
-            throw clsErroresCampos.De(sobrantes[0], $"Campo no admitido en este catálogo (admite: {string.Join(", ", admitidos.Order())})");
+            throw clsErroresCampos.De(sobrantes[0], $"Campo no admitido en {donde} (admite: {string.Join(", ", admitidos.Order())})");
         }
     }
 

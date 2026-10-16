@@ -14,6 +14,15 @@ public static class clsCodigosError
     public const string INTERNAL_ERROR = "INTERNAL_ERROR";
     public const string RATE_LIMITED = "RATE_LIMITED";
 
+    /// <summary>La cuenta esta bloqueada por intentos de PIN fallidos (423); details.bloqueado_hasta dice hasta cuando.</summary>
+    public const string ACCOUNT_LOCKED = "ACCOUNT_LOCKED";
+
+    /// <summary>La etapa anterior del VIN no tiene su inspeccion de llegada cerrada: no se puede crear la salida de la siguiente (409).</summary>
+    public const string ETAPA_PREVIA_SIN_CIERRE = "ETAPA_PREVIA_SIN_CIERRE";
+
+    /// <summary>El PIN fue asignado o reiniciado y hay que cambiarlo antes de usar el resto de la API (403).</summary>
+    public const string PIN_CHANGE_REQUIRED = "PIN_CHANGE_REQUIRED";
+
     /// <summary>La persona del portal no tiene acceso habilitado a IA Autos (no existe en el portal, no tiene un rol de IA Autos o fue retirada): 403 con codigo propio, distinto de FORBIDDEN (rol insuficiente), para que el modulo muestre el mensaje de acceso no habilitado.</summary>
     public const string PORTAL_USER_NOT_LINKED = "PORTAL_USER_NOT_LINKED";
 }

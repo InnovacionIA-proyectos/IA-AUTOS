@@ -1,4 +1,6 @@
 import '../../sync/domain/job.dart';
+import 'foto_local.dart';
+import 'hallazgo_local.dart';
 
 /// Motivos por los que todavía no se puede cerrar un informe.
 enum BloqueoCierre {

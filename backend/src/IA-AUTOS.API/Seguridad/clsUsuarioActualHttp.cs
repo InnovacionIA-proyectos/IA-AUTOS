@@ -8,6 +8,8 @@ namespace IAAutos.API.Seguridad;
 internal sealed class clsUsuarioActualHttp(IHttpContextAccessor accesor) : IUsuarioActual
 {
     public const string CLAIM_ROL = "user_role";
+    public const string CLAIM_CLIENTE = "cliente_id";
+    public const string CLAIM_CAMBIAR_PIN = "cambiar_pin";
 
     private ClaimsPrincipal? Principal => accesor.HttpContext?.User;
 
@@ -17,4 +19,7 @@ internal sealed class clsUsuarioActualHttp(IHttpContextAccessor accesor) : IUsua
     public string? Rol => Principal?.FindFirstValue(CLAIM_ROL);
 
     public string? Email => Principal?.FindFirstValue(JwtRegisteredClaimNames.Email);
+
+    public Guid? ClienteId =>
+        Guid.TryParse(Principal?.FindFirstValue(CLAIM_CLIENTE), out var id) ? id : null;
 }

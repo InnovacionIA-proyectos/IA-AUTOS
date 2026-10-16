@@ -11,11 +11,13 @@ vistas de foto, cuadrantes, tipos de unidad) viven ahora en tablas y se administ
 | `tblEtapasCatalogo` | Etapas del proceso. Es el `proceso` de cada tramo de la ruta de un vehículo | `cargue`, `transporte`, `descargue` |
 | `tblPuntosCustodia` | **Lugares** físicos donde se hace una etapa (la tabla se rehízo) | `cedi_1`, `origen`, `certificadora`, `destino`, `cedi_2`, `concesionario` |
 | `tblTiposUnidadTransportadora` | Tipos de unidad transportadora | `ninera`, `nodriza`, `quintinaria`, `planchon_grua` |
+| `tblClientes` | Clientes (empresas) a los que pertenecen los usuarios y los vehículos (ver [identidad.md](identidad.md)) | `sofasa` |
 | `tblClasesDano` | Clases de daño de un hallazgo | 10 (`deformacion`, `rotura`, `cortado`, `perforacion`, `golpe`, `mancha`, `raya_pintar`, `desconchado`, `particulas`, `faltante`) |
 | `tblTamanosDano` | Tamaños de daño de un hallazgo | 6 (`1_5cm`, `5_10cm`, `10_20cm`, `mas_20cm`, `requiere_reemplazo`, `mas_10_particulas`) |
 | `tblNivelesSeveridad` | Niveles V1+, V1, V2, V3 con su `Accion` | 4, **sin acción** (se carga desde el portal) |
 | `tblVistasFoto` | Vistas de foto; `Obligatoria` = 1 se toma siempre, 0 solo con faltante o daño; `TipoVehiculo` opcional | 9: 7 obligatorias (`frontal`, `trasera`, `lateral_derecha`, `lateral_izquierda`, `diagonal_trasera_izquierda`, `diagonal_delantera_derecha`, `superior`) y 2 adicionales (`piezas_baul`, `cojineria`) |
-| `tblCuadrantes` | Regiones numeradas de cada vista, por tipo de vehículo, con su geometría (polígono normalizado en JSON) | **ninguno**: se cargan desde el portal o con la plantilla de abajo |
+| `tblCuadrantes` | Las **zonas** numeradas de la carrocería, por tipo de vehículo (la puerta delantera es una zona aunque se vea desde varias vistas) | 36 de la ficha del vehículo genérico (script 04); los números 4 y 12 no existen en la ficha |
+| `tblCuadranteVistas` | El **polígono** de cada zona en cada vista donde aparece (JSON normalizado, una fila por aparición; una zona tiene a lo sumo un polígono por vista) | 97 polígonos en 5 vistas (script 04) |
 
 Todos comparten `Codigo` (clave estable, única, en minúsculas), `Nombre`, `Orden`, `Activo`, `CreatedAt` y `UpdatedAt`. Un valor **en uso no se
 borra** (la base lo impide con una llave foránea y la API responde `409`): se inactiva con `Activo = 0`.
@@ -50,9 +52,9 @@ Los datos existentes migran sin pérdida: cada etapa conserva su proceso (en la 
 | Antes | Ahora |
 |---|---|
 | `proceso` salía de los 7 puntos de custodia | `proceso` es el `codigo` de una etapa del catálogo (`cargue`, `transporte`, `descargue`); el filtro `proceso` de los informes valida contra `etapas` |
-| `POST /api/etapas` recibía `punto_custodia_id` (el proceso) | recibe `etapa_catalogo_id` (obligatorio) y `punto_custodia_id` (el **lugar**, opcional) |
+| `POST /api/etapas` recibía `punto_custodia_id` (el proceso) | recibía `etapa_catalogo_id` y `punto_custodia_id` (el **lugar**); ya no existe: las etapas nacen al agregar un VIN a un viaje (ver [viajes.md](viajes.md)) |
 | `clase_dano` y `tamano_dano` validados contra listas fijas | validados contra los valores **activos** de `clases-dano` y `tamanos-dano` |
-| Los vehículos nuevos recibían siempre Cargue, Transporte y Descargue | reciben una etapa por cada valor **activo** de `etapas`, en su `orden` |
+| Los vehículos nuevos recibían siempre Cargue, Transporte y Descargue | cada VIN que entra a un viaje recibe una etapa por cada valor **activo** de `etapas`, en su `orden` |
 | inventario e informe | agregan `lugar` (nombre del lugar o `null`) |
 
 ## Aplicar el cambio en una base existente
@@ -62,6 +64,8 @@ Con un usuario que pueda crear tablas (no el de la aplicación), conectado a la 
 1. Ejecutar [`database/cambios-esquema/02-catalogos-maestros.sql`](../database/cambios-esquema/02-catalogos-maestros.sql) ajustando `@esquema`
    (`dbo`, o `db_IA_AUTOS` en la base compartida de pruebas). Es una sola transacción y se puede repetir: si ya está migrada no hace nada. Aborta
    sin cambiar nada si alguna etapa usa uno de los 4 lugares antiguos.
+   Si la base ya tenía los catálogos con un cuadrante por vista, ejecutar después [`03-cuadrantes-por-zona.sql`](../database/cambios-esquema/03-cuadrantes-por-zona.sql)
+   (separa la zona de su polígono por vista; también se puede repetir).
 2. Dar permisos al usuario de la aplicación sobre las tablas nuevas si no los hereda por esquema.
 3. Desplegar la API **después** de la migración (la API nueva espera las tablas nuevas).
 
@@ -70,22 +74,31 @@ valor en uso no se borra.
 
 ## Cargar los cuadrantes y las acciones de los niveles
 
-Se pueden crear desde el portal (API). Para cargarlos en bloque con SQL:
+Los cuadrantes de la ficha del vehículo genérico (36 zonas y 97 polígonos) se cargan con
+[`database/cambios-esquema/04-cargar-cuadrantes-ficha.sql`](../database/cambios-esquema/04-cargar-cuadrantes-ficha.sql), que se ejecuta después
+del 03 y se puede repetir: lo que ya existe no se duplica ni se pisa. Los puntos son proporciones (0 a 1) de la imagen de cada vista.
+
+| Vista de la ficha | Vista de foto |
+|---|---|
+| Vista superior | `superior` |
+| Costado lateral izquierdo | `lateral_izquierda` |
+| Costado lateral derecho | `lateral_derecha` |
+| Perfil posterior izquierdo | `diagonal_trasera_izquierda` |
+| Perfil posterior derecho | `diagonal_delantera_derecha` |
+
+Pendiente de validar por calidad: los **nombres** de las zonas (la ficha solo trae el número; se corrigen desde el portal con
+`PATCH /api/catalogos/cuadrantes/{id}`), el 15 (se dibujó como «Manija de puerta trasera») y el lado del capó y del techo (en la ficha, el lado
+de arriba de la vista superior es el **derecho** del vehículo, porque el frente apunta a la izquierda). Las vistas `frontal` y `trasera` no tienen
+cuadrantes dibujados: un golpe en el parachoques delantero no tiene zona a la cual asociarse hasta que se dibujen.
+
+Las acciones de los niveles de severidad se cargan con SQL o desde el portal:
 
 ```sql
--- Acciones de los niveles de severidad
 UPDATE db_IA_AUTOS.tblNivelesSeveridad SET Accion = N'<qué hacer con una unidad V1+>', UpdatedAt = SYSDATETIMEOFFSET() WHERE Codigo = 'v1_plus';
-
--- Cuadrantes: uno por fila. Solo las 7 vistas obligatorias admiten cuadrantes. TipoVehiculo NULL = cualquier tipo.
--- Geometria: {"puntos":[[x,y],...]} con al menos 3 puntos y x,y entre 0 y 1 sobre la imagen de la vista.
-INSERT INTO db_IA_AUTOS.tblCuadrantes (Id, VistaFotoId, TipoVehiculo, Numero, Nombre, Geometria, Orden)
-SELECT NEWID(), v.Id, x.TipoVehiculo, x.Numero, x.Nombre, x.Geometria, x.Numero
-FROM (VALUES
-    ('frontal', NULL, 1, N'Frontal 1', N'{"puntos":[[0,0],[0.5,0],[0.5,0.5],[0,0.5]]}')
-    -- , ('frontal', NULL, 2, N'Frontal 2', N'...')
-) AS x (Vista, TipoVehiculo, Numero, Nombre, Geometria)
-JOIN db_IA_AUTOS.tblVistasFoto v ON v.Codigo = x.Vista;
 ```
+
+Para agregar una zona o su polígono en otra vista desde el portal: `POST /api/catalogos/cuadrantes` (la zona) y `POST /api/catalogos/cuadrante-vistas`
+(su polígono en una vista).
 
 La API guarda los catálogos en memoria hasta un minuto (`Catalogos__CacheSegundos`): los cambios hechos directamente en la base pueden tardar ese
 tiempo en verse; los hechos por la API se ven al instante.

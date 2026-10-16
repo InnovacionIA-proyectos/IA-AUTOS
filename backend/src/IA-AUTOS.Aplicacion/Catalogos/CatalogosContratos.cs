@@ -1,4 +1,5 @@
 using System.Text.Json;
+using IAAutos.Dominio.Vehiculos;
 
 namespace IAAutos.Aplicacion.Catalogos;
 
@@ -13,6 +14,8 @@ public static class clsNombresCatalogo
     public const string NIVELES_SEVERIDAD = "niveles-severidad";
     public const string VISTAS_FOTO = "vistas-foto";
     public const string CUADRANTES = "cuadrantes";
+    public const string CUADRANTE_VISTAS = "cuadrante-vistas";
+    public const string CLIENTES = "clientes";
 }
 
 /// <summary>Un valor de catalogo tal como lo ve el cliente: solo los campos propios de ese catalogo (snake_case), con id, codigo, nombre, orden y activo.</summary>
@@ -68,11 +71,12 @@ public sealed record CatalogoValorRequest(
     string? Accion,
     bool? Obligatoria,
     string? TipoVehiculo,
+    Guid? CuadranteId,
     Guid? VistaFotoId,
     int? Numero,
     GeometriaCuadranteDto? Geometria);
 
-/// <summary>Poligono normalizado de un cuadrante: cada punto es [x, y] con x e y entre 0 y 1 sobre la imagen de la vista.</summary>
+/// <summary>Poligono normalizado de un cuadrante en una vista: cada punto es [x, y] con x e y entre 0 y 1 sobre la imagen de la vista.</summary>
 public sealed record GeometriaCuadranteDto(IReadOnlyList<IReadOnlyList<double>> Puntos);
 
 /// <summary>Lectura de los catalogos para el resto de la aplicacion (validar entradas, armar la ruta de un vehiculo). Con cache.</summary>
@@ -81,9 +85,18 @@ public interface ICatalogosLectura
     /// <summary>Codigos del catalogo; <paramref name="soloActivos"/> excluye los inactivos.</summary>
     Task<IReadOnlySet<string>> CodigosAsync(string catalogo, bool soloActivos, CancellationToken ct = default);
 
-    /// <summary>Ids de las etapas activas del catalogo, en orden: la ruta estandar de un vehiculo nuevo.</summary>
-    Task<IReadOnlyList<Guid>> EtapasDeLaRutaAsync(CancellationToken ct = default);
+    /// <summary>Etapas activas del catalogo (id y codigo), en orden: la ruta estandar de cada VIN de un viaje.</summary>
+    Task<IReadOnlyList<clsEtapaDeRuta>> RutaEstandarAsync(CancellationToken ct = default);
+
+    /// <summary>Todos los valores del catalogo (activos e inactivos) tal como los sirve la API: id, codigo, nombre, orden, activo...</summary>
+    Task<IReadOnlyList<ValorCatalogo>> ValoresAsync(string catalogo, CancellationToken ct = default);
 
     /// <summary>True si el valor existe en el catalogo y esta activo (por ejemplo, para crear una etapa con un lugar valido).</summary>
     Task<bool> ExisteActivoAsync(string catalogo, Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Id del cliente activo con ese codigo; si no existe o no se indica, el primer cliente activo por orden. Es el cliente que se asigna a
+    /// lo que se crea sin un cliente explicito (por ejemplo, los vehiculos de la ingesta).
+    /// </summary>
+    Task<Guid> ClienteAsync(string? codigoPreferido, CancellationToken ct = default);
 }

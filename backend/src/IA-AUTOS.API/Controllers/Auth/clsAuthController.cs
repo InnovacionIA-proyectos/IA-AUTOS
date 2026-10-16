@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using IAAutos.API.Configuracion;
 using IAAutos.API.Controllers.Comun;
+using IAAutos.API.Seguridad;
 using IAAutos.Aplicacion.Auth;
 using IAAutos.Aplicacion.Auth.DTOAuth;
 using IAAutos.Aplicacion.Comun;
@@ -19,6 +20,7 @@ public sealed class clsAuthController(
 {
     public const string POLITICA_LIMITE_LOGIN = "login";
     public const string POLITICA_LIMITE_LOGIN_PORTAL = "login-portal";
+    public const string POLITICA_LIMITE_LOGIN_CONDUCTOR = "login-conductor";
     public const string POLITICA_LIMITE_REFRESH = "refresh";
 
     /// <summary>Inicio de sesion por correo y contrasena. Devuelve el JWT y los datos basicos del usuario.</summary>
@@ -31,6 +33,37 @@ public sealed class clsAuthController(
     {
         var solicitud = await LeerCuerpoAsync<LoginRequest>(ct);
         return Ok(await servicio.LoginAsync(solicitud, ct));
+    }
+
+    /// <summary>
+    /// Inicio de sesion con cedula y PIN (conductor o inspector sin correo). Devuelve el JWT y el usuario; si el PIN es temporal,
+    /// <c>usuario.debe_cambiar_pin</c> es true y el resto de la API responde 403 PIN_CHANGE_REQUIRED hasta llamar a cambiar-pin.
+    /// 401 con cedula o PIN incorrectos; 423 ACCOUNT_LOCKED tras varios PIN errados seguidos (con details.bloqueado_hasta).
+    /// </summary>
+    [HttpPost("login-conductor")]
+    [AllowAnonymous]
+    [EnableRateLimiting(POLITICA_LIMITE_LOGIN_CONDUCTOR)]
+    [ProducesResponseType<LoginResponse>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(LoginConductorRequest))]
+    public async Task<IActionResult> LoginConductor(CancellationToken ct)
+    {
+        var solicitud = await LeerCuerpoAsync<LoginConductorRequest>(ct);
+        return Ok(await servicio.LoginConductorAsync(solicitud, ct));
+    }
+
+    /// <summary>
+    /// El propio usuario cambia su PIN (obligatorio cuando un administrador se lo asigno o reinicio). Pide el PIN actual; un actual
+    /// errado cuenta como intento fallido. Responde 204.
+    /// </summary>
+    [HttpPost("cambiar-pin")]
+    [PermitirConCambioDePin]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [CuerpoSolicitud(typeof(CambiarPinRequest))]
+    public async Task<IActionResult> CambiarPin(CancellationToken ct)
+    {
+        var solicitud = await LeerCuerpoAsync<CambiarPinRequest>(ct);
+        await servicio.CambiarPinAsync(actual.IdObligatorio(), solicitud, ct);
+        return NoContent();
     }
 
     /// <summary>
@@ -72,6 +105,7 @@ public sealed class clsAuthController(
     /// </summary>
     [HttpPost("logout")]
     [AllowAnonymous]
+    [PermitirConCambioDePin]
     [CuerpoSolicitud(typeof(RefreshRequest))]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Logout(CancellationToken ct)
@@ -83,9 +117,10 @@ public sealed class clsAuthController(
         return NoContent();
     }
 
-    /// <summary>Datos del usuario autenticado.</summary>
+    /// <summary>Perfil del usuario autenticado: datos, cedula, cliente y capacidades (para armar el menu segun el rol).</summary>
     [HttpGet("me")]
-    [ProducesResponseType<UsuarioAutenticadoDto>(StatusCodes.Status200OK)]
+    [PermitirConCambioDePin]
+    [ProducesResponseType<PerfilDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Me(CancellationToken ct) =>
         Ok(await servicio.ObtenerPerfilAsync(actual.IdObligatorio(), ct));
 

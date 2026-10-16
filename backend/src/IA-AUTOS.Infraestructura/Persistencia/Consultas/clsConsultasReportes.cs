@@ -12,7 +12,7 @@ internal sealed class clsConsultasReportes(clsAppDbContext contexto) : IConsulta
 
     public async Task<(IReadOnlyList<ConteoProcesoDto>, IReadOnlyList<ConteoZonaDto>, IReadOnlyList<ConteoZonaProcesoDto>)> ObtenerPatronesAsync(CancellationToken ct = default)
     {
-        var movilizados = contexto.Set<clsVehiculoMovilizado>().Select(m => m.VehiculoId);
+        var movilizados = contexto.Set<clsViajeCompleto>().Select(m => m.VehiculoId);
         var hallazgos = from h in contexto.Hallazgos.AsNoTracking()
                         join i in contexto.Inspecciones on h.InspeccionId equals i.Id
                         join e in contexto.Etapas on i.EtapaId equals e.Id
@@ -42,7 +42,7 @@ internal sealed class clsConsultasReportes(clsAppDbContext contexto) : IConsulta
     public async Task<(IReadOnlyList<ConteoClaseDto>, IReadOnlyList<ConteoTamanoDto>)> ObtenerAnalisisAsync(CancellationToken ct = default)
     {
         // A diferencia de los patrones, el analisis cuantifica los hallazgos de unidades movilizadas de cualquier proceso.
-        var movilizados = contexto.Set<clsVehiculoMovilizado>().Select(m => m.VehiculoId);
+        var movilizados = contexto.Set<clsViajeCompleto>().Select(m => m.VehiculoId);
         var hallazgos = from h in contexto.Hallazgos.AsNoTracking()
                         join i in contexto.Inspecciones on h.InspeccionId equals i.Id
                         join e in contexto.Etapas on i.EtapaId equals e.Id
@@ -65,7 +65,7 @@ internal sealed class clsConsultasReportes(clsAppDbContext contexto) : IConsulta
 
     public async Task<ConteosRechazo> ObtenerConteosRechazoAsync(CancellationToken ct = default)
     {
-        var movilizados = contexto.Set<clsVehiculoMovilizado>().Select(m => m.VehiculoId);
+        var movilizados = contexto.Set<clsViajeCompleto>().Select(m => m.VehiculoId);
         var conHallazgos = (from e in contexto.Etapas
                             join i in contexto.Inspecciones on e.Id equals i.EtapaId
                             join h in contexto.Hallazgos on i.Id equals h.InspeccionId

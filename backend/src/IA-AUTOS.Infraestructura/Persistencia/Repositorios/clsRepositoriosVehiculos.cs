@@ -43,26 +43,11 @@ internal sealed class clsEtapaRepository(clsAppDbContext contexto) : IEtapaRepos
     public Task<clsEtapa?> ObtenerPorIdAsync(Guid id, CancellationToken ct = default) =>
         contexto.Etapas.FirstOrDefaultAsync(e => e.Id == id, ct);
 
-    public async Task<IReadOnlyDictionary<Guid, IReadOnlySet<int>>> ObtenerOrdenesExistentesAsync(
-        IReadOnlyCollection<Guid> vehiculoIds,
-        CancellationToken ct = default)
-    {
-        var resultado = new Dictionary<Guid, IReadOnlySet<int>>();
-        foreach (var lote in vehiculoIds.Distinct().Chunk(1000))
-        {
-            var filas = await contexto.Etapas
-                .AsNoTracking()
-                .Where(e => lote.Contains(e.VehiculoId))
-                .Select(e => new { e.VehiculoId, e.Orden })
-                .ToListAsync(ct);
-            foreach (var grupo in filas.GroupBy(f => f.VehiculoId))
-            {
-                resultado[grupo.Key] = grupo.Select(f => f.Orden).ToHashSet();
-            }
-        }
-
-        return resultado;
-    }
+    public Task<clsEtapa?> ObtenerPreviaAsync(Guid viajeId, Guid vehiculoId, int orden, CancellationToken ct = default) =>
+        contexto.Etapas.AsNoTracking()
+            .Where(e => e.ViajeId == viajeId && e.VehiculoId == vehiculoId && e.Orden < orden)
+            .OrderByDescending(e => e.Orden)
+            .FirstOrDefaultAsync(ct);
 
     public void Agregar(clsEtapa etapa) => contexto.Etapas.Add(etapa);
 }

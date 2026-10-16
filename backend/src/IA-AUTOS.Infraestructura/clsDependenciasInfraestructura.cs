@@ -6,7 +6,6 @@ using IAAutos.Aplicacion.Reportes;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Sofasa;
 using IAAutos.Aplicacion.Vehiculos;
-using IAAutos.Dominio.Asignaciones;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Auditoria;
 using IAAutos.Dominio.Comun;
@@ -15,6 +14,8 @@ using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Sofasa;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
+using IAAutos.Dominio.Viajes;
+using IAAutos.Aplicacion.Viajes;
 using IAAutos.Infraestructura.Almacenamiento;
 using IAAutos.Infraestructura.Catalogos;
 using IAAutos.Infraestructura.Persistencia;
@@ -60,9 +61,11 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IUnidadDeTrabajo, clsUnidadDeTrabajo>();
         servicios.AddScoped<IConsultasVehiculos, clsConsultasVehiculos>();
         servicios.AddScoped<IConsultasSofasa, clsConsultasSofasa>();
+        servicios.AddScoped<IConsultasViajes, clsConsultasViajes>();
         servicios.AddScoped<IConsultasInspecciones, clsConsultasInspecciones>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();
         servicios.AddSingleton<IGeneradorPdfInventario, clsGeneradorPdfInventario>();
+        servicios.AddSingleton<IGeneradorPdfConstancia, clsGeneradorPdfConstancia>();
 
         servicios.Configure<clsOpcionesAlmacenamiento>(configuracion.GetSection(clsOpcionesAlmacenamiento.SECCION));
         servicios.Configure<clsOpcionesS3>(configuracion.GetSection(clsOpcionesS3.SECCION));
@@ -85,7 +88,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IEtapaRepository, clsEtapaRepository>();
         servicios.AddScoped<IInspeccionRepository, clsInspeccionRepository>();
         servicios.AddScoped<ITransferenciaCustodiaRepository, clsTransferenciaCustodiaRepository>();
-        servicios.AddScoped<IAsignacionRepository, clsAsignacionRepository>();
+        servicios.AddScoped<IViajeRepository, clsViajeRepository>();
         servicios.AddScoped<IOrdenSofasaRepository, clsOrdenSofasaRepository>();
         servicios.AddScoped<IAuditoriaRepository, clsAuditoriaRepository>();
         return servicios;
@@ -101,6 +104,8 @@ public static class clsDependenciasInfraestructura
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.PUNTOS_CUSTODIA, clsPuntoCustodia.Crear));
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsTipoUnidadTransportadora>(
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.TIPOS_UNIDAD, clsTipoUnidadTransportadora.Crear));
+        servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsCliente>(
+            p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.CLIENTES, clsCliente.Crear));
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsClaseDano>(
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.CLASES_DANO, clsClaseDano.Crear));
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsTamanoDano>(
@@ -108,5 +113,6 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<ICatalogo, clsCatalogoNiveles>();
         servicios.AddScoped<ICatalogo, clsCatalogoVistas>();
         servicios.AddScoped<ICatalogo, clsCatalogoCuadrantes>();
+        servicios.AddScoped<ICatalogo, clsCatalogoCuadranteVistas>();
     }
 }
