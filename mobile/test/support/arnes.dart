@@ -6,7 +6,7 @@ import 'package:traza_autos/app/proveedores.dart';
 import 'package:traza_autos/core/config/entorno.dart';
 import 'package:traza_autos/core/dispositivo/servicios.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
-import 'package:traza_autos/core/seguridad/almacen_sesion.dart';
+import 'package:traza_autos/features/auth/domain/almacen_sesion.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/inspecciones/data/inspecciones_repositorio.dart';
 import 'package:traza_autos/features/inspecciones/domain/inspeccion_resumen.dart';

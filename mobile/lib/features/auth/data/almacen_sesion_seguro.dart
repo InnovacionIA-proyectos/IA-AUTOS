@@ -2,16 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../../features/auth/domain/sesion.dart';
+import '../domain/almacen_sesion.dart';
+import '../domain/sesion.dart';
 
-/// Guarda la sesión (JWT y datos del usuario) de forma segura: Keystore en Android. Nunca en texto plano en
-/// SharedPreferences ni en SQLite.
-abstract interface class AlmacenSesion {
-  Future<Sesion?> leer();
-  Future<void> guardar(Sesion sesion);
-  Future<void> borrar();
-}
-
+/// Implementación de [AlmacenSesion] sobre flutter_secure_storage (Keystore en Android).
 class AlmacenSesionSeguro implements AlmacenSesion {
   AlmacenSesionSeguro([FlutterSecureStorage? almacen]) : _almacen = almacen ?? const FlutterSecureStorage();
 
