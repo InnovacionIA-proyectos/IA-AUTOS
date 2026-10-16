@@ -2,20 +2,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/entorno.dart';
 import '../core/db/app_database.dart';
-import '../core/db/cache_lecturas.dart';
 import '../core/dispositivo/servicios.dart';
 import '../core/dispositivo/servicios_reales.dart';
 import '../core/http/cliente_api.dart';
-import '../core/red/estado_red.dart';
 import '../core/seguridad/almacen_sesion.dart';
 import '../features/auth/data/auth_repositorio_api.dart';
 import '../features/auth/domain/sesion.dart';
 import '../features/auth/presentation/auth_controller.dart';
 import '../features/custodia/data/usuarios_repositorio.dart';
+import '../features/inspecciones/data/cache_lecturas.dart';
 import '../features/inspecciones/data/inspecciones_repositorio.dart';
 import '../features/sofasa/data/sofasa_repositorio.dart';
 import '../features/sync/data/archivos_locales_io.dart';
 import '../features/sync/data/cola_drift.dart';
+import '../features/sync/data/estado_red_conectividad.dart';
 import '../features/sync/data/gateway_informes_api.dart';
 import '../features/sync/domain/procesador_cola.dart';
 import '../features/sync/domain/puertos.dart';
@@ -45,7 +45,7 @@ final clienteApiProvider = Provider<ClienteApi>((ref) {
   );
 });
 
-final estadoRedProvider = Provider<EstadoRedConectividad>((ref) => EstadoRedConectividad(apiUrl: ref.watch(entornoProvider).apiUrl));
+final estadoRedProvider = Provider<EstadoRed>((ref) => EstadoRedConectividad(apiUrl: ref.watch(entornoProvider).apiUrl));
 
 final colaRepositorioProvider = Provider<ColaRepositorio>((ref) => ColaDrift(ref.watch(appDatabaseProvider)));
 

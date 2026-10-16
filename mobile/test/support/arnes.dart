@@ -6,12 +6,12 @@ import 'package:traza_autos/app/proveedores.dart';
 import 'package:traza_autos/core/config/entorno.dart';
 import 'package:traza_autos/core/dispositivo/servicios.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
-import 'package:traza_autos/core/red/estado_red.dart';
 import 'package:traza_autos/core/seguridad/almacen_sesion.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/inspecciones/data/inspecciones_repositorio.dart';
 import 'package:traza_autos/features/inspecciones/domain/inspeccion_resumen.dart';
 import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
+import 'package:traza_autos/features/sync/domain/puertos.dart';
 
 import 'dobles_sync.dart';
 
@@ -50,9 +50,7 @@ class AuthRepositorioFalso implements AuthRepositorio {
 }
 
 /// Red controlable sin plugins: se activa/desactiva y emite cambios a mano.
-class RedConectividadFalsa extends EstadoRedConectividad {
-  RedConectividadFalsa() : super(apiUrl: 'https://api.test');
-
+class RedConectividadFalsa implements EstadoRed {
   final controlador = StreamController<bool>.broadcast();
   bool estable = true;
   bool alcanzable = true;

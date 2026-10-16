@@ -13,6 +13,9 @@ abstract interface class ColaRepositorio {
 
 /// Estado de la conectividad. "Señal estable" = wifi, datos o ethernet con internet alcanzable.
 abstract interface class EstadoRed {
+  /// Emite true cuando la conexión pasa a ser estable y false cuando se pierde.
+  Stream<bool> get cambios;
+
   Future<bool> redEstable();
 
   /// La API responde de verdad (GET /health) en un tiempo corto.

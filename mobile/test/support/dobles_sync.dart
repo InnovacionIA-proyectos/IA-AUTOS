@@ -33,6 +33,9 @@ class RedFalsa implements EstadoRed {
   int consultas = 0;
 
   @override
+  Stream<bool> get cambios => const Stream.empty();
+
+  @override
   Future<bool> redEstable() async {
     consultas++;
     final limite = consultasEstables;

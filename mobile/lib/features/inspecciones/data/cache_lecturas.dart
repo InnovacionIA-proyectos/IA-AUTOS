@@ -1,5 +1,4 @@
-
-import 'app_database.dart';
+import '../../../core/db/app_database.dart';
 
 /// Caché clave-valor de lecturas (JSON como texto).
 class CacheLecturasRepo {
