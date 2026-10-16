@@ -59,13 +59,18 @@ jobs:
       - name: Pruebas unitarias
         run: dotnet test backend\tests\IA-AUTOS.Tests.Unitarios -c Release --no-build --logger "trx;LogFileName=unitarias.trx" --results-directory TestResults
 
+      # Pruebas de integracion por regla de negocio (S5-HU-26.2): cada una levanta su propio SQL Server en un contenedor
+      # Testcontainers efimero, borra y vuelve a crear sus datos de negocio ahi mismo y nunca toca la base real ni el
+      # entorno real. DOCKER_HOST apunta al daemon expuesto por TCP en el runner (Docker Desktop corre en otra sesion
+      # de Windows que la del servicio del runner; el named pipe por defecto no es visible entre sesiones).
+      - name: Pruebas de integracion (reglas de negocio, Testcontainers)
+        env:
+          DOCKER_HOST: tcp://localhost:2375
+        run: dotnet test backend\tests\IA-AUTOS.Tests.Integracion -c Release --no-build --logger "trx;LogFileName=integracion.trx" --results-directory TestResults
+
       # SOLO LECTURA contra la base y el MinIO reales: solo SELECT y listados, sin insertar, actualizar ni borrar nada.
       # Usan los mismos nombres de variable que backend/.env (ASP.NET Core las mapea solo, doble guion bajo). Los valores
       # son secretos del repositorio; la lista completa esta en backend/.env.github.
-      #
-      # NO se ejecuta aqui IA-AUTOS.Tests.Integracion: sus pruebas borran y vuelven a crear los datos de negocio al inicio
-      # de cada prueba (en su propio contenedor Testcontainers) y NUNCA deben apuntar a la base real. Se corren en local
-      # con Docker: dotnet test backend/tests/IA-AUTOS.Tests.Integracion
       - name: Pruebas contra el entorno real (solo lectura)
         if: github.actor != 'dependabot[bot]'
         env:
