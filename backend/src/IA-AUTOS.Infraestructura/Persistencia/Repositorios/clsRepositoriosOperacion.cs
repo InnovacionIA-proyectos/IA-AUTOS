@@ -1,4 +1,3 @@
-using IAAutos.Dominio.Asignaciones;
 using IAAutos.Dominio.Auditoria;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
@@ -20,16 +19,87 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
         return contexto.Usuarios.FirstOrDefaultAsync(u => u.Email == normalizado, ct);
     }
 
+    public Task<clsUsuario?> ObtenerPorCedulaAsync(string cedula, CancellationToken ct = default) =>
+        string.IsNullOrEmpty(cedula) ? Task.FromResult<clsUsuario?>(null) : contexto.Usuarios.FirstOrDefaultAsync(u => u.Cedula == cedula, ct);
+
     public Task<clsUsuario?> ObtenerPorPortalIdAsync(long portalUsuarioId, CancellationToken ct = default) =>
         contexto.Usuarios.FirstOrDefaultAsync(u => u.PortalUsuarioId == portalUsuarioId, ct);
 
-    public async Task<IReadOnlyList<clsUsuario>> ListarAsync(CancellationToken ct = default) =>
-        await contexto.Usuarios.AsNoTracking().OrderBy(u => u.Nombre).ToListAsync(ct);
+    public async Task<IReadOnlyDictionary<string, clsUsuario>> ObtenerPorCedulasAsync(IReadOnlyCollection<string> cedulas, CancellationToken ct = default)
+    {
+        var resultado = new Dictionary<string, clsUsuario>(StringComparer.OrdinalIgnoreCase);
+        foreach (var lote in cedulas.Distinct(StringComparer.OrdinalIgnoreCase).Chunk(1000))
+        {
+            foreach (var usuario in await contexto.Usuarios.AsNoTracking().Where(u => u.Cedula != null && lote.Contains(u.Cedula)).ToListAsync(ct))
+            {
+                resultado[usuario.Cedula!] = usuario;
+            }
+        }
+
+        return resultado;
+    }
+
+    public async Task<IReadOnlyList<clsUsuario>> ListarAsync(Guid? clienteId = null, CancellationToken ct = default) =>
+        await contexto.Usuarios.AsNoTracking()
+            .Where(u => clienteId == null || u.ClienteId == clienteId)
+            .OrderBy(u => u.Nombre)
+            .ToListAsync(ct);
+
+    public async Task<(IReadOnlyList<clsUsuario> Filas, int Total)> BuscarAsync(clsFiltroUsuarios filtro, int saltar, int tomar, CancellationToken ct = default)
+    {
+        var consulta = contexto.Usuarios.AsNoTracking().AsQueryable();
+        if (filtro.ClienteId is { } clienteId)
+        {
+            consulta = consulta.Where(u => u.ClienteId == clienteId);
+        }
+
+        if (filtro.Rol is not null)
+        {
+            consulta = consulta.Where(u => u.Rol == filtro.Rol);
+        }
+
+        if (filtro.Activo is { } activo)
+        {
+            consulta = consulta.Where(u => u.Activo == activo);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtro.Texto))
+        {
+            var texto = filtro.Texto.Trim();
+            consulta = consulta.Where(u => u.Nombre.Contains(texto) || (u.Email != null && u.Email.Contains(texto)) || (u.Cedula != null && u.Cedula.Contains(texto)));
+        }
+
+        var total = await consulta.CountAsync(ct);
+        var filas = await consulta.OrderBy(u => u.Nombre).ThenBy(u => u.Id).Skip(saltar).Take(tomar).ToListAsync(ct);
+        return (filas, total);
+    }
+
+    public async Task<IReadOnlySet<string>> EmailsExistentesAsync(IReadOnlyCollection<string> emails, CancellationToken ct = default)
+    {
+        var existentes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var lote in emails.Distinct(StringComparer.OrdinalIgnoreCase).Chunk(1000))
+        {
+            existentes.UnionWith(await contexto.Usuarios.AsNoTracking().Where(u => u.Email != null && lote.Contains(u.Email)).Select(u => u.Email!).ToListAsync(ct));
+        }
+
+        return existentes;
+    }
+
+    public async Task<IReadOnlySet<string>> CedulasExistentesAsync(IReadOnlyCollection<string> cedulas, CancellationToken ct = default)
+    {
+        var existentes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var lote in cedulas.Distinct(StringComparer.OrdinalIgnoreCase).Chunk(1000))
+        {
+            existentes.UnionWith(await contexto.Usuarios.AsNoTracking().Where(u => u.Cedula != null && lote.Contains(u.Cedula)).Select(u => u.Cedula!).ToListAsync(ct));
+        }
+
+        return existentes;
+    }
 
     public async Task<bool> TieneHistorialAsync(Guid id, CancellationToken ct = default) =>
         await contexto.Inspecciones.AnyAsync(i => i.UsuarioId == id, ct)
         || await contexto.Transferencias.AnyAsync(t => t.EntregaUsuarioId == id || t.RecibeUsuarioId == id, ct)
-        || await contexto.Asignaciones.AnyAsync(a => a.AsignadoPor == id, ct)
+        || await contexto.Viajes.AnyAsync(v => v.ConductorId == id || v.InspectorId == id || v.CreadoPor == id, ct)
         || await contexto.AuditLog.AnyAsync(a => a.UsuarioId == id, ct);
 
     public void Agregar(clsUsuario usuario) => contexto.Usuarios.Add(usuario);
@@ -44,12 +114,38 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
 
     public async Task<clsResumenCierre> ObtenerResumenCierreAsync(Guid inspeccionId, CancellationToken ct = default)
     {
-        var evidencias = contexto.Evidencias.Where(e => e.InspeccionId == inspeccionId);
-        var totalEvidencias = await evidencias.CountAsync(ct);
-        var sinGeo = await evidencias.CountAsync(e => e.SelloLat == null || e.SelloLng == null, ct);
-        var totalHallazgos = await contexto.Hallazgos.CountAsync(h => h.InspeccionId == inspeccionId, ct);
-        return new clsResumenCierre(totalEvidencias, sinGeo, totalHallazgos);
+        var evidencias = await contexto.Evidencias.AsNoTracking()
+            .Where(e => e.InspeccionId == inspeccionId && !e.EsConstancia)
+            .Select(e => new { e.Id, e.VistaId, e.HallazgoId, e.SelloLat, e.SelloLng, e.SelloServidorAt })
+            .ToListAsync(ct);
+        var hallazgos = await contexto.Hallazgos.AsNoTracking().Where(h => h.InspeccionId == inspeccionId).Select(h => h.Id).ToListAsync(ct);
+
+        // Una foto repetida reemplaza a la anterior de la misma vista (o del mismo hallazgo): lo que cuenta para la ubicacion es la ultima.
+        // Las fotos anteriores quedan guardadas (son evidencia) pero ya no bloquean el cierre.
+        var ultimas = evidencias
+            .GroupBy(e => e.VistaId is { } vista ? $"v:{vista}" : e.HallazgoId is { } hallazgo ? $"h:{hallazgo}" : $"f:{e.Id}")
+            .Select(g => g.OrderByDescending(e => e.SelloServidorAt).First())
+            .ToList();
+        var sinUbicacion = ultimas.Count(e => e.SelloLat == 0 && e.SelloLng == 0);
+        var conFoto = evidencias.Where(e => e.HallazgoId is not null).Select(e => e.HallazgoId!.Value).ToHashSet();
+        var vistas = evidencias.Where(e => e.VistaId is not null).Select(e => e.VistaId!.Value).Distinct().ToList();
+        return new clsResumenCierre(evidencias.Count, sinUbicacion, hallazgos.Count, hallazgos.Count(h => !conFoto.Contains(h)), vistas);
     }
+
+    public Task<bool> TieneLlegadaCerradaAsync(Guid etapaId, CancellationToken ct = default) =>
+        contexto.Inspecciones.AnyAsync(i => i.EtapaId == etapaId && i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA, ct);
+
+    public Task<bool> TieneTransferenciaSinCierreAsync(Guid etapaId, CancellationToken ct = default) =>
+        (from t in contexto.Transferencias
+         join i in contexto.Inspecciones on t.InspeccionId equals i.Id
+         where i.EtapaId == etapaId && t.TipoCierre == null
+         select t.Id).AnyAsync(ct);
+
+    public Task<clsEvidencia?> ObtenerEvidenciaAsync(Guid id, CancellationToken ct = default) =>
+        contexto.Evidencias.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id, ct);
+
+    public Task<Guid?> ObtenerCorreccionIdAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        contexto.Inspecciones.AsNoTracking().Where(i => i.CorrigeInspeccionId == inspeccionId).Select(i => (Guid?)i.Id).FirstOrDefaultAsync(ct);
 
     public Task<bool> ExisteHallazgoEnInspeccionAsync(Guid hallazgoId, Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Hallazgos.AnyAsync(h => h.Id == hallazgoId && h.InspeccionId == inspeccionId, ct);
@@ -69,15 +165,21 @@ internal sealed class clsTransferenciaCustodiaRepository(clsAppDbContext context
     public void Agregar(clsTransferenciaCustodia transferencia) => contexto.Transferencias.Add(transferencia);
 }
 
-internal sealed class clsAsignacionRepository(clsAppDbContext contexto) : IAsignacionRepository
-{
-    public void Agregar(clsAsignacion asignacion) => contexto.Asignaciones.Add(asignacion);
-}
-
 internal sealed class clsOrdenSofasaRepository(clsAppDbContext contexto) : IOrdenSofasaRepository
 {
     public Task<clsOrdenSofasa?> ObtenerPorSourceIdAsync(long sourceId, CancellationToken ct = default) =>
         contexto.OrdenesSofasa.FirstOrDefaultAsync(o => o.SourceId == sourceId, ct);
+
+    public async Task<IReadOnlyList<clsOrdenSofasa>> ObtenerSinViajePorVinesAsync(IReadOnlyCollection<string> vines, CancellationToken ct = default)
+    {
+        var resultado = new List<clsOrdenSofasa>();
+        foreach (var lote in vines.Distinct(StringComparer.OrdinalIgnoreCase).Chunk(1000))
+        {
+            resultado.AddRange(await contexto.OrdenesSofasa.Where(o => o.ViajeId == null && o.Vin != null && lote.Contains(o.Vin)).ToListAsync(ct));
+        }
+
+        return resultado;
+    }
 
     public void Agregar(clsOrdenSofasa orden) => contexto.OrdenesSofasa.Add(orden);
 }

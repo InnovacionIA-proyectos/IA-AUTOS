@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../app/proveedores.dart';
 import '../../../core/errores/error_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
@@ -12,7 +11,9 @@ import '../../auth/presentation/auth_controller.dart';
 import '../../inspecciones/domain/reglas_informe.dart';
 import '../../sync/domain/job.dart';
 import '../../sync/presentation/sync_controller.dart';
+import '../../sync/providers.dart';
 import '../../vehiculos/domain/etiquetas.dart';
+import '../providers.dart';
 import 'lienzo_firma.dart';
 
 final _usuariosProvider = FutureProvider.autoDispose<List<Usuario>>((ref) => ref.watch(usuariosRepositorioProvider).listar());

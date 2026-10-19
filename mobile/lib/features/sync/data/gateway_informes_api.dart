@@ -1,5 +1,5 @@
 import '../../../core/http/cliente_api.dart';
-import '../domain/job.dart';
+import '../../inspecciones/domain/hallazgo_local.dart';
 import '../domain/puertos.dart';
 
 /// Implementación de [GatewayInformes] sobre la API REST (contrato en backend/docs/openapi.json).

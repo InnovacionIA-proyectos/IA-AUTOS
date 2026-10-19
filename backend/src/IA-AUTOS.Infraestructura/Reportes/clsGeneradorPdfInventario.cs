@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using IAAutos.Aplicacion.Vehiculos;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
+using static IAAutos.Infraestructura.Reportes.clsPdfBasico;
 
 namespace IAAutos.Infraestructura.Reportes;
 
@@ -17,8 +18,6 @@ internal sealed class clsGeneradorPdfInventario : IGeneradorPdfInventario
     private const double Y_INICIAL = 800;
     private const double ANCHO_UTIL = ANCHO - (2 * MARGEN);
     private const double FACTOR_ANCHO_CARACTER = 0.55;
-
-    private static readonly Encoding WIN_ANSI = CrearWinAnsi();
 
     private readonly record struct Linea(string Texto, double Tamano, bool Negrita);
 
@@ -46,7 +45,7 @@ internal sealed class clsGeneradorPdfInventario : IGeneradorPdfInventario
             foreach (var inspeccion in etapa.Inspecciones)
             {
                 var fecha = inspeccion.Fecha.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
-                elementos.Add(new Linea($"  {inspeccion.Momento} — {inspeccion.Estado} — {fecha}", 11, false));
+                elementos.Add(new Linea($"  {inspeccion.MomentoNombre} — {inspeccion.Estado} — {fecha}", 11, false));
                 foreach (var hallazgo in inspeccion.Hallazgos)
                 {
                     elementos.Add(new Linea($"    • {hallazgo.ParteVehiculo}: {hallazgo.ClaseDano} ({hallazgo.TamanoDano})", 11, false));
@@ -181,38 +180,5 @@ internal sealed class clsGeneradorPdfInventario : IGeneradorPdfInventario
         }
 
         return flujo.ToArray();
-    }
-
-    /// <summary>Cadena literal de PDF en WinAnsi: se escapan parentesis y barra, y los bytes no imprimibles en octal.</summary>
-    private static byte[] CadenaPdf(string texto)
-    {
-        var bytes = WIN_ANSI.GetBytes(texto);
-        var salida = new List<byte>(bytes.Length);
-        foreach (var b in bytes)
-        {
-            if (b is (byte)'(' or (byte)')' or (byte)'\\')
-            {
-                salida.Add((byte)'\\');
-                salida.Add(b);
-            }
-            else if (b is < 32 or > 126)
-            {
-                salida.AddRange(Encoding.ASCII.GetBytes("\\" + Convert.ToString(b, 8).PadLeft(3, '0')));
-            }
-            else
-            {
-                salida.Add(b);
-            }
-        }
-
-        return [.. salida];
-    }
-
-    private static byte[] Texto(string texto) => Encoding.Latin1.GetBytes(texto);
-
-    private static Encoding CrearWinAnsi()
-    {
-        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-        return Encoding.GetEncoding(1252, EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback);
     }
 }

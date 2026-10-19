@@ -19,7 +19,8 @@ public sealed record clsDatosOrdenSofasa(
     DateTimeOffset? LoadingDate,
     DateTimeOffset? Appointment,
     string? LoadingDock,
-    decimal? Weight);
+    decimal? Weight,
+    string? CodigoMtrack = null);
 
 /// <summary>Orden de carga ingerida desde el SQL Server de Sofasa por el ETL. Idempotente por SourceId.</summary>
 public sealed class clsOrdenSofasa : clsEntidadBase
@@ -64,6 +65,12 @@ public sealed class clsOrdenSofasa : clsEntidadBase
     /// <summary>Vehiculo materializado a partir del VIN (si aplica).</summary>
     public Guid? VehiculoId { get; private set; }
 
+    /// <summary>Codigo del viaje en MTrack, si la orden lo trae. Junto con el VIN identifica el viaje de la orden.</summary>
+    public string? CodigoMtrack { get; private set; }
+
+    /// <summary>Viaje al que pertenece la orden (por VIN y, si lo trae, por codigo MTrack). Nulo mientras ningun viaje lleve ese VIN.</summary>
+    public Guid? ViajeId { get; private set; }
+
     public DateTimeOffset SyncedAt { get; private set; }
 
     public static clsOrdenSofasa Crear(clsDatosOrdenSofasa datos, Guid? vehiculoId, DateTimeOffset ahora)
@@ -72,6 +79,13 @@ public sealed class clsOrdenSofasa : clsEntidadBase
         orden.Inicializar(ahora);
         orden.Aplicar(datos, vehiculoId, ahora);
         return orden;
+    }
+
+    /// <summary>Vincula la orden a un viaje (o la desvincula con nulo).</summary>
+    public void AsignarViaje(Guid? viajeId, DateTimeOffset ahora)
+    {
+        ViajeId = viajeId;
+        Tocar(ahora);
     }
 
     /// <summary>Re-ingesta: reemplaza los datos de la orden; el vehiculo se conserva si no llega uno nuevo.</summary>
@@ -93,6 +107,7 @@ public sealed class clsOrdenSofasa : clsEntidadBase
         LoadingDock = datos.LoadingDock;
         Weight = datos.Weight;
         VehiculoId = vehiculoId ?? VehiculoId;
+        CodigoMtrack = datos.CodigoMtrack;
         SyncedAt = ahora;
         Tocar(ahora);
     }

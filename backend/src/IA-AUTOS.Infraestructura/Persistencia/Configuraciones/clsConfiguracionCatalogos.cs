@@ -34,6 +34,11 @@ internal sealed class clsConfiguracionTipoUnidad : IEntityTypeConfiguration<clsT
         clsConfiguracionCatalogo.Codificado(builder, "tblTiposUnidadTransportadora");
 }
 
+internal sealed class clsConfiguracionCliente : IEntityTypeConfiguration<clsCliente>
+{
+    public void Configure(EntityTypeBuilder<clsCliente> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblClientes");
+}
+
 internal sealed class clsConfiguracionClaseDano : IEntityTypeConfiguration<clsClaseDano>
 {
     public void Configure(EntityTypeBuilder<clsClaseDano> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblClasesDano");
@@ -70,10 +75,23 @@ internal sealed class clsConfiguracionCuadrante : IEntityTypeConfiguration<clsCu
         clsConfiguracionBase.Base(builder);
         builder.Property(c => c.Nombre).HasMaxLength(clsCatalogoBase.NOMBRE_MAX).IsRequired();
         builder.Property(c => c.TipoVehiculo).HasColumnType("varchar(30)");
-        builder.Property(c => c.Geometria).HasColumnType("nvarchar(max)");
-        builder.HasOne<clsVistaFoto>().WithMany().HasForeignKey(c => c.VistaFotoId)
-            .HasConstraintName("FK_tblCuadrantes_Vista").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(c => new { c.TipoVehiculo, c.Numero }).IsUnique().HasDatabaseName("UQ_tblCuadrantes_Tipo_Numero");
-        builder.HasIndex(c => c.VistaFotoId).HasDatabaseName("IX_tblCuadrantes_Vista");
+    }
+}
+
+/// <summary>Un cuadrante se dibuja una vez por vista; al borrar el cuadrante se borran sus poligonos, pero una vista con poligonos no se borra.</summary>
+internal sealed class clsConfiguracionCuadranteVista : IEntityTypeConfiguration<clsCuadranteVista>
+{
+    public void Configure(EntityTypeBuilder<clsCuadranteVista> builder)
+    {
+        builder.ToTable("tblCuadranteVistas");
+        clsConfiguracionBase.Base(builder);
+        builder.Property(c => c.Geometria).HasColumnType("nvarchar(max)").IsRequired();
+        builder.HasOne<clsCuadrante>().WithMany().HasForeignKey(c => c.CuadranteId)
+            .HasConstraintName("FK_tblCuadranteVistas_Cuadrante").OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<clsVistaFoto>().WithMany().HasForeignKey(c => c.VistaFotoId)
+            .HasConstraintName("FK_tblCuadranteVistas_Vista").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(c => new { c.CuadranteId, c.VistaFotoId }).IsUnique().HasDatabaseName("UQ_tblCuadranteVistas_Cuadrante_Vista");
+        builder.HasIndex(c => c.VistaFotoId).HasDatabaseName("IX_tblCuadranteVistas_Vista");
     }
 }

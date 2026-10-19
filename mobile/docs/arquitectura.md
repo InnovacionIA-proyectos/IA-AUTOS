@@ -1,18 +1,32 @@
 # Arquitectura de la app móvil
 
-Feature-first con Clean Architecture por analogía (el plan de migración lo fija así): cada funcionalidad separa `domain`,
-`data` y `presentation`, y `core` aloja lo transversal.
+Feature-First + Clean pragmática: la app se divide por funcionalidades del negocio y, dentro de cada una, el código se
+separa en `presentation`, `domain` y `data` solo cuando esa separación aporta claridad. `core` aloja lo transversal y
+`app` compone la aplicación.
 
 ```
 presentation  ->  domain  <-  data
 (widgets, controladores)   (reglas, modelos, puertos)   (API, SQLite, archivos)
 ```
 
-- **domain**: Dart puro (sin Flutter ni HTTP). Reglas de cierre, modelos de inventario, catálogo de partes, la cola de
-  sincronización y sus *puertos* (`ColaRepositorio`, `GatewayInformes`, `EstadoRed`, `ArchivosLocales`).
-- **data**: implementaciones de los puertos (`ColaDrift`, `GatewayInformesApi`, `ArchivosLocalesIo`) y repositorios de
-  lectura que usan `ClienteApi`.
+- **domain**: Dart puro (sin Flutter ni HTTP). Reglas de cierre, modelos de inventario, catálogo de partes, fotos y
+  hallazgos locales, la cola de sincronización y sus *puertos* (`ColaRepositorio`, `GatewayInformes`, `EstadoRed`,
+  `ArchivosLocales`, `AlmacenSesion`).
+- **data**: implementaciones de los puertos (`ColaDrift`, `GatewayInformesApi`, `ArchivosLocalesIo`,
+  `EstadoRedConectividad`, `AlmacenSesionSeguro`) y repositorios de lectura que usan `ClienteApi`.
 - **presentation**: pantallas y controladores Riverpod.
+- **providers.dart** (en la raíz de cada feature): declara los providers de sus repositorios y puertos. Es el único
+  punto de cableado de la feature.
+
+Reglas de dependencia:
+
+- `core` no importa nada de `features`.
+- `app/proveedores.dart` solo declara lo transversal: entorno, base de datos, cliente HTTP y servicios del dispositivo.
+  Los `providers.dart` de cada feature lo importan para componer sus repositorios.
+- `presentation` importa los providers de su propia feature; acude a `app/proveedores.dart` únicamente por los
+  transversales (`entornoProvider`, `servicioUbicacionProvider`, `servicioFotosProvider`).
+- `sync` depende de `inspecciones` (transporta sus fotos y hallazgos) y no al revés. `vehiculos` no depende de `sync`.
+- Una feature pequeña no crea capas vacías: `sofasa` y `custodia` tienen un repositorio y una pantalla, y basta.
 
 La lógica con más riesgo (la cola) está en `domain` precisamente para probarla con dobles en memoria, sin dispositivo.
 
@@ -25,7 +39,7 @@ La lógica con más riesgo (la cola) está en `domain` precisamente para probarl
 | HTTP | Dio | `ClienteApi` adjunta el JWT y convierte todo fallo en `ErrorApi` |
 | Persistencia | Drift (SQLite) | tablas `jobs` (cola) y `cache_lecturas` |
 | Secretos | flutter_secure_storage | el token vive en el Keystore; nunca en SQLite ni en preferencias |
-| Dispositivo | camera, geolocator, connectivity_plus | detrás de interfaces (`ServicioUbicacion`, `ServicioFotos`) |
+| Dispositivo | camera, geolocator, connectivity_plus | detrás de interfaces (`ServicioUbicacion`, `ServicioFotos`, `EstadoRed`) |
 
 ## Sesión
 

@@ -10,6 +10,9 @@ public interface IUsuarioActual
     string? Rol { get; }
 
     string? Email { get; }
+
+    /// <summary>Cliente del usuario; nulo en el super administrador (ve todos los clientes).</summary>
+    Guid? ClienteId { get; }
 }
 
 public static class clsUsuarioActualExtensiones
@@ -19,4 +22,11 @@ public static class clsUsuarioActualExtensiones
 
     public static bool EsAdministrador(this IUsuarioActual actual) =>
         actual.Rol is IAAutos.Dominio.Usuarios.clsRol.ADMIN or IAAutos.Dominio.Usuarios.clsRol.SUPER_ADMIN;
+
+    /// <summary>
+    /// Id del usuario si solo puede ver lo de sus viajes (inspector o conductor); nulo si ve todo (los demas roles). Se pasa a las
+    /// consultas para filtrar por asignacion.
+    /// </summary>
+    public static Guid? SoloSusViajes(this IUsuarioActual actual) =>
+        IAAutos.Dominio.Usuarios.clsRol.VeSoloSusViajes(actual.Rol) ? actual.IdObligatorio() : null;
 }

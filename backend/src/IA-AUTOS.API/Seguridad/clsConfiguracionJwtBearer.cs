@@ -79,9 +79,24 @@ internal sealed class clsConfiguracionJwtBearer(IOptions<clsOpcionesJwt> opcione
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, usuario.Id.ToString()),
-            new(JwtRegisteredClaimNames.Email, usuario.Email),
             new(clsUsuarioActualHttp.CLAIM_ROL, usuario.Rol),
         };
+        if (usuario.Email is not null)
+        {
+            claims.Add(new Claim(JwtRegisteredClaimNames.Email, usuario.Email));
+        }
+
+        if (usuario.ClienteId is { } clienteId)
+        {
+            claims.Add(new Claim(clsUsuarioActualHttp.CLAIM_CLIENTE, clienteId.ToString()));
+        }
+
+        // El PIN temporal se marca aqui desde la base (no desde el token): el filtro global bloquea el resto de la API hasta que lo cambie.
+        if (usuario.DebeCambiarPin)
+        {
+            claims.Add(new Claim(clsUsuarioActualHttp.CLAIM_CAMBIAR_PIN, "1"));
+        }
+
         var sid = contexto.Principal?.FindFirstValue(JwtRegisteredClaimNames.Sid);
         if (sid is not null)
         {

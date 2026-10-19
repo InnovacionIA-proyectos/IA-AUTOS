@@ -14,6 +14,9 @@ public sealed class CuerpoSolicitudAttribute(Type tipo) : Attribute
 
     /// <summary>True si el cuerpo es un arreglo JSON de <see cref="Tipo"/> (por ejemplo, login-portal).</summary>
     public bool EsArreglo { get; init; }
+
+    /// <summary>True si la accion acepta tambien multipart/form-data con un archivo en el campo "archivo" (subida de fotos).</summary>
+    public bool TambienMultipart { get; init; }
 }
 
 /// <summary>Forma comun de los errores de la API (ver docs/api.md).</summary>
@@ -71,19 +74,32 @@ internal static class clsOpenApi
                     contexto.Document!.Components ??= new OpenApiComponents();
                     contexto.Document.Components.Schemas ??= new Dictionary<string, IOpenApiSchema>();
                     contexto.Document.Components.Schemas[cuerpo.Tipo.Name] = esquema;
-                    operacion.RequestBody = new OpenApiRequestBody
+                    var contenido = new Dictionary<string, OpenApiMediaType>
                     {
-                        Required = true,
-                        Content = new Dictionary<string, OpenApiMediaType>
+                        ["application/json"] = new OpenApiMediaType
                         {
-                            ["application/json"] = new OpenApiMediaType
-                            {
-                                Schema = cuerpo.EsArreglo
-                                    ? new OpenApiSchema { Type = JsonSchemaType.Array, Items = new OpenApiSchemaReference(cuerpo.Tipo.Name) }
-                                    : new OpenApiSchemaReference(cuerpo.Tipo.Name),
-                            },
+                            Schema = cuerpo.EsArreglo
+                                ? new OpenApiSchema { Type = JsonSchemaType.Array, Items = new OpenApiSchemaReference(cuerpo.Tipo.Name) }
+                                : new OpenApiSchemaReference(cuerpo.Tipo.Name),
                         },
                     };
+                    if (cuerpo.TambienMultipart)
+                    {
+                        contenido["multipart/form-data"] = new OpenApiMediaType
+                        {
+                            Schema = new OpenApiSchema
+                            {
+                                Type = JsonSchemaType.Object,
+                                Properties = new Dictionary<string, IOpenApiSchema>
+                                {
+                                    ["archivo"] = new OpenApiSchema { Type = JsonSchemaType.String, Format = "binary" },
+                                },
+                                Required = new HashSet<string> { "archivo" },
+                            },
+                        };
+                    }
+
+                    operacion.RequestBody = new OpenApiRequestBody { Required = true, Content = contenido };
                 }
             }
 

@@ -29,7 +29,11 @@ public static class clsServiciosApi
         servicios
             // Todo controlador exige autenticacion salvo [AllowAnonymous] (login y health). Un filtro global, a diferencia de una
             // politica de respaldo, deja que las rutas inexistentes respondan 404 y los metodos incorrectos 405.
-            .AddControllers(o => o.Filters.Add(new AuthorizeFilter()))
+            .AddControllers(o =>
+            {
+                o.Filters.Add(new AuthorizeFilter());
+                o.Filters.Add(new clsFiltroCambioPin());
+            })
             .AddJsonOptions(o => clsJsonApi.Configurar(o.JsonSerializerOptions))
             .ConfigureApiBehaviorOptions(o => o.SuppressModelStateInvalidFilter = true);
 
@@ -60,6 +64,8 @@ public static class clsServiciosApi
             };
             o.AddPolicy(clsAuthController.POLITICA_LIMITE_LOGIN, contexto =>
                 LimitePorIp(contexto, s => s.LoginMaxIntentosPorMinuto));
+            o.AddPolicy(clsAuthController.POLITICA_LIMITE_LOGIN_CONDUCTOR, contexto =>
+                LimitePorIp(contexto, s => s.LoginConductorMaxIntentosPorMinuto));
             o.AddPolicy(clsAuthController.POLITICA_LIMITE_LOGIN_PORTAL, contexto =>
                 LimitePorIp(contexto, s => s.LoginPortalMaxIntentosPorMinuto));
             o.AddPolicy(clsAuthController.POLITICA_LIMITE_REFRESH, contexto =>

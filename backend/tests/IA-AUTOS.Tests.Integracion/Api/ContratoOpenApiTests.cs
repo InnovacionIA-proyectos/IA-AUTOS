@@ -31,6 +31,7 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var pagina = contrato["components"]!["schemas"]!["ListadoPaginadoDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList();
 
         Assert.Contains("etapa_id", inspeccion);
+        Assert.Contains("viaje_id", inspeccion);
         Assert.Contains("conductor_nombre", inspeccion);
         Assert.Contains("created_at", inspeccion);
         Assert.DoesNotContain("etapaId", inspeccion);
@@ -59,15 +60,26 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         {
             ["/api/auth/login|post"] = "LoginRequest",
             ["/api/auth/login-portal|post"] = "LoginPortalUsuarioDto",
+            ["/api/auth/login-conductor|post"] = "LoginConductorRequest",
+            ["/api/auth/cambiar-pin|post"] = "CambiarPinRequest",
             ["/api/usuarios|post"] = "CrearUsuarioRequest",
+            ["/api/usuarios/{id}/pin|post"] = "AsignarPinRequest",
+            ["/api/usuarios/cargar/previsualizar|post"] = "CargarConductoresRequest",
+            ["/api/usuarios/cargar|post"] = "CargarConductoresRequest",
             ["/api/usuarios/{id}|patch"] = "ActualizarUsuarioRequest",
             ["/api/vehiculos/cargar|post"] = "CargarVinsRequest",
-            ["/api/asignaciones|post"] = "CrearAsignacionRequest",
-            ["/api/etapas|post"] = "CrearEtapaRequest",
+            ["/api/viajes|post"] = "CrearViajeRequest",
+            ["/api/viajes/{id}|patch"] = "ActualizarViajeRequest",
+            ["/api/viajes/{id}/estado|patch"] = "CambiarEstadoViajeRequest",
+            ["/api/viajes/{id}/vehiculos|post"] = "AgregarVinesRequest",
+            ["/api/viajes/cargar/previsualizar|post"] = "CargarViajesRequest",
+            ["/api/viajes/cargar|post"] = "CargarViajesRequest",
             ["/api/inspecciones|post"] = "CrearInspeccionRequest",
             ["/api/inspecciones/{id}/evidencias|post"] = "CrearEvidenciaRequest",
             ["/api/inspecciones/{id}/hallazgos|post"] = "CrearHallazgoRequest",
             ["/api/inspecciones/{id}/transferencia|post"] = "FirmarTransferenciaRequest",
+            ["/api/inspecciones/{id}/transferencia/reservas|post"] = "RecibirConReservasRequest",
+            ["/api/inspecciones/{id}/transferencia/no-firma|post"] = "RegistrarNoFirmaRequest",
             ["/api/uploads|post"] = "SubirArchivoRequest",
             ["/api/etl/sofasa/ordenes|post"] = "IngestarOrdenesRequest",
         };
@@ -81,6 +93,7 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.NotNull(contrato["components"]!["securitySchemes"]!["bearerAuth"]);
         Assert.Null(rutas["/api/auth/login"]!["post"]!["security"]);
         Assert.Null(rutas["/api/auth/login-portal"]!["post"]!["security"]);
+        Assert.Null(rutas["/api/auth/login-conductor"]!["post"]!["security"]);
         Assert.Null(rutas["/api/auth/refresh"]!["post"]!["security"]);
         Assert.Null(rutas["/api/auth/logout"]!["post"]!["security"]);
         Assert.Null(rutas["/api/auth/login-portal"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!["properties"]);

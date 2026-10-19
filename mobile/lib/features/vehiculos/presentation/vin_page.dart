@@ -10,6 +10,7 @@ import '../../../core/util/formato.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../domain/etiquetas.dart';
 import '../domain/inventario.dart';
+import '../providers.dart';
 import 'diagrama_vehiculo.dart';
 
 final inventarioProvider = FutureProvider.autoDispose.family<Inventario, String>(

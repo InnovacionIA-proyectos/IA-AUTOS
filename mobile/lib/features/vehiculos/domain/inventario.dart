@@ -1,4 +1,4 @@
-import '../../sync/domain/job.dart';
+import 'coords_diagrama.dart';
 
 class HallazgoVista {
   const HallazgoVista({required this.id, required this.parte, required this.clase, required this.tamano, this.coords});

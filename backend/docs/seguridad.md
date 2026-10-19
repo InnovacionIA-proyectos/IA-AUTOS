@@ -12,10 +12,12 @@ Cambios intencionales que corrigen riesgos detectados en el diagnostico. Ninguno
 | Token del ETL | comparacion con `!==` | comparacion en tiempo constante; sin token configurado se rechaza todo |
 | Contrasenas nuevas | scrypt, minimo 6 caracteres | PBKDF2-SHA256 con 600000 iteraciones, minimo 8 caracteres; los hashes scrypt se aceptan y se regeneran al primer ingreso |
 | Acceso a informes ajenos | cualquier usuario autenticado escribia en cualquier inspeccion | solo el creador o un administrador agrega hallazgos y evidencias o cierra (configurable) |
-| Firmas | una transferencia firmada podia sobrescribirse | inmutable cuando ambas partes firmaron (repetir los mismos datos es idempotente) |
+| Firmas | una transferencia firmada podia sobrescribirse, y el cliente enviaba las dos firmas y los dos ids en la misma llamada | cada firma la envia su titular (la identidad sale del token; `403` si no es una de las dos partes) y guarda su fecha e IP; inmutable cuando se cierra como firmada, con reservas o con constancia de no firma (repetir la misma firma es idempotente); los firmantes son usuarios del viaje |
 | Informe nuevo | admitia `estado: cerrada` al crear, saltando las reglas de cierre | siempre nace en borrador; se cierra con `/cerrar` |
-| Rol `super_admin` | no podia usar carga de VIN, asignaciones ni etapas | incluido en esas rutas |
-| Lista de usuarios | todos los autenticados veian correos y estados | los no administradores reciben solo `id`, `nombre` y `rol` de usuarios activos |
+| Rol `super_admin` | no podia usar carga de VIN, asignaciones ni etapas | incluido en la carga de VIN y en la gestion de viajes |
+| Lista de usuarios | todos los autenticados veian correos y estados | los que no gestionan usuarios reciben solo `id`, `nombre` y `rol` de los usuarios activos de su cliente |
+| Gestion de usuarios | solo `super_admin` | tambien `admin` y `coordinador_calidad`, cada uno solo sobre los usuarios de su cliente; el nivel `super_admin` lo asigna y modifica unicamente un `super_admin` |
+| PIN del personal de campo | no existia | cedula y PIN numerico (4 a 8 digitos, no trivial) con el mismo servicio de hash de las contrasenas; 5 PIN errados seguidos bloquean la cuenta 15 minutos (`423`), cada intento fallido queda en la auditoria y el mensaje es el mismo exista o no la cedula; el PIN asignado o reiniciado es temporal y la API entera responde `403 PIN_CHANGE_REQUIRED` hasta que la persona lo cambie (la marca se lee de la base en cada solicitud) |
 | Subida de fotos | sin limite ni validacion de contenido | tamano maximo, tipo verificado por la firma binaria (JPEG o PNG) y extension decidida por el contenido |
 | `storage_path` de evidencias | cualquier texto | solo nombres planos de archivo (sin carpetas ni `..`) |
 | CORS | `*` por defecto | solo los origenes configurados; sin configuracion no se habilita |
@@ -28,7 +30,9 @@ Cambios intencionales que corrigen riesgos detectados en el diagnostico. Ninguno
 
 ## Controles vigentes
 
-- Todo controlador exige autenticacion salvo `[AllowAnonymous]` (login, salud, ingesta del ETL con su token y lectura de imagenes).
+- Todo controlador exige autenticacion salvo `[AllowAnonymous]` (login, login-conductor, salud, ingesta del ETL con su token y lectura de imagenes).
+- Un filtro global rechaza con `403 PIN_CHANGE_REQUIRED` toda accion mientras el PIN sea temporal, salvo `cambiar-pin`, `me` y `logout`.
+- El PIN y la contrasena nunca se guardan ni se devuelven en claro: solo el hash (`PinHash`, `PasswordHash`). El PIN generado por la API viaja una unica vez en la respuesta que lo crea.
 - Todo el acceso a datos es parametrizado (EF Core).
 - La API se conecta con un usuario de base de datos de minimo privilegio (`database/01-crear-usuario-app.sql`), no con `sa`.
 - El secreto JWT se valida al arrancar (minimo 32 caracteres).
@@ -42,7 +46,8 @@ Cambios intencionales que corrigen riesgos detectados en el diagnostico. Ninguno
 | El token dura 30 dias y no hay refresh | se mantiene por compatibilidad con la app instalada | la revocacion es inmediata por baja del usuario; evaluar tokens cortos con refresh al migrar la app a Flutter |
 | Una consulta a la base por solicitud para validar al usuario | costo bajo (clave primaria) | si el volumen lo exige, agregar un cache de pocos segundos |
 | El limite de intentos es por IP y en memoria de la instancia | basico | con varias instancias, mover el limite a un almacen compartido o al proxy |
-| Todo usuario autenticado puede leer inspecciones, inventarios y reportes | igual que antes | si el negocio lo requiere, restringir la lectura por asignacion (la tabla de asignaciones ya existe) |
+| Inspectores y conductores leen solo lo de sus viajes (VIN, viajes, informes, ordenes Sofasa); el resto de roles lee todo | la visibilidad sale del conductor o inspector del viaje | la visibilidad por cliente (unidades de un cliente y ningun otro) solo esta aplicada a la gestion de usuarios: usuarios y vehiculos ya llevan su cliente (`ClienteId`), pero los listados de vehiculos, viajes, informes y reportes todavia no filtran por el; los reportes son agregados |
+| Los intentos de PIN se cuentan en la fila del usuario sin bloqueo de concurrencia | dos intentos simultaneos pueden contar uno solo | el limite por IP de `login-conductor` y el bloqueo por cuenta bastan para el uso previsto; si hiciera falta, pasar el contador a una actualizacion atomica |
 | Cola offline de la app: un 4xx distinto de 409 la marca como fallida y puede perder evidencia | del cliente, no del backend | corregirlo en la migracion de la app a Flutter |
 | El sello de fecha y ubicacion de las fotos lo envia el cliente y el servidor no puede verificarlo | igual que antes | para valor legal, considerar sellos del lado del servidor |
 | La validacion de propiedad puede rechazar jobs de la app si se cambia de usuario en el mismo dispositivo antes de sincronizar | nueva | si ocurre en campo, desactivar `Seguridad__ValidarPropiedadInspeccion` temporalmente |

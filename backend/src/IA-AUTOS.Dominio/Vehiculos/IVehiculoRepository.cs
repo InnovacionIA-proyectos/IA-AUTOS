@@ -19,8 +19,8 @@ public interface IEtapaRepository
 {
     Task<clsEtapa?> ObtenerPorIdAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Ordenes de etapa ya existentes por vehiculo (para crear la ruta de forma idempotente).</summary>
-    Task<IReadOnlyDictionary<Guid, IReadOnlySet<int>>> ObtenerOrdenesExistentesAsync(IReadOnlyCollection<Guid> vehiculoIds, CancellationToken ct = default);
+    /// <summary>La etapa inmediatamente anterior del mismo VIN en el mismo viaje (la de mayor orden menor al indicado), o nulo si es la primera.</summary>
+    Task<clsEtapa?> ObtenerPreviaAsync(Guid viajeId, Guid vehiculoId, int orden, CancellationToken ct = default);
 
     void Agregar(clsEtapa etapa);
 }

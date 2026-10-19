@@ -9,41 +9,60 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | Grupo | Roles | Se usa en |
 |---|---|---|
 | Campo | inspector, conductor, admin | informes, hallazgos, evidencias, firmas, subida de fotos |
-| Administracion | admin, super_admin | carga masiva de VIN, asignaciones, etapas |
-| Gestion de usuarios | super_admin | alta, cambio y baja de usuarios |
+| Administracion | admin, super_admin | carga masiva de VIN |
+| Gestion de viajes | coordinador_calidad, admin, super_admin | crear y administrar viajes, asignar VIN, cargar viajes por Excel |
+| Gestion de usuarios | admin, super_admin, coordinador_calidad | alta, cambio, baja y PIN de usuarios, carga de conductores por Excel (cada uno solo los de su cliente; solo super_admin asigna el nivel super_admin) |
 
 ## Endpoints
 
 | Metodo y ruta | Acceso | Descripcion |
 |---|---|---|
 | POST `/api/auth/login` | publico, con limite de intentos | correo y contrasena; devuelve `{ token, usuario }` |
+| POST `/api/auth/login-conductor` | publico, con limite de intentos | cedula y PIN (conductor o inspector sin correo); devuelve `{ token, usuario }`. 401 con datos incorrectos; 423 `ACCOUNT_LOCKED` tras 5 PIN errados seguidos (15 minutos) |
+| POST `/api/auth/cambiar-pin` | autenticado (tambien con PIN temporal) | `{ pin_actual, pin_nuevo }`; 204. Obligatorio mientras el PIN sea temporal (el resto de la API responde 403 `PIN_CHANGE_REQUIRED`) |
 | POST `/api/auth/login-portal` | publico, con limite de intentos | inicio de sesion unico: recibe el arreglo del usuario del portal (usa solo el id y lo revalida en TI); devuelve `{ access, refresh, user }`. 403 `PORTAL_USER_NOT_LINKED` si no tiene acceso a IA Autos |
 | POST `/api/auth/refresh` | publico | recibe `{ refresh }`; devuelve `{ access, refresh }` y rota el refresh (el anterior queda revocado) |
 | POST `/api/auth/logout` | publico | recibe `{ refresh }`; revoca la sesion (refresh y access) y responde 204 |
-| GET `/api/auth/me` | autenticado | datos del usuario actual |
-| GET `/api/usuarios` | autenticado | administradores: datos completos; los demas roles: `id`, `nombre`, `rol` de usuarios activos |
-| POST `/api/usuarios` | super_admin | crea usuario (`nombre`, `email`, `rol`, `password`) |
-| PATCH `/api/usuarios/{id}` | super_admin | cambia solo los campos enviados (incluye `password` y `activo`) |
-| DELETE `/api/usuarios/{id}` | super_admin | `{ modo: "eliminado" \| "retirado" }`; no permite auto-eliminacion |
-| POST `/api/vehiculos/cargar` | administracion | hasta 5000 VIN con su ruta Cargue, Transporte, Descargue; idempotente |
-| GET `/api/vehiculos?vin=` | autenticado | autocompletado por fragmento de VIN o marca (maximo 8) |
+| GET `/api/auth/me` | autenticado (tambien con PIN temporal) | perfil del usuario actual: datos, cedula, cliente y `capacidades` para armar el menu segun el rol |
+| GET `/api/usuarios` | autenticado | quien gestiona usuarios: pagina de usuarios completos con filtros `q`, `rol`, `activo`, `clienteId`, `pagina`, `tamano`; los demas roles: `id`, `nombre`, `rol` de los usuarios activos de su cliente |
+| POST `/api/usuarios` | gestion de usuarios | crea usuario: con `password` (y `email`) entra con correo; sin ella, con `cedula` y PIN (conductor o inspector; `pin` opcional, si no se envia se genera uno temporal) |
+| PATCH `/api/usuarios/{id}` | gestion de usuarios | cambia solo los campos enviados; `null` limpia `subtipo_inspector`, `email` y `cedula` |
+| DELETE `/api/usuarios/{id}` | gestion de usuarios | `{ modo: "eliminado" \| "retirado" }`; no permite auto-eliminacion |
+| POST `/api/usuarios/{id}/pin` | gestion de usuarios | asigna o reinicia el PIN (temporal: la persona debe cambiarlo); levanta el bloqueo |
+| POST `/api/usuarios/{id}/pin/forzar-cambio` | gestion de usuarios | obliga a cambiar el PIN en el proximo uso |
+| POST `/api/usuarios/{id}/desbloquear` | gestion de usuarios | levanta el bloqueo por PIN errados |
+| POST `/api/usuarios/cargar/previsualizar`, POST `/api/usuarios/cargar` | gestion de usuarios | carga de conductores por Excel: vista previa con el error de cada fila y confirmacion que crea los validos con su PIN temporal |
+| POST `/api/vehiculos/cargar` | administracion | hasta 5000 VIN; idempotente (las etapas nacen cuando el VIN entra a un viaje) |
+| GET `/api/vehiculos?vin=` | autenticado | autocompletado por fragmento de VIN o marca (maximo 8); inspector y conductor solo ven los VIN de sus viajes |
 | GET `/api/vehiculos/listado?tipo=&vin=&page=` | autenticado | `tipo` = movilizados, pendientes o novedad; 500 por pagina |
-| GET `/api/vehiculos/{vin}/inventario` | autenticado | etapas, inspecciones, hallazgos, evidencias y transferencia |
+| GET `/api/vehiculos/{vin}/inventario` | autenticado | etapas (de todos sus viajes), inspecciones, hallazgos, evidencias y transferencia; `403` si inspector o conductor y el VIN no esta en sus viajes |
 | GET `/api/vehiculos/{vin}/inventario/pdf` | autenticado | inventario en PDF (descarga) |
-| POST `/api/asignaciones` | administracion | asigna un VIN a una ninera (placa) y opcionalmente a un conductor |
-| POST `/api/etapas` | administracion | define un tramo de la ruta: `etapa_catalogo_id`, `punto_custodia_id` (lugar, opcional), `orden`, `requiere_inspeccion` |
-| POST `/api/inspecciones` | campo | crea el informe de una etapa (siempre en borrador; el usuario sale del token) |
-| GET `/api/inspecciones` | autenticado | listado (maximo 200) con filtros `vin`, `usuarioId`, `momento`, `estado`, `proceso`, `desde`, `hasta` |
-| GET `/api/inspecciones/{id}` | autenticado | informe completo con firmas y nombres |
-| POST `/api/inspecciones/{id}/evidencias` | campo, creador o administrador | agrega una foto ya subida |
-| POST `/api/inspecciones/{id}/hallazgos` | campo, creador o administrador | agrega un hallazgo |
-| POST `/api/inspecciones/{id}/transferencia` | campo | firma de entrega y/o recibo (parcial o completa) |
-| POST `/api/inspecciones/{id}/cerrar` | campo, creador o administrador | cierra el informe; `{ inspeccion, resumen }` |
-| POST `/api/uploads` | campo | sube una foto en base64 (JPG o PNG); `{ storage_path, url }` |
+| POST `/api/viajes` | gestion de viajes | crea un viaje con unidad, placa, trailer, conductor, codigo MTrack (unico, `409` si se repite) y sus VIN; crea las etapas de cada VIN |
+| GET `/api/viajes` | autenticado | listado (maximo 200) con filtros `estado`, `codigoMtrack`, `vin`, `conductorId`, `clienteId`, `desde`, `hasta`; inspector y conductor solo ven los suyos; `clienteId` trae los viajes con algun VIN de ese cliente (solo el super_admin elige; el resto siempre recibe los de su cliente); cada fila trae `clientes` |
+| GET `/api/viajes/mios` | autenticado | los viajes del usuario (conductor o inspector) con sus VIN; por defecto programados y en curso |
+| GET `/api/viajes/{id}` | autenticado | un viaje con sus VIN y sus `clientes`; `403` si no es de un inspector o conductor, o si quien consulta no es super_admin y el viaje no tiene unidades de su cliente; fuera del conductor, el inspector del viaje y el super_admin, solo ve los VIN de su cliente |
+| GET `/api/viajes/{id}/firmantes` | autenticado | los usuarios del viaje que pueden firmar una transferencia (su conductor y su inspector activos) |
+| PATCH `/api/viajes/{id}` | gestion de viajes | cambia los campos enviados de un viaje programado o en curso |
+| PATCH `/api/viajes/{id}/estado` | gestion de viajes | programado a en curso a finalizado, o cancelar |
+| POST `/api/viajes/{id}/vehiculos`, DELETE `/api/viajes/{id}/vehiculos/{vin}` | gestion de viajes | asigna o quita VIN (todo o nada; no se quita un VIN con inspecciones) |
+| DELETE `/api/viajes/{id}` | gestion de viajes | borra un viaje sin inspecciones (`409` si las tiene) |
+| POST `/api/viajes/cargar/previsualizar`, POST `/api/viajes/cargar` | gestion de viajes | carga por Excel: vista previa con el error de cada fila y confirmacion que guarda solo las filas validas |
+| POST `/api/inspecciones` | campo | crea la inspeccion de salida o de llegada de una etapa (`momento`: `salida` o `llegada`; siempre en borrador; el usuario sale del token; placa, trailer y conductor salen del viaje; `403` si la etapa es de un viaje ajeno; `409 ETAPA_PREVIA_SIN_CIERRE` si es una salida y la etapa anterior no tiene su llegada cerrada o su transferencia no tiene tipo de cierre) |
+| POST `/api/inspecciones/{id}/corregir` | campo | corrige una inspeccion cerrada: crea la version siguiente (borrador, vacia) que referencia a la anterior; la anterior no cambia; `409` si no esta cerrada o ya fue corregida |
+| GET `/api/inspecciones` | autenticado | listado (maximo 200) con filtros `vin`, `usuarioId`, `viajeId`, `momento`, `estado`, `proceso`, `desde`, `hasta`; inspector y conductor solo ven los informes de sus viajes |
+| GET `/api/inspecciones/{id}` | autenticado | informe completo con firmas, nombres y el sello de cada foto |
+| POST `/api/inspecciones/{id}/evidencias` | campo, creador o administrador | registra una foto ya subida de una vista (`vista_id`) o de un hallazgo (`hallazgo_id`), con su sello (fecha, GPS, precision, dispositivo); el servidor agrega su sello y el hash SHA-256; las vistas adicionales exigen `nota` |
+| POST `/api/inspecciones/{id}/hallazgos` | campo, creador o administrador | agrega un hallazgo **con su foto propia** (`evidencia` obligatoria; sin ella `400`) |
+| POST `/api/inspecciones/{id}/transferencia` | campo | firma la propia parte (quien entrega firma la entrega y quien recibe, el recibo; la identidad sale del token, `403` si no es ninguna de las dos partes); la primera firma crea la transferencia con los dos ids, que deben ser usuarios del viaje; guarda la fecha y la IP de cada firma |
+| POST `/api/inspecciones/{id}/transferencia/reservas` | campo | quien recibe firma con reservas: observaciones obligatorias (`400` sin ellas, `403` si no es quien recibe) |
+| POST `/api/inspecciones/{id}/transferencia/no-firma` | campo | constancia de no firma: la registra la otra parte con motivo, testigo con usuario y foto; cierra la transferencia como `no_firma` |
+| GET `/api/inspecciones/{id}/transferencia/constancia/pdf` | autenticado | constancia en PDF: firmas con fecha e IP, reservas o motivo de la no firma, testigo y foto; `403` si es de un viaje ajeno, `404` sin transferencia |
+| POST `/api/inspecciones/{id}/cerrar` | campo, creador o administrador | cierra el informe; `{ inspeccion, resumen }`. En Cargue y Descargue exige las 7 vistas obligatorias (`400` con el nombre de la que falta), una foto propia por hallazgo y ubicacion en toda foto; en Transporte exige el GPS del registro |
+| POST `/api/uploads` | campo | sube una foto en base64 (JSON) o como `multipart/form-data` (campo `archivo`); JPG o PNG; `{ storage_path, url, hash_sha256 }` |
 | GET `/api/uploads/{archivo}` | publico por defecto | sirve la imagen |
 | POST `/api/etl/sofasa/ordenes` | token del ETL | ingesta idempotente por `source_id` |
-| GET `/api/sofasa/ordenes` | autenticado | ordenes mas recientes primero (maximo 500) |
-| GET `/api/catalogos` | autenticado | todos los catalogos maestros (etapas, lugares, clases y tamanos de dano, niveles, vistas, cuadrantes...) con version (`ETag`, `304` con `If-None-Match`) |
+| GET `/api/sofasa/ordenes` | autenticado | ordenes mas recientes primero (maximo 500), con `viaje_id` y `codigo_mtrack`; inspector y conductor solo ven las de sus viajes |
+| GET `/api/catalogos` | autenticado | todos los catalogos maestros (etapas, lugares, clases y tamanos de dano, niveles, vistas, cuadrantes y sus poligonos, clientes...) con version (`ETag`, `304` con `If-None-Match`) |
 | GET `/api/catalogos/{nombre}` | autenticado | un catalogo con su version |
 | POST `/api/catalogos/{nombre}`, PATCH `/api/catalogos/{nombre}/{id}`, DELETE `/api/catalogos/{nombre}/{id}` | admin, super_admin, coordinador_calidad | crea, edita o borra un valor; uno en uso no se borra (`409`), se inactiva |
 | GET `/api/patrones` | autenticado | hallazgos por proceso y zona de unidades movilizadas |
@@ -64,9 +83,12 @@ Siempre JSON:
 | VALIDATION_ERROR | 400 | cuerpo invalido, datos que no cumplen las reglas, filtros mal formados |
 | UNAUTHORIZED | 401 | sin token, token invalido o vencido, usuario retirado o inexistente, credenciales incorrectas |
 | FORBIDDEN | 403 | rol insuficiente o inspeccion ajena |
+| PIN_CHANGE_REQUIRED | 403 | el PIN es temporal: hay que cambiarlo con `POST /api/auth/cambiar-pin` |
+| ACCOUNT_LOCKED | 423 | cuenta bloqueada por PIN errados seguidos; `details.bloqueado_hasta` |
 | NOT_FOUND | 404 | recurso o ruta inexistente |
 | METHOD_NOT_ALLOWED | 405 | metodo no admitido en una ruta existente |
-| CONFLICT | 409 | duplicados, inspeccion cerrada, transferencia ya firmada |
+| CONFLICT | 409 | duplicados, inspeccion cerrada, transferencia ya cerrada, firmantes de la transferencia que no se pueden cambiar |
+| ETAPA_PREVIA_SIN_CIERRE | 409 | la etapa anterior del VIN no esta terminada (sin llegada cerrada o con la transferencia sin tipo de cierre): no se puede crear la salida de la siguiente |
 | RATE_LIMITED | 429 | demasiados intentos de login |
 | INTERNAL_ERROR | 500 | error inesperado (sin detalles internos) |
 | DB_UNAVAILABLE | 503 | reservado |

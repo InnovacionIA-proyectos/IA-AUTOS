@@ -6,9 +6,19 @@ namespace IAAutos.Dominio.Catalogos;
 /// <summary>Etapa del proceso (cargue, transporte, descargue). Es el "proceso" de cada tramo de la ruta de un vehiculo.</summary>
 public sealed class clsEtapaCatalogo : clsCatalogoCodificado
 {
+    public const string CARGUE = "cargue";
+    public const string TRANSPORTE = "transporte";
+    public const string DESCARGUE = "descargue";
+
     private clsEtapaCatalogo()
     {
     }
+
+    /// <summary>
+    /// Las inspecciones de Cargue y Descargue exigen las fotos de las vistas obligatorias; en Transporte la salida y la llegada son registros
+    /// del conductor y no las exigen.
+    /// </summary>
+    public static bool ExigeVistas(string? codigo) => codigo is CARGUE or DESCARGUE;
 
     public static clsEtapaCatalogo Crear(string? codigo, string? nombre, int? orden, bool? activo, DateTimeOffset ahora)
     {
@@ -174,121 +184,20 @@ public sealed class clsVistaFoto : clsCatalogoCodificado
     }
 }
 
-/// <summary>
-/// Cuadrante numerado de una vista, por tipo de vehiculo. La geometria es un poligono normalizado (coordenadas entre 0 y 1 sobre la
-/// imagen de la vista) para que la app y el portal dibujen las mismas regiones. Las vistas adicionales no tienen cuadrantes.
-/// </summary>
-public sealed class clsCuadrante : clsCatalogoBase
+/// <summary>Cliente (empresa) al que pertenecen los usuarios y los vehiculos. Cada usuario ve solo lo de su cliente.</summary>
+public sealed class clsCliente : clsCatalogoCodificado
 {
-    private clsCuadrante()
+    /// <summary>Cliente de las ordenes que llegan por la ingesta de Sofasa.</summary>
+    public const string CODIGO_SOFASA = "sofasa";
+
+    private clsCliente()
     {
     }
 
-    public Guid VistaFotoId { get; private set; }
-
-    public string? TipoVehiculo { get; private set; }
-
-    /// <summary>Numero del cuadrante (1 en adelante); es unico por tipo de vehiculo.</summary>
-    public int Numero { get; private set; }
-
-    /// <summary>Poligono en JSON: {"puntos":[[x,y],...]}. Nulo mientras no se haya dibujado.</summary>
-    public string? Geometria { get; private set; }
-
-    public static clsCuadrante Crear(
-        Guid vistaFotoId,
-        string? tipoVehiculo,
-        int? numero,
-        string? nombre,
-        string? geometria,
-        int? orden,
-        bool? activo,
-        DateTimeOffset ahora)
+    public static clsCliente Crear(string? codigo, string? nombre, int? orden, bool? activo, DateTimeOffset ahora)
     {
-        var cuadrante = new clsCuadrante
-        {
-            VistaFotoId = vistaFotoId,
-            TipoVehiculo = clsVistaFoto.TipoVehiculoValido(tipoVehiculo),
-            Numero = NumeroValido(numero),
-            Geometria = GeometriaValida(geometria),
-        };
-        cuadrante.Iniciar(nombre, orden, activo, ahora);
-        return cuadrante;
-    }
-
-    /// <summary>Cambia lo propio del cuadrante; los indicadores distinguen "no enviado" de "enviado en nulo".</summary>
-    public void Cambiar(
-        Guid? vistaFotoId,
-        string? tipoVehiculo,
-        bool cambiaTipoVehiculo,
-        int? numero,
-        string? geometria,
-        bool cambiaGeometria,
-        DateTimeOffset ahora)
-    {
-        if (vistaFotoId is not null)
-        {
-            VistaFotoId = vistaFotoId.Value;
-        }
-
-        if (cambiaTipoVehiculo)
-        {
-            TipoVehiculo = clsVistaFoto.TipoVehiculoValido(tipoVehiculo);
-        }
-
-        if (numero is not null)
-        {
-            Numero = NumeroValido(numero);
-        }
-
-        if (cambiaGeometria)
-        {
-            Geometria = GeometriaValida(geometria);
-        }
-
-        Tocar(ahora);
-    }
-
-    private static int NumeroValido(int? numero) =>
-        numero is >= 1 ? numero.Value : throw clsErroresCampos.De("numero", "El número debe ser un entero >= 1");
-
-    /// <summary>
-    /// Verifica que sea {"puntos":[[x,y],...]} con al menos 3 puntos y coordenadas entre 0 y 1, y la devuelve compacta.
-    /// Nulo o vacio = sin geometria.
-    /// </summary>
-    public static string? GeometriaValida(string? geometria)
-    {
-        if (string.IsNullOrWhiteSpace(geometria))
-        {
-            return null;
-        }
-
-        const string FORMATO = "La geometría debe ser {\"puntos\":[[x,y],...]} con al menos 3 puntos y coordenadas entre 0 y 1";
-        try
-        {
-            using var documento = JsonDocument.Parse(geometria);
-            if (documento.RootElement.ValueKind != JsonValueKind.Object
-                || !documento.RootElement.TryGetProperty("puntos", out var puntos)
-                || puntos.ValueKind != JsonValueKind.Array
-                || puntos.GetArrayLength() < 3)
-            {
-                throw clsErroresCampos.De("geometria", FORMATO);
-            }
-
-            foreach (var punto in puntos.EnumerateArray())
-            {
-                if (punto.ValueKind != JsonValueKind.Array
-                    || punto.GetArrayLength() != 2
-                    || punto.EnumerateArray().Any(c => c.ValueKind != JsonValueKind.Number || c.GetDouble() is < 0 or > 1))
-                {
-                    throw clsErroresCampos.De("geometria", FORMATO);
-                }
-            }
-
-            return JsonSerializer.Serialize(documento.RootElement);
-        }
-        catch (JsonException)
-        {
-            throw clsErroresCampos.De("geometria", FORMATO);
-        }
+        var cliente = new clsCliente();
+        cliente.Iniciar(codigo, nombre, orden, activo, ahora);
+        return cliente;
     }
 }

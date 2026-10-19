@@ -11,7 +11,11 @@ namespace IAAutos.API.Controllers.Inspecciones;
 [Route("api/inspecciones")]
 public sealed class clsInspeccionesController(clsInspeccionesService servicio) : clsControladorBase
 {
-    /// <summary>Crea la inspeccion de una etapa. El usuario sale del token y el estado inicial es siempre borrador.</summary>
+    /// <summary>
+    /// Crea la inspeccion de salida o de llegada de una etapa. El usuario sale del token, el estado inicial es siempre borrador y la placa, el
+    /// trailer y el conductor salen del viaje de la etapa. La salida exige que la etapa anterior del VIN tenga cerrada su llegada (409
+    /// ETAPA_PREVIA_SIN_CIERRE).
+    /// </summary>
     [HttpPost]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
     [ProducesResponseType<InspeccionDto>(StatusCodes.Status201Created)]
@@ -22,25 +26,44 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio) :
         return Creado(await servicio.CrearAsync(solicitud, ct));
     }
 
-    /// <summary>Listado (maximo 200, mas recientes primero) con filtros por VIN, usuario, momento, estado, proceso y fechas.</summary>
+    /// <summary>
+    /// Corrige una inspeccion CERRADA: crea la version siguiente (en borrador, vacia: se vuelven a tomar las fotos) que referencia a la anterior;
+    /// la anterior no cambia. 409 si la inspeccion no esta cerrada o ya fue corregida. Cuerpo opcional.
+    /// </summary>
+    [HttpPost("{id:guid}/corregir")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
+    [ProducesResponseType<InspeccionDto>(StatusCodes.Status201Created)]
+    [CuerpoSolicitud(typeof(IAAutos.Aplicacion.Inspecciones.DTOInspecciones.CorregirInspeccionRequest))]
+    public async Task<IActionResult> Corregir(Guid id, CancellationToken ct)
+    {
+        var solicitud = Request.ContentLength is > 0 ? await LeerCuerpoAsync<CorregirInspeccionRequest>(ct) : new CorregirInspeccionRequest(null, null, null, null);
+        return Creado(await servicio.CorregirAsync(id, solicitud, ct));
+    }
+
+    /// <summary>Listado (maximo 200, mas recientes primero) con filtros por VIN, usuario, viaje, momento, estado, proceso y fechas. Inspectores y conductores ven solo los informes de sus viajes.</summary>
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<InspeccionListadoDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Listar(
         [FromQuery] string? vin,
         [FromQuery] string? usuarioId,
+        [FromQuery] string? viajeId,
         [FromQuery] string? momento,
         [FromQuery] string? estado,
         [FromQuery] string? proceso,
         [FromQuery] string? desde,
         [FromQuery] string? hasta,
         CancellationToken ct) =>
-        Ok(await servicio.ListarAsync(new FiltrosInspeccionesRequest(vin, usuarioId, momento, estado, proceso, desde, hasta), ct));
+        Ok(await servicio.ListarAsync(new FiltrosInspeccionesRequest(vin, usuarioId, viajeId, momento, estado, proceso, desde, hasta), ct));
 
     /// <summary>Informe completo para revision: contexto, hallazgos, evidencias con URL y transferencia con firmas.</summary>
     [HttpGet("{id:guid}")]
     [ProducesResponseType<InformeDetalleDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Obtener(Guid id, CancellationToken ct) => Ok(await servicio.ObtenerInformeAsync(id, ct));
 
+    /// <summary>
+    /// Agrega una foto: de una vista (<c>vista_id</c>, una de las 7 obligatorias o de las 2 adicionales con su <c>nota</c>) o de un hallazgo
+    /// (<c>hallazgo_id</c>). El archivo debe haberse subido antes con POST /api/uploads. El servidor agrega su sello y el hash SHA-256.
+    /// </summary>
     [HttpPost("{id:guid}/evidencias")]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
     [ProducesResponseType<EvidenciaDto>(StatusCodes.Status201Created)]
@@ -51,9 +74,10 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio) :
         return Creado(await servicio.AgregarEvidenciaAsync(id, solicitud, ct));
     }
 
+    /// <summary>Guarda un hallazgo con su foto propia (<c>evidencia</c>, obligatoria: sin ella 400).</summary>
     [HttpPost("{id:guid}/hallazgos")]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
-    [ProducesResponseType<HallazgoDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<HallazgoCreadoDto>(StatusCodes.Status201Created)]
     [CuerpoSolicitud(typeof(IAAutos.Aplicacion.Inspecciones.DTOInspecciones.CrearHallazgoRequest))]
     public async Task<IActionResult> AgregarHallazgo(Guid id, CancellationToken ct)
     {
@@ -61,18 +85,10 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio) :
         return Creado(await servicio.AgregarHallazgoAsync(id, solicitud, ct));
     }
 
-    /// <summary>Firma de entrega y recibo (parcial o completa). Se acumulan las firmas hasta completar ambas.</summary>
-    [HttpPost("{id:guid}/transferencia")]
-    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
-    [ProducesResponseType<TransferenciaDto>(StatusCodes.Status201Created)]
-    [CuerpoSolicitud(typeof(IAAutos.Aplicacion.Inspecciones.DTOInspecciones.FirmarTransferenciaRequest))]
-    public async Task<IActionResult> FirmarTransferencia(Guid id, CancellationToken ct)
-    {
-        var solicitud = await LeerCuerpoAsync<FirmarTransferenciaRequest>(ct);
-        return Creado(await servicio.FirmarTransferenciaAsync(id, solicitud, ct));
-    }
-
-    /// <summary>Cierra la inspeccion como evidencia inmutable (409 si ya estaba cerrada).</summary>
+    /// <summary>
+    /// Cierra la inspeccion como evidencia inmutable (409 si ya estaba cerrada). En Cargue y Descargue exige la foto de cada vista obligatoria
+    /// (400 con el nombre de la que falta), una foto propia por hallazgo y que toda foto tenga ubicacion.
+    /// </summary>
     [HttpPost("{id:guid}/cerrar")]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
     [ProducesResponseType<CerrarInspeccionResponse>(StatusCodes.Status200OK)]

@@ -4,7 +4,32 @@ namespace IAAutos.Aplicacion.Auth.DTOAuth;
 
 public sealed record LoginRequest(string? Email, string? Password);
 
-public sealed record UsuarioAutenticadoDto(Guid Id, string Nombre, string Email, string Rol);
+/// <summary>Cuerpo de login-conductor: la cedula y el PIN de quien entra desde la app.</summary>
+public sealed record LoginConductorRequest(string? Cedula, string? Pin);
+
+/// <summary>Cuerpo de cambiar-pin: el PIN actual y el nuevo.</summary>
+public sealed record CambiarPinRequest(string? PinActual, string? PinNuevo);
+
+/// <summary>Quien inicio sesion. <c>DebeCambiarPin</c> avisa a la app que debe llevar a la persona a cambiar su PIN antes de seguir.</summary>
+public sealed record UsuarioAutenticadoDto(Guid Id, string Nombre, string? Email, string Rol, string? Cedula = null, bool DebeCambiarPin = false);
+
+public sealed record ClienteDto(Guid Id, string Codigo, string Nombre);
+
+/// <summary>
+/// Perfil del usuario autenticado (GET /api/auth/me): quien es, con que entra, su cliente y lo que puede hacer (<c>Capacidades</c>,
+/// nombres estables para armar el menu).
+/// </summary>
+public sealed record PerfilDto(
+    Guid Id,
+    string Nombre,
+    string? Email,
+    string Rol,
+    string? SubtipoInspector,
+    string? Cedula,
+    string TipoCredencial,
+    bool DebeCambiarPin,
+    ClienteDto? Cliente,
+    IReadOnlyList<string> Capacidades);
 
 public sealed record LoginResponse(string Token, UsuarioAutenticadoDto Usuario);
 

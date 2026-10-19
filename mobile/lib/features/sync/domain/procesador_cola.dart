@@ -1,4 +1,5 @@
 import '../../../core/errores/error_api.dart';
+import '../../inspecciones/domain/foto_local.dart';
 import 'job.dart';
 import 'puertos.dart';
 
