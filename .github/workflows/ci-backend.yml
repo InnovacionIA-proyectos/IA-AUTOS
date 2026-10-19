@@ -1,0 +1,113 @@
+name: CI Backend
+
+on:
+  push:
+    branches: [main, QA]
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci-backend.yml"
+  pull_request:
+    branches: [main, QA]
+    paths:
+      - "backend/**"
+      - ".github/workflows/ci-backend.yml"
+
+permissions:
+  contents: read
+
+# Una sola ejecucion por rama. En PR una nueva solicitud cancela la anterior (evita abrir conexiones de mas a la base real);
+# en push a main NO se cancela, para no cortar un despliegue a medias: la siguiente espera su turno.
+concurrency:
+  group: ci-backend-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Self-hosted (no ubuntu-latest): las pruebas del entorno real usan la base SQL Server de la red corporativa privada
+  # y el MinIO reales; un runner en la nube de GitHub no podria alcanzarlos.
+  # No se ejecuta en PR de forks: ese codigo externo correria en el runner corporativo con acceso a los secretos.
+  build-and-test:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, dokploy_]
+    # Este runner solo tiene Windows PowerShell (politica de ejecucion restringida) y cmd. Sin este default, cualquier
+    # "run:" sin "shell:" cae en PowerShell y falla con "la ejecucion de scripts esta deshabilitada".
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v4
+
+      # DOTNET_INSTALL_DIR explicito: por defecto setup-dotnet instala en "C:\Program Files\dotnet" y la cuenta del runner
+      # no tiene permiso de escritura ahi. runner.tool_cache si es escribible por esa cuenta. El paso siguiente agrega esa
+      # carpeta al PATH porque setup-dotnet solo lo hace automaticamente para la ubicacion por defecto.
+      - name: Instalar .NET SDK
+        uses: actions/setup-dotnet@v4
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.tool_cache }}\dotnet
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Agregar dotnet al PATH
+        run: echo ${{ runner.tool_cache }}\dotnet>>"%GITHUB_PATH%"
+
+      - name: Restaurar dependencias
+        run: dotnet restore backend\IA-AUTOS.slnx
+
+      - name: Compilar (Release)
+        run: dotnet build backend\IA-AUTOS.slnx -c Release --no-restore
+
+      # No tocan ninguna base ni servicio externo.
+      - name: Pruebas unitarias
+        run: dotnet test backend\tests\IA-AUTOS.Tests.Unitarios -c Release --no-build --logger "trx;LogFileName=unitarias.trx" --results-directory TestResults
+
+      # SOLO LECTURA contra la base y el MinIO reales: solo SELECT y listados, sin insertar, actualizar ni borrar nada.
+      # Usan los mismos nombres de variable que backend/.env (ASP.NET Core las mapea solo, doble guion bajo). Los valores
+      # son secretos del repositorio; la lista completa esta en backend/.env.github.
+      #
+      # NO se ejecuta aqui IA-AUTOS.Tests.Integracion: sus pruebas borran y vuelven a crear los datos de negocio al inicio
+      # de cada prueba (en su propio contenedor Testcontainers) y NUNCA deben apuntar a la base real. Se corren en local
+      # con Docker: dotnet test backend/tests/IA-AUTOS.Tests.Integracion
+      - name: Pruebas contra el entorno real (solo lectura)
+        env:
+          ConnectionStrings__DefaultConnection: ${{ secrets.CONNECTIONSTRINGS_DEFAULTCONNECTION }}
+          Jwt__Secret: ${{ secrets.JWT_SECRET }}
+          Storage__S3__Endpoint: ${{ secrets.STORAGE_S3_ENDPOINT }}
+          Storage__S3__Bucket: ${{ secrets.STORAGE_S3_BUCKET }}
+          Storage__S3__Region: ${{ secrets.STORAGE_S3_REGION }}
+          Storage__S3__AccessKey: ${{ secrets.STORAGE_S3_ACCESSKEY }}
+          Storage__S3__SecretKey: ${{ secrets.STORAGE_S3_SECRETKEY }}
+          PortalTi__ConnectionString: ${{ secrets.PORTALTI_CONNECTIONSTRING }}
+        run: dotnet test backend\tests\IA-AUTOS.Tests.EntornoReal -c Release --no-build --logger "trx;LogFileName=entorno-real.trx" --results-directory TestResults
+
+      - name: Conservar resultados de las pruebas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: resultados-pruebas-backend
+          path: TestResults/*.trx
+          if-no-files-found: warn
+          retention-days: 14
+
+  # CD: solo despues de que el CI pase y unicamente en push a main (nunca en PR ni en QA).
+  deploy:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Self-hosted (no ubuntu-latest): el webhook de Dokploy vive en la red privada corporativa y no es alcanzable desde
+    # los runners en la nube de GitHub.
+    runs-on: [self-hosted, dokploy_]
+    steps:
+      - name: Mostrar informacion del deploy
+        shell: cmd
+        run: |
+          echo Branch: ${{ github.ref }}
+          echo Commit: ${{ github.sha }}
+          echo Evento: ${{ github.event_name }}
+
+      # DOKPLOY_DEPLOY_WEBHOOK_URL es un secreto del repositorio (Dokploy > aplicacion > Deployments > Webhook URL).
+      # -f hace que el job falle si Dokploy responde con error (4xx/5xx).
+      - name: Disparar despliegue en Dokploy
+        shell: cmd
+        run: |
+          curl -f -X POST "${{ secrets.DOKPLOY_DEPLOY_WEBHOOK_URL }}" ^
+            -H "Content-Type: application/json" ^
+            -H "X-GitHub-Event: push" ^
+            -d "{\"ref\":\"${{ github.ref }}\",\"repository\":{\"full_name\":\"${{ github.repository }}\"}}"
