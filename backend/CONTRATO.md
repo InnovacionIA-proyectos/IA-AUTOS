@@ -506,12 +506,25 @@ Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viaj
     { "vehiculo_id": "uuid", "vin": "9BWZZZ377VT004251", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional",
       "etapas": 3, "completas": 0 }
   ],
+  "clientes": [ { "id": "uuid", "codigo": "sofasa", "nombre": "Sofasa" } ],
   "created_at": "…", "updated_at": "…"
 }
 ```
 
 `codigo_mtrack`, `tipo_unidad_id` y `placa` pueden ser `null` solo en los viajes migrados desde las asignaciones anteriores. `etapas` y `completas`
 de cada VIN cuentan sus etapas del viaje y las que ya tienen informe cerrado.
+
+**Clientes del viaje.** El viaje no tiene un cliente propio: un viaje puede llevar VIN de más de una marca, así que su cliente se toma de sus VIN. `clientes` es la lista, sin
+repetidos y por nombre, de los clientes de los VIN del viaje, con el mismo objeto que `cliente` en `GET /api/auth/me` (`id`, `codigo`, `nombre`). Va en `ViajeDto` y en `ViajeResumenDto`
+y es `[]` si el viaje aún no tiene VIN. Los indicadores por cliente o marca se cuentan por vehículo, no por viaje.
+
+**Qué VIN ve cada quien.** `vehiculos`, `clientes` y, en el listado, `total_vehiculos` y `vehiculos_completos` se calculan sobre los VIN que quien consulta puede ver:
+
+| Quien consulta | Ve |
+|---|---|
+| El conductor y el inspector del viaje | todos los VIN del viaje y todos sus clientes |
+| El super administrador | todos los VIN y todos los clientes |
+| Cualquier otro rol (coordinador, administrador, comercial…) | solo los VIN de **su cliente** y solo su cliente en `clientes` |
 
 ### `POST /api/viajes`
 Gestión de viajes. `201` con el `ViajeDto`.
@@ -543,15 +556,21 @@ ninguna etapa.
 ### `GET /api/viajes`
 Autenticado. Hasta **200** viajes, los más recientes primero, como `ViajeResumenDto` (los campos del viaje sin `vehiculos`, más `total_vehiculos` y
 `vehiculos_completos`: cuántos VIN ya completaron su ruta en el viaje). Filtros opcionales en la consulta: `estado`, `codigoMtrack` (fragmento),
-`vin` (fragmento), `conductorId`, `desde`, `hasta` (fecha ISO sobre la creación). Un filtro mal formado responde `400` con `fieldErrors`. Inspectores y
-conductores solo reciben sus viajes.
+`vin` (fragmento), `conductorId`, `clienteId`, `desde`, `hasta` (fecha ISO sobre la creación). Un filtro mal formado responde `400` con `fieldErrors`. Inspectores y
+conductores solo reciben sus viajes. Cada fila trae `clientes` (ver «Clientes del viaje»).
+
+`clienteId` (uuid) trae los viajes que tienen **al menos un VIN de ese cliente**: un viaje con VIN de dos clientes aparece al filtrar por cualquiera de los dos. Un cliente sin
+viajes o que no existe da una lista vacía; un valor que no es uuid, `400`. **Solo el super administrador elige el cliente**: quien no lo es siempre recibe los viajes de su cliente
+(con o sin `clienteId`; si pide otro, se ignora), igual que en `GET /api/usuarios`. Un viaje **sin VIN** todavía no tiene cliente: lo ven los de su cliente
+si lo creó alguien de su cliente (así quien lo crea lo encuentra antes de asignarle unidades) y el super administrador, pero no sale al filtrar por `clienteId`.
 
 ### `GET /api/viajes/mios`
 Autenticado. Los viajes del usuario (donde es conductor o inspector) **con sus VIN**, como `ViajeDto`. Sin parámetros trae los `programado` y `en_curso`;
 con `?estado=` trae los de ese estado (`finalizado`, por ejemplo). Es la entrada de «Mis viajes» en la app.
 
 ### `GET /api/viajes/{id}`
-Autenticado. El `ViajeDto`. `403` si es un inspector o conductor y el viaje no es suyo; `404` si no existe.
+Autenticado. El `ViajeDto`. `403` si es un inspector o conductor y el viaje no es suyo, o si el rol no es el super administrador y el viaje no tiene unidades de su cliente;
+`404` si no existe. Los VIN y los clientes que trae dependen de quien consulta (ver «Qué VIN ve cada quien»).
 
 ### `GET /api/viajes/{id}/firmantes`
 Autenticado. Los usuarios del viaje que pueden firmar una transferencia: su **conductor** y su **inspector** activos, como lista de `{ id, nombre, rol }`. Es la lista de la que la app elige
@@ -634,7 +653,7 @@ Se aplica a:
 
 | Recurso | Para un inspector o conductor |
 |---|---|
-| `GET /api/viajes`, `GET /api/viajes/{id}` | solo sus viajes; el detalle de otro viaje responde `403` |
+| `GET /api/viajes`, `GET /api/viajes/{id}` | solo sus viajes (con todos sus VIN); el detalle de otro viaje responde `403` |
 | `GET /api/vehiculos?vin=` y `GET /api/vehiculos/listado` | solo los VIN de sus viajes |
 | `GET /api/vehiculos/{vin}/inventario` (y `/pdf`) | `403` si el VIN no está en sus viajes (`404` si no existe); del VIN ve solo las etapas de sus viajes |
 | `GET /api/inspecciones` | solo los informes de sus viajes |
@@ -642,8 +661,9 @@ Se aplica a:
 | `POST /api/inspecciones` | `403` si la etapa es de otro viaje |
 | `GET /api/sofasa/ordenes` | solo las órdenes vinculadas a sus viajes |
 
-Los reportes (`/api/patrones`, `/api/metricas/rechazo`) son agregados y no se filtran. La visibilidad por **cliente** (unidades de un cliente y ningún otro) no
-está en este servicio.
+Los reportes (`/api/patrones`, `/api/metricas/rechazo`) son agregados y no se filtran. La visibilidad por **cliente** está hoy en los **viajes**: el listado y el detalle
+(`GET /api/viajes`, `GET /api/viajes/{id}`) muestran a quien no es super administrador solo los viajes y los VIN de su cliente (ver «Clientes del viaje»). El resto de recursos
+(vehículos, inspecciones, órdenes) aún no se filtra por cliente.
 
 > **Retirados.** `POST /api/asignaciones` y `POST /api/etapas` ya no existen (responden `404`): las asignaciones pasaron a ser viajes y las etapas nacen al
 > agregar un VIN a un viaje.

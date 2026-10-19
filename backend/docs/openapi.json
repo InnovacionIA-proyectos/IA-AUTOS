@@ -105,6 +105,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "clienteId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -6932,6 +6939,7 @@
           "estado",
           "con_personal_apoyo",
           "vehiculos",
+          "clientes",
           "created_at",
           "updated_at"
         ],
@@ -7036,6 +7044,12 @@
               "$ref": "#/components/schemas/ViajeVehiculoDto"
             }
           },
+          "clientes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClienteDto"
+            }
+          },
           "created_at": {
             "format": "date-time"
           },
@@ -7064,6 +7078,7 @@
           "con_personal_apoyo",
           "total_vehiculos",
           "vehiculos_completos",
+          "clientes",
           "created_at",
           "updated_at"
         ],
@@ -7169,6 +7184,12 @@
           "vehiculos_completos": {
             "type": "integer",
             "format": "int32"
+          },
+          "clientes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClienteDto"
+            }
           },
           "created_at": {
             "format": "date-time"

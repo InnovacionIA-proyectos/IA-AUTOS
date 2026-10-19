@@ -20,9 +20,9 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
 
     private sealed record Sesion(string Token, Guid UsuarioId);
 
-    private async Task<Sesion> SesionAsync(string email, string rol, string? cedula = null)
+    private async Task<Sesion> SesionAsync(string email, string rol, string? cedula = null, Guid? clienteId = null)
     {
-        var usuario = await Fabrica.SembrarUsuarioAsync(email, "Clave-Segura-1", rol, nombre: "Nombre " + email, cedula: cedula);
+        var usuario = await Fabrica.SembrarUsuarioAsync(email, "Clave-Segura-1", rol, nombre: "Nombre " + email, cedula: cedula, clienteId: clienteId);
         return new Sesion(await LoginAsync(email, "Clave-Segura-1"), usuario.Id);
     }
 
@@ -282,7 +282,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var viaje = await LeerJsonAsync(r);
         Assert.Equal(
             ["id", "codigo_mtrack", "tipo_unidad_id", "unidad", "placa", "trailer", "conductor_id", "conductor_nombre", "inspector_id", "inspector_nombre",
-             "origen_id", "origen", "destino_id", "destino", "estado", "con_personal_apoyo", "vehiculos", "created_at", "updated_at"],
+             "origen_id", "origen", "destino_id", "destino", "estado", "con_personal_apoyo", "vehiculos", "clientes", "created_at", "updated_at"],
             viaje.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("MTK-ALTA", viaje.GetProperty("codigo_mtrack").GetString());
         Assert.Equal("Niñera", viaje.GetProperty("unidad").GetString());
@@ -893,5 +893,175 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         Assert.Equal("retirado", (await LeerJsonAsync(r)).GetProperty("modo").GetString());
+    }
+
+    // ------------------------------------------------------------------------------------- clientes del viaje
+
+    private async Task<Guid> ClienteAsync(string codigo, string nombre, int orden)
+    {
+        var id = Guid.NewGuid();
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblClientes (Id, Codigo, Nombre, Orden) VALUES (@id, @c, @n, @o)",
+            ("@id", id), ("@c", codigo), ("@n", nombre), ("@o", orden));
+        return id;
+    }
+
+    private Task<Guid> SofasaAsync() => IdAsync("tblClientes", "sofasa");
+
+    /// <summary>Un viaje con dos VIN de Sofasa y uno de otro cliente, con su conductor y su inspector.</summary>
+    private sealed record ViajeDosMarcas(Guid ViajeId, Guid Sofasa, Guid Otro, Sesion Coordinador, Sesion Conductor, Sesion Inspector);
+
+    private async Task<ViajeDosMarcas> ViajeDosMarcasAsync()
+    {
+        var sofasa = await SofasaAsync();
+        var otro = await ClienteAsync("otro", "Otro cliente", 2);
+        var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD, clienteId: sofasa);
+        var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
+        var inspector = await SesionAsync("insp@ejemplo.com", clsRol.INSPECTOR);
+        var viajeId = await ViajeConVinesAsync(coordinador, "MTK-DOS", ["VIN-S-1", "VIN-S-2", "VIN-O-1"], conductor.UsuarioId, inspector.UsuarioId);
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblVehiculos SET ClienteId = @c WHERE Vin = 'VIN-O-1'", ("@c", otro));
+        return new ViajeDosMarcas(viajeId, sofasa, otro, coordinador, conductor, inspector);
+    }
+
+    private static List<string?> Codigos(JsonElement viaje) =>
+        viaje.GetProperty("clientes").EnumerateArray().Select(c => c.GetProperty("codigo").GetString()).Order().ToList();
+
+    private static List<Guid> Ids(JsonElement lista) => lista.EnumerateArray().Select(v => v.GetProperty("id").GetGuid()).ToList();
+
+    [Fact]
+    public async Task Un_viaje_con_vin_de_dos_clientes_sale_al_filtrar_por_cualquiera_de_los_dos_y_trae_ambos_clientes()
+    {
+        var d = await ViajeDosMarcasAsync();
+        var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
+
+        var porSofasa = await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes?clienteId={d.Sofasa}"));
+        var porOtro = await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes?clienteId={d.Otro}"));
+        var sinFiltro = await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync("/api/viajes"));
+
+        Assert.Equal([d.ViajeId], Ids(porSofasa));
+        Assert.Equal([d.ViajeId], Ids(porOtro));
+        Assert.Equal([d.ViajeId], Ids(sinFiltro));
+        Assert.Equal(["otro", "sofasa"], Codigos(porSofasa[0]));
+        Assert.Equal(["otro", "sofasa"], Codigos(porOtro[0]));
+        Assert.Equal(3, porOtro[0].GetProperty("total_vehiculos").GetInt32());
+        var sofasa = porSofasa[0].GetProperty("clientes").EnumerateArray().Single(c => c.GetProperty("codigo").GetString() == "sofasa");
+        Assert.Equal(["id", "codigo", "nombre"], sofasa.EnumerateObject().Select(x => x.Name).ToList());
+        Assert.Equal(d.Sofasa, sofasa.GetProperty("id").GetGuid());
+        Assert.Equal("Otro cliente", porOtro[0].GetProperty("clientes").EnumerateArray().Single(c => c.GetProperty("codigo").GetString() == "otro").GetProperty("nombre").GetString());
+    }
+
+    [Fact]
+    public async Task El_filtro_por_cliente_sin_viajes_o_inexistente_da_lista_vacia_y_uno_mal_formado_es_400()
+    {
+        var d = await ViajeDosMarcasAsync();
+        var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
+        var sinViajes = await ClienteAsync("tercero", "Tercero", 3);
+
+        var vacioReal = await Cliente(superAdmin.Token).GetAsync($"/api/viajes?clienteId={sinViajes}");
+        var vacioInexistente = await Cliente(superAdmin.Token).GetAsync($"/api/viajes?clienteId={Guid.NewGuid()}");
+        var invalido = await Cliente(superAdmin.Token).GetAsync("/api/viajes?clienteId=no-es-uuid");
+        var invalidoDelCoordinador = await Cliente(d.Coordinador.Token).GetAsync("/api/viajes?clienteId=no-es-uuid");
+
+        Assert.Equal(0, (await LeerJsonAsync(vacioReal)).GetArrayLength());
+        Assert.Equal(HttpStatusCode.OK, vacioInexistente.StatusCode);
+        Assert.Equal(0, (await LeerJsonAsync(vacioInexistente)).GetArrayLength());
+        Assert.Equal(HttpStatusCode.BadRequest, invalido.StatusCode);
+        Assert.True((await LeerJsonAsync(invalido)).GetProperty("details").GetProperty("fieldErrors").TryGetProperty("clienteId", out _));
+        Assert.Equal(HttpStatusCode.BadRequest, invalidoDelCoordinador.StatusCode);
+    }
+
+    [Fact]
+    public async Task Quien_no_es_super_administrador_solo_obtiene_los_viajes_de_su_cliente_con_o_sin_filtro_y_solo_cuenta_sus_vin()
+    {
+        var d = await ViajeDosMarcasAsync();
+        var delOtro = await SesionAsync("coord-otro@ejemplo.com", clsRol.COORDINADOR_CALIDAD, clienteId: d.Otro);
+        var tercero = await ClienteAsync("tercero", "Tercero", 3);
+        var delTercero = await SesionAsync("coord-tercero@ejemplo.com", clsRol.COORDINADOR_CALIDAD, clienteId: tercero);
+
+        var sofasa = await LeerJsonAsync(await Cliente(d.Coordinador.Token).GetAsync("/api/viajes"));
+        var sofasaPidiendoOtro = await LeerJsonAsync(await Cliente(d.Coordinador.Token).GetAsync($"/api/viajes?clienteId={d.Otro}"));
+        var otro = await LeerJsonAsync(await Cliente(delOtro.Token).GetAsync("/api/viajes"));
+        var otroPidiendoSofasa = await LeerJsonAsync(await Cliente(delOtro.Token).GetAsync($"/api/viajes?clienteId={d.Sofasa}"));
+        var ninguno = await LeerJsonAsync(await Cliente(delTercero.Token).GetAsync("/api/viajes"));
+
+        Assert.Equal([d.ViajeId], Ids(sofasa));
+        Assert.Equal(["sofasa"], Codigos(sofasa[0]));
+        Assert.Equal(2, sofasa[0].GetProperty("total_vehiculos").GetInt32());
+        Assert.Equal([d.ViajeId], Ids(sofasaPidiendoOtro));
+        Assert.Equal(["sofasa"], Codigos(sofasaPidiendoOtro[0]));
+        Assert.Equal([d.ViajeId], Ids(otro));
+        Assert.Equal(["otro"], Codigos(otro[0]));
+        Assert.Equal(1, otro[0].GetProperty("total_vehiculos").GetInt32());
+        Assert.Equal(["otro"], Codigos(otroPidiendoSofasa[0]));
+        Assert.Equal(0, ninguno.GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Al_abrir_el_detalle_cada_usuario_de_un_cliente_ve_solo_los_vin_de_su_cliente()
+    {
+        var d = await ViajeDosMarcasAsync();
+        var delOtro = await SesionAsync("coord-otro@ejemplo.com", clsRol.COORDINADOR_CALIDAD, clienteId: d.Otro);
+        var tercero = await ClienteAsync("tercero", "Tercero", 3);
+        var delTercero = await SesionAsync("coord-tercero@ejemplo.com", clsRol.COORDINADOR_CALIDAD, clienteId: tercero);
+
+        var sofasa = await LeerJsonAsync(await Cliente(d.Coordinador.Token).GetAsync($"/api/viajes/{d.ViajeId}"));
+        var otro = await LeerJsonAsync(await Cliente(delOtro.Token).GetAsync($"/api/viajes/{d.ViajeId}"));
+        var ajeno = await Cliente(delTercero.Token).GetAsync($"/api/viajes/{d.ViajeId}");
+
+        Assert.Equal(["VIN-S-1", "VIN-S-2"], Vines(sofasa));
+        Assert.Equal(["sofasa"], Codigos(sofasa));
+        Assert.Equal(["VIN-O-1"], Vines(otro));
+        Assert.Equal(["otro"], Codigos(otro));
+        Assert.Equal(HttpStatusCode.Forbidden, ajeno.StatusCode);
+        Assert.Equal("FORBIDDEN", (await LeerJsonAsync(ajeno)).GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task El_conductor_el_inspector_y_el_super_administrador_ven_todos_los_vin_del_viaje()
+    {
+        var d = await ViajeDosMarcasAsync();
+        var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
+
+        var delConductor = await LeerJsonAsync(await Cliente(d.Conductor.Token).GetAsync($"/api/viajes/{d.ViajeId}"));
+        var delInspector = await LeerJsonAsync(await Cliente(d.Inspector.Token).GetAsync($"/api/viajes/{d.ViajeId}"));
+        var delSuper = await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes/{d.ViajeId}"));
+        var mios = await LeerJsonAsync(await Cliente(d.Conductor.Token).GetAsync("/api/viajes/mios"));
+        var listadoDelConductor = await LeerJsonAsync(await Cliente(d.Conductor.Token).GetAsync("/api/viajes"));
+
+        foreach (var viaje in new[] { delConductor, delInspector, delSuper, mios[0] })
+        {
+            Assert.Equal(["VIN-O-1", "VIN-S-1", "VIN-S-2"], Vines(viaje));
+            Assert.Equal(["otro", "sofasa"], Codigos(viaje));
+        }
+
+        Assert.Equal(3, listadoDelConductor[0].GetProperty("total_vehiculos").GetInt32());
+        Assert.Equal(["otro", "sofasa"], Codigos(listadoDelConductor[0]));
+    }
+
+    [Fact]
+    public async Task Un_viaje_sin_vin_solo_lo_ve_su_cliente_hasta_que_tenga_unidades()
+    {
+        var sofasa = await SofasaAsync();
+        var otro = await ClienteAsync("otro", "Otro cliente", 2);
+        var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD, clienteId: sofasa);
+        var delOtro = await SesionAsync("coord-otro@ejemplo.com", clsRol.COORDINADOR_CALIDAD, clienteId: otro);
+        var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
+        var creado = await CrearViajeAsync(coordinador, "MTK-VACIO");
+        Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
+        var viajeId = (await LeerJsonAsync(creado)).GetProperty("id").GetGuid();
+
+        var propio = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes"));
+        var ajeno = await LeerJsonAsync(await Cliente(delOtro.Token).GetAsync("/api/viajes"));
+        var detalleAjeno = await Cliente(delOtro.Token).GetAsync($"/api/viajes/{viajeId}");
+        var detallePropio = await Cliente(coordinador.Token).GetAsync($"/api/viajes/{viajeId}");
+        var delSuper = await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes?clienteId={sofasa}"));
+
+        Assert.Equal([viajeId], Ids(propio));
+        Assert.Empty(Codigos(propio[0]));
+        Assert.Equal(0, ajeno.GetArrayLength());
+        Assert.Equal(HttpStatusCode.Forbidden, detalleAjeno.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, detallePropio.StatusCode);
+        // Sin VIN no hay a que cliente atribuirlo: el filtro por cliente del super administrador solo trae viajes con unidades de ese cliente.
+        Assert.Equal(0, delSuper.GetArrayLength());
     }
 }

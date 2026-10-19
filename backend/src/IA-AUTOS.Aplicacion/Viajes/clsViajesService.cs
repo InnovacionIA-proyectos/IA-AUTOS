@@ -62,7 +62,7 @@ public sealed class clsViajesService(
     // ---------------------------------------------------------------------------------------------- consulta
 
     public async Task<IReadOnlyList<ViajeResumenDto>> ListarAsync(FiltrosViajesRequest solicitud, CancellationToken ct = default) =>
-        await consultas.ListarAsync(ParsearFiltros(solicitud), actual.SoloSusViajes(), LIMITE_LISTADO, ct);
+        await consultas.ListarAsync(ParsearFiltros(solicitud, ClienteRestringido), actual.SoloSusViajes(), ClienteRestringido, LIMITE_LISTADO, ct);
 
     /// <summary>Los viajes del usuario (como conductor o inspector). Sin estado: los programados y en curso.</summary>
     public async Task<IReadOnlyList<ViajeDto>> MiosAsync(string? estado, CancellationToken ct = default)
@@ -81,7 +81,7 @@ public sealed class clsViajesService(
     public async Task<ViajeDto> ObtenerAsync(Guid id, CancellationToken ct = default)
     {
         var viaje = await ObtenerViajeAsync(id, ct);
-        AsegurarAcceso(viaje);
+        await AsegurarAccesoAsync(viaje, ct);
         return await ObtenerDtoAsync(id, ct);
     }
 
@@ -211,14 +211,27 @@ public sealed class clsViajesService(
         await viajes.ObtenerPorIdAsync(id, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado");
 
     private async Task<ViajeDto> ObtenerDtoAsync(Guid id, CancellationToken ct) =>
-        await consultas.ObtenerAsync(id, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado");
+        await consultas.ObtenerAsync(id, ClienteRestringido, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado");
 
-    /// <summary>Inspectores y conductores solo abren los viajes en los que participan.</summary>
-    private void AsegurarAcceso(clsViaje viaje)
+    /// <summary>
+    /// El viaje no tiene un cliente propio: se toma de sus VIN. Quien administra viajes sin ser super administrador (coordinador, administrador,
+    /// comercial...) solo ve los VIN de su cliente y los viajes que los tienen; el conductor y el inspector, que ven lo asignado a ellos, y el
+    /// super administrador ven todo. Nulo si no hay restriccion; sin cliente asignado, <see cref="Guid.Empty"/> (no ve nada).
+    /// </summary>
+    private Guid? ClienteRestringido =>
+        actual.Rol is null or clsRol.SUPER_ADMIN || clsRol.VeSoloSusViajes(actual.Rol) ? null : actual.ClienteId ?? Guid.Empty;
+
+    /// <summary>Inspectores y conductores solo abren los viajes en los que participan; el resto, los de su cliente (el super administrador, todos).</summary>
+    private async Task AsegurarAccesoAsync(clsViaje viaje, CancellationToken ct)
     {
         if (actual.SoloSusViajes() is { } usuarioId && !viaje.Participa(usuarioId))
         {
             throw new clsProhibidoException("El viaje no está asignado a su usuario");
+        }
+
+        if (ClienteRestringido is { } cliente && !await consultas.ViajeEsDeClienteAsync(viaje.Id, cliente, ct))
+        {
+            throw new clsProhibidoException("El viaje no tiene unidades de su cliente");
         }
     }
 
@@ -348,13 +361,18 @@ public sealed class clsViajesService(
         }
     }
 
-    private static FiltrosViajes ParsearFiltros(FiltrosViajesRequest s)
+    /// <summary>
+    /// <c>clienteId</c> solo lo elige el super administrador; quien tiene su alcance limitado a un cliente (<paramref name="clienteRestringido"/>) siempre
+    /// recibe el suyo, venga o no el filtro (igual que en el listado de usuarios).
+    /// </summary>
+    private static FiltrosViajes ParsearFiltros(FiltrosViajesRequest s, Guid? clienteRestringido)
     {
         var errores = new Dictionary<string, string[]>();
         var estado = clsParseoFiltros.Catalogo(s.Estado, clsEstadoViaje.VALORES, "estado", errores);
         var conductorId = clsParseoFiltros.Uuid(s.ConductorId, "conductorId", errores);
         var desde = clsParseoFiltros.Fecha(s.Desde, "desde", errores);
         var hasta = clsParseoFiltros.Fecha(s.Hasta, "hasta", errores);
+        var clienteId = clsParseoFiltros.Uuid(s.ClienteId, "clienteId", errores);
         if (errores.Count > 0)
         {
             throw clsErroresCampos.Varios(errores);
@@ -366,6 +384,7 @@ public sealed class clsViajesService(
             string.IsNullOrWhiteSpace(s.Vin) ? null : clsVin.Normalizar(s.Vin),
             conductorId,
             desde,
-            hasta);
+            hasta,
+            clienteRestringido is null ? clienteId : null);
     }
 }

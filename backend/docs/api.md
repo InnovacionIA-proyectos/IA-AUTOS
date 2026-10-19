@@ -38,9 +38,9 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | GET `/api/vehiculos/{vin}/inventario` | autenticado | etapas (de todos sus viajes), inspecciones, hallazgos, evidencias y transferencia; `403` si inspector o conductor y el VIN no esta en sus viajes |
 | GET `/api/vehiculos/{vin}/inventario/pdf` | autenticado | inventario en PDF (descarga) |
 | POST `/api/viajes` | gestion de viajes | crea un viaje con unidad, placa, trailer, conductor, codigo MTrack (unico, `409` si se repite) y sus VIN; crea las etapas de cada VIN |
-| GET `/api/viajes` | autenticado | listado (maximo 200) con filtros `estado`, `codigoMtrack`, `vin`, `conductorId`, `desde`, `hasta`; inspector y conductor solo ven los suyos |
+| GET `/api/viajes` | autenticado | listado (maximo 200) con filtros `estado`, `codigoMtrack`, `vin`, `conductorId`, `clienteId`, `desde`, `hasta`; inspector y conductor solo ven los suyos; `clienteId` trae los viajes con algun VIN de ese cliente (solo el super_admin elige; el resto siempre recibe los de su cliente); cada fila trae `clientes` |
 | GET `/api/viajes/mios` | autenticado | los viajes del usuario (conductor o inspector) con sus VIN; por defecto programados y en curso |
-| GET `/api/viajes/{id}` | autenticado | un viaje con sus VIN; `403` si no es de un inspector o conductor |
+| GET `/api/viajes/{id}` | autenticado | un viaje con sus VIN y sus `clientes`; `403` si no es de un inspector o conductor, o si quien consulta no es super_admin y el viaje no tiene unidades de su cliente; fuera del conductor, el inspector del viaje y el super_admin, solo ve los VIN de su cliente |
 | GET `/api/viajes/{id}/firmantes` | autenticado | los usuarios del viaje que pueden firmar una transferencia (su conductor y su inspector activos) |
 | PATCH `/api/viajes/{id}` | gestion de viajes | cambia los campos enviados de un viaje programado o en curso |
 | PATCH `/api/viajes/{id}/estado` | gestion de viajes | programado a en curso a finalizado, o cancelar |

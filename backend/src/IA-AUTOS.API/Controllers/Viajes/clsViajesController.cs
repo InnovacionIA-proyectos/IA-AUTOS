@@ -28,7 +28,10 @@ public sealed class clsViajesController(clsViajesService servicio, clsCargaViaje
         return Creado(await servicio.CrearAsync(solicitud, ct));
     }
 
-    /// <summary>Listado (maximo 200, mas recientes primero). Inspectores y conductores ven solo sus viajes.</summary>
+    /// <summary>
+    /// Listado (maximo 200, mas recientes primero). Inspectores y conductores ven solo sus viajes. <c>clienteId</c> trae los viajes con algun VIN de ese
+    /// cliente (solo el super administrador elige otro; el resto recibe siempre los de su cliente). Cada fila trae los clientes de sus VIN.
+    /// </summary>
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<ViajeResumenDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Listar(
@@ -38,8 +41,9 @@ public sealed class clsViajesController(clsViajesService servicio, clsCargaViaje
         [FromQuery] string? conductorId,
         [FromQuery] string? desde,
         [FromQuery] string? hasta,
+        [FromQuery] string? clienteId,
         CancellationToken ct) =>
-        Ok(await servicio.ListarAsync(new FiltrosViajesRequest(estado, codigoMtrack, vin, conductorId, desde, hasta), ct));
+        Ok(await servicio.ListarAsync(new FiltrosViajesRequest(estado, codigoMtrack, vin, conductorId, desde, hasta, clienteId), ct));
 
     /// <summary>Los viajes del usuario autenticado (como conductor o inspector) con sus VIN. Sin estado: los programados y en curso.</summary>
     [HttpGet("mios")]

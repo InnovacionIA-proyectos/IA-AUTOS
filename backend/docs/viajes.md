@@ -29,7 +29,10 @@ programado lo pasa a `en_curso`. Un viaje cancelado deja de ser visible para ins
 - **Inspección.** Toma del viaje de su etapa la placa, el tráiler y el conductor (ya no se piden). No se crea en un viaje finalizado o cancelado ni en uno ajeno.
 - **Sofasa.** La ingesta vincula la orden al viaje del VIN (y del `codigo_mtrack`, si la orden lo trae). Si el VIN entra a un viaje después, la orden se vincula al
   agregarlo o en la siguiente ingesta.
-- **Fuera de este servicio:** la integración con MTrack (el código se digita o llega en el Excel) y la visibilidad por **cliente**.
+- **Clientes del viaje.** El viaje no tiene un cliente propio (puede llevar VIN de varias marcas): su cliente se toma de sus VIN. `GET /api/viajes?clienteId=` trae los viajes con
+  al menos un VIN de ese cliente, y el listado y el detalle traen `clientes`. Quien no es super administrador, conductor ni inspector del viaje ve solo los viajes y los VIN de su
+  cliente; el conductor y el inspector del viaje ven todos sus VIN. No se agregó `ClienteId` a `tblViajes`: los indicadores por cliente o marca se cuentan por vehículo.
+- **Fuera de este servicio:** la integración con MTrack (el código se digita o llega en el Excel) y la visibilidad por cliente del resto de recursos (vehículos, inspecciones, órdenes).
 
 ## Mapeo del modelo anterior
 
