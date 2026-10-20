@@ -34,7 +34,7 @@ internal sealed class clsConfiguracionEtapa : IEntityTypeConfiguration<clsEtapa>
         builder.ToTable("tblEtapas");
         clsConfiguracionBase.Base(builder);
         builder.HasOne<clsVehiculo>().WithMany().HasForeignKey(e => e.VehiculoId)
-            .HasConstraintName("FK_tblEtapas_Vehiculo").OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("FK_tblEtapas_Vehiculo").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsEtapaCatalogo>().WithMany().HasForeignKey(e => e.EtapaCatalogoId)
             .HasConstraintName("FK_tblEtapas_EtapaCatalogo").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsPuntoCustodia>().WithMany().HasForeignKey(e => e.PuntoCustodiaId)

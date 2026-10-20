@@ -75,7 +75,7 @@ Todos los errores son JSON con la misma forma:
 | `ACCOUNT_LOCKED` | 423 | la cuenta está bloqueada por PIN errados seguidos; `details.bloqueado_hasta` (ISO 8601) dice hasta cuándo, o un administrador la desbloquea |
 | `NOT_FOUND` | 404 | recurso o ruta inexistente |
 | `METHOD_NOT_ALLOWED` | 405 | método no admitido en una ruta existente |
-| `CONFLICT` | 409 | duplicados (por ejemplo un código MTrack repetido), inspección cerrada, transferencia ya cerrada (firmada, con reservas o con constancia de no firma), firmantes que no se pueden cambiar, viaje finalizado o cancelado |
+| `CONFLICT` | 409 | duplicados (por ejemplo un código MTrack repetido), inspección cerrada, transferencia ya cerrada (firmada, con reservas o con constancia de no firma), firmantes que no se pueden cambiar, un registro que es evidencia y no se puede borrar, viaje finalizado o cancelado |
 | `RATE_LIMITED` | 429 | demasiados intentos de login (10 por minuto por IP en `login`, 60 en `login-conductor`; configurable) |
 | `INTERNAL_ERROR` | 500 | error inesperado, sin detalles internos |
 | `DB_UNAVAILABLE` | 503 | no se pudo verificar la identidad en la base de usuarios del portal (TI) |

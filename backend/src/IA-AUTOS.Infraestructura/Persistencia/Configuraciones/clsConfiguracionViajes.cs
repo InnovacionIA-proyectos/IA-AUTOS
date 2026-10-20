@@ -46,7 +46,7 @@ internal sealed class clsConfiguracionViajeVehiculo : IEntityTypeConfiguration<c
         builder.HasOne<clsViaje>().WithMany().HasForeignKey(v => v.ViajeId)
             .HasConstraintName("FK_tblViajeVehiculos_Viaje").OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<clsVehiculo>().WithMany().HasForeignKey(v => v.VehiculoId)
-            .HasConstraintName("FK_tblViajeVehiculos_Vehiculo").OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("FK_tblViajeVehiculos_Vehiculo").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(v => new { v.ViajeId, v.VehiculoId }).IsUnique().HasDatabaseName("UQ_tblViajeVehiculos_Viaje_Vehiculo");
         builder.HasIndex(v => v.VehiculoId).HasDatabaseName("IX_tblViajeVehiculos_Vehiculo");
     }

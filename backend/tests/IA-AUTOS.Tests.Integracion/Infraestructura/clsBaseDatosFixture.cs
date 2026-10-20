@@ -32,10 +32,19 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
 
     public async Task DisposeAsync() => await _contenedor.DisposeAsync();
 
-    /// <summary>Borra todos los datos de negocio (conserva los catalogos).</summary>
+    /// <summary>
+    /// Borra todos los datos de negocio (conserva los catalogos). La base protege la evidencia con triggers de no borrado: se apagan solo
+    /// mientras dura la limpieza y se vuelven a encender siempre, aunque falle.
+    /// </summary>
     public async Task LimpiarAsync()
     {
         const string SQL = """
+            BEGIN TRY
+            ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblEvidencias DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgos DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblInspecciones DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblAuditLog DISABLE TRIGGER ALL;
             DELETE FROM dbo.tblRefreshTokens;
             DELETE FROM dbo.tblAuditLog;
             DELETE FROM dbo.tblOrdenesSofasa;
@@ -48,6 +57,20 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             DELETE FROM dbo.tblViajes;
             DELETE FROM dbo.tblVehiculos;
             DELETE FROM dbo.tblUsuarios;
+            ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblEvidencias ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblAuditLog ENABLE TRIGGER ALL;
+            END TRY
+            BEGIN CATCH
+            ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblEvidencias ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblAuditLog ENABLE TRIGGER ALL;
+            THROW;
+            END CATCH
 
             -- Catalogos: vuelven a su estado inicial (sin valores creados por las pruebas, todos activos y sin cambios de forma).
             DELETE FROM dbo.tblCuadrantes;

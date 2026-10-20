@@ -87,7 +87,7 @@ Siempre JSON:
 | ACCOUNT_LOCKED | 423 | cuenta bloqueada por PIN errados seguidos; `details.bloqueado_hasta` |
 | NOT_FOUND | 404 | recurso o ruta inexistente |
 | METHOD_NOT_ALLOWED | 405 | metodo no admitido en una ruta existente |
-| CONFLICT | 409 | duplicados, inspeccion cerrada, transferencia ya cerrada, firmantes de la transferencia que no se pueden cambiar |
+| CONFLICT | 409 | duplicados, inspeccion cerrada, transferencia ya cerrada, firmantes de la transferencia que no se pueden cambiar, registro que es evidencia y no se puede borrar |
 | ETAPA_PREVIA_SIN_CIERRE | 409 | la etapa anterior del VIN no esta terminada (sin llegada cerrada o con la transferencia sin tipo de cierre): no se puede crear la salida de la siguiente |
 | RATE_LIMITED | 429 | demasiados intentos de login |
 | INTERNAL_ERROR | 500 | error inesperado (sin detalles internos) |

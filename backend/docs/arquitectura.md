@@ -40,7 +40,7 @@ Clases con prefijo `cls`, variables en camelCase, constantes en MAYUSCULAS_SOSTE
 
 ## Base de datos
 
-El esquema lo crea `database/ddl.sql` (no se usan migraciones de EF). Ademas de las tablas incluye la vista de viajes completos y tres triggers de ultima defensa: no se puede modificar una inspeccion cerrada ni agregarle hallazgos o evidencias. SQL Server no admite en este modelo `SET NULL` junto a la cascada desde inspecciones, por eso `tblEvidencias.HallazgoId` usa `NO ACTION` (la aplicacion no elimina hallazgos).
+El esquema lo crea `database/ddl.sql` (no se usan migraciones de EF). Ademas de las tablas incluye la vista de viajes completos y triggers de ultima defensa: no se puede modificar una inspeccion cerrada ni agregarle hallazgos o evidencias, y la evidencia no se puede borrar (ver [evidencia-inmutable.md](evidencia-inmutable.md)). Las relaciones entre vehiculo, etapa, inspeccion y sus registros no borran en cascada. `tblEvidencias.HallazgoId` usa `NO ACTION` (la aplicacion no elimina hallazgos).
 
 ## Auditoria
 

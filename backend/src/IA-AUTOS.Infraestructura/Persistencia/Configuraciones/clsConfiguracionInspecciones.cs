@@ -30,7 +30,7 @@ internal sealed class clsConfiguracionInspeccion : IEntityTypeConfiguration<clsI
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(i => i.CorrigeInspeccionId)
             .HasConstraintName("FK_tblInspecciones_Corrige").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsEtapa>().WithMany().HasForeignKey(i => i.EtapaId)
-            .HasConstraintName("FK_tblInspecciones_Etapa").OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("FK_tblInspecciones_Etapa").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsViaje>().WithMany().HasForeignKey(i => i.ViajeId)
             .HasConstraintName("FK_tblInspecciones_Viaje").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(i => i.UsuarioId)
@@ -66,7 +66,7 @@ internal sealed class clsConfiguracionHallazgo : IEntityTypeConfiguration<clsHal
         builder.Property(h => h.TamanoDano).HasColumnType("varchar(30)").IsRequired();
         builder.Property(h => h.CoordsDiagrama).HasConversion(CONVERSOR_COORDS).HasMaxLength(200);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(h => h.InspeccionId)
-            .HasConstraintName("FK_tblHallazgos_Inspeccion").OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("FK_tblHallazgos_Inspeccion").OnDelete(DeleteBehavior.NoAction);
     }
 
     private static clsCoordsDiagrama? LeerCoords(string? json)
@@ -101,7 +101,7 @@ internal sealed class clsConfiguracionEvidencia : IEntityTypeConfiguration<clsEv
         builder.HasIndex(e => e.VistaId).HasDatabaseName("IX_tblEvidencias_Vista");
         builder.Property(e => e.EsConstancia).HasDefaultValue(false);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(e => e.InspeccionId)
-            .HasConstraintName("FK_tblEvidencias_Inspeccion").OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("FK_tblEvidencias_Inspeccion").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(e => e.HallazgoId)
             .HasConstraintName("FK_tblEvidencias_Hallazgo").OnDelete(DeleteBehavior.NoAction);
     }
@@ -128,7 +128,7 @@ internal sealed class clsConfiguracionTransferencia : IEntityTypeConfiguration<c
         builder.HasOne<clsEvidencia>().WithMany().HasForeignKey(t => t.EvidenciaConstanciaId)
             .HasConstraintName("FK_tblTransferencias_Constancia").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(t => t.InspeccionId)
-            .HasConstraintName("FK_tblTransferencias_Inspeccion").OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("FK_tblTransferencias_Inspeccion").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.EntregaUsuarioId)
             .HasConstraintName("FK_tblTransferencias_Entrega").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.RecibeUsuarioId)

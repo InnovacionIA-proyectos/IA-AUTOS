@@ -346,6 +346,39 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_evidencia_no_se_borra_y_las_relaciones_ya_no_borran_en_cascada()
+    {
+        // Sin esta migracion la evidencia se podria borrar de la base (en cascada o a mano): este chequeo (solo lectura) avisa antes de
+        // desplegar si falta ejecutar database/cambios-esquema/09-evidencia-sin-borrado.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/09-evidencia-sin-borrado.sql.";
+
+        var activo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblVehiculos', N'U') AND name = N'Activo' AND is_nullable = 0");
+        var indice = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'IX_tblVehiculos_Activo' AND object_id = OBJECT_ID(N'tblVehiculos', N'U')");
+        var triggers = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.triggers
+             WHERE is_instead_of_trigger = 1 AND is_disabled = 0
+               AND name IN (N'TR_tblEvidencias_NoBorrar', N'TR_tblHallazgos_NoBorrar', N'TR_tblTransferenciasCustodia_NoBorrar',
+                            N'TR_tblAuditLog_NoBorrar', N'TR_tblInspecciones_NoBorrar')
+            """);
+        var cascadasQuitadas = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.foreign_keys
+             WHERE delete_referential_action = 1
+               AND name IN (N'FK_tblViajeVehiculos_Vehiculo', N'FK_tblEtapas_Vehiculo', N'FK_tblInspecciones_Etapa', N'FK_tblHallazgos_Inspeccion',
+                            N'FK_tblEvidencias_Inspeccion', N'FK_tblTransferencias_Inspeccion')
+            """);
+        var cascadasConservadas = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.foreign_keys
+             WHERE delete_referential_action = 1 AND name IN (N'FK_tblViajeVehiculos_Viaje', N'FK_tblCuadranteVistas_Cuadrante')
+            """);
+
+        Assert.True(activo == 1 && indice == 1, $"Falta tblVehiculos.Activo (obligatoria) o su indice. {ayuda}");
+        Assert.True(triggers == 5, $"Faltan triggers que impiden borrar la evidencia (o estan deshabilitados). {ayuda}");
+        Assert.True(cascadasQuitadas == 0, $"Siguen existiendo relaciones que borran en cascada lo que es evidencia. {ayuda}");
+        Assert.True(cascadasConservadas == 2, $"Se perdio una cascada que debia conservarse (viaje a sus vehiculos o cuadrante a sus regiones). {ayuda}");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

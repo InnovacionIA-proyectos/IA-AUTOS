@@ -26,6 +26,8 @@
     <Content Include="..\..\database\cambios-esquema\07-inspecciones-salida-llegada.sql" Link="database\cambios-esquema\07-inspecciones-salida-llegada.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\08-transferencias-custodia.sql" Link="database\cambios-esquema\08-transferencias-custodia.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-transferencias.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\09-evidencia-sin-borrado.sql" Link="database\cambios-esquema\09-evidencia-sin-borrado.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-evidencia.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
