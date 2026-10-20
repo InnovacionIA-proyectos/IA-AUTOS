@@ -28,6 +28,9 @@
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-transferencias.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\09-evidencia-sin-borrado.sql" Link="database\cambios-esquema\09-evidencia-sin-borrado.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-evidencia.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\04-cargar-cuadrantes-ficha.sql" Link="database\cambios-esquema\04-cargar-cuadrantes-ficha.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\10-zona-dano-y-hallazgo.sql" Link="database\cambios-esquema\10-zona-dano-y-hallazgo.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-zona-dano.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>

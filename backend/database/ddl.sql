@@ -357,6 +357,126 @@ BEGIN
 END
 GO
 
+-- Una zona numerada se identifica por (cuadrante, numero): este indice unico permite que las zonas lo referencien junto con su numero.
+IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblCuadrantes_Id_Numero' AND parent_object_id = OBJECT_ID(N'dbo.tblCuadrantes'))
+    ALTER TABLE dbo.tblCuadrantes ADD CONSTRAINT UQ_tblCuadrantes_Id_Numero UNIQUE (Id, Numero);
+GO
+
+/* -----------------------------------------------------------------------------
+   Zona del dano. Un hallazgo se atribuye a una zona del vehiculo, que es UNA de estas dos cosas:
+     - una zona numerada: el cuadrante (numero) mas su lado. Los numeros 1 a 25 llevan lado (izquierdo o derecho); del 26 en adelante no.
+       Hay una fila por lado + numero, creada automaticamente al crear el cuadrante (TR_tblCuadrantes_CrearZonas);
+     - una zona provisional, sin numero ni lado y sin dibujo, que se elige de una lista (frente y cada llanta). Se identifica por su Codigo.
+   La zona se guarda por lado + numero, no por el panel donde se toco.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblZonasDano', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblZonasDano
+    (
+        Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblZonasDano PRIMARY KEY,
+        CuadranteId   uniqueidentifier  NULL,
+        Numero        int               NULL,
+        Lado          varchar(10)       NULL,
+        Codigo        varchar(40)       NULL,
+        Nombre        nvarchar(100)     NULL,
+        Orden         int               NOT NULL CONSTRAINT DF_tblZonasDano_Orden DEFAULT (0),
+        Activo        bit               NOT NULL CONSTRAINT DF_tblZonasDano_Activo DEFAULT (1),
+        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblZonasDano_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblZonasDano_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        -- Si el cuadrante se borra o cambia de numero, sus zonas lo siguen (un cuadrante con hallazgos no se puede borrar: ver tblHallazgos).
+        CONSTRAINT FK_tblZonasDano_Cuadrante FOREIGN KEY (CuadranteId, Numero) REFERENCES dbo.tblCuadrantes (Id, Numero) ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT UQ_tblZonasDano_Id_Cuadrante UNIQUE (Id, CuadranteId),
+        CONSTRAINT CK_tblZonasDano_Lado CHECK (Lado IS NULL OR Lado IN ('izquierdo', 'derecho')),
+        -- Numerada: cuadrante y numero, con lado del 1 al 25 y sin lado del 26 en adelante. Provisional: sin cuadrante, numero ni lado, con codigo y nombre.
+        CONSTRAINT CK_tblZonasDano_Forma CHECK (
+            (CuadranteId IS NOT NULL AND Numero IS NOT NULL AND Codigo IS NULL
+                AND ((Numero BETWEEN 1 AND 25 AND Lado IS NOT NULL) OR (Numero > 25 AND Lado IS NULL)))
+            OR (CuadranteId IS NULL AND Numero IS NULL AND Lado IS NULL AND Codigo IS NOT NULL AND Nombre IS NOT NULL))
+    );
+    -- Una zona numerada es unica por cuadrante y lado; una provisional, por codigo.
+    CREATE UNIQUE INDEX UX_tblZonasDano_Cuadrante_Lado ON dbo.tblZonasDano (CuadranteId, Lado) WHERE CuadranteId IS NOT NULL;
+    CREATE UNIQUE INDEX UX_tblZonasDano_Codigo ON dbo.tblZonasDano (Codigo) WHERE Codigo IS NOT NULL;
+END
+GO
+
+/* -----------------------------------------------------------------------------
+   Paneles del dibujo de danos: los 5 paneles de la ficha del vehiculo, separados del catalogo de vistas de foto. Cada uno tiene su imagen de
+   fondo (ImagenPath, el archivo en el almacen de imagenes; nulo hasta que se carga) y sus regiones tocables.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblPanelesDano', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblPanelesDano
+    (
+        Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblPanelesDano PRIMARY KEY,
+        Codigo        varchar(40)       NOT NULL,
+        Nombre        nvarchar(100)     NOT NULL,
+        ImagenPath    nvarchar(260)     NULL,
+        Orden         int               NOT NULL CONSTRAINT DF_tblPanelesDano_Orden DEFAULT (0),
+        Activo        bit               NOT NULL CONSTRAINT DF_tblPanelesDano_Activo DEFAULT (1),
+        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblPanelesDano_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblPanelesDano_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblPanelesDano_Codigo UNIQUE (Codigo)
+    );
+END
+GO
+
+/* -----------------------------------------------------------------------------
+   Regiones tocables de un panel: el poligono de una zona numerada en un panel (las zonas provisionales no tienen region). Geometria =
+   poligono normalizado en JSON ({"puntos":[[x,y],...]} con x e y entre 0 y 1 sobre la imagen del panel). Una zona se dibuja a lo sumo una
+   vez por panel. Al borrar la zona (o su cuadrante) se borran sus regiones.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblRegionesDano', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblRegionesDano
+    (
+        Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblRegionesDano PRIMARY KEY,
+        PanelId       uniqueidentifier  NOT NULL,
+        ZonaId        uniqueidentifier  NOT NULL,
+        CuadranteId   uniqueidentifier  NOT NULL,
+        Geometria     nvarchar(max)     NOT NULL,
+        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblRegionesDano_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblRegionesDano_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblRegionesDano_Panel FOREIGN KEY (PanelId) REFERENCES dbo.tblPanelesDano (Id),
+        -- CuadranteId no es nulo: asi la zona de una region es siempre una zona numerada (una provisional no tiene cuadrante).
+        CONSTRAINT FK_tblRegionesDano_Zona FOREIGN KEY (ZonaId, CuadranteId) REFERENCES dbo.tblZonasDano (Id, CuadranteId) ON DELETE CASCADE,
+        CONSTRAINT UQ_tblRegionesDano_Panel_Zona UNIQUE (PanelId, ZonaId),
+        CONSTRAINT CK_tblRegionesDano_Geometria CHECK (ISJSON(Geometria) = 1)
+    );
+    CREATE INDEX IX_tblRegionesDano_Zona ON dbo.tblRegionesDano (ZonaId);
+END
+GO
+
+-- Cada cuadrante nuevo trae sus zonas: dos (izquierdo y derecho) del 1 al 25 y una del 26 en adelante.
+CREATE OR ALTER TRIGGER dbo.TR_tblCuadrantes_CrearZonas
+ON dbo.tblCuadrantes
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    INSERT INTO dbo.tblZonasDano (Id, CuadranteId, Numero, Lado, Orden)
+    SELECT NEWID(), i.Id, i.Numero, l.Lado, i.Numero
+    FROM inserted i
+    CROSS APPLY (SELECT Lado FROM (VALUES ('izquierdo'), ('derecho')) AS x (Lado) WHERE i.Numero <= 25
+                 UNION ALL SELECT NULL WHERE i.Numero > 25) AS l;
+END
+GO
+
+-- Los 5 paneles de la ficha y las zonas provisionales (la lista que se ofrece para el frente y las llantas). Solo agregan lo que falta.
+INSERT INTO dbo.tblPanelesDano (Id, Codigo, Nombre, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
+FROM (VALUES ('superior', N'Superior', 1), ('perfil_posterior_izquierdo', N'Perfil posterior izquierdo', 2),
+             ('perfil_posterior_derecho', N'Perfil posterior derecho', 3), ('costado_izquierdo', N'Costado izquierdo', 4),
+             ('costado_derecho', N'Costado derecho', 5)) AS v (Codigo, Nombre, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblPanelesDano p WHERE p.Codigo = v.Codigo);
+
+INSERT INTO dbo.tblZonasDano (Id, Codigo, Nombre, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
+FROM (VALUES ('frente', N'Frente', 101), ('llanta_delantera_izquierda', N'Llanta delantera izquierda', 102),
+             ('llanta_delantera_derecha', N'Llanta delantera derecha', 103), ('llanta_trasera_izquierda', N'Llanta trasera izquierda', 104),
+             ('llanta_trasera_derecha', N'Llanta trasera derecha', 105)) AS v (Codigo, Nombre, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblZonasDano z WHERE z.Codigo = v.Codigo);
+GO
+
 /* -----------------------------------------------------------------------------
    tblViajes: el viaje es el eje del modelo. Una unidad transportadora (tipo, placa, trailer) lleva uno o varios VIN con un
    conductor (y, si hay, un inspector) entre un origen y un destino. Cada etapa e inspeccion cuelga de un viaje.
@@ -411,11 +531,25 @@ BEGIN
         Id          uniqueidentifier  NOT NULL CONSTRAINT PK_tblViajeVehiculos PRIMARY KEY,
         ViajeId     uniqueidentifier  NOT NULL,
         VehiculoId  uniqueidentifier  NOT NULL,
+        -- Una unidad con un hallazgo V1+ puede "no salir" del viaje sin bloquearlo: el vinculo no se borra para conservar su trazabilidad.
+        EstadoUnidad          varchar(10)       NOT NULL CONSTRAINT DF_tblViajeVehiculos_EstadoUnidad DEFAULT ('activa'),
+        NoSaleMotivo          nvarchar(500)     NULL,
+        NoSaleHallazgoId      uniqueidentifier  NULL,
+        NoSaleMarcadoPor      uniqueidentifier  NULL,
+        NoSaleAt              datetimeoffset(3) NULL,
+        ReemplazoVehiculoId   uniqueidentifier  NULL,
         CreatedAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajeVehiculos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajeVehiculos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblViajeVehiculos_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id) ON DELETE CASCADE,
         CONSTRAINT FK_tblViajeVehiculos_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id),
-        CONSTRAINT UQ_tblViajeVehiculos_Viaje_Vehiculo UNIQUE (ViajeId, VehiculoId)
+        CONSTRAINT FK_tblViajeVehiculos_NoSaleMarcadoPor FOREIGN KEY (NoSaleMarcadoPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblViajeVehiculos_Reemplazo FOREIGN KEY (ReemplazoVehiculoId) REFERENCES dbo.tblVehiculos (Id),
+        CONSTRAINT UQ_tblViajeVehiculos_Viaje_Vehiculo UNIQUE (ViajeId, VehiculoId),
+        CONSTRAINT CK_tblViajeVehiculos_EstadoUnidad CHECK (EstadoUnidad IN ('activa', 'no_sale')),
+        -- "No sale" exige su motivo, el hallazgo que lo causa, quien lo marco y cuando; una unidad activa no lleva nada de eso.
+        CONSTRAINT CK_tblViajeVehiculos_NoSale CHECK (
+            (EstadoUnidad = 'activa' AND NoSaleMotivo IS NULL AND NoSaleHallazgoId IS NULL AND NoSaleMarcadoPor IS NULL AND NoSaleAt IS NULL AND ReemplazoVehiculoId IS NULL)
+            OR (EstadoUnidad = 'no_sale' AND NoSaleMotivo IS NOT NULL AND NoSaleHallazgoId IS NOT NULL AND NoSaleMarcadoPor IS NOT NULL AND NoSaleAt IS NOT NULL))
     );
     CREATE INDEX IX_tblViajeVehiculos_Vehiculo ON dbo.tblViajeVehiculos (VehiculoId);
 END
@@ -511,8 +645,14 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
-   tblHallazgos (averia marcada sobre el diagrama)
-   CoordsDiagrama: JSON {"x":0..1,"y":0..1}. SQL Server 2019 no tiene tipo JSON nativo.
+   tblHallazgos (averia atribuida a una zona del vehiculo, con su clase, tamano y nivel de severidad)
+   ZonaId: la zona del dano (lado + numero, o una zona provisional). Es nula solo en una novedad del conductor aun sin revisar, o en un
+   hallazgo historico que no se pudo ubicar (MigracionPendiente = 1). ClaseDano y NivelSeveridad: nulos en una novedad del conductor
+   sin revisar (el conductor nunca asigna el nivel); NivelSeveridad tambien en los hallazgos historicos, que no lo tenian.
+   ParteVehiculo y CoordsDiagrama (JSON {"x":0..1,"y":0..1}) son del modelo anterior: solo quedan en los hallazgos historicos.
+   Si el hallazgo es preexistente, HallazgoOrigenId es el hallazgo previo del mismo VIN que ya lo tenia.
+   EstadoSeguimiento: lo cambia el coordinador (validado, rechazado, recuperado o derogado). EvidenciaCompleta se recalcula al cambiar
+   el seguimiento o la transferencia. SQL Server 2019 no tiene tipo JSON nativo.
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblHallazgos', N'U') IS NULL
 BEGIN
@@ -520,21 +660,52 @@ BEGIN
     (
         Id              uniqueidentifier NOT NULL CONSTRAINT PK_tblHallazgos PRIMARY KEY,
         InspeccionId    uniqueidentifier NOT NULL,
-        ParteVehiculo   nvarchar(200)    NOT NULL,
-        ClaseDano       varchar(30)      NOT NULL,
+        ParteVehiculo   nvarchar(200)    NULL,
+        ClaseDano       varchar(30)      NULL,
         TamanoDano      varchar(30)      NOT NULL,
         CoordsDiagrama  nvarchar(200)    NULL,
+        ZonaId              uniqueidentifier NULL,
+        TipoNovedad         varchar(20)      NULL,
+        NivelSeveridad      varchar(30)      NULL,
+        Origen              varchar(10)      NOT NULL CONSTRAINT DF_tblHallazgos_Origen DEFAULT ('inspector'),
+        Nota                nvarchar(500)    NULL,
+        EsPreexistente      bit              NOT NULL CONSTRAINT DF_tblHallazgos_EsPreexistente DEFAULT (0),
+        HallazgoOrigenId    uniqueidentifier NULL,
+        ConfirmadoPor       uniqueidentifier NULL,
+        EstadoSeguimiento   varchar(15)      NOT NULL CONSTRAINT DF_tblHallazgos_EstadoSeguimiento DEFAULT ('pendiente'),
+        EvidenciaCompleta   bit              NOT NULL CONSTRAINT DF_tblHallazgos_EvidenciaCompleta DEFAULT (0),
+        RevisadoPor         uniqueidentifier NULL,
+        RevisadoAt          datetimeoffset(3) NULL,
+        MigracionPendiente  bit              NOT NULL CONSTRAINT DF_tblHallazgos_MigracionPendiente DEFAULT (0),
         CreatedAt       datetimeoffset(3) NOT NULL CONSTRAINT DF_tblHallazgos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt       datetimeoffset(3) NOT NULL CONSTRAINT DF_tblHallazgos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblHallazgos_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
         CONSTRAINT FK_tblHallazgos_ClaseDano FOREIGN KEY (ClaseDano) REFERENCES dbo.tblClasesDano (Codigo),
         CONSTRAINT FK_tblHallazgos_TamanoDano FOREIGN KEY (TamanoDano) REFERENCES dbo.tblTamanosDano (Codigo),
-        CONSTRAINT CK_tblHallazgos_Coords CHECK (CoordsDiagrama IS NULL OR ISJSON(CoordsDiagrama) = 1)
+        CONSTRAINT FK_tblHallazgos_Zona FOREIGN KEY (ZonaId) REFERENCES dbo.tblZonasDano (Id),
+        CONSTRAINT FK_tblHallazgos_Nivel FOREIGN KEY (NivelSeveridad) REFERENCES dbo.tblNivelesSeveridad (Codigo),
+        CONSTRAINT FK_tblHallazgos_Origen FOREIGN KEY (HallazgoOrigenId) REFERENCES dbo.tblHallazgos (Id),
+        CONSTRAINT FK_tblHallazgos_ConfirmadoPor FOREIGN KEY (ConfirmadoPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblHallazgos_RevisadoPor FOREIGN KEY (RevisadoPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT CK_tblHallazgos_Coords CHECK (CoordsDiagrama IS NULL OR ISJSON(CoordsDiagrama) = 1),
+        CONSTRAINT CK_tblHallazgos_Origen CHECK (Origen IN ('inspector', 'conductor')),
+        -- La clase del dano solo puede faltar en una novedad del conductor (la clasifica despues el inspector); el tipo de novedad solo existe en ellas.
+        CONSTRAINT CK_tblHallazgos_Clase CHECK (ClaseDano IS NOT NULL OR Origen = 'conductor'),
+        CONSTRAINT CK_tblHallazgos_TipoNovedad CHECK (TipoNovedad IS NULL OR (Origen = 'conductor' AND TipoNovedad IN ('golpe', 'piedra', 'granizo', 'incidente_vial'))),
+        CONSTRAINT CK_tblHallazgos_Seguimiento CHECK (EstadoSeguimiento IN ('pendiente', 'validado', 'rechazado', 'recuperado', 'derogado')),
+        -- Un hallazgo preexistente siempre dice cual hallazgo previo lo origino.
+        CONSTRAINT CK_tblHallazgos_Preexistente CHECK (EsPreexistente = 0 OR HallazgoOrigenId IS NOT NULL)
     );
     CREATE INDEX IX_tblHallazgos_Inspeccion ON dbo.tblHallazgos (InspeccionId);
     -- Mapa de calor / patrones por zona y clase de dano.
     CREATE INDEX IX_tblHallazgos_Parte_Clase ON dbo.tblHallazgos (ParteVehiculo, ClaseDano);
 END
+GO
+
+-- La unidad que "no sale" apunta al hallazgo V1+ que lo causo. tblViajeVehiculos se crea antes que tblHallazgos, por eso la relacion se agrega aqui.
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'NoSaleHallazgoId') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajeVehiculos_NoSaleHallazgo')
+    EXEC (N'ALTER TABLE dbo.tblViajeVehiculos ADD CONSTRAINT FK_tblViajeVehiculos_NoSaleHallazgo FOREIGN KEY (NoSaleHallazgoId) REFERENCES dbo.tblHallazgos (Id)');
 GO
 
 /* -----------------------------------------------------------------------------
