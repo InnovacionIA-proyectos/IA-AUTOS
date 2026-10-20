@@ -31,7 +31,9 @@ BEGIN
     ALTER TABLE dbo.tblEvidencias DISABLE TRIGGER ALL;
     ALTER TABLE dbo.tblHallazgos DISABLE TRIGGER ALL;
     ALTER TABLE dbo.tblInspecciones DISABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblHallazgoSeguimiento DISABLE TRIGGER ALL;
     BEGIN TRY
+        DELETE FROM dbo.tblHallazgoSeguimiento WHERE HallazgoId IN (SELECT h.Id FROM dbo.tblHallazgos h WHERE h.InspeccionId IN (SELECT Id FROM @insp));
         DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblEvidencias WHERE InspeccionId IN (SELECT Id FROM @insp);
         -- Las unidades que "no salen" apuntan a un hallazgo, y un hallazgo preexistente apunta a su origen: se quitan primero.
@@ -51,12 +53,14 @@ BEGIN
         ALTER TABLE dbo.tblEvidencias ENABLE TRIGGER ALL;
         ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
         ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
+        ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
         THROW;
     END CATCH
     ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
     ALTER TABLE dbo.tblEvidencias ENABLE TRIGGER ALL;
     ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
     ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
 END
 GO
 
@@ -566,6 +570,67 @@ INSERT #r SELECT N'Hallazgo: guarda zona, nivel y nota; el preexistente apunta a
     CASE WHEN EXISTS (SELECT 1 FROM dbo.tblHallazgos WHERE Id = @hNuevo AND ZonaId = @zonaIzq7 AND NivelSeveridad = 'v1_plus' AND Origen = 'inspector' AND EstadoSeguimiento = 'pendiente' AND EvidenciaCompleta = 0 AND MigracionPendiente = 0)
           AND EXISTS (SELECT 1 FROM dbo.tblHallazgos WHERE Id = @hPre AND EsPreexistente = 1 AND HallazgoOrigenId = @hNuevo)
           AND EXISTS (SELECT 1 FROM dbo.tblHallazgos WHERE Id = @bConductor AND ZonaId IS NULL AND ClaseDano IS NULL AND NivelSeveridad IS NULL AND TipoNovedad = 'granizo') THEN 1 ELSE 0 END, NULL;
+
+-- 7d) Historial de seguimiento (append-only), estado del hallazgo y vista de patrones por zona
+DECLARE @hDer uniqueidentifier = NEWID(), @selloEv uniqueidentifier = (SELECT TOP 1 Id FROM dbo.tblEvidencias WHERE InspeccionId = @bF);
+INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) VALUES (@hDer, @bF, @zonaDer7, 'golpe', '1_5cm', 'v1_plus');
+
+INSERT dbo.tblHallazgoSeguimiento (Id, HallazgoId, Accion, EstadoAnterior, EstadoNuevo, UsuarioId, Nota, EvidenciaSelloId, Detalle)
+VALUES (NEWID(), @hNuevo, 'seguimiento', 'pendiente', 'validado', @u1, N'Validado por Sofasa', @selloEv, N'{"motivo":"v2"}');
+INSERT #r SELECT N'Seguimiento: una fila de seguimiento cambia el estado del hallazgo',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblHallazgos WHERE Id = @hNuevo AND EstadoSeguimiento = 'validado') THEN 1 ELSE 0 END, NULL;
+INSERT dbo.tblHallazgoSeguimiento (Id, HallazgoId, Accion, EstadoAnterior, EstadoNuevo, UsuarioId) VALUES (NEWID(), @hNuevo, 'revision', 'validado', 'rechazado', @u1);
+INSERT dbo.tblHallazgoSeguimiento (Id, HallazgoId, Accion, UsuarioId, Nota) VALUES (NEWID(), @hNuevo, 'no_sale', @u1, N'La unidad no sale');
+INSERT #r SELECT N'Seguimiento: una revision o un no sale no cambian el estado del hallazgo',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblHallazgos WHERE Id = @hNuevo AND EstadoSeguimiento = 'validado') AND (SELECT COUNT(*) FROM dbo.tblHallazgoSeguimiento WHERE HallazgoId = @hNuevo) = 3 THEN 1 ELSE 0 END, NULL;
+INSERT dbo.tblHallazgoSeguimiento (Id, HallazgoId, Accion, EstadoAnterior, EstadoNuevo, UsuarioId) VALUES (NEWID(), @hNuevo, 'seguimiento', 'validado', 'rechazado', @u1);
+INSERT #r SELECT N'Seguimiento: el ultimo cambio es el estado vigente del hallazgo',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblHallazgos WHERE Id = @hNuevo AND EstadoSeguimiento = 'rechazado') AND EXISTS (SELECT 1 FROM dbo.tblHallazgos WHERE Id = @hPre AND EstadoSeguimiento = 'pendiente') THEN 1 ELSE 0 END, NULL;
+
+DECLARE @casosHistorial TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosHistorial VALUES
+ (N'El historial no se modifica', N'UPDATE dbo.tblHallazgoSeguimiento SET Nota = N''otra'' WHERE HallazgoId = ''' + CAST(@hNuevo AS nvarchar(36)) + N'''', 51005),
+ (N'El historial no se borra', N'DELETE FROM dbo.tblHallazgoSeguimiento WHERE HallazgoId = ''' + CAST(@hNuevo AS nvarchar(36)) + N'''', 51003),
+ (N'CHECK accion del historial', N'INSERT dbo.tblHallazgoSeguimiento (Id,HallazgoId,Accion,UsuarioId) VALUES (NEWID(),''' + CAST(@hNuevo AS nvarchar(36)) + N''',''borrar'',''' + CAST(@u1 AS nvarchar(36)) + N''')', 547),
+ (N'CHECK un cambio de seguimiento dice el estado nuevo', N'INSERT dbo.tblHallazgoSeguimiento (Id,HallazgoId,Accion,UsuarioId) VALUES (NEWID(),''' + CAST(@hNuevo AS nvarchar(36)) + N''',''seguimiento'',''' + CAST(@u1 AS nvarchar(36)) + N''')', 547),
+ (N'CHECK estado del historial', N'INSERT dbo.tblHallazgoSeguimiento (Id,HallazgoId,Accion,EstadoNuevo,UsuarioId) VALUES (NEWID(),''' + CAST(@hNuevo AS nvarchar(36)) + N''',''seguimiento'',''archivado'',''' + CAST(@u1 AS nvarchar(36)) + N''')', 547),
+ (N'CHECK el detalle del historial es JSON', N'INSERT dbo.tblHallazgoSeguimiento (Id,HallazgoId,Accion,UsuarioId,Detalle) VALUES (NEWID(),''' + CAST(@hNuevo AS nvarchar(36)) + N''',''revision'',''' + CAST(@u1 AS nvarchar(36)) + N''',N''no es json'')', 547),
+ (N'FK hallazgo inexistente en el historial', N'INSERT dbo.tblHallazgoSeguimiento (Id,HallazgoId,Accion,UsuarioId) VALUES (NEWID(),NEWID(),''revision'',''' + CAST(@u1 AS nvarchar(36)) + N''')', 547),
+ (N'FK usuario inexistente en el historial', N'INSERT dbo.tblHallazgoSeguimiento (Id,HallazgoId,Accion,UsuarioId) VALUES (NEWID(),''' + CAST(@hNuevo AS nvarchar(36)) + N''',''revision'',NEWID())', 547),
+ (N'FK sello inexistente en el historial', N'INSERT dbo.tblHallazgoSeguimiento (Id,HallazgoId,Accion,UsuarioId,EvidenciaSelloId) VALUES (NEWID(),''' + CAST(@hNuevo AS nvarchar(36)) + N''',''revision'',''' + CAST(@u1 AS nvarchar(36)) + N''',NEWID())', 547);
+
+DECLARE @pruebaHist nvarchar(200), @sqlHist nvarchar(max), @espHist int;
+DECLARE cHist CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosHistorial;
+OPEN cHist; FETCH NEXT FROM cHist INTO @pruebaHist, @sqlHist, @espHist;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    BEGIN TRY
+        EXEC (@sqlHist);
+        INSERT #r VALUES (@pruebaHist, 0, N'la sentencia no fallo');
+    END TRY
+    BEGIN CATCH
+        INSERT #r VALUES (@pruebaHist, CASE WHEN ERROR_NUMBER() = @espHist THEN 1 ELSE 0 END, N'error ' + CAST(ERROR_NUMBER() AS nvarchar(10)) + N': ' + LEFT(ERROR_MESSAGE(), 150));
+    END CATCH
+    FETCH NEXT FROM cHist INTO @pruebaHist, @sqlHist, @espHist;
+END
+CLOSE cHist; DEALLOCATE cHist;
+
+-- Vista de patrones: solo cuenta hallazgos de inspecciones CERRADAS. Con la inspeccion en borrador no hay filas; al cerrarla, izquierdo 7 y derecho 7 son filas distintas.
+INSERT #r SELECT N'Patrones: una inspeccion en borrador no cuenta',
+    CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.vwPatronesPorCuadrante WHERE CuadranteId = @cuad7) THEN 1 ELSE 0 END, NULL;
+UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @bF;
+INSERT #r SELECT N'Patrones: izquierdo 7 y derecho 7 son filas distintas, con su nombre, proceso, nivel, clase y total',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.vwPatronesPorCuadrante WHERE CuadranteId = @cuad7) = 2
+          AND EXISTS (SELECT 1 FROM dbo.vwPatronesPorCuadrante WHERE CuadranteId = @cuad7 AND Lado = 'izquierdo' AND Numero = 7 AND Total = 2 AND Proceso = 'cargue'
+                        AND NivelSeveridad = 'v1_plus' AND ClaseDano = 'golpe' AND ClienteId = @cli AND Operacion = 'nacional'
+                        AND ZonaNombre = N'Izquierdo 7 ' + NCHAR(183) + N' ZZ_TEST zona 7')
+          AND EXISTS (SELECT 1 FROM dbo.vwPatronesPorCuadrante WHERE CuadranteId = @cuad7 AND Lado = 'derecho' AND Total = 1) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Patrones: la novedad del conductor sin revisar y el hallazgo sin zona no cuentan',
+    CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.vwPatronesPorCuadrante WHERE ZonaId IS NULL) AND (SELECT ISNULL(SUM(Total), 0) FROM dbo.vwPatronesPorCuadrante WHERE CuadranteId = @cuad7) = 3 THEN 1 ELSE 0 END, NULL;
+-- Al revisar la novedad del conductor y asignarle zona, clase y nivel, pasa a contar.
+UPDATE dbo.tblHallazgos SET ZonaId = @zonaDer7, ClaseDano = 'golpe', NivelSeveridad = 'v1', RevisadoAt = SYSDATETIMEOFFSET(), RevisadoPor = @u1 WHERE Id = @bConductor;
+INSERT #r SELECT N'Patrones: la novedad del conductor revisada cuenta en su zona',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.vwPatronesPorCuadrante WHERE CuadranteId = @cuad7 AND Lado = 'derecho' AND NivelSeveridad = 'v1' AND Total = 1) THEN 1 ELSE 0 END, NULL;
 
 -- Una unidad puede no salir del viaje: queda con su motivo, el hallazgo que lo causa y quien lo marco, y conserva su vinculo con el viaje.
 UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = 'no_sale', NoSaleMotivo = N'Hallazgo V1+', NoSaleHallazgoId = @hNuevo, NoSaleMarcadoPor = @u1, NoSaleAt = SYSDATETIMEOFFSET()

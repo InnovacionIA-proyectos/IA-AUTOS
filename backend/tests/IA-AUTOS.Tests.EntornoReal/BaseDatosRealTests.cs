@@ -430,6 +430,37 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task El_historial_de_seguimiento_del_hallazgo_y_la_vista_de_patrones_estan_migrados()
+    {
+        // Sin esta migracion la API no puede registrar el seguimiento de un hallazgo ni calcular los patrones por zona: este chequeo (solo lectura)
+        // avisa antes de desplegar si falta ejecutar database/cambios-esquema/11-seguimiento-hallazgo.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/11-seguimiento-hallazgo.sql.";
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblHallazgoSeguimiento'");
+        var vista = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE name = N'vwPatronesPorCuadrante'");
+        var triggers = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.triggers
+             WHERE is_disabled = 0 AND parent_id = OBJECT_ID(N'tblHallazgoSeguimiento', N'U')
+               AND name IN (N'TR_tblHallazgoSeguimiento_NoModificar', N'TR_tblHallazgoSeguimiento_NoBorrar', N'TR_tblHallazgoSeguimiento_Sincronizar')
+            """);
+        var restricciones = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.objects
+             WHERE name IN (N'FK_tblHallazgoSeguimiento_Hallazgo', N'FK_tblHallazgoSeguimiento_Usuario', N'FK_tblHallazgoSeguimiento_Sello',
+                            N'CK_tblHallazgoSeguimiento_Accion', N'CK_tblHallazgoSeguimiento_Estados', N'CK_tblHallazgoSeguimiento_Cambio', N'CK_tblHallazgoSeguimiento_Detalle')
+            """);
+
+        Assert.True(tabla == 1, $"Falta la tabla tblHallazgoSeguimiento. {ayuda}");
+        Assert.True(triggers == 3, $"Faltan triggers del historial de seguimiento (o estan deshabilitados). {ayuda}");
+        Assert.True(restricciones == 7, $"Faltan relaciones o restricciones del historial de seguimiento. {ayuda}");
+        Assert.True(vista == 1, $"Falta la vista vwPatronesPorCuadrante. {ayuda}");
+
+        // La vista se puede consultar (es solo lectura) y no cuenta hallazgos sin zona.
+        var sinZona = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwPatronesPorCuadrante WHERE ZonaId IS NULL");
+        Assert.Equal(0, sinZona);
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();
