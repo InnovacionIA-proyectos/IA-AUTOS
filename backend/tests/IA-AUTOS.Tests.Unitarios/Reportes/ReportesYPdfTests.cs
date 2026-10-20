@@ -114,10 +114,14 @@ public class GeneradorPdfInventarioTests
             Guid.NewGuid(),
             "MTK-1",
             false,
+            "activa",
+            null,
             [
                 new InventarioInspeccionDto(
                     Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "salida", FECHA, null, null, "cerrada", null, null, null, null, FECHA, FECHA, FECHA, FECHA, 1, null, "Inspección de salida",
-                    Enumerable.Range(0, hallazgos).Select(_ => new HallazgoDto(Guid.NewGuid(), Guid.NewGuid(), parte, "golpe", "5_10cm", null, FECHA, FECHA)).ToList(),
+                    Enumerable.Range(0, hallazgos).Select(_ => new HallazgoDto(
+                        Guid.NewGuid(), Guid.NewGuid(), null, "golpe", "5_10cm", null, null, null, "frente", null, parte, null, "v2", "V2", null, "inspector", null, false, null, null,
+                        "pendiente", false, [], null, null, FECHA, FECHA)).ToList(),
                     [],
                     null),
             ])).ToList();

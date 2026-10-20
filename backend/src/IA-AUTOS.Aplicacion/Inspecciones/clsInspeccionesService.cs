@@ -21,6 +21,12 @@ public interface IConsultasInspecciones
     Task<InformeDetalleDto?> ObtenerInformeAsync(Guid id, CancellationToken ct = default);
 }
 
+/// <summary>Arma el DTO de los hallazgos con lo que solo referencian: su zona, su nivel de severidad y si ya tienen su foto.</summary>
+public interface IDescriptorHallazgos
+{
+    Task<IReadOnlyList<HallazgoDto>> DescribirAsync(IReadOnlyCollection<clsHallazgo> hallazgos, CancellationToken ct = default);
+}
+
 /// <summary>
 /// Flujo de campo: crear la inspeccion de salida o de llegada de una etapa, agregar fotos y hallazgos (cada uno con su foto), registrar la
 /// transferencia de custodia (firma parcial acumulada), cerrarla como evidencia inmutable y, si hay un error, corregirla con una version nueva.
@@ -33,6 +39,7 @@ public sealed class clsInspeccionesService(
     clsFabricaEvidencias fabricaEvidencias,
     IUsuarioRepository usuarios,
     IConsultasInspecciones consultas,
+    IDescriptorHallazgos descriptorHallazgos,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -150,7 +157,10 @@ public sealed class clsInspeccionesService(
         return informe;
     }
 
-    /// <summary>Guarda el hallazgo junto con su foto propia (un hallazgo sin foto no se guarda: 400).</summary>
+    /// <summary>
+    /// Guarda el hallazgo con su zona, su clase, su tamano y su nivel de severidad, junto con su foto propia (un hallazgo sin foto no se guarda: 400). El
+    /// origen sale del rol: el conductor registra novedades sin nivel; el inspector y el administrador siempre asignan el nivel.
+    /// </summary>
     public async Task<HallazgoCreadoDto> AgregarHallazgoAsync(Guid inspeccionId, CrearHallazgoRequest solicitud, CancellationToken ct = default)
     {
         await ValidarHallazgoAsync(solicitud, ct);
@@ -158,12 +168,25 @@ public sealed class clsInspeccionesService(
         inspeccion.AsegurarEditable();
         var foto = solicitud.Evidencia!;
 
+        var zona = await ResolverZonaAsync(inspeccionId, solicitud, ct);
+        var clase = solicitud.ClaseDano!.Trim();
+        if (solicitud.HallazgoOrigenId is { } origenId
+            && !await inspecciones.EsHallazgoPrevioDelVehiculoAsync(origenId, inspeccionId, zona.Id, clase, ct))
+        {
+            throw clsErroresCampos.De(
+                "hallazgo_origen_id", "El hallazgo de origen debe ser de otra inspección del mismo vehículo, con la misma zona y la misma clase de daño");
+        }
+
         var hallazgo = clsHallazgo.Crear(
             inspeccionId,
-            solicitud.ParteVehiculo!,
-            solicitud.ClaseDano!,
+            zona.Id,
+            clase,
             solicitud.TamanoDano!,
-            solicitud.CoordsDiagrama is null ? null : new clsCoordsDiagrama(solicitud.CoordsDiagrama.X, solicitud.CoordsDiagrama.Y),
+            solicitud.NivelSeveridad,
+            actual.Rol == clsRol.CONDUCTOR ? clsOrigenHallazgo.CONDUCTOR : clsOrigenHallazgo.INSPECTOR,
+            solicitud.Nota,
+            solicitud.HallazgoOrigenId,
+            actual.IdObligatorio(),
             reloj.Ahora);
         var evidencia = await fabricaEvidencias.CrearAsync(
             inspeccionId, hallazgo.Id, null, esConstancia: false, foto.StoragePath!, foto.SelloFecha!.Value, foto.SelloLat, foto.SelloLng, foto.Precision,
@@ -173,7 +196,24 @@ public sealed class clsInspeccionesService(
         auditor.Registrar("hallazgo.crear", "hallazgos", hallazgo.Id);
         auditor.Registrar("evidencia.crear", "evidencias", evidencia.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        return clsMapeadorInspecciones.AHallazgoCreado(hallazgo, evidencia);
+        return clsMapeadorInspecciones.AHallazgoCreado((await descriptorHallazgos.DescribirAsync([hallazgo], ct))[0], evidencia);
+    }
+
+    /// <summary>
+    /// La zona del hallazgo: la numerada (cuadrante + lado, del cuadrante del tipo del vehiculo o del generico) o la provisional con ese codigo. 400 con
+    /// el campo que corresponde si no existe o esta inactiva.
+    /// </summary>
+    private async Task<clsZonaDano> ResolverZonaAsync(Guid inspeccionId, CrearHallazgoRequest solicitud, CancellationToken ct)
+    {
+        if (solicitud.CuadranteNumero is { } numero)
+        {
+            var tipoVehiculo = await inspecciones.ObtenerTipoVehiculoAsync(inspeccionId, ct);
+            return await inspecciones.ObtenerZonaNumeradaAsync(numero, solicitud.Lado, tipoVehiculo, ct)
+                ?? throw clsErroresCampos.De("cuadrante_numero", "El cuadrante indicado no existe o está inactivo");
+        }
+
+        return await inspecciones.ObtenerZonaProvisionalAsync(solicitud.ZonaProvisional!, ct)
+            ?? throw clsErroresCampos.De("zona_provisional", "La zona provisional indicada no existe o está inactiva");
     }
 
     public async Task<EvidenciaDto> AgregarEvidenciaAsync(Guid inspeccionId, CrearEvidenciaRequest solicitud, CancellationToken ct = default)
@@ -316,6 +356,12 @@ public sealed class clsInspeccionesService(
             && !(await catalogos.CodigosAsync(clsNombresCatalogo.TAMANOS_DANO, soloActivos: true, ct)).Contains(solicitud.TamanoDano))
         {
             deCatalogo["tamano_dano"] = ["Tamaño de daño inválido"];
+        }
+
+        if (!string.IsNullOrWhiteSpace(solicitud.NivelSeveridad)
+            && !(await catalogos.CodigosAsync(clsNombresCatalogo.NIVELES_SEVERIDAD, soloActivos: true, ct)).Contains(solicitud.NivelSeveridad))
+        {
+            deCatalogo["nivel_severidad"] = ["Nivel de severidad inválido"];
         }
 
         try

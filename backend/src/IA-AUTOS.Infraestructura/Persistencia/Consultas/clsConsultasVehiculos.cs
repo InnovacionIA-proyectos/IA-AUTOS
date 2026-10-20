@@ -2,7 +2,9 @@ using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Vehiculos;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
+using IAAutos.Aplicacion.Viajes;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Viajes;
 using Microsoft.EntityFrameworkCore;
 
 namespace IAAutos.Infraestructura.Persistencia.Consultas;
@@ -94,8 +96,28 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                              join l in contexto.PuntosCustodia on e.PuntoCustodiaId equals l.Id into lugares
                              from l in lugares.DefaultIfEmpty()
                              join vj in contexto.Viajes on e.ViajeId equals vj.Id
+                             join vv in contexto.ViajeVehiculos on new { e.ViajeId, e.VehiculoId } equals new { vv.ViajeId, vv.VehiculoId } into vinesEnViaje
+                             from vv in vinesEnViaje.DefaultIfEmpty()
+                             join um in contexto.Usuarios on vv.NoSaleMarcadoPor equals um.Id into marcadores
+                             from um in marcadores.DefaultIfEmpty()
+                             join r in contexto.Vehiculos on vv.ReemplazoVehiculoId equals r.Id into reemplazos
+                             from r in reemplazos.DefaultIfEmpty()
                              where e.VehiculoId == vehiculo.Id
-                             select new { Etapa = e, Proceso = p.Codigo, Lugar = (string?)l.Nombre, vj.CodigoMtrack, ViajeCreado = vj.CreatedAt };
+                             select new
+                             {
+                                 Etapa = e,
+                                 Proceso = p.Codigo,
+                                 Lugar = (string?)l.Nombre,
+                                 vj.CodigoMtrack,
+                                 ViajeCreado = vj.CreatedAt,
+                                 EstadoUnidad = vv.EstadoUnidad ?? clsEstadoUnidad.ACTIVA,
+                                 vv.NoSaleMotivo,
+                                 vv.NoSaleHallazgoId,
+                                 vv.NoSaleMarcadoPor,
+                                 MarcadoPorNombre = (string?)um.Nombre,
+                                 vv.NoSaleAt,
+                                 VinReemplazo = (string?)r.Vin,
+                             };
         if (soloDeUsuario is { } usuarioId)
         {
             var viajesPropios = clsAlcanceViajes.Viajes(contexto, usuarioId);
@@ -112,6 +134,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
 
         var hallazgos = await contexto.Hallazgos.AsNoTracking()
             .Where(h => inspeccionIds.Contains(h.InspeccionId)).OrderBy(h => h.CreatedAt).ToListAsync(ct);
+        var hallazgosDto = (await new clsDescriptorHallazgos(contexto).DescribirAsync(hallazgos, ct)).ToDictionary(h => h.Id);
         var evidencias = await contexto.Evidencias.AsNoTracking()
             .Where(e => inspeccionIds.Contains(e.InspeccionId)).OrderBy(e => e.CreatedAt).ToListAsync(ct);
         var transferencias = await contexto.Transferencias.AsNoTracking()
@@ -126,7 +149,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                 i.ConductorNombre ?? viaje?.Conductor, i.Placa ?? viaje?.Placa, i.Trailer ?? viaje?.Trailer, i.Notas,
                 i.CreatedAt, i.UpdatedAt,
                 i.IniciadaAt, i.CerradaAt, i.Version, i.CorrigeInspeccionId, clsMomento.Nombre(i.Momento),
-                hallazgos.Where(h => h.InspeccionId == i.Id).Select(clsMapeadorInspecciones.AHallazgo).ToList(),
+                hallazgos.Where(h => h.InspeccionId == i.Id).Select(h => hallazgosDto[h.Id]).ToList(),
                 evidencias.Where(ev => ev.InspeccionId == i.Id).Select(clsMapeadorInspecciones.AEvidencia).ToList(),
                 transferencias.Where(t => t.InspeccionId == i.Id).Select(clsMapeadorInspecciones.ATransferencia).FirstOrDefault());
         }
@@ -140,6 +163,8 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
             e.Etapa.ViajeId,
             e.CodigoMtrack,
             e.Etapa.ConPersonalApoyo,
+            e.EstadoUnidad,
+            clsMapeadorViajes.ANoSale(e.EstadoUnidad, e.NoSaleMotivo, e.NoSaleHallazgoId, e.NoSaleMarcadoPor, e.MarcadoPorNombre, e.NoSaleAt, e.VinReemplazo),
             inspecciones.Where(i => i.EtapaId == e.Etapa.Id).Select(AInspeccion).ToList()))
             .ToList();
 

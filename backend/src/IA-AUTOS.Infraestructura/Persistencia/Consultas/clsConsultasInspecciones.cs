@@ -76,6 +76,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
         var viaje = (await clsDatosDeViaje.CargarAsync(contexto, [insp.ViajeId], ct)).GetValueOrDefault(insp.ViajeId);
 
         var hallazgos = await contexto.Hallazgos.AsNoTracking().Where(h => h.InspeccionId == id).OrderBy(h => h.CreatedAt).ToListAsync(ct);
+        var hallazgosDto = await new clsDescriptorHallazgos(contexto).DescribirAsync(hallazgos, ct);
         var evidencias = await contexto.Evidencias.AsNoTracking().Where(e => e.InspeccionId == id).OrderBy(e => e.CreatedAt).ToListAsync(ct);
         var transferencia = await (from t in contexto.Transferencias.AsNoTracking()
                                    join ue in contexto.Usuarios on t.EntregaUsuarioId equals ue.Id into entregas
@@ -106,7 +107,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
             insp.Placa ?? viaje?.Placa,
             viaje?.CodigoMtrack,
             viaje?.Unidad,
-            hallazgos.Select(clsMapeadorInspecciones.AHallazgo).ToList(),
+            hallazgosDto,
             evidencias.Select(clsMapeadorInspecciones.AEvidencia).ToList(),
             transferencia is null
                 ? null

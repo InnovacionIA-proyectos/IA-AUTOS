@@ -63,6 +63,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IConsultasSofasa, clsConsultasSofasa>();
         servicios.AddScoped<IConsultasViajes, clsConsultasViajes>();
         servicios.AddScoped<IConsultasInspecciones, clsConsultasInspecciones>();
+        servicios.AddScoped<IDescriptorHallazgos, clsDescriptorHallazgos>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();
         servicios.AddSingleton<IGeneradorPdfInventario, clsGeneradorPdfInventario>();
         servicios.AddSingleton<IGeneradorPdfConstancia, clsGeneradorPdfConstancia>();
@@ -113,6 +114,8 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<ICatalogo, clsCatalogoNiveles>();
         servicios.AddScoped<ICatalogo, clsCatalogoVistas>();
         servicios.AddScoped<ICatalogo, clsCatalogoCuadrantes>();
-        servicios.AddScoped<ICatalogo, clsCatalogoCuadranteVistas>();
+        servicios.AddScoped<ICatalogo, clsCatalogoPanelesDano>();
+        servicios.AddScoped<ICatalogo, clsCatalogoCuadranteRegiones>();
+        servicios.AddScoped<IImagenesPanelDano, clsImagenesPanelDano>();
     }
 }

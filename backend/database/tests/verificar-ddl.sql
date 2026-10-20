@@ -172,6 +172,8 @@ INSERT #r SELECT N'Catalogo: 10 clases de dano', CASE WHEN (SELECT COUNT(*) FROM
 INSERT #r SELECT N'Catalogo: 6 tamanos de dano', CASE WHEN (SELECT COUNT(*) FROM dbo.tblTamanosDano) >= 6 THEN 1 ELSE 0 END, NULL;
 INSERT #r SELECT N'Catalogo: 4 niveles de severidad (V1+, V1, V2, V3)',
     CASE WHEN (SELECT COUNT(*) FROM dbo.tblNivelesSeveridad WHERE Codigo IN ('v1_plus','v1','v2','v3')) = 4 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Catalogo: cada nivel de severidad trae su accion',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblNivelesSeveridad WHERE Codigo IN ('v1_plus','v1','v2','v3') AND Accion IS NOT NULL) = 4 THEN 1 ELSE 0 END, NULL;
 INSERT #r SELECT N'Catalogo: 9 vistas de foto (7 obligatorias y 2 adicionales)',
     CASE WHEN (SELECT COUNT(*) FROM dbo.tblVistasFoto) >= 9
           AND (SELECT COUNT(*) FROM dbo.tblVistasFoto WHERE Obligatoria = 1) >= 7

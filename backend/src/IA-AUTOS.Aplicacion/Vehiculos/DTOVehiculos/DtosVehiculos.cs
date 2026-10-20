@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
+using IAAutos.Aplicacion.Viajes.DTOViajes;
 
 namespace IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
 
@@ -64,6 +65,8 @@ public sealed record InventarioEtapaDto(
     Guid ViajeId,
     string? CodigoMtrack,
     bool ConPersonalApoyo,
+    string EstadoUnidad,
+    NoSaleDto? NoSale,
     IReadOnlyList<InventarioInspeccionDto> Inspecciones);
 
 public sealed record InventarioDto(

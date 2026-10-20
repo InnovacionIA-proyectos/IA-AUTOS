@@ -128,6 +128,32 @@ public sealed class clsSembrador(string cadenaConexion)
         return id;
     }
 
+    /// <summary>Crea un cuadrante; la base le crea sus zonas (una por lado del 1 al 25, una sola del 26 en adelante).</summary>
+    public async Task<Guid> CuadranteAsync(int numero, string nombre, string? tipoVehiculo = null)
+    {
+        var id = Guid.NewGuid();
+        await EjecutarAsync(
+            "INSERT dbo.tblCuadrantes (Id, TipoVehiculo, Numero, Nombre, Orden) VALUES (@id, @tipo, @numero, @nombre, @numero)",
+            ("@id", id), ("@tipo", (object?)tipoVehiculo ?? DBNull.Value), ("@numero", numero), ("@nombre", nombre));
+        return id;
+    }
+
+    /// <summary>Un hallazgo con zona (provisional «frente») y nivel, de la inspeccion indicada: la forma que guarda la API.</summary>
+    public async Task<Guid> HallazgoEnFrenteAsync(Guid inspeccionId, string nivel = "v1_plus", string clase = "golpe")
+    {
+        var id = Guid.NewGuid();
+        await EjecutarAsync(
+            "INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) SELECT @id, @i, z.Id, @c, '5_10cm', @n FROM dbo.tblZonasDano z WHERE z.Codigo = 'frente'",
+            ("@id", id), ("@i", inspeccionId), ("@c", clase), ("@n", nivel));
+        return id;
+    }
+
+    /// <summary>Marca la unidad como «no sale» del viaje, con el hallazgo que la causo y quien la marco.</summary>
+    public Task UnidadNoSaleAsync(Guid viajeId, Guid vehiculoId, Guid hallazgoId, Guid marcadoPor, string motivo, Guid? reemplazoId = null) =>
+        EjecutarAsync(
+            "UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = 'no_sale', NoSaleMotivo = @m, NoSaleHallazgoId = @h, NoSaleMarcadoPor = @u, NoSaleAt = SYSDATETIMEOFFSET(), ReemplazoVehiculoId = @r WHERE ViajeId = @v AND VehiculoId = @veh",
+            ("@m", motivo), ("@h", hallazgoId), ("@u", marcadoPor), ("@r", (object?)reemplazoId ?? DBNull.Value), ("@v", viajeId), ("@veh", vehiculoId));
+
     /// <summary>Las vistas de foto activas (obligatorias o adicionales) del catalogo, en su orden: id y nombre.</summary>
     public async Task<List<(Guid Id, string Nombre)>> VistasAsync(bool obligatoria)
     {

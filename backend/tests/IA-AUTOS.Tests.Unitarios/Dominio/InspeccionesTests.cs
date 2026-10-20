@@ -237,28 +237,110 @@ public class HallazgosYEvidenciasTests
         string? nota = null) =>
         clsEvidencia.Crear(Guid.NewGuid(), hallazgo, hallazgo is null ? vista ?? VISTA : vista, ruta, AHORA, lat, lng, precision, dispositivo, hash, nota, AHORA.AddSeconds(3));
 
-    [Fact]
-    public void Hallazgo_valido_conserva_coordenadas()
-    {
-        var h = clsHallazgo.Crear(Guid.NewGuid(), "  Guardafango delantero derecho ", "golpe", "5_10cm", new clsCoordsDiagrama(0.2, 0.8), AHORA);
+    private static readonly Guid ZONA = Guid.NewGuid();
 
-        Assert.Equal("Guardafango delantero derecho", h.ParteVehiculo);
-        Assert.Equal(0.2, h.CoordsDiagrama!.X);
+    private static clsHallazgo HallazgoDeInspector(
+        string clase = "golpe",
+        string tamano = "5_10cm",
+        string? nivel = "v2",
+        string? nota = null,
+        Guid? origen = null,
+        Guid? confirmadoPor = null) =>
+        clsHallazgo.Crear(Guid.NewGuid(), ZONA, clase, tamano, nivel, clsOrigenHallazgo.INSPECTOR, nota, origen, confirmadoPor, AHORA);
+
+    [Fact]
+    public void Hallazgo_del_inspector_guarda_zona_clase_tamano_y_nivel_y_nace_pendiente_y_nuevo()
+    {
+        var h = HallazgoDeInspector(clase: "  golpe ", nota: "  con nota  ");
+
+        Assert.Equal(ZONA, h.ZonaId);
+        Assert.Equal("golpe", h.ClaseDano);
+        Assert.Equal("5_10cm", h.TamanoDano);
+        Assert.Equal("v2", h.NivelSeveridad);
+        Assert.Equal(clsOrigenHallazgo.INSPECTOR, h.Origen);
+        Assert.Equal("con nota", h.Nota);
+        Assert.Equal(clsEstadoSeguimiento.PENDIENTE, h.EstadoSeguimiento);
+        Assert.False(h.EsPreexistente);
+        Assert.Null(h.HallazgoOrigenId);
+        Assert.Null(h.ConfirmadoPor);
+        Assert.Null(h.ParteVehiculo);
+        Assert.Null(h.CoordsDiagrama);
+    }
+
+    [Fact]
+    public void Hallazgo_preexistente_apunta_a_su_origen_y_guarda_quien_lo_confirmo()
+    {
+        var origen = Guid.NewGuid();
+        var inspector = Guid.NewGuid();
+
+        var h = HallazgoDeInspector(origen: origen, confirmadoPor: inspector);
+
+        Assert.True(h.EsPreexistente);
+        Assert.Equal(origen, h.HallazgoOrigenId);
+        Assert.Equal(inspector, h.ConfirmadoPor);
+    }
+
+    [Fact]
+    public void Hallazgo_nuevo_no_guarda_quien_confirmo()
+    {
+        var h = HallazgoDeInspector(confirmadoPor: Guid.NewGuid());
+
+        Assert.Null(h.ConfirmadoPor);
     }
 
     [Theory]
-    [InlineData("", "golpe", "5_10cm")]
-    [InlineData("Capot", "", "5_10cm")]
-    [InlineData("Capot", "golpe", "")]
-    public void Hallazgo_rechaza_campos_invalidos(string parte, string clase, string tamano)
+    [InlineData("", "5_10cm", "clase_dano")]
+    [InlineData("golpe", "", "tamano_dano")]
+    public void Hallazgo_rechaza_clase_o_tamano_vacios(string clase, string tamano, string campo)
     {
-        Assert.Throws<clsValidacionException>(() => clsHallazgo.Crear(Guid.NewGuid(), parte, clase, tamano, null, AHORA));
+        var ex = Assert.Throws<clsValidacionException>(() => HallazgoDeInspector(clase, tamano));
+
+        Assert.Contains(campo, ex.Message);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public void Hallazgo_del_inspector_exige_nivel_de_severidad(string? nivel)
+    {
+        var ex = Assert.Throws<clsValidacionException>(() => HallazgoDeInspector(nivel: nivel));
+
+        Assert.Contains("nivel_severidad", ((Dictionary<string, string[]>)((Dictionary<string, object>)ex.Detalles!)["fieldErrors"]).Keys);
     }
 
     [Fact]
-    public void Hallazgo_rechaza_parte_de_mas_de_80_caracteres()
+    public void Hallazgo_del_conductor_se_guarda_sin_nivel_y_no_admite_que_lo_envie()
     {
-        Assert.Throws<clsValidacionException>(() => clsHallazgo.Crear(Guid.NewGuid(), new string('p', 81), "golpe", "1_5cm", null, AHORA));
+        var h = clsHallazgo.Crear(Guid.NewGuid(), ZONA, "golpe", "5_10cm", null, clsOrigenHallazgo.CONDUCTOR, null, null, null, AHORA);
+
+        Assert.Equal(clsOrigenHallazgo.CONDUCTOR, h.Origen);
+        Assert.Null(h.NivelSeveridad);
+        Assert.Throws<clsValidacionException>(
+            () => clsHallazgo.Crear(Guid.NewGuid(), ZONA, "golpe", "5_10cm", "v1", clsOrigenHallazgo.CONDUCTOR, null, null, null, AHORA));
+    }
+
+    [Fact]
+    public void Hallazgo_rechaza_un_origen_desconocido()
+    {
+        Assert.Throws<clsValidacionException>(
+            () => clsHallazgo.Crear(Guid.NewGuid(), ZONA, "golpe", "5_10cm", "v1", "coordinador", null, null, null, AHORA));
+    }
+
+    [Fact]
+    public void Hallazgo_rechaza_una_nota_de_mas_de_500_caracteres()
+    {
+        Assert.Throws<clsValidacionException>(() => HallazgoDeInspector(nota: new string('n', clsHallazgo.NOTA_MAX + 1)));
+        Assert.Equal(clsHallazgo.NOTA_MAX, HallazgoDeInspector(nota: new string('n', clsHallazgo.NOTA_MAX)).Nota!.Length);
+    }
+
+    [Theory]
+    [InlineData(1, true)]
+    [InlineData(25, true)]
+    [InlineData(26, false)]
+    [InlineData(38, false)]
+    public void Los_numeros_del_1_al_25_llevan_lado_y_del_26_en_adelante_no(int numero, bool llevaLado)
+    {
+        Assert.Equal(llevaLado, clsLado.LlevaLado(numero));
     }
 
     [Theory]

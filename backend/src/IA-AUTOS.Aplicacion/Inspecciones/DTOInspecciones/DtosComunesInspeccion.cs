@@ -29,27 +29,52 @@ public sealed record InspeccionDto(
     Guid? CorrigeInspeccionId,
     string MomentoNombre);
 
-public sealed record HallazgoDto(
+/// <summary>
+/// Un hallazgo con su zona: <c>CuadranteNumero</c> y <c>Lado</c> (o <c>ZonaProvisional</c>), <c>CuadranteNombre</c> y <c>Zona</c> ya armada para mostrar
+/// («Izquierdo 7 · Puerta delantera», «Frente»). <c>NivelNombre</c> y <c>NivelAccion</c> salen del catalogo de niveles. <c>EvidenciaFaltante</c> dice que
+/// le falta para tener la evidencia completa (<c>foto_hallazgo</c>, <c>transferencia_sin_cierre</c> o <c>transferencia_no_firma</c>) y
+/// <c>EvidenciaCompleta</c> es verdadera cuando no falta nada. <c>ParteVehiculo</c> y <c>CoordsDiagrama</c> solo vienen en los hallazgos historicos.
+/// </summary>
+public record HallazgoDto(
     Guid Id,
     Guid InspeccionId,
-    string ParteVehiculo,
-    string ClaseDano,
+    string? ParteVehiculo,
+    string? ClaseDano,
     string TamanoDano,
     CoordsDiagramaDto? CoordsDiagrama,
+    int? CuadranteNumero,
+    string? Lado,
+    string? ZonaProvisional,
+    string? CuadranteNombre,
+    string? Zona,
+    string? TipoNovedad,
+    string? NivelSeveridad,
+    string? NivelNombre,
+    string? NivelAccion,
+    string Origen,
+    string? Nota,
+    bool EsPreexistente,
+    Guid? HallazgoOrigenId,
+    Guid? ConfirmadoPor,
+    string EstadoSeguimiento,
+    bool EvidenciaCompleta,
+    IReadOnlyList<string> EvidenciaFaltante,
+    Guid? RevisadoPor,
+    DateTimeOffset? RevisadoAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
 /// <summary>El hallazgo recien guardado junto con la foto propia que se guardo con el.</summary>
-public sealed record HallazgoCreadoDto(
-    Guid Id,
-    Guid InspeccionId,
-    string ParteVehiculo,
-    string ClaseDano,
-    string TamanoDano,
-    CoordsDiagramaDto? CoordsDiagrama,
-    DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt,
-    EvidenciaDto Evidencia);
+public sealed record HallazgoCreadoDto : HallazgoDto
+{
+    public HallazgoCreadoDto(HallazgoDto hallazgo, EvidenciaDto evidencia)
+        : base(hallazgo)
+    {
+        Evidencia = evidencia;
+    }
+
+    public EvidenciaDto Evidencia { get; init; }
+}
 
 /// <summary>
 /// La ruta interna de almacenamiento no se expone: el cliente recibe solo la URL servible. Cada foto trae su propio sello (fecha, ubicacion y

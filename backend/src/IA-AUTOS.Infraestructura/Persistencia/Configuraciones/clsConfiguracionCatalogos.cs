@@ -71,7 +71,8 @@ internal sealed class clsConfiguracionCuadrante : IEntityTypeConfiguration<clsCu
 {
     public void Configure(EntityTypeBuilder<clsCuadrante> builder)
     {
-        builder.ToTable("tblCuadrantes");
+        // La base crea las zonas de cada cuadrante nuevo con un trigger (TR_tblCuadrantes_CrearZonas).
+        builder.ToTable("tblCuadrantes", t => t.HasTrigger("TR_tblCuadrantes_CrearZonas"));
         clsConfiguracionBase.Base(builder);
         builder.Property(c => c.Nombre).HasMaxLength(clsCatalogoBase.NOMBRE_MAX).IsRequired();
         builder.Property(c => c.TipoVehiculo).HasColumnType("varchar(30)");
@@ -95,3 +96,45 @@ internal sealed class clsConfiguracionCuadranteVista : IEntityTypeConfiguration<
         builder.HasIndex(c => c.VistaFotoId).HasDatabaseName("IX_tblCuadranteVistas_Vista");
     }
 }
+
+/// <summary>Los cinco paneles de la ficha del vehiculo donde se toca la region del dano; cada uno con su imagen de fondo.</summary>
+internal sealed class clsConfiguracionPanelDano : IEntityTypeConfiguration<clsPanelDano>
+{
+    public void Configure(EntityTypeBuilder<clsPanelDano> builder)
+    {
+        clsConfiguracionCatalogo.Codificado(builder, "tblPanelesDano");
+        builder.Property(p => p.Codigo).HasColumnType("varchar(40)");
+        builder.Property(p => p.ImagenPath).HasMaxLength(clsPanelDano.IMAGEN_PATH_MAX);
+    }
+}
+
+/// <summary>Las zonas del dano: cada cuadrante numerado con su lado, mas las zonas provisionales. Solo lectura desde la aplicacion (las crea la base).</summary>
+internal sealed class clsConfiguracionZonaDano : IEntityTypeConfiguration<clsZonaDano>
+{
+    public void Configure(EntityTypeBuilder<clsZonaDano> builder)
+    {
+        builder.ToTable("tblZonasDano");
+        clsConfiguracionBase.Base(builder);
+        builder.Property(z => z.Lado).HasColumnType("varchar(10)");
+        builder.Property(z => z.Codigo).HasColumnType("varchar(40)");
+        builder.Property(z => z.Nombre).HasMaxLength(clsCatalogoBase.NOMBRE_MAX);
+        builder.HasIndex(z => new { z.CuadranteId, z.Lado }).IsUnique().HasDatabaseName("UX_tblZonasDano_Cuadrante_Lado");
+        builder.HasIndex(z => z.Codigo).IsUnique().HasDatabaseName("UX_tblZonasDano_Codigo");
+    }
+}
+
+/// <summary>El poligono de una zona numerada en un panel: una zona se dibuja una vez por panel y al borrar la zona se borran sus regiones.</summary>
+internal sealed class clsConfiguracionRegionDano : IEntityTypeConfiguration<clsRegionDano>
+{
+    public void Configure(EntityTypeBuilder<clsRegionDano> builder)
+    {
+        builder.ToTable("tblRegionesDano");
+        clsConfiguracionBase.Base(builder);
+        builder.Property(r => r.Geometria).HasColumnType("nvarchar(max)").IsRequired();
+        builder.HasOne<clsPanelDano>().WithMany().HasForeignKey(r => r.PanelId)
+            .HasConstraintName("FK_tblRegionesDano_Panel").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(r => new { r.PanelId, r.ZonaId }).IsUnique().HasDatabaseName("UQ_tblRegionesDano_Panel_Zona");
+        builder.HasIndex(r => r.ZonaId).HasDatabaseName("IX_tblRegionesDano_Zona");
+    }
+}
+

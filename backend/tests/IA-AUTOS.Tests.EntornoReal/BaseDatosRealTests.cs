@@ -483,6 +483,17 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Los_niveles_de_severidad_tienen_su_accion()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/13-acciones-niveles-severidad.sql.
+        await using var conexion = await AbrirAsync();
+
+        var sinAccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblNivelesSeveridad WHERE Codigo IN ('v1_plus','v1','v2','v3') AND Accion IS NULL");
+
+        Assert.True(sinAccion == 0, $"Hay {sinAccion} nivel(es) de severidad sin accion. Ejecute database/cambios-esquema/13-acciones-niveles-severidad.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

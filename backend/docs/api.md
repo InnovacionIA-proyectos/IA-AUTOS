@@ -52,7 +52,7 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | GET `/api/inspecciones` | autenticado | listado (maximo 200) con filtros `vin`, `usuarioId`, `viajeId`, `momento`, `estado`, `proceso`, `desde`, `hasta`; inspector y conductor solo ven los informes de sus viajes |
 | GET `/api/inspecciones/{id}` | autenticado | informe completo con firmas, nombres y el sello de cada foto |
 | POST `/api/inspecciones/{id}/evidencias` | campo, creador o administrador | registra una foto ya subida de una vista (`vista_id`) o de un hallazgo (`hallazgo_id`), con su sello (fecha, GPS, precision, dispositivo); el servidor agrega su sello y el hash SHA-256; las vistas adicionales exigen `nota` |
-| POST `/api/inspecciones/{id}/hallazgos` | campo, creador o administrador | agrega un hallazgo **con su foto propia** (`evidencia` obligatoria; sin ella `400`) |
+| POST `/api/inspecciones/{id}/hallazgos` | campo, creador o administrador | agrega un hallazgo con su **zona** (`cuadrante_numero` + `lado`, o `zona_provisional`), clase, tamano, `nivel_severidad` (el conductor no lo envia), `es_preexistente` con `hallazgo_origen_id` y `nota`, **con su foto propia** (`evidencia` obligatoria; sin ella `400`). `parte_vehiculo` y `coords_diagrama` ya no se aceptan (`400`) |
 | POST `/api/inspecciones/{id}/transferencia` | campo | firma la propia parte (quien entrega firma la entrega y quien recibe, el recibo; la identidad sale del token, `403` si no es ninguna de las dos partes); la primera firma crea la transferencia con los dos ids, que deben ser usuarios del viaje; guarda la fecha y la IP de cada firma |
 | POST `/api/inspecciones/{id}/transferencia/reservas` | campo | quien recibe firma con reservas: observaciones obligatorias (`400` sin ellas, `403` si no es quien recibe) |
 | POST `/api/inspecciones/{id}/transferencia/no-firma` | campo | constancia de no firma: la registra la otra parte con motivo, testigo con usuario y foto; cierra la transferencia como `no_firma` |
@@ -62,8 +62,10 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | GET `/api/uploads/{archivo}` | publico por defecto | sirve la imagen |
 | POST `/api/etl/sofasa/ordenes` | token del ETL | ingesta idempotente por `source_id` |
 | GET `/api/sofasa/ordenes` | autenticado | ordenes mas recientes primero (maximo 500), con `viaje_id` y `codigo_mtrack`; inspector y conductor solo ven las de sus viajes |
-| GET `/api/catalogos` | autenticado | todos los catalogos maestros (etapas, lugares, clases y tamanos de dano, niveles, vistas, cuadrantes y sus poligonos, clientes...) con version (`ETag`, `304` con `If-None-Match`) |
-| GET `/api/catalogos/{nombre}` | autenticado | un catalogo con su version |
+| GET `/api/catalogos` | autenticado | todos los catalogos maestros (etapas, lugares, clases y tamanos de dano, niveles, vistas, cuadrantes con las zonas provisionales, paneles de dano y sus regiones, clientes...) con version (`ETag`, `304` con `If-None-Match`) |
+| GET `/api/catalogos/{nombre}` | autenticado | un catalogo con su version (`cuadrante-vistas` ya no existe: `404`, lo reemplazo `cuadrante-regiones`) |
+| GET `/api/catalogos/paneles-dano/{codigo}/imagen` | publico | la imagen de fondo de un panel de dano, con cache larga; `404` si aun no tiene |
+| PUT `/api/catalogos/paneles-dano/{codigo}/imagen` | admin, super_admin | cambia la imagen del panel con un archivo ya subido (`{ "archivo": "…png" }`) |
 | POST `/api/catalogos/{nombre}`, PATCH `/api/catalogos/{nombre}/{id}`, DELETE `/api/catalogos/{nombre}/{id}` | admin, super_admin, coordinador_calidad | crea, edita o borra un valor; uno en uso no se borra (`409`), se inactiva |
 | GET `/api/patrones` | autenticado | hallazgos por proceso y zona de unidades movilizadas |
 | GET `/api/patrones/analisis` | autenticado | clases y tamanos de dano con sugerencias |

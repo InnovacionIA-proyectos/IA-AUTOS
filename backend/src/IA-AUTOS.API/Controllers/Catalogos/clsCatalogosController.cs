@@ -4,6 +4,7 @@ using IAAutos.API.Controllers.Comun;
 using IAAutos.API.Seguridad;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Dominio.Usuarios;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace IAAutos.API.Controllers.Catalogos;
@@ -31,6 +32,33 @@ public sealed class clsCatalogosController(clsCatalogosService servicio) : clsCo
         return Ok(new CatalogosDto(
             instantanea.Version,
             instantanea.Catalogos.ToDictionary(c => c.Key, c => c.Value.Items)));
+    }
+
+    /// <summary>
+    /// La imagen de fondo de un panel del dibujo de danos. De lectura publica (las etiquetas de imagen no envian token) y con cache larga: la URL del
+    /// catalogo cambia cuando se cambia la imagen.
+    /// </summary>
+    [HttpGet("paneles-dano/{codigo}/imagen")]
+    [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK, Type = typeof(FileContentResult))]
+    public async Task<IActionResult> ImagenDePanel(string codigo, CancellationToken ct)
+    {
+        var imagen = await servicio.ObtenerImagenPanelAsync(codigo, ct);
+        Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+        return File(imagen.Contenido, imagen.TipoContenido);
+    }
+
+    /// <summary>
+    /// Cambia la imagen de fondo de un panel con un archivo ya subido (<c>archivo</c> es el nombre que devolvio POST /api/uploads). Solo administradores.
+    /// </summary>
+    [HttpPut("paneles-dano/{codigo}/imagen")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [CuerpoSolicitud(typeof(CambiarImagenPanelRequest))]
+    public async Task<IActionResult> CambiarImagenDePanel(string codigo, CancellationToken ct)
+    {
+        await servicio.CambiarImagenPanelAsync(codigo, await LeerCuerpoAsync<CambiarImagenPanelRequest>(ct), ct);
+        return NoContent();
     }
 
     /// <summary>Un catalogo con su version propia. Responde 304 si If-None-Match coincide.</summary>

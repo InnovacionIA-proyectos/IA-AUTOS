@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using IAAutos.Aplicacion.Archivos;
+using IAAutos.Aplicacion.Archivos.DTOArchivos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Vehiculos;
@@ -33,6 +35,8 @@ public sealed class clsCatalogosService(
     IMemoryCache cache,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
+    IImagenesPanelDano imagenesPaneles,
+    clsArchivosService archivos,
     IOptions<clsOpcionesCatalogos> opciones) : ICatalogosLectura
 {
     private const string CLAVE_CACHE = "catalogos:instantanea";
@@ -104,12 +108,48 @@ public sealed class clsCatalogosService(
         Invalidar();
     }
 
+    // ------------------------------------------------------------------------------------- imagen de los paneles
+
+    /// <summary>La imagen de fondo de un panel de danos (404 si el panel no existe o aun no tiene imagen).</summary>
+    public async Task<ArchivoLeidoDto> ObtenerImagenPanelAsync(string codigoPanel, CancellationToken ct = default)
+    {
+        var nombre = await imagenesPaneles.ObtenerNombreAsync(codigoPanel, ct)
+            ?? throw new clsEntidadNoEncontradaException($"El panel {codigoPanel} aún no tiene imagen");
+        return await archivos.LeerAsync(nombre, ct);
+    }
+
+    /// <summary>Fija la imagen del panel con un archivo ya subido (400 si no existe en el almacen).</summary>
+    public async Task CambiarImagenPanelAsync(string codigoPanel, CambiarImagenPanelRequest solicitud, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(solicitud.Archivo))
+        {
+            throw clsErroresCampos.De("archivo", "El nombre del archivo es requerido: es el que devolvió la subida de imágenes");
+        }
+
+        var archivo = solicitud.Archivo.Trim();
+        try
+        {
+            await archivos.LeerAsync(archivo, ct);
+        }
+        catch (clsEntidadNoEncontradaException)
+        {
+            throw clsErroresCampos.De("archivo", "El archivo no existe: súbalo primero con POST /api/uploads");
+        }
+
+        await imagenesPaneles.CambiarAsync(codigoPanel, archivo, ct);
+        auditor.Registrar($"catalogo.{clsNombresCatalogo.PANELES_DANO}.imagen", clsNombresCatalogo.PANELES_DANO);
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        Invalidar();
+    }
+
     // ----------------------------------------------------------------------------------------------- internos
 
     private ICatalogo Buscar(string nombre) =>
         _porNombre.TryGetValue(nombre, out var catalogo)
             ? catalogo
-            : throw new clsEntidadNoEncontradaException($"Catálogo desconocido: {nombre}. Disponibles: {string.Join(", ", _porNombre.Keys.Order())}");
+            : nombre == clsNombresCatalogo.CUADRANTE_VISTAS
+                ? throw new clsEntidadNoEncontradaException("El catálogo cuadrante-vistas fue reemplazado por cuadrante-regiones")
+                : throw new clsEntidadNoEncontradaException($"Catálogo desconocido: {nombre}. Disponibles: {string.Join(", ", _porNombre.Keys.Order())}");
 
     private void Invalidar() => cache.Remove(CLAVE_CACHE);
 
