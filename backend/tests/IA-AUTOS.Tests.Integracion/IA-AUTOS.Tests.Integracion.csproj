@@ -33,6 +33,8 @@
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-zona-dano.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\11-seguimiento-hallazgo.sql" Link="database\cambios-esquema\11-seguimiento-hallazgo.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-seguimiento.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\12-indices-hallazgo.sql" Link="database\cambios-esquema\12-indices-hallazgo.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-indices.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>

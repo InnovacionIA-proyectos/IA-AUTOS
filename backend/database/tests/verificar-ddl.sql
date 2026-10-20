@@ -674,6 +674,16 @@ INSERT #r SELECT N'Limpieza: se borra un vehiculo quitando antes lo que cuelga d
     CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblVehiculos WHERE Vin = 'ZZ_TEST_VIN_0006') AND NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id IN (@s5, @l5, @c5, @bF, @bH, @bT))
           AND NOT EXISTS (SELECT 1 FROM dbo.tblEvidencias WHERE StoragePath LIKE N'zz-%') THEN 1 ELSE 0 END, NULL;
 
+-- 7e) Indices de consulta de los hallazgos: por zona y clase (con la inspeccion incluida) y por estado de seguimiento, origen y fecha de revision
+INSERT #r SELECT N'Indices del hallazgo: zona + clase con la inspeccion incluida, y estado de seguimiento + origen + fecha de revision; ya no el de parte + clase',
+    CASE WHEN (SELECT STRING_AGG(c.name, N',') WITHIN GROUP (ORDER BY ic.key_ordinal) FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+               WHERE ic.object_id = OBJECT_ID(N'dbo.tblHallazgos') AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE name = N'IX_tblHallazgos_Zona_Clase' AND object_id = OBJECT_ID(N'dbo.tblHallazgos')) AND ic.is_included_column = 0) = N'ZonaId,ClaseDano'
+          AND (SELECT STRING_AGG(c.name, N',') FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+               WHERE ic.object_id = OBJECT_ID(N'dbo.tblHallazgos') AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE name = N'IX_tblHallazgos_Zona_Clase' AND object_id = OBJECT_ID(N'dbo.tblHallazgos')) AND ic.is_included_column = 1) = N'InspeccionId'
+          AND (SELECT STRING_AGG(c.name, N',') WITHIN GROUP (ORDER BY ic.key_ordinal) FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+               WHERE ic.object_id = OBJECT_ID(N'dbo.tblHallazgos') AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE name = N'IX_tblHallazgos_Seguimiento' AND object_id = OBJECT_ID(N'dbo.tblHallazgos'))) = N'EstadoSeguimiento,Origen,RevisadoAt'
+          AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblHallazgos_Parte_Clase' AND object_id = OBJECT_ID(N'dbo.tblHallazgos')) THEN 1 ELSE 0 END, NULL;
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';

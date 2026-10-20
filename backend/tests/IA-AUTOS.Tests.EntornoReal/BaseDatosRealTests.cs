@@ -461,6 +461,28 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Los_indices_de_consulta_de_los_hallazgos_estan_migrados()
+    {
+        // Sin esta migracion las consultas por zona y la bandeja de seguimiento recorren toda la tabla: este chequeo (solo lectura) avisa si falta
+        // ejecutar database/cambios-esquema/12-indices-hallazgo.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/12-indices-hallazgo.sql.";
+
+        async Task<string?> Columnas(string indice, bool incluidas) => await EscalarAsync<string>(conexion, """
+            SELECT STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.key_ordinal, ic.index_column_id)
+              FROM sys.indexes i
+              JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+              JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+             WHERE i.object_id = OBJECT_ID(N'tblHallazgos', N'U') AND i.name = @i AND ic.is_included_column = @inc
+            """, ("@i", indice), ("@inc", incluidas));
+
+        Assert.True(await Columnas("IX_tblHallazgos_Zona_Clase", false) == "ZonaId,ClaseDano", $"Falta el indice por zona y clase. {ayuda}");
+        Assert.True(await Columnas("IX_tblHallazgos_Zona_Clase", true) == "InspeccionId", $"El indice por zona y clase debe incluir la inspeccion. {ayuda}");
+        Assert.True(await Columnas("IX_tblHallazgos_Seguimiento", false) == "EstadoSeguimiento,Origen,RevisadoAt", $"Falta el indice por estado de seguimiento, origen y fecha de revision. {ayuda}");
+        Assert.True(await Columnas("IX_tblHallazgos_Parte_Clase", false) is null, $"Sigue existiendo el indice por parte del vehiculo y clase, que reemplaza el de zona. {ayuda}");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

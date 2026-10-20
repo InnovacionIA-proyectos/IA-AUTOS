@@ -697,9 +697,19 @@ BEGIN
         CONSTRAINT CK_tblHallazgos_Preexistente CHECK (EsPreexistente = 0 OR HallazgoOrigenId IS NOT NULL)
     );
     CREATE INDEX IX_tblHallazgos_Inspeccion ON dbo.tblHallazgos (InspeccionId);
-    -- Mapa de calor / patrones por zona y clase de dano.
-    CREATE INDEX IX_tblHallazgos_Parte_Clase ON dbo.tblHallazgos (ParteVehiculo, ClaseDano);
 END
+GO
+
+-- Indices de consulta de los hallazgos. Usan columnas nuevas del hallazgo, por eso se crean con SQL dinamico y solo si existen (este script tambien se ejecuta
+-- sobre una base que aun tiene el hallazgo anterior):
+--   por zona (lado + numero) y clase, con la inspeccion incluida: la propuesta de hallazgo preexistente y el mapa de calor;
+--   por estado de seguimiento, origen y fecha de revision: la bandeja del coordinador y de las novedades por revisar.
+IF COL_LENGTH(N'dbo.tblHallazgos', N'ZonaId') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblHallazgos_Zona_Clase' AND object_id = OBJECT_ID(N'dbo.tblHallazgos'))
+    EXEC (N'CREATE INDEX IX_tblHallazgos_Zona_Clase ON dbo.tblHallazgos (ZonaId, ClaseDano) INCLUDE (InspeccionId)');
+IF COL_LENGTH(N'dbo.tblHallazgos', N'EstadoSeguimiento') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblHallazgos_Seguimiento' AND object_id = OBJECT_ID(N'dbo.tblHallazgos'))
+    EXEC (N'CREATE INDEX IX_tblHallazgos_Seguimiento ON dbo.tblHallazgos (EstadoSeguimiento, Origen, RevisadoAt)');
 GO
 
 -- La unidad que "no sale" apunta al hallazgo V1+ que lo causo. tblViajeVehiculos se crea antes que tblHallazgos, por eso la relacion se agrega aqui.
