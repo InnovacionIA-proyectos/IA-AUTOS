@@ -1345,5 +1345,79 @@ BEGIN
 END');
 GO
 
+/* -----------------------------------------------------------------------------
+   tblParametros: los valores que el negocio ajusta sin desplegar codigo (objetivo diario, destinatarios y hora del reporte, horario de operacion, retencion, precision minima del GPS y
+   vigencia de las URL firmadas). Una fila por parametro; las filas se crean aqui y no por la API, que solo cambia su valor. Valor nulo = sin valor (por ejemplo, ningun destinatario del reporte
+   o la retencion que todavia no se define). Tipo dice como se valida el valor: numero, porcentaje (0 a 100, con punto decimal), texto, lista (codigos separados por coma), hora (HH:mm) o
+   correos (direcciones separadas por coma). Los valores iniciales los confirma Calidad; las filas ya existentes nunca se sobrescriben.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblParametros', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblParametros
+    (
+        Clave           varchar(100)      NOT NULL CONSTRAINT PK_tblParametros PRIMARY KEY,
+        Valor           nvarchar(1000)    NULL,
+        Tipo            varchar(15)       NOT NULL,
+        Descripcion     nvarchar(300)     NOT NULL,
+        ActualizadoPor  uniqueidentifier  NULL,
+        UpdatedAt       datetimeoffset(3) NOT NULL CONSTRAINT DF_tblParametros_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblParametros_ActualizadoPor FOREIGN KEY (ActualizadoPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT CK_tblParametros_Tipo CHECK (Tipo IN ('numero', 'porcentaje', 'texto', 'lista', 'hora', 'correos')),
+        CONSTRAINT CK_tblParametros_Valor CHECK (Valor IS NULL OR LEN(Valor) > 0)
+    );
+END
+GO
+
+INSERT INTO dbo.tblParametros (Clave, Valor, Tipo, Descripcion)
+SELECT v.Clave, v.Valor, v.Tipo, v.Descripcion
+FROM (VALUES
+    ('objetivo_diario_novedad',        N'1.2',   'porcentaje', N'Objetivo diario de vehiculos con novedad (al menos un hallazgo V1), en porcentaje'),
+    ('reporte_diario_destinatarios',   NULL,     'correos',    N'Correos que reciben el reporte diario, separados por coma; vacio = no se envia'),
+    ('reporte_diario_hora',            N'06:00', 'hora',       N'Hora (HH:mm, hora de Colombia) a la que se envia el reporte diario'),
+    ('horario_operacion_inicio',       N'08:00', 'hora',       N'Hora (HH:mm) en que empieza el horario de operacion'),
+    ('horario_operacion_fin',          N'21:00', 'hora',       N'Hora (HH:mm) en que termina el horario de operacion'),
+    ('retencion_dias',                 NULL,     'numero',     N'Dias que se conserva la evidencia; sin valor hasta que se defina la retencion'),
+    ('gps_precision_minima_m',         N'30',    'numero',     N'Precision minima del GPS, en metros, para no avisar de precision baja'),
+    ('url_firmada_minutos',            N'15',    'numero',     N'Minutos de vigencia de las URL firmadas de las fotos')
+) AS v (Clave, Valor, Tipo, Descripcion)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblParametros p WHERE p.Clave = v.Clave);
+GO
+
+/* -----------------------------------------------------------------------------
+   Parametros de las alertas: los niveles de severidad criticos (lista de codigos), cuantos hallazgos por zona o por proceso en la ventana de dias activan la alerta de patron, y los minutos
+   que esperan los avisos de captura incompleta y de transferencia pendiente. Los valores los confirma Calidad; una fila que ya existe nunca se sobrescribe.
+   ----------------------------------------------------------------------------- */
+INSERT INTO dbo.tblParametros (Clave, Valor, Tipo, Descripcion)
+SELECT v.Clave, v.Valor, v.Tipo, v.Descripcion
+FROM (VALUES
+    ('niveles_criticos',                   N'v1_plus,v1', 'lista',  N'Niveles de severidad criticos: al asignarlos a un hallazgo se alerta al coordinador y al administrador del cliente'),
+    ('umbral_patron_cantidad',             N'10',         'numero', N'Hallazgos por zona o por proceso, dentro de la ventana, a partir de los cuales se alerta de un patron'),
+    ('umbral_patron_ventana_dias',         N'30',         'numero', N'Dias de la ventana en la que se cuentan los hallazgos de un patron'),
+    ('captura_incompleta_minutos',         N'30',         'numero', N'Minutos que una inspeccion de Cargue o Descargue puede seguir en borrador sin todas las fotos antes de avisar a quien la inicio'),
+    ('transferencia_pendiente_minutos',    N'240',        'numero', N'Minutos que una llegada cerrada puede seguir con la transferencia sin cierre antes de avisar al firmante que falta')
+) AS v (Clave, Valor, Tipo, Descripcion)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblParametros p WHERE p.Clave = v.Clave);
+GO
+
+/* -----------------------------------------------------------------------------
+   vwHallazgosVentanaUmbral: los hallazgos de inspecciones CERRADAS con su cliente, su zona (lado + numero, o la zona provisional), su proceso y la fecha de cierre, para contar patrones
+   por zona o por proceso dentro de una ventana de dias. Una fila por hallazgo. Excluye las novedades del conductor aun sin revisar (no tienen zona, clase ni nivel); un hallazgo historico sin
+   zona si esta (cuenta por proceso, con la zona nula).
+   ----------------------------------------------------------------------------- */
+IF COL_LENGTH(N'dbo.tblHallazgos', N'ZonaId') IS NOT NULL
+    EXEC (N'CREATE OR ALTER VIEW dbo.vwHallazgosVentanaUmbral
+AS
+SELECT h.Id AS HallazgoId, h.InspeccionId, i.ViajeId, e.VehiculoId, v.ClienteId,
+       z.Id AS ZonaId, z.Numero, z.Lado, z.Codigo AS ZonaCodigo,
+       ec.Codigo AS Proceso, i.CerradaAt AS Fecha
+FROM dbo.tblHallazgos h
+JOIN dbo.tblInspecciones i ON i.Id = h.InspeccionId AND i.Estado = ''cerrada''
+JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+JOIN dbo.tblEtapasCatalogo ec ON ec.Id = e.EtapaCatalogoId
+JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId
+LEFT JOIN dbo.tblZonasDano z ON z.Id = h.ZonaId
+WHERE NOT (h.Origen = ''conductor'' AND h.RevisadoAt IS NULL)');
+GO
+
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';
 GO
