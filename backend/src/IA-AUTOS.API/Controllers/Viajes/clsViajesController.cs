@@ -1,6 +1,8 @@
 using IAAutos.API.Configuracion;
 using IAAutos.API.Controllers.Comun;
 using IAAutos.API.Seguridad;
+using IAAutos.Aplicacion.Conductor;
+using IAAutos.Aplicacion.Conductor.DTOConductor;
 using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Viajes;
@@ -15,7 +17,12 @@ namespace IAAutos.API.Controllers.Viajes;
 /// solo ven los viajes en los que participan.
 /// </summary>
 [Route("api/viajes")]
-public sealed class clsViajesController(clsViajesService servicio, clsCargaViajesService carga, clsTransferenciasService transferencias, clsNoSaleService noSale) : clsControladorBase
+public sealed class clsViajesController(
+    clsViajesService servicio,
+    clsCargaViajesService carga,
+    clsTransferenciasService transferencias,
+    clsNoSaleService noSale,
+    clsConductorService conductor) : clsControladorBase
 {
     /// <summary>Crea un viaje con su unidad, placa, trailer, conductor, codigo MTrack y, opcionalmente, sus VIN (se crean sus etapas). 409 si el codigo MTrack ya existe.</summary>
     [HttpPost]
@@ -100,6 +107,33 @@ public sealed class clsViajesController(clsViajesService servicio, clsCargaViaje
     [CuerpoSolicitud(typeof(MarcarNoSaleRequest))]
     public async Task<IActionResult> MarcarNoSale(Guid id, string vin, CancellationToken ct) =>
         Ok(await noSale.MarcarAsync(id, vin, await LeerCuerpoAsync<MarcarNoSaleRequest>(ct), ct));
+
+    /// <summary>
+    /// El conductor del viaje registra una novedad del recorrido de la unidad (<c>fecha</c>, <c>lat</c>, <c>lng</c>, <c>tipo_novedad</c>, <c>tamano_dano</c> y la <c>evidencia</c> con su foto sellada), sin texto libre
+    /// (<c>nota</c> responde 400 «Campo no admitido»). Crea la salida de Transporte en borrador si aun no existe (409 ETAPA_PREVIA_SIN_CIERRE si el Cargue no esta cerrado), responde 201 con el hallazgo
+    /// y avisa a los coordinadores de calidad y administradores del cliente del vehiculo. 403 si el viaje no es suyo; 409 UNIDAD_NO_SALE si la unidad no sale del viaje.
+    /// </summary>
+    [HttpPost("{id:guid}/vehiculos/{vin}/novedades")]
+    [RolesPermitidos(clsRol.CONDUCTOR)]
+    [ProducesResponseType<HallazgoCreadoDto>(StatusCodes.Status201Created)]
+    [CuerpoSolicitud(typeof(RegistrarNovedadRequest))]
+    public async Task<IActionResult> RegistrarNovedad(Guid id, string vin, CancellationToken ct)
+    {
+        var solicitud = await LeerCuerpoAsync<RegistrarNovedadRequest>(
+            ct, "nota", "clase_dano", "nivel_severidad", "cuadrante_numero", "lado", "zona_provisional", "es_preexistente", "hallazgo_origen_id");
+        return Creado(await conductor.RegistrarNovedadAsync(id, vin, solicitud, ct));
+    }
+
+    /// <summary>
+    /// El conductor del viaje confirma la llegada de la unidad (<c>fecha</c>, <c>lat</c>, <c>lng</c>): cierra la salida de Transporte si esta abierta y crea y cierra la llegada. Responde 200 con
+    /// <c>inspeccion</c>, <c>novedades</c> y <c>sin_novedad</c>; 400 sin GPS; 409 LLEGADA_YA_CERRADA si ya estaba confirmada (un reintento es un exito) y 409 UNIDAD_NO_SALE si la unidad no sale.
+    /// </summary>
+    [HttpPost("{id:guid}/vehiculos/{vin}/llegada")]
+    [RolesPermitidos(clsRol.CONDUCTOR)]
+    [ProducesResponseType<LlegadaDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(RegistrarLlegadaRequest))]
+    public async Task<IActionResult> RegistrarLlegada(Guid id, string vin, CancellationToken ct) =>
+        Ok(await conductor.RegistrarLlegadaAsync(id, vin, await LeerCuerpoAsync<RegistrarLlegadaRequest>(ct), ct));
 
     /// <summary>Quita un VIN del viaje (se borran sus etapas). 409 si ya tiene inspecciones en el viaje.</summary>
     [HttpDelete("{id:guid}/vehiculos/{vin}")]

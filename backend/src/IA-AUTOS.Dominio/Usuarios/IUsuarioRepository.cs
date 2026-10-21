@@ -19,6 +19,9 @@ public interface IUsuarioRepository
     /// <summary>Usuarios ordenados por nombre, con <paramref name="clienteId"/> solo los de ese cliente (selector de entrega y recibo).</summary>
     Task<IReadOnlyList<clsUsuario>> ListarAsync(Guid? clienteId = null, CancellationToken ct = default);
 
+    /// <summary>Los usuarios activos de ese cliente con alguno de esos roles (a quienes llegan las alertas del cliente), ordenados por nombre.</summary>
+    Task<IReadOnlyList<clsUsuario>> ObtenerActivosPorRolesAsync(IReadOnlyCollection<string> roles, Guid clienteId, CancellationToken ct = default);
+
     /// <summary>Busqueda paginada para la gestion web, ordenada por nombre.</summary>
     Task<(IReadOnlyList<clsUsuario> Filas, int Total)> BuscarAsync(clsFiltroUsuarios filtro, int saltar, int tomar, CancellationToken ct = default);
 

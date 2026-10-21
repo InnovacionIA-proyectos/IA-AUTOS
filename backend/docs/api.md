@@ -62,6 +62,13 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | POST `/api/inspecciones/{id}/transferencia/reservas` | campo | quien recibe firma con reservas: observaciones obligatorias (`400` sin ellas, `403` si no es quien recibe) |
 | POST `/api/inspecciones/{id}/transferencia/no-firma` | campo | constancia de no firma: la registra la otra parte con motivo, testigo con usuario y foto; cierra la transferencia como `no_firma` |
 | GET `/api/inspecciones/{id}/transferencia/constancia/pdf` | autenticado | constancia en PDF: firmas con fecha e IP, reservas o motivo de la no firma, testigo y foto; `403` si es de un viaje ajeno, `404` sin transferencia |
+| POST `/api/viajes/{id}/vehiculos/{vin}/novedades` | conductor del viaje (403 a otro) | registra una novedad del recorrido (`fecha`, `lat`, `lng`, `tipo_novedad`, `tamano_dano`, `evidencia` con su sello completo; sin texto libre: `nota` responde 400 «Campo no admitido»); crea la salida de Transporte en borrador si no existe (`409 ETAPA_PREVIA_SIN_CIERRE` si el Cargue no esta cerrado); `201` con el hallazgo; avisa a los coordinadores y administradores del cliente por bandeja y push; `409 UNIDAD_NO_SALE` |
+| POST `/api/viajes/{id}/vehiculos/{vin}/llegada` | conductor del viaje | confirma la llegada (`fecha`, `lat`, `lng`): cierra la salida de Transporte y crea y cierra la llegada; `200` con `inspeccion`, `novedades` y `sin_novedad`; `400` sin GPS; `409 LLEGADA_YA_CERRADA` o `UNIDAD_NO_SALE` |
+| GET `/api/notificaciones` | ver_alertas (coordinador_calidad, admin, super_admin, inspector, conductor) | la bandeja del usuario (el super_admin ve las de todos los clientes) con `leida`, `tipo`, `urgencia`, `pagina` y `tamano`: `items`, `total`, `pagina`, `tamano` y `no_leidas` |
+| POST `/api/notificaciones/{id}/leida` | el destinatario | marca la notificacion como leida |
+| POST `/api/notificaciones/{id}/respuesta` | coordinador_calidad, admin, super_admin, de una novedad de su cliente | responde la novedad del conductor (`texto`, `medio`: `app` o `llamada`) y le llega al conductor del viaje; `409` si ya fue respondida |
+| POST `/api/dispositivos` | autenticado | registra o actualiza el token de FCM del dispositivo (`token_fcm`, `plataforma`, `modelo`) |
+| DELETE `/api/dispositivos/{token_fcm}` | autenticado | retira el token al cerrar sesion (siempre `204`) |
 | POST `/api/viajes/{id}/vehiculos/{vin}/no-sale` | inspector del viaje y coordinador_calidad (403 a los demas) | marca que la unidad no sale del viaje por un hallazgo V1+ de una inspeccion cerrada (`motivo`, `hallazgo_id`, `vin_reemplazo` opcional); responde el viaje; `409` si no es V1+, no es de ese VIN, la inspeccion no esta cerrada, ya no sale o el reemplazo esta en un viaje activo o antes no salio y no esta recuperado |
 | POST `/api/inspecciones/{id}/cerrar` | campo, creador o administrador | cierra el informe; `{ inspeccion, resumen }`. En Cargue y Descargue exige las 7 vistas obligatorias (`400` con el nombre de la que falta), una foto propia por hallazgo y ubicacion en toda foto; en Transporte exige el GPS del registro |
 | POST `/api/uploads` | campo | sube una foto en base64 (JSON) o como `multipart/form-data` (campo `archivo`); JPG o PNG; `{ storage_path, url, hash_sha256 }` |
@@ -96,6 +103,8 @@ Siempre JSON:
 | NOT_FOUND | 404 | recurso o ruta inexistente |
 | METHOD_NOT_ALLOWED | 405 | metodo no admitido en una ruta existente |
 | CONFLICT | 409 | duplicados, inspeccion cerrada, transferencia ya cerrada, firmantes de la transferencia que no se pueden cambiar, registro que es evidencia y no se puede borrar |
+| LLEGADA_YA_CERRADA | 409 | la llegada de Transporte de esa unidad ya estaba confirmada (un reintento del conductor es un exito) |
+| UNIDAD_NO_SALE | 409 | la unidad se marco «no sale» del viaje: no admite novedades ni llegada |
 | ETAPA_PREVIA_SIN_CIERRE | 409 | la etapa anterior del VIN no esta terminada (sin llegada cerrada o con la transferencia sin tipo de cierre): no se puede crear la salida de la siguiente |
 | RATE_LIMITED | 429 | demasiados intentos de login |
 | INTERNAL_ERROR | 500 | error inesperado (sin detalles internos) |

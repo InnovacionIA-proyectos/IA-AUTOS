@@ -193,6 +193,9 @@ public sealed class clsUsuarioRepositoryFalso : IUsuarioRepository
     public Task<clsUsuario?> ObtenerPorCedulaAsync(string cedula, CancellationToken ct = default) =>
         Task.FromResult(Usuarios.FirstOrDefault(u => u.Cedula == cedula));
 
+    public Task<IReadOnlyList<clsUsuario>> ObtenerActivosPorRolesAsync(IReadOnlyCollection<string> roles, Guid clienteId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<clsUsuario>>(Usuarios.Where(u => u.Activo && u.ClienteId == clienteId && roles.Contains(u.Rol)).OrderBy(u => u.Nombre).ToList());
+
     public Task<IReadOnlyList<clsUsuario>> ListarAsync(Guid? clienteId = null, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<clsUsuario>>(Usuarios.Where(u => clienteId == null || u.ClienteId == clienteId).OrderBy(u => u.Nombre).ToList());
 

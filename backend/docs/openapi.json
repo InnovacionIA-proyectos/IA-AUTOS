@@ -635,6 +635,150 @@
         ]
       }
     },
+    "/api/viajes/{id}/vehiculos/{vin}/novedades": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_RegistrarNovedad",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "vin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrarNovedadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoCreadoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoCreadoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoCreadoDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/vehiculos/{vin}/llegada": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_RegistrarLlegada",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "vin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrarLlegadaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlegadaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlegadaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlegadaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/viajes/{id}/vehiculos/{vin}": {
       "delete": {
         "tags": [
@@ -1880,6 +2024,295 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TasaRechazoDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/dispositivos": {
+      "post": {
+        "tags": [
+          "Dispositivos"
+        ],
+        "operationId": "Dispositivos_Registrar",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrarDispositivoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispositivoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispositivoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DispositivoDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/dispositivos/{tokenFcm}": {
+      "delete": {
+        "tags": [
+          "Dispositivos"
+        ],
+        "operationId": "Dispositivos_Retirar",
+        "parameters": [
+          {
+            "name": "tokenFcm",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/notificaciones": {
+      "get": {
+        "tags": [
+          "Notificaciones"
+        ],
+        "operationId": "Notificaciones_Listar",
+        "parameters": [
+          {
+            "name": "leida",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tipo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "urgencia",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "tamano",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoNotificacionesDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoNotificacionesDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoNotificacionesDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/notificaciones/{id}/leida": {
+      "post": {
+        "tags": [
+          "Notificaciones"
+        ],
+        "operationId": "Notificaciones_MarcarLeida",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificacionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificacionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificacionDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/notificaciones/{id}/respuesta": {
+      "post": {
+        "tags": [
+          "Notificaciones"
+        ],
+        "operationId": "Notificaciones_Responder",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResponderNotificacionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificacionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificacionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificacionDto"
                 }
               }
             }
@@ -5050,6 +5483,37 @@
           }
         }
       },
+      "DispositivoDto": {
+        "required": [
+          "id",
+          "plataforma",
+          "modelo",
+          "activo",
+          "ultimo_uso_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "plataforma": {
+            "type": "string"
+          },
+          "modelo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "activo": {
+            "type": "boolean"
+          },
+          "ultimo_uso_at": {
+            "format": "date-time"
+          }
+        }
+      },
       "EliminarUsuarioResponse": {
         "required": [
           "modo"
@@ -7194,6 +7658,40 @@
           }
         }
       },
+      "ListadoNotificacionesDto": {
+        "required": [
+          "items",
+          "total",
+          "pagina",
+          "tamano",
+          "no_leidas"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificacionDto"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pagina": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tamano": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "no_leidas": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "ListadoPaginadoDto": {
         "required": [
           "rows",
@@ -7302,6 +7800,26 @@
           "novedades": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "LlegadaDto": {
+        "required": [
+          "inspeccion",
+          "novedades",
+          "sin_novedad"
+        ],
+        "type": "object",
+        "properties": {
+          "inspeccion": {
+            "$ref": "#/components/schemas/InspeccionDto"
+          },
+          "novedades": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sin_novedad": {
+            "type": "boolean"
           }
         }
       },
@@ -7510,6 +8028,91 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "NotificacionDto": {
+        "required": [
+          "id",
+          "tipo",
+          "urgencia",
+          "titulo",
+          "mensaje",
+          "viaje_id",
+          "codigo_mtrack",
+          "vin",
+          "hallazgo_id",
+          "inspeccion_id",
+          "leida_at",
+          "respuesta",
+          "created_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tipo": {
+            "type": "string"
+          },
+          "urgencia": {
+            "type": "string"
+          },
+          "titulo": {
+            "type": "string"
+          },
+          "mensaje": {
+            "type": "string"
+          },
+          "viaje_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "vin": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hallazgo_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "inspeccion_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "leida_at": {
+            "format": "date-time"
+          },
+          "respuesta": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RespuestaNotificacionDto"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time"
           }
         }
       },
@@ -7828,6 +8431,61 @@
           }
         }
       },
+      "RegistrarDispositivoRequest": {
+        "required": [
+          "token_fcm",
+          "plataforma",
+          "modelo"
+        ],
+        "type": "object",
+        "properties": {
+          "token_fcm": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "plataforma": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "modelo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RegistrarLlegadaRequest": {
+        "required": [
+          "fecha",
+          "lat",
+          "lng"
+        ],
+        "type": "object",
+        "properties": {
+          "fecha": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          }
+        }
+      },
       "RegistrarNoFirmaRequest": {
         "required": [
           "entrega_usuario_id",
@@ -7934,6 +8592,158 @@
                 ]
               }
             }
+          }
+        }
+      },
+      "RegistrarNovedadRequest": {
+        "required": [
+          "fecha",
+          "lat",
+          "lng",
+          "tipo_novedad",
+          "tamano_dano",
+          "evidencia"
+        ],
+        "type": "object",
+        "properties": {
+          "fecha": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "tipo_novedad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tamano_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "evidencia": {
+            "required": [
+              "storage_path",
+              "sello_fecha",
+              "sello_lat",
+              "sello_lng",
+              "precision",
+              "dispositivo_id",
+              "nota",
+              "hash_sha256"
+            ],
+            "type": "object",
+            "properties": {
+              "storage_path": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "sello_fecha": {
+                "format": "date-time"
+              },
+              "sello_lat": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "sello_lng": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "precision": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "dispositivo_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "nota": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "hash_sha256": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "ResponderNotificacionRequest": {
+        "required": [
+          "texto",
+          "medio"
+        ],
+        "type": "object",
+        "properties": {
+          "texto": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "medio": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "RespuestaNotificacionDto": {
+        "required": [
+          "texto",
+          "medio",
+          "usuario_nombre",
+          "fecha"
+        ],
+        "type": "object",
+        "properties": {
+          "texto": {
+            "type": "string"
+          },
+          "medio": {
+            "type": "string"
+          },
+          "usuario_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fecha": {
+            "format": "date-time"
           }
         }
       },
@@ -8970,7 +9780,9 @@
           "etapas",
           "completas",
           "estado_unidad",
-          "no_sale"
+          "no_sale",
+          "estado_transporte",
+          "novedades"
         ],
         "type": "object",
         "properties": {
@@ -9019,6 +9831,13 @@
                 "$ref": "#/components/schemas/NoSaleDto"
               }
             ]
+          },
+          "estado_transporte": {
+            "type": "string"
+          },
+          "novedades": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       }
@@ -9049,6 +9868,12 @@
     },
     {
       "name": "clsReportes"
+    },
+    {
+      "name": "clsDispositivos"
+    },
+    {
+      "name": "clsNotificaciones"
     },
     {
       "name": "clsHallazgos"

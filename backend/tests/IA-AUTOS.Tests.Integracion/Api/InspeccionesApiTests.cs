@@ -1788,7 +1788,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { entrega_usuario_id = sesion.UsuarioId, recibe_usuario_id = receptor.UsuarioId, firma = "TRAZO-A" });
         await Cliente(receptor.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { firma = "TRAZO-B" });
 
-        var r = await Cliente(receptor.Token).GetAsync($"/api/inspecciones/{id}");
+        // Lo lee quien creo el informe: el conductor que recibe no ve los hallazgos que registro el inspector.
+        var r = await Cliente(sesion.Token).GetAsync($"/api/inspecciones/{id}");
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var inf = await ClonarAsync(r);

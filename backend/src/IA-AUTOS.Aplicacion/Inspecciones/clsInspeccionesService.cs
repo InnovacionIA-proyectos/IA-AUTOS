@@ -54,6 +54,7 @@ public sealed class clsInspeccionesService(
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
     clsFabricaEvidencias fabricaEvidencias,
+    clsVerificadorEtapaPrevia etapaPrevia,
     IUsuarioRepository usuarios,
     IConsultasInspecciones consultas,
     IDescriptorHallazgos descriptorHallazgos,
@@ -98,7 +99,7 @@ public sealed class clsInspeccionesService(
         // La salida de una etapa solo se crea cuando la etapa anterior del VIN ya termino (su llegada esta cerrada).
         if (solicitud.Momento == clsMomento.SALIDA)
         {
-            await AsegurarEtapaPreviaCerradaAsync(etapa, ct);
+            await etapaPrevia.AsegurarCerradaAsync(etapa, ct);
         }
 
         // El usuario siempre sale del token: el cliente no puede crear informes a nombre de otro.
@@ -185,7 +186,8 @@ public sealed class clsInspeccionesService(
     }
 
     /// <summary>
-    /// Informe completo. Inspectores y conductores solo abren los informes de sus viajes y quien se limita a su cliente, los de VIN de su cliente (403 si es de otro).
+    /// Informe completo. Inspectores y conductores solo abren los informes de sus viajes y quien se limita a su cliente, los de VIN de su cliente (403 si es de otro). El conductor
+    /// recibe sin hallazgos ni fotos de hallazgos los informes que no creo.
     /// </summary>
     public async Task<InformeDetalleDto> ObtenerInformeAsync(Guid id, CancellationToken ct = default)
     {
@@ -201,7 +203,7 @@ public sealed class clsInspeccionesService(
             }
         }
 
-        return informe;
+        return informe.ParaConductor(actual);
     }
 
     /// <summary>
@@ -317,33 +319,9 @@ public sealed class clsInspeccionesService(
             new ResumenCierreDto(resumen.TotalEvidencias, resumen.TotalHallazgos));
     }
 
-    /// <summary>
-    /// La salida de una etapa exige que la etapa anterior del mismo VIN en el viaje este terminada: su inspeccion de llegada cerrada y ninguna
-    /// transferencia suya sin tipo de cierre (409 ETAPA_PREVIA_SIN_CIERRE con la etapa que falta cerrar y el motivo). La primera etapa no tiene anterior.
-    /// </summary>
     /// <summary>True si la etapa es el Cargue (la etapa del catalogo con ese codigo).</summary>
     private async Task<bool> EsCargueAsync(clsEtapa etapa, CancellationToken ct) =>
         (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo == clsCodigosEtapa.CARGUE;
-
-    private async Task AsegurarEtapaPreviaCerradaAsync(clsEtapa etapa, CancellationToken ct)
-    {
-        var previa = await etapas.ObtenerPreviaAsync(etapa.ViajeId, etapa.VehiculoId, etapa.Orden, ct);
-        if (previa is null)
-        {
-            return;
-        }
-
-        var motivo = !await inspecciones.TieneLlegadaCerradaAsync(previa.Id, ct)
-            ? clsEtapaPreviaSinCierreException.MOTIVO_SIN_LLEGADA
-            : await inspecciones.TieneTransferenciaSinCierreAsync(previa.Id, ct) ? clsEtapaPreviaSinCierreException.MOTIVO_TRANSFERENCIA_ABIERTA : null;
-        if (motivo is null)
-        {
-            return;
-        }
-
-        var nombre = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == previa.EtapaCatalogoId);
-        throw new clsEtapaPreviaSinCierreException(previa.Id, nombre?["nombre"] as string ?? nombre?.Codigo ?? "anterior", motivo);
-    }
 
     /// <summary>Nombres de las vistas obligatorias (activas, del tipo del vehiculo o de cualquier tipo) que aun no tienen foto, en el orden del catalogo.</summary>
     private async Task<IReadOnlyList<string>> VistasFaltantesAsync(clsEtapa etapa, clsResumenCierre resumen, CancellationToken ct)

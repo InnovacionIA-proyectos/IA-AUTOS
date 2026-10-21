@@ -494,7 +494,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(JsonValueKind.Null, antesUnidad.GetProperty("no_sale").ValueKind);
         var unidad = despues.GetProperty("vehiculos")[0];
         Assert.Equal(
-            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale"],
+            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale", "estado_transporte", "novedades"],
             unidad.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("no_sale", unidad.GetProperty("estado_unidad").GetString());
         var noSale = unidad.GetProperty("no_sale");

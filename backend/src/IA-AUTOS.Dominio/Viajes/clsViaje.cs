@@ -223,7 +223,28 @@ public sealed partial class clsViaje : clsEntidadBase
     private static partial Regex FormatoCodigo();
 }
 
-/// <summary>Un VIN dentro de un viaje.</summary>
+/// <summary>
+/// Como va una unidad en su recorrido de Transporte segun lo que registra el conductor: sin nada registrado, con novedades en ruta, llegada confirmada sin novedades o llegada
+/// confirmada con novedades.
+/// </summary>
+public static class clsEstadoTransporte
+{
+    public const string SIN_REGISTRO = "sin_registro";
+    public const string CON_NOVEDAD = "con_novedad";
+    public const string SIN_NOVEDAD = "sin_novedad";
+    public const string LLEGADA_CON_NOVEDAD = "llegada_con_novedad";
+
+    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { SIN_REGISTRO, CON_NOVEDAD, SIN_NOVEDAD, LLEGADA_CON_NOVEDAD };
+
+    public static string De(bool llegadaCerrada, int novedades) => (llegadaCerrada, novedades > 0) switch
+    {
+        (true, true) => LLEGADA_CON_NOVEDAD,
+        (true, false) => SIN_NOVEDAD,
+        (false, true) => CON_NOVEDAD,
+        _ => SIN_REGISTRO,
+    };
+}
+
 /// <summary>Estado de una unidad dentro de un viaje: activa, o que no sale (un hallazgo grave la retiro del viaje).</summary>
 public static class clsEstadoUnidad
 {

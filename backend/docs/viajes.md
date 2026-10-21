@@ -32,6 +32,9 @@ programado lo pasa a `en_curso`. Un viaje cancelado deja de ser visible para ins
 - **Clientes del viaje.** El viaje no tiene un cliente propio (puede llevar VIN de varias marcas): su cliente se toma de sus VIN. `GET /api/viajes?clienteId=` trae los viajes con
   al menos un VIN de ese cliente, y el listado y el detalle traen `clientes`. Quien no es super administrador, conductor ni inspector del viaje ve solo los viajes y los VIN de su
   cliente; el conductor y el inspector del viaje ven todos sus VIN. No se agregó `ClienteId` a `tblViajes`: los indicadores por cliente o marca se cuentan por vehículo.
+- **Conductor en ruta.** El conductor del viaje registra las novedades de cada unidad (`POST /api/viajes/{id}/vehiculos/{vin}/novedades`) y confirma su llegada (`.../llegada`) sobre la etapa de Transporte del VIN; cada VIN del viaje trae su
+  `estado_transporte` (`sin_registro`, `con_novedad`, `sin_novedad` o `llegada_con_novedad`) y sus `novedades`. Una unidad marcada «no sale» no admite ninguna de las dos (`409 UNIDAD_NO_SALE`). Ver [CONTRATO.md](../CONTRATO.md) («Conductor en ruta») y
+  [notificaciones.md](notificaciones.md).
 - **Fuera de este servicio:** la integración con MTrack (el código se digita o llega en el Excel) y la visibilidad por cliente del resto de recursos (vehículos, inspecciones, órdenes).
 
 ## Mapeo del modelo anterior

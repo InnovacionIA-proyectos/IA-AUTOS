@@ -23,6 +23,7 @@ La API se configura solo con variables de entorno (o `appsettings`). El doble gu
 | `Storage__LocalPath` | no (`.uploads`) | carpeta para el almacenamiento en disco |
 | `Storage__MaximoBytes` | no (10 MB) | tamano maximo de una imagen |
 | `Storage__LecturaPublica` | no (`true`) | `false` exige token para leer imagenes |
+| `Notificaciones__FcmProyectoId`, `__FcmClientEmail`, `__FcmClavePrivada` | no | cuenta de servicio de Firebase para enviar los push (el id del proyecto, el correo de la cuenta y su clave privada; los saltos de linea de la clave pueden ir como `\n`). Sin ellas el push no se envia y cada notificacion queda con su error de envio |
 | `Seguridad__PasswordMinimo` | no (8) | longitud minima de contrasenas asignadas |
 | `Seguridad__ValidarPropiedadInspeccion` | no (`true`) | solo el creador o un administrador modifica o cierra un informe |
 | `Seguridad__LoginMaxIntentosPorMinuto` | no (10) | limite por IP en el login |

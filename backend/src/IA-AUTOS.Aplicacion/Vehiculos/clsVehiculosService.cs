@@ -1,6 +1,7 @@
 using FluentValidation;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
+using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
 using IAAutos.Dominio.Comun;
 using IAAutos.Aplicacion.Viajes;
@@ -116,7 +117,7 @@ public sealed class clsVehiculosService(
 
     /// <summary>
     /// Inventario del VIN. Un inspector o conductor solo puede abrir los VIN de sus viajes (403 si no es de ellos); de ese VIN ve unicamente
-    /// las etapas de sus viajes. Quien se limita a su cliente recibe 403 con el VIN de otro cliente.
+    /// las etapas de sus viajes. Quien se limita a su cliente recibe 403 con el VIN de otro cliente. El conductor recibe sin hallazgos ni fotos de hallazgos las inspecciones que no creo.
     /// </summary>
     public async Task<InventarioDto> ObtenerInventarioAsync(string vin, CancellationToken ct = default)
     {
@@ -144,8 +145,9 @@ public sealed class clsVehiculosService(
             }
         }
 
-        return await consultas.ObtenerInventarioAsync(vin, soloDeUsuario, ct)
+        var inventario = await consultas.ObtenerInventarioAsync(vin, soloDeUsuario, ct)
             ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
+        return inventario.ParaConductor(actual);
     }
 
     /// <summary>Inventario del VIN en PDF (soporte de rechazo).</summary>

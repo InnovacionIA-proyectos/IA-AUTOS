@@ -1,6 +1,7 @@
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Auditoria;
 using IAAutos.Dominio.Custodia;
+using IAAutos.Dominio.Notificaciones;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Sofasa;
 using IAAutos.Dominio.Usuarios;
@@ -63,6 +64,10 @@ public sealed class clsAppDbContext : DbContext
     public DbSet<clsOrdenSofasa> OrdenesSofasa => Set<clsOrdenSofasa>();
 
     public DbSet<clsAuditLog> AuditLog => Set<clsAuditLog>();
+
+    public DbSet<clsNotificacion> Notificaciones => Set<clsNotificacion>();
+
+    public DbSet<clsDispositivo> Dispositivos => Set<clsDispositivo>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

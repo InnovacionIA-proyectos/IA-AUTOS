@@ -71,6 +71,8 @@ Todos los errores son JSON con la misma forma:
 | `FORBIDDEN` | 403 | rol insuficiente, inspección ajena, o VIN, viaje o informe fuera de los viajes del usuario |
 | `PORTAL_USER_NOT_LINKED` | 403 | la persona del portal no tiene acceso a IA Autos (solo en `login-portal`) |
 | `ETAPA_PREVIA_SIN_CIERRE` | 409 | la etapa anterior del VIN no está terminada: no tiene su llegada cerrada (`details.motivo: "etapa_previa_sin_cierre"`) o su transferencia no tiene tipo de cierre (`"transferencia_sin_cierre"`); no se puede crear la salida de la siguiente (`details.etapa_previa` dice cuál) |
+| `LLEGADA_YA_CERRADA` | 409 | la llegada de Transporte de esa unidad ya estaba confirmada: es un éxito para un reintento (ver «Conductor en ruta») |
+| `UNIDAD_NO_SALE` | 409 | la unidad se marcó «no sale» del viaje: no admite novedades ni llegada |
 | `PIN_CHANGE_REQUIRED` | 403 | el PIN fue asignado o reiniciado por un administrador: hay que cambiarlo (`POST /api/auth/cambiar-pin`) antes de usar el resto de la API |
 | `ACCOUNT_LOCKED` | 423 | la cuenta está bloqueada por PIN errados seguidos; `details.bloqueado_hasta` (ISO 8601) dice hasta cuándo, o un administrador la desbloquea |
 | `NOT_FOUND` | 404 | recurso o ruta inexistente |
@@ -514,7 +516,7 @@ Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viaj
   "estado": "programado", "con_personal_apoyo": false,
   "vehiculos": [
     { "vehiculo_id": "uuid", "vin": "9BWZZZ377VT004251", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional",
-      "etapas": 3, "completas": 0, "estado_unidad": "activa", "no_sale": null }
+      "etapas": 3, "completas": 0, "estado_unidad": "activa", "no_sale": null, "estado_transporte": "sin_registro", "novedades": 0 }
   ],
   "clientes": [ { "id": "uuid", "codigo": "sofasa", "nombre": "Sofasa" } ],
   "created_at": "…", "updated_at": "…"
@@ -523,7 +525,8 @@ Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viaj
 
 `codigo_mtrack`, `tipo_unidad_id` y `placa` pueden ser `null` solo en los viajes migrados desde las asignaciones anteriores. `etapas` y `completas`
 de cada VIN cuentan sus etapas del viaje y las que ya tienen informe cerrado. `estado_unidad` es `activa` o `no_sale` y `no_sale` trae el motivo, el hallazgo, quién la marcó y
-cuándo (el mismo objeto del inventario); una unidad que no sale **sigue en la lista de VIN del viaje**.
+cuándo (el mismo objeto del inventario); una unidad que no sale **sigue en la lista de VIN del viaje**. `estado_transporte` (`sin_registro`, `con_novedad`, `sin_novedad` o `llegada_con_novedad`) y `novedades`
+dicen cómo va la unidad en su recorrido según lo que registra el conductor (ver [Conductor en ruta](#conductor-en-ruta)).
 
 **Clientes del viaje.** El viaje no tiene un cliente propio: un viaje puede llevar VIN de más de una marca, así que su cliente se toma de sus VIN. `clientes` es la lista, sin
 repetidos y por nombre, de los clientes de los VIN del viaje, con el mismo objeto que `cliente` en `GET /api/auth/me` (`id`, `codigo`, `nombre`). Va en `ViajeDto` y en `ViajeResumenDto`
@@ -1032,6 +1035,164 @@ Responde `200` con el `ViajeDto`: la unidad queda con `estado_unidad: "no_sale"`
 (un VIN que no salió puede volver a entrar como reemplazo solo cuando ese hallazgo esté en estado `recuperado`). `404` si el viaje o el VIN no existen o el VIN no está en el viaje.
 
 Una unidad que no sale no cuenta en `vehiculos_completos` ni en `vwViajesCompletos`, y su vínculo no cuenta como «viaje activo» del VIN: se puede asignar a otro viaje, y su inventario muestra el historial completo, incluido el viaje del que no salió y su hallazgo V1+.
+
+## Conductor en ruta
+
+El conductor responde por lo que pasa en el recorrido de cada unidad de **su** viaje: registra las **novedades** (golpe, piedra, granizo o incidente vial) y confirma la **llegada**. Las dos viven en la etapa de **Transporte** del VIN:
+las novedades van en su inspección de **salida** (que se crea en borrador al registrar la primera) y la llegada cierra esa salida y crea y cierra la inspección de **llegada**. Ambas son solo del `conductor` del viaje (`403` a cualquier otro
+usuario, también a un administrador); `404` si el viaje o el VIN no existen o el VIN no está en el viaje, y `409` si el viaje está finalizado o cancelado.
+
+El celular guarda la novedad y la llegada con su fecha, hora y GPS aunque no haya señal y las envía al recuperarla conservando esos datos: la `fecha`, `lat` y `lng` son los del **momento del registro**, no los del envío.
+
+### `POST /api/viajes/{id}/vehiculos/{vin}/novedades`
+
+```json
+{
+  "fecha": "2026-10-21T08:30:00-05:00", "lat": 4.7, "lng": -74.2,
+  "tipo_novedad": "golpe", "tamano_dano": "5_10cm",
+  "evidencia": { "storage_path": "abc.png", "sello_fecha": "2026-10-21T08:30:00-05:00", "sello_lat": 4.7, "sello_lng": -74.2, "precision": 5.0, "dispositivo_id": "celular-1", "hash_sha256": "…" }
+}
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `fecha`, `lat`, `lng` | sí | fecha ISO 8601 con zona y el GPS del momento (`400` si falta alguno o está fuera de rango) |
+| `tipo_novedad` | sí | `golpe`, `piedra`, `granizo` o `incidente_vial` |
+| `tamano_dano` | sí | un código **activo** del catálogo `tamanos-dano` |
+| `evidencia` | sí | la foto de la novedad ya subida con `POST /api/uploads`, con su sello **completo** (`sello_fecha`, `sello_lat` y `sello_lng`; sin ubicación no se podría cerrar el registro). `nota` no se admite (`400`) |
+
+**No hay texto libre ni se indican cuadrante, clase o nivel**: `nota`, `clase_dano`, `nivel_severidad`, `cuadrante_numero`, `lado`, `zona_provisional`, `es_preexistente` y `hallazgo_origen_id` responden `400` con `Campo no admitido` en ese campo.
+El cuadrante, la clase y el nivel V quedan vacíos hasta que un inspector revisa la novedad.
+
+Si el VIN no tiene inspección de **salida de Transporte** en ese viaje, la crea en borrador con la `fecha`, `lat` y `lng` del cuerpo, a nombre del conductor, y para eso exige que la etapa anterior (el Cargue) esté cerrada: `409` con
+`code: "ETAPA_PREVIA_SIN_CIERRE"` si no tiene su llegada cerrada o su transferencia no tiene tipo de cierre (la app deja la novedad en espera hasta que el inventario muestre el Cargue cerrado). Las novedades siguientes van a la misma salida.
+Un viaje `programado` pasa a `en_curso`. Todo queda en la auditoría (`novedad.crear`, `evidencia.crear`).
+
+Responde `201` con el `HallazgoCreadoDto`: `origen: "conductor"`, `tipo_novedad`, `tamano_dano`, `clase_dano`, `cuadrante_numero`, `lado`, `zona_provisional`, `nivel_severidad`, `nota` y `revisado_at` en `null`, `estado_seguimiento: "pendiente"` y la `evidencia` con su `url`.
+
+`409` más con `code: "UNIDAD_NO_SALE"` si la unidad se marcó «no sale» del viaje, y `409` (`CONFLICT`) si la salida de Transporte ya está cerrada (por la llegada): ya no se agregan novedades.
+
+**Aviso.** Al guardar la novedad se crea una notificación `novedad_conductor` de urgencia **alta** para cada `coordinador_calidad` y `admin` **activo del cliente del vehículo** (ninguno de otro cliente, ni el `comercial`, el `inspector` o el conductor), por
+**bandeja** y por **push** a sus dispositivos activos. Si el envío por FCM falla, la petición responde igual y la notificación de push queda con su motivo en `ErrorEnvio`. No se envía correo (el correo es solo del reporte diario).
+
+### `POST /api/viajes/{id}/vehiculos/{vin}/llegada`
+
+```json
+{ "fecha": "2026-10-21T14:10:00-05:00", "lat": 4.9, "lng": -74.4 }
+```
+
+Confirma la llegada de la unidad: cierra la salida de Transporte si está abierta (con sus novedades) y crea y cierra la inspección de **llegada** de Transporte con la fecha, hora y ubicación recibidas; no pide las vistas de foto.
+Responde `200`:
+
+```json
+{ "inspeccion": { /* InspeccionDto de la llegada, ya cerrada */ }, "novedades": 2, "sin_novedad": false }
+```
+
+`novedades` es cuántas novedades registró el conductor de esa unidad y `sin_novedad` es `novedades == 0`. `400` sin `fecha`, `lat` o `lng` (la app no habilita «Llegué» sin GPS) o si una foto de la salida quedó sin ubicación (se repite antes de confirmar).
+
+| `409` con `code` | Cuándo |
+|---|---|
+| `LLEGADA_YA_CERRADA` | la llegada de esa unidad ya estaba confirmada. **Es un éxito para un reintento**: la app lo toma como llegada confirmada; el servidor conserva la primera y no repite nada |
+| `UNIDAD_NO_SALE` | la unidad se marcó «no sale» del viaje: no se transporta y no admite llegada |
+
+### Estado de transporte de la unidad
+
+Cada VIN de `ViajeDto.vehiculos` agrega `estado_transporte` y `novedades`:
+
+| `estado_transporte` | Cuándo |
+|---|---|
+| `sin_registro` | el conductor no ha registrado nada de esa unidad |
+| `con_novedad` | tiene novedades y aún no confirmó la llegada |
+| `sin_novedad` | confirmó la llegada y no tiene novedades |
+| `llegada_con_novedad` | confirmó la llegada y tiene novedades |
+
+`novedades` es el número de novedades de la unidad. La llegada de Transporte cerrada cuenta como etapa completa de la unidad.
+
+### Lo que el conductor no ve
+
+El conductor no ve los hallazgos que registraron otros (el inspector, por ejemplo):
+
+| Endpoint | Para el conductor |
+|---|---|
+| `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` | en toda inspección que **no creó** llegan `hallazgos: []` y sin las fotos de hallazgos ni las del sello de quien los valida; las inspecciones que sí creó (sus novedades) llegan completas |
+| `GET /api/inspecciones` | el listado no trae hallazgos |
+| `GET /api/inspecciones/{id}/hallazgos-previos`, `GET /api/hallazgos` y `GET /api/hallazgos/{id}` | `403` |
+
+## Notificaciones
+
+Las alertas y los avisos llegan a una **bandeja** (el portal y la app) y, las urgentes, también por **push** al celular. La capacidad `ver_alertas` de `GET /api/auth/me` la tienen `coordinador_calidad`, `admin` y `super_admin` (las alertas preventivas
+de su cliente), `inspector` (solo los avisos operativos dirigidos a él: `captura_incompleta` de una inspección que inició y `transferencia_pendiente` de su firma) y `conductor` (solo `respuesta_conductor`, `captura_incompleta` de una inspección que
+él inició en un cargue sin personal de apoyo y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Hoy se generan `novedad_conductor` y `respuesta_conductor`; los demás tipos los crean los procesos de alertas
+que llegan después. Todo lo que se hace aquí queda en la auditoría.
+
+`NotificacionDto`:
+
+```json
+{
+  "id": "uuid", "tipo": "novedad_conductor", "urgencia": "alta", "titulo": "Novedad en ruta: 9BWZZZ377VT004251", "mensaje": "Carlos Gómez registró una novedad de tipo golpe (tamaño 5_10cm) en la unidad … (viaje MTK-001).",
+  "viaje_id": "uuid", "codigo_mtrack": "MTK-001", "vin": "9BWZZZ377VT004251", "hallazgo_id": "uuid", "inspeccion_id": "uuid",
+  "leida_at": null,
+  "respuesta": { "texto": "Detente en el siguiente peaje", "medio": "app", "usuario_nombre": "Ana Ruiz", "fecha": "2026-10-21T14:12:00Z" },
+  "created_at": "2026-10-21T13:31:00Z"
+}
+```
+
+`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente` o `reporte_diario`. `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
+
+### `GET /api/notificaciones`
+Una página de la bandeja, las más recientes primero: `{ "items": [NotificacionDto], "total": 3, "pagina": 1, "tamano": 50, "no_leidas": 2 }`.
+
+| Filtro | Qué trae |
+|---|---|
+| `leida` | `true` o `false` |
+| `tipo` | un tipo de notificación |
+| `urgencia` | `alta` o `media` |
+| `pagina`, `tamano` | página desde 1 (por defecto 1) y tamaño (por defecto 50, máximo **200**: uno mayor se reduce a 200) |
+
+Cada usuario ve **solo las suyas**; el `super_admin` ve las de **todos los clientes**. `no_leidas` es cuántas hay sin leer en ese alcance, sin contar los filtros. Un filtro inválido responde `400` con todos los errores juntos en `details.fieldErrors`.
+Solo se listan las de la bandeja: las filas de push son el registro del envío.
+
+### `POST /api/notificaciones/{id}/leida`
+Marca la notificación como leída y responde `200` con el `NotificacionDto`. Solo su destinatario (`403` si es de otro, también para el `super_admin`); leerla otra vez no cambia la primera `leida_at`. `404` si no existe.
+
+### `POST /api/notificaciones/{id}/respuesta`
+
+```json
+{ "texto": "Detente en el siguiente peaje y espera al inspector", "medio": "app" }
+```
+
+Responde la **novedad del conductor**. Solo `coordinador_calidad`, `admin` y `super_admin`, de una novedad de su cliente (`403` a los demás roles y a quien es de otro cliente; el `super_admin` responde la de cualquier cliente).
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `texto` | sí | máximo 1000 caracteres |
+| `medio` | sí | `app` (respuesta escrita) o `llamada` (atendió por teléfono) |
+
+Responde `200` con el `NotificacionDto` ya con su `respuesta`. La respuesta queda en la **novedad**: la ven (y la alerta queda atendida para) todos los coordinadores y administradores del cliente. **Solo la primera respuesta se guarda**: otra respuesta a la misma
+novedad, aunque la envíe otro coordinador o llegue a la vez, responde `409` y conserva la primera. `409` también si la notificación no es de una novedad del conductor. Al responder se crea una notificación `respuesta_conductor` de urgencia **alta** para el conductor del
+viaje, por bandeja y por push (el texto de la respuesta es su mensaje).
+
+### Dispositivos
+
+El celular del usuario registra su token de FCM para recibir los push.
+
+#### `POST /api/dispositivos`
+
+```json
+{ "token_fcm": "…", "plataforma": "android", "modelo": "Pixel 8" }
+```
+
+Cualquier usuario autenticado. `plataforma`: `android`, `ios` o `web`; `modelo` es opcional (máximo 100 caracteres) y `token_fcm` máximo 512; `400` si falta el token o la plataforma es inválida. Registra el dispositivo o, si el token ya existe, lo **actualiza**:
+queda activo y a nombre de quien lo registra (un celular que cambia de usuario pasa al nuevo). Responde `200` con `{ id, plataforma, modelo, activo, ultimo_uso_at }`.
+
+#### `DELETE /api/dispositivos/{token_fcm}`
+Se llama al cerrar sesión: el dispositivo deja de recibir push. Responde siempre `204`, también si el token no existe, ya estaba retirado o es de otro usuario (no hace nada).
+
+### Envío del push
+
+El push sale por **Firebase Cloud Messaging** a cada dispositivo activo del destinatario, con `tipo`, `notificacion_id`, `hallazgo_id` y `viaje_id` como datos para abrir la alerta. Si FCM falla, no está configurado o el usuario no tiene dispositivos, la petición que originó
+la alerta responde igual y la notificación de push guarda el motivo en `ErrorEnvio` (un token que FCM ya no reconoce deja el dispositivo inactivo). Una misma alerta no se repite: su clave (alerta, destinatario y canal) es única. Se configura con
+`Notificaciones__FcmProyectoId`, `Notificaciones__FcmClientEmail` y `Notificaciones__FcmClavePrivada` (ver [docs/configuracion.md](docs/configuracion.md)).
 
 ## Transferencia de custodia
 

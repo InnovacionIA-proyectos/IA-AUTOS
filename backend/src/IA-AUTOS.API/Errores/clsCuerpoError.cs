@@ -21,6 +21,8 @@ public static class clsCuerpoError
         clsCodigosError.METHOD_NOT_ALLOWED => StatusCodes.Status405MethodNotAllowed,
         clsCodigosError.CONFLICT => StatusCodes.Status409Conflict,
         clsCodigosError.ETAPA_PREVIA_SIN_CIERRE => StatusCodes.Status409Conflict,
+        clsCodigosError.LLEGADA_YA_CERRADA => StatusCodes.Status409Conflict,
+        clsCodigosError.UNIDAD_NO_SALE => StatusCodes.Status409Conflict,
         clsCodigosError.RATE_LIMITED => StatusCodes.Status429TooManyRequests,
         clsCodigosError.NOT_IMPLEMENTED => StatusCodes.Status501NotImplemented,
         clsCodigosError.DB_UNAVAILABLE => StatusCodes.Status503ServiceUnavailable,
