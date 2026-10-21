@@ -89,6 +89,12 @@ public sealed class clsInspeccionesService(
             throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite inspecciones nuevas");
         }
 
+        // En un Cargue con personal de apoyo la salida la hace el inspector: el conductor solo firma el recibo.
+        if (actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && etapa.ConPersonalApoyo && await EsCargueAsync(etapa, ct))
+        {
+            throw new clsProhibidoException("Este cargue tiene personal de apoyo: el conductor solo firma el recibo");
+        }
+
         // La salida de una etapa solo se crea cuando la etapa anterior del VIN ya termino (su llegada esta cerrada).
         if (solicitud.Momento == clsMomento.SALIDA)
         {
@@ -315,6 +321,10 @@ public sealed class clsInspeccionesService(
     /// La salida de una etapa exige que la etapa anterior del mismo VIN en el viaje este terminada: su inspeccion de llegada cerrada y ninguna
     /// transferencia suya sin tipo de cierre (409 ETAPA_PREVIA_SIN_CIERRE con la etapa que falta cerrar y el motivo). La primera etapa no tiene anterior.
     /// </summary>
+    /// <summary>True si la etapa es el Cargue (la etapa del catalogo con ese codigo).</summary>
+    private async Task<bool> EsCargueAsync(clsEtapa etapa, CancellationToken ct) =>
+        (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo == clsCodigosEtapa.CARGUE;
+
     private async Task AsegurarEtapaPreviaCerradaAsync(clsEtapa etapa, CancellationToken ct)
     {
         var previa = await etapas.ObtenerPreviaAsync(etapa.ViajeId, etapa.VehiculoId, etapa.Orden, ct);

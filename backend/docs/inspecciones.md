@@ -22,7 +22,7 @@ El trigger de inmutabilidad sigue impidiendo modificar una cerrada y agregarle h
 | Cualquier otra etapa que agregue el catálogo | se trata como Transporte (no exige las vistas) |
 
 Las dos **vistas adicionales** (piezas en el baúl y cojinería) se toman solo cuando hay un faltante o daño, y su foto exige una **nota** con ese faltante o daño. Una inspección sin faltantes ni
-daños se cierra sin ellas. Si el cargue no tiene personal de apoyo, la inspección de salida la hace el conductor con exactamente las mismas reglas.
+daños se cierra sin ellas. Si el cargue no tiene personal de apoyo, la inspección de salida la hace el conductor con exactamente las mismas reglas. Si lo tiene, el servidor no deja que el conductor la cree (403: «Este cargue tiene personal de apoyo: el conductor solo firma el recibo»): ya no depende de que la app lo bloquee.
 
 Un cierre incompleto responde `400` con la lista de lo que falta, **una línea por cada vista, con su nombre** («Falta la foto de la vista «Frontal»»).
 
