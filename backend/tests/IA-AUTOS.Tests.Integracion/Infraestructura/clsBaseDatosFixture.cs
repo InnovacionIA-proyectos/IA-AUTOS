@@ -45,6 +45,8 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblHallazgos DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblInspecciones DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblAuditLog DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgoSeguimiento DISABLE TRIGGER ALL;
+            DELETE FROM dbo.tblHallazgoSeguimiento;
             DELETE FROM dbo.tblRefreshTokens;
             DELETE FROM dbo.tblAuditLog;
             DELETE FROM dbo.tblOrdenesSofasa;
@@ -62,6 +64,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblAuditLog ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
             END TRY
             BEGIN CATCH
             ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
@@ -69,6 +72,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblAuditLog ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
             THROW;
             END CATCH
 

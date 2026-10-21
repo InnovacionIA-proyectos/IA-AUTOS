@@ -36,7 +36,7 @@ Clases con prefijo `cls`, variables en camelCase, constantes en MAYUSCULAS_SOSTE
 - La carga masiva de VIN y la ingesta de Sofasa son idempotentes: re-procesar no duplica vehiculos, y un error en una fila no detiene el lote. Las etapas no se crean ahi: nacen al agregar el VIN a un viaje. La ingesta vincula cada orden al viaje del VIN (y del codigo MTrack, si lo trae).
 - Baja de usuario: se elimina si no tiene historial; si lo tiene, se marca como retirado.
 - Inspecciones: por etapa hay una inspeccion de salida y una de llegada, y cada foto lleva su sello (el del dispositivo y el del servidor) y su hash. Detalle en [inspecciones.md](inspecciones.md) y, para la transferencia de custodia, en [transferencias.md](transferencias.md).
-- Hallazgos: cada hallazgo se atribuye a una zona del vehiculo (cuadrante + lado, o una zona provisional) con su clase, tamano y nivel de severidad; una unidad con un hallazgo grave puede no salir del viaje sin bloquearlo. Modelo y mapeo en [zonas-dano.md](zonas-dano.md).
+- Hallazgos: cada hallazgo se atribuye a una zona del vehiculo (cuadrante + lado, o una zona provisional) con su clase, tamano y nivel de severidad; una unidad con un hallazgo grave puede no salir del viaje sin bloquearlo. Modelo y mapeo en [zonas-dano.md](zonas-dano.md); su historial de seguimiento (que nunca se modifica) y la vista de patrones por zona, en [seguimiento-hallazgos.md](seguimiento-hallazgos.md).
 - Identidad: un usuario entra con correo y contrasena o con cedula y PIN (conductor e inspector, el correo es opcional). Cada usuario y cada vehiculo pertenecen a un cliente (catalogo `clientes`); el super administrador no tiene cliente. Detalle en [identidad.md](identidad.md).
 
 ## Base de datos

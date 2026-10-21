@@ -754,6 +754,97 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
+   tblHallazgoSeguimiento: historial del seguimiento de un hallazgo (append-only: una fila nunca se modifica ni se borra).
+   Accion: seguimiento (el coordinador cambia el estado del hallazgo), revision (un inspector revisa una novedad del conductor) o no_sale
+   (la unidad no sale del viaje por ese hallazgo). EvidenciaSelloId es la foto del sello de quien valida (Sofasa); Detalle es un JSON con
+   lo asignado en una revision. Al insertar una fila de seguimiento, el estado del hallazgo (tblHallazgos.EstadoSeguimiento) pasa a EstadoNuevo.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblHallazgoSeguimiento', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblHallazgoSeguimiento
+    (
+        Id                uniqueidentifier  NOT NULL CONSTRAINT PK_tblHallazgoSeguimiento PRIMARY KEY,
+        HallazgoId        uniqueidentifier  NOT NULL,
+        Accion            varchar(15)       NOT NULL,
+        EstadoAnterior    varchar(15)       NULL,
+        EstadoNuevo       varchar(15)       NULL,
+        UsuarioId         uniqueidentifier  NOT NULL,
+        Nota              nvarchar(1000)    NULL,
+        EvidenciaSelloId  uniqueidentifier  NULL,
+        Detalle           nvarchar(max)     NULL,
+        CreatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblHallazgoSeguimiento_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblHallazgoSeguimiento_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblHallazgoSeguimiento_Hallazgo FOREIGN KEY (HallazgoId) REFERENCES dbo.tblHallazgos (Id),
+        CONSTRAINT FK_tblHallazgoSeguimiento_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblHallazgoSeguimiento_Sello FOREIGN KEY (EvidenciaSelloId) REFERENCES dbo.tblEvidencias (Id),
+        CONSTRAINT CK_tblHallazgoSeguimiento_Accion CHECK (Accion IN ('seguimiento', 'revision', 'no_sale')),
+        CONSTRAINT CK_tblHallazgoSeguimiento_Estados CHECK (
+            (EstadoAnterior IS NULL OR EstadoAnterior IN ('pendiente', 'validado', 'rechazado', 'recuperado', 'derogado'))
+            AND (EstadoNuevo IS NULL OR EstadoNuevo IN ('pendiente', 'validado', 'rechazado', 'recuperado', 'derogado'))),
+        -- Un cambio de seguimiento siempre dice a que estado pasa el hallazgo.
+        CONSTRAINT CK_tblHallazgoSeguimiento_Cambio CHECK (Accion <> 'seguimiento' OR EstadoNuevo IS NOT NULL),
+        CONSTRAINT CK_tblHallazgoSeguimiento_Detalle CHECK (Detalle IS NULL OR ISJSON(Detalle) = 1)
+    );
+    CREATE INDEX IX_tblHallazgoSeguimiento_Hallazgo ON dbo.tblHallazgoSeguimiento (HallazgoId, CreatedAt);
+END
+GO
+
+-- El historial no se modifica (error 51005); su borrado lo impide el trigger de no borrado de las tablas de evidencia (error 51003).
+CREATE OR ALTER TRIGGER dbo.TR_tblHallazgoSeguimiento_NoModificar
+ON dbo.tblHallazgoSeguimiento
+INSTEAD OF UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    THROW 51005, 'El historial de seguimiento no se modifica', 1;
+END
+GO
+
+-- Se crean con SQL dinamico y solo si las columnas existen, para poder ejecutar este script tambien sobre una base que aun tiene el hallazgo anterior.
+IF COL_LENGTH(N'dbo.tblHallazgos', N'EstadoSeguimiento') IS NOT NULL
+    EXEC (N'CREATE OR ALTER TRIGGER dbo.TR_tblHallazgoSeguimiento_Sincronizar
+ON dbo.tblHallazgoSeguimiento
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    -- Si en una misma sentencia llegan varios cambios del mismo hallazgo, queda el ultimo.
+    UPDATE h SET h.EstadoSeguimiento = u.EstadoNuevo, h.UpdatedAt = SYSDATETIMEOFFSET()
+    FROM dbo.tblHallazgos h
+    JOIN (SELECT HallazgoId, EstadoNuevo, ROW_NUMBER() OVER (PARTITION BY HallazgoId ORDER BY CreatedAt DESC, Id DESC) AS Orden
+          FROM inserted WHERE Accion = ''seguimiento'') u ON u.HallazgoId = h.Id AND u.Orden = 1;
+END');
+GO
+
+/* -----------------------------------------------------------------------------
+   vwPatronesPorCuadrante: hallazgos por zona para el mapa de calor y los patrones. Cuenta por zona (lado + numero, o la zona provisional), no solo
+   por numero: izquierdo 7 y derecho 7 son filas distintas. Incluye los hallazgos de toda inspeccion CERRADA aunque la unidad no haya terminado el
+   viaje, y excluye las novedades del conductor sin revisar y los hallazgos aun sin zona. Total = hallazgos del grupo.
+   ----------------------------------------------------------------------------- */
+IF COL_LENGTH(N'dbo.tblHallazgos', N'ZonaId') IS NOT NULL
+    EXEC (N'CREATE OR ALTER VIEW dbo.vwPatronesPorCuadrante
+AS
+SELECT x.ZonaId, x.CuadranteId, x.Numero, x.Lado, x.ZonaCodigo, x.ZonaNombre, x.Proceso, x.NivelSeveridad, x.ClaseDano, x.ClienteId, x.Operacion, x.Fecha,
+       COUNT(*) AS Total
+FROM (
+    SELECT z.Id AS ZonaId, z.CuadranteId, z.Numero, z.Lado, z.Codigo AS ZonaCodigo,
+           CASE WHEN z.Lado IS NOT NULL THEN CONCAT(UPPER(LEFT(z.Lado, 1)), SUBSTRING(z.Lado, 2, 20), N'' '', z.Numero, N'' '', NCHAR(183), N'' '', c.Nombre)
+                WHEN z.Numero IS NOT NULL THEN CONCAT(z.Numero, N'' '', NCHAR(183), N'' '', c.Nombre)
+                ELSE z.Nombre END AS ZonaNombre,
+           ec.Codigo AS Proceso, h.NivelSeveridad, h.ClaseDano, v.ClienteId, v.Operacion, CAST(i.CerradaAt AS date) AS Fecha
+    FROM dbo.tblHallazgos h
+    JOIN dbo.tblZonasDano z ON z.Id = h.ZonaId
+    LEFT JOIN dbo.tblCuadrantes c ON c.Id = z.CuadranteId
+    JOIN dbo.tblInspecciones i ON i.Id = h.InspeccionId AND i.Estado = ''cerrada''
+    JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+    JOIN dbo.tblEtapasCatalogo ec ON ec.Id = e.EtapaCatalogoId
+    JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId
+    WHERE NOT (h.Origen = ''conductor'' AND h.RevisadoAt IS NULL)
+) AS x
+GROUP BY x.ZonaId, x.CuadranteId, x.Numero, x.Lado, x.ZonaCodigo, x.ZonaNombre, x.Proceso, x.NivelSeveridad, x.ClaseDano, x.ClienteId, x.Operacion, x.Fecha');
+GO
+
+/* -----------------------------------------------------------------------------
    tblTransferenciasCustodia (entrega y recibo; una por inspeccion)
    Cada firma la envia su titular (quien entrega o quien recibe) y guarda su fecha e IP. La transferencia se cierra con un TipoCierre:
      firmada      ambas partes firmaron;
@@ -1047,7 +1138,7 @@ GO
    ----------------------------------------------------------------------------- */
 DECLARE @tablaProtegida sysname, @sqlProtegida nvarchar(max);
 DECLARE cProtegidas CURSOR LOCAL FAST_FORWARD FOR
-    SELECT v FROM (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblTransferenciasCustodia'), (N'tblAuditLog')) AS t (v);
+    SELECT v FROM (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblTransferenciasCustodia'), (N'tblAuditLog'), (N'tblHallazgoSeguimiento')) AS t (v);
 OPEN cProtegidas;
 FETCH NEXT FROM cProtegidas INTO @tablaProtegida;
 WHILE @@FETCH_STATUS = 0
