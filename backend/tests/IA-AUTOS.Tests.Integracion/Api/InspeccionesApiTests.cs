@@ -1207,6 +1207,46 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     // ---------------------------------------------------------------- cargue sin personal de apoyo
 
     [Fact]
+    public async Task Con_personal_de_apoyo_el_conductor_no_crea_la_salida_del_cargue_y_el_inspector_si()
+    {
+        var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
+        var inspector = await SesionAsync("insp@ejemplo.com");
+        var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-COND-0002", conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET ConPersonalApoyo = 1 WHERE Id = @e", ("@e", etapas[0]));
+
+        var delConductor = await Cliente(conductor.Token).PostAsJsonAsync(
+            "/api/inspecciones", new { etapa_id = etapas[0], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
+        var delInspector = await Cliente(inspector.Token).PostAsJsonAsync(
+            "/api/inspecciones", new { etapa_id = etapas[0], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
+
+        Assert.Equal(HttpStatusCode.Forbidden, delConductor.StatusCode);
+        var cuerpo = await ClonarAsync(delConductor);
+        Assert.Equal("FORBIDDEN", cuerpo.GetProperty("code").GetString());
+        Assert.Equal("Este cargue tiene personal de apoyo: el conductor solo firma el recibo", cuerpo.GetProperty("message").GetString());
+        Assert.Equal(HttpStatusCode.Created, delInspector.StatusCode);
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones"));
+    }
+
+    [Fact]
+    public async Task El_conductor_crea_la_salida_de_transporte_y_de_descargue_aunque_el_cargue_tenga_personal_de_apoyo()
+    {
+        var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
+        var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-COND-0003", conductorId: conductor.UsuarioId);
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET ConPersonalApoyo = 1 WHERE Id = @e", ("@e", etapas[0]));
+        await LlegadaCerradaAsync(etapas[0], conductor.UsuarioId);
+        var transporte = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
+        await LlegadaCerradaAsync(etapas[1], conductor.UsuarioId);
+
+        var descargue = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
+        var llegadaDelCargue = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[0], momento = "llegada", fecha = FECHA, lat = 4.6, lng = -74.1 });
+
+        Assert.Equal(HttpStatusCode.Created, transporte.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, descargue.StatusCode);
+        // El bloqueo es de la salida del Cargue: lo demas del Cargue (por ejemplo la llegada) no cambia.
+        Assert.NotEqual(HttpStatusCode.Forbidden, llegadaDelCargue.StatusCode);
+    }
+
+    [Fact]
     public async Task Sin_personal_de_apoyo_el_conductor_hace_la_salida_con_las_mismas_reglas_del_inspector()
     {
         var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);

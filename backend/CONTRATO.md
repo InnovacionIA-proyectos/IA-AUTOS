@@ -701,6 +701,9 @@ Las mismas reglas valen para quien haga la inspección: cuando el cargue no tien
 Campo. `201` con la inspección. El usuario sale del token (no se envía) y **la placa, el tráiler y el conductor salen del viaje de la etapa**: ya no se piden como texto.
 Inspector y conductor reciben `403` si la etapa es de un viaje que no es suyo; un viaje finalizado o cancelado responde `409`; una etapa inexistente, `404`.
 
+**El conductor no crea la salida de un Cargue con personal de apoyo.** Si la etapa es el Cargue y tiene `con_personal_apoyo: true`, la salida solo la crea el inspector: el conductor recibe `403` con «Este cargue tiene personal de apoyo: el conductor solo firma el recibo».
+Con `con_personal_apoyo: false`, y en Transporte y Descargue, el conductor sí la crea. La regla es de la salida del Cargue; la llegada y el resto no cambian.
+
 **La salida exige la etapa anterior terminada.** Si el VIN tiene una etapa anterior en el viaje (por su `orden`) y esa etapa no tiene su **llegada cerrada**, o tiene una
 **transferencia sin tipo de cierre**, la salida responde `409` con `code: "ETAPA_PREVIA_SIN_CIERRE"` y `details` con `motivo` (`etapa_previa_sin_cierre` si falta cerrar la llegada,
 `transferencia_sin_cierre` si falta cerrar la transferencia), `etapa_previa_id` y `etapa_previa` (el nombre de la etapa que falta terminar), para que la app muestre el bloqueo. La primera
