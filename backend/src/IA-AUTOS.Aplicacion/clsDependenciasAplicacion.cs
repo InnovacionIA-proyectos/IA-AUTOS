@@ -35,6 +35,7 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsFabricaEvidencias>();
         servicios.AddScoped<clsEvidenciaDeHallazgos>();
         servicios.AddScoped<clsSeguimientoService>();
+        servicios.AddScoped<clsHallazgosService>();
         servicios.AddScoped<clsNoSaleService>();
         servicios.AddScoped<clsTransferenciasService>();
         servicios.AddScoped<clsVehiculosService>();

@@ -917,13 +917,45 @@ Si ya estaba cerrada, `409`; **un cliente que reintenta el cierre puede tomar es
 
 ---
 
+## Listado de hallazgos
+
+### `GET /api/hallazgos`
+Una página de hallazgos para la bandeja del coordinador y las novedades por revisar. Lo consultan el `inspector` (solo los de **sus viajes**), el `coordinador_calidad`, el `comercial` y los administradores (solo los de **su cliente**) y el `super_admin` (todos); el `conductor` recibe `403`.
+Ver «Visibilidad por cliente».
+
+```json
+{ "items": [ { /* HallazgoListadoDto */ } ], "total": 120, "pagina": 1, "tamano": 50 }
+```
+
+| Filtro | Qué trae |
+|---|---|
+| `estado_seguimiento` | `pendiente`, `validado`, `rechazado`, `recuperado` o `derogado` |
+| `origen` | `inspector` o `conductor` |
+| `revisado` | `true` o `false`: **solo aplica a las novedades del conductor** (revisadas por un inspector o pendientes de revisar); con `revisado` no entran los hallazgos del inspector |
+| `cliente_id` | un cliente: solo lo elige el `super_admin`; quien se limita a su cliente puede enviar el suyo y enviar otro responde `403` |
+| `viaje_id`, `vin`, `inspeccion_id` | los de ese viaje, VIN (sin distinguir mayúsculas) o inspección |
+| `nivel` | `v1_plus`, `v1`, `v2` o `v3` |
+| `cuadrante_numero`, `lado` | la zona numerada (`lado`: `izquierdo` o `derecho`); un lado sin número trae todas las zonas de ese lado |
+| `proceso` | el proceso de la etapa: `cargue`, `transporte`, `descargue`... |
+| `desde`, `hasta` | fecha ISO 8601 con zona: el **cierre de la inspección** del hallazgo (una inspección en borrador no tiene cierre y no entra en un rango) |
+| `orden` | `recientes` (por defecto: el cierre más reciente primero), `antiguos` o `severidad` (V1+, V1, V2, V3 y al final las novedades sin nivel) |
+| `pagina`, `tamano` | página desde 1 (por defecto 1) y tamaño (por defecto 50, máximo **200**: uno mayor se reduce a 200) |
+
+Un filtro con un valor inválido responde `400` con todos los errores juntos en `details.fieldErrors`.
+
+Cada fila (`HallazgoListadoDto`) es el `HallazgoDto` más el contexto de su inspección: `vin`, `viaje_id`, `codigo_mtrack`, `proceso`, `momento`, `inspeccion_estado`, `cerrada_at` (nulo si la inspección está en borrador) y `evidencia`, la **foto propia** del hallazgo como `EvidenciaDto` con su `url`
+(nula si no tiene; no cuenta la foto del sello).
+
+### `GET /api/hallazgos/{id}`
+La misma fila más `seguimiento` (el historial, como en `GET /api/hallazgos/{id}/seguimiento`) y `notas_aclaratorias` (un arreglo que va vacío hasta que existan las notas aclaratorias de una inspección cerrada). `404` si no existe; `403` si es de un viaje ajeno (inspector) o de otro cliente.
+
 ## Seguimiento del hallazgo
 
 El coordinador da seguimiento a cada hallazgo y todo cambio queda en un historial que nunca se modifica. Lo hacen `coordinador_calidad`, `comercial`, `admin` y `super_admin` (la capacidad `gestionar_seguimiento` de `GET /api/auth/me`); inspector y conductor reciben `403`.
 Solo ven y cambian los hallazgos del **cliente** de su usuario (`403` con uno de otro cliente, ver «Visibilidad por cliente»).
 
 ### `POST /api/hallazgos/{id}/seguimiento`
-Cambia el estado del hallazgo y responde `200` con el `HallazgoDto` ya actualizado.
+Cambia el estado del hallazgo y responde `200` con el `HallazgoDto` ya actualizado. El listado y el detalle de los hallazgos están en «Listado de hallazgos».
 
 ```json
 {
