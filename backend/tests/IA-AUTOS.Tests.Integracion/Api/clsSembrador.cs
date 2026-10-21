@@ -166,8 +166,11 @@ public sealed class clsSembrador(string cadenaConexion)
         var inspeccion = await InformeAsync(etapaId, usuarioId, cerrada: false, momento: momento);
         var hallazgo = Guid.NewGuid();
         await EjecutarAsync(
-            "INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad, Origen) VALUES (@h, @i, @z, @c, '5_10cm', @n, @o)",
-            ("@h", hallazgo), ("@i", inspeccion), ("@z", zonaId), ("@c", clase), ("@n", (object?)nivel ?? DBNull.Value), ("@o", origen));
+            // Un hallazgo del conductor con nivel ya lo reviso un inspector: nunca nace con nivel.
+            "INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad, Origen, RevisadoAt, RevisadoPor) "
+            + "VALUES (@h, @i, @z, @c, '5_10cm', @n, @o, CASE WHEN @rev = 1 THEN SYSDATETIMEOFFSET() END, CASE WHEN @rev = 1 THEN @u END)",
+            ("@h", hallazgo), ("@i", inspeccion), ("@z", zonaId), ("@c", clase), ("@n", (object?)nivel ?? DBNull.Value), ("@o", origen),
+            ("@rev", origen == "conductor" && nivel is not null ? 1 : 0), ("@u", usuarioId));
         if (conFoto)
         {
             await EjecutarAsync(

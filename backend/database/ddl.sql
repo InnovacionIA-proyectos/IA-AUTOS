@@ -830,6 +830,129 @@ END');
 GO
 
 /* -----------------------------------------------------------------------------
+   tblNotificaciones: las notificaciones del sistema (alertas y avisos operativos) y las respuestas del coordinador a una novedad del conductor. Una fila por canal
+   (bandeja, push o correo) y por destinatario. Es append-only salvo la lectura (LeidaAt) y la respuesta (RespuestaTexto, RespuestaMedio, RespondidaPor, RespondidaAt):
+   cambiar otra columna falla (error 51006) y borrar una fila falla (error 51003). ClaveDedupe es unica por alerta, canal y destinatario para que no se repita.
+   El canal correo solo se admite en el reporte diario (que no tiene destinatario: UsuarioId nulo).
+   tblDispositivos: los celulares donde un usuario recibe las notificaciones push (token FCM unico).
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblNotificaciones', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblNotificaciones
+    (
+        Id               uniqueidentifier  NOT NULL CONSTRAINT PK_tblNotificaciones PRIMARY KEY,
+        Tipo             varchar(30)       NOT NULL,
+        Urgencia         varchar(5)        NOT NULL,
+        UsuarioId        uniqueidentifier  NULL,
+        ClienteId        uniqueidentifier  NULL,
+        ViajeId          uniqueidentifier  NULL,
+        VehiculoId       uniqueidentifier  NULL,
+        HallazgoId       uniqueidentifier  NULL,
+        InspeccionId     uniqueidentifier  NULL,
+        Titulo           nvarchar(200)     NOT NULL,
+        Mensaje          nvarchar(1000)    NOT NULL,
+        Canal            varchar(10)       NOT NULL,
+        EnviadaAt        datetimeoffset(3) NULL,
+        ErrorEnvio       nvarchar(500)     NULL,
+        LeidaAt          datetimeoffset(3) NULL,
+        RespuestaTexto   nvarchar(1000)    NULL,
+        RespuestaMedio   varchar(10)       NULL,
+        RespondidaPor    uniqueidentifier  NULL,
+        RespondidaAt     datetimeoffset(3) NULL,
+        ClaveDedupe      varchar(300)      NOT NULL,
+        CreatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblNotificaciones_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblNotificaciones_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblNotificaciones_Cliente FOREIGN KEY (ClienteId) REFERENCES dbo.tblClientes (Id),
+        CONSTRAINT FK_tblNotificaciones_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
+        CONSTRAINT FK_tblNotificaciones_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id),
+        CONSTRAINT FK_tblNotificaciones_Hallazgo FOREIGN KEY (HallazgoId) REFERENCES dbo.tblHallazgos (Id),
+        CONSTRAINT FK_tblNotificaciones_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
+        CONSTRAINT FK_tblNotificaciones_RespondidaPor FOREIGN KEY (RespondidaPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT UQ_tblNotificaciones_ClaveDedupe UNIQUE (ClaveDedupe),
+        CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario')),
+        CONSTRAINT CK_tblNotificaciones_Urgencia CHECK (Urgencia IN ('alta', 'media')),
+        CONSTRAINT CK_tblNotificaciones_Canal CHECK (Canal IN ('bandeja', 'push', 'correo')),
+        CONSTRAINT CK_tblNotificaciones_RespuestaMedio CHECK (RespuestaMedio IS NULL OR RespuestaMedio IN ('app', 'llamada')),
+        -- Solo el reporte diario no tiene destinatario, y solo el reporte diario se envia por correo.
+        CONSTRAINT CK_tblNotificaciones_Destinatario CHECK (UsuarioId IS NOT NULL OR Tipo = 'reporte_diario'),
+        CONSTRAINT CK_tblNotificaciones_Correo CHECK (Canal <> 'correo' OR Tipo = 'reporte_diario'),
+        -- La respuesta del coordinador es completa (texto, medio, quien y cuando) y solo existe sobre una novedad del conductor.
+        CONSTRAINT CK_tblNotificaciones_Respuesta CHECK (
+            (RespuestaTexto IS NULL AND RespuestaMedio IS NULL AND RespondidaPor IS NULL AND RespondidaAt IS NULL)
+            OR (RespuestaTexto IS NOT NULL AND RespuestaMedio IS NOT NULL AND RespondidaPor IS NOT NULL AND RespondidaAt IS NOT NULL AND Tipo = 'novedad_conductor'))
+    );
+    CREATE INDEX IX_tblNotificaciones_Usuario_Leida ON dbo.tblNotificaciones (UsuarioId, LeidaAt);
+END
+GO
+
+-- Solo se lee y se responde una notificacion: cualquier otra columna que se intente cambiar falla (51006). El borrado lo impide el trigger de no borrado de las tablas de evidencia (51003).
+CREATE OR ALTER TRIGGER dbo.TR_tblNotificaciones_SoloLecturaYRespuesta
+ON dbo.tblNotificaciones
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF UPDATE(Id) OR UPDATE(Tipo) OR UPDATE(Urgencia) OR UPDATE(UsuarioId) OR UPDATE(ClienteId) OR UPDATE(ViajeId) OR UPDATE(VehiculoId) OR UPDATE(HallazgoId)
+       OR UPDATE(InspeccionId) OR UPDATE(Titulo) OR UPDATE(Mensaje) OR UPDATE(Canal) OR UPDATE(EnviadaAt) OR UPDATE(ErrorEnvio) OR UPDATE(ClaveDedupe) OR UPDATE(CreatedAt)
+        THROW 51006, 'Una notificacion solo admite cambiar su lectura y su respuesta', 1;
+END
+GO
+
+IF OBJECT_ID(N'dbo.tblDispositivos', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblDispositivos
+    (
+        Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblDispositivos PRIMARY KEY,
+        UsuarioId     uniqueidentifier  NOT NULL,
+        TokenFcm      varchar(512)      NOT NULL,
+        Plataforma    varchar(20)       NOT NULL,
+        Modelo        nvarchar(100)     NULL,
+        UltimoUsoAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblDispositivos_UltimoUsoAt DEFAULT (SYSDATETIMEOFFSET()),
+        Activo        bit               NOT NULL CONSTRAINT DF_tblDispositivos_Activo DEFAULT (1),
+        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblDispositivos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblDispositivos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblDispositivos_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT UQ_tblDispositivos_TokenFcm UNIQUE (TokenFcm),
+        CONSTRAINT CK_tblDispositivos_Token CHECK (LEN(TokenFcm) > 0),
+        CONSTRAINT CK_tblDispositivos_Plataforma CHECK (Plataforma IN ('android', 'ios', 'web'))
+    );
+    CREATE INDEX IX_tblDispositivos_Usuario ON dbo.tblDispositivos (UsuarioId, Activo);
+END
+GO
+
+/* -----------------------------------------------------------------------------
+   La novedad del conductor es un hallazgo con TipoNovedad (golpe, piedra, granizo o incidente_vial) sobre la inspeccion de SALIDA de TRANSPORTE del VIN. Mientras ningun
+   inspector la revise (RevisadoAt nulo) no tiene zona, clase, nivel ni texto libre; al revisarla se completan la zona, la clase y el nivel. El conductor nunca asigna el
+   nivel V: un hallazgo de origen conductor no lo tiene hasta que se revisa. Se crean con SQL dinamico y solo si las columnas existen, para poder ejecutar este script
+   tambien sobre una base que aun tiene el hallazgo anterior.
+   ----------------------------------------------------------------------------- */
+IF COL_LENGTH(N'dbo.tblHallazgos', N'TipoNovedad') IS NOT NULL AND COL_LENGTH(N'dbo.tblHallazgos', N'RevisadoAt') IS NOT NULL
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_NovedadSinRevisar' AND parent_object_id = OBJECT_ID(N'dbo.tblHallazgos'))
+        EXEC (N'ALTER TABLE dbo.tblHallazgos ADD CONSTRAINT CK_tblHallazgos_NovedadSinRevisar CHECK (
+            TipoNovedad IS NULL OR RevisadoAt IS NOT NULL OR (ZonaId IS NULL AND ClaseDano IS NULL AND NivelSeveridad IS NULL AND Nota IS NULL))');
+    IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_NovedadRevisada' AND parent_object_id = OBJECT_ID(N'dbo.tblHallazgos'))
+        EXEC (N'ALTER TABLE dbo.tblHallazgos ADD CONSTRAINT CK_tblHallazgos_NovedadRevisada CHECK (
+            TipoNovedad IS NULL OR RevisadoAt IS NULL OR (ZonaId IS NOT NULL AND ClaseDano IS NOT NULL AND NivelSeveridad IS NOT NULL))');
+    IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_NivelDelConductor' AND parent_object_id = OBJECT_ID(N'dbo.tblHallazgos'))
+        EXEC (N'ALTER TABLE dbo.tblHallazgos ADD CONSTRAINT CK_tblHallazgos_NivelDelConductor CHECK (Origen <> ''conductor'' OR RevisadoAt IS NOT NULL OR NivelSeveridad IS NULL)');
+    EXEC (N'CREATE OR ALTER TRIGGER dbo.TR_tblHallazgos_NovedadDeTransporte
+ON dbo.tblHallazgos
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM inserted h
+               JOIN dbo.tblInspecciones i ON i.Id = h.InspeccionId
+               JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+               JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId
+               WHERE h.TipoNovedad IS NOT NULL AND (i.Momento <> ''salida'' OR c.Codigo <> ''transporte''))
+        THROW 51007, ''Una novedad del conductor es de la inspeccion de salida de Transporte'', 1;
+END');
+END
+GO
+
+/* -----------------------------------------------------------------------------
    vwPatronesPorCuadrante: hallazgos por zona para el mapa de calor y los patrones. Cuenta por zona (lado + numero, o la zona provisional), no solo
    por numero: izquierdo 7 y derecho 7 son filas distintas. Incluye los hallazgos de toda inspeccion CERRADA aunque la unidad no haya terminado el
    viaje, y excluye las novedades del conductor sin revisar y los hallazgos aun sin zona. Total = hallazgos del grupo.
@@ -1181,7 +1304,7 @@ GO
    ----------------------------------------------------------------------------- */
 DECLARE @tablaProtegida sysname, @sqlProtegida nvarchar(max);
 DECLARE cProtegidas CURSOR LOCAL FAST_FORWARD FOR
-    SELECT v FROM (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblTransferenciasCustodia'), (N'tblAuditLog'), (N'tblHallazgoSeguimiento')) AS t (v);
+    SELECT v FROM (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblTransferenciasCustodia'), (N'tblAuditLog'), (N'tblHallazgoSeguimiento'), (N'tblNotificaciones')) AS t (v);
 OPEN cProtegidas;
 FETCH NEXT FROM cProtegidas INTO @tablaProtegida;
 WHILE @@FETCH_STATUS = 0
