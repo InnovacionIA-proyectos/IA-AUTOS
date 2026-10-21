@@ -77,6 +77,44 @@ public sealed record HallazgoCreadoDto : HallazgoDto
 }
 
 /// <summary>
+/// Un hallazgo de una inspeccion cerrada anterior del mismo VIN, con el contexto de donde salio: la inspeccion (<c>InspeccionId</c> ya viene en el
+/// hallazgo), el viaje y su codigo, el proceso, el momento, cuando se cerro y sus fotos. Con ellos el cliente propone un hallazgo nuevo como preexistente
+/// comparando zona (lado + numero) y clase.
+/// </summary>
+public sealed record HallazgoPrevioDto : HallazgoDto
+{
+    public HallazgoPrevioDto(
+        HallazgoDto hallazgo,
+        Guid viajeId,
+        string? codigoMtrack,
+        string proceso,
+        string momento,
+        DateTimeOffset cerradaAt,
+        IReadOnlyList<EvidenciaDto> evidencias)
+        : base(hallazgo)
+    {
+        ViajeId = viajeId;
+        CodigoMtrack = codigoMtrack;
+        Proceso = proceso;
+        Momento = momento;
+        CerradaAt = cerradaAt;
+        Evidencias = evidencias;
+    }
+
+    public Guid ViajeId { get; init; }
+
+    public string? CodigoMtrack { get; init; }
+
+    public string Proceso { get; init; }
+
+    public string Momento { get; init; }
+
+    public DateTimeOffset CerradaAt { get; init; }
+
+    public IReadOnlyList<EvidenciaDto> Evidencias { get; init; }
+}
+
+/// <summary>
 /// La ruta interna de almacenamiento no se expone: el cliente recibe solo la URL servible. Cada foto trae su propio sello (fecha, ubicacion y
 /// precision del dispositivo), el del servidor (<c>SelloServidorAt</c>) y el hash SHA-256 del archivo. <c>SinUbicacion</c> marca la foto
 /// tomada sin senal de GPS (hay que repetirla antes de cerrar).

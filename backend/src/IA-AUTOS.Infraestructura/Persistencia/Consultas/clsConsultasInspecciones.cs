@@ -45,6 +45,51 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosAsync(Guid inspeccionId, CancellationToken ct = default)
+    {
+        var actual = await (from i in contexto.Inspecciones.AsNoTracking()
+                            join e in contexto.Etapas on i.EtapaId equals e.Id
+                            where i.Id == inspeccionId
+                            select new { i.IniciadaAt, i.CorrigeInspeccionId, e.VehiculoId }).FirstOrDefaultAsync(ct);
+        if (actual is null)
+        {
+            return [];
+        }
+
+        // Cerradas antes de que empezara esta, del mismo vehiculo; sin la version que esta corrige ni las que ya reemplazo una correccion cerrada.
+        var previas = await (from i in contexto.Inspecciones.AsNoTracking()
+                             join e in contexto.Etapas on i.EtapaId equals e.Id
+                             join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id
+                             join vj in contexto.Viajes on i.ViajeId equals vj.Id
+                             where e.VehiculoId == actual.VehiculoId
+                                && i.Id != inspeccionId
+                                && i.Id != actual.CorrigeInspeccionId
+                                && i.Estado == clsEstadoInspeccion.CERRADA
+                                && i.CerradaAt < actual.IniciadaAt
+                                && !contexto.Inspecciones.Any(c => c.CorrigeInspeccionId == i.Id && c.Estado == clsEstadoInspeccion.CERRADA)
+                             select new { i.Id, i.Momento, CerradaAt = i.CerradaAt!.Value, i.ViajeId, vj.CodigoMtrack, Proceso = p.Codigo }).ToListAsync(ct);
+        if (previas.Count == 0)
+        {
+            return [];
+        }
+
+        var ids = previas.Select(x => x.Id).ToList();
+        var hallazgos = await contexto.Hallazgos.AsNoTracking().Where(h => ids.Contains(h.InspeccionId)).ToListAsync(ct);
+        var dtos = (await new clsDescriptorHallazgos(contexto).DescribirAsync(hallazgos, ct)).ToDictionary(h => h.Id);
+        var hallazgoIds = hallazgos.Select(h => h.Id).ToList();
+        var fotos = (await contexto.Evidencias.AsNoTracking().Where(e => e.HallazgoId != null && hallazgoIds.Contains(e.HallazgoId.Value))
+            .OrderBy(e => e.CreatedAt).ToListAsync(ct)).ToLookup(e => e.HallazgoId!.Value);
+        var origenes = previas.ToDictionary(x => x.Id);
+
+        return hallazgos
+            .Select(h => (Hallazgo: h, Origen: origenes[h.InspeccionId]))
+            .OrderByDescending(x => x.Origen.CerradaAt).ThenByDescending(x => x.Hallazgo.CreatedAt)
+            .Select(x => new HallazgoPrevioDto(
+                dtos[x.Hallazgo.Id], x.Origen.ViajeId, x.Origen.CodigoMtrack, x.Origen.Proceso, x.Origen.Momento, x.Origen.CerradaAt,
+                fotos[x.Hallazgo.Id].Select(clsMapeadorInspecciones.AEvidencia).ToList()))
+            .ToList();
+    }
+
     public async Task<InformeDetalleDto?> ObtenerInformeAsync(Guid id, CancellationToken ct = default)
     {
         var fila = await (from i in contexto.Inspecciones.AsNoTracking()
