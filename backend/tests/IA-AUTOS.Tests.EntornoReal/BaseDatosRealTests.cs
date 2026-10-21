@@ -535,6 +535,50 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_tabla_de_parametros_esta_migrada_con_sus_parametros_iniciales()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/16-tabla-parametros.sql. Los valores no se comparan: el negocio los puede haber cambiado.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/16-tabla-parametros.sql.";
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblParametros' AND schema_id = SCHEMA_ID()");
+        Assert.True(tabla == 1, $"Falta tblParametros. {ayuda}");
+        var iniciales = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM tblParametros
+             WHERE Clave IN ('objetivo_diario_novedad', 'reporte_diario_destinatarios', 'reporte_diario_hora', 'horario_operacion_inicio', 'horario_operacion_fin',
+                             'retencion_dias', 'gps_precision_minima_m', 'url_firmada_minutos')
+            """);
+        var invalidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Tipo NOT IN ('numero', 'porcentaje', 'texto', 'lista', 'hora', 'correos')");
+        var lineaBase = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR Clave LIKE '%fotos_minimas%'");
+
+        Assert.True(iniciales == 8, $"Faltan parametros iniciales (hay {iniciales} de 8). {ayuda}");
+        Assert.Equal(0, invalidos);
+        Assert.Equal(0, lineaBase);
+    }
+
+    [FactEntornoReal]
+    public async Task Los_parametros_de_las_alertas_y_la_vista_de_la_ventana_de_umbral_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/17-parametros-de-alertas.sql. Los valores no se comparan: el negocio los puede haber cambiado.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/17-parametros-de-alertas.sql.";
+
+        var parametros = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM tblParametros
+             WHERE Clave IN ('niveles_criticos', 'umbral_patron_cantidad', 'umbral_patron_ventana_dias', 'captura_incompleta_minutos', 'transferencia_pendiente_minutos')
+            """);
+        var vista = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE name = N'vwHallazgosVentanaUmbral' AND schema_id = SCHEMA_ID()");
+        var tipoDeLaLista = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave = 'niveles_criticos' AND Tipo = 'lista'");
+        Assert.True(parametros == 5, $"Faltan parametros de alertas (hay {parametros} de 5). {ayuda}");
+        Assert.True(vista == 1, $"Falta vwHallazgosVentanaUmbral. {ayuda}");
+        Assert.Equal(1, tipoDeLaLista);
+
+        // La vista se puede leer con las columnas que usan los procesos de alertas.
+        var filas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwHallazgosVentanaUmbral WHERE Fecha IS NOT NULL AND ClienteId IS NOT NULL AND Proceso IS NOT NULL");
+        Assert.True(filas >= 0);
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

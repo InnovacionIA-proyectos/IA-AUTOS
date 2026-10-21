@@ -738,6 +738,33 @@ DELETE FROM dbo.tblNotificaciones WHERE ClaveDedupe LIKE N'zz_dedupe_%';
 ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
 DELETE FROM dbo.tblDispositivos WHERE TokenFcm LIKE N'zz-token-%';
 
+-- 7h) Parametros de las alertas y vista de la ventana de umbral
+INSERT #r SELECT N'Parametros de alertas: niveles criticos v1_plus,v1 (lista), umbral 10, ventana 30 dias, captura 30 min y transferencia 240 min',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'niveles_criticos' AND Valor = N'v1_plus,v1' AND Tipo = 'lista') = 1
+          AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'umbral_patron_cantidad' AND Valor = N'10' AND Tipo = 'numero') = 1
+          AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'umbral_patron_ventana_dias' AND Valor = N'30' AND Tipo = 'numero') = 1
+          AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'captura_incompleta_minutos' AND Valor = N'30' AND Tipo = 'numero') = 1
+          AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'transferencia_pendiente_minutos' AND Valor = N'240' AND Tipo = 'numero') = 1 THEN 1 ELSE 0 END, NULL;
+-- Un hallazgo del inspector en la llegada del Cargue de la unidad 5 y una novedad del conductor sin revisar en la salida de su Transporte (ya creada arriba): mientras las inspecciones estan en
+-- borrador la vista no trae ninguno; ya cerradas, trae solo el hallazgo del inspector hasta que la novedad se revisa.
+DECLARE @hvA uniqueidentifier = NEWID(), @hvB uniqueidentifier = NEWID();
+INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) VALUES (@hvA, @l5, (SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'), 'golpe', '5_10cm', 'v2');
+INSERT dbo.tblHallazgos (Id, InspeccionId, TamanoDano, Origen, TipoNovedad) VALUES (@hvB, @st5, '5_10cm', 'conductor', 'golpe');
+INSERT #r SELECT N'vwHallazgosVentanaUmbral: una inspeccion en borrador no trae hallazgos',
+    CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral WHERE HallazgoId IN (@hvA, @hvB)) THEN 1 ELSE 0 END, NULL;
+UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id IN (@l5, @st5);
+INSERT #r SELECT N'vwHallazgosVentanaUmbral: trae el hallazgo con su cliente, zona, proceso y fecha de cierre y excluye la novedad del conductor sin revisar',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral w WHERE w.HallazgoId = @hvA AND w.InspeccionId = @l5 AND w.ViajeId = @vj5 AND w.VehiculoId = @v5
+                       AND w.ClienteId = (SELECT ClienteId FROM dbo.tblVehiculos WHERE Id = @v5) AND w.ZonaCodigo = 'frente' AND w.Numero IS NULL AND w.Lado IS NULL
+                       AND w.Proceso = 'cargue' AND w.Fecha IS NOT NULL)
+          AND NOT EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral WHERE HallazgoId = @hvB) THEN 1 ELSE 0 END, NULL;
+UPDATE dbo.tblHallazgos SET ClaseDano = 'golpe', NivelSeveridad = 'v1', ZonaId = (SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'), RevisadoAt = SYSDATETIMEOFFSET(), RevisadoPor = @u1 WHERE Id = @hvB;
+INSERT #r SELECT N'vwHallazgosVentanaUmbral: la novedad revisada entra a la vista con su proceso',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral w WHERE w.HallazgoId = @hvB AND w.Proceso = 'transporte') THEN 1 ELSE 0 END, NULL;
+ALTER TABLE dbo.tblHallazgos DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblHallazgos WHERE Id IN (@hvA, @hvB);
+ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
+
 -- Limpieza: el vehiculo de prueba se borra quitando antes, de forma explicita, todo lo que cuelga de el.
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0006';
 DELETE FROM dbo.tblViajes WHERE CodigoMtrack = 'ZZ_TEST_MTK_6';
@@ -758,6 +785,44 @@ INSERT #r SELECT N'Indices del hallazgo: zona + clase con la inspeccion incluida
           AND (SELECT STRING_AGG(c.name, N',') WITHIN GROUP (ORDER BY ic.key_ordinal) FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
                WHERE ic.object_id = OBJECT_ID(N'dbo.tblHallazgos') AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE name = N'IX_tblHallazgos_Seguimiento' AND object_id = OBJECT_ID(N'dbo.tblHallazgos'))) = N'EstadoSeguimiento,Origen,RevisadoAt'
           AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblHallazgos_Parte_Clase' AND object_id = OBJECT_ID(N'dbo.tblHallazgos')) THEN 1 ELSE 0 END, NULL;
+
+-- 7g) Parametros: la tabla, sus filas iniciales y sus restricciones
+INSERT #r SELECT N'Parametros: la tabla existe con sus 8 filas iniciales (6 con valor y 2 sin valor) y sin linea base de rechazo',
+    CASE WHEN OBJECT_ID(N'dbo.tblParametros', N'U') IS NOT NULL
+          AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave IN ('objetivo_diario_novedad', 'reporte_diario_destinatarios', 'reporte_diario_hora', 'horario_operacion_inicio', 'horario_operacion_fin', 'retencion_dias', 'gps_precision_minima_m', 'url_firmada_minutos')) = 8
+          AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave IN ('reporte_diario_destinatarios', 'retencion_dias') AND Valor IS NULL) = 2
+          AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'objetivo_diario_novedad' AND Valor = N'1.2' AND Tipo = 'porcentaje') = 1
+          AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'reporte_diario_hora' AND Valor = N'06:00' AND Tipo = 'hora') = 1
+          AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'gps_precision_minima_m' AND Valor = N'30' AND Tipo = 'numero') = 1
+          AND NOT EXISTS (SELECT 1 FROM dbo.tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR Clave LIKE '%fotos_minimas%') THEN 1 ELSE 0 END, NULL;
+DECLARE @casosParam TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosParam VALUES
+ (N'Parametro: uno valido se guarda', N'INSERT dbo.tblParametros (Clave, Valor, Tipo, Descripcion) VALUES (''zz_param_1'', N''5'', ''numero'', N''prueba'')', 0),
+ (N'PK clave del parametro', N'INSERT dbo.tblParametros (Clave, Valor, Tipo, Descripcion) VALUES (''zz_param_1'', N''6'', ''numero'', N''prueba'')', 2627),
+ (N'CHECK tipo del parametro', N'INSERT dbo.tblParametros (Clave, Valor, Tipo, Descripcion) VALUES (''zz_param_2'', N''6'', ''fecha'', N''prueba'')', 547),
+ (N'CHECK el valor del parametro no es vacio (sin valor es nulo)', N'INSERT dbo.tblParametros (Clave, Valor, Tipo, Descripcion) VALUES (''zz_param_3'', N'''', ''texto'', N''prueba'')', 547),
+ (N'Parametro: sin valor es nulo', N'INSERT dbo.tblParametros (Clave, Valor, Tipo, Descripcion) VALUES (''zz_param_4'', NULL, ''lista'', N''prueba'')', 0),
+ (N'FK quien actualizo el parametro', N'UPDATE dbo.tblParametros SET ActualizadoPor = NEWID() WHERE Clave = ''zz_param_1''', 547),
+ (N'Parametro: se actualiza su valor y quien lo hizo', N'UPDATE dbo.tblParametros SET Valor = N''7'', ActualizadoPor = ''' + CAST(@u1 AS nvarchar(36)) + N''' WHERE Clave = ''zz_param_1''', 0);
+DECLARE @pruebaP nvarchar(200), @sentenciaP nvarchar(max), @esperadoP int, @obtenidoP int, @mensajeP nvarchar(4000);
+DECLARE cParam CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosParam;
+OPEN cParam;
+FETCH NEXT FROM cParam INTO @pruebaP, @sentenciaP, @esperadoP;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoP = 0; SET @mensajeP = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaP);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoP = ERROR_NUMBER(); SET @mensajeP = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaP, CASE WHEN @obtenidoP = @esperadoP THEN 1 ELSE 0 END, CASE WHEN @obtenidoP = @esperadoP THEN NULL ELSE CONCAT(N'esperaba ', @esperadoP, N' y fue ', @obtenidoP, N': ', @mensajeP) END);
+    FETCH NEXT FROM cParam INTO @pruebaP, @sentenciaP, @esperadoP;
+END
+CLOSE cParam;
+DEALLOCATE cParam;
+DELETE FROM dbo.tblParametros WHERE Clave LIKE 'zz_param_%';
 
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;

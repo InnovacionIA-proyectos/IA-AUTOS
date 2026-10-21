@@ -41,6 +41,10 @@
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-sello.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\15-notificaciones-y-dispositivos.sql" Link="database\cambios-esquema\15-notificaciones-y-dispositivos.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-notificaciones.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\16-tabla-parametros.sql" Link="database\cambios-esquema\16-tabla-parametros.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-parametros.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\17-parametros-de-alertas.sql" Link="database\cambios-esquema\17-parametros-de-alertas.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-alertas.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
