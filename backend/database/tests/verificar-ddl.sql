@@ -32,7 +32,9 @@ BEGIN
     ALTER TABLE dbo.tblHallazgos DISABLE TRIGGER ALL;
     ALTER TABLE dbo.tblInspecciones DISABLE TRIGGER ALL;
     ALTER TABLE dbo.tblHallazgoSeguimiento DISABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblNotificaciones DISABLE TRIGGER ALL;
     BEGIN TRY
+        DELETE FROM dbo.tblNotificaciones WHERE VehiculoId = @v OR InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblHallazgoSeguimiento WHERE HallazgoId IN (SELECT h.Id FROM dbo.tblHallazgos h WHERE h.InspeccionId IN (SELECT Id FROM @insp));
         DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblEvidencias WHERE InspeccionId IN (SELECT Id FROM @insp);
@@ -54,6 +56,7 @@ BEGIN
         ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
         ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
         ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
+        ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
         THROW;
     END CATCH
     ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
@@ -61,6 +64,7 @@ BEGIN
     ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
     ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
     ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
 END
 GO
 
@@ -476,7 +480,7 @@ INSERT #r SELECT N'Vehiculo: nace activo y tiene su indice',
     CASE WHEN EXISTS (SELECT 1 FROM dbo.tblVehiculos WHERE Vin = 'ZZ_TEST_VIN_0006' AND Activo = 1)
           AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblVehiculos_Activo' AND object_id = OBJECT_ID(N'dbo.tblVehiculos')) THEN 1 ELSE 0 END, NULL;
 DECLARE @bV uniqueidentifier = NEWID(), @bF uniqueidentifier = NEWID(), @bH uniqueidentifier = NEWID(), @bT uniqueidentifier = NEWID();
-INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (NEWID(), @v5, @vj5, @pc, 3), (NEWID(), @v5, @vj5, @pc, 4), (NEWID(), @v5, @vj5, @pc, 5), (NEWID(), @v5, @vj5, @pc, 6);
+INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (NEWID(), @v5, @vj5, @pc, 3), (NEWID(), @v5, @vj5, @pt, 4), (NEWID(), @v5, @vj5, @pc, 5), (NEWID(), @v5, @vj5, @pc, 6);
 INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES
  (@bV, (SELECT Id FROM dbo.tblEtapas WHERE VehiculoId = @v5 AND Orden = 3), @vj5, @u1, 'salida', SYSDATETIMEOFFSET()),
  (@bF, (SELECT Id FROM dbo.tblEtapas WHERE VehiculoId = @v5 AND Orden = 4), @vj5, @u1, 'salida', SYSDATETIMEOFFSET()),
@@ -643,7 +647,7 @@ INSERT #r SELECT N'Patrones: una inspeccion en borrador no cuenta',
 UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @bF;
 INSERT #r SELECT N'Patrones: izquierdo 7 y derecho 7 son filas distintas, con su nombre, proceso, nivel, clase y total',
     CASE WHEN (SELECT COUNT(*) FROM dbo.vwPatronesPorCuadrante WHERE CuadranteId = @cuad7) = 2
-          AND EXISTS (SELECT 1 FROM dbo.vwPatronesPorCuadrante WHERE CuadranteId = @cuad7 AND Lado = 'izquierdo' AND Numero = 7 AND Total = 2 AND Proceso = 'cargue'
+          AND EXISTS (SELECT 1 FROM dbo.vwPatronesPorCuadrante WHERE CuadranteId = @cuad7 AND Lado = 'izquierdo' AND Numero = 7 AND Total = 2 AND Proceso = 'transporte'
                         AND NivelSeveridad = 'v1_plus' AND ClaseDano = 'golpe' AND ClienteId = @cli AND Operacion = 'nacional'
                         AND ZonaNombre = N'Izquierdo 7 ' + NCHAR(183) + N' ZZ_TEST zona 7')
           AND EXISTS (SELECT 1 FROM dbo.vwPatronesPorCuadrante WHERE CuadranteId = @cuad7 AND Lado = 'derecho' AND Total = 1) THEN 1 ELSE 0 END, NULL;
@@ -684,6 +688,55 @@ INSERT #r SELECT N'Los registros protegidos siguen ahi despues de los intentos d
 ALTER TABLE dbo.tblAuditLog DISABLE TRIGGER ALL;
 DELETE FROM dbo.tblAuditLog WHERE Accion = N'zz_test.borrar';
 ALTER TABLE dbo.tblAuditLog ENABLE TRIGGER ALL;
+
+-- 7f) Notificaciones, dispositivos y la novedad del conductor
+DECLARE @st5 uniqueidentifier = NEWID(), @eT5 uniqueidentifier = (SELECT Id FROM dbo.tblEtapas WHERE ViajeId = @vj5 AND Orden = 2);
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@st5, @eT5, @vj5, @u1, 'salida', SYSDATETIMEOFFSET());
+DECLARE @casosNotif TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosNotif VALUES
+ (N'Notificacion: una valida se guarda', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,VehiculoId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''novedad_conductor'',''alta'',''' + CAST(@u1 AS nvarchar(36)) + N''',''' + CAST(@v5 AS nvarchar(36)) + N''',N''T'',N''M'',''bandeja'',''zz_dedupe_1'')', 0),
+ (N'UNIQUE clave de dedupe de la notificacion', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''novedad_conductor'',''alta'',''' + CAST(@u1 AS nvarchar(36)) + N''',N''T'',N''M'',''push'',''zz_dedupe_1'')', 2627),
+ (N'CHECK tipo de la notificacion', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''inventado'',''alta'',''' + CAST(@u1 AS nvarchar(36)) + N''',N''T'',N''M'',''bandeja'',''zz_dedupe_2'')', 547),
+ (N'CHECK el correo solo es del reporte diario', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''novedad_conductor'',''alta'',''' + CAST(@u1 AS nvarchar(36)) + N''',N''T'',N''M'',''correo'',''zz_dedupe_3'')', 547),
+ (N'CHECK solo el reporte diario no tiene destinatario', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''umbral_patron'',''media'',N''T'',N''M'',''bandeja'',''zz_dedupe_4'')', 547),
+ (N'Notificacion: el reporte diario va por correo y sin destinatario', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''reporte_diario'',''media'',N''T'',N''M'',''correo'',''zz_dedupe_5'')', 0),
+ (N'CHECK la respuesta es completa', N'UPDATE dbo.tblNotificaciones SET RespuestaTexto = N''solo texto'' WHERE ClaveDedupe = ''zz_dedupe_1''', 547),
+ (N'Notificacion: se lee', N'UPDATE dbo.tblNotificaciones SET LeidaAt = SYSDATETIMEOFFSET() WHERE ClaveDedupe = ''zz_dedupe_1''', 0),
+ (N'Notificacion: se responde', N'UPDATE dbo.tblNotificaciones SET RespuestaTexto = N''En camino'', RespuestaMedio = ''llamada'', RespondidaPor = ''' + CAST(@u1 AS nvarchar(36)) + N''', RespondidaAt = SYSDATETIMEOFFSET() WHERE ClaveDedupe = ''zz_dedupe_1''', 0),
+ (N'Trigger: una notificacion solo cambia su lectura y su respuesta', N'UPDATE dbo.tblNotificaciones SET Titulo = N''Otro'' WHERE ClaveDedupe = ''zz_dedupe_1''', 51006),
+ (N'Trigger: una notificacion no se borra', N'DELETE FROM dbo.tblNotificaciones WHERE ClaveDedupe = ''zz_dedupe_1''', 51003),
+ (N'Dispositivo: uno valido se guarda', N'INSERT dbo.tblDispositivos (Id,UsuarioId,TokenFcm,Plataforma) VALUES (NEWID(),''' + CAST(@u1 AS nvarchar(36)) + N''',''zz-token-1'',''android'')', 0),
+ (N'UNIQUE token FCM del dispositivo', N'INSERT dbo.tblDispositivos (Id,UsuarioId,TokenFcm,Plataforma) VALUES (NEWID(),''' + CAST(@u1 AS nvarchar(36)) + N''',''zz-token-1'',''ios'')', 2627),
+ (N'CHECK plataforma del dispositivo', N'INSERT dbo.tblDispositivos (Id,UsuarioId,TokenFcm,Plataforma) VALUES (NEWID(),''' + CAST(@u1 AS nvarchar(36)) + N''',''zz-token-2'',''symbian'')', 547),
+ (N'Novedad: la del conductor en la salida de Transporte se guarda sin zona, clase ni nivel', N'INSERT dbo.tblHallazgos (Id,InspeccionId,TamanoDano,Origen,TipoNovedad) VALUES (NEWID(),''' + CAST(@st5 AS nvarchar(36)) + N''',''5_10cm'',''conductor'',''golpe'')', 0),
+ (N'CHECK la novedad sin revisar no tiene nivel', N'INSERT dbo.tblHallazgos (Id,InspeccionId,TamanoDano,Origen,TipoNovedad,NivelSeveridad) VALUES (NEWID(),''' + CAST(@st5 AS nvarchar(36)) + N''',''5_10cm'',''conductor'',''golpe'',''v2'')', 547),
+ (N'CHECK la novedad sin revisar no tiene texto libre', N'INSERT dbo.tblHallazgos (Id,InspeccionId,TamanoDano,Origen,TipoNovedad,Nota) VALUES (NEWID(),''' + CAST(@st5 AS nvarchar(36)) + N''',''5_10cm'',''conductor'',''golpe'',N''texto'')', 547),
+ (N'CHECK la novedad revisada se completa', N'UPDATE dbo.tblHallazgos SET RevisadoAt = SYSDATETIMEOFFSET() WHERE InspeccionId = ''' + CAST(@st5 AS nvarchar(36)) + N''' AND TipoNovedad IS NOT NULL', 547),
+ (N'CHECK el conductor no asigna el nivel', N'INSERT dbo.tblHallazgos (Id,InspeccionId,TamanoDano,Origen,ClaseDano,NivelSeveridad) VALUES (NEWID(),''' + CAST(@s5 AS nvarchar(36)) + N''',''5_10cm'',''conductor'',''golpe'',''v1'')', 547),
+ (N'Trigger: una novedad solo es de la salida de Transporte', N'INSERT dbo.tblHallazgos (Id,InspeccionId,TamanoDano,Origen,TipoNovedad) VALUES (NEWID(),''' + CAST(@s5 AS nvarchar(36)) + N''',''5_10cm'',''conductor'',''golpe'')', 51007);
+DECLARE @pruebaN nvarchar(200), @sentenciaN nvarchar(max), @esperadoN int, @obtenidoN int, @mensajeN nvarchar(4000);
+DECLARE cNotif CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosNotif;
+OPEN cNotif;
+FETCH NEXT FROM cNotif INTO @pruebaN, @sentenciaN, @esperadoN;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoN = 0; SET @mensajeN = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaN);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoN = ERROR_NUMBER(); SET @mensajeN = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaN, CASE WHEN @obtenidoN = @esperadoN THEN 1 ELSE 0 END, CASE WHEN @obtenidoN = @esperadoN THEN NULL ELSE CONCAT(N'esperaba ', @esperadoN, N' y fue ', @obtenidoN, N': ', @mensajeN) END);
+    FETCH NEXT FROM cNotif INTO @pruebaN, @sentenciaN, @esperadoN;
+END
+CLOSE cNotif;
+DEALLOCATE cNotif;
+-- Limpieza de lo de esta seccion (las notificaciones solo se borran con su trigger apagado).
+ALTER TABLE dbo.tblNotificaciones DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblNotificaciones WHERE ClaveDedupe LIKE N'zz_dedupe_%';
+ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
+DELETE FROM dbo.tblDispositivos WHERE TokenFcm LIKE N'zz-token-%';
 
 -- Limpieza: el vehiculo de prueba se borra quitando antes, de forma explicita, todo lo que cuelga de el.
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0006';

@@ -39,6 +39,8 @@
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-acciones.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\14-sello-y-unidad-no-sale.sql" Link="database\cambios-esquema\14-sello-y-unidad-no-sale.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-sello.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\15-notificaciones-y-dispositivos.sql" Link="database\cambios-esquema\15-notificaciones-y-dispositivos.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-notificaciones.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>

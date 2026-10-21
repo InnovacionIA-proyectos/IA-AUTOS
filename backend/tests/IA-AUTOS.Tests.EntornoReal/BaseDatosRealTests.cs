@@ -512,6 +512,29 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Las_notificaciones_los_dispositivos_y_la_novedad_del_conductor_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/15-notificaciones-y-dispositivos.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/15-notificaciones-y-dispositivos.sql.";
+
+        var tablas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'tblNotificaciones', N'tblDispositivos') AND schema_id = SCHEMA_ID()");
+        var restricciones = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.check_constraints
+             WHERE name IN (N'CK_tblHallazgos_NovedadSinRevisar', N'CK_tblHallazgos_NovedadRevisada', N'CK_tblHallazgos_NivelDelConductor')
+               AND parent_object_id = OBJECT_ID(N'tblHallazgos', N'U')
+            """);
+        var triggers = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.triggers
+             WHERE name IN (N'TR_tblNotificaciones_SoloLecturaYRespuesta', N'TR_tblNotificaciones_NoBorrar', N'TR_tblHallazgos_NovedadDeTransporte')
+            """);
+
+        Assert.True(tablas == 2, $"Faltan tblNotificaciones o tblDispositivos. {ayuda}");
+        Assert.True(restricciones == 3, $"Faltan restricciones de la novedad del conductor en el hallazgo. {ayuda}");
+        Assert.True(triggers == 3, $"Faltan triggers de las notificaciones o de la novedad del conductor. {ayuda}");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();
