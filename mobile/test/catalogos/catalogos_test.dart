@@ -32,6 +32,21 @@ void main() {
       expect([for (final v in catalogos.todos(Catalogo.clasesDano)) v.codigo], ['golpe', 'mancha', 'raya_pintar']);
     });
 
+    test('opciones ordena por orden, sin confiar en el que mande el servidor', () {
+      final catalogos = Catalogos.desdeRespuesta(
+        respuesta(catalogos: {
+          Catalogo.clasesDano: [
+            valor('tercero', 'Tercero', orden: 3),
+            valor('primero', 'Primero', orden: 1),
+            valor('segundo', 'Segundo', orden: 2),
+          ],
+        }),
+        usuarioId: 'u1',
+      );
+
+      expect([for (final v in catalogos.opciones(Catalogo.clasesDano)) v.codigo], ['primero', 'segundo', 'tercero']);
+    });
+
     test('etiqueta resuelve el nombre, también el de un valor inactivo (informes viejos)', () {
       final catalogos = Catalogos.desdeRespuesta(respuesta(), usuarioId: 'u1');
 

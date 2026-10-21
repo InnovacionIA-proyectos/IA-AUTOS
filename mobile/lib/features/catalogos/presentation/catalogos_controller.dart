@@ -56,7 +56,33 @@ class CatalogosController extends Notifier<EstadoCatalogos> {
   /// Vuelve a intentarlo desde la pantalla de «sin catálogos».
   Future<void> reintentar() => cargar();
 
+  bool _cargando = false;
+  bool _pedidoDeNuevo = false;
+
+  /// Los tres disparadores pueden solaparse: el arranque, la transición de sesión y la vuelta de la señal llegan
+  /// casi a la vez. Sin esto se descargaría varias veces y una pasada vieja podría publicar su resultado después
+  /// de una nueva.
+  ///
+  /// No basta con descartar la llamada que llega mientras hay una en curso: la primera puede haber salido sin
+  /// sesión todavía y haber terminado sin hacer nada, y entonces se perdería la del login. Por eso se anota y se
+  /// repite al terminar.
   Future<void> cargar() async {
+    if (_cargando) {
+      _pedidoDeNuevo = true;
+      return;
+    }
+    _cargando = true;
+    try {
+      do {
+        _pedidoDeNuevo = false;
+        await _cargar();
+      } while (_pedidoDeNuevo);
+    } finally {
+      _cargando = false;
+    }
+  }
+
+  Future<void> _cargar() async {
     // Sin sesión la API responde 401 y la petición no aporta nada; es la misma guarda que usa la cola.
     final autenticacion = ref.read(authControllerProvider);
     if (autenticacion.fase != FaseAuth.autenticado) return;

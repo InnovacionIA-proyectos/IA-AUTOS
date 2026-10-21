@@ -45,7 +45,7 @@ class CatalogosRepositorio {
     final local = await leerCache(usuarioId);
     final propia = local != null && local.usuarioId == usuarioId;
 
-    var respuesta = await _pedir(propia ? local.version : null);
+    var respuesta = await _pedir(propia ? local.etag : null);
     if (respuesta.estado == 304) {
       if (propia) return local;
       // 304 sin una copia utilizable que conservar: se repite sin la condición para no quedar pidiendo
@@ -54,16 +54,21 @@ class CatalogosRepositorio {
     }
 
     // Se interpreta ANTES de guardar: si el cuerpo no sirve, la copia anterior queda intacta.
-    final catalogos = Catalogos.desdeRespuesta(_cuerpo(respuesta), usuarioId: usuarioId);
+    final catalogos = Catalogos.desdeRespuesta(
+      _cuerpo(respuesta),
+      usuarioId: usuarioId,
+      etag: respuesta.encabezado('ETag'),
+    );
     await _cache.escribir(clave, jsonEncode(catalogos.toJson()));
     return catalogos;
   }
 
-  /// `version` viaja entre comillas en `If-None-Match`, que es como la publica el `ETag` (ver CONTRATO.md).
-  Future<RespuestaApi> _pedir(String? version) => _api.enviar(
+  /// Se devuelve el validador tal como llego en el `ETag`, sin reconstruirlo: si un proxy lo reescribe (por
+  /// ejemplo anadiendo `-gzip`), uno armado a mano nunca casaria y se bajaria el catalogo completo cada vez.
+  Future<RespuestaApi> _pedir(String? etag) => _api.enviar(
         'GET',
         _ruta,
-        encabezados: version == null || version.isEmpty ? null : {'If-None-Match': '"$version"'},
+        encabezados: etag == null || etag.isEmpty ? null : {'If-None-Match': etag},
         estadosExtra: const {304},
       );
 

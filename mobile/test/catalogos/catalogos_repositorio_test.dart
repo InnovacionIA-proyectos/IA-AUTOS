@@ -76,6 +76,36 @@ void main() {
     expect(segunda.etiqueta(Catalogo.clasesDano, 'golpe'), 'Golpe');
   });
 
+  test('el validador se devuelve tal como lo mandó el servidor, no reconstruido desde la versión', () async {
+    // Un proxy puede reescribir el ETag (por ejemplo añadiendo -gzip). Armarlo a mano desde `version` nunca
+    // casaría y se bajaría el catálogo completo en cada revalidación.
+    final adaptador = AdaptadorFalso(
+      (opciones) => opciones.headers.containsKey('If-None-Match')
+          ? noModificado
+          : ResponseBody.fromString(
+              jsonEncode({
+                'version': 'v1',
+                'catalogos': {
+                  Catalogo.clasesDano: [
+                    {'id': 'i1', 'codigo': 'golpe', 'nombre': 'Golpe', 'orden': 1, 'activo': true},
+                  ],
+                },
+              }),
+              200,
+              headers: {
+                Headers.contentTypeHeader: ['application/json'],
+                'etag': ['"v1-gzip"'],
+              },
+            ),
+    );
+    final repo = repositorio(adaptador);
+    await repo.sincronizar('u1');
+
+    await repo.sincronizar('u1');
+
+    expect(enviado(adaptador, 1), '"v1-gzip"');
+  });
+
   test('una caché ilegible se trata como ausente: se descarga completa, sin condicionar', () async {
     await cache.escribir(CatalogosRepositorio.clave, 'esto no es json');
     final adaptador = AdaptadorFalso((_) => cuerpo('v2'));

@@ -71,6 +71,18 @@ void main() {
     expect(estado.catalogos!.etiqueta(Catalogo.clasesDano, 'golpe'), 'Golpe');
   });
 
+  test('dos cargas a la vez no descargan dos veces', () async {
+    final repositorio = CatalogosRepositorioFalso()..remoto = catalogosCon('Golpe');
+    final contenedor = await iniciar(Arnes(), repositorio);
+    final controlador = contenedor.read(catalogosControllerProvider.notifier);
+
+    await Future.wait([controlador.cargar(), controlador.cargar(), controlador.cargar()]);
+
+    // La del arranque, mas una sola pasada por las tres simultaneas (la segunda se anota y se repite una vez).
+    expect(repositorio.sincronizaciones, lessThanOrEqualTo(3));
+    expect(repositorio.sincronizaciones, greaterThanOrEqualTo(2));
+  });
+
   test('al volver una señal estable se revalida', () async {
     final repositorio = CatalogosRepositorioFalso()..remoto = catalogosCon('Golpe');
     final arnes = Arnes()..red.estable = false;

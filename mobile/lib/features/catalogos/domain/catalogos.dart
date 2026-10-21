@@ -55,8 +55,13 @@ class ValorCatalogo {
 /// El índice por código se arma una sola vez al construirla: las pantallas llaman a [etiqueta] en cada `build`, así
 /// que la búsqueda debe ser directa y no recorrer listas.
 class Catalogos {
-  Catalogos({required this.version, required this.usuarioId, required Map<String, List<ValorCatalogo>> porNombre})
-      : _porNombre = porNombre,
+  Catalogos({
+    required this.version,
+    required this.usuarioId,
+    required Map<String, List<ValorCatalogo>> porNombre,
+    String? etag,
+  })  : etag = etag == null || etag.isEmpty ? (version.isEmpty ? '' : '"$version"') : etag,
+        _porNombre = porNombre,
         _porCodigo = {
           for (final entrada in porNombre.entries)
             // Los valores sin código (cuadrantes, cuadrante-vistas) quedan fuera del índice: no se buscan así.
@@ -64,10 +69,12 @@ class Catalogos {
         };
 
   /// Copia de la API (`{version, catalogos}`), sellada con el usuario que la descargó.
-  factory Catalogos.desdeRespuesta(Map<String, dynamic> json, {required String usuarioId}) => Catalogos(
+  factory Catalogos.desdeRespuesta(Map<String, dynamic> json, {required String usuarioId, String? etag}) =>
+      Catalogos(
         version: json['version'] as String? ?? '',
         usuarioId: usuarioId,
         porNombre: _leerCatalogos(json['catalogos']),
+        etag: etag,
       );
 
   /// Copia guardada en el dispositivo. Si la descargó otra persona, se omiten los catálogos de
@@ -78,7 +85,12 @@ class Catalogos {
     if (dueno != usuarioId) {
       leidos.removeWhere((nombre, _) => catalogosPorUsuario.contains(nombre));
     }
-    return Catalogos(version: json['version'] as String? ?? '', usuarioId: dueno ?? '', porNombre: leidos);
+    return Catalogos(
+      version: json['version'] as String? ?? '',
+      usuarioId: dueno ?? '',
+      porNombre: leidos,
+      etag: json['etag'] as String?,
+    );
   }
 
   /// Sin copia descargada. `etiqueta()` devuelve el código tal cual y los selectores no tienen opciones, que es
@@ -86,6 +98,11 @@ class Catalogos {
   static final vacio = Catalogos(version: '', usuarioId: '', porNombre: const {});
 
   final String version;
+
+  /// Validador que se devuelve en `If-None-Match`, tal como lo mando el servidor (entre comillas y, si un proxy lo
+  /// reescribio, con el sufijo que le haya puesto). Si la respuesta no trajo `ETag` se arma con la version, que es
+  /// el mismo valor segun el contrato.
+  final String etag;
 
   /// Quién descargó esta copia. No particiona el almacenamiento (la clave es única y global): solo permite
   /// detectar que la copia es de otra persona.
@@ -95,7 +112,10 @@ class Catalogos {
   final Map<String, Map<String, ValorCatalogo>> _porCodigo;
 
   /// Valores que se ofrecen en un selector: solo los activos, en su orden.
-  List<ValorCatalogo> opciones(String catalogo) => [...?_porNombre[catalogo]?.where((v) => v.activo)];
+  ///
+  /// Se ordena aqui aunque la API ya los mande ordenados: asi el orden de la pantalla no depende de una promesa
+  /// del servidor que nada comprueba.
+  List<ValorCatalogo> opciones(String catalogo) => _ordenados(todos(catalogo).where((v) => v.activo));
 
   /// Todos los valores, activos e inactivos. Es lo que hay que usar para dibujar informes viejos: un hallazgo
   /// antiguo puede tener una clase que hoy está inactiva.
@@ -110,11 +130,15 @@ class Catalogos {
 
   Map<String, dynamic> toJson() => {
         'version': version,
+        'etag': etag,
         'usuarioId': usuarioId,
         'catalogos': {
           for (final entrada in _porNombre.entries) entrada.key: [for (final v in entrada.value) v.toJson()],
         },
       };
+
+  static List<ValorCatalogo> _ordenados(Iterable<ValorCatalogo> valores) =>
+      [...valores]..sort((a, b) => a.orden.compareTo(b.orden));
 
   static Map<String, List<ValorCatalogo>> _leerCatalogos(Object? crudo) {
     if (crudo is! Map) return {};
