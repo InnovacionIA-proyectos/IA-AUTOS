@@ -23,6 +23,9 @@ public static class clsCodigosError
     /// <summary>La llegada de Transporte de esa unidad ya estaba cerrada (409): un reintento del conductor es un exito, el servidor no la repite.</summary>
     public const string LLEGADA_YA_CERRADA = "LLEGADA_YA_CERRADA";
 
+    /// <summary>La novedad del conductor ya fue revisada por un inspector (409): su zona, clase y nivel ya no se cambian.</summary>
+    public const string HALLAZGO_YA_REVISADO = "HALLAZGO_YA_REVISADO";
+
     /// <summary>La unidad se marco «no sale» del viaje y ya no se transporta (409): no admite novedades ni llegada.</summary>
     public const string UNIDAD_NO_SALE = "UNIDAD_NO_SALE";
 

@@ -114,27 +114,35 @@ public sealed class FotoEvidenciaRequestValidator : AbstractValidator<FotoEviden
         clsReglasFoto.Aplicar(this, x => x.StoragePath, x => x.SelloFecha, x => x.SelloLat, x => x.SelloLng, x => x.Precision, x => x.DispositivoId, x => x.Nota, x => x.HashSha256);
 }
 
+/// <summary>La zona de un hallazgo: lado + numero de un cuadrante, o una zona provisional de la lista (exactamente una de las dos formas).</summary>
+internal static class clsReglasZona
+{
+    public static void Aplicar<T>(AbstractValidator<T> validador, Func<T, int?> cuadranteNumero, Func<T, string?> lado, Func<T, string?> zonaProvisional)
+    {
+        validador.RuleFor(x => cuadranteNumero(x)).Must((x, numero) => numero is not null ^ !string.IsNullOrWhiteSpace(zonaProvisional(x)))
+            .WithMessage("Indique el cuadrante (cuadrante_numero y lado) o una zona provisional (zona_provisional), no ambos ni ninguno").OverridePropertyName("CuadranteNumero");
+        validador.RuleFor(x => cuadranteNumero(x)).GreaterThanOrEqualTo(1).When(x => cuadranteNumero(x) is not null)
+            .WithMessage("El número del cuadrante debe ser un entero >= 1").OverridePropertyName("CuadranteNumero");
+        validador.RuleFor(x => lado(x)).Must(l => l is not null && clsLado.VALORES.Contains(l))
+            .When(x => cuadranteNumero(x) is { } n && n >= 1 && clsLado.LlevaLado(n))
+            .WithMessage("El lado es requerido del cuadrante 1 al 25 (izquierdo o derecho)").OverridePropertyName("Lado");
+        validador.RuleFor(x => lado(x)).Must(l => l is null)
+            .When(x => cuadranteNumero(x) is { } n && n > clsLado.ULTIMO_NUMERO_CON_LADO)
+            .WithMessage("Del cuadrante 26 en adelante no se envía el lado").OverridePropertyName("Lado");
+        validador.RuleFor(x => lado(x)).Must(l => l is null)
+            .When(x => cuadranteNumero(x) is null && !string.IsNullOrWhiteSpace(zonaProvisional(x)))
+            .WithMessage("Una zona provisional no lleva lado").OverridePropertyName("Lado");
+        validador.RuleFor(x => zonaProvisional(x)).Must(z => z is not null && clsZonaProvisional.VALORES.Contains(z))
+            .When(x => !string.IsNullOrWhiteSpace(zonaProvisional(x)))
+            .WithMessage("Zona provisional inválida").OverridePropertyName("ZonaProvisional");
+    }
+}
+
 public sealed class CrearHallazgoRequestValidator : AbstractValidator<CrearHallazgoRequest>
 {
     public CrearHallazgoRequestValidator()
     {
-        // La zona es lado + numero de un cuadrante, o una zona provisional de la lista: exactamente una de las dos formas.
-        RuleFor(x => x.CuadranteNumero).Must((x, numero) => numero is not null ^ !string.IsNullOrWhiteSpace(x.ZonaProvisional))
-            .WithMessage("Indique el cuadrante (cuadrante_numero y lado) o una zona provisional (zona_provisional), no ambos ni ninguno");
-        RuleFor(x => x.CuadranteNumero).GreaterThanOrEqualTo(1).When(x => x.CuadranteNumero is not null)
-            .WithMessage("El número del cuadrante debe ser un entero >= 1");
-        RuleFor(x => x.Lado).Must(l => l is not null && clsLado.VALORES.Contains(l))
-            .When(x => x.CuadranteNumero is { } n && n >= 1 && clsLado.LlevaLado(n))
-            .WithMessage("El lado es requerido del cuadrante 1 al 25 (izquierdo o derecho)");
-        RuleFor(x => x.Lado).Must(l => l is null)
-            .When(x => x.CuadranteNumero is { } n && n > clsLado.ULTIMO_NUMERO_CON_LADO)
-            .WithMessage("Del cuadrante 26 en adelante no se envía el lado");
-        RuleFor(x => x.Lado).Must(l => l is null)
-            .When(x => x.CuadranteNumero is null && !string.IsNullOrWhiteSpace(x.ZonaProvisional))
-            .WithMessage("Una zona provisional no lleva lado");
-        RuleFor(x => x.ZonaProvisional).Must(z => z is not null && clsZonaProvisional.VALORES.Contains(z))
-            .When(x => !string.IsNullOrWhiteSpace(x.ZonaProvisional))
-            .WithMessage("Zona provisional inválida");
+        clsReglasZona.Aplicar(this, x => x.CuadranteNumero, x => x.Lado, x => x.ZonaProvisional);
         RuleFor(x => x.ClaseDano).Must(c => !string.IsNullOrWhiteSpace(c)).WithMessage("Clase de daño inválida");
         RuleFor(x => x.TamanoDano).Must(t => !string.IsNullOrWhiteSpace(t)).WithMessage("Tamaño de daño inválido");
         RuleFor(x => x.Nota).Must(n => n is null || n.Trim().Length <= clsHallazgo.NOTA_MAX)

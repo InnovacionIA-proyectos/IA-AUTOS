@@ -13,7 +13,7 @@ namespace IAAutos.API.Controllers.Inspecciones;
 /// (coordinador de calidad, comercial y administradores, capacidad <c>gestionar_seguimiento</c>).
 /// </summary>
 [Route("api/hallazgos")]
-public sealed class clsHallazgosController(clsSeguimientoService seguimiento, clsHallazgosService hallazgos) : clsControladorBase
+public sealed class clsHallazgosController(clsSeguimientoService seguimiento, clsHallazgosService hallazgos, clsRevisionService revision) : clsControladorBase
 {
     /// <summary>
     /// Una pagina de hallazgos (<c>items</c>, <c>total</c>, <c>pagina</c>, <c>tamano</c> hasta 200) con filtros <c>estado_seguimiento</c>, <c>origen</c>, <c>revisado</c> (solo novedades del
@@ -49,6 +49,18 @@ public sealed class clsHallazgosController(clsSeguimientoService seguimiento, cl
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.COMERCIAL, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
     [ProducesResponseType<HallazgoDetalleDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Obtener(Guid id, CancellationToken ct) => Ok(await hallazgos.ObtenerAsync(id, ct));
+
+    /// <summary>
+    /// Revisa el hallazgo que registro el conductor: <c>cuadrante_numero</c> + <c>lado</c> (o <c>zona_provisional</c>), <c>clase_dano</c> y <c>nivel_severidad</c> son obligatorios, <c>tamano_dano</c> corrige el que
+    /// eligio el conductor y <c>nota</c> es opcional. Lo hacen el inspector (de un VIN de sus viajes) y los administradores, y el coordinador de calidad solo con los de la salida de un Cargue sin personal de
+    /// apoyo. 409 si el hallazgo no es del conductor y 409 HALLAZGO_YA_REVISADO si ya se reviso. Queda en el historial y, si el nivel es critico, alerta al coordinador y al administrador del cliente.
+    /// </summary>
+    [HttpPost("{id:guid}/revision")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType<HallazgoDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(RevisarHallazgoRequest))]
+    public async Task<IActionResult> Revisar(Guid id, CancellationToken ct) =>
+        Ok(await revision.RevisarAsync(id, await LeerCuerpoAsync<RevisarHallazgoRequest>(ct), ct));
 
     /// <summary>
     /// Cambia el estado del hallazgo. Un hallazgo V2 se valida con <c>evidencia_sello</c> (la foto del sello de quien valida, 400 si falta). 409 si su inspeccion esta en borrador

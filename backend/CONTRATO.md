@@ -72,6 +72,7 @@ Todos los errores son JSON con la misma forma:
 | `PORTAL_USER_NOT_LINKED` | 403 | la persona del portal no tiene acceso a IA Autos (solo en `login-portal`) |
 | `ETAPA_PREVIA_SIN_CIERRE` | 409 | la etapa anterior del VIN no está terminada: no tiene su llegada cerrada (`details.motivo: "etapa_previa_sin_cierre"`) o su transferencia no tiene tipo de cierre (`"transferencia_sin_cierre"`); no se puede crear la salida de la siguiente (`details.etapa_previa` dice cuál) |
 | `LLEGADA_YA_CERRADA` | 409 | la llegada de Transporte de esa unidad ya estaba confirmada: es un éxito para un reintento (ver «Conductor en ruta») |
+| `HALLAZGO_YA_REVISADO` | 409 | la novedad del conductor ya fue revisada: su zona, clase y nivel ya no se cambian (ver «Revisión de la novedad») |
 | `UNIDAD_NO_SALE` | 409 | la unidad se marcó «no sale» del viaje: no admite novedades ni llegada |
 | `PIN_CHANGE_REQUIRED` | 403 | el PIN fue asignado o reiniciado por un administrador: hay que cambiarlo (`POST /api/auth/cambiar-pin`) antes de usar el resto de la API |
 | `ACCOUNT_LOCKED` | 423 | la cuenta está bloqueada por PIN errados seguidos; `details.bloqueado_hasta` (ISO 8601) dice hasta cuándo, o un administrador la desbloquea |
@@ -954,6 +955,45 @@ Cada fila (`HallazgoListadoDto`) es el `HallazgoDto` más el contexto de su insp
 
 ### `GET /api/hallazgos/{id}`
 La misma fila más `seguimiento` (el historial, como en `GET /api/hallazgos/{id}/seguimiento`) y `notas_aclaratorias` (un arreglo que va vacío hasta que existan las notas aclaratorias de una inspección cerrada). `404` si no existe; `403` si es de un viaje ajeno (inspector) o de otro cliente.
+
+## Revisión de la novedad
+
+La novedad que registra el conductor nace sin zona, clase ni nivel V: un inspector la revisa, la ubica y le asigna el nivel, que el conductor nunca asigna. A partir de la revisión el hallazgo entra al seguimiento y a los patrones. También se revisan
+así los hallazgos que el conductor registra en la salida de un Cargue sin personal de apoyo (que tampoco traen nivel).
+
+### `POST /api/hallazgos/{id}/revision`
+
+```json
+{ "cuadrante_numero": 7, "lado": "izquierdo", "clase_dano": "golpe", "nivel_severidad": "v1", "tamano_dano": "5_10cm", "nota": "Abolladura sobre la puerta" }
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `cuadrante_numero` + `lado`, o `zona_provisional` | sí, una de las dos formas | las mismas reglas de la zona de `POST /api/inspecciones/{id}/hallazgos` (lado del 1 al 25, sin lado del 26 en adelante; cuadrante o zona provisional **activos**) |
+| `clase_dano` | sí | un código **activo** de `clases-dano` |
+| `nivel_severidad` | sí | un código **activo** de `niveles-severidad` (`v1_plus`, `v1`, `v2`, `v3`) |
+| `tamano_dano` | no | corrige el que eligió el conductor (un código activo de `tamanos-dano`); sin él se conserva el del conductor |
+| `nota` | no | máximo 500 caracteres |
+
+Responde `200` con el `HallazgoDto` ya completo: `revisado_por` y `revisado_at` quedan guardados y `estado_seguimiento` sigue `pendiente`. Queda una fila `revision` en el historial del hallazgo (`GET /api/hallazgos/{id}/seguimiento`) con quién la hizo, su `nota` y en
+`detalle` lo asignado: `zona_id`, `cuadrante_numero`, `lado`, `zona_provisional`, `clase_dano`, `nivel_severidad`, `tamano_dano` y `tamano_dano_anterior` (solo si se corrigió el tamaño). Queda en la auditoría (`hallazgo.revision`). Sin la revisión, el seguimiento del hallazgo responde `409`.
+
+**Quién revisa.**
+
+| Rol | Qué revisa |
+|---|---|
+| `inspector` | hallazgos de un VIN que está en alguno de sus viajes (`403` si no) |
+| `admin` y `super_admin` | los de su cliente (el `super_admin`, los de cualquiera) |
+| `coordinador_calidad` | **solo** los hallazgos del conductor de la salida de un Cargue **sin personal de apoyo** (`403` en cualquier otro caso): los revisa a distancia con las fotos y les asigna el nivel V antes de que salga el viaje, de modo que un V1+ todavía se puede recuperar o marcar «no sale». Propuesta pendiente de confirmar por el negocio |
+| los demás roles | `403` |
+
+Quien se limita a su cliente recibe `403` con un hallazgo de otro cliente.
+
+**Errores.** `400` si falta o es inválida la zona, la clase o el nivel (todos los errores juntos en `details.fieldErrors`); `404` si el hallazgo no existe; `409` con `code: "CONFLICT"` si el hallazgo **no es del conductor**; `409` con `code: "HALLAZGO_YA_REVISADO"`
+si ya fue revisado, también si dos usuarios lo revisan a la vez (solo la primera revisión se guarda y se conserva).
+
+**Hallazgo crítico.** Si el `nivel_severidad` asignado es crítico, se crea una notificación `hallazgo_critico` de urgencia **alta** para cada `coordinador_calidad` y `admin` activo del cliente del vehículo, por bandeja y push (ver [Notificaciones](#notificaciones)).
+Los niveles críticos se leen de la configuración `Alertas__NivelesCriticos__0`, `__1`... (por defecto solo `v1_plus`).
 
 ## Seguimiento del hallazgo
 

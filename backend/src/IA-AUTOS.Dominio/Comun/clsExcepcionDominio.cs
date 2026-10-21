@@ -106,6 +106,15 @@ public sealed class clsLlegadaYaCerradaException : clsExcepcionDominio
     }
 }
 
+/// <summary>La novedad del conductor ya fue revisada: 409 HALLAZGO_YA_REVISADO.</summary>
+public sealed class clsHallazgoYaRevisadoException : clsExcepcionDominio
+{
+    public clsHallazgoYaRevisadoException()
+        : base(clsCodigosError.HALLAZGO_YA_REVISADO, "El hallazgo ya fue revisado: su zona, clase y nivel ya no se cambian")
+    {
+    }
+}
+
 /// <summary>La unidad no sale del viaje, asi que no se transporta: 409 UNIDAD_NO_SALE.</summary>
 public sealed class clsUnidadNoSaleException : clsExcepcionDominio
 {

@@ -70,7 +70,8 @@ internal sealed class clsConfiguracionHallazgo : IEntityTypeConfiguration<clsHal
         builder.Property(h => h.Origen).HasColumnType("varchar(10)").IsRequired();
         builder.Property(h => h.Nota).HasMaxLength(clsHallazgo.NOTA_MAX);
         builder.Property(h => h.EstadoSeguimiento).HasColumnType("varchar(15)").IsRequired();
-        builder.Property(h => h.RevisadoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        // La revision solo se hace una vez: si dos usuarios revisan a la vez, el cambio del segundo no encuentra el hallazgo sin revisar y se rechaza.
+        builder.Property(h => h.RevisadoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA).IsConcurrencyToken();
         builder.HasOne<clsZonaDano>().WithMany().HasForeignKey(h => h.ZonaId)
             .HasConstraintName("FK_tblHallazgos_Zona").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsNivelSeveridad>().WithMany().HasForeignKey(h => h.NivelSeveridad).HasPrincipalKey(n => n.Codigo)
