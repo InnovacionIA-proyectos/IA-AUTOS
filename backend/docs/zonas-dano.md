@@ -85,6 +85,15 @@ Las coordenadas del modelo anterior eran sobre una sola imagen distinta a los pa
 (techo, capot, parabrisas, stop, puertas, guardafangos...) quedan con zona nula y `MigracionPendiente = 1`; conservan su parte y sus coordenadas, y el script los lista en su reporte para ubicarlos a mano.
 Todos quedan con `Origen = inspector`, `EstadoSeguimiento = pendiente` y sin nivel.
 
+## Indices de consulta del hallazgo
+
+| Indice | Columnas | Lo usan |
+|---|---|---|
+| `IX_tblHallazgos_Zona_Clase` | `ZonaId`, `ClaseDano`, con `InspeccionId` incluida | la propuesta de hallazgo preexistente (misma zona y clase en el VIN) y el mapa de calor |
+| `IX_tblHallazgos_Seguimiento` | `EstadoSeguimiento`, `Origen`, `RevisadoAt` | la bandeja del coordinador y la de las novedades del conductor por revisar |
+
+Reemplazan a `IX_tblHallazgos_Parte_Clase` (parte del vehiculo y clase, del modelo anterior), que se quita. Los indices de las demas tablas son de las tareas que las crean.
+
 ## La unidad que no sale
 
 `tblViajeVehiculos` gana `EstadoUnidad` (`activa` por defecto o `no_sale`), `NoSaleMotivo` (hasta 500 caracteres), `NoSaleHallazgoId`, `NoSaleMarcadoPor`, `NoSaleAt` y `ReemplazoVehiculoId`.
