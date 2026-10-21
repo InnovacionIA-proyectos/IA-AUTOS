@@ -1,0 +1,130 @@
+/// Catálogos maestros descargados de `GET /api/catalogos`. Son administrables desde el portal, así que la app NO
+/// los lleva fijos en el código: guarda la última copia y la usa aunque no haya señal.
+///
+/// Los valores son heterogéneos (`vistas-foto` trae `obligatoria` y `tipo_vehiculo`, `niveles-severidad` trae
+/// `accion`, `cuadrantes` trae `numero` y no trae `codigo`), por eso se guarda el ítem completo y no un mapa de
+/// código a texto: cada pantalla lee los campos que necesita.
+library;
+
+/// Nombres de los catálogos tal como los sirve la API y como se usan de clave.
+abstract final class Catalogo {
+  static const etapas = 'etapas';
+  static const puntosCustodia = 'puntos-custodia';
+  static const tiposUnidad = 'tipos-unidad';
+  static const clasesDano = 'clases-dano';
+  static const tamanosDano = 'tamanos-dano';
+  static const nivelesSeveridad = 'niveles-severidad';
+  static const vistasFoto = 'vistas-foto';
+  static const cuadrantes = 'cuadrantes';
+  static const cuadranteVistas = 'cuadrante-vistas';
+  static const clientes = 'clientes';
+}
+
+/// Catálogos que hoy la API sirve iguales para todos, pero que podría pasar a filtrar por el cliente del usuario.
+/// Si la copia guardada la descargó otra persona, estos no se entregan desde la caché (ver [Catalogos.desdeAlmacen]).
+const catalogosPorUsuario = {Catalogo.clientes};
+
+/// Un valor de catálogo tal como lo sirve la API: `id`, `codigo`, `nombre`, `orden`, `activo` y los campos propios
+/// de su catálogo. Se conserva el mapa completo para no perder los campos que todavía no se usan.
+class ValorCatalogo {
+  const ValorCatalogo(this.campos);
+
+  final Map<String, dynamic> campos;
+
+  String get id => campos['id'] as String? ?? '';
+
+  /// Clave estable del valor (lo que viaja en el resto de la API). `cuadrantes` y `cuadrante-vistas` no la tienen.
+  String? get codigo => campos['codigo'] as String?;
+
+  /// Etiqueta para mostrar. Puede cambiar; nunca se usa como clave.
+  String get nombre => campos['nombre'] as String? ?? codigo ?? '';
+
+  int get orden => (campos['orden'] as num?)?.toInt() ?? 0;
+
+  /// Un valor inactivo ya no se ofrece en los selectores, pero sigue siendo válido en lo ya guardado.
+  bool get activo => campos['activo'] as bool? ?? true;
+
+  /// Campo propio del catálogo (`obligatoria`, `accion`, `numero`, `tipo_vehiculo`, `geometria`...).
+  T? campo<T>(String nombre) => campos[nombre] is T ? campos[nombre] as T : null;
+
+  Map<String, dynamic> toJson() => campos;
+}
+
+/// Copia inmutable de los catálogos, con su versión (el `ETag` del servidor).
+///
+/// El índice por código se arma una sola vez al construirla: las pantallas llaman a [etiqueta] en cada `build`, así
+/// que la búsqueda debe ser directa y no recorrer listas.
+class Catalogos {
+  Catalogos({required this.version, required this.usuarioId, required Map<String, List<ValorCatalogo>> porNombre})
+      : _porNombre = porNombre,
+        _porCodigo = {
+          for (final entrada in porNombre.entries)
+            // Los valores sin código (cuadrantes, cuadrante-vistas) quedan fuera del índice: no se buscan así.
+            entrada.key: {for (final valor in entrada.value) ?valor.codigo: valor},
+        };
+
+  /// Copia de la API (`{version, catalogos}`), sellada con el usuario que la descargó.
+  factory Catalogos.desdeRespuesta(Map<String, dynamic> json, {required String usuarioId}) => Catalogos(
+        version: json['version'] as String? ?? '',
+        usuarioId: usuarioId,
+        porNombre: _leerCatalogos(json['catalogos']),
+      );
+
+  /// Copia guardada en el dispositivo. Si la descargó otra persona, se omiten los catálogos de
+  /// [catalogosPorUsuario]: el día que la API los filtre por cliente, un usuario no verá los del anterior.
+  factory Catalogos.desdeAlmacen(Map<String, dynamic> json, {required String usuarioId}) {
+    final dueno = json['usuarioId'] as String?;
+    final leidos = _leerCatalogos(json['catalogos']);
+    if (dueno != usuarioId) {
+      leidos.removeWhere((nombre, _) => catalogosPorUsuario.contains(nombre));
+    }
+    return Catalogos(version: json['version'] as String? ?? '', usuarioId: dueno ?? '', porNombre: leidos);
+  }
+
+  /// Sin copia descargada. `etiqueta()` devuelve el código tal cual y los selectores no tienen opciones, que es
+  /// justo lo que debe bloquear la captura.
+  static final vacio = Catalogos(version: '', usuarioId: '', porNombre: const {});
+
+  final String version;
+
+  /// Quién descargó esta copia. No particiona el almacenamiento (la clave es única y global): solo permite
+  /// detectar que la copia es de otra persona.
+  final String usuarioId;
+
+  final Map<String, List<ValorCatalogo>> _porNombre;
+  final Map<String, Map<String, ValorCatalogo>> _porCodigo;
+
+  /// Valores que se ofrecen en un selector: solo los activos, en su orden.
+  List<ValorCatalogo> opciones(String catalogo) => [...?_porNombre[catalogo]?.where((v) => v.activo)];
+
+  /// Todos los valores, activos e inactivos. Es lo que hay que usar para dibujar informes viejos: un hallazgo
+  /// antiguo puede tener una clase que hoy está inactiva.
+  List<ValorCatalogo> todos(String catalogo) => [...?_porNombre[catalogo]];
+
+  /// Valor por su código, activo o no; null si el catálogo o el código no existen.
+  ValorCatalogo? valor(String catalogo, String codigo) => _porCodigo[catalogo]?[codigo];
+
+  /// Etiqueta de un código. Busca entre todos (un informe viejo puede traer un valor ya inactivo) y, si no lo
+  /// encuentra, devuelve el código tal cual: igual que hacía `etiquetar()` con los mapas fijos.
+  String etiqueta(String catalogo, String codigo) => valor(catalogo, codigo)?.nombre ?? codigo;
+
+  Map<String, dynamic> toJson() => {
+        'version': version,
+        'usuarioId': usuarioId,
+        'catalogos': {
+          for (final entrada in _porNombre.entries) entrada.key: [for (final v in entrada.value) v.toJson()],
+        },
+      };
+
+  static Map<String, List<ValorCatalogo>> _leerCatalogos(Object? crudo) {
+    if (crudo is! Map) return {};
+    return {
+      for (final entrada in crudo.entries)
+        if (entrada.value is List)
+          entrada.key as String: [
+            for (final item in entrada.value as List)
+              if (item is Map<String, dynamic>) ValorCatalogo(item),
+          ],
+    };
+  }
+}

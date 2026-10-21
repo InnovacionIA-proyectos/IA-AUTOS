@@ -52,6 +52,8 @@ void main() {
     'CoordsDiagramaDto': ['x', 'y'],
     'EvidenciaDto': ['id', 'url'],
     'InspeccionListadoDto': ['id', 'vin', 'momento', 'fecha', 'estado'],
+    // Los catálogos maestros no son listas fijas en la app: se descargan y se guardan con su versión.
+    'CatalogosDto': ['version', 'catalogos'],
     'InspeccionDto': ['id'],
     'ArchivoSubidoDto': ['storage_path'],
     'OrdenSofasaDto': [
@@ -86,6 +88,7 @@ void main() {
     const usos = <(String, String)>[
       ('post', '/api/auth/login'),
       ('get', '/api/usuarios'),
+      ('get', '/api/catalogos'),
       ('get', '/api/vehiculos/{}/inventario'),
       ('get', '/api/inspecciones'),
       ('post', '/api/inspecciones'),
