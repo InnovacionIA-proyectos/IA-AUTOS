@@ -116,7 +116,7 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
     public async Task<clsResumenCierre> ObtenerResumenCierreAsync(Guid inspeccionId, CancellationToken ct = default)
     {
         var evidencias = await contexto.Evidencias.AsNoTracking()
-            .Where(e => e.InspeccionId == inspeccionId && !e.EsConstancia)
+            .Where(e => e.InspeccionId == inspeccionId && !e.EsConstancia && !e.EsSello)
             .Select(e => new { e.Id, e.VistaId, e.HallazgoId, e.SelloLat, e.SelloLng, e.SelloServidorAt })
             .ToListAsync(ct);
         var hallazgos = await contexto.Hallazgos.AsNoTracking().Where(h => h.InspeccionId == inspeccionId).Select(h => h.Id).ToListAsync(ct);
@@ -181,11 +181,23 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
          where actual.Id == inspeccionId && ip.Id != inspeccionId && ip.Estado == clsEstadoInspeccion.CERRADA && ep.VehiculoId == ea.VehiculoId && h.ZonaId == zonaId && h.ClaseDano == claseDano
          select h.Id).AnyAsync(ct);
 
+    public Task<clsHallazgo?> ObtenerHallazgoAsync(Guid id, CancellationToken ct = default) => contexto.Hallazgos.FirstOrDefaultAsync(h => h.Id == id, ct);
+
+    public async Task<IReadOnlyList<clsHallazgo>> ObtenerHallazgosDeInspeccionAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        await contexto.Hallazgos.Where(h => h.InspeccionId == inspeccionId).ToListAsync(ct);
+
+    public async Task<IReadOnlySet<Guid>> HallazgosConFotoAsync(IReadOnlyCollection<Guid> hallazgoIds, CancellationToken ct = default) =>
+        (await contexto.Evidencias.AsNoTracking()
+            .Where(e => e.HallazgoId != null && hallazgoIds.Contains(e.HallazgoId.Value) && !e.EsSello && !e.EsConstancia)
+            .Select(e => e.HallazgoId!.Value).Distinct().ToListAsync(ct)).ToHashSet();
+
     public void Agregar(clsInspeccion inspeccion) => contexto.Inspecciones.Add(inspeccion);
 
     public void Agregar(clsHallazgo hallazgo) => contexto.Hallazgos.Add(hallazgo);
 
     public void Agregar(clsEvidencia evidencia) => contexto.Evidencias.Add(evidencia);
+
+    public void Agregar(clsHallazgoSeguimiento seguimiento) => contexto.HallazgosSeguimiento.Add(seguimiento);
 }
 
 internal sealed class clsTransferenciaCustodiaRepository(clsAppDbContext contexto) : ITransferenciaCustodiaRepository

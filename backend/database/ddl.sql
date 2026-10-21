@@ -747,6 +747,7 @@ BEGIN
         DispositivoId nvarchar(100)    NULL,
         Nota          nvarchar(500)    NULL,
         EsConstancia  bit              NOT NULL CONSTRAINT DF_tblEvidencias_EsConstancia DEFAULT (0),
+        EsSello       bit              NOT NULL CONSTRAINT DF_tblEvidencias_EsSello DEFAULT (0),
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblEvidencias_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
@@ -755,7 +756,9 @@ BEGIN
         CONSTRAINT CK_tblEvidencias_Lat CHECK (SelloLat BETWEEN -90 AND 90),
         CONSTRAINT CK_tblEvidencias_Lng CHECK (SelloLng BETWEEN -180 AND 180),
         CONSTRAINT CK_tblEvidencias_Precision CHECK (Precision IS NULL OR Precision >= 0),
-        CONSTRAINT CK_tblEvidencias_Hash CHECK (HashSha256 IS NULL OR HashSha256 NOT LIKE '%[^0-9a-f]%')
+        CONSTRAINT CK_tblEvidencias_Hash CHECK (HashSha256 IS NULL OR HashSha256 NOT LIKE '%[^0-9a-f]%'),
+        -- La foto del sello de quien valida (EsSello) no es de una vista, de un hallazgo ni una constancia.
+        CONSTRAINT CK_tblEvidencias_Sello CHECK (EsSello = 0 OR (HallazgoId IS NULL AND VistaId IS NULL AND EsConstancia = 0))
     );
     EXEC (N'CREATE INDEX IX_tblEvidencias_Vista ON dbo.tblEvidencias (VistaId)');
     CREATE INDEX IX_tblEvidencias_Inspeccion ON dbo.tblEvidencias (InspeccionId);
@@ -1088,18 +1091,36 @@ IF OBJECT_ID(N'dbo.vwVehiculosMovilizados', N'V') IS NOT NULL
     DROP VIEW dbo.vwVehiculosMovilizados;
 GO
 
-CREATE OR ALTER VIEW dbo.vwViajesCompletos
+-- Una unidad marcada "no sale" en un viaje no cuenta como completa en ese viaje (el viaje sigue sin ella). Con SQL dinamico, para poder ejecutar este
+-- script tambien sobre una base que aun no tiene el estado de la unidad.
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'EstadoUnidad') IS NOT NULL
+    EXEC (N'CREATE OR ALTER VIEW dbo.vwViajesCompletos
 AS
 SELECT x.ViajeId, x.VehiculoId
 FROM (
     SELECT e.ViajeId, e.VehiculoId,
            CASE WHEN EXISTS (SELECT 1 FROM dbo.tblInspecciones i
-                              WHERE i.EtapaId = e.Id AND i.Estado = 'cerrada')
+                              WHERE i.EtapaId = e.Id AND i.Estado = ''cerrada'')
+                THEN 1 ELSE 0 END AS Cerrada
+    FROM dbo.tblEtapas e
+) AS x
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblViajeVehiculos vv
+                   WHERE vv.ViajeId = x.ViajeId AND vv.VehiculoId = x.VehiculoId AND vv.EstadoUnidad = ''no_sale'')
+GROUP BY x.ViajeId, x.VehiculoId
+HAVING COUNT(*) > 0 AND COUNT(*) = SUM(x.Cerrada)');
+ELSE
+    EXEC (N'CREATE OR ALTER VIEW dbo.vwViajesCompletos
+AS
+SELECT x.ViajeId, x.VehiculoId
+FROM (
+    SELECT e.ViajeId, e.VehiculoId,
+           CASE WHEN EXISTS (SELECT 1 FROM dbo.tblInspecciones i
+                              WHERE i.EtapaId = e.Id AND i.Estado = ''cerrada'')
                 THEN 1 ELSE 0 END AS Cerrada
     FROM dbo.tblEtapas e
 ) AS x
 GROUP BY x.ViajeId, x.VehiculoId
-HAVING COUNT(*) > 0 AND COUNT(*) = SUM(x.Cerrada);
+HAVING COUNT(*) > 0 AND COUNT(*) = SUM(x.Cerrada)');
 GO
 
 /* -----------------------------------------------------------------------------
@@ -1133,9 +1154,10 @@ BEGIN
 END
 GO
 
--- La foto de la constancia de no firma (EsConstancia = 1) si se admite: la transferencia se firma despues del cierre. Se crea con SQL
--- dinamico y solo si la columna existe, para poder ejecutar este script tambien sobre una base que aun no tiene la columna.
-IF COL_LENGTH(N'dbo.tblEvidencias', N'EsConstancia') IS NOT NULL
+-- La foto de la constancia de no firma (EsConstancia = 1) y la del sello de quien valida un hallazgo (EsSello = 1) si se admiten: la transferencia se
+-- firma y el hallazgo se valida despues del cierre. Se crea con SQL dinamico y solo si las columnas existen, para poder ejecutar este script tambien
+-- sobre una base que aun no las tiene.
+IF COL_LENGTH(N'dbo.tblEvidencias', N'EsSello') IS NOT NULL
     EXEC (N'CREATE OR ALTER TRIGGER dbo.TR_tblEvidencias_NoEnCerrada
 ON dbo.tblEvidencias
 AFTER INSERT
@@ -1144,7 +1166,7 @@ BEGIN
     SET NOCOUNT ON;
     IF EXISTS (SELECT 1 FROM inserted i
                JOIN dbo.tblInspecciones n ON n.Id = i.InspeccionId
-               WHERE n.Estado = ''cerrada'' AND i.EsConstancia = 0)
+               WHERE n.Estado = ''cerrada'' AND i.EsConstancia = 0 AND i.EsSello = 0)
         THROW 51002, ''La inspeccion esta cerrada y es inmutable; no admite evidencias nuevas'', 1;
 END');
 GO

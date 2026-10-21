@@ -7,7 +7,7 @@ namespace IAAutos.Infraestructura.Persistencia.Consultas;
 
 /// <summary>
 /// Arma el DTO de los hallazgos leyendo, en pocas consultas, lo que el hallazgo solo referencia: su zona y el cuadrante de la zona, su nivel de severidad
-/// y si ya tiene su foto propia.
+/// y lo que le falta a su evidencia (su foto propia y el cierre de la transferencia de su inspeccion).
 /// </summary>
 internal sealed class clsDescriptorHallazgos(clsAppDbContext contexto) : IDescriptorHallazgos
 {
@@ -25,15 +25,20 @@ internal sealed class clsDescriptorHallazgos(clsAppDbContext contexto) : IDescri
         var codigosNivel = hallazgos.Where(h => h.NivelSeveridad is not null).Select(h => h.NivelSeveridad!).Distinct().ToList();
         var niveles = await contexto.NivelesSeveridad.AsNoTracking().Where(n => codigosNivel.Contains(n.Codigo)).ToDictionaryAsync(n => n.Codigo, ct);
         var ids = hallazgos.Select(h => h.Id).ToList();
-        var conFoto = (await contexto.Evidencias.AsNoTracking().Where(e => e.HallazgoId != null && ids.Contains(e.HallazgoId.Value))
+        var conFoto = (await contexto.Evidencias.AsNoTracking()
+            .Where(e => e.HallazgoId != null && ids.Contains(e.HallazgoId.Value) && !e.EsSello && !e.EsConstancia)
             .Select(e => e.HallazgoId!.Value).Distinct().ToListAsync(ct)).ToHashSet();
+        var inspeccionIds = hallazgos.Select(h => h.InspeccionId).Distinct().ToList();
+        var cierres = await contexto.Transferencias.AsNoTracking().Where(t => inspeccionIds.Contains(t.InspeccionId))
+            .ToDictionaryAsync(t => t.InspeccionId, t => t.TipoCierre, ct);
 
         return hallazgos.Select(h =>
         {
             var zona = h.ZonaId is { } zonaId ? zonas.GetValueOrDefault(zonaId) : null;
             var cuadranteNombre = zona?.CuadranteId is { } cuadranteId ? cuadrantes.GetValueOrDefault(cuadranteId) : null;
             var nivel = h.NivelSeveridad is { } codigo ? niveles.GetValueOrDefault(codigo) : null;
-            return clsMapeadorInspecciones.AHallazgo(h, zona, cuadranteNombre, nivel, conFoto.Contains(h.Id));
+            var faltante = clsEvidenciaHallazgo.Faltante(conFoto.Contains(h.Id), cierres.GetValueOrDefault(h.InspeccionId));
+            return clsMapeadorInspecciones.AHallazgo(h, zona, cuadranteNombre, nivel, faltante);
         }).ToList();
     }
 }

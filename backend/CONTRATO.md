@@ -831,8 +831,8 @@ Campos del `HallazgoDto`:
 | `tipo_novedad` | solo en una novedad del conductor: `golpe`, `piedra`, `granizo` o `incidente_vial`; si no, `null` |
 | `nota` | texto libre, máximo 500 |
 | `es_preexistente`, `hallazgo_origen_id`, `confirmado_por` | si el daño ya existía, el hallazgo previo del VIN que ya lo tenía y quién lo confirmó |
-| `estado_seguimiento` | `pendiente` (al crearse), `validado`, `rechazado`, `recuperado` o `derogado` |
-| `evidencia_completa`, `evidencia_faltante` | `evidencia_faltante` lista lo que impide la evidencia completa; hoy `foto_hallazgo` si el hallazgo no tiene su foto propia (un hallazgo creado por la API siempre la trae) |
+| `estado_seguimiento` | `pendiente` (al crearse), `validado`, `rechazado`, `recuperado` o `derogado`; lo cambia `POST /api/hallazgos/{id}/seguimiento` |
+| `evidencia_completa`, `evidencia_faltante` | `evidencia_faltante` lista lo que impide la evidencia completa (`foto_hallazgo`, `transferencia_sin_cierre`, `transferencia_no_firma`); ver «Seguimiento del hallazgo» |
 | `revisado_por`, `revisado_at` | quién revisó el hallazgo y cuándo; `null` mientras no se revise |
 | `parte_vehiculo`, `coords_diagrama` | **solo en los hallazgos históricos** (anteriores a este modelo): la parte en texto y el punto sobre la imagen anterior. En los nuevos son `null` |
 
@@ -916,6 +916,87 @@ cada vista que falta, con su nombre**:
 Si ya estaba cerrada, `409`; **un cliente que reintenta el cierre puede tomar ese `409` como éxito.**
 
 ---
+
+## Seguimiento del hallazgo
+
+El coordinador da seguimiento a cada hallazgo y todo cambio queda en un historial que nunca se modifica. Lo hacen `coordinador_calidad`, `comercial`, `admin` y `super_admin` (la capacidad `gestionar_seguimiento` de `GET /api/auth/me`); inspector y conductor reciben `403`.
+Solo ven y cambian los hallazgos del **cliente** de su usuario (`403` con uno de otro cliente, ver «Visibilidad por cliente»).
+
+### `POST /api/hallazgos/{id}/seguimiento`
+Cambia el estado del hallazgo y responde `200` con el `HallazgoDto` ya actualizado.
+
+```json
+{
+  "estado": "validado", "nota": "Validado por Sofasa",
+  "evidencia_sello": { "storage_path": "3f2b…c1.png", "sello_fecha": "2026-07-17T12:30:15.123Z", "sello_lat": 6.24, "sello_lng": -75.58, "precision": 4.5, "dispositivo_id": "tablet-7", "hash_sha256": "…" }
+}
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `estado` | sí | `validado`, `rechazado`, `recuperado` o `derogado` (`pendiente` es el de partida y no se asigna) |
+| `nota` | no | máximo 1000 caracteres |
+| `evidencia_sello` | en `validado` de un hallazgo **V2** | la foto del sello de quien valida (Sofasa), ya subida con `POST /api/uploads` (con los mismos campos y reglas que la foto de un hallazgo); sin ella `400` en `evidencia_sello`. Se acepta en cualquier cambio |
+
+**Cada nivel tiene su estado de llegada**, que el servidor expone en `nivel_accion` y **no impone**: el coordinador decide y se admite cualquier estado.
+
+| Nivel | `nivel_accion` | Estado de llegada |
+|---|---|---|
+| `v1_plus` (V1+) | Se recupera antes del despacho | `recuperado` |
+| `v1` (V1) | Se rechaza el vehículo | `rechazado` |
+| `v2` (V2) | Validación por Sofasa | `validado` (significa que **Sofasa lo validó**) |
+| `v3` (V3) | Se deroga (se acepta el defecto) | `derogado` (propuesta pendiente de confirmar por el negocio) |
+
+Errores: `400` con un estado inválido, una nota larga, un V2 validado sin `evidencia_sello` o una foto no subida; `403` sin la capacidad o con un hallazgo de otro cliente; `404` si el hallazgo no existe; `409` si la inspección del hallazgo está en **borrador**
+(el seguimiento empieza al cerrarla) o si es una **novedad del conductor sin revisar** (sin nivel, ningún inspector la ha revisado).
+
+**La foto del sello** queda como una evidencia de la inspección con `es_sello: true`: no es de una vista ni de un hallazgo, no cuenta para el cierre de la inspección y se admite aunque la inspección ya esté **cerrada** (como la constancia de no firma). Aparece en el historial y en el
+informe de la inspección. `POST /api/uploads` admite a quien tiene `gestionar_seguimiento`.
+
+**Evidencia completa.** Marcar un hallazgo como rechazado **nunca se bloquea por la evidencia** (un V1 se rechaza en preembarque, antes de que exista una transferencia firmada): la respuesta dice si la evidencia está completa y qué le falta.
+
+| Campo del `HallazgoDto` | Significado |
+|---|---|
+| `evidencia_completa` | `true` si el hallazgo tiene su **foto propia** (no cuenta la foto del sello) y la transferencia de su inspección se cerró **firmada** o **con reservas** (en las dos firman las dos partes). Una transferencia cerrada como «no firma» no cuenta (propuesta pendiente de confirmar por el negocio) |
+| `evidencia_faltante` | lo que falta: `foto_hallazgo`, `transferencia_sin_cierre` (la transferencia no existe o sigue abierta) y `transferencia_no_firma` |
+
+Se calcula al leer el hallazgo, se guarda al cambiar su seguimiento y se **recalcula cuando se cierra la transferencia** de su inspección. Un hallazgo rechazado sin evidencia completa no cuenta en la tasa de rechazo mientras no la tenga.
+
+### `GET /api/hallazgos/{id}/seguimiento`
+Mismos roles. El historial del hallazgo, del más antiguo al más reciente:
+
+```json
+[
+  { "id": "uuid", "accion": "seguimiento", "estado_anterior": "pendiente", "estado_nuevo": "validado", "usuario_id": "uuid", "usuario_nombre": "Ana Pérez",
+    "nota": "Validado por Sofasa", "evidencia_sello": { /* EvidenciaDto con es_sello: true */ }, "detalle": null, "created_at": "2026-07-17T12:30:15.123Z" }
+]
+```
+
+`accion` es `seguimiento` (el coordinador cambia el estado), `revision` (un inspector revisa una novedad del conductor, con `detalle` en JSON) o `no_sale` (la unidad no sale del viaje por ese hallazgo; su `nota` es el motivo). Una fila no se modifica ni se borra.
+
+## Unidad que no sale
+
+Una unidad con un hallazgo **V1+** puede no salir de su viaje sin bloquearlo: «se cambia por otra». La unidad conserva su vínculo con el viaje, sus etapas y sus inspecciones (para no perder su trazabilidad si más adelante vuelve a otro viaje), deja de contar como completa y el viaje sigue.
+
+### `POST /api/viajes/{id}/vehiculos/{vin}/no-sale`
+Solo el **inspector del viaje** y el `coordinador_calidad` (de un viaje de su cliente); `403` a los demás, incluidos `admin`, `comercial` y `super_admin` (propuesta pendiente de confirmar por el negocio).
+
+```json
+{ "motivo": "Golpe estructural en el frente", "hallazgo_id": "uuid", "vin_reemplazo": "9BWZZZ377VT004252" }
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `motivo` | sí | máximo 500 caracteres |
+| `hallazgo_id` | sí | un hallazgo **V1+** de una inspección **cerrada** de ese VIN en ese viaje |
+| `vin_reemplazo` | no (propuesta pendiente de confirmar por el negocio: el negocio dijo que la unidad «se cambia por otra») | un VIN que existe en el inventario (`400` en `vin_reemplazo` si no); entra al viaje con sus etapas nuevas, con las reglas de `POST /api/viajes/{id}/vehiculos` |
+
+Responde `200` con el `ViajeDto`: la unidad queda con `estado_unidad: "no_sale"` y `no_sale { motivo, hallazgo_id, marcado_por, marcado_por_nombre, fecha, vin_reemplazo }`. Queda una fila `no_sale` en el historial del hallazgo y en la auditoría.
+
+`409` si el hallazgo **no es V1+**, no es de ese VIN en ese viaje, su inspección **no está cerrada**, la unidad **ya no sale**, el VIN de reemplazo **ya está en este viaje o en otro viaje activo**, o el reemplazo **antes no salió y el hallazgo V1+ que lo causó no está recuperado**
+(un VIN que no salió puede volver a entrar como reemplazo solo cuando ese hallazgo esté en estado `recuperado`). `404` si el viaje o el VIN no existen o el VIN no está en el viaje.
+
+Una unidad que no sale no cuenta en `vehiculos_completos` ni en `vwViajesCompletos`, y su vínculo no cuenta como «viaje activo» del VIN: se puede asignar a otro viaje, y su inventario muestra el historial completo, incluido el viaje del que no salió y su hallazgo V1+.
 
 ## Transferencia de custodia
 

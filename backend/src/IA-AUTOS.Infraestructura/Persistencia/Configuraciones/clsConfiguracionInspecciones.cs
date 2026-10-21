@@ -116,10 +116,37 @@ internal sealed class clsConfiguracionEvidencia : IEntityTypeConfiguration<clsEv
             .HasConstraintName("FK_tblEvidencias_Vista").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(e => e.VistaId).HasDatabaseName("IX_tblEvidencias_Vista");
         builder.Property(e => e.EsConstancia).HasDefaultValue(false);
+        builder.Property(e => e.EsSello).HasDefaultValue(false);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(e => e.InspeccionId)
             .HasConstraintName("FK_tblEvidencias_Inspeccion").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(e => e.HallazgoId)
             .HasConstraintName("FK_tblEvidencias_Hallazgo").OnDelete(DeleteBehavior.NoAction);
+    }
+}
+
+internal sealed class clsConfiguracionHallazgoSeguimiento : IEntityTypeConfiguration<clsHallazgoSeguimiento>
+{
+    public void Configure(EntityTypeBuilder<clsHallazgoSeguimiento> builder)
+    {
+        // El historial no se modifica ni se borra y un trigger sincroniza el estado del hallazgo: EF no puede leer valores generados con OUTPUT.
+        builder.ToTable("tblHallazgoSeguimiento", t =>
+        {
+            t.HasTrigger("TR_tblHallazgoSeguimiento_NoModificar");
+            t.HasTrigger("TR_tblHallazgoSeguimiento_Sincronizar");
+            t.HasTrigger("TR_tblHallazgoSeguimiento_NoBorrar");
+        });
+        clsConfiguracionBase.Base(builder);
+        builder.Property(s => s.Accion).HasMaxLength(15).IsRequired();
+        builder.Property(s => s.EstadoAnterior).HasMaxLength(15);
+        builder.Property(s => s.EstadoNuevo).HasMaxLength(15);
+        builder.Property(s => s.Nota).HasMaxLength(clsHallazgoSeguimiento.NOTA_MAX);
+        builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(s => s.HallazgoId)
+            .HasConstraintName("FK_tblHallazgoSeguimiento_Hallazgo").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(s => s.UsuarioId)
+            .HasConstraintName("FK_tblHallazgoSeguimiento_Usuario").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsEvidencia>().WithMany().HasForeignKey(s => s.EvidenciaSelloId)
+            .HasConstraintName("FK_tblHallazgoSeguimiento_Sello").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(s => new { s.HallazgoId, s.CreatedAt }).HasDatabaseName("IX_tblHallazgoSeguimiento_Hallazgo");
     }
 }
 

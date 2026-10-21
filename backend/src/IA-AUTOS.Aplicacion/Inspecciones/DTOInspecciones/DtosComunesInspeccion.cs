@@ -117,7 +117,7 @@ public sealed record HallazgoPrevioDto : HallazgoDto
 /// <summary>
 /// La ruta interna de almacenamiento no se expone: el cliente recibe solo la URL servible. Cada foto trae su propio sello (fecha, ubicacion y
 /// precision del dispositivo), el del servidor (<c>SelloServidorAt</c>) y el hash SHA-256 del archivo. <c>SinUbicacion</c> marca la foto
-/// tomada sin senal de GPS (hay que repetirla antes de cerrar).
+/// tomada sin senal de GPS (hay que repetirla antes de cerrar). <c>EsSello</c> marca la foto del sello de quien valida un hallazgo.
 /// </summary>
 public sealed record EvidenciaDto(
     Guid Id,
@@ -136,7 +136,8 @@ public sealed record EvidenciaDto(
     string? DispositivoId,
     string? Nota,
     bool SinUbicacion,
-    bool EsConstancia);
+    bool EsConstancia,
+    bool EsSello);
 
 /// <summary>
 /// Las firmas dibujadas no se exponen en los listados. <c>Firmada</c> es true cuando estan las dos firmas (tambien si fue con reservas);

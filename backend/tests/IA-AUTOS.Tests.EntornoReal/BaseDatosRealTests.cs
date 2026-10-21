@@ -494,6 +494,24 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_foto_del_sello_y_la_unidad_que_no_sale_estan_migradas()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/14-sello-y-unidad-no-sale.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/14-sello-y-unidad-no-sale.sql.";
+
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblEvidencias', N'U') AND name = N'EsSello'");
+        var restriccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblEvidencias_Sello' AND parent_object_id = OBJECT_ID(N'tblEvidencias', N'U')");
+        var trigger = await EscalarAsync<int>(conexion, "SELECT CASE WHEN OBJECT_DEFINITION(OBJECT_ID(N'TR_tblEvidencias_NoEnCerrada')) LIKE N'%EsSello%' THEN 1 ELSE 0 END");
+        var vista = await EscalarAsync<int>(conexion, "SELECT CASE WHEN OBJECT_DEFINITION(OBJECT_ID(N'vwViajesCompletos')) LIKE N'%no_sale%' THEN 1 ELSE 0 END");
+
+        Assert.True(columna == 1, $"Falta la marca de la foto del sello en las evidencias. {ayuda}");
+        Assert.True(restriccion == 1, $"Falta la restriccion de la foto del sello. {ayuda}");
+        Assert.True(trigger == 1, $"El trigger de evidencias no admite la foto del sello en una inspeccion cerrada. {ayuda}");
+        Assert.True(vista == 1, $"La vista de viajes completos aun cuenta las unidades que no salen. {ayuda}");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

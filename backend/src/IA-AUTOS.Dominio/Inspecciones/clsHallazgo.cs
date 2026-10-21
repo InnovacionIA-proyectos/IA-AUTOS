@@ -21,6 +21,9 @@ public static class clsEstadoSeguimiento
     public const string DEROGADO = "derogado";
 
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { PENDIENTE, VALIDADO, RECHAZADO, RECUPERADO, DEROGADO };
+
+    /// <summary>Los estados a los que el coordinador puede llevar un hallazgo (el pendiente es el de partida, no se asigna).</summary>
+    public static readonly IReadOnlySet<string> ASIGNABLES = new HashSet<string> { VALIDADO, RECHAZADO, RECUPERADO, DEROGADO };
 }
 
 /// <summary>
@@ -80,6 +83,18 @@ public sealed class clsHallazgo : clsEntidadBase
     public DateTimeOffset? RevisadoAt { get; private set; }
 
     public bool MigracionPendiente { get; private set; }
+
+    /// <summary>Guarda si el hallazgo tiene su evidencia completa (se recalcula al cambiar el seguimiento o al cerrarse la transferencia de su inspeccion).</summary>
+    public void CambiarEvidenciaCompleta(bool completa, DateTimeOffset ahora)
+    {
+        if (EvidenciaCompleta == completa)
+        {
+            return;
+        }
+
+        EvidenciaCompleta = completa;
+        Tocar(ahora);
+    }
 
     /// <summary>
     /// Crea un hallazgo con su zona. El inspector (o administrador) siempre asigna el nivel de severidad; el conductor nunca lo asigna (queda nulo hasta que un

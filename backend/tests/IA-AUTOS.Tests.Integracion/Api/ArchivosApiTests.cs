@@ -211,11 +211,13 @@ public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
     }
 
     [Theory]
-    [InlineData(clsRol.SUPER_ADMIN, HttpStatusCode.Forbidden)]
     [InlineData(clsRol.INSPECTOR, HttpStatusCode.Created)]
     [InlineData(clsRol.CONDUCTOR, HttpStatusCode.Created)]
     [InlineData(clsRol.ADMIN, HttpStatusCode.Created)]
-    public async Task La_subida_es_de_los_roles_de_campo(string rol, HttpStatusCode esperado)
+    [InlineData(clsRol.COORDINADOR_CALIDAD, HttpStatusCode.Created)]
+    [InlineData(clsRol.COMERCIAL, HttpStatusCode.Created)]
+    [InlineData(clsRol.SUPER_ADMIN, HttpStatusCode.Created)]
+    public async Task La_subida_es_de_los_roles_de_campo_y_de_quien_da_seguimiento_a_los_hallazgos(string rol, HttpStatusCode esperado)
     {
         var token = await TokenAsync(rol, "rol@ejemplo.com");
 

@@ -336,7 +336,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal("Frente", h.GetProperty("zona").GetString());
         Assert.Equal("v1_plus", h.GetProperty("nivel_severidad").GetString());
         Assert.Equal("Se recupera antes del despacho", h.GetProperty("nivel_accion").GetString());
-        Assert.Equal(["foto_hallazgo"], h.GetProperty("evidencia_faltante").EnumerateArray().Select(x => x.GetString()).ToList());
+        Assert.Equal(["foto_hallazgo", "transferencia_sin_cierre"], h.GetProperty("evidencia_faltante").EnumerateArray().Select(x => x.GetString()).ToList());
     }
 
     [Fact]

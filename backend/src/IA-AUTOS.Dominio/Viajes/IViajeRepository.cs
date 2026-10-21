@@ -2,7 +2,7 @@ using IAAutos.Dominio.Vehiculos;
 
 namespace IAAutos.Dominio.Viajes;
 
-/// <summary>Un viaje activo (programado o en curso) que ya lleva un VIN.</summary>
+/// <summary>Un viaje activo (programado o en curso) que ya lleva un VIN (una unidad que no sale de ese viaje ya no lo lleva).</summary>
 public sealed record clsViajeActivoDeVin(Guid ViajeId, string? CodigoMtrack);
 
 public interface IViajeRepository
@@ -20,6 +20,11 @@ public interface IViajeRepository
         IReadOnlyCollection<Guid> vehiculoIds,
         Guid? exceptoViajeId,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Las unidades marcadas que no salen (en cualquier viaje) del vehiculo indicado cuyo hallazgo V1+ aun no esta recuperado: un vehiculo asi no vuelve a entrar a un viaje.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> HallazgosNoSaleSinRecuperarAsync(Guid vehiculoId, CancellationToken ct = default);
 
     /// <summary>Los VIN del viaje (un enlace por vehiculo).</summary>
     Task<IReadOnlyList<clsViajeVehiculo>> ObtenerVehiculosAsync(Guid viajeId, CancellationToken ct = default);

@@ -263,6 +263,34 @@ public sealed class clsViajeVehiculo : clsEntidadBase
     /// <summary>El vehiculo que reemplaza a la unidad que no sale, si ya se asigno.</summary>
     public Guid? ReemplazoVehiculoId { get; private set; }
 
+    public bool NoSale => EstadoUnidad == clsEstadoUnidad.NO_SALE;
+
+    /// <summary>
+    /// La unidad no sale de este viaje por el hallazgo indicado: queda con su motivo, el hallazgo, quien la marco y cuando. Conserva sus etapas e inspecciones y el
+    /// viaje sigue. 409 si ya estaba marcada.
+    /// </summary>
+    public void MarcarNoSale(string? motivo, Guid hallazgoId, Guid marcadoPor, Guid? reemplazoVehiculoId, DateTimeOffset ahora)
+    {
+        var texto = clsValidador.Requerido(motivo, "El motivo es requerido");
+        if (texto.Length > NO_SALE_MOTIVO_MAX)
+        {
+            throw clsErroresCampos.De("motivo", $"El motivo admite máximo {NO_SALE_MOTIVO_MAX} caracteres");
+        }
+
+        if (NoSale)
+        {
+            throw new clsConflictoException("La unidad ya está marcada como que no sale de este viaje");
+        }
+
+        EstadoUnidad = clsEstadoUnidad.NO_SALE;
+        NoSaleMotivo = texto;
+        NoSaleHallazgoId = hallazgoId;
+        NoSaleMarcadoPor = marcadoPor;
+        NoSaleAt = ahora;
+        ReemplazoVehiculoId = reemplazoVehiculoId;
+        Tocar(ahora);
+    }
+
     public static clsViajeVehiculo Crear(Guid viajeId, Guid vehiculoId, DateTimeOffset ahora)
     {
         var vinEnViaje = new clsViajeVehiculo { ViajeId = viajeId, VehiculoId = vehiculoId };

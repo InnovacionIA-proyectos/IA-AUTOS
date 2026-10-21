@@ -318,7 +318,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(JsonValueKind.Null, h.GetProperty("tipo_novedad").ValueKind);
         Assert.Equal("pendiente", h.GetProperty("estado_seguimiento").GetString());
         Assert.False(h.GetProperty("evidencia_completa").GetBoolean());
-        Assert.Equal(0, h.GetProperty("evidencia_faltante").GetArrayLength());
+        // Tiene su foto propia; le falta que se cierre la transferencia de su inspeccion.
+        Assert.Equal(["transferencia_sin_cierre"], h.GetProperty("evidencia_faltante").EnumerateArray().Select(x => x.GetString()).ToList());
         Assert.Equal(JsonValueKind.Null, h.GetProperty("revisado_por").ValueKind);
         Assert.Equal(JsonValueKind.Null, h.GetProperty("revisado_at").ValueKind);
         Assert.Equal(JsonValueKind.Null, h.GetProperty("parte_vehiculo").ValueKind);
@@ -780,7 +781,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(
             [
                 "id", "inspeccion_id", "hallazgo_id", "sello_fecha", "sello_lat", "sello_lng", "url", "created_at", "updated_at", "vista_id", "hash_sha256",
-                "sello_servidor_at", "precision", "dispositivo_id", "nota", "sin_ubicacion", "es_constancia",
+                "sello_servidor_at", "precision", "dispositivo_id", "nota", "sin_ubicacion", "es_constancia", "es_sello",
             ],
             e.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal(vista, e.GetProperty("vista_id").GetGuid());

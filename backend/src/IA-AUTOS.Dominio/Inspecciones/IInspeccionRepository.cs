@@ -41,9 +41,20 @@ public interface IInspeccionRepository
     /// </summary>
     Task<bool> EsHallazgoPrevioDelVehiculoAsync(Guid hallazgoOrigenId, Guid inspeccionId, Guid zonaId, string claseDano, CancellationToken ct = default);
 
+    /// <summary>El hallazgo (para modificarlo), o nulo si no existe.</summary>
+    Task<clsHallazgo?> ObtenerHallazgoAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Los hallazgos de la inspeccion (para recalcular su evidencia).</summary>
+    Task<IReadOnlyList<clsHallazgo>> ObtenerHallazgosDeInspeccionAsync(Guid inspeccionId, CancellationToken ct = default);
+
+    /// <summary>De los hallazgos recibidos, los que tienen su foto propia (no cuenta la foto del sello de quien valida).</summary>
+    Task<IReadOnlySet<Guid>> HallazgosConFotoAsync(IReadOnlyCollection<Guid> hallazgoIds, CancellationToken ct = default);
+
     void Agregar(clsInspeccion inspeccion);
 
     void Agregar(clsHallazgo hallazgo);
 
     void Agregar(clsEvidencia evidencia);
+
+    void Agregar(clsHallazgoSeguimiento seguimiento);
 }
