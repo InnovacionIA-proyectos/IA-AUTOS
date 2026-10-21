@@ -1,7 +1,7 @@
 # Notificaciones, dispositivos y novedad del conductor
 
 El sistema avisa con **notificaciones** (alertas y avisos operativos) y guarda los **dispositivos** donde cada usuario recibe las notificaciones push. Este documento describe el modelo de datos;
-los endpoints que lo usan estan en [CONTRATO.md](../CONTRATO.md).
+los endpoints que lo usan estan en [CONTRATO.md](../CONTRATO.md) («Conductor en ruta» y «Notificaciones»).
 
 ## Notificaciones
 
@@ -43,6 +43,18 @@ inspeccion de **salida de Transporte** del VIN en el viaje. La base garantiza:
 
 Los hallazgos que el conductor registra en un Cargue sin personal de apoyo no son novedades (no llevan `TipoNovedad`): conservan su zona y su clase y quedan sin nivel hasta que se revisan.
 Que haya foto, que el tamano sea un codigo activo y que existan el GPS y la fecha lo valida la API al crear la novedad.
+
+## Como se crean y se envian
+
+`clsEmisorNotificaciones` crea las notificaciones de una alerta: una fila de **bandeja** y una de **push** por destinatario. El push va por Firebase Cloud Messaging a cada dispositivo activo del destinatario (`IEnviadorPush`, implementado por `clsEnviadorFcm`):
+
+- El envio nunca rompe la peticion que lo origino. Como `EnviadaAt` y `ErrorEnvio` solo se fijan al crear la fila, el push se intenta **antes** de guardarla: si llego a algun dispositivo queda `EnviadaAt`; si no, queda `ErrorEnvio`
+  (FCM respondio con error, FCM no esta configurado o el usuario no tiene dispositivos activos). Un token que FCM ya no reconoce (`UNREGISTERED`) deja el dispositivo inactivo.
+- Si crear las notificaciones falla, se registra en el log y la peticion sigue: el hecho que se avisa (la novedad) ya quedo guardado.
+- La clave de dedupe es `{alerta}:{destinatario}:{canal}` (por ejemplo `novedad_conductor:{hallazgo}:{usuario}:bandeja`): una alerta con la misma clave no se repite.
+- La respuesta a una novedad se guarda en **todas** las filas de esa novedad (de cada coordinador y administrador y de cada canal) con un solo `UPDATE` condicionado a que aun no tengan respuesta: asi la primera respuesta gana aunque dos lleguen a la vez.
+
+Configuracion de FCM (cuenta de servicio de Firebase; sin ella el push no se envia y queda `ErrorEnvio`): `Notificaciones__FcmProyectoId`, `Notificaciones__FcmClientEmail` y `Notificaciones__FcmClavePrivada` (los saltos de linea de la clave pueden ir como `\n`).
 
 ## Aplicar el cambio en una base existente
 

@@ -15,6 +15,12 @@ public interface IInspeccionRepository
     /// <summary>True si alguna inspeccion de la etapa tiene una transferencia sin tipo de cierre (abierta): bloquea iniciar la etapa siguiente.</summary>
     Task<bool> TieneTransferenciaSinCierreAsync(Guid etapaId, CancellationToken ct = default);
 
+    /// <summary>La version mas reciente de la inspeccion de ese momento (salida o llegada) de la etapa, o nulo si no la tiene.</summary>
+    Task<clsInspeccion?> ObtenerUltimaDeEtapaAsync(Guid etapaId, string momento, CancellationToken ct = default);
+
+    /// <summary>Cuantas novedades del conductor tiene la inspeccion.</summary>
+    Task<int> ContarNovedadesAsync(Guid inspeccionId, CancellationToken ct = default);
+
     /// <summary>Una evidencia por id (por ejemplo, la foto de una constancia de no firma).</summary>
     Task<clsEvidencia?> ObtenerEvidenciaAsync(Guid id, CancellationToken ct = default);
 

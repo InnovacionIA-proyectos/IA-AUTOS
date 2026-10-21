@@ -35,6 +35,15 @@ public static class clsRol
     /// <summary>Marcar que una unidad con un hallazgo V1+ no sale del viaje: el inspector (del viaje) y el coordinador de calidad.</summary>
     public static readonly string[] MARCAR_NO_SALE = [INSPECTOR, COORDINADOR_CALIDAD];
 
+    /// <summary>
+    /// Quienes ven alertas: el coordinador de calidad y los administradores las preventivas de su cliente, el inspector solo los avisos operativos dirigidos a el y el conductor
+    /// solo las respuestas a sus novedades y sus avisos de captura y firma. El comercial no las recibe.
+    /// </summary>
+    public static readonly string[] VER_ALERTAS = [COORDINADOR_CALIDAD, ADMIN, SUPER_ADMIN, INSPECTOR, CONDUCTOR];
+
+    /// <summary>Responder la novedad que registro el conductor: el coordinador de calidad y los administradores.</summary>
+    public static readonly string[] RESPONDER_NOVEDADES = [COORDINADOR_CALIDAD, ADMIN, SUPER_ADMIN];
+
     public static bool EsAdministrador(string rol) => rol is ADMIN or SUPER_ADMIN;
 
     /// <summary>Inspectores y conductores solo ven los VIN, viajes e informes de los viajes en los que participan.</summary>

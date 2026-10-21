@@ -11,6 +11,17 @@ public static class clsOrigenHallazgo
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { INSPECTOR, CONDUCTOR };
 }
 
+/// <summary>Los tipos de novedad que el conductor elige de una lista (nunca escribe texto libre).</summary>
+public static class clsTipoNovedad
+{
+    public const string GOLPE = "golpe";
+    public const string PIEDRA = "piedra";
+    public const string GRANIZO = "granizo";
+    public const string INCIDENTE_VIAL = "incidente_vial";
+
+    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { GOLPE, PIEDRA, GRANIZO, INCIDENTE_VIAL };
+}
+
 /// <summary>Estado del seguimiento de un hallazgo. Nace pendiente y lo cambia el coordinador.</summary>
 public static class clsEstadoSeguimiento
 {
@@ -150,6 +161,24 @@ public sealed class clsHallazgo : clsEntidadBase
             EsPreexistente = hallazgoOrigenId is not null,
             HallazgoOrigenId = hallazgoOrigenId,
             ConfirmadoPor = hallazgoOrigenId is not null ? confirmadoPor : null,
+        };
+        hallazgo.Inicializar(ahora);
+        return hallazgo;
+    }
+
+    /// <summary>
+    /// Crea la novedad que registra el conductor en ruta: un tipo de la lista y un tamano, sin zona, clase, nivel ni texto libre. Esos datos los completa el inspector al
+    /// revisarla; mientras tanto la novedad no tiene nivel V.
+    /// </summary>
+    public static clsHallazgo CrearNovedad(Guid inspeccionId, string tipoNovedad, string tamanoDano, DateTimeOffset ahora)
+    {
+        clsValidador.EnCatalogo(tipoNovedad, clsTipoNovedad.VALORES, "tipo_novedad");
+        var hallazgo = new clsHallazgo
+        {
+            InspeccionId = inspeccionId,
+            TipoNovedad = tipoNovedad,
+            TamanoDano = clsValidador.Requerido(tamanoDano, "tamano_dano es requerido"),
+            Origen = clsOrigenHallazgo.CONDUCTOR,
         };
         hallazgo.Inicializar(ahora);
         return hallazgo;

@@ -40,6 +40,9 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
         return resultado;
     }
 
+    public async Task<IReadOnlyList<clsUsuario>> ObtenerActivosPorRolesAsync(IReadOnlyCollection<string> roles, Guid clienteId, CancellationToken ct = default) =>
+        await contexto.Usuarios.AsNoTracking().Where(u => u.Activo && u.ClienteId == clienteId && roles.Contains(u.Rol)).OrderBy(u => u.Nombre).ToListAsync(ct);
+
     public async Task<IReadOnlyList<clsUsuario>> ListarAsync(Guid? clienteId = null, CancellationToken ct = default) =>
         await contexto.Usuarios.AsNoTracking()
             .Where(u => clienteId == null || u.ClienteId == clienteId)
@@ -141,6 +144,12 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
          join i in contexto.Inspecciones on t.InspeccionId equals i.Id
          where i.EtapaId == etapaId && t.TipoCierre == null
          select t.Id).AnyAsync(ct);
+
+    public Task<clsInspeccion?> ObtenerUltimaDeEtapaAsync(Guid etapaId, string momento, CancellationToken ct = default) =>
+        contexto.Inspecciones.Where(i => i.EtapaId == etapaId && i.Momento == momento).OrderByDescending(i => i.Version).FirstOrDefaultAsync(ct);
+
+    public Task<int> ContarNovedadesAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        contexto.Hallazgos.CountAsync(h => h.InspeccionId == inspeccionId && h.TipoNovedad != null, ct);
 
     public Task<clsEvidencia?> ObtenerEvidenciaAsync(Guid id, CancellationToken ct = default) =>
         contexto.Evidencias.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id, ct);

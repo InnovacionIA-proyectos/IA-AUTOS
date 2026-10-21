@@ -52,6 +52,11 @@ Para crear la **salida** de una etapa, la etapa anterior del mismo VIN en el via
 y `details`: `motivo` (`etapa_previa_sin_cierre` si falta cerrar la llegada, `transferencia_sin_cierre` si falta cerrar la transferencia, ver [transferencias.md](transferencias.md)), `etapa_previa_id` y `etapa_previa` (el nombre de la etapa que falta terminar), para que la app muestre el bloqueo. La primera etapa y la llegada
 no tienen este bloqueo.
 
+## Lo que ve el conductor
+
+El conductor no ve los hallazgos que registraron otros: en `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` toda inspección que **no creó** llega con `hallazgos: []` y sin las fotos de hallazgos ni las del sello (`clsVisibilidadConductor`); las
+que sí creó (sus novedades) llegan completas. `GET /api/inspecciones/{id}/hallazgos-previos` y `GET /api/hallazgos` responden `403`. Las novedades que registra en ruta están en [notificaciones.md](notificaciones.md).
+
 ## Corrección sin modificar lo cerrado
 
 Una inspección cerrada no se edita. `POST /api/inspecciones/{id}/corregir` crea la **versión siguiente** (`version` 2, 3…, en borrador y vacía) con `corrige_inspeccion_id` apuntando a la

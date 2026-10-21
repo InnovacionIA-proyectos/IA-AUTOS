@@ -3,6 +3,7 @@ using IAAutos.Aplicacion.Auth.DTOAuth;
 using IAAutos.Aplicacion.Viajes;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
 using Microsoft.EntityFrameworkCore;
 
@@ -228,13 +229,20 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                    MarcadoPorNombre = (string?)um.Nombre,
                                    vv.NoSaleAt,
                                    VinReemplazo = (string?)r.Vin,
+                                   Novedades = contexto.Hallazgos.Count(x => x.TipoNovedad != null
+                                       && contexto.Inspecciones.Any(i => i.Id == x.InspeccionId
+                                           && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id))),
+                                   LlegadaCerrada = contexto.Inspecciones.Any(i => i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA
+                                       && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
+                                           && contexto.EtapasCatalogo.Any(p => p.Id == e.EtapaCatalogoId && p.Codigo == clsCodigosEtapa.TRANSPORTE))),
                                }).ToListAsync(ct);
         var porViaje = vehiculos.ToLookup(
             v => v.ViajeId,
             v => new ViajeVehiculoDto(
                 v.Vehiculo.Id, v.Vehiculo.Vin, v.Vehiculo.Marca, v.Vehiculo.Modelo, v.Vehiculo.Color, v.Vehiculo.Operacion, v.Etapas, v.Completas,
                 v.EstadoUnidad,
-                clsMapeadorViajes.ANoSale(v.EstadoUnidad, v.NoSaleMotivo, v.NoSaleHallazgoId, v.NoSaleMarcadoPor, v.MarcadoPorNombre, v.NoSaleAt, v.VinReemplazo)));
+                clsMapeadorViajes.ANoSale(v.EstadoUnidad, v.NoSaleMotivo, v.NoSaleHallazgoId, v.NoSaleMarcadoPor, v.MarcadoPorNombre, v.NoSaleAt, v.VinReemplazo),
+                clsEstadoTransporte.De(v.LlegadaCerrada, v.Novedades), v.Novedades));
         var clientes = await ClientesPorViajeAsync(ids, soloDeCliente, ct);
         return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id])).ToList();
     }

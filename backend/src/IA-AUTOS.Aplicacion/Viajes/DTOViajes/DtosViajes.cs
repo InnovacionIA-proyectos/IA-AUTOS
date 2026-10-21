@@ -48,7 +48,8 @@ public sealed record NoSaleDto(
 
 /// <summary>
 /// Un VIN del viaje con el avance de sus etapas dentro de el. <c>EstadoUnidad</c> es <c>activa</c> o <c>no_sale</c>; en ese caso <c>NoSale</c> trae
-/// el motivo y el hallazgo.
+/// el motivo y el hallazgo. <c>EstadoTransporte</c> dice como va la unidad en su recorrido (<c>sin_registro</c>, <c>con_novedad</c>, <c>sin_novedad</c> o <c>llegada_con_novedad</c>) y
+/// <c>Novedades</c> cuantas novedades registro el conductor.
 /// </summary>
 public sealed record ViajeVehiculoDto(
     Guid VehiculoId,
@@ -60,7 +61,9 @@ public sealed record ViajeVehiculoDto(
     int Etapas,
     int Completas,
     string EstadoUnidad,
-    NoSaleDto? NoSale);
+    NoSaleDto? NoSale,
+    string EstadoTransporte,
+    int Novedades);
 
 /// <summary>
 /// Viaje completo con sus VIN. <c>ConPersonalApoyo</c> es la marca de la etapa de Cargue. El viaje no tiene un cliente propio: <c>Clientes</c>
