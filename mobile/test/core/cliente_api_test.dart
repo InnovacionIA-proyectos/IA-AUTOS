@@ -95,6 +95,79 @@ void main() {
     });
   });
 
+  group('ClienteApi.enviar (respuesta completa)', () {
+    test('devuelve estado, encabezados y cuerpo', () async {
+      final adaptador = AdaptadorFalso(
+        (_) => ResponseBody.fromString(
+          '{"version":"abc"}',
+          200,
+          headers: {
+            Headers.contentTypeHeader: ['application/json'],
+            'etag': ['"abc"'],
+          },
+        ),
+      );
+
+      final r = await cliente(adaptador).enviar('GET', '/api/catalogos');
+
+      expect(r.estado, 200);
+      expect(r.datos, {'version': 'abc'});
+      // El nombre del encabezado no distingue mayúsculas.
+      expect(r.encabezado('ETag'), '"abc"');
+      expect(r.encabezado('no-vino'), isNull);
+    });
+
+    test('los encabezados propios viajan junto al token, sin pisarlo', () async {
+      final adaptador = AdaptadorFalso((_) => json(200, {}));
+
+      await cliente(adaptador).enviar('GET', '/api/catalogos', encabezados: {'If-None-Match': '"abc"'});
+
+      final enviados = adaptador.peticiones.single.headers;
+      expect(enviados['If-None-Match'], '"abc"');
+      expect(enviados['Authorization'], 'Bearer jwt-123');
+    });
+
+    test('con estadosExtra {304} un 304 no es error: llega con su estado y su ETag', () async {
+      final adaptador = AdaptadorFalso(
+        (_) => ResponseBody.fromString('', 304, headers: {
+          'etag': ['"abc"'],
+        }),
+      );
+
+      final r = await cliente(adaptador).enviar(
+        'GET',
+        '/api/catalogos',
+        encabezados: {'If-None-Match': '"abc"'},
+        estadosExtra: {304},
+      );
+
+      expect(r.estado, 304);
+      expect(r.encabezado('etag'), '"abc"');
+    });
+
+    test('sin estadosExtra un 304 sigue siendo ErrorApi (el comportamiento por defecto no cambia)', () async {
+      final adaptador = AdaptadorFalso((_) => ResponseBody.fromString('', 304));
+
+      final error = await cliente(adaptador)
+          .enviar('GET', '/api/catalogos')
+          .then<ErrorApi?>((_) => null, onError: (Object e) => e as ErrorApi);
+
+      expect(error!.status, 304);
+    });
+
+    test('estadosExtra no afecta a los demás estados: un 401 sigue avisando y lanzando', () async {
+      var avisos = 0;
+      final adaptador = AdaptadorFalso((_) => json(401, {'code': 'UNAUTHORIZED', 'message': 'No autorizado'}));
+
+      final error = await cliente(adaptador, alNoAutorizado: () => avisos++)
+          .enviar('GET', '/api/catalogos', estadosExtra: {304})
+          .then<ErrorApi?>((_) => null, onError: (Object e) => e as ErrorApi);
+
+      expect(error!.status, 401);
+      expect(avisos, 1);
+    });
+  });
+
   group('clasificación transitoria', () {
     test('0, 401, 408, 429 y 5xx se reintentan; el resto no', () {
       bool t(int s) => ErrorApi(message: '', code: '', status: s).esTransitorio;
