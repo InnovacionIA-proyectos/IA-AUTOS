@@ -37,9 +37,6 @@ abstract interface class GatewayInformes {
     required String fecha,
     required double lat,
     required double lng,
-    String? conductorNombre,
-    String? placa,
-    String? trailer,
     String? notas,
   });
 

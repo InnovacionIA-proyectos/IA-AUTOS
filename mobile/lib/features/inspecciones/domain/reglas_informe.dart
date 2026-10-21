@@ -8,7 +8,6 @@ enum BloqueoCierre {
   /// sano. Por eso bloquea el cierre en vez de dejar pasar un informe vacío.
   sinCatalogos('No se han descargado los catálogos de daño. Conéctate para descargarlos.'),
   sinUbicacion('Esperando ubicación…'),
-  faltaTransporte('Ingresa el conductor y la placa.'),
   faltaFotoNovedad('Registraste una novedad: agrega al menos una foto.');
 
   const BloqueoCierre(this.mensaje);
@@ -19,20 +18,16 @@ enum BloqueoCierre {
 /// Reglas de cierre:
 ///  - catálogos de daño descargados (si no, no se pueden registrar novedades),
 ///  - ubicación disponible,
-///  - conductor y placa (datos del transporte),
 ///  - fotos obligatorias SOLO si hay novedad (al menos una).
 /// Devuelve null si se puede cerrar.
 BloqueoCierre? bloqueoDeCierre({
   required bool hayUbicacion,
-  required String conductor,
-  required String placa,
   required int cantidadHallazgos,
   required int cantidadFotos,
   bool catalogosListos = true,
 }) {
   if (!catalogosListos) return BloqueoCierre.sinCatalogos;
   if (!hayUbicacion) return BloqueoCierre.sinUbicacion;
-  if (conductor.trim().isEmpty || placa.trim().isEmpty) return BloqueoCierre.faltaTransporte;
   if (cantidadHallazgos > 0 && cantidadFotos == 0) return BloqueoCierre.faltaFotoNovedad;
   return null;
 }
@@ -47,9 +42,6 @@ InformeJob construirInformeJob({
   required DateTime fecha,
   required double lat,
   required double lng,
-  required String conductor,
-  required String placa,
-  String trailer = '',
   String notas = '',
   required List<FotoLocal> fotos,
   required List<HallazgoLocal> hallazgos,
@@ -64,9 +56,6 @@ InformeJob construirInformeJob({
     fecha: fecha.toUtc().toIso8601String(),
     lat: lat,
     lng: lng,
-    conductorNombre: conductor.trim(),
-    placa: placa.trim(),
-    trailer: opcional(trailer),
     notas: opcional(notas),
     fotos: fotos,
     hallazgos: hallazgos,

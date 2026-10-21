@@ -105,7 +105,10 @@ class _Detalle extends ConsumerWidget {
               etapa: etapa,
               procesoNombre: catalogos.etiqueta(Catalogo.etapas, etapa.proceso),
               accion: accionDeEtapa(etapa, inventario),
-              alCapturar: () => alIr('/inspecciones/vin/$vinRuta/captura/${etapa.id}?proceso=${Uri.encodeQueryComponent(catalogos.etiqueta(Catalogo.etapas, etapa.proceso))}'),
+              alCapturar: () => alIr(
+                '/inspecciones/vin/$vinRuta/captura/${etapa.id}?proceso=${Uri.encodeQueryComponent(catalogos.etiqueta(Catalogo.etapas, etapa.proceso))}'
+                '${etapa.viajeId == null ? '' : '&viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}'}',
+              ),
               alFirmar: (accion) => alIr(
                 '/inspecciones/vin/$vinRuta/firma/${accion.inspeccionId}?proceso=${Uri.encodeQueryComponent(catalogos.etiqueta(Catalogo.etapas, etapa.proceso))}&soloFirma=${accion.soloFirma ? 1 : 0}',
               ),
@@ -216,7 +219,17 @@ class _TarjetaEtapa extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(procesoNombre, style: tema.titleMedium?.copyWith(fontSize: 15))),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(procesoNombre, style: tema.titleMedium?.copyWith(fontSize: 15)),
+                    // El lugar lo resuelve la API («CEDI 1»); no todas las etapas tienen uno.
+                    if (etapa.lugar case final lugar? when lugar.isNotEmpty)
+                      Text(lugar, style: tema.bodySmall),
+                  ],
+                ),
+              ),
               Insignia(etapa.requiereInspeccion ? 'Requiere informe' : 'Solo firma', tono: etapa.requiereInspeccion ? TonoInsignia.info : TonoInsignia.neutro),
             ],
           ),

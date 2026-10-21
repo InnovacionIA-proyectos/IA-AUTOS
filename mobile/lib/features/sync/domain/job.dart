@@ -50,9 +50,6 @@ class InformeJob extends Job {
     required this.fecha,
     required this.lat,
     required this.lng,
-    this.conductorNombre,
-    this.placa,
-    this.trailer,
     this.notas,
     this.fotos = const [],
     this.hallazgos = const [],
@@ -73,9 +70,6 @@ class InformeJob extends Job {
         fecha: json['fecha'] as String,
         lat: (json['lat'] as num).toDouble(),
         lng: (json['lng'] as num).toDouble(),
-        conductorNombre: json['conductor_nombre'] as String?,
-        placa: json['placa'] as String?,
-        trailer: json['trailer'] as String?,
         notas: json['notas'] as String?,
         fotos: [for (final f in json['fotos'] as List<dynamic>) FotoLocal.fromJson(f as Map<String, dynamic>)],
         hallazgos: [for (final h in json['hallazgos'] as List<dynamic>) HallazgoLocal.fromJson(h as Map<String, dynamic>)],
@@ -89,9 +83,6 @@ class InformeJob extends Job {
   final String fecha;
   final double lat;
   final double lng;
-  final String? conductorNombre;
-  final String? placa;
-  final String? trailer;
   final String? notas;
   final List<FotoLocal> fotos;
   final List<HallazgoLocal> hallazgos;
@@ -116,9 +107,6 @@ class InformeJob extends Job {
         fecha: fecha,
         lat: lat,
         lng: lng,
-        conductorNombre: conductorNombre,
-        placa: placa,
-        trailer: trailer,
         notas: notas,
         fotos: fotos ?? this.fotos,
         hallazgos: hallazgos,
@@ -140,9 +128,6 @@ class InformeJob extends Job {
         fecha: fecha,
         lat: lat,
         lng: lng,
-        conductorNombre: conductorNombre,
-        placa: placa,
-        trailer: trailer,
         notas: notas,
         fotos: fotos,
         hallazgos: hallazgos,
@@ -165,9 +150,6 @@ class InformeJob extends Job {
         'fecha': fecha,
         'lat': lat,
         'lng': lng,
-        'conductor_nombre': conductorNombre,
-        'placa': placa,
-        'trailer': trailer,
         'notas': notas,
         'fotos': [for (final f in fotos) f.toJson()],
         'hallazgos': [for (final h in hallazgos) h.toJson()],

@@ -74,20 +74,39 @@ class InspeccionVista {
 }
 
 class EtapaVista {
-  const EtapaVista({required this.id, required this.orden, required this.proceso, required this.requiereInspeccion, this.inspecciones = const []});
+  const EtapaVista({
+    required this.id,
+    required this.orden,
+    required this.proceso,
+    required this.requiereInspeccion,
+    this.lugar,
+    this.viajeId,
+    this.inspecciones = const [],
+  });
 
   factory EtapaVista.fromJson(Map<String, dynamic> json) => EtapaVista(
         id: json['id'] as String,
         orden: json['orden'] as int,
         proceso: json['proceso'] as String,
         requiereInspeccion: json['requiere_inspeccion'] as bool,
+        lugar: json['lugar'] as String?,
+        viajeId: json['viaje_id'] as String?,
         inspecciones: [for (final i in (json['inspecciones'] as List<dynamic>? ?? [])) InspeccionVista.fromJson(i as Map<String, dynamic>)],
       );
 
   final String id;
   final int orden;
+
+  /// Código de la etapa del catálogo `etapas` (cargue, transporte, descargue).
   final String proceso;
   final bool requiereInspeccion;
+
+  /// Nombre del lugar de la etapa («CEDI 1»), ya resuelto por la API. No es un código.
+  final String? lugar;
+
+  /// Viaje del que cuelga la etapa: de él salen la placa, el tráiler, la unidad y el conductor.
+  final String? viajeId;
+
   final List<InspeccionVista> inspecciones;
 }
 

@@ -15,9 +15,6 @@ class GatewayInformesApi implements GatewayInformes {
     required String fecha,
     required double lat,
     required double lng,
-    String? conductorNombre,
-    String? placa,
-    String? trailer,
     String? notas,
   }) async {
     // usuario_id lo fija el backend desde el token.
@@ -27,9 +24,6 @@ class GatewayInformesApi implements GatewayInformes {
       'fecha': fecha,
       'lat': lat,
       'lng': lng,
-      'conductor_nombre': conductorNombre,
-      'placa': placa,
-      'trailer': trailer,
       'notas': notas,
     });
     return (r as Map<String, dynamic>)['id'] as String;

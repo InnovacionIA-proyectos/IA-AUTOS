@@ -57,6 +57,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                         vin: state.pathParameters['vin']!,
                         etapaId: state.pathParameters['etapaId']!,
                         proceso: state.uri.queryParameters['proceso'] ?? '',
+                        viajeId: state.uri.queryParameters['viajeId'],
                       ),
                     ),
                     GoRoute(

@@ -20,6 +20,24 @@ void main() {
   });
   tearDown(() => db.close());
 
+  test('un job encolado por una versión anterior se sigue leyendo y enviando', () async {
+    // Antes de S5-HU-22.9 el informe llevaba conductor_nombre, placa y trailer. Al actualizar la app con informes
+    // sin enviar, esas claves sobran: se ignoran. Lo que NO puede pasar es que el job deje de poder leerse, porque
+    // `listar()` descarta en silencio las filas ilegibles y el informe desaparecería de la cola sin remedio.
+    const viejo = '{"kind":"informe","id":"a","etiqueta":"Informe VIN123 · Cargue","creado_en":1,"intentos":0,'
+        '"fallido":false,"etapa_id":"etapa-1","momento":"informe","fecha":"2026-01-02T10:00:00.000Z",'
+        '"lat":6.2,"lng":-75.5,"conductor_nombre":"Ana","placa":"ABC123","trailer":"T-9","notas":"ojo",'
+        '"fotos":[],"hallazgos":[],"inspeccion_id":null,"hallazgos_enviados":0,"cerrada":false}';
+    await db.into(db.jobs).insert(JobsCompanion.insert(id: 'a', payload: viejo));
+
+    final jobs = await cola.listar();
+
+    expect(jobs, hasLength(1), reason: 'una fila ilegible se descartaría en silencio');
+    final job = jobs.single as InformeJob;
+    expect((job.id, job.etapaId, job.notas), ('a', 'etapa-1', 'ojo'));
+    expect(job.fotos, isEmpty);
+  });
+
   test('conserva el orden de inserción (FIFO) aunque se modifiquen jobs antiguos', () async {
     await cola.agregar(informe(id: 'a'));
     await cola.agregar(informe(id: 'b'));

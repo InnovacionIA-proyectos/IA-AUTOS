@@ -65,7 +65,7 @@ void main() {
   // Campos que la app ENVÍA en cada petición.
   const escrituras = <String, List<String>>{
     'LoginRequest': ['email', 'password'],
-    'CrearInspeccionRequest': ['etapa_id', 'momento', 'fecha', 'lat', 'lng', 'conductor_nombre', 'placa', 'trailer', 'notas'],
+    'CrearInspeccionRequest': ['etapa_id', 'momento', 'fecha', 'lat', 'lng', 'notas'],
     'CrearEvidenciaRequest': ['storage_path', 'sello_fecha', 'sello_lat', 'sello_lng'],
     'CrearHallazgoRequest': ['parte_vehiculo', 'clase_dano', 'tamano_dano', 'coords_diagrama'],
     'FirmarTransferenciaRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma_entrega', 'firma_recibe'],

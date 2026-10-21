@@ -127,9 +127,6 @@ class ProcesadorCola {
         fecha: job.fecha,
         lat: job.lat,
         lng: job.lng,
-        conductorNombre: job.conductorNombre,
-        placa: job.placa,
-        trailer: job.trailer,
         notas: job.notas,
       );
       job = job.conProgreso(inspeccionId: id);

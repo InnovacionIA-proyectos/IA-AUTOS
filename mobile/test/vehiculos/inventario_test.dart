@@ -40,6 +40,24 @@ void main() {
       expect(insp.evidencias.single.url, '/api/uploads/i1.jpg');
     });
 
+    test('la etapa trae su lugar y su viaje, que la API ya resuelve', () {
+      final inv = inventario([
+        {'id': 'e1', 'orden': 1, 'proceso': 'cargue', 'lugar': 'CEDI 1', 'viaje_id': 'via-1', 'requiere_inspeccion': true},
+      ]);
+
+      final etapa = inv.etapas.single;
+      expect(etapa.lugar, 'CEDI 1', reason: 'el lugar llega como nombre, no como código');
+      expect(etapa.viajeId, 'via-1', reason: 'de ahí salen la placa, el tráiler, la unidad y el conductor');
+    });
+
+    test('una etapa sin lugar ni viaje no rompe', () {
+      final etapa = inventario([
+        {'id': 'e1', 'orden': 1, 'proceso': 'cargue', 'requiere_inspeccion': true},
+      ]).etapas.single;
+
+      expect((etapa.lugar, etapa.viajeId), (null, null));
+    });
+
     test('tolera campos opcionales ausentes', () {
       final inv = Inventario.fromJson({'id': 'v', 'vin': 'X', 'marca': 'Kia', 'operacion': 'nacional'});
       expect(inv.etapas, isEmpty);

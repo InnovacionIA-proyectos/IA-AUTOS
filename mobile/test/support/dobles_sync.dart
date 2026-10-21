@@ -161,8 +161,6 @@ InformeJob informe({
   fecha: '2026-01-02T10:00:00.000Z',
   lat: 6.2,
   lng: -75.5,
-  conductorNombre: 'Ana',
-  placa: 'ABC123',
   fotos: fotos ?? const [],
   hallazgos: hallazgos ?? const [],
   inspeccionId: inspeccionId,

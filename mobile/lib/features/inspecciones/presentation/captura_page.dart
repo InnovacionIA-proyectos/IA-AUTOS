@@ -9,12 +9,14 @@ import '../../../app/proveedores.dart';
 import '../../../core/dispositivo/servicios.dart';
 import '../../../core/errores/error_api.dart';
 import '../../../core/tema/tema.dart';
+import '../../../core/ui/widgets.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
 import '../../vehiculos/domain/coords_diagrama.dart';
 import '../../vehiculos/presentation/diagrama_vehiculo.dart';
+import '../../viajes/providers.dart';
 import '../domain/foto_local.dart';
 import '../domain/hallazgo_local.dart';
 import '../domain/reglas_informe.dart';
@@ -26,11 +28,14 @@ import 'selector_dano.dart';
 /// Funciona sin señal: al cerrar, el informe completo se guarda en la cola persistente y se envía cuando la conexión
 /// sea estable.
 class CapturaPage extends ConsumerStatefulWidget {
-  const CapturaPage({super.key, required this.vin, required this.etapaId, required this.proceso});
+  const CapturaPage({super.key, required this.vin, required this.etapaId, required this.proceso, this.viajeId});
 
   final String vin;
   final String etapaId;
   final String proceso;
+
+  /// Viaje del que cuelga la etapa. De él salen la placa, el tráiler, la unidad y el conductor.
+  final String? viajeId;
 
   @override
   ConsumerState<CapturaPage> createState() => _EstadoCapturaPage();
@@ -46,9 +51,6 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   bool _guardandoFoto = false;
   bool _cerrando = false;
 
-  final _conductor = TextEditingController();
-  final _placa = TextEditingController();
-  final _trailer = TextEditingController();
   final _notas = TextEditingController();
 
   @override
@@ -59,9 +61,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 
   @override
   void dispose() {
-    for (final c in [_conductor, _placa, _trailer, _notas]) {
-      c.dispose();
-    }
+    _notas.dispose();
     super.dispose();
   }
 
@@ -133,8 +133,6 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 
   BloqueoCierre? get _bloqueo => bloqueoDeCierre(
         hayUbicacion: _gps != null,
-        conductor: _conductor.text,
-        placa: _placa.text,
         cantidadHallazgos: _hallazgos.length,
         cantidadFotos: _fotos.length,
         catalogosListos: _catalogosListos,
@@ -155,9 +153,6 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         fecha: ahora,
         lat: gps.lat,
         lng: gps.lng,
-        conductor: _conductor.text,
-        placa: _placa.text,
-        trailer: _trailer.text,
         notas: _notas.text,
         fotos: _fotos,
         hallazgos: _hallazgos,
@@ -213,27 +208,8 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                 const SizedBox(height: Espacio.md),
                 Text('Datos del transporte', style: tema.titleMedium),
                 const SizedBox(height: Espacio.md),
-                TextField(
-                  controller: _conductor,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Conductor', hintText: 'Nombre de quien realiza el transporte'),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: Espacio.md),
-                TextField(
-                  controller: _placa,
-                  textCapitalization: TextCapitalization.characters,
-                  autocorrect: false,
-                  decoration: const InputDecoration(labelText: 'Placa', hintText: 'Placa de la niñera'),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: Espacio.md),
-                TextField(
-                  controller: _trailer,
-                  textCapitalization: TextCapitalization.characters,
-                  autocorrect: false,
-                  decoration: const InputDecoration(labelText: 'Trailer (opcional)', hintText: 'Identificación del trailer'),
-                ),
+                // Ya no se escriben: salen del viaje de la etapa y el servidor los toma de ahí.
+                _DatosDelViaje(viajeId: widget.viajeId),
                 const SizedBox(height: Espacio.md),
                 _FilaUbicacion(gps: _gps, error: _errorGps, buscando: _buscandoGps, alReintentar: _buscarUbicacion, alAbrirAjustes: ref.read(servicioUbicacionProvider).abrirAjustes),
                 const SizedBox(height: Espacio.lg),
@@ -350,6 +326,55 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         ),
       ),
     );
+  }
+}
+
+/// Placa, tráiler, unidad y conductor del viaje, en solo lectura.
+///
+/// Antes se escribían a mano en cada informe. Ahora salen del viaje —el servidor los toma de ahí y ya no los
+/// acepta en el cuerpo—, así que aquí solo se muestran para que quien captura confirme que es el viaje correcto.
+class _DatosDelViaje extends ConsumerWidget {
+  const _DatosDelViaje({required this.viajeId});
+
+  final String? viajeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tema = Theme.of(context).textTheme;
+    if (viajeId == null) {
+      return Tarjeta(child: Text('Esta etapa no tiene viaje asociado.', style: tema.bodySmall));
+    }
+
+    return ref.watch(viajeDeEtapaProvider(viajeId!)).when(
+          loading: () => Tarjeta(child: Text('Cargando los datos del viaje…', style: tema.bodySmall)),
+          // No impide capturar: el servidor igual toma los datos del viaje al recibir el informe.
+          error: (_, _) => Tarjeta(child: Text('No se pudieron cargar los datos del viaje.', style: tema.bodySmall)),
+          data: (viaje) => viaje == null
+              ? Tarjeta(child: Text('No se pudieron cargar los datos del viaje.', style: tema.bodySmall))
+              : Tarjeta(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final (etiqueta, valor) in [
+                        ('Placa', viaje.placa),
+                        ('Tráiler', viaje.trailer ?? '—'),
+                        ('Unidad', viaje.unidad ?? '—'),
+                        ('Conductor', viaje.conductorNombre ?? '—'),
+                      ])
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: Espacio.sm),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(width: 96, child: Text(etiqueta, style: tema.bodySmall)),
+                              Expanded(child: Text(valor, style: tema.bodySmall?.copyWith(color: Colores.textoPrimario))),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+        );
   }
 }
 
