@@ -15,6 +15,49 @@ IF OBJECT_ID('tempdb..#r') IS NOT NULL DROP TABLE #r;
 CREATE TABLE #r (Prueba nvarchar(200) NOT NULL, Ok bit NOT NULL, Detalle nvarchar(400) NULL);
 GO
 
+-- Borra un vehiculo de prueba con todo lo que cuelga de el. La base no borra en cascada y protege la evidencia, asi que la limpieza
+-- apaga los triggers solo mientras borra y los vuelve a encender, aunque falle.
+IF OBJECT_ID('tempdb..#zz_borrar_vehiculo') IS NOT NULL DROP PROCEDURE #zz_borrar_vehiculo;
+GO
+CREATE PROCEDURE #zz_borrar_vehiculo @vin varchar(64)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    DECLARE @v uniqueidentifier = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = @vin);
+    IF @v IS NULL RETURN;
+    DECLARE @insp TABLE (Id uniqueidentifier PRIMARY KEY);
+    INSERT @insp SELECT i.Id FROM dbo.tblInspecciones i JOIN dbo.tblEtapas e ON e.Id = i.EtapaId WHERE e.VehiculoId = @v;
+    ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblEvidencias DISABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblHallazgos DISABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblInspecciones DISABLE TRIGGER ALL;
+    BEGIN TRY
+        DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId IN (SELECT Id FROM @insp);
+        DELETE FROM dbo.tblEvidencias WHERE InspeccionId IN (SELECT Id FROM @insp);
+        DELETE FROM dbo.tblHallazgos WHERE InspeccionId IN (SELECT Id FROM @insp);
+        -- Las versiones se borran de la mas nueva a la mas antigua: una version no se puede quitar mientras otra la corrige.
+        WHILE EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id IN (SELECT Id FROM @insp))
+            DELETE FROM dbo.tblInspecciones
+            WHERE Id IN (SELECT Id FROM @insp)
+              AND Id NOT IN (SELECT CorrigeInspeccionId FROM dbo.tblInspecciones WHERE CorrigeInspeccionId IS NOT NULL);
+        DELETE FROM dbo.tblEtapas WHERE VehiculoId = @v;
+        DELETE FROM dbo.tblViajeVehiculos WHERE VehiculoId = @v;
+        DELETE FROM dbo.tblVehiculos WHERE Id = @v;
+    END TRY
+    BEGIN CATCH
+        ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
+        ALTER TABLE dbo.tblEvidencias ENABLE TRIGGER ALL;
+        ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
+        ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
+        THROW;
+    END CATCH
+    ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblEvidencias ENABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
+END
+GO
+
 DECLARE @u1 uniqueidentifier = NEWID(), @u2 uniqueidentifier = NEWID();
 DECLARE @v uniqueidentifier = NEWID();
 DECLARE @pc uniqueidentifier = (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'cargue');
@@ -183,7 +226,7 @@ UPDATE dbo.tblClasesDano SET Activo = 1 WHERE Codigo = 'golpe';
 -- Borrar el cuadrante borra sus poligonos (cascada).
 DELETE FROM dbo.tblCuadrantes WHERE TipoVehiculo = 'zz_test';
 INSERT #r SELECT N'Borrar un cuadrante borra sus poligonos', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblCuadranteVistas WHERE CuadranteId = @cuadranteTest) THEN 1 ELSE 0 END, NULL;
-DELETE FROM dbo.tblVehiculos WHERE Vin = 'ZZ_TEST_VIN_0003';
+EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0003';
 DELETE FROM dbo.tblViajes WHERE CodigoMtrack = 'ZZ_TEST_MTK_3';
 
 -- 5) Viajes: codigo MTrack unico, estados, referencias, cascada hacia sus VIN y proteccion de lo que cuelga de ellos
@@ -400,17 +443,76 @@ END TRY
 BEGIN CATCH
     INSERT #r VALUES (N'Transferencia: cierre con reservas y cierre por no firma se guardan con sus datos', 0, ERROR_MESSAGE());
 END CATCH
--- Borrar el vehiculo de la prueba se lleva sus inspecciones, versiones y fotos (cascada); la cadena de versiones no la impide.
-DELETE FROM dbo.tblVehiculos WHERE Vin = 'ZZ_TEST_VIN_0006';
-DELETE FROM dbo.tblViajes WHERE CodigoMtrack = 'ZZ_TEST_MTK_6';
-INSERT #r SELECT N'Cascada: borrar el vehiculo borra sus inspecciones con versiones y fotos',
-    CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id IN (@s5, @l5, @c5)) AND NOT EXISTS (SELECT 1 FROM dbo.tblEvidencias WHERE StoragePath LIKE N'zz-%') THEN 1 ELSE 0 END, NULL;
+-- 7b) La evidencia no se borra (51003) y las relaciones ya no borran en cascada
+INSERT #r SELECT N'Vehiculo: nace activo y tiene su indice',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblVehiculos WHERE Vin = 'ZZ_TEST_VIN_0006' AND Activo = 1)
+          AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblVehiculos_Activo' AND object_id = OBJECT_ID(N'dbo.tblVehiculos')) THEN 1 ELSE 0 END, NULL;
+DECLARE @bV uniqueidentifier = NEWID(), @bF uniqueidentifier = NEWID(), @bH uniqueidentifier = NEWID(), @bT uniqueidentifier = NEWID();
+INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (NEWID(), @v5, @vj5, @pc, 3), (NEWID(), @v5, @vj5, @pc, 4), (NEWID(), @v5, @vj5, @pc, 5), (NEWID(), @v5, @vj5, @pc, 6);
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES
+ (@bV, (SELECT Id FROM dbo.tblEtapas WHERE VehiculoId = @v5 AND Orden = 3), @vj5, @u1, 'salida', SYSDATETIMEOFFSET()),
+ (@bF, (SELECT Id FROM dbo.tblEtapas WHERE VehiculoId = @v5 AND Orden = 4), @vj5, @u1, 'salida', SYSDATETIMEOFFSET()),
+ (@bH, (SELECT Id FROM dbo.tblEtapas WHERE VehiculoId = @v5 AND Orden = 5), @vj5, @u1, 'salida', SYSDATETIMEOFFSET()),
+ (@bT, (SELECT Id FROM dbo.tblEtapas WHERE VehiculoId = @v5 AND Orden = 6), @vj5, @u1, 'salida', SYSDATETIMEOFFSET());
+INSERT dbo.tblEvidencias (Id, InspeccionId, StoragePath, SelloFecha, SelloLat, SelloLng) VALUES (NEWID(), @bF, N'zz-borrador.jpg', SYSDATETIMEOFFSET(), 4.6, -74.1);
+INSERT dbo.tblHallazgos (Id, InspeccionId, ParteVehiculo, ClaseDano, TamanoDano) VALUES (NEWID(), @bH, N'Capot', 'golpe', '1_5cm');
+INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId) VALUES (NEWID(), @bT, @u1, @u2);
+INSERT dbo.tblAuditLog (Id, Accion) VALUES (NEWID(), N'zz_test.borrar');
 
--- 8) Cascada: borrar el vehiculo elimina etapas, inspecciones, transferencias y su lugar en los viajes (no hay trigger de DELETE)
+DECLARE @casosBorrado TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosBorrado VALUES
+ (N'No se borra una evidencia', N'DELETE FROM dbo.tblEvidencias WHERE StoragePath = N''zz-borrador.jpg''', 51003),
+ (N'No se borra un hallazgo', N'DELETE FROM dbo.tblHallazgos WHERE InspeccionId = ''' + CAST(@bH AS nvarchar(36)) + N'''', 51003),
+ (N'No se borra una transferencia', N'DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = ''' + CAST(@bT AS nvarchar(36)) + N'''', 51003),
+ (N'No se borra un registro de auditoria', N'DELETE FROM dbo.tblAuditLog WHERE Accion = N''zz_test.borrar''', 51003),
+ (N'No se borra una inspeccion cerrada', N'DELETE FROM dbo.tblInspecciones WHERE Id = ''' + CAST(@s5 AS nvarchar(36)) + N'''', 51003),
+ (N'No se borra un borrador con fotos', N'DELETE FROM dbo.tblInspecciones WHERE Id = ''' + CAST(@bF AS nvarchar(36)) + N'''', 51003),
+ (N'No se borra un borrador con hallazgos', N'DELETE FROM dbo.tblInspecciones WHERE Id = ''' + CAST(@bH AS nvarchar(36)) + N'''', 51003),
+ (N'No se borra un borrador con transferencia', N'DELETE FROM dbo.tblInspecciones WHERE Id = ''' + CAST(@bT AS nvarchar(36)) + N'''', 51003),
+ (N'No se borra un vehiculo con etapas (sin cascada)', N'DELETE FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0006''', 547),
+ (N'No se borra una etapa con inspecciones (sin cascada)', N'DELETE FROM dbo.tblEtapas WHERE Id = ''' + CAST(@e5 AS nvarchar(36)) + N'''', 547);
+
+DECLARE @pruebaBorrado nvarchar(200), @sqlBorrado nvarchar(max), @espBorrado int;
+DECLARE cBorrado CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosBorrado;
+OPEN cBorrado; FETCH NEXT FROM cBorrado INTO @pruebaBorrado, @sqlBorrado, @espBorrado;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    BEGIN TRY
+        EXEC (@sqlBorrado);
+        INSERT #r VALUES (@pruebaBorrado, 0, N'la sentencia no fallo');
+    END TRY
+    BEGIN CATCH
+        INSERT #r VALUES (@pruebaBorrado, CASE WHEN ERROR_NUMBER() = @espBorrado THEN 1 ELSE 0 END, N'error ' + CAST(ERROR_NUMBER() AS nvarchar(10)) + N': ' + LEFT(ERROR_MESSAGE(), 150));
+    END CATCH
+    FETCH NEXT FROM cBorrado INTO @pruebaBorrado, @sqlBorrado, @espBorrado;
+END
+CLOSE cBorrado; DEALLOCATE cBorrado;
+
+-- Un borrador vacio si se borra.
+DELETE FROM dbo.tblInspecciones WHERE Id = @bV;
+INSERT #r SELECT N'Un borrador sin fotos, hallazgos ni transferencia si se borra',
+    CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id = @bV) AND EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id = @bF) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Los registros protegidos siguen ahi despues de los intentos de borrado',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblEvidencias WHERE StoragePath = N'zz-borrador.jpg') AND EXISTS (SELECT 1 FROM dbo.tblHallazgos WHERE InspeccionId = @bH)
+          AND EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @bT) AND EXISTS (SELECT 1 FROM dbo.tblAuditLog WHERE Accion = N'zz_test.borrar')
+          AND EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id = @s5) THEN 1 ELSE 0 END, NULL;
+-- La auditoria de prueba se limpia con su trigger apagado solo mientras se borra.
+ALTER TABLE dbo.tblAuditLog DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblAuditLog WHERE Accion = N'zz_test.borrar';
+ALTER TABLE dbo.tblAuditLog ENABLE TRIGGER ALL;
+
+-- Limpieza: el vehiculo de prueba se borra quitando antes, de forma explicita, todo lo que cuelga de el.
+EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0006';
+DELETE FROM dbo.tblViajes WHERE CodigoMtrack = 'ZZ_TEST_MTK_6';
+INSERT #r SELECT N'Limpieza: se borra un vehiculo quitando antes lo que cuelga de el',
+    CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblVehiculos WHERE Vin = 'ZZ_TEST_VIN_0006') AND NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id IN (@s5, @l5, @c5, @bF, @bH, @bT))
+          AND NOT EXISTS (SELECT 1 FROM dbo.tblEvidencias WHERE StoragePath LIKE N'zz-%') THEN 1 ELSE 0 END, NULL;
+
+-- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
-DELETE FROM dbo.tblVehiculos WHERE Vin = 'ZZ_TEST_VIN_0001';
-INSERT #r SELECT N'Cascada: borrar vehiculo elimina etapas e inspecciones', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblEtapas WHERE VehiculoId = @v) AND NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id IN (@i1, @i2)) THEN 1 ELSE 0 END, NULL;
-INSERT #r SELECT N'Cascada: borrar vehiculo lo quita de sus viajes', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblViajeVehiculos WHERE VehiculoId = @v) THEN 1 ELSE 0 END, NULL;
+EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';
+INSERT #r SELECT N'Limpieza: no quedan etapas ni inspecciones del vehiculo base', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblEtapas WHERE VehiculoId = @v) AND NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id IN (@i1, @i2)) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Limpieza: el vehiculo base ya no esta en sus viajes', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblViajeVehiculos WHERE VehiculoId = @v) THEN 1 ELSE 0 END, NULL;
 DELETE FROM dbo.tblViajes WHERE CodigoMtrack LIKE 'ZZ_TEST%' OR Placa LIKE N'ZZT_SIN_CODIGO%';
 DELETE FROM dbo.tblUsuarios WHERE Email LIKE N'zz_test_%' OR Nombre LIKE N'ZZ_TEST%';
 INSERT #r SELECT N'Limpieza: no quedan datos de prueba', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblUsuarios WHERE Nombre LIKE N'ZZ_TEST%') AND NOT EXISTS (SELECT 1 FROM dbo.tblVehiculos WHERE Vin LIKE 'ZZ_TEST%') AND NOT EXISTS (SELECT 1 FROM dbo.tblViajes WHERE CodigoMtrack LIKE 'ZZ_TEST%' OR Placa LIKE N'ZZT%') THEN 1 ELSE 0 END, NULL;

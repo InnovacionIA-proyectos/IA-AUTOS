@@ -16,6 +16,7 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
     private const int ERROR_TRIGGER_INSPECCION_CERRADA = 51000;
     private const int ERROR_TRIGGER_HALLAZGO_EN_CERRADA = 51001;
     private const int ERROR_TRIGGER_EVIDENCIA_EN_CERRADA = 51002;
+    private const int ERROR_TRIGGER_EVIDENCIA_NO_SE_BORRA = 51003;
 
     // Mensajes por restriccion: coinciden con los de la API original.
     private static readonly (string Restriccion, string Mensaje)[] CONFLICTOS_UNICOS =
@@ -139,6 +140,9 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
 
             case ERROR_TRIGGER_INSPECCION_CERRADA or ERROR_TRIGGER_HALLAZGO_EN_CERRADA or ERROR_TRIGGER_EVIDENCIA_EN_CERRADA:
                 return new clsConflictoException("La inspección está cerrada y es inmutable; no admite cambios");
+
+            case ERROR_TRIGGER_EVIDENCIA_NO_SE_BORRA:
+                return new clsConflictoException("El registro es evidencia y no se puede borrar");
 
             default:
                 return null;

@@ -169,6 +169,7 @@ BEGIN
         Color         nvarchar(100)    NULL,
         Operacion     varchar(20)      NOT NULL,
         ClienteId     uniqueidentifier NOT NULL,
+        Activo        bit              NOT NULL CONSTRAINT DF_tblVehiculos_Activo DEFAULT (1),
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblVehiculos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblVehiculos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT UQ_tblVehiculos_Vin UNIQUE (Vin),
@@ -177,6 +178,14 @@ BEGIN
     );
     CREATE INDEX IX_tblVehiculos_Cliente ON dbo.tblVehiculos (ClienteId);
 END
+GO
+
+-- Baja logica: un vehiculo dado de baja queda inactivo (no se busca ni se agrega a un viaje) y conserva sus etapas, inspecciones y evidencias.
+IF COL_LENGTH(N'dbo.tblVehiculos', N'Activo') IS NULL
+    ALTER TABLE dbo.tblVehiculos ADD Activo bit NOT NULL CONSTRAINT DF_tblVehiculos_Activo DEFAULT (1);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblVehiculos_Activo' AND object_id = OBJECT_ID(N'dbo.tblVehiculos'))
+    CREATE INDEX IX_tblVehiculos_Activo ON dbo.tblVehiculos (Activo);
 GO
 
 /* -----------------------------------------------------------------------------
@@ -405,7 +414,7 @@ BEGIN
         CreatedAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajeVehiculos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajeVehiculos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblViajeVehiculos_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id) ON DELETE CASCADE,
-        CONSTRAINT FK_tblViajeVehiculos_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_tblViajeVehiculos_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id),
         CONSTRAINT UQ_tblViajeVehiculos_Viaje_Vehiculo UNIQUE (ViajeId, VehiculoId)
     );
     CREATE INDEX IX_tblViajeVehiculos_Vehiculo ON dbo.tblViajeVehiculos (VehiculoId);
@@ -432,7 +441,7 @@ BEGIN
         ConPersonalApoyo    bit              NOT NULL CONSTRAINT DF_tblEtapas_ConPersonalApoyo DEFAULT (0),
         CreatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEtapas_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEtapas_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        CONSTRAINT FK_tblEtapas_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_tblEtapas_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id),
         CONSTRAINT FK_tblEtapas_EtapaCatalogo FOREIGN KEY (EtapaCatalogoId) REFERENCES dbo.tblEtapasCatalogo (Id),
         CONSTRAINT FK_tblEtapas_PuntoCustodia FOREIGN KEY (PuntoCustodiaId) REFERENCES dbo.tblPuntosCustodia (Id),
         CONSTRAINT FK_tblEtapas_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
@@ -475,7 +484,7 @@ BEGIN
         CorrigeInspeccionId uniqueidentifier NULL,
         CreatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspecciones_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspecciones_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        CONSTRAINT FK_tblInspecciones_Etapa FOREIGN KEY (EtapaId) REFERENCES dbo.tblEtapas (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_tblInspecciones_Etapa FOREIGN KEY (EtapaId) REFERENCES dbo.tblEtapas (Id),
         CONSTRAINT FK_tblInspecciones_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT FK_tblInspecciones_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
         CONSTRAINT FK_tblInspecciones_Corrige FOREIGN KEY (CorrigeInspeccionId) REFERENCES dbo.tblInspecciones (Id),
@@ -517,7 +526,7 @@ BEGIN
         CoordsDiagrama  nvarchar(200)    NULL,
         CreatedAt       datetimeoffset(3) NOT NULL CONSTRAINT DF_tblHallazgos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt       datetimeoffset(3) NOT NULL CONSTRAINT DF_tblHallazgos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        CONSTRAINT FK_tblHallazgos_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_tblHallazgos_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
         CONSTRAINT FK_tblHallazgos_ClaseDano FOREIGN KEY (ClaseDano) REFERENCES dbo.tblClasesDano (Codigo),
         CONSTRAINT FK_tblHallazgos_TamanoDano FOREIGN KEY (TamanoDano) REFERENCES dbo.tblTamanosDano (Codigo),
         CONSTRAINT CK_tblHallazgos_Coords CHECK (CoordsDiagrama IS NULL OR ISJSON(CoordsDiagrama) = 1)
@@ -559,7 +568,7 @@ BEGIN
         EsConstancia  bit              NOT NULL CONSTRAINT DF_tblEvidencias_EsConstancia DEFAULT (0),
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        CONSTRAINT FK_tblEvidencias_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_tblEvidencias_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
         CONSTRAINT FK_tblEvidencias_Hallazgo FOREIGN KEY (HallazgoId) REFERENCES dbo.tblHallazgos (Id),
         CONSTRAINT FK_tblEvidencias_Vista FOREIGN KEY (VistaId) REFERENCES dbo.tblVistasFoto (Id),
         CONSTRAINT CK_tblEvidencias_Lat CHECK (SelloLat BETWEEN -90 AND 90),
@@ -605,7 +614,7 @@ BEGIN
         EvidenciaConstanciaId uniqueidentifier NULL,
         CreatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTransferenciasCustodia_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTransferenciasCustodia_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
-        CONSTRAINT FK_tblTransferencias_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_tblTransferencias_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
         CONSTRAINT FK_tblTransferencias_Entrega FOREIGN KEY (EntregaUsuarioId) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT FK_tblTransferencias_Recibe FOREIGN KEY (RecibeUsuarioId) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT FK_tblTransferencias_Testigo FOREIGN KEY (TestigoUsuarioId) REFERENCES dbo.tblUsuarios (Id),
@@ -854,6 +863,57 @@ BEGIN
                JOIN dbo.tblInspecciones n ON n.Id = i.InspeccionId
                WHERE n.Estado = ''cerrada'' AND i.EsConstancia = 0)
         THROW 51002, ''La inspeccion esta cerrada y es inmutable; no admite evidencias nuevas'', 1;
+END');
+GO
+
+/* -----------------------------------------------------------------------------
+   La evidencia no se borra (ultima defensa en la base, ademas de la aplicacion):
+   ningun usuario ni proceso puede borrar evidencias, hallazgos, transferencias ni el registro de auditoria, y una inspeccion
+   solo se borra si es un borrador vacio (sin fotos, hallazgos ni transferencia). El error es 51003. Por eso las relaciones
+   entre vehiculo, etapa, inspeccion y sus registros no tienen borrado en cascada: para quitar algo hay que hacerlo de forma explicita.
+   Un trigger INSTEAD OF DELETE no puede existir en una tabla con una FK en cascada: en una base que aun conserva las cascadas
+   anteriores no se crea (se crea al aplicar el cambio de esquema que las quita).
+   ----------------------------------------------------------------------------- */
+DECLARE @tablaProtegida sysname, @sqlProtegida nvarchar(max);
+DECLARE cProtegidas CURSOR LOCAL FAST_FORWARD FOR
+    SELECT v FROM (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblTransferenciasCustodia'), (N'tblAuditLog')) AS t (v);
+OPEN cProtegidas;
+FETCH NEXT FROM cProtegidas INTO @tablaProtegida;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    IF OBJECT_ID(N'dbo.' + @tablaProtegida, N'U') IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE parent_object_id = OBJECT_ID(N'dbo.' + @tablaProtegida) AND delete_referential_action <> 0)
+    BEGIN
+        SET @sqlProtegida = N'CREATE OR ALTER TRIGGER dbo.TR_' + @tablaProtegida + N'_NoBorrar
+ON dbo.' + @tablaProtegida + N'
+INSTEAD OF DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    THROW 51003, ''Este registro es evidencia y no se puede borrar'', 1;
+END';
+        EXEC (@sqlProtegida);
+    END
+    FETCH NEXT FROM cProtegidas INTO @tablaProtegida;
+END
+CLOSE cProtegidas;
+DEALLOCATE cProtegidas;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE parent_object_id = OBJECT_ID(N'dbo.tblInspecciones') AND delete_referential_action <> 0)
+    EXEC (N'CREATE OR ALTER TRIGGER dbo.TR_tblInspecciones_NoBorrar
+ON dbo.tblInspecciones
+INSTEAD OF DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM deleted d
+               WHERE d.Estado = ''cerrada''
+                  OR EXISTS (SELECT 1 FROM dbo.tblEvidencias e WHERE e.InspeccionId = d.Id)
+                  OR EXISTS (SELECT 1 FROM dbo.tblHallazgos h WHERE h.InspeccionId = d.Id)
+                  OR EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia t WHERE t.InspeccionId = d.Id))
+        THROW 51003, ''Una inspeccion cerrada, o con fotos, hallazgos o transferencia, es evidencia y no se puede borrar'', 1;
+    DELETE i FROM dbo.tblInspecciones i JOIN deleted d ON d.Id = i.Id;
 END');
 GO
 

@@ -63,4 +63,4 @@ Con un usuario que pueda crear tablas y vistas y desactivar triggers (no el de l
 El trigger de inmutabilidad de las inspecciones se desactiva **solo** mientras se llena `tblInspecciones.ViajeId` (ningún otro dato de un informe cerrado cambia) y se
 vuelve a activar dentro de la misma transacción.
 
-Una base nueva se crea con `ddl.sql`, que ya trae el esquema. `tests/verificar-ddl.sql` comprueba las restricciones de los viajes, la vista y la cascada.
+Una base nueva se crea con `ddl.sql`, que ya trae el esquema. `tests/verificar-ddl.sql` comprueba las restricciones de los viajes y la vista. Un viaje sin inspecciones se borra junto con la lista de sus VIN (esa cascada se conserva); el vehiculo, las etapas y las inspecciones no se borran en cascada (ver [evidencia-inmutable.md](evidencia-inmutable.md)).
