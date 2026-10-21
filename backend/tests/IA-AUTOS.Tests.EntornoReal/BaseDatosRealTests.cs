@@ -579,6 +579,25 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_auditoria_completa_y_las_notas_aclaratorias_estan_migradas()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/18-auditoria-completa.sql o 19-notas-aclaratorias.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columnas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblAuditLog', N'U') AND name IN (N'Ip', N'Dispositivo', N'Detalle', N'ViajeId', N'ClienteId')");
+        var indices = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'tblAuditLog', N'U') AND name IN (N'IX_tblAuditLog_Entidad', N'IX_tblAuditLog_Viaje', N'IX_tblAuditLog_Cliente')");
+        var triggerAuditoria = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE name = N'TR_tblAuditLog_NoModificar'");
+        var tablaNotas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblNotasAclaratorias' AND schema_id = SCHEMA_ID()");
+        var triggersNotas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE name IN (N'TR_tblNotasAclaratorias_NoModificar', N'TR_tblNotasAclaratorias_NoBorrar')");
+
+        Assert.True(columnas == 5, "Faltan columnas de tblAuditLog. Ejecute database/cambios-esquema/18-auditoria-completa.sql.");
+        Assert.True(indices == 3, "Faltan indices de tblAuditLog. Ejecute database/cambios-esquema/18-auditoria-completa.sql.");
+        Assert.True(triggerAuditoria == 1, "Falta TR_tblAuditLog_NoModificar. Ejecute database/cambios-esquema/18-auditoria-completa.sql.");
+        Assert.True(tablaNotas == 1, "Falta tblNotasAclaratorias. Ejecute database/cambios-esquema/19-notas-aclaratorias.sql.");
+        Assert.True(triggersNotas == 2, "Faltan los triggers de tblNotasAclaratorias. Ejecute database/cambios-esquema/19-notas-aclaratorias.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

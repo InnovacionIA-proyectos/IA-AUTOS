@@ -765,6 +765,48 @@ ALTER TABLE dbo.tblHallazgos DISABLE TRIGGER ALL;
 DELETE FROM dbo.tblHallazgos WHERE Id IN (@hvA, @hvB);
 ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
 
+-- 7i) Auditoria con IP, dispositivo y detalle (inmodificable) y notas aclaratorias (append-only)
+DECLARE @casosAud TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosAud VALUES
+ (N'Auditoria: un registro con IP, dispositivo, detalle JSON, viaje y cliente se guarda', N'INSERT dbo.tblAuditLog (Id, UsuarioId, Accion, Entidad, EntidadId, Ip, Dispositivo, Detalle, ViajeId, ClienteId) VALUES (NEWID(), ''' + CAST(@u1 AS nvarchar(36)) + N''', N''zz.accion'', N''zz'', NEWID(), ''10.0.0.1'', N''zz-celular'', N''{"antes":{"estado":"borrador"},"despues":{"estado":"cerrada"}}'', NEWID(), NEWID())', 0),
+ (N'CHECK el detalle de la auditoria es JSON', N'INSERT dbo.tblAuditLog (Id, Accion, Detalle) VALUES (NEWID(), N''zz.accion'', N''esto no es json'')', 547),
+ (N'Auditoria: el detalle nulo es una lectura', N'INSERT dbo.tblAuditLog (Id, Accion) VALUES (NEWID(), N''zz.lectura'')', 0),
+ (N'Trigger: la auditoria no se modifica', N'UPDATE dbo.tblAuditLog SET Accion = N''otra'' WHERE Accion = N''zz.accion''', 51005),
+ (N'Trigger: la auditoria no se borra', N'DELETE FROM dbo.tblAuditLog WHERE Accion = N''zz.accion''', 51003),
+ (N'Nota aclaratoria: una valida se guarda', N'INSERT dbo.tblNotasAclaratorias (Id, Entidad, EntidadId, AutorId, Texto) VALUES (NEWID(), ''hallazgo'', NEWID(), ''' + CAST(@u1 AS nvarchar(36)) + N''', N''zz aclaracion'')', 0),
+ (N'CHECK entidad de la nota aclaratoria', N'INSERT dbo.tblNotasAclaratorias (Id, Entidad, EntidadId, AutorId, Texto) VALUES (NEWID(), ''vehiculo'', NEWID(), ''' + CAST(@u1 AS nvarchar(36)) + N''', N''zz aclaracion'')', 547),
+ (N'CHECK texto de la nota aclaratoria no vacio', N'INSERT dbo.tblNotasAclaratorias (Id, Entidad, EntidadId, AutorId, Texto) VALUES (NEWID(), ''inspeccion'', NEWID(), ''' + CAST(@u1 AS nvarchar(36)) + N''', N'''')', 547),
+ (N'FK autor de la nota aclaratoria', N'INSERT dbo.tblNotasAclaratorias (Id, Entidad, EntidadId, AutorId, Texto) VALUES (NEWID(), ''transferencia'', NEWID(), NEWID(), N''zz aclaracion'')', 547),
+ (N'Trigger: la nota aclaratoria no se modifica', N'UPDATE dbo.tblNotasAclaratorias SET Texto = N''otro'' WHERE Texto = N''zz aclaracion''', 51005),
+ (N'Trigger: la nota aclaratoria no se borra', N'DELETE FROM dbo.tblNotasAclaratorias WHERE Texto = N''zz aclaracion''', 51003);
+DECLARE @pruebaA nvarchar(200), @sentenciaA nvarchar(max), @esperadoA int, @obtenidoA int, @mensajeA nvarchar(4000);
+DECLARE cAud CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosAud;
+OPEN cAud;
+FETCH NEXT FROM cAud INTO @pruebaA, @sentenciaA, @esperadoA;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoA = 0; SET @mensajeA = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaA);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoA = ERROR_NUMBER(); SET @mensajeA = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaA, CASE WHEN @obtenidoA = @esperadoA THEN 1 ELSE 0 END, CASE WHEN @obtenidoA = @esperadoA THEN NULL ELSE CONCAT(N'esperaba ', @esperadoA, N' y fue ', @obtenidoA, N': ', @mensajeA) END);
+    FETCH NEXT FROM cAud INTO @pruebaA, @sentenciaA, @esperadoA;
+END
+CLOSE cAud;
+DEALLOCATE cAud;
+INSERT #r SELECT N'Auditoria: tiene sus indices por entidad, viaje, cliente y fecha',
+    CASE WHEN (SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.tblAuditLog') AND name IN (N'IX_tblAuditLog_Entidad', N'IX_tblAuditLog_Viaje', N'IX_tblAuditLog_Cliente', N'IX_tblAuditLog_CreatedAt')) = 4 THEN 1 ELSE 0 END, NULL;
+-- La limpieza de lo de esta seccion (la auditoria y las notas solo se borran con sus triggers apagados).
+ALTER TABLE dbo.tblAuditLog DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblAuditLog WHERE Accion IN (N'zz.accion', N'zz.lectura');
+ALTER TABLE dbo.tblAuditLog ENABLE TRIGGER ALL;
+ALTER TABLE dbo.tblNotasAclaratorias DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblNotasAclaratorias WHERE Texto = N'zz aclaracion';
+ALTER TABLE dbo.tblNotasAclaratorias ENABLE TRIGGER ALL;
+
 -- Limpieza: el vehiculo de prueba se borra quitando antes, de forma explicita, todo lo que cuelga de el.
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0006';
 DELETE FROM dbo.tblViajes WHERE CodigoMtrack = 'ZZ_TEST_MTK_6';

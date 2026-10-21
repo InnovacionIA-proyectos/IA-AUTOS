@@ -51,6 +51,15 @@ Con un usuario que pueda alterar tablas y crear triggers (no el de la aplicacion
 
 No borra ni cambia ningun dato: solo cambia relaciones, crea los triggers y agrega la columna `Activo` (todos los vehiculos quedan activos).
 
+## Auditoria completa y notas aclaratorias
+
+- **`tblAuditLog`** gana `Ip` (45), `Dispositivo` (200), `Detalle` (JSON `{"antes": {...}, "despues": {...}}`, nulo en las lecturas), `ViajeId` y `ClienteId` (sin llave foranea: el registro sobrevive a lo que audita, incluso a un viaje que se borra).
+  Tiene indices por `(Entidad, EntidadId)`, `ViajeId`, `ClienteId` y `CreatedAt`. **Un UPDATE falla con el error 51005** y un DELETE con el 51003. Script: `database/cambios-esquema/18-auditoria-completa.sql`.
+- **`tblNotasAclaratorias`**: la aclaracion de un registro ya guardado es un registro NUEVO (`Entidad`: `inspeccion`, `hallazgo` o `transferencia`; `EntidadId`, `AutorId`, `Texto` de hasta 1000 y `CreatedAt`) con indice por `(Entidad, EntidadId)`.
+  El original no cambia y la nota no se edita (51005) ni se borra (51003). Script: `database/cambios-esquema/19-notas-aclaratorias.sql`.
+
+Cada script se ejecuta completo, en una sola ejecucion, antes de desplegar la API, ajustando `@esquema`; es una transaccion y se puede repetir. `tests/verificar-ddl.sql` prueba cada restriccion y cada trigger.
+
 Una base nueva se crea con `ddl.sql`, que ya trae el esquema. `tests/verificar-ddl.sql` prueba cada trigger (un caso de error 51003 por tabla, la
 inspeccion cerrada, el borrador con fotos, hallazgos o transferencia, y el borrador vacio que si se borra) y que un vehiculo o una etapa con registros no se
 borra. Para limpiar sus datos de prueba apaga los triggers solo mientras borra y los vuelve a encender, aunque falle.

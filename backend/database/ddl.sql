@@ -1295,6 +1295,75 @@ END');
 GO
 
 /* -----------------------------------------------------------------------------
+   Auditoria con IP, dispositivo y detalle, e inmodificable. tblAuditLog gana Ip, Dispositivo, Detalle (JSON {"antes": {...}, "despues": {...}}; nulo en las lecturas), ViajeId y ClienteId
+   (el viaje y el cliente a los que pertenece lo auditado, sin llave foranea: el registro de auditoria sobrevive a lo que audita, incluso a un viaje que se borra). Los indices sirven a la consulta
+   por entidad, viaje, cliente y fecha. Un UPDATE falla con el error 51005 (el borrado ya lo impide el trigger de no borrado, error 51003).
+   ----------------------------------------------------------------------------- */
+IF COL_LENGTH(N'dbo.tblAuditLog', N'Ip') IS NULL
+    ALTER TABLE dbo.tblAuditLog ADD Ip varchar(45) NULL;
+IF COL_LENGTH(N'dbo.tblAuditLog', N'Dispositivo') IS NULL
+    ALTER TABLE dbo.tblAuditLog ADD Dispositivo nvarchar(200) NULL;
+IF COL_LENGTH(N'dbo.tblAuditLog', N'Detalle') IS NULL
+    ALTER TABLE dbo.tblAuditLog ADD Detalle nvarchar(max) NULL;
+IF COL_LENGTH(N'dbo.tblAuditLog', N'ViajeId') IS NULL
+    ALTER TABLE dbo.tblAuditLog ADD ViajeId uniqueidentifier NULL;
+IF COL_LENGTH(N'dbo.tblAuditLog', N'ClienteId') IS NULL
+    ALTER TABLE dbo.tblAuditLog ADD ClienteId uniqueidentifier NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblAuditLog_Detalle' AND parent_object_id = OBJECT_ID(N'dbo.tblAuditLog'))
+    EXEC (N'ALTER TABLE dbo.tblAuditLog WITH CHECK ADD CONSTRAINT CK_tblAuditLog_Detalle CHECK (Detalle IS NULL OR ISJSON(Detalle) = 1)');
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblAuditLog_Entidad' AND object_id = OBJECT_ID(N'dbo.tblAuditLog'))
+    EXEC (N'CREATE INDEX IX_tblAuditLog_Entidad ON dbo.tblAuditLog (Entidad, EntidadId)');
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblAuditLog_Viaje' AND object_id = OBJECT_ID(N'dbo.tblAuditLog'))
+    EXEC (N'CREATE INDEX IX_tblAuditLog_Viaje ON dbo.tblAuditLog (ViajeId)');
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblAuditLog_Cliente' AND object_id = OBJECT_ID(N'dbo.tblAuditLog'))
+    EXEC (N'CREATE INDEX IX_tblAuditLog_Cliente ON dbo.tblAuditLog (ClienteId)');
+GO
+
+CREATE OR ALTER TRIGGER dbo.TR_tblAuditLog_NoModificar
+ON dbo.tblAuditLog
+INSTEAD OF UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    THROW 51005, 'El registro de auditoria no se modifica', 1;
+END
+GO
+
+/* -----------------------------------------------------------------------------
+   tblNotasAclaratorias: la aclaracion de un registro ya guardado (una inspeccion, un hallazgo o una transferencia) es un registro NUEVO con su autor y su fecha: el original no cambia y la nota
+   no se edita ni se borra (UPDATE falla con 51005 y DELETE con 51003). EntidadId es el id de la inspeccion, del hallazgo o de la transferencia segun Entidad (sin llave foranea: es de tres tablas).
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblNotasAclaratorias', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblNotasAclaratorias
+    (
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblNotasAclaratorias PRIMARY KEY,
+        Entidad    varchar(15)       NOT NULL,
+        EntidadId  uniqueidentifier  NOT NULL,
+        AutorId    uniqueidentifier  NOT NULL,
+        Texto      nvarchar(1000)    NOT NULL,
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblNotasAclaratorias_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblNotasAclaratorias_Autor FOREIGN KEY (AutorId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT CK_tblNotasAclaratorias_Entidad CHECK (Entidad IN ('inspeccion', 'hallazgo', 'transferencia')),
+        CONSTRAINT CK_tblNotasAclaratorias_Texto CHECK (LEN(Texto) > 0)
+    );
+    CREATE INDEX IX_tblNotasAclaratorias_Entidad ON dbo.tblNotasAclaratorias (Entidad, EntidadId);
+END
+GO
+
+CREATE OR ALTER TRIGGER dbo.TR_tblNotasAclaratorias_NoModificar
+ON dbo.tblNotasAclaratorias
+INSTEAD OF UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    THROW 51005, 'Una nota aclaratoria no se modifica', 1;
+END
+GO
+
+/* -----------------------------------------------------------------------------
    La evidencia no se borra (ultima defensa en la base, ademas de la aplicacion):
    ningun usuario ni proceso puede borrar evidencias, hallazgos, transferencias ni el registro de auditoria, y una inspeccion
    solo se borra si es un borrador vacio (sin fotos, hallazgos ni transferencia). El error es 51003. Por eso las relaciones
@@ -1304,7 +1373,7 @@ GO
    ----------------------------------------------------------------------------- */
 DECLARE @tablaProtegida sysname, @sqlProtegida nvarchar(max);
 DECLARE cProtegidas CURSOR LOCAL FAST_FORWARD FOR
-    SELECT v FROM (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblTransferenciasCustodia'), (N'tblAuditLog'), (N'tblHallazgoSeguimiento'), (N'tblNotificaciones')) AS t (v);
+    SELECT v FROM (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblTransferenciasCustodia'), (N'tblAuditLog'), (N'tblHallazgoSeguimiento'), (N'tblNotificaciones'), (N'tblNotasAclaratorias')) AS t (v);
 OPEN cProtegidas;
 FETCH NEXT FROM cProtegidas INTO @tablaProtegida;
 WHILE @@FETCH_STATUS = 0
