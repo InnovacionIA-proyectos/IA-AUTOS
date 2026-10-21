@@ -12,8 +12,10 @@ hay una conexión estable.
 | Pantalla | Qué hace |
 |---|---|
 | Login | correo y contraseña contra la API; el token se guarda en el Keystore de Android |
-| Mis inspecciones | listado con caché local (se ve sin señal), barra de sincronización y botón de nueva inspección |
-| Abrir VIN / VIN | inventario, último informe con fotos y diagrama, y el estado de cada etapa de la ruta de custodia |
+| Mis viajes | entrada principal: los viajes donde la persona es conductor o inspector, con sus unidades y caché local |
+| Buscar VIN | búsqueda dentro de mis viajes por VIN, marca, modelo o código del viaje |
+| Mis inspecciones | listado con caché local (se ve sin señal) y barra de sincronización |
+| VIN | inventario, último informe con fotos y diagrama, y el estado de cada etapa de la ruta de custodia |
 | Captura | datos del transporte, novedades sobre el diagrama, fotos selladas, notas y cierre del informe |
 | Firma | firma de quien entrega y de quien recibe (parcial o completa) |
 | Envíos pendientes | lo que espera señal; los envíos con error se ven aquí con su motivo, y se reintentan o descartan a mano |
@@ -30,6 +32,7 @@ lib/
   core/       config (entornos), http (Dio), db (Drift), dispositivo, errores, tema, ui, util
   features/
     auth/         sesión, login y almacén seguro del token
+    viajes/       mis viajes con caché, búsqueda de VIN y datos del transporte para la captura
     vehiculos/    inventario, catálogo de partes del diagrama, etiquetas
     inspecciones/ listado con caché, captura, reglas de cierre, fotos y hallazgos
     custodia/     firma

@@ -10,8 +10,9 @@ import '../features/inspecciones/presentation/lista_inspecciones_page.dart';
 import '../features/sofasa/presentation/sofasa_page.dart';
 import '../features/sync/presentation/cola_page.dart';
 import '../features/sync/presentation/sync_controller.dart';
-import '../features/vehiculos/presentation/abrir_vin_page.dart';
 import '../features/vehiculos/presentation/vin_page.dart';
+import '../features/viajes/presentation/buscar_vin_page.dart';
+import '../features/viajes/presentation/mis_viajes_page.dart';
 
 /// Rutas de la app. El redirect de sesión es la única puerta: sin sesión solo existe /login.
 final routerProvider = Provider<GoRouter>((ref) {
@@ -31,7 +32,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         case FaseAuth.noAutenticado:
           return ruta == '/login' ? null : '/login';
         case FaseAuth.autenticado:
-          return ruta == '/login' || ruta == '/cargando' ? '/inspecciones' : null;
+          return ruta == '/login' || ruta == '/cargando' ? '/viajes' : null;
       }
     },
     routes: [
@@ -42,10 +43,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         branches: [
           StatefulShellBranch(routes: [
             GoRoute(
+              path: '/viajes',
+              builder: (_, _) => const MisViajesPage(),
+              routes: [GoRoute(path: 'buscar', builder: (_, _) => const BuscarVinPage())],
+            ),
+          ]),
+          StatefulShellBranch(routes: [
+            GoRoute(
               path: '/inspecciones',
               builder: (_, _) => const ListaInspeccionesPage(),
               routes: [
-                GoRoute(path: 'abrir', builder: (_, _) => const AbrirVinPage()),
                 GoRoute(path: 'cola', builder: (_, _) => const ColaPage()),
                 GoRoute(
                   path: 'vin/:vin',
@@ -99,12 +106,17 @@ class _Estructura extends ConsumerWidget {
         selectedIndex: shell.currentIndex,
         onDestinationSelected: (i) => shell.goBranch(i, initialLocation: i == shell.currentIndex),
         destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.local_shipping_outlined),
+            selectedIcon: Icon(Icons.local_shipping),
+            label: 'Mis viajes',
+          ),
           NavigationDestination(
             icon: Badge(isLabelVisible: pendientes > 0, label: Text('$pendientes'), child: const Icon(Icons.assignment_outlined)),
             selectedIcon: Badge(isLabelVisible: pendientes > 0, label: Text('$pendientes'), child: const Icon(Icons.assignment)),
             label: 'Inspecciones',
           ),
-          const NavigationDestination(icon: Icon(Icons.local_shipping_outlined), selectedIcon: Icon(Icons.local_shipping), label: 'Sofasa'),
+          const NavigationDestination(icon: Icon(Icons.inventory_2_outlined), selectedIcon: Icon(Icons.inventory_2), label: 'Sofasa'),
         ],
       ),
     );

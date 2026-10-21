@@ -31,6 +31,8 @@ Reglas de dependencia:
   queda pendiente; hasta entonces esa es la única dependencia admitida hacia `sync`.
 - `catalogos` solo depende de `auth` (necesita saber si hay sesión antes de pedir nada) y del estado de la red,
   igual que `sync`. `inspecciones` y `vehiculos` dependen de `catalogos` para traducir códigos a etiquetas.
+- `viajes` depende de `auth` y del estado de la red. `inspecciones` depende de `viajes`: la captura lee de ahí la
+  placa, el tráiler, la unidad y el conductor, que ya no se escriben.
 - Una feature pequeña no crea capas vacías: `sofasa` y `custodia` tienen un repositorio y una pantalla, y basta.
   Por lo mismo, un valor de catálogo se modela con un único tipo genérico que conserva sus campos, en vez de diez
   clases para diez catálogos de los que hoy se usan tres.
@@ -47,6 +49,18 @@ La lógica con más riesgo (la cola) está en `domain` precisamente para probarl
 | Persistencia | Drift (SQLite) | tablas `jobs` (cola) y `cache_lecturas` (listado de inspecciones y catálogos) |
 | Secretos | flutter_secure_storage | el token vive en el Keystore; nunca en SQLite ni en preferencias |
 | Dispositivo | camera, geolocator, connectivity_plus | detrás de interfaces (`ServicioUbicacion`, `ServicioFotos`, `EstadoRed`) |
+
+## El viaje como eje
+
+«Mis viajes» (`GET /api/viajes/mios`) es la entrada de la app: un inspector o un conductor solo ven los viajes donde
+están asignados, y de ahí salen las unidades que pueden abrir.
+
+- La copia vive en `cache_lecturas` con clave **por usuario**, porque un viaje solo lo ven su conductor y su
+  inspector: en un equipo compartido nadie debe leer los de otra persona.
+- Buscar un VIN es filtrar dentro de esa copia, no digitar 17 caracteres cualesquiera. La API responde `403` ante un
+  VIN ajeno, así que ofrecer la búsqueda libre solo llevaba a un error.
+- La captura ya no pide placa, tráiler ni conductor: salen del viaje de la etapa (`viaje_id`) y el servidor los toma
+  de ahí. Si el viaje no está en la copia se pide suelto; si tampoco se puede, la captura sigue siendo posible.
 
 ## Catálogos maestros
 

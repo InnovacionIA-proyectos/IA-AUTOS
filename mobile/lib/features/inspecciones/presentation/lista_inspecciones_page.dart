@@ -84,11 +84,6 @@ class _EstadoListaInspeccionesPage extends ConsumerState<ListaInspeccionesPage> 
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        tooltip: 'Nueva inspección',
-        onPressed: () => context.push('/inspecciones/abrir'),
-        child: const Icon(Icons.add, size: 28),
-      ),
     );
   }
 
@@ -112,8 +107,8 @@ class _EstadoListaInspeccionesPage extends ConsumerState<ListaInspeccionesPage> 
       FaseLista.listo when estado.items.isEmpty => EstadoMensaje(
           icono: Icons.assignment_outlined,
           titulo: 'Aún no tienes inspecciones',
-          descripcion: 'Cuando se te asigne un VIN aparecerá aquí. También puedes iniciar una inspección nueva digitando el VIN.',
-          accion: FilledButton(onPressed: () => context.push('/inspecciones/abrir'), child: const Text('Nueva inspección')),
+          descripcion: 'Cuando captures un informe aparecerá aquí. Para empezar uno, abre una unidad desde Mis viajes.',
+          accion: FilledButton(onPressed: () => context.go('/viajes'), child: const Text('Ir a Mis viajes')),
         ),
       FaseLista.listo => RefreshIndicator(
           onRefresh: cargar,
