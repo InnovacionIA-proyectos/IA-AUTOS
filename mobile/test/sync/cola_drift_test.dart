@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/core/db/app_database.dart';
-import 'package:traza_autos/features/inspecciones/data/cache_lecturas.dart';
+import 'package:traza_autos/core/db/cache_lecturas.dart';
 import 'package:traza_autos/features/sync/data/cola_drift.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/vehiculos/domain/coords_diagrama.dart';
