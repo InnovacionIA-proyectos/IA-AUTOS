@@ -1,4 +1,5 @@
 using IAAutos.Dominio.Auditoria;
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Sofasa;
@@ -149,6 +150,36 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
 
     public Task<bool> ExisteHallazgoEnInspeccionAsync(Guid hallazgoId, Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Hallazgos.AnyAsync(h => h.Id == hallazgoId && h.InspeccionId == inspeccionId, ct);
+
+    public async Task<clsZonaDano?> ObtenerZonaNumeradaAsync(int numero, string? lado, string? tipoVehiculo, CancellationToken ct = default)
+    {
+        var candidatas = await (from z in contexto.ZonasDano.AsNoTracking()
+                                join c in contexto.Cuadrantes.AsNoTracking() on z.CuadranteId equals c.Id
+                                where z.Activo && c.Activo && c.Numero == numero && z.Lado == lado
+                                    && (c.TipoVehiculo == null || c.TipoVehiculo == tipoVehiculo)
+                                select new { Zona = z, c.TipoVehiculo }).ToListAsync(ct);
+        // El cuadrante propio del tipo de vehiculo gana sobre el generico.
+        return candidatas.OrderBy(x => x.TipoVehiculo is null ? 1 : 0).Select(x => x.Zona).FirstOrDefault();
+    }
+
+    public Task<clsZonaDano?> ObtenerZonaProvisionalAsync(string codigo, CancellationToken ct = default) =>
+        contexto.ZonasDano.AsNoTracking().Where(z => z.CuadranteId == null && z.Activo && z.Codigo == codigo).FirstOrDefaultAsync(ct);
+
+    public Task<string?> ObtenerTipoVehiculoAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        (from i in contexto.Inspecciones.AsNoTracking()
+         join e in contexto.Etapas on i.EtapaId equals e.Id
+         join v in contexto.Vehiculos on e.VehiculoId equals v.Id
+         where i.Id == inspeccionId
+         select v.TipoVehiculo).FirstOrDefaultAsync(ct);
+
+    public Task<bool> EsHallazgoPrevioDelVehiculoAsync(Guid hallazgoOrigenId, Guid inspeccionId, Guid zonaId, string claseDano, CancellationToken ct = default) =>
+        (from actual in contexto.Inspecciones.AsNoTracking()
+         join ea in contexto.Etapas on actual.EtapaId equals ea.Id
+         join h in contexto.Hallazgos.AsNoTracking() on hallazgoOrigenId equals h.Id
+         join ip in contexto.Inspecciones on h.InspeccionId equals ip.Id
+         join ep in contexto.Etapas on ip.EtapaId equals ep.Id
+         where actual.Id == inspeccionId && ip.Id != inspeccionId && ep.VehiculoId == ea.VehiculoId && h.ZonaId == zonaId && h.ClaseDano == claseDano
+         select h.Id).AnyAsync(ct);
 
     public void Agregar(clsInspeccion inspeccion) => contexto.Inspecciones.Add(inspeccion);
 

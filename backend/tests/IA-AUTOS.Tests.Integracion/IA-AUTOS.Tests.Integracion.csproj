@@ -35,6 +35,8 @@
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-seguimiento.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\12-indices-hallazgo.sql" Link="database\cambios-esquema\12-indices-hallazgo.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-indices.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\13-acciones-niveles-severidad.sql" Link="database\cambios-esquema\13-acciones-niveles-severidad.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-acciones.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>

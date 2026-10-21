@@ -38,6 +38,12 @@ public sealed class clsAppDbContext : DbContext
     public DbSet<clsCuadrante> Cuadrantes => Set<clsCuadrante>();
     public DbSet<clsCuadranteVista> CuadranteVistas => Set<clsCuadranteVista>();
 
+    public DbSet<clsPanelDano> PanelesDano => Set<clsPanelDano>();
+
+    public DbSet<clsZonaDano> ZonasDano => Set<clsZonaDano>();
+
+    public DbSet<clsRegionDano> RegionesDano => Set<clsRegionDano>();
+
     public DbSet<clsEtapa> Etapas => Set<clsEtapa>();
 
     public DbSet<clsInspeccion> Inspecciones => Set<clsInspeccion>();

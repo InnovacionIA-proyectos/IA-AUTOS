@@ -61,10 +61,26 @@ internal sealed class clsConfiguracionHallazgo : IEntityTypeConfiguration<clsHal
         builder.HasOne<clsTamanoDano>().WithMany().HasForeignKey(h => h.TamanoDano).HasPrincipalKey(c => c.Codigo)
             .HasConstraintName("FK_tblHallazgos_TamanoDano").OnDelete(DeleteBehavior.NoAction);
         clsConfiguracionBase.Base(builder);
-        builder.Property(h => h.ParteVehiculo).HasMaxLength(200).IsRequired();
-        builder.Property(h => h.ClaseDano).HasColumnType("varchar(30)").IsRequired();
+        builder.Property(h => h.ParteVehiculo).HasMaxLength(200);
+        builder.Property(h => h.ClaseDano).HasColumnType("varchar(30)");
         builder.Property(h => h.TamanoDano).HasColumnType("varchar(30)").IsRequired();
         builder.Property(h => h.CoordsDiagrama).HasConversion(CONVERSOR_COORDS).HasMaxLength(200);
+        builder.Property(h => h.TipoNovedad).HasColumnType("varchar(20)");
+        builder.Property(h => h.NivelSeveridad).HasColumnType("varchar(30)");
+        builder.Property(h => h.Origen).HasColumnType("varchar(10)").IsRequired();
+        builder.Property(h => h.Nota).HasMaxLength(clsHallazgo.NOTA_MAX);
+        builder.Property(h => h.EstadoSeguimiento).HasColumnType("varchar(15)").IsRequired();
+        builder.Property(h => h.RevisadoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.HasOne<clsZonaDano>().WithMany().HasForeignKey(h => h.ZonaId)
+            .HasConstraintName("FK_tblHallazgos_Zona").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsNivelSeveridad>().WithMany().HasForeignKey(h => h.NivelSeveridad).HasPrincipalKey(n => n.Codigo)
+            .HasConstraintName("FK_tblHallazgos_Nivel").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(h => h.HallazgoOrigenId)
+            .HasConstraintName("FK_tblHallazgos_Origen").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(h => h.ConfirmadoPor)
+            .HasConstraintName("FK_tblHallazgos_ConfirmadoPor").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(h => h.RevisadoPor)
+            .HasConstraintName("FK_tblHallazgos_RevisadoPor").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(h => h.InspeccionId)
             .HasConstraintName("FK_tblHallazgos_Inspeccion").OnDelete(DeleteBehavior.NoAction);
     }

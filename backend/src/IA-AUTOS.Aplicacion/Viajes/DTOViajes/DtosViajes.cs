@@ -34,7 +34,22 @@ public sealed record AgregarVinesRequest(IReadOnlyList<string>? Vines);
 
 public sealed record CambiarEstadoViajeRequest(string? Estado);
 
-/// <summary>Un VIN del viaje con el avance de sus etapas dentro de el.</summary>
+/// <summary>
+/// Una unidad que no sale del viaje: el motivo, el hallazgo que la causo, quien la marco (y su nombre), cuando y el VIN que la reemplaza (si ya se
+/// asigno).
+/// </summary>
+public sealed record NoSaleDto(
+    string Motivo,
+    Guid HallazgoId,
+    Guid MarcadoPor,
+    string? MarcadoPorNombre,
+    DateTimeOffset Fecha,
+    string? VinReemplazo);
+
+/// <summary>
+/// Un VIN del viaje con el avance de sus etapas dentro de el. <c>EstadoUnidad</c> es <c>activa</c> o <c>no_sale</c>; en ese caso <c>NoSale</c> trae
+/// el motivo y el hallazgo.
+/// </summary>
 public sealed record ViajeVehiculoDto(
     Guid VehiculoId,
     string Vin,
@@ -43,7 +58,9 @@ public sealed record ViajeVehiculoDto(
     string? Color,
     string Operacion,
     int Etapas,
-    int Completas);
+    int Completas,
+    string EstadoUnidad,
+    NoSaleDto? NoSale);
 
 /// <summary>
 /// Viaje completo con sus VIN. <c>ConPersonalApoyo</c> es la marca de la etapa de Cargue. El viaje no tiene un cliente propio: <c>Clientes</c>

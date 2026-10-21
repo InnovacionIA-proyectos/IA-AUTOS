@@ -224,8 +224,23 @@ public sealed partial class clsViaje : clsEntidadBase
 }
 
 /// <summary>Un VIN dentro de un viaje.</summary>
+/// <summary>Estado de una unidad dentro de un viaje: activa, o que no sale (un hallazgo grave la retiro del viaje).</summary>
+public static class clsEstadoUnidad
+{
+    public const string ACTIVA = "activa";
+    public const string NO_SALE = "no_sale";
+
+    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { ACTIVA, NO_SALE };
+}
+
+/// <summary>
+/// Un VIN dentro de un viaje. Una unidad que no sale conserva este vinculo (con su motivo, el hallazgo que la causo, quien la marco y cuando) para no
+/// perder su trazabilidad cuando mas adelante vuelva a otro viaje.
+/// </summary>
 public sealed class clsViajeVehiculo : clsEntidadBase
 {
+    public const int NO_SALE_MOTIVO_MAX = 500;
+
     private clsViajeVehiculo()
     {
     }
@@ -233,6 +248,20 @@ public sealed class clsViajeVehiculo : clsEntidadBase
     public Guid ViajeId { get; private set; }
 
     public Guid VehiculoId { get; private set; }
+
+    /// <summary><see cref="clsEstadoUnidad"/>.</summary>
+    public string EstadoUnidad { get; private set; } = clsEstadoUnidad.ACTIVA;
+
+    public string? NoSaleMotivo { get; private set; }
+
+    public Guid? NoSaleHallazgoId { get; private set; }
+
+    public Guid? NoSaleMarcadoPor { get; private set; }
+
+    public DateTimeOffset? NoSaleAt { get; private set; }
+
+    /// <summary>El vehiculo que reemplaza a la unidad que no sale, si ya se asigno.</summary>
+    public Guid? ReemplazoVehiculoId { get; private set; }
 
     public static clsViajeVehiculo Crear(Guid viajeId, Guid vehiculoId, DateTimeOffset ahora)
     {

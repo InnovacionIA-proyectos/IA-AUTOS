@@ -456,6 +456,7 @@ transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus v
     {
       "id": "uuid", "orden": 1, "proceso": "cargue", "lugar": "CEDI 1", "requiere_inspeccion": true,
       "viaje_id": "uuid", "codigo_mtrack": "MTK-001", "con_personal_apoyo": false,
+      "estado_unidad": "activa", "no_sale": null,
       "inspecciones": [
         { "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "salida", "fecha": "…", "lat": 6.2, "lng": -75.5,
           "estado": "cerrada", "conductor_nombre": null, "placa": null, "trailer": null, "notas": null,
@@ -466,6 +467,15 @@ transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus v
   ]
 }
 ```
+
+`estado_unidad` es el de la unidad **en el viaje de esa etapa**: `activa` o `no_sale`. Cuando es `no_sale`, `no_sale` trae el detalle; si no, es `null`:
+
+```json
+"no_sale": { "motivo": "Golpe estructural en el frente", "hallazgo_id": "uuid", "marcado_por": "uuid", "marcado_por_nombre": "Ana Pérez",
+             "fecha": "2026-07-17T12:30:15.123Z", "vin_reemplazo": "9BWZZZ377VT004252" }
+```
+
+`vin_reemplazo` es el VIN que reemplaza a la unidad, o `null` si aún no se asignó. Una unidad que no sale **conserva su vínculo con el viaje** y el inventario devuelve las etapas de ese viaje igual que las demás, con su historial completo (incluido el hallazgo que la sacó del viaje).
 
 ### `GET /api/vehiculos/{vin}/inventario/pdf`
 Autenticado. Devuelve el inventario en PDF (`Content-Type: application/pdf`, nombre `inventario-{vin}.pdf`). Es una
@@ -504,7 +514,7 @@ Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viaj
   "estado": "programado", "con_personal_apoyo": false,
   "vehiculos": [
     { "vehiculo_id": "uuid", "vin": "9BWZZZ377VT004251", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional",
-      "etapas": 3, "completas": 0 }
+      "etapas": 3, "completas": 0, "estado_unidad": "activa", "no_sale": null }
   ],
   "clientes": [ { "id": "uuid", "codigo": "sofasa", "nombre": "Sofasa" } ],
   "created_at": "…", "updated_at": "…"
@@ -512,7 +522,8 @@ Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viaj
 ```
 
 `codigo_mtrack`, `tipo_unidad_id` y `placa` pueden ser `null` solo en los viajes migrados desde las asignaciones anteriores. `etapas` y `completas`
-de cada VIN cuentan sus etapas del viaje y las que ya tienen informe cerrado.
+de cada VIN cuentan sus etapas del viaje y las que ya tienen informe cerrado. `estado_unidad` es `activa` o `no_sale` y `no_sale` trae el motivo, el hallazgo, quién la marcó y
+cuándo (el mismo objeto del inventario); una unidad que no sale **sigue en la lista de VIN del viaje**.
 
 **Clientes del viaje.** El viaje no tiene un cliente propio: un viaje puede llevar VIN de más de una marca, así que su cliente se toma de sus VIN. `clientes` es la lista, sin
 repetidos y por nombre, de los clientes de los VIN del viaje, con el mismo objeto que `cliente` en `GET /api/auth/me` (`id`, `codigo`, `nombre`). Va en `ViajeDto` y en `ViajeResumenDto`
@@ -766,31 +777,66 @@ Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de
 La placa, el conductor y el tráiler son los **del viaje**; en un informe anterior a los viajes, lo que se capturó a mano tiene prioridad. `ninera` es la placa del viaje (nombre heredado, igual a `placa`).
 
 ### `POST /api/inspecciones/{id}/hallazgos`
-Campo (creador de la inspección o administrador). **Un hallazgo exige su foto propia**: se guarda junto con ella (`evidencia`, obligatoria; sin ella `400` y no se guarda nada). `201` con el hallazgo y su foto.
+Campo (creador de la inspección o administrador). **Un hallazgo exige su foto propia**: se guarda junto con ella (`evidencia`, obligatoria; sin ella `400` y no se guarda nada). `201` con el hallazgo y su foto. La zona del daño, el nivel de severidad y si el daño ya existía se explican en [Hallazgo por región](#hallazgo-por-región).
 
 ```json
 {
-  "parte_vehiculo": "Puerta delantera izquierda", "clase_dano": "rotura", "tamano_dano": "5_10cm", "coords_diagrama": { "x": 0.42, "y": 0.18 },
+  "cuadrante_numero": 7, "lado": "izquierdo", "clase_dano": "rotura", "tamano_dano": "5_10cm", "nivel_severidad": "v2",
+  "es_preexistente": false, "nota": "Rayón largo sobre la puerta",
   "evidencia": { "storage_path": "3f2b…c1.png", "sello_fecha": "2026-07-17T12:30:15.123Z", "sello_lat": 6.24, "sello_lng": -75.58, "precision": 4.5, "dispositivo_id": "tablet-7", "nota": null, "hash_sha256": "…" }
 }
 ```
 
+Una zona provisional va sin cuadrante ni lado: `{ "zona_provisional": "frente", "clase_dano": "golpe", "tamano_dano": "1_5cm", "nivel_severidad": "v1", "evidencia": { … } }`.
+
 | Campo | Obligatorio | Regla |
 |---|---|---|
-| `parte_vehiculo` | sí | máximo 80 caracteres |
+| `cuadrante_numero` | uno de los dos | número de un cuadrante **activo** del catálogo `cuadrantes` (el del tipo de vehículo del VIN; si no hay, el genérico). Excluye a `zona_provisional` |
+| `lado` | con `cuadrante_numero` de 1 a 25 | `izquierdo` o `derecho`. Del 26 en adelante **no se envía** (`400` en `lado`); tampoco con `zona_provisional` |
+| `zona_provisional` | uno de los dos | `frente`, `llanta_delantera_izquierda`, `llanta_delantera_derecha`, `llanta_trasera_izquierda` o `llanta_trasera_derecha`. Excluye a `cuadrante_numero` |
 | `clase_dano` | sí | `codigo` **activo** del catálogo `clases-dano` |
 | `tamano_dano` | sí | `codigo` **activo** del catálogo `tamanos-dano` |
-| `coords_diagrama` | no | `x` e `y` entre 0 y 1 |
+| `nivel_severidad` | inspector y administrador | `codigo` **activo** de `niveles-severidad` (`v1_plus`, `v1`, `v2`, `v3`). El conductor **no lo envía** (`400`): queda vacío hasta que un inspector revise su novedad |
+| `es_preexistente` | no | `true` si el daño ya existía. Exige `hallazgo_origen_id` |
+| `hallazgo_origen_id` | con `es_preexistente` | un hallazgo de **otra inspección del mismo VIN** con la **misma zona y la misma clase**; si no, `400` en `hallazgo_origen_id`. Sin `es_preexistente` verdadero no se envía |
+| `nota` | no | máximo 500 caracteres |
 | `evidencia` | sí | la foto del hallazgo, con los mismos campos y reglas que una evidencia (sin `vista_id` ni `hallazgo_id`) |
 
-Respuesta (`HallazgoCreadoDto`): el hallazgo más su `evidencia` (`EvidenciaDto`):
+`parte_vehiculo` y `coords_diagrama` **ya no se aceptan**: si llegan, `400` con «Campo no admitido» en cada uno. El `origen` del hallazgo (`inspector` o `conductor`) sale del rol de quien lo registra.
+
+Respuesta (`HallazgoCreadoDto`): el `HallazgoDto` más su `evidencia` (`EvidenciaDto`):
 
 ```json
-{ "id": "uuid", "inspeccion_id": "uuid", "parte_vehiculo": "…", "clase_dano": "rotura", "tamano_dano": "5_10cm",
-  "coords_diagrama": { "x": 0.42, "y": 0.18 }, "created_at": "…", "updated_at": "…", "evidencia": { /* EvidenciaDto */ } }
+{ "id": "uuid", "inspeccion_id": "uuid", "parte_vehiculo": null, "clase_dano": "rotura", "tamano_dano": "5_10cm", "coords_diagrama": null,
+  "cuadrante_numero": 7, "lado": "izquierdo", "zona_provisional": null, "cuadrante_nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera",
+  "tipo_novedad": null, "nivel_severidad": "v2", "nivel_nombre": "V2", "nivel_accion": "Validación por Sofasa",
+  "origen": "inspector", "nota": "Rayón largo sobre la puerta", "es_preexistente": false, "hallazgo_origen_id": null, "confirmado_por": null,
+  "estado_seguimiento": "pendiente", "evidencia_completa": false, "evidencia_faltante": [], "revisado_por": null, "revisado_at": null,
+  "created_at": "…", "updated_at": "…", "evidencia": { /* EvidenciaDto */ } }
 ```
 
 En el informe y el inventario, los hallazgos llegan como `HallazgoDto` (el mismo objeto sin `evidencia`) y sus fotos en `evidencias`, con `hallazgo_id`.
+
+### Hallazgo por región
+Un hallazgo se atribuye a una **zona** del vehículo, no a una parte en texto libre. La zona es **lado + número** de un cuadrante (`izquierdo 7`) o una **zona provisional**; se guarda por lado + número, no por el panel donde se tocó: «izquierdo 7» es la misma zona se toque donde se toque. Los números 1 a 25 llevan lado y del 26 en adelante no. Las zonas provisionales son una lista de cinco (`frente` y las cuatro llantas) y no tienen número ni dibujo.
+
+Campos del `HallazgoDto`:
+
+| Campo | Significado |
+|---|---|
+| `cuadrante_numero`, `lado`, `zona_provisional` | la zona; con una zona provisional los dos primeros son `null`, y del 26 en adelante `lado` es `null` |
+| `cuadrante_nombre`, `zona` | el nombre del cuadrante y el texto listo para mostrar: «Izquierdo 7 · Puerta delantera», «Techo 30», «Frente», «Llanta trasera derecha». En un hallazgo histórico sin ubicar, `zona` es la parte que se escribió entonces |
+| `nivel_severidad`, `nivel_nombre`, `nivel_accion` | el nivel V (`v1_plus`…`v3`), su nombre («V1+») y la acción del catálogo («Se rechaza el vehículo»). Los tres son `null` mientras la novedad de un conductor no se revise |
+| `origen` | `inspector` o `conductor` |
+| `tipo_novedad` | solo en una novedad del conductor: `golpe`, `piedra`, `granizo` o `incidente_vial`; si no, `null` |
+| `nota` | texto libre, máximo 500 |
+| `es_preexistente`, `hallazgo_origen_id`, `confirmado_por` | si el daño ya existía, el hallazgo previo del VIN que ya lo tenía y quién lo confirmó |
+| `estado_seguimiento` | `pendiente` (al crearse), `validado`, `rechazado`, `recuperado` o `derogado` |
+| `evidencia_completa`, `evidencia_faltante` | `evidencia_faltante` lista lo que impide la evidencia completa; hoy `foto_hallazgo` si el hallazgo no tiene su foto propia (un hallazgo creado por la API siempre la trae) |
+| `revisado_por`, `revisado_at` | quién revisó el hallazgo y cuándo; `null` mientras no se revise |
+| `parte_vehiculo`, `coords_diagrama` | **solo en los hallazgos históricos** (anteriores a este modelo): la parte en texto y el punto sobre la imagen anterior. En los nuevos son `null` |
+
+Los hallazgos anteriores se ubicaron por el texto de su parte solo cuando la equivalencia era segura (`Fachada delantera`, `Parachoque delantero` y las llantas); los demás tienen `zona` con la parte escrita y `cuadrante_numero`, `lado` y `zona_provisional` en `null` hasta que se ubiquen a mano.
 
 ### `POST /api/inspecciones/{id}/evidencias`
 Campo (creador o administrador). Registra una foto **ya subida** con `POST /api/uploads`: de una **vista** (`vista_id`) o de un **hallazgo** (`hallazgo_id`), no de ambos. `201` con el `EvidenciaDto`.
@@ -937,7 +983,7 @@ Que la app no se los muestre ni se los notifique en esa pantalla es una regla de
 ## Catálogos maestros
 
 Las etapas, los lugares, los tipos de unidad, las clases y tamaños de daño, los niveles de severidad, las vistas de foto, los
-cuadrantes y los clientes **ya no son listas fijas en el código**: viven en tablas y los administra TI o el coordinador de calidad desde el portal.
+cuadrantes, los paneles de daño y sus regiones y los clientes **ya no son listas fijas en el código**: viven en tablas y los administra TI o el coordinador de calidad desde el portal.
 La web y la app deben leerlos de la API (y guardar una copia para trabajar sin señal), no escribirlos a mano.
 
 | Nombre (ruta y clave) | Qué contiene | Campos de cada valor |
@@ -947,10 +993,11 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | `tipos-unidad` | Tipos de unidad transportadora: niñera, nodriza, quintinaria, planchón grúa | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `clases-dano` | Clases de daño de un hallazgo (10 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `tamanos-dano` | Tamaños de daño de un hallazgo (6 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
-| `niveles-severidad` | Niveles V1+, V1, V2 y V3 con su acción | `id`, `codigo`, `nombre`, `orden`, `activo`, `accion` (texto o `null`, máx. 500) |
+| `niveles-severidad` | Niveles V1+, V1, V2 y V3 con su acción: «Se recupera antes del despacho», «Se rechaza el vehículo», «Validación por Sofasa» y «Se deroga (se acepta el defecto)» | `id`, `codigo`, `nombre`, `orden`, `activo`, `accion` (texto o `null`, máx. 500) |
 | `vistas-foto` | Las 9 vistas de foto: 7 obligatorias y 2 adicionales (`piezas_baul`, `cojineria`) que solo se toman con faltante o daño | `id`, `codigo`, `nombre`, `orden`, `activo`, `obligatoria`, `tipo_vehiculo` (`null` = cualquier tipo) |
-| `cuadrantes` | Las **zonas** numeradas de la carrocería (puerta delantera, pilar central, capó…). Una zona es la misma aunque se vea desde varias vistas | `id`, `tipo_vehiculo` (`null` = cualquier tipo), `numero`, `nombre`, `orden`, `activo` |
-| `cuadrante-vistas` | El **polígono** de cada zona en cada vista donde aparece (una fila por aparición). Las vistas adicionales no tienen | `id`, `cuadrante_id`, `numero` (de la zona), `vista_foto_id`, `vista` (código de la vista), `geometria` |
+| `cuadrantes` | Las **zonas** numeradas de la carrocería (puerta delantera, pilar central, capó…) y las **zonas provisionales** (`frente` y las cuatro llantas). Una zona es la misma aunque se vea desde varios paneles | `id`, `codigo` (solo las provisionales; las numeradas `null`), `tipo_vehiculo` (`null` = cualquier tipo), `numero` (`null` en las provisionales), `nombre`, `orden`, `activo` |
+| `paneles-dano` | Los **5 paneles** del dibujo de daños (`superior`, `perfil_posterior_izquierdo`, `perfil_posterior_derecho`, `costado_izquierdo`, `costado_derecho`), separados de las vistas de foto | `id`, `codigo`, `nombre`, `orden`, `activo`, `imagen_url` (la imagen de fondo del panel o `null` si aún no se cargó) |
+| `cuadrante-regiones` | La **región tocable** de cada zona numerada en cada panel (una fila por aparición). Las zonas provisionales no tienen región | `id`, `panel` (código), `cuadrante_id`, `numero`, `nombre`, `lado` (`izquierdo`, `derecho` o `null` del 26 en adelante), `geometria` |
 | `clientes` | Las empresas a las que pertenecen los usuarios y los vehículos (hoy `sofasa`). El primero activo por `orden` es el cliente por defecto de lo que se crea sin cliente explícito | `id`, `codigo`, `nombre`, `orden`, `activo` |
 
 `codigo` es la **clave estable** (minúsculas, números y `_`, máximo 30 caracteres): es lo que viaja en el resto de la API
@@ -966,10 +1013,14 @@ Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inacti
   "catalogos": {
     "etapas": [ { "id": "uuid", "codigo": "cargue", "nombre": "Cargue", "orden": 1, "activo": true } ],
     "clases-dano": [ { "id": "uuid", "codigo": "golpe", "nombre": "Golpe", "orden": 5, "activo": true } ],
-    "niveles-severidad": [ { "id": "uuid", "codigo": "v1", "nombre": "V1", "orden": 2, "activo": true, "accion": null } ],
+    "niveles-severidad": [ { "id": "uuid", "codigo": "v1", "nombre": "V1", "orden": 2, "activo": true, "accion": "Se rechaza el vehículo" } ],
     "vistas-foto": [ { "id": "uuid", "codigo": "piezas_baul", "nombre": "Piezas en el baúl", "orden": 8, "activo": true, "obligatoria": false, "tipo_vehiculo": null } ],
-    "cuadrantes": [ { "id": "uuid", "tipo_vehiculo": null, "numero": 1, "nombre": "Puerta delantera: parte alta", "orden": 1, "activo": true } ],
-    "cuadrante-vistas": [ { "id": "uuid", "cuadrante_id": "uuid", "numero": 1, "vista_foto_id": "uuid", "vista": "lateral_izquierda", "geometria": { "puntos": [ [0.34, 0.30], [0.59, 0.30] ] } } ],
+    "cuadrantes": [
+      { "id": "uuid", "codigo": null, "tipo_vehiculo": null, "numero": 1, "nombre": "Puerta delantera: parte alta", "orden": 1, "activo": true },
+      { "id": "uuid", "codigo": "frente", "tipo_vehiculo": null, "numero": null, "nombre": "Frente", "orden": 101, "activo": true }
+    ],
+    "paneles-dano": [ { "id": "uuid", "codigo": "costado_izquierdo", "nombre": "Costado izquierdo", "orden": 4, "activo": true, "imagen_url": "/api/catalogos/paneles-dano/costado_izquierdo/imagen?v=3f2b…c1" } ],
+    "cuadrante-regiones": [ { "id": "uuid", "panel": "costado_izquierdo", "cuadrante_id": "uuid", "numero": 1, "nombre": "Puerta delantera: parte alta", "lado": "izquierdo", "geometria": { "puntos": [ [0.34, 0.30], [0.59, 0.30], [0.59, 0.48] ] } } ],
     "puntos-custodia": [], "tipos-unidad": [], "tamanos-dano": [], "clientes": []
   }
 }
@@ -977,7 +1028,7 @@ Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inacti
 
 ### `GET /api/catalogos/{nombre}`
 Un solo catálogo con **su propia versión**: `{ "version": "…", "items": [ … ] }`. `404` si el nombre no existe (el mensaje lista los
-disponibles).
+disponibles). `cuadrante-vistas` (el catálogo anterior de polígonos por vista de foto) **ya no existe**: responde `404` con «El catálogo cuadrante-vistas fue reemplazado por cuadrante-regiones».
 
 ### Versión y copia sin conexión
 Cada respuesta trae la versión en el encabezado `ETag` (por ejemplo `"9f2c4a7b1d3e5f60"`) y también en el cuerpo. La versión es una
@@ -993,24 +1044,38 @@ Un catálogo cambia al instante cuando se edita; si hay varias instancias de la 
 **Valores inactivos.** `activo: false` significa que ya no se ofrece, pero sigue siendo válido en lo que ya se guardó. En los selectores
 muestre solo los activos; para dibujar informes viejos use todos (un hallazgo antiguo puede tener una clase hoy inactiva).
 
-### Cuadrantes y su geometría
-Un cuadrante es una **zona** de la carrocería con un número (`cuadrantes`). Esa misma zona se ve desde varias vistas (la puerta delantera
-aparece de lado y en diagonal), así que **dónde se dibuja** en cada vista va aparte, en `cuadrante-vistas`: una fila por cada vista
-donde aparece. Para dibujar una vista, la app y el portal toman los `cuadrante-vistas` de esa `vista` y le ponen a cada polígono el
+### Cuadrantes, regiones y paneles de daño
+Un cuadrante es una **zona** de la carrocería con un número (`cuadrantes`). Esa misma zona se ve desde varios paneles, así que **dónde se dibuja** en cada panel va aparte, en
+`cuadrante-regiones`: una fila por cada panel donde aparece. Para dibujar un panel, la app y el portal toman las `cuadrante-regiones` de ese `panel` y le ponen a cada región el
 `numero` y el nombre de su zona (`cuadrante_id` → `cuadrantes`).
 
 Para que la app y el portal dibujen las mismas regiones, `geometria` es un **polígono normalizado**: un objeto con la lista de puntos,
-cada uno `[x, y]` con `x` e `y` entre 0 y 1, medidos sobre la imagen de la vista (el origen es la esquina superior izquierda).
+cada uno `[x, y]` con `x` e `y` entre 0 y 1, medidos sobre la imagen del panel (el origen es la esquina superior izquierda).
 
 ```json
 { "puntos": [ [0.10, 0.10], [0.55, 0.10], [0.55, 0.48], [0.10, 0.48] ] }
 ```
 
-Debe tener al menos 3 puntos y llega como objeto JSON (no como texto). Es obligatoria en cada polígono. `numero` es único por `tipo_vehiculo`
-(con `tipo_vehiculo: null` el número es único entre las zonas sin tipo) y un cuadrante tiene como máximo **un polígono por vista**. Hoy
-están cargadas las 36 zonas de la ficha del vehículo genérico (los números 4 y 12 no existen en la ficha) con 97 polígonos en 5 vistas:
-`superior`, `lateral_izquierda`, `lateral_derecha`, `diagonal_trasera_izquierda` y `diagonal_delantera_derecha`. Las vistas `frontal` y
-`trasera` todavía no tienen cuadrantes dibujados.
+Debe tener al menos 3 puntos y llega como objeto JSON (no como texto). Es obligatoria en cada región. `numero` es único por `tipo_vehiculo`
+(con `tipo_vehiculo: null` el número es único entre las zonas sin tipo) y una zona tiene como máximo **una región por panel**.
+
+**El lado.** Los números **1 a 25** llevan lado (`izquierdo` o `derecho`); del **26 en adelante** no. Una región es de la zona «lado + número»: en un panel de costado o de perfil el lado
+es el del panel (`costado_izquierdo`, `perfil_posterior_izquierdo`…), y en el panel `superior` cada número del 1 al 25 necesita **dos** regiones, una por lado.
+
+**Zonas provisionales.** `frente`, `llanta_delantera_izquierda`, `llanta_delantera_derecha`, `llanta_trasera_izquierda` y `llanta_trasera_derecha` se publican en `cuadrantes` con su `codigo`, **sin
+`numero`** y **sin región**: no se dibujan, se eligen de una lista. Son una propuesta pendiente de confirmar por el negocio y no se editan por la API; el día que se les dé un número se migran.
+
+Hoy están cargadas las 36 zonas de la ficha del vehículo genérico (los números 4 y 12 no existen en la ficha) con 97 regiones en los 5 paneles: `superior` (13, del número 26 al 38), `costado_izquierdo` (19),
+`costado_derecho` (19), `perfil_posterior_izquierdo` (23) y `perfil_posterior_derecho` (23).
+
+### Paneles de daño
+Los 5 paneles del dibujo de daños son la ficha donde se toca la región del daño; están separados del catálogo `vistas-foto` (las vistas de foto son otra cosa: lo que se fotografía). Cada panel trae
+`imagen_url`: la imagen de fondo sobre la que se dibujan sus regiones, o `null` si aún no se cargó.
+
+- `GET /api/catalogos/paneles-dano/{codigo}/imagen`: la imagen del panel. **Pública** (una etiqueta de imagen no envía token) y con caché larga (`Cache-Control: public, max-age=31536000, immutable`):
+  la URL de `imagen_url` lleva el nombre del archivo (`?v=…`), así que cambia cuando se cambia la imagen. `404` si el panel no existe o aún no tiene imagen.
+- `PUT /api/catalogos/paneles-dano/{codigo}/imagen`: cambia la imagen. Solo `admin` y `super_admin` (`403` para los demás). Cuerpo `{ "archivo": "3f2b…c1.png" }`, con el nombre que devolvió `POST /api/uploads` (JPG o PNG);
+  `400` en `archivo` si falta o no existe, `404` si el panel no existe, `204` si se cambió. El catálogo cambia de versión.
 
 ### Administración: crear, editar, inactivar y borrar
 Solo `admin`, `super_admin` y `coordinador_calidad`; los demás roles reciben `403`.
@@ -1023,9 +1088,10 @@ Solo `admin`, `super_admin` y `coordinador_calidad`; los demás roles reciben `4
 | Borrar | `DELETE /api/catalogos/{nombre}/{id}` | `204`; `409` si algo lo usa |
 
 Cuerpo de **crear**: `codigo` y `nombre` obligatorios; `orden` (entero ≥ 0, por defecto 0) y `activo` (por defecto `true`) opcionales, más
-los campos propios del catálogo. En **cuadrantes** no hay `codigo`: son obligatorios `numero` y `nombre`, y opcionales `tipo_vehiculo`, `orden` y `activo`. En
-**cuadrante-vistas** (no tiene `codigo`, `nombre`, `orden` ni `activo`) son obligatorios `cuadrante_id`, `vista_foto_id` y `geometria`; al editar
-solo se cambian `vista_foto_id` y `geometria` (el cuadrante no se puede cambiar). En **vistas** `obligatoria` es opcional (por defecto `true`).
+los campos propios del catálogo. En **cuadrantes** no hay `codigo`: son obligatorios `numero` y `nombre`, y opcionales `tipo_vehiculo`, `orden` y `activo` (las zonas provisionales se leen pero no se crean ni se editan). En
+**paneles-dano** valen los campos comunes (`codigo`, `nombre`, `orden`, `activo`); la imagen se cambia con `PUT …/imagen`. En
+**cuadrante-regiones** (no tiene `codigo`, `nombre`, `orden` ni `activo`) son obligatorios `panel` (código), `cuadrante_id` y `geometria`, y `lado` según el número y el panel (ver arriba);
+al editar solo se cambia la `geometria` (el panel, el cuadrante y el lado no se pueden cambiar: se crea la región en el otro panel y se borra esta). En **vistas** `obligatoria` es opcional (por defecto `true`).
 
 ```json
 { "codigo": "oxidacion", "nombre": "Oxidación", "orden": 11 }
@@ -1035,11 +1101,11 @@ Reglas:
 - `400` con `details.fieldErrors` si un campo es inválido, **si llega un campo que ese catálogo no admite** (por ejemplo `accion` en
   `etapas`) o si se envía `null` en `nombre`, `orden` o `activo`.
 - El **`codigo` no se puede cambiar** (`400`); se puede reenviar igual. Para reemplazar un código, cree un valor nuevo e inactive el viejo.
-- `409` si el `codigo` ya existe en ese catálogo, o si el `numero` de cuadrante ya existe para ese tipo de vehículo, o si el cuadrante ya tiene un polígono en esa vista.
+- `409` si el `codigo` ya existe en ese catálogo, o si el `numero` de cuadrante ya existe para ese tipo de vehículo, o si la zona (cuadrante + lado) ya tiene una región en ese panel.
+- `400` en `lado` si una región tiene un lado incoherente: falta en un número del 1 al 25 (panel superior), sobra del 26 en adelante, no es `izquierdo` ni `derecho` o no coincide con el del panel.
 - **Un valor en uso no se borra:** `409` con el mensaje «El valor está en uso y no se puede borrar: solo puede inactivarlo». Está en uso una clase
-  o tamaño usado por algún hallazgo, una etapa o un lugar usado por algún tramo de la ruta, un cliente con usuarios o vehículos, y una vista que tiene polígonos de cuadrantes. Borrar un cuadrante borra también sus polígonos.
-- Una vista **con polígonos** no puede pasar a `obligatoria: false` (`409`), y no se pueden crear polígonos en una vista adicional ni
-  inactiva (`400`).
+  o tamaño usado por algún hallazgo, una etapa o un lugar usado por algún tramo de la ruta, un cliente con usuarios o vehículos, y una vista que tiene polígonos del modelo anterior. Borrar un cuadrante borra también sus regiones (salvo que un hallazgo ya use una de sus zonas).
+- Una vista **con polígonos del modelo anterior** no puede pasar a `obligatoria: false` (`409`).
 - El código `requiere_reemplazo` de `tamanos-dano` lo usa el análisis de patrones para contar los daños que obligan a reemplazar la pieza:
   no lo borre ni le cambie el código.
 
@@ -1124,6 +1190,7 @@ Hallazgos de unidades movilizadas por proceso y zona (mapa de calor).
 ```
 
 Las filas internas conservan `snake_case` (`parte_vehiculo`); lo que va en `camelCase` son las claves de primer nivel.
+`parte_vehiculo` conserva su nombre pero ahora trae el **texto de la zona** del hallazgo («Izquierdo 7 · Puerta delantera», «Frente»); en un hallazgo histórico sin ubicar, la parte que se escribió entonces.
 
 ### `GET /api/patrones/analisis`
 Clases y tamaños de daño, con sugerencias.

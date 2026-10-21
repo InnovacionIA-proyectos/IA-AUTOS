@@ -271,7 +271,18 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var insp = listaEtapas[0].GetProperty("inspecciones")[0];
         Assert.Equal("cerrada", insp.GetProperty("estado").GetString());
         var hallazgo = insp.GetProperty("hallazgos")[0];
+        // Un hallazgo historico conserva su parte y sus coordenadas, y aun no tiene zona ni nivel.
         Assert.Equal(0.5, hallazgo.GetProperty("coords_diagrama").GetProperty("x").GetDouble());
+        Assert.Equal("Capot", hallazgo.GetProperty("parte_vehiculo").GetString());
+        Assert.Equal("Capot", hallazgo.GetProperty("zona").GetString());
+        Assert.Equal(JsonValueKind.Null, hallazgo.GetProperty("cuadrante_numero").ValueKind);
+        Assert.Equal(JsonValueKind.Null, hallazgo.GetProperty("nivel_severidad").ValueKind);
+        Assert.Equal("pendiente", hallazgo.GetProperty("estado_seguimiento").GetString());
+        Assert.All(listaEtapas.EnumerateArray(), e =>
+        {
+            Assert.Equal("activa", e.GetProperty("estado_unidad").GetString());
+            Assert.Equal(JsonValueKind.Null, e.GetProperty("no_sale").ValueKind);
+        });
         var evidencias = insp.GetProperty("evidencias");
         Assert.Equal(2, evidencias.GetArrayLength());
         Assert.Equal("/api/uploads/foto-0.jpg", evidencias[0].GetProperty("url").GetString());
@@ -280,6 +291,52 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.True(transferencia.GetProperty("firmada").GetBoolean());
         Assert.Equal("firmada", transferencia.GetProperty("tipo_cierre").GetString());
         Assert.False(transferencia.TryGetProperty("firma_entrega", out _));
+    }
+
+    [Fact]
+    public async Task El_inventario_devuelve_el_viaje_del_que_la_unidad_no_salio_igual_que_los_demas_con_su_motivo_y_su_hallazgo()
+    {
+        var token = await TokenAsync(clsRol.COORDINADOR_CALIDAD, "i@ejemplo.com");
+        var usuarioId = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblUsuarios WHERE Email = 'i@ejemplo.com'"))!;
+        var (vehiculoId, etapas) = await Sembrador.VehiculoConRutaAsync("NOSALE-VIN-0001");
+        var (reemplazoId, _) = await Sembrador.VehiculoConRutaAsync("NOSALE-VIN-0002");
+        var viajeNoSale = await Sembrador.ViajeDeEtapaAsync(etapas[0]);
+        var informe = await Sembrador.InformeAsync(etapas[0], usuarioId, cerrada: false);
+        var hallazgo = await Sembrador.HallazgoEnFrenteAsync(informe);
+        await Sembrador.UnidadNoSaleAsync(viajeNoSale, vehiculoId, hallazgo, usuarioId, "Golpe estructural en el frente", reemplazoId);
+        // Mas adelante la misma unidad se asigna a otro viaje y vuelve a estar activa.
+        var otroViaje = await Sembrador.ViajeAsync();
+        await Sembrador.EjecutarAsync("INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @v, @veh)", ("@v", otroViaje), ("@veh", vehiculoId));
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (NEWID(), @veh, @v, @p, 1)",
+            ("@veh", vehiculoId), ("@v", otroViaje), ("@p", (await Sembrador.EtapasRutaAsync())[0]));
+
+        var inv = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/nosale-vin-0001/inventario"));
+
+        var lista = inv.GetProperty("etapas").EnumerateArray().ToList();
+        Assert.Equal(4, lista.Count);
+        Assert.All(lista.Take(3), e =>
+        {
+            Assert.Equal("no_sale", e.GetProperty("estado_unidad").GetString());
+            var noSale = e.GetProperty("no_sale");
+            Assert.Equal(
+                ["motivo", "hallazgo_id", "marcado_por", "marcado_por_nombre", "fecha", "vin_reemplazo"],
+                noSale.EnumerateObject().Select(p => p.Name).ToList());
+            Assert.Equal("Golpe estructural en el frente", noSale.GetProperty("motivo").GetString());
+            Assert.Equal(hallazgo, noSale.GetProperty("hallazgo_id").GetGuid());
+            Assert.Equal(usuarioId, noSale.GetProperty("marcado_por").GetGuid());
+            Assert.Equal("Usuario de prueba", noSale.GetProperty("marcado_por_nombre").GetString());
+            Assert.Equal("NOSALE-VIN-0002", noSale.GetProperty("vin_reemplazo").GetString());
+            Assert.Equal(JsonValueKind.String, noSale.GetProperty("fecha").ValueKind);
+        });
+        Assert.Equal("activa", lista[3].GetProperty("estado_unidad").GetString());
+        Assert.Equal(JsonValueKind.Null, lista[3].GetProperty("no_sale").ValueKind);
+        // El hallazgo grave que la saco del viaje sigue en el historial de la unidad, con su zona y su nivel.
+        var h = lista[0].GetProperty("inspecciones")[0].GetProperty("hallazgos")[0];
+        Assert.Equal("Frente", h.GetProperty("zona").GetString());
+        Assert.Equal("v1_plus", h.GetProperty("nivel_severidad").GetString());
+        Assert.Equal("Se recupera antes del despacho", h.GetProperty("nivel_accion").GetString());
+        Assert.Equal(["foto_hallazgo"], h.GetProperty("evidencia_faltante").EnumerateArray().Select(x => x.GetString()).ToList());
     }
 
     [Fact]

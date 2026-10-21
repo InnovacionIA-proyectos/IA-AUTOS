@@ -2567,6 +2567,100 @@
         ]
       }
     },
+    "/api/catalogos/paneles-dano/{codigo}/imagen": {
+      "get": {
+        "tags": [
+          "Catalogos"
+        ],
+        "operationId": "Catalogos_ImagenDePanel",
+        "parameters": [
+          {
+            "name": "codigo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileContentResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileContentResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileContentResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Catalogos"
+        ],
+        "operationId": "Catalogos_CambiarImagenDePanel",
+        "parameters": [
+          {
+            "name": "codigo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CambiarImagenPanelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/catalogos/{nombre}": {
       "get": {
         "tags": [
@@ -3446,6 +3540,20 @@
           }
         }
       },
+      "CambiarImagenPanelRequest": {
+        "required": [
+          "archivo"
+        ],
+        "type": "object",
+        "properties": {
+          "archivo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CambiarPinRequest": {
         "required": [
           "pin_actual",
@@ -3695,7 +3803,9 @@
           "cuadrante_id",
           "vista_foto_id",
           "numero",
-          "geometria"
+          "geometria",
+          "panel",
+          "lado"
         ],
         "type": "object",
         "properties": {
@@ -3780,6 +3890,18 @@
                 }
               }
             }
+          },
+          "panel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lado": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -4034,15 +4156,33 @@
       },
       "CrearHallazgoRequest": {
         "required": [
-          "parte_vehiculo",
+          "cuadrante_numero",
+          "lado",
+          "zona_provisional",
           "clase_dano",
           "tamano_dano",
-          "coords_diagrama",
+          "nivel_severidad",
+          "es_preexistente",
+          "hallazgo_origen_id",
+          "nota",
           "evidencia"
         ],
         "type": "object",
         "properties": {
-          "parte_vehiculo": {
+          "cuadrante_numero": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "lado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona_provisional": {
             "type": [
               "null",
               "string"
@@ -4060,22 +4200,30 @@
               "string"
             ]
           },
-          "coords_diagrama": {
-            "required": [
-              "x",
-              "y"
+          "nivel_severidad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "es_preexistente": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "hallazgo_origen_id": {
+            "type": [
+              "null",
+              "string"
             ],
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number",
-                "format": "double"
-              },
-              "y": {
-                "type": "number",
-                "format": "double"
-              }
-            }
+            "format": "uuid"
+          },
+          "nota": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "evidencia": {
             "required": [
@@ -4355,6 +4503,17 @@
           }
         }
       },
+      "EntityTagHeaderValue": {
+        "type": "object",
+        "properties": {
+          "tag": {
+            "$ref": "#/components/schemas/StringSegment"
+          },
+          "is_weak": {
+            "type": "boolean"
+          }
+        }
+      },
       "ErrorApiDto": {
         "required": [
           "error",
@@ -4611,6 +4770,43 @@
           }
         }
       },
+      "FileContentResult": {
+        "type": "object",
+        "properties": {
+          "file_contents": {
+            "type": "string",
+            "format": "byte"
+          },
+          "content_type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "file_download_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "last_modified": {
+            "format": "date-time"
+          },
+          "entity_tag": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EntityTagHeaderValue"
+              }
+            ]
+          },
+          "enable_range_processing": {
+            "type": "boolean"
+          }
+        }
+      },
       "FirmanteDto": {
         "required": [
           "id",
@@ -4663,18 +4859,13 @@
       },
       "HallazgoCreadoDto": {
         "required": [
-          "id",
-          "inspeccion_id",
-          "parte_vehiculo",
-          "clase_dano",
-          "tamano_dano",
-          "coords_diagrama",
-          "created_at",
-          "updated_at",
           "evidencia"
         ],
         "type": "object",
         "properties": {
+          "evidencia": {
+            "$ref": "#/components/schemas/EvidenciaDto"
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -4684,10 +4875,16 @@
             "format": "uuid"
           },
           "parte_vehiculo": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "clase_dano": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "tamano_dano": {
             "type": "string"
@@ -4702,14 +4899,114 @@
               }
             ]
           },
+          "cuadrante_numero": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "lado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona_provisional": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cuadrante_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo_novedad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_severidad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_accion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "origen": {
+            "type": "string"
+          },
+          "nota": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "es_preexistente": {
+            "type": "boolean"
+          },
+          "hallazgo_origen_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "confirmado_por": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "estado_seguimiento": {
+            "type": "string"
+          },
+          "evidencia_completa": {
+            "type": "boolean"
+          },
+          "evidencia_faltante": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revisado_por": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "revisado_at": {
+            "format": "date-time"
+          },
           "created_at": {
             "format": "date-time"
           },
           "updated_at": {
             "format": "date-time"
-          },
-          "evidencia": {
-            "$ref": "#/components/schemas/EvidenciaDto"
           }
         }
       },
@@ -4721,6 +5018,25 @@
           "clase_dano",
           "tamano_dano",
           "coords_diagrama",
+          "cuadrante_numero",
+          "lado",
+          "zona_provisional",
+          "cuadrante_nombre",
+          "zona",
+          "tipo_novedad",
+          "nivel_severidad",
+          "nivel_nombre",
+          "nivel_accion",
+          "origen",
+          "nota",
+          "es_preexistente",
+          "hallazgo_origen_id",
+          "confirmado_por",
+          "estado_seguimiento",
+          "evidencia_completa",
+          "evidencia_faltante",
+          "revisado_por",
+          "revisado_at",
           "created_at",
           "updated_at"
         ],
@@ -4735,10 +5051,16 @@
             "format": "uuid"
           },
           "parte_vehiculo": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "clase_dano": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "tamano_dano": {
             "type": "string"
@@ -4752,6 +5074,109 @@
                 "$ref": "#/components/schemas/CoordsDiagramaDto"
               }
             ]
+          },
+          "cuadrante_numero": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "lado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona_provisional": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cuadrante_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo_novedad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_severidad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_accion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "origen": {
+            "type": "string"
+          },
+          "nota": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "es_preexistente": {
+            "type": "boolean"
+          },
+          "hallazgo_origen_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "confirmado_por": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "estado_seguimiento": {
+            "type": "string"
+          },
+          "evidencia_completa": {
+            "type": "boolean"
+          },
+          "evidencia_faltante": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revisado_por": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "revisado_at": {
+            "format": "date-time"
           },
           "created_at": {
             "format": "date-time"
@@ -5410,6 +5835,8 @@
           "viaje_id",
           "codigo_mtrack",
           "con_personal_apoyo",
+          "estado_unidad",
+          "no_sale",
           "inspecciones"
         ],
         "type": "object",
@@ -5446,6 +5873,19 @@
           },
           "con_personal_apoyo": {
             "type": "boolean"
+          },
+          "estado_unidad": {
+            "type": "string"
+          },
+          "no_sale": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NoSaleDto"
+              }
+            ]
           },
           "inspecciones": {
             "type": "array",
@@ -5844,6 +6284,45 @@
           },
           "usuario": {
             "$ref": "#/components/schemas/UsuarioAutenticadoDto"
+          }
+        }
+      },
+      "NoSaleDto": {
+        "required": [
+          "motivo",
+          "hallazgo_id",
+          "marcado_por",
+          "marcado_por_nombre",
+          "fecha",
+          "vin_reemplazo"
+        ],
+        "type": "object",
+        "properties": {
+          "motivo": {
+            "type": "string"
+          },
+          "hallazgo_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "marcado_por": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "marcado_por_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fecha": {
+            "format": "date-time"
+          },
+          "vin_reemplazo": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -6429,6 +6908,34 @@
           "hallazgos": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "StringSegment": {
+        "type": "object",
+        "properties": {
+          "buffer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "length": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "value": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "has_value": {
+            "type": "boolean"
           }
         }
       },
@@ -7208,7 +7715,9 @@
           "color",
           "operacion",
           "etapas",
-          "completas"
+          "completas",
+          "estado_unidad",
+          "no_sale"
         ],
         "type": "object",
         "properties": {
@@ -7244,6 +7753,19 @@
           "completas": {
             "type": "integer",
             "format": "int32"
+          },
+          "estado_unidad": {
+            "type": "string"
+          },
+          "no_sale": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NoSaleDto"
+              }
+            ]
           }
         }
       }

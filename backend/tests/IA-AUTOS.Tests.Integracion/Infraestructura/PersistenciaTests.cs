@@ -1,4 +1,5 @@
 using IAAutos.Dominio.Auditoria;
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
@@ -23,6 +24,10 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
     private ServiceProvider Proveedor() => CrearProveedor(bd.CadenaConexion);
 
     /// <summary>Crea usuario, vehiculo con su ruta estandar y devuelve los ids para armar inspecciones.</summary>
+    /// <summary>La zona provisional «frente» (la crea el ddl): una zona que siempre existe para los hallazgos de prueba.</summary>
+    private static Task<Guid> ZonaFrenteAsync(IServiceProvider proveedor) =>
+        proveedor.GetRequiredService<clsAppDbContext>().ZonasDano.Where(z => z.Codigo == clsZonaProvisional.FRENTE).Select(z => z.Id).FirstAsync();
+
     private async Task<(Guid UsuarioId, Guid VehiculoId, IReadOnlyList<clsEtapa> Etapas)> SembrarRutaAsync(string email = "uno@ejemplo.com", string vin = "9FBHSR4E8PM000123")
     {
         using var proveedor = Proveedor();
@@ -67,6 +72,7 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         var (usuarioId, _, etapas) = await SembrarRutaAsync();
         Guid inspeccionId;
         Guid hallazgoId;
+        Guid zonaId;
 
         using (var proveedor = Proveedor())
         using (var alcance = proveedor.CreateScope())
@@ -74,7 +80,8 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
             var s = alcance.ServiceProvider;
             var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, 4.60971, -74.08175, null,
                 "nota con \"comillas\"", AHORA);
-            var hallazgo = clsHallazgo.Crear(inspeccion.Id, "Capot", "golpe", "5_10cm", new clsCoordsDiagrama(0.25, 0.75), AHORA);
+            var hallazgo = clsHallazgo.Crear(
+                inspeccion.Id, await ZonaFrenteAsync(s), "golpe", "5_10cm", "v2", clsOrigenHallazgo.INSPECTOR, "con nota", null, null, AHORA);
             var evidencia = clsEvidencia.Crear(inspeccion.Id, hallazgo.Id, null, "foto.jpg", AHORA, 4.6, -74.1, 7.5, "tablet-1", new string('b', 64), "nota", AHORA.AddSeconds(2));
             var repo = s.GetRequiredService<IInspeccionRepository>();
             repo.Agregar(inspeccion);
@@ -83,6 +90,7 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
             await s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync();
             inspeccionId = inspeccion.Id;
             hallazgoId = hallazgo.Id;
+            zonaId = hallazgo.ZonaId!.Value;
         }
 
         using var proveedor2 = Proveedor();
@@ -97,8 +105,14 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
 
         var contexto = s2.GetRequiredService<clsAppDbContext>();
         var h = await contexto.Hallazgos.SingleAsync(x => x.Id == hallazgoId);
-        Assert.Equal(0.25, h.CoordsDiagrama!.X);
-        Assert.Equal(0.75, h.CoordsDiagrama.Y);
+        Assert.Equal(zonaId, h.ZonaId);
+        Assert.Equal("v2", h.NivelSeveridad);
+        Assert.Equal(clsOrigenHallazgo.INSPECTOR, h.Origen);
+        Assert.Equal("con nota", h.Nota);
+        Assert.Equal(clsEstadoSeguimiento.PENDIENTE, h.EstadoSeguimiento);
+        Assert.False(h.EsPreexistente);
+        Assert.Null(h.ParteVehiculo);
+        Assert.Null(h.CoordsDiagrama);
         var ev = await contexto.Evidencias.SingleAsync(x => x.InspeccionId == inspeccionId);
         Assert.Equal(hallazgoId, ev.HallazgoId);
         Assert.Equal(AHORA, ev.SelloFecha);
@@ -123,9 +137,10 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         var inspeccion = clsInspeccion.Crear(etapas[0].Id, etapas[0].ViajeId, usuarioId, clsMomento.SALIDA, AHORA, null, null, null, null, AHORA);
         var repo = s.GetRequiredService<IInspeccionRepository>();
         repo.Agregar(inspeccion);
-        var conFoto = clsHallazgo.Crear(inspeccion.Id, "Capot", "golpe", "1_5cm", null, AHORA);
+        var zonaId = await ZonaFrenteAsync(s);
+        var conFoto = clsHallazgo.Crear(inspeccion.Id, zonaId, "golpe", "1_5cm", "v1", clsOrigenHallazgo.INSPECTOR, null, null, null, AHORA);
         repo.Agregar(conFoto);
-        repo.Agregar(clsHallazgo.Crear(inspeccion.Id, "Techo", "mancha", "1_5cm", null, AHORA));
+        repo.Agregar(clsHallazgo.Crear(inspeccion.Id, zonaId, "mancha", "1_5cm", "v3", clsOrigenHallazgo.INSPECTOR, null, null, null, AHORA));
         repo.Agregar(clsEvidencia.Crear(inspeccion.Id, conFoto.Id, null, "h.jpg", AHORA, 4.6, -74.1, null, null, null, null, AHORA));
         // Vista 0: primero sin ubicacion y luego repetida con ubicacion (la ultima reemplaza a la anterior).
         repo.Agregar(clsEvidencia.Crear(inspeccion.Id, null, vistas[0], "a1.jpg", AHORA, null, null, null, null, null, null, AHORA));
@@ -317,14 +332,16 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
 
         using var proveedor2 = Proveedor();
         Guid vistaId;
+        Guid zonaId;
         using (var alcanceVista = proveedor2.CreateScope())
         {
             vistaId = await alcanceVista.ServiceProvider.GetRequiredService<clsAppDbContext>().VistasFoto.Select(v => v.Id).FirstAsync();
+            zonaId = await ZonaFrenteAsync(alcanceVista.ServiceProvider);
         }
 
         foreach (var agregar in new Action<IInspeccionRepository>[]
         {
-            r => r.Agregar(clsHallazgo.Crear(inspeccionId, "Capot", "golpe", "1_5cm", null, AHORA)),
+            r => r.Agregar(clsHallazgo.Crear(inspeccionId, zonaId, "golpe", "1_5cm", "v1", clsOrigenHallazgo.INSPECTOR, null, null, null, AHORA)),
             r => r.Agregar(clsEvidencia.Crear(inspeccionId, null, vistaId, "x.jpg", AHORA, 4.6, -74.1, null, null, null, null, AHORA)),
         })
         {

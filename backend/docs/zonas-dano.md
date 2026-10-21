@@ -100,6 +100,18 @@ Reemplazan a `IX_tblHallazgos_Parte_Clase` (parte del vehiculo y clase, del mode
 Una unidad que no sale exige su motivo, el hallazgo que lo causa, quien la marco y cuando; una unidad activa no lleva ninguno de esos datos. El vinculo del vehiculo con el viaje no se borra, para que la unidad
 conserve su trazabilidad cuando vuelva a otro viaje. Las reglas de quien puede marcarla y como cuenta en el viaje las aplica la API.
 
+## Cómo lo expone la API
+
+- `POST /api/inspecciones/{id}/hallazgos` recibe `cuadrante_numero` + `lado` (o `zona_provisional`), `clase_dano`, `tamano_dano`, `nivel_severidad`, `es_preexistente` + `hallazgo_origen_id` y `nota`. La API resuelve la zona
+  con el cuadrante del tipo de vehículo del VIN (o el genérico si no hay uno propio), valida el lado por número (obligatorio del 1 al 25, prohibido del 26 en adelante), exige el nivel al inspector y al administrador
+  (el conductor no lo envía y su novedad queda sin nivel) y comprueba que un hallazgo preexistente apunte a un hallazgo de **otra inspección del mismo VIN** con la **misma zona y clase**.
+- `GET /api/catalogos` publica `paneles-dano` (con la URL de su imagen) y `cuadrante-regiones`, y las zonas provisionales dentro de `cuadrantes` (con su `codigo`, sin número ni región). `cuadrante-vistas` responde `404`.
+- El texto de la zona para mostrar se arma en la API: «Izquierdo 7 · Puerta delantera», «Techo 30», «Frente».
+- El inventario y el detalle del viaje traen `estado_unidad` y `no_sale` por unidad (la columna del viaje que dejó la migración 10). Marcar una unidad como «no sale» es de otra tarea.
+- Los reportes de patrones cuentan por la zona en texto; un hallazgo histórico sin ubicar cuenta por la parte que se escribió entonces.
+
+El detalle de los campos está en [CONTRATO.md](../CONTRATO.md) («Hallazgo por región» y «Paneles de daño»).
+
 ## Aplicar el cambio en una base existente
 
 Con un usuario que pueda alterar tablas y crear triggers (no el de la aplicacion), conectado a la base de IA Autos, **antes de desplegar la API**:

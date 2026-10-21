@@ -1,3 +1,5 @@
+using IAAutos.Dominio.Catalogos;
+
 namespace IAAutos.Dominio.Inspecciones;
 
 public interface IInspeccionRepository
@@ -20,6 +22,24 @@ public interface IInspeccionRepository
     Task<Guid?> ObtenerCorreccionIdAsync(Guid inspeccionId, CancellationToken ct = default);
 
     Task<bool> ExisteHallazgoEnInspeccionAsync(Guid hallazgoId, Guid inspeccionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// La zona numerada activa de un cuadrante activo, por numero y lado (nulo del 26 en adelante). Con <paramref name="tipoVehiculo"/> prefiere el cuadrante
+    /// de ese tipo de vehiculo y, si no existe, el generico (sin tipo). Nulo si no existe.
+    /// </summary>
+    Task<clsZonaDano?> ObtenerZonaNumeradaAsync(int numero, string? lado, string? tipoVehiculo, CancellationToken ct = default);
+
+    /// <summary>La zona provisional activa con ese codigo (frente, llantas), o nulo.</summary>
+    Task<clsZonaDano?> ObtenerZonaProvisionalAsync(string codigo, CancellationToken ct = default);
+
+    /// <summary>Tipo de vehiculo del vehiculo al que pertenece la inspeccion (nulo si no tiene).</summary>
+    Task<string?> ObtenerTipoVehiculoAsync(Guid inspeccionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// True si el hallazgo es de otra inspeccion del MISMO vehiculo (mismo VIN) y tiene la misma zona y la misma clase: la condicion para que un hallazgo
+    /// nuevo se marque como preexistente de ese.
+    /// </summary>
+    Task<bool> EsHallazgoPrevioDelVehiculoAsync(Guid hallazgoOrigenId, Guid inspeccionId, Guid zonaId, string claseDano, CancellationToken ct = default);
 
     void Agregar(clsInspeccion inspeccion);
 

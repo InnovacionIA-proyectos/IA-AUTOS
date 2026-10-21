@@ -1041,14 +1041,25 @@ FROM (VALUES
 WHERE NOT EXISTS (SELECT 1 FROM dbo.tblTamanosDano c WHERE c.Codigo = v.Codigo);
 GO
 
-INSERT INTO dbo.tblNivelesSeveridad (Id, Codigo, Nombre, Orden)
-SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
+-- La accion de cada nivel: que se hace con una unidad que lo tiene. Solo se completa donde aun no hay una (no pisa lo que se haya editado).
+INSERT INTO dbo.tblNivelesSeveridad (Id, Codigo, Nombre, Accion, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.Accion, v.Orden
 FROM (VALUES
-    ('v1_plus', N'V1+', 1),
-    ('v1',      N'V1',  2),
-    ('v2',      N'V2',  3),
-    ('v3',      N'V3',  4)) AS v (Codigo, Nombre, Orden)
+    ('v1_plus', N'V1+', N'Se recupera antes del despacho', 1),
+    ('v1',      N'V1',  N'Se rechaza el veh' + NCHAR(237) + N'culo', 2),
+    ('v2',      N'V2',  N'Validaci' + NCHAR(243) + N'n por Sofasa', 3),
+    ('v3',      N'V3',  N'Se deroga (se acepta el defecto)', 4)) AS v (Codigo, Nombre, Accion, Orden)
 WHERE NOT EXISTS (SELECT 1 FROM dbo.tblNivelesSeveridad c WHERE c.Codigo = v.Codigo);
+GO
+
+UPDATE n SET Accion = v.Accion
+FROM dbo.tblNivelesSeveridad n
+JOIN (VALUES
+    ('v1_plus', N'Se recupera antes del despacho'),
+    ('v1',      N'Se rechaza el veh' + NCHAR(237) + N'culo'),
+    ('v2',      N'Validaci' + NCHAR(243) + N'n por Sofasa'),
+    ('v3',      N'Se deroga (se acepta el defecto)')) AS v (Codigo, Accion) ON v.Codigo = n.Codigo
+WHERE n.Accion IS NULL;
 GO
 
 INSERT INTO dbo.tblVistasFoto (Id, Codigo, Nombre, Obligatoria, Orden)

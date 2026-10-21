@@ -30,12 +30,22 @@ public sealed record FotoEvidenciaRequest(
     string? Nota,
     string? HashSha256);
 
-/// <summary>Un hallazgo exige su foto propia: <c>Evidencia</c> es obligatoria y se guarda junto con el hallazgo.</summary>
+/// <summary>
+/// Un hallazgo exige su foto propia: <c>Evidencia</c> es obligatoria y se guarda junto con el hallazgo. La zona es <c>CuadranteNumero</c> + <c>Lado</c>
+/// (lado obligatorio del 1 al 25 y prohibido del 26 en adelante) o <c>ZonaProvisional</c>: exactamente una de las dos formas. El nivel de severidad es
+/// obligatorio para el inspector y el administrador; el conductor no lo envia. <c>EsPreexistente</c> exige <c>HallazgoOrigenId</c>: un hallazgo del mismo
+/// vehiculo con la misma zona y clase.
+/// </summary>
 public sealed record CrearHallazgoRequest(
-    string? ParteVehiculo,
+    int? CuadranteNumero,
+    string? Lado,
+    string? ZonaProvisional,
     string? ClaseDano,
     string? TamanoDano,
-    CoordsDiagramaDto? CoordsDiagrama,
+    string? NivelSeveridad,
+    bool? EsPreexistente,
+    Guid? HallazgoOrigenId,
+    string? Nota,
     FotoEvidenciaRequest? Evidencia);
 
 /// <summary>

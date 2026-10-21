@@ -476,6 +476,38 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     }
 
     [Fact]
+    public async Task El_viaje_muestra_el_estado_de_cada_unidad_y_el_detalle_de_la_que_no_sale()
+    {
+        var coordinador = await CoordinadorAsync();
+        var (vehiculoId, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-NS-01");
+        var (reemplazoId, _) = await Sembrador.VehiculoConRutaAsync("VIN-NS-02");
+        var viaje = await Sembrador.ViajeDeEtapaAsync(etapas[0]);
+        var informe = await Sembrador.InformeAsync(etapas[0], coordinador.UsuarioId, cerrada: false);
+        var hallazgo = await Sembrador.HallazgoEnFrenteAsync(informe);
+        var antes = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync($"/api/viajes/{viaje}"));
+        await Sembrador.UnidadNoSaleAsync(viaje, vehiculoId, hallazgo, coordinador.UsuarioId, "Dano grave en el frente", reemplazoId);
+
+        var despues = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync($"/api/viajes/{viaje}"));
+
+        var antesUnidad = antes.GetProperty("vehiculos")[0];
+        Assert.Equal("activa", antesUnidad.GetProperty("estado_unidad").GetString());
+        Assert.Equal(JsonValueKind.Null, antesUnidad.GetProperty("no_sale").ValueKind);
+        var unidad = despues.GetProperty("vehiculos")[0];
+        Assert.Equal(
+            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale"],
+            unidad.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal("no_sale", unidad.GetProperty("estado_unidad").GetString());
+        var noSale = unidad.GetProperty("no_sale");
+        Assert.Equal("Dano grave en el frente", noSale.GetProperty("motivo").GetString());
+        Assert.Equal(hallazgo, noSale.GetProperty("hallazgo_id").GetGuid());
+        Assert.Equal(coordinador.UsuarioId, noSale.GetProperty("marcado_por").GetGuid());
+        Assert.Equal("Nombre coord@ejemplo.com", noSale.GetProperty("marcado_por_nombre").GetString());
+        Assert.Equal("VIN-NS-02", noSale.GetProperty("vin_reemplazo").GetString());
+        // La unidad que no sale sigue contando entre los VIN del viaje.
+        Assert.Equal(["VIN-NS-01"], Vines(despues));
+    }
+
+    [Fact]
     public async Task Un_viaje_cancelado_deja_de_ser_visible_para_inspectores_y_conductores()
     {
         var coordinador = await CoordinadorAsync();

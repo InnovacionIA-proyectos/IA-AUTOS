@@ -1,3 +1,4 @@
+using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Auth.DTOAuth;
 using IAAutos.Aplicacion.Auth.Services;
 using IAAutos.Aplicacion.Catalogos;
@@ -8,6 +9,41 @@ using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 
 namespace IAAutos.Tests.Unitarios.Falsos;
+
+/// <summary>Almacen de imagenes en memoria: lo guardado se lee por nombre.</summary>
+public sealed class clsAlmacenArchivosFalso : IAlmacenArchivos
+{
+    public Dictionary<string, byte[]> Archivos { get; } = [];
+
+    public Task GuardarAsync(string nombreArchivo, byte[] contenido, string tipoContenido, CancellationToken ct = default)
+    {
+        Archivos[nombreArchivo] = contenido;
+        return Task.CompletedTask;
+    }
+
+    public Task<byte[]?> LeerAsync(string nombreArchivo, CancellationToken ct = default) =>
+        Task.FromResult(Archivos.TryGetValue(nombreArchivo, out var contenido) ? contenido : null);
+}
+
+/// <summary>Imagen de los paneles de danos en memoria: un panel por codigo, con su archivo (o sin imagen).</summary>
+public sealed class clsImagenesPanelFalso : IImagenesPanelDano
+{
+    public Dictionary<string, string?> Paneles { get; } = [];
+
+    public Task<string?> ObtenerNombreAsync(string codigoPanel, CancellationToken ct = default) =>
+        Paneles.TryGetValue(codigoPanel, out var nombre) ? Task.FromResult(nombre) : throw new clsEntidadNoEncontradaException($"No existe el panel {codigoPanel}");
+
+    public Task CambiarAsync(string codigoPanel, string archivo, CancellationToken ct = default)
+    {
+        if (!Paneles.ContainsKey(codigoPanel))
+        {
+            throw new clsEntidadNoEncontradaException($"No existe el panel {codigoPanel}");
+        }
+
+        Paneles[codigoPanel] = archivo;
+        return Task.CompletedTask;
+    }
+}
 
 public sealed class clsRelojFijo(DateTimeOffset ahora) : IReloj
 {

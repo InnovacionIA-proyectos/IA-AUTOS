@@ -48,7 +48,7 @@ internal sealed class clsGeneradorPdfInventario : IGeneradorPdfInventario
                 elementos.Add(new Linea($"  {inspeccion.MomentoNombre} — {inspeccion.Estado} — {fecha}", 11, false));
                 foreach (var hallazgo in inspeccion.Hallazgos)
                 {
-                    elementos.Add(new Linea($"    • {hallazgo.ParteVehiculo}: {hallazgo.ClaseDano} ({hallazgo.TamanoDano})", 11, false));
+                    elementos.Add(new Linea($"    • {hallazgo.Zona ?? "Sin ubicar"}: {hallazgo.ClaseDano ?? "Sin clase"} ({hallazgo.TamanoDano})", 11, false));
                 }
 
                 elementos.Add(new Linea($"    Evidencias: {inspeccion.Evidencias.Count}", 11, false));

@@ -74,14 +74,17 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio) :
         return Creado(await servicio.AgregarEvidenciaAsync(id, solicitud, ct));
     }
 
-    /// <summary>Guarda un hallazgo con su foto propia (<c>evidencia</c>, obligatoria: sin ella 400).</summary>
+    /// <summary>
+    /// Guarda un hallazgo con su zona (<c>cuadrante_numero</c> + <c>lado</c>, o <c>zona_provisional</c>), clase, tamano, nivel de severidad y su foto propia
+    /// (<c>evidencia</c>, obligatoria: sin ella 400). <c>parte_vehiculo</c> y <c>coords_diagrama</c> ya no se aceptan.
+    /// </summary>
     [HttpPost("{id:guid}/hallazgos")]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
     [ProducesResponseType<HallazgoCreadoDto>(StatusCodes.Status201Created)]
     [CuerpoSolicitud(typeof(IAAutos.Aplicacion.Inspecciones.DTOInspecciones.CrearHallazgoRequest))]
     public async Task<IActionResult> AgregarHallazgo(Guid id, CancellationToken ct)
     {
-        var solicitud = await LeerCuerpoAsync<CrearHallazgoRequest>(ct);
+        var solicitud = await LeerCuerpoAsync<CrearHallazgoRequest>(ct, "parte_vehiculo", "coords_diagrama");
         return Creado(await servicio.AgregarHallazgoAsync(id, solicitud, ct));
     }
 
