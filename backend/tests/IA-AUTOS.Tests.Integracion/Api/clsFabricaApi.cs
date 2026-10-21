@@ -29,6 +29,7 @@ public sealed class clsFabricaApi(
             ["Etl:IngestToken"] = TOKEN_ETL,
             ["Cors:Origins"] = ORIGEN_PERMITIDO,
             ["Contrasenas:Iteraciones"] = "1000",
+            ["Alertas:ProcesosActivos"] = "false",
             ["Seguridad:LoginMaxIntentosPorMinuto"] = "1000",
             ["Storage:LocalPath"] = Path.Combine(Path.GetTempPath(), "iaautos-pruebas-" + Guid.NewGuid().ToString("N")),
         };

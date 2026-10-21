@@ -18,7 +18,7 @@ Infraestructura  ->  Aplicacion y Dominio      (la API enlaza la infraestructura
 
 ## Modulos
 
-Auth, Usuarios, Vehiculos (carga masiva, listados, inventario, PDF), Viajes (alta, asignacion de VIN, estados, carga por Excel, visibilidad), Inspecciones (informes, hallazgos, evidencias, cierre, custodia), Conductor (novedades y llegada en ruta), Notificaciones (bandeja, dispositivos y envio push por FCM), Archivos, Sofasa (ingesta y consulta), Reportes (patrones, analisis, tasa de rechazo) y Auditoria (transversal).
+Auth, Usuarios, Vehiculos (carga masiva, listados, inventario, PDF), Viajes (alta, asignacion de VIN, estados, carga por Excel, visibilidad), Inspecciones (informes, hallazgos, evidencias, cierre, custodia), Conductor (novedades y llegada en ruta), Notificaciones (bandeja, dispositivos y envio push por FCM), Alertas (alertas preventivas y avisos operativos, con su proceso periodico) y Parametros (valores que el negocio ajusta), Archivos, Sofasa (ingesta y consulta), Reportes (patrones, analisis, tasa de rechazo) y Auditoria (transversal).
 
 Cada capa se organiza por grupo funcional (por ejemplo `Aplicacion/Inspecciones/{DTOInspecciones, Validators}`), no por tipo tecnico.
 

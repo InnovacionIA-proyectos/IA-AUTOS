@@ -214,11 +214,10 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     }
 
     [Fact]
-    public async Task Los_niveles_criticos_se_configuran()
+    public async Task Los_niveles_criticos_son_el_parametro_niveles_criticos()
     {
-        var conCriticoV2 = CrearFabrica(new Dictionary<string, string?> { ["Alertas:NivelesCriticos:0"] = "v1_plus", ["Alertas:NivelesCriticos:1"] = "v2" }, s => s.AddSingleton<IEnviadorPush>(_push));
-        _api = conCriticoV2;
         var e = await EscenarioAsync();
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblParametros SET Valor = N'v1_plus, v2' WHERE Clave = 'niveles_criticos'");
 
         await RevisarAsync(e.Inspector, e.Novedad, Cuerpo(c => c["nivel_severidad"] = "v2"));
 

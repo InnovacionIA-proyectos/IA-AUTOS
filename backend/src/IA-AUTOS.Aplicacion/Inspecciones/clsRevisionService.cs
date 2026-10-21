@@ -87,7 +87,8 @@ public sealed class clsRevisionService(
         auditor.Registrar("hallazgo.revision", "hallazgos", hallazgo.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
 
-        await alertaCritica.EmitirSiEsCriticoAsync(hallazgo, vehiculo, viaje.Id, ct);
+        var proceso = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo ?? "la etapa";
+        await alertaCritica.EmitirSiHayCriticosAsync([hallazgo], vehiculo, viaje.Id, proceso, ct);
         return await consultas.ObtenerHallazgoAsync(hallazgo.Id, ct) ?? throw new clsEntidadNoEncontradaException($"Hallazgo {hallazgoId} no encontrado");
     }
 

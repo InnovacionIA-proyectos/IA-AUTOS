@@ -1,3 +1,4 @@
+using IAAutos.Aplicacion.Alertas;
 using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Auth.Services;
 using IAAutos.Aplicacion.Catalogos;
@@ -13,11 +14,13 @@ using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Notificaciones;
+using IAAutos.Dominio.Parametros;
 using IAAutos.Dominio.Sofasa;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
 using IAAutos.Aplicacion.Viajes;
+using IAAutos.Infraestructura.Alertas;
 using IAAutos.Infraestructura.Almacenamiento;
 using IAAutos.Infraestructura.Catalogos;
 using IAAutos.Infraestructura.Notificaciones;
@@ -71,6 +74,8 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IDescriptorHallazgos, clsDescriptorHallazgos>();
         servicios.AddScoped<IConsultasHallazgos, clsConsultasHallazgos>();
         servicios.AddScoped<IConsultasNotificaciones, clsConsultasNotificaciones>();
+        servicios.AddScoped<IConsultasAlertas, clsConsultasAlertas>();
+        servicios.AddScoped<IParametroRepository, clsParametroRepository>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();
         servicios.AddSingleton<IGeneradorPdfInventario, clsGeneradorPdfInventario>();
         servicios.AddSingleton<IGeneradorPdfConstancia, clsGeneradorPdfConstancia>();
@@ -108,6 +113,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IAuditoriaRepository, clsAuditoriaRepository>();
         servicios.AddScoped<INotificacionRepository, clsNotificacionRepository>();
         servicios.AddScoped<IDispositivoRepository, clsDispositivoRepository>();
+        servicios.AddHostedService<clsProcesoAlertas>();
         return servicios;
     }
 
