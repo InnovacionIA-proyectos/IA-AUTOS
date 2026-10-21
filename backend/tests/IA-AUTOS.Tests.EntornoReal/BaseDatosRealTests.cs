@@ -379,6 +379,57 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_zona_del_dano_el_hallazgo_con_nivel_y_el_estado_de_la_unidad_estan_migrados()
+    {
+        // Sin esta migracion la API no puede leer ni guardar hallazgos con zona: este chequeo (solo lectura) avisa antes de desplegar si falta
+        // ejecutar database/cambios-esquema/10-zona-dano-y-hallazgo.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/10-zona-dano-y-hallazgo.sql.";
+
+        async Task<int> Columnas(string tabla, string columna) => await EscalarAsync<int>(
+            conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(@t, N'U') AND name = @c", ("@t", tabla), ("@c", columna));
+
+        foreach (var tabla in new[] { "tblPanelesDano", "tblZonasDano", "tblRegionesDano" })
+        {
+            Assert.True(await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = @t", ("@t", tabla)) == 1, $"Falta la tabla {tabla}. {ayuda}");
+        }
+
+        foreach (var columna in new[]
+        {
+            "ZonaId", "TipoNovedad", "NivelSeveridad", "Origen", "Nota", "EsPreexistente", "HallazgoOrigenId", "ConfirmadoPor", "EstadoSeguimiento",
+            "EvidenciaCompleta", "RevisadoPor", "RevisadoAt", "MigracionPendiente",
+        })
+        {
+            Assert.True(await Columnas("tblHallazgos", columna) == 1, $"Falta tblHallazgos.{columna}. {ayuda}");
+        }
+
+        foreach (var columna in new[] { "EstadoUnidad", "NoSaleMotivo", "NoSaleHallazgoId", "NoSaleMarcadoPor", "NoSaleAt", "ReemplazoVehiculoId" })
+        {
+            Assert.True(await Columnas("tblViajeVehiculos", columna) == 1, $"Falta tblViajeVehiculos.{columna}. {ayuda}");
+        }
+
+        var paneles = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblPanelesDano WHERE Codigo IN ('superior','perfil_posterior_izquierdo','perfil_posterior_derecho','costado_izquierdo','costado_derecho')");
+        var provisionales = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano WHERE CuadranteId IS NULL AND Codigo IN ('frente','llanta_delantera_izquierda','llanta_delantera_derecha','llanta_trasera_izquierda','llanta_trasera_derecha')");
+        var zonasEsperadas = await EscalarAsync<int>(conexion, "SELECT ISNULL(SUM(CASE WHEN Numero <= 25 THEN 2 ELSE 1 END), 0) FROM tblCuadrantes");
+        var zonas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano WHERE CuadranteId IS NOT NULL");
+        var restricciones = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.objects
+             WHERE name IN (N'FK_tblZonasDano_Cuadrante', N'CK_tblZonasDano_Forma', N'FK_tblRegionesDano_Zona', N'FK_tblHallazgos_Zona', N'FK_tblHallazgos_Nivel',
+                            N'FK_tblHallazgos_Origen', N'CK_tblHallazgos_Origen', N'CK_tblHallazgos_Clase', N'CK_tblHallazgos_TipoNovedad',
+                            N'CK_tblHallazgos_Seguimiento', N'CK_tblHallazgos_Preexistente', N'FK_tblViajeVehiculos_NoSaleHallazgo', N'CK_tblViajeVehiculos_NoSale')
+            """);
+        var disparador = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE name = N'TR_tblCuadrantes_CrearZonas' AND is_disabled = 0");
+        var hallazgosSinUbicarSinMarca = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblHallazgos WHERE ZonaId IS NULL AND Origen = 'inspector' AND MigracionPendiente = 0");
+
+        Assert.True(paneles == 5, $"Faltan paneles del dibujo de danos. {ayuda}");
+        Assert.True(provisionales == 5, $"Faltan zonas provisionales. {ayuda}");
+        Assert.True(zonas == zonasEsperadas, $"Hay {zonas} zonas numeradas y los cuadrantes esperan {zonasEsperadas} (dos por lado del 1 al 25 y una del 26 en adelante). {ayuda}");
+        Assert.True(restricciones == 13, $"Faltan relaciones o restricciones de zonas, hallazgos o unidades del viaje. {ayuda}");
+        Assert.True(disparador == 1, $"Falta el trigger que crea las zonas de un cuadrante nuevo. {ayuda}");
+        Assert.Equal(0, hallazgosSinUbicarSinMarca);
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

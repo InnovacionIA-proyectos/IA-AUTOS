@@ -34,6 +34,9 @@ BEGIN
     BEGIN TRY
         DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblEvidencias WHERE InspeccionId IN (SELECT Id FROM @insp);
+        -- Las unidades que "no salen" apuntan a un hallazgo, y un hallazgo preexistente apunta a su origen: se quitan primero.
+        DELETE FROM dbo.tblViajeVehiculos WHERE VehiculoId = @v;
+        DELETE FROM dbo.tblHallazgos WHERE EsPreexistente = 1 AND InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblHallazgos WHERE InspeccionId IN (SELECT Id FROM @insp);
         -- Las versiones se borran de la mas nueva a la mas antigua: una version no se puede quitar mientras otra la corrige.
         WHILE EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id IN (SELECT Id FROM @insp))
@@ -41,7 +44,6 @@ BEGIN
             WHERE Id IN (SELECT Id FROM @insp)
               AND Id NOT IN (SELECT CorrigeInspeccionId FROM dbo.tblInspecciones WHERE CorrigeInspeccionId IS NOT NULL);
         DELETE FROM dbo.tblEtapas WHERE VehiculoId = @v;
-        DELETE FROM dbo.tblViajeVehiculos WHERE VehiculoId = @v;
         DELETE FROM dbo.tblVehiculos WHERE Id = @v;
     END TRY
     BEGIN CATCH
@@ -488,6 +490,101 @@ BEGIN
 END
 CLOSE cBorrado; DEALLOCATE cBorrado;
 
+-- 7c) Zonas del dano, paneles, regiones, hallazgo con nivel y estado de la unidad del viaje
+INSERT #r SELECT N'Paneles: existen los 5 paneles de la ficha, separados de las vistas de foto',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblPanelesDano WHERE Codigo IN ('superior','perfil_posterior_izquierdo','perfil_posterior_derecho','costado_izquierdo','costado_derecho')) = 5 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Zonas provisionales: frente y las cuatro llantas, sin cuadrante, numero ni lado',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblZonasDano WHERE CuadranteId IS NULL AND Numero IS NULL AND Lado IS NULL
+                 AND Codigo IN ('frente','llanta_delantera_izquierda','llanta_delantera_derecha','llanta_trasera_izquierda','llanta_trasera_derecha')) = 5 THEN 1 ELSE 0 END, NULL;
+
+DECLARE @cuad7 uniqueidentifier = NEWID(), @cuad30 uniqueidentifier = NEWID();
+INSERT dbo.tblCuadrantes (Id, TipoVehiculo, Numero, Nombre) VALUES (@cuad7, 'zz_zona', 7, N'ZZ_TEST zona 7'), (@cuad30, 'zz_zona', 30, N'ZZ_TEST zona 30');
+INSERT #r SELECT N'Cuadrante nuevo: el trigger crea dos zonas (izquierdo y derecho) del 1 al 25 y una sin lado del 26 en adelante',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblZonasDano WHERE CuadranteId = @cuad7 AND Lado IN ('izquierdo','derecho')) = 2
+          AND (SELECT COUNT(*) FROM dbo.tblZonasDano WHERE CuadranteId = @cuad30 AND Lado IS NULL) = 1 THEN 1 ELSE 0 END, NULL;
+
+DECLARE @zonaIzq7 uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE CuadranteId = @cuad7 AND Lado = 'izquierdo');
+DECLARE @zonaDer7 uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE CuadranteId = @cuad7 AND Lado = 'derecho');
+DECLARE @zona30 uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE CuadranteId = @cuad30);
+DECLARE @zonaFrente uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente');
+DECLARE @panelSup uniqueidentifier = (SELECT Id FROM dbo.tblPanelesDano WHERE Codigo = 'superior');
+DECLARE @panelCostIzq uniqueidentifier = (SELECT Id FROM dbo.tblPanelesDano WHERE Codigo = 'costado_izquierdo');
+
+-- Una region valida: la zona izquierdo 7 dibujada en el costado izquierdo.
+INSERT dbo.tblRegionesDano (Id, PanelId, ZonaId, CuadranteId, Geometria) VALUES (NEWID(), @panelCostIzq, @zonaIzq7, @cuad7, N'{"puntos":[[0.1,0.1],[0.2,0.1],[0.2,0.2]]}');
+INSERT #r SELECT N'Region: la zona izquierdo 7 se dibuja en el costado izquierdo', CASE WHEN EXISTS (SELECT 1 FROM dbo.tblRegionesDano WHERE ZonaId = @zonaIzq7 AND PanelId = @panelCostIzq) THEN 1 ELSE 0 END, NULL;
+
+DECLARE @bConductor uniqueidentifier = NEWID();
+DECLARE @casosZona TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosZona VALUES
+ (N'CHECK una zona sobre el numero 25 no lleva lado', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,Lado) VALUES (NEWID(),''' + CAST(@cuad30 AS nvarchar(36)) + N''',30,''izquierdo'')', 547),
+ (N'CHECK una zona del 1 al 25 exige lado', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,Lado) VALUES (NEWID(),''' + CAST(@cuad7 AS nvarchar(36)) + N''',7,NULL)', 547),
+ (N'CHECK lado distinto de izquierdo o derecho', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,Lado) VALUES (NEWID(),''' + CAST(@cuad7 AS nvarchar(36)) + N''',7,''centro'')', 547),
+ (N'UNIQUE una zona por cuadrante y lado', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,Lado) VALUES (NEWID(),''' + CAST(@cuad7 AS nvarchar(36)) + N''',7,''izquierdo'')', 2601),
+ (N'FK el numero de la zona es el de su cuadrante', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,Lado) VALUES (NEWID(),''' + CAST(@cuad7 AS nvarchar(36)) + N''',30,NULL)', 547),
+ (N'CHECK una zona provisional exige codigo y nombre', N'INSERT dbo.tblZonasDano (Id,Codigo) VALUES (NEWID(),''zz_provisional'')', 547),
+ (N'UNIQUE codigo de la zona provisional', N'INSERT dbo.tblZonasDano (Id,Codigo,Nombre) VALUES (NEWID(),''frente'',N''Otra'')', 2601),
+ (N'FK una region no puede ser de una zona provisional', N'INSERT dbo.tblRegionesDano (Id,PanelId,ZonaId,CuadranteId,Geometria) VALUES (NEWID(),''' + CAST(@panelSup AS nvarchar(36)) + N''',''' + CAST(@zonaFrente AS nvarchar(36)) + N''',''' + CAST(@cuad7 AS nvarchar(36)) + N''',N''{"puntos":[]}'')', 547),
+ (N'FK la zona de una region es de su cuadrante', N'INSERT dbo.tblRegionesDano (Id,PanelId,ZonaId,CuadranteId,Geometria) VALUES (NEWID(),''' + CAST(@panelSup AS nvarchar(36)) + N''',''' + CAST(@zonaDer7 AS nvarchar(36)) + N''',''' + CAST(@cuad30 AS nvarchar(36)) + N''',N''{"puntos":[]}'')', 547),
+ (N'UNIQUE una zona se dibuja una vez por panel', N'INSERT dbo.tblRegionesDano (Id,PanelId,ZonaId,CuadranteId,Geometria) VALUES (NEWID(),''' + CAST(@panelCostIzq AS nvarchar(36)) + N''',''' + CAST(@zonaIzq7 AS nvarchar(36)) + N''',''' + CAST(@cuad7 AS nvarchar(36)) + N''',N''{"puntos":[]}'')', 2627),
+ (N'CHECK la geometria de la region es JSON', N'INSERT dbo.tblRegionesDano (Id,PanelId,ZonaId,CuadranteId,Geometria) VALUES (NEWID(),''' + CAST(@panelSup AS nvarchar(36)) + N''',''' + CAST(@zonaDer7 AS nvarchar(36)) + N''',''' + CAST(@cuad7 AS nvarchar(36)) + N''',N''no es json'')', 547),
+ (N'CHECK origen del hallazgo', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ClaseDano,TamanoDano,Origen) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''golpe'',''1_5cm'',''robot'')', 547),
+ (N'CHECK el tipo de novedad es solo del conductor', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ClaseDano,TamanoDano,TipoNovedad) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''golpe'',''1_5cm'',''piedra'')', 547),
+ (N'CHECK tipo de novedad desconocido', N'INSERT dbo.tblHallazgos (Id,InspeccionId,TamanoDano,Origen,TipoNovedad) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''1_5cm'',''conductor'',''lluvia'')', 547),
+ (N'CHECK la clase solo falta en una novedad del conductor', N'INSERT dbo.tblHallazgos (Id,InspeccionId,TamanoDano) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''1_5cm'')', 547),
+ (N'CHECK estado de seguimiento', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ClaseDano,TamanoDano,EstadoSeguimiento) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''golpe'',''1_5cm'',''archivado'')', 547),
+ (N'CHECK un hallazgo preexistente exige su hallazgo de origen', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ClaseDano,TamanoDano,EsPreexistente) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''golpe'',''1_5cm'',1)', 547),
+ (N'FK nivel de severidad inexistente', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ClaseDano,TamanoDano,NivelSeveridad) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''golpe'',''1_5cm'',''v9'')', 547),
+ (N'FK zona inexistente en el hallazgo', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ClaseDano,TamanoDano,ZonaId) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''golpe'',''1_5cm'',NEWID())', 547),
+ (N'CHECK una unidad que no sale exige su motivo, hallazgo y responsable', N'UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = ''no_sale'' WHERE VehiculoId = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0006'')', 547),
+ (N'CHECK una unidad activa no lleva datos de no sale', N'UPDATE dbo.tblViajeVehiculos SET NoSaleMotivo = N''x'' WHERE VehiculoId = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0006'')', 547),
+ (N'CHECK estado de la unidad del viaje', N'UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = ''perdida'' WHERE VehiculoId = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0006'')', 547);
+
+DECLARE @pruebaZona nvarchar(200), @sqlZona nvarchar(max), @espZona int;
+DECLARE cZona CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosZona;
+OPEN cZona; FETCH NEXT FROM cZona INTO @pruebaZona, @sqlZona, @espZona;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    BEGIN TRY
+        EXEC (@sqlZona);
+        INSERT #r VALUES (@pruebaZona, 0, N'la sentencia no fallo');
+    END TRY
+    BEGIN CATCH
+        INSERT #r VALUES (@pruebaZona, CASE WHEN ERROR_NUMBER() = @espZona THEN 1 ELSE 0 END, N'error ' + CAST(ERROR_NUMBER() AS nvarchar(10)) + N': ' + LEFT(ERROR_MESSAGE(), 150));
+    END CATCH
+    FETCH NEXT FROM cZona INTO @pruebaZona, @sqlZona, @espZona;
+END
+CLOSE cZona; DEALLOCATE cZona;
+
+-- Un hallazgo completo (zona lado + numero, clase, tamano, nivel, nota), uno preexistente que apunta al primero y una novedad del conductor sin zona, clase ni nivel.
+DECLARE @hNuevo uniqueidentifier = NEWID(), @hPre uniqueidentifier = NEWID();
+INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad, Nota) VALUES (@hNuevo, @bF, @zonaIzq7, 'golpe', '1_5cm', 'v1_plus', N'Rayon en la puerta');
+INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad, EsPreexistente, HallazgoOrigenId, ConfirmadoPor)
+VALUES (@hPre, @bF, @zonaIzq7, 'golpe', '1_5cm', 'v1_plus', 1, @hNuevo, @u1);
+INSERT dbo.tblHallazgos (Id, InspeccionId, TamanoDano, Origen, TipoNovedad) VALUES (@bConductor, @bF, '1_5cm', 'conductor', 'granizo');
+INSERT #r SELECT N'Hallazgo: guarda zona, nivel y nota; el preexistente apunta a su origen; la novedad del conductor no lleva zona, clase ni nivel',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblHallazgos WHERE Id = @hNuevo AND ZonaId = @zonaIzq7 AND NivelSeveridad = 'v1_plus' AND Origen = 'inspector' AND EstadoSeguimiento = 'pendiente' AND EvidenciaCompleta = 0 AND MigracionPendiente = 0)
+          AND EXISTS (SELECT 1 FROM dbo.tblHallazgos WHERE Id = @hPre AND EsPreexistente = 1 AND HallazgoOrigenId = @hNuevo)
+          AND EXISTS (SELECT 1 FROM dbo.tblHallazgos WHERE Id = @bConductor AND ZonaId IS NULL AND ClaseDano IS NULL AND NivelSeveridad IS NULL AND TipoNovedad = 'granizo') THEN 1 ELSE 0 END, NULL;
+
+-- Una unidad puede no salir del viaje: queda con su motivo, el hallazgo que lo causa y quien lo marco, y conserva su vinculo con el viaje.
+UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = 'no_sale', NoSaleMotivo = N'Hallazgo V1+', NoSaleHallazgoId = @hNuevo, NoSaleMarcadoPor = @u1, NoSaleAt = SYSDATETIMEOFFSET()
+WHERE VehiculoId = @v5;
+INSERT #r SELECT N'Unidad del viaje: no sale con su motivo, hallazgo y responsable, sin borrar el vinculo',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblViajeVehiculos WHERE VehiculoId = @v5 AND EstadoUnidad = 'no_sale' AND NoSaleHallazgoId = @hNuevo) THEN 1 ELSE 0 END, NULL;
+
+-- Una zona con hallazgos no se borra; un cuadrante sin hallazgos se lleva sus zonas y regiones.
+BEGIN TRY
+    DELETE FROM dbo.tblZonasDano WHERE Id = @zonaIzq7;
+    INSERT #r VALUES (N'No se borra una zona que tiene hallazgos', 0, N'no fallo');
+END TRY
+BEGIN CATCH
+    INSERT #r VALUES (N'No se borra una zona que tiene hallazgos', CASE WHEN ERROR_NUMBER() = 547 THEN 1 ELSE 0 END, LEFT(ERROR_MESSAGE(), 150));
+END CATCH
+DELETE FROM dbo.tblCuadrantes WHERE Id = @cuad30;
+INSERT #r SELECT N'Borrar un cuadrante borra sus zonas',
+    CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblZonasDano WHERE CuadranteId = @cuad30) AND EXISTS (SELECT 1 FROM dbo.tblZonasDano WHERE CuadranteId = @cuad7) THEN 1 ELSE 0 END, NULL;
+
 -- Un borrador vacio si se borra.
 DELETE FROM dbo.tblInspecciones WHERE Id = @bV;
 INSERT #r SELECT N'Un borrador sin fotos, hallazgos ni transferencia si se borra',
@@ -504,6 +601,10 @@ ALTER TABLE dbo.tblAuditLog ENABLE TRIGGER ALL;
 -- Limpieza: el vehiculo de prueba se borra quitando antes, de forma explicita, todo lo que cuelga de el.
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0006';
 DELETE FROM dbo.tblViajes WHERE CodigoMtrack = 'ZZ_TEST_MTK_6';
+DELETE FROM dbo.tblCuadrantes WHERE TipoVehiculo = 'zz_zona';
+INSERT #r SELECT N'Limpieza: no quedan cuadrantes, zonas ni regiones de prueba',
+    CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblCuadrantes WHERE TipoVehiculo = 'zz_zona') AND NOT EXISTS (SELECT 1 FROM dbo.tblZonasDano WHERE CuadranteId IN (@cuad7, @cuad30))
+          AND NOT EXISTS (SELECT 1 FROM dbo.tblRegionesDano WHERE CuadranteId IN (@cuad7, @cuad30)) THEN 1 ELSE 0 END, NULL;
 INSERT #r SELECT N'Limpieza: se borra un vehiculo quitando antes lo que cuelga de el',
     CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblVehiculos WHERE Vin = 'ZZ_TEST_VIN_0006') AND NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id IN (@s5, @l5, @c5, @bF, @bH, @bT))
           AND NOT EXISTS (SELECT 1 FROM dbo.tblEvidencias WHERE StoragePath LIKE N'zz-%') THEN 1 ELSE 0 END, NULL;
