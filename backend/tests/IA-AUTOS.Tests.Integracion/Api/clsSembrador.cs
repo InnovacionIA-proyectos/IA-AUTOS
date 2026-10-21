@@ -148,6 +148,25 @@ public sealed class clsSembrador(string cadenaConexion)
         return id;
     }
 
+    /// <summary>Una inspeccion ya cerrada con un hallazgo en la zona indicada (la forma que guarda la API), para usarlo como hallazgo previo del VIN.</summary>
+    public async Task<(Guid InspeccionId, Guid HallazgoId)> InformeCerradoConHallazgoAsync(
+        Guid etapaId, Guid usuarioId, Guid zonaId, string clase = "golpe", string momento = "salida")
+    {
+        var inspeccion = await InformeAsync(etapaId, usuarioId, cerrada: false, momento: momento);
+        var hallazgo = Guid.NewGuid();
+        await EjecutarAsync(
+            "INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) VALUES (@h, @i, @z, @c, '5_10cm', 'v2')",
+            ("@h", hallazgo), ("@i", inspeccion), ("@z", zonaId), ("@c", clase));
+        await EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i", ("@i", inspeccion));
+        return (inspeccion, hallazgo);
+    }
+
+    /// <summary>La zona de un cuadrante por numero y lado (nulo del 26 en adelante).</summary>
+    public async Task<Guid> ZonaAsync(int numero, string? lado) =>
+        (Guid)(await EscalarAsync(
+            "SELECT Id FROM dbo.tblZonasDano WHERE Numero = @n AND ((@l IS NULL AND Lado IS NULL) OR Lado = @l)",
+            ("@n", numero), ("@l", (object?)lado ?? DBNull.Value)))!;
+
     /// <summary>Marca la unidad como «no sale» del viaje, con el hallazgo que la causo y quien la marco.</summary>
     public Task UnidadNoSaleAsync(Guid viajeId, Guid vehiculoId, Guid hallazgoId, Guid marcadoPor, string motivo, Guid? reemplazoId = null) =>
         EjecutarAsync(

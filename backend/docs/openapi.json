@@ -2107,6 +2107,69 @@
         ]
       }
     },
+    "/api/inspecciones/{id}/hallazgos-previos": {
+      "get": {
+        "tags": [
+          "Inspecciones"
+        ],
+        "operationId": "Inspecciones_HallazgosPrevios",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HallazgoPrevioDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HallazgoPrevioDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HallazgoPrevioDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/inspecciones/{id}/evidencias": {
       "post": {
         "tags": [
@@ -5042,6 +5105,186 @@
         ],
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inspeccion_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parte_vehiculo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clase_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tamano_dano": {
+            "type": "string"
+          },
+          "coords_diagrama": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CoordsDiagramaDto"
+              }
+            ]
+          },
+          "cuadrante_numero": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "lado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona_provisional": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cuadrante_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo_novedad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_severidad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_accion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "origen": {
+            "type": "string"
+          },
+          "nota": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "es_preexistente": {
+            "type": "boolean"
+          },
+          "hallazgo_origen_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "confirmado_por": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "estado_seguimiento": {
+            "type": "string"
+          },
+          "evidencia_completa": {
+            "type": "boolean"
+          },
+          "evidencia_faltante": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revisado_por": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "revisado_at": {
+            "format": "date-time"
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "HallazgoPrevioDto": {
+        "required": [
+          "viaje_id",
+          "codigo_mtrack",
+          "proceso",
+          "momento",
+          "cerrada_at",
+          "evidencias"
+        ],
+        "type": "object",
+        "properties": {
+          "viaje_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proceso": {
+            "type": "string"
+          },
+          "momento": {
+            "type": "string"
+          },
+          "cerrada_at": {
+            "format": "date-time"
+          },
+          "evidencias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvidenciaDto"
+            }
+          },
           "id": {
             "type": "string",
             "format": "uuid"

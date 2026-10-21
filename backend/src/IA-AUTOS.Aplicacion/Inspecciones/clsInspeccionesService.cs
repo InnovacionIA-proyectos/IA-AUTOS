@@ -19,6 +19,12 @@ public interface IConsultasInspecciones
     Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones filtros, Guid? soloDeUsuario, int limite, CancellationToken ct = default);
 
     Task<InformeDetalleDto?> ObtenerInformeAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Los hallazgos de las inspecciones cerradas anteriores del mismo VIN (de cualquier viaje, incluido uno del que la unidad no salio), del cierre mas reciente
+    /// al mas antiguo. Una inspeccion corregida cuenta con su ultima version cerrada y no con la que reemplazo.
+    /// </summary>
+    Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosAsync(Guid inspeccionId, CancellationToken ct = default);
 }
 
 /// <summary>Arma el DTO de los hallazgos con lo que solo referencian: su zona, su nivel de severidad y si ya tienen su foto.</summary>
@@ -140,6 +146,26 @@ public sealed class clsInspeccionesService(
     public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspeccionesRequest solicitud, CancellationToken ct = default) =>
         await consultas.ListarAsync(await ParsearFiltrosAsync(solicitud, ct), actual.SoloSusViajes(), LIMITE_LISTADO, ct);
 
+    /// <summary>
+    /// Los hallazgos previos del VIN de la inspeccion, para que el cliente proponga un hallazgo nuevo como preexistente. Solo inspector y administrador; el inspector
+    /// solo los pide de inspecciones de sus viajes (403 si es de otro).
+    /// </summary>
+    public async Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosAsync(Guid inspeccionId, CancellationToken ct = default)
+    {
+        var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct)
+            ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
+        if (actual.SoloSusViajes() is { } usuarioViaje)
+        {
+            var viaje = await viajes.ObtenerPorIdAsync(inspeccion.ViajeId, ct);
+            if (viaje is null || !viaje.Participa(usuarioViaje))
+            {
+                throw new clsProhibidoException("La inspección pertenece a un viaje que no está asignado a su usuario");
+            }
+        }
+
+        return await consultas.ObtenerHallazgosPreviosAsync(inspeccionId, ct);
+    }
+
     /// <summary>Informe completo. Inspectores y conductores solo abren los informes de sus viajes (403 si es de otro).</summary>
     public async Task<InformeDetalleDto> ObtenerInformeAsync(Guid id, CancellationToken ct = default)
     {
@@ -174,7 +200,7 @@ public sealed class clsInspeccionesService(
             && !await inspecciones.EsHallazgoPrevioDelVehiculoAsync(origenId, inspeccionId, zona.Id, clase, ct))
         {
             throw clsErroresCampos.De(
-                "hallazgo_origen_id", "El hallazgo de origen debe ser de otra inspección del mismo vehículo, con la misma zona y la misma clase de daño");
+                "hallazgo_origen_id", "El hallazgo de origen debe ser de una inspección cerrada anterior del mismo vehículo, con la misma zona y la misma clase de daño");
         }
 
         var hallazgo = clsHallazgo.Crear(

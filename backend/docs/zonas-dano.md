@@ -104,7 +104,8 @@ conserve su trazabilidad cuando vuelva a otro viaje. Las reglas de quien puede m
 
 - `POST /api/inspecciones/{id}/hallazgos` recibe `cuadrante_numero` + `lado` (o `zona_provisional`), `clase_dano`, `tamano_dano`, `nivel_severidad`, `es_preexistente` + `hallazgo_origen_id` y `nota`. La API resuelve la zona
   con el cuadrante del tipo de vehículo del VIN (o el genérico si no hay uno propio), valida el lado por número (obligatorio del 1 al 25, prohibido del 26 en adelante), exige el nivel al inspector y al administrador
-  (el conductor no lo envía y su novedad queda sin nivel) y comprueba que un hallazgo preexistente apunte a un hallazgo de **otra inspección del mismo VIN** con la **misma zona y clase**.
+  (el conductor no lo envía y su novedad queda sin nivel) y comprueba que un hallazgo preexistente apunte a un hallazgo de una **inspección cerrada anterior del mismo VIN** con la **misma zona y clase**.
+- `GET /api/inspecciones/{id}/hallazgos-previos` entrega esa lista (con el viaje, el proceso, el momento, el cierre y las fotos de cada hallazgo) para que la app proponga el preexistente comparando zona y clase.
 - `GET /api/catalogos` publica `paneles-dano` (con la URL de su imagen) y `cuadrante-regiones`, y las zonas provisionales dentro de `cuadrantes` (con su `codigo`, sin número ni región). `cuadrante-vistas` responde `404`.
 - El texto de la zona para mostrar se arma en la API: «Izquierdo 7 · Puerta delantera», «Techo 30», «Frente».
 - El inventario y el detalle del viaje traen `estado_unidad` y `no_sale` por unidad (la columna del viaje que dejó la migración 10). Marcar una unidad como «no sale» es de otra tarea.

@@ -526,10 +526,9 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (sesion, etapas) = await EscenarioAsync();
         await Sembrador.CuadranteAsync(7, "Puerta delantera");
-        var salida = await CrearInspeccionAsync(sesion, etapas[0]);
+        // El hallazgo previo es de una inspeccion de salida ya cerrada; la de llegada se abre despues.
+        var (_, origen) = await Sembrador.InformeCerradoConHallazgoAsync(etapas[0], sesion.UsuarioId, await Sembrador.ZonaAsync(7, "izquierdo"));
         var llegada = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
-        var (rutaSalida, _) = await SubirAsync(sesion);
-        var origen = (await ClonarAsync(await PostHallazgoAsync(sesion, salida, CuerpoHallazgo(rutaSalida, ZONA_IZQUIERDO_7)))).GetProperty("id").GetGuid();
         var (ruta, _) = await SubirAsync(sesion);
         Dictionary<string, object?> Preexistente(object zona, string clase = "golpe", Guid? hallazgoOrigen = null)
         {
@@ -542,19 +541,21 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var otraZona = await PostHallazgoAsync(sesion, llegada, Preexistente(new { cuadrante_numero = 7, lado = "derecho" }));
         var otraClase = await PostHallazgoAsync(sesion, llegada, Preexistente(ZONA_IZQUIERDO_7, clase: "rotura"));
         var inexistente = await PostHallazgoAsync(sesion, llegada, Preexistente(ZONA_IZQUIERDO_7, hallazgoOrigen: Guid.NewGuid()));
-        var enLaMismaInspeccion = await PostHallazgoAsync(sesion, salida, Preexistente(ZONA_IZQUIERDO_7));
+        var abierto = (await ClonarAsync(await PostHallazgoAsync(sesion, llegada, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }, nivel: "v1")))).GetProperty("id").GetGuid();
+        var deInspeccionAbierta = await PostHallazgoAsync(sesion, llegada, Preexistente(new { zona_provisional = "frente" }, hallazgoOrigen: abierto));
         var ok = await PostHallazgoAsync(sesion, llegada, Preexistente(ZONA_IZQUIERDO_7));
 
         Assert.Contains("mismo vehículo", await ErrorDeCampoAsync(otraZona, "hallazgo_origen_id"));
         Assert.Contains("misma zona", await ErrorDeCampoAsync(otraClase, "hallazgo_origen_id"));
         Assert.Contains("mismo vehículo", await ErrorDeCampoAsync(inexistente, "hallazgo_origen_id"));
-        Assert.Contains("otra inspección", await ErrorDeCampoAsync(enLaMismaInspeccion, "hallazgo_origen_id"));
+        Assert.Contains("inspección cerrada anterior", await ErrorDeCampoAsync(deInspeccionAbierta, "hallazgo_origen_id"));
         Assert.Equal(HttpStatusCode.Created, ok.StatusCode);
         var h = await ClonarAsync(ok);
         Assert.True(h.GetProperty("es_preexistente").GetBoolean());
         Assert.Equal(origen, h.GetProperty("hallazgo_origen_id").GetGuid());
         Assert.Equal(sesion.UsuarioId, h.GetProperty("confirmado_por").GetGuid());
-        Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
+        // El previo sembrado, el hallazgo abierto y el preexistente recien guardado.
+        Assert.Equal(3, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
     }
 
     [Fact]
@@ -609,6 +610,155 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var (ruta, _) = await SubirAsync(sesion);
 
         var r = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }));
+
+        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
+        Assert.Equal($"Inspección {id} no encontrada", (await ClonarAsync(r)).GetProperty("message").GetString());
+    }
+
+    // ---------------------------------------------------------------- hallazgos previos del VIN
+
+    [Fact]
+    public async Task Los_hallazgos_previos_traen_los_de_las_inspecciones_cerradas_del_vin_del_mas_reciente_al_mas_antiguo_con_su_contexto()
+    {
+        var (sesion, etapas) = await EscenarioAsync();
+        await Sembrador.CuadranteAsync(7, "Puerta delantera");
+        var izquierdo7 = await Sembrador.ZonaAsync(7, "izquierdo");
+        var frente = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var vehiculo = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblVehiculos WHERE Vin = 'VIN-INSP-0001'"))!;
+
+        // Un viaje anterior del que la unidad no salio, con su hallazgo grave.
+        var viajeAnterior = await Sembrador.ViajeAsync(inspectorId: sesion.UsuarioId, estado: "cancelado", codigoMtrack: "MTK-ANTERIOR");
+        var etapaAnterior = Guid.NewGuid();
+        await Sembrador.EjecutarAsync("INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @v, @veh)", ("@v", viajeAnterior), ("@veh", vehiculo));
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@e, @veh, @v, @p, 1)",
+            ("@e", etapaAnterior), ("@veh", vehiculo), ("@v", viajeAnterior), ("@p", (await Sembrador.EtapasRutaAsync())[0]));
+        var (_, hallazgoNoSale) = await Sembrador.InformeCerradoConHallazgoAsync(etapaAnterior, sesion.UsuarioId, frente, clase: "rotura");
+        await Sembrador.UnidadNoSaleAsync(viajeAnterior, vehiculo, hallazgoNoSale, sesion.UsuarioId, "Rotura en el frente");
+        await Task.Delay(30);
+
+        // Las inspecciones del viaje actual: una salida cerrada y una llegada cerrada despues.
+        var (inspeccionSalida, hallazgoSalida) = await Sembrador.InformeCerradoConHallazgoAsync(etapas[0], sesion.UsuarioId, izquierdo7);
+        await Task.Delay(30);
+        var (inspeccionLlegada, hallazgoLlegada) = await Sembrador.InformeCerradoConHallazgoAsync(etapas[0], sesion.UsuarioId, frente, momento: "llegada");
+        // Lo que no cuenta: un hallazgo de una inspeccion abierta y uno de otro VIN.
+        await Sembrador.InformeAsync(etapas[1], sesion.UsuarioId, cerrada: false, hallazgos: 1, momento: "llegada");
+        var (_, etapasAjenas) = await Sembrador.VehiculoConRutaAsync("VIN-INSP-0099", inspectorId: sesion.UsuarioId);
+        await Sembrador.InformeCerradoConHallazgoAsync(etapasAjenas[0], sesion.UsuarioId, frente);
+        await Task.Delay(30);
+        var actual = await CrearInspeccionAsync(sesion, etapas[1]);
+
+        var r = await Cliente(sesion.Token).GetAsync($"/api/inspecciones/{actual}/hallazgos-previos");
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var lista = (await ClonarAsync(r)).EnumerateArray().ToList();
+        Assert.Equal([hallazgoLlegada, hallazgoSalida, hallazgoNoSale], lista.Select(h => h.GetProperty("id").GetGuid()).ToList());
+        var llegada = lista[0];
+        Assert.Equal(inspeccionLlegada, llegada.GetProperty("inspeccion_id").GetGuid());
+        Assert.Equal(await Sembrador.ViajeDeEtapaAsync(etapas[0]), llegada.GetProperty("viaje_id").GetGuid());
+        Assert.StartsWith("MTK-S", llegada.GetProperty("codigo_mtrack").GetString());
+        Assert.Equal("cargue", llegada.GetProperty("proceso").GetString());
+        Assert.Equal("llegada", llegada.GetProperty("momento").GetString());
+        Assert.Equal(JsonValueKind.String, llegada.GetProperty("cerrada_at").ValueKind);
+        Assert.Equal(JsonValueKind.Array, llegada.GetProperty("evidencias").ValueKind);
+        Assert.Equal("Frente", llegada.GetProperty("zona").GetString());
+        Assert.Equal("v2", llegada.GetProperty("nivel_severidad").GetString());
+        Assert.Equal("Izquierdo 7 · Puerta delantera", lista[1].GetProperty("zona").GetString());
+        Assert.Equal(inspeccionSalida, lista[1].GetProperty("inspeccion_id").GetGuid());
+        // El del viaje anterior del que la unidad no salio tambien llega, con el codigo de su viaje.
+        Assert.Equal(viajeAnterior, lista[2].GetProperty("viaje_id").GetGuid());
+        Assert.Equal("MTK-ANTERIOR", lista[2].GetProperty("codigo_mtrack").GetString());
+        Assert.Equal("rotura", lista[2].GetProperty("clase_dano").GetString());
+    }
+
+    [Fact]
+    public async Task Los_hallazgos_previos_traen_las_fotos_del_hallazgo_con_su_url()
+    {
+        var (sesion, etapas) = await EscenarioAsync();
+        var frente = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var inspeccion = await Sembrador.InformeAsync(etapas[0], sesion.UsuarioId, cerrada: false);
+        var hallazgo = Guid.NewGuid();
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) VALUES (@h, @i, @z, 'golpe', '5_10cm', 'v2')",
+            ("@h", hallazgo), ("@i", inspeccion), ("@z", frente));
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblEvidencias (Id, InspeccionId, HallazgoId, StoragePath, SelloFecha, SelloLat, SelloLng) VALUES (NEWID(), @i, @h, 'hallazgo-previo.png', SYSDATETIMEOFFSET(), 4.6, -74.1)",
+            ("@i", inspeccion), ("@h", hallazgo));
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i", ("@i", inspeccion));
+        await Task.Delay(30);
+        var actual = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
+
+        var lista = (await ClonarAsync(await Cliente(sesion.Token).GetAsync($"/api/inspecciones/{actual}/hallazgos-previos"))).EnumerateArray().ToList();
+
+        var foto = Assert.Single(lista).GetProperty("evidencias").EnumerateArray().Single();
+        Assert.Equal("/api/uploads/hallazgo-previo.png", foto.GetProperty("url").GetString());
+        Assert.Equal(hallazgo, foto.GetProperty("hallazgo_id").GetGuid());
+        Assert.False(foto.TryGetProperty("storage_path", out _));
+    }
+
+    [Fact]
+    public async Task Una_inspeccion_corregida_aporta_los_hallazgos_de_su_ultima_version_cerrada()
+    {
+        var (sesion, etapas) = await EscenarioAsync();
+        await Sembrador.CuadranteAsync(7, "Puerta delantera");
+        var (original, hallazgoOriginal) = await Sembrador.InformeCerradoConHallazgoAsync(etapas[0], sesion.UsuarioId, await Sembrador.ZonaAsync(7, "izquierdo"));
+        var correccion = Guid.NewGuid();
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, Estado, Version, CorrigeInspeccionId) SELECT @c, EtapaId, ViajeId, UsuarioId, Momento, Fecha, 'borrador', 2, @o FROM dbo.tblInspecciones WHERE Id = @o",
+            ("@c", correccion), ("@o", original));
+        var hallazgoCorregido = Guid.NewGuid();
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) VALUES (@h, @i, @z, 'golpe', '1_5cm', 'v1')",
+            ("@h", hallazgoCorregido), ("@i", correccion), ("@z", await Sembrador.ZonaAsync(7, "derecho")));
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i", ("@i", correccion));
+        await Task.Delay(30);
+        var actual = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
+
+        var lista = (await ClonarAsync(await Cliente(sesion.Token).GetAsync($"/api/inspecciones/{actual}/hallazgos-previos"))).EnumerateArray().ToList();
+
+        Assert.Equal([hallazgoCorregido], lista.Select(h => h.GetProperty("id").GetGuid()).ToList());
+        Assert.DoesNotContain(lista, h => h.GetProperty("id").GetGuid() == hallazgoOriginal);
+    }
+
+    [Fact]
+    public async Task Sin_hallazgos_previos_la_lista_va_vacia()
+    {
+        var (sesion, etapas) = await EscenarioAsync();
+        var actual = await CrearInspeccionAsync(sesion, etapas[0]);
+
+        var r = await Cliente(sesion.Token).GetAsync($"/api/inspecciones/{actual}/hallazgos-previos");
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal(0, (await ClonarAsync(r)).GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Los_hallazgos_previos_son_de_inspector_y_administrador_el_conductor_y_un_viaje_ajeno_son_403()
+    {
+        var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
+        var ajeno = await SesionAsync("ajeno@ejemplo.com");
+        var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
+        var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
+        var actual = await CrearInspeccionAsync(inspector, etapas[0]);
+        var ruta = $"/api/inspecciones/{actual}/hallazgos-previos";
+
+        Assert.Equal(HttpStatusCode.OK, (await Cliente(inspector.Token).GetAsync(ruta)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Cliente(admin.Token).GetAsync(ruta)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Cliente(superAdmin.Token).GetAsync(ruta)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Cliente(conductor.Token).GetAsync(ruta)).StatusCode);
+        var viajeAjeno = await Cliente(ajeno.Token).GetAsync(ruta);
+        Assert.Equal(HttpStatusCode.Forbidden, viajeAjeno.StatusCode);
+        Assert.Contains("no está asignado", (await ClonarAsync(viajeAjeno)).GetProperty("message").GetString());
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Cliente().GetAsync(ruta)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Los_hallazgos_previos_de_una_inspeccion_inexistente_responden_404()
+    {
+        var (sesion, _) = await EscenarioAsync();
+        var id = Guid.NewGuid();
+
+        var r = await Cliente(sesion.Token).GetAsync($"/api/inspecciones/{id}/hallazgos-previos");
 
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
         Assert.Equal($"Inspección {id} no encontrada", (await ClonarAsync(r)).GetProperty("message").GetString());

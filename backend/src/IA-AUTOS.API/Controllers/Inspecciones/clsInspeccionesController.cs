@@ -61,6 +61,15 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio) :
     public async Task<IActionResult> Obtener(Guid id, CancellationToken ct) => Ok(await servicio.ObtenerInformeAsync(id, ct));
 
     /// <summary>
+    /// Los hallazgos de las inspecciones cerradas anteriores del mismo VIN, del mas reciente al mas antiguo, con su viaje, proceso, momento, cierre y fotos. El cliente
+    /// los descarga para proponer un hallazgo nuevo como preexistente (misma zona y clase) aun sin senal. No es para el conductor (403).
+    /// </summary>
+    [HttpGet("{id:guid}/hallazgos-previos")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType<IReadOnlyList<HallazgoPrevioDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> HallazgosPrevios(Guid id, CancellationToken ct) => Ok(await servicio.ObtenerHallazgosPreviosAsync(id, ct));
+
+    /// <summary>
     /// Agrega una foto: de una vista (<c>vista_id</c>, una de las 7 obligatorias o de las 2 adicionales con su <c>nota</c>) o de un hallazgo
     /// (<c>hallazgo_id</c>). El archivo debe haberse subido antes con POST /api/uploads. El servidor agrega su sello y el hash SHA-256.
     /// </summary>

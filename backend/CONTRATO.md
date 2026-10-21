@@ -798,7 +798,7 @@ Una zona provisional va sin cuadrante ni lado: `{ "zona_provisional": "frente", 
 | `tamano_dano` | sí | `codigo` **activo** del catálogo `tamanos-dano` |
 | `nivel_severidad` | inspector y administrador | `codigo` **activo** de `niveles-severidad` (`v1_plus`, `v1`, `v2`, `v3`). El conductor **no lo envía** (`400`): queda vacío hasta que un inspector revise su novedad |
 | `es_preexistente` | no | `true` si el daño ya existía. Exige `hallazgo_origen_id` |
-| `hallazgo_origen_id` | con `es_preexistente` | un hallazgo de **otra inspección del mismo VIN** con la **misma zona y la misma clase**; si no, `400` en `hallazgo_origen_id`. Sin `es_preexistente` verdadero no se envía |
+| `hallazgo_origen_id` | con `es_preexistente` | un hallazgo de una **inspección cerrada anterior del mismo VIN** (la lista de [`hallazgos-previos`](#get-apiinspeccionesidhallazgos-previos)) con la **misma zona y la misma clase**; si no, `400` en `hallazgo_origen_id`. Sin `es_preexistente` verdadero no se envía |
 | `nota` | no | máximo 500 caracteres |
 | `evidencia` | sí | la foto del hallazgo, con los mismos campos y reglas que una evidencia (sin `vista_id` ni `hallazgo_id`) |
 
@@ -837,6 +837,27 @@ Campos del `HallazgoDto`:
 | `parte_vehiculo`, `coords_diagrama` | **solo en los hallazgos históricos** (anteriores a este modelo): la parte en texto y el punto sobre la imagen anterior. En los nuevos son `null` |
 
 Los hallazgos anteriores se ubicaron por el texto de su parte solo cuando la equivalencia era segura (`Fachada delantera`, `Parachoque delantero` y las llantas); los demás tienen `zona` con la parte escrita y `cuadrante_numero`, `lado` y `zona_provisional` en `null` hasta que se ubiquen a mano.
+
+### `GET /api/inspecciones/{id}/hallazgos-previos`
+Solo `inspector`, `admin` y `super_admin` (`403` al conductor). El inspector solo la pide de inspecciones de **sus viajes** (`403` si es de otro); `404` si la inspección no existe.
+
+Devuelve los hallazgos de todas las **inspecciones cerradas anteriores del mismo VIN**: las etapas anteriores del mismo viaje y los viajes anteriores, **incluido uno del que la unidad «no salió»**. Es una lista de `HallazgoDto`
+(sin `evidencia`) ordenada del cierre más reciente al más antiguo, y cada elemento agrega el contexto de dónde salió:
+
+```json
+[
+  { "id": "uuid", "inspeccion_id": "uuid", "clase_dano": "rotura", "zona": "Izquierdo 7 · Puerta delantera", "cuadrante_numero": 7, "lado": "izquierdo", "nivel_severidad": "v2", "…": "…",
+    "viaje_id": "uuid", "codigo_mtrack": "MTK-001", "proceso": "cargue", "momento": "salida", "cerrada_at": "2026-07-17T12:30:15.123Z",
+    "evidencias": [ { /* EvidenciaDto, con su url */ } ] }
+]
+```
+
+No cuenta lo que aún no se cerró, ni las inspecciones de otro VIN, ni la inspección que se consulta; una inspección corregida aporta su última versión cerrada y no la que reemplazó. Las `evidencias` traen la `url` actual de cada foto
+(la URL firmada llegará con la tarea de las fotos privadas). Sin hallazgos previos, `[]`.
+
+**La propuesta de preexistente la hace el cliente.** La app descarga esta lista y, al registrar un hallazgo, la compara por **zona (lado + número, o zona provisional) y clase**: si hay uno igual, lo propone como preexistente y el inspector lo confirma
+(`es_preexistente: true` con `hallazgo_origen_id` de esa lista) o lo corrige (queda nuevo). Funciona sin señal con la lista ya descargada; un hallazgo en `derecho 7` no se propone como preexistente de uno en `izquierdo 7`.
+Al crear el hallazgo el servidor valida que el origen sea de esa lista, con la misma zona y clase.
 
 ### `POST /api/inspecciones/{id}/evidencias`
 Campo (creador o administrador). Registra una foto **ya subida** con `POST /api/uploads`: de una **vista** (`vista_id`) o de un **hallazgo** (`hallazgo_id`), no de ambos. `201` con el `EvidenciaDto`.
