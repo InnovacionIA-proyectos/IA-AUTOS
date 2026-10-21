@@ -42,7 +42,7 @@ void main() {
   // Campos que la app LEE de cada respuesta.
   const lecturas = <String, List<String>>{
     'LoginResponse': ['token', 'usuario'],
-    'UsuarioAutenticadoDto': ['id', 'nombre', 'email', 'rol'],
+    'UsuarioAutenticadoDto': ['id', 'nombre', 'email', 'rol', 'cedula', 'debe_cambiar_pin'],
     'UsuarioDto': ['id', 'nombre', 'rol'],
     'InventarioDto': ['id', 'vin', 'marca', 'modelo', 'operacion', 'etapas'],
     'InventarioEtapaDto': ['id', 'orden', 'proceso', 'requiere_inspeccion', 'inspecciones'],
@@ -65,6 +65,8 @@ void main() {
   // Campos que la app ENVÍA en cada petición.
   const escrituras = <String, List<String>>{
     'LoginRequest': ['email', 'password'],
+    'LoginConductorRequest': ['cedula', 'pin'],
+    'CambiarPinRequest': ['pin_actual', 'pin_nuevo'],
     'CrearInspeccionRequest': ['etapa_id', 'momento', 'fecha', 'lat', 'lng', 'notas'],
     'CrearEvidenciaRequest': ['storage_path', 'sello_fecha', 'sello_lat', 'sello_lng'],
     'CrearHallazgoRequest': ['parte_vehiculo', 'clase_dano', 'tamano_dano', 'coords_diagrama'],
@@ -87,6 +89,8 @@ void main() {
   group('rutas y métodos que la app usa', () {
     const usos = <(String, String)>[
       ('post', '/api/auth/login'),
+      ('post', '/api/auth/login-conductor'),
+      ('post', '/api/auth/cambiar-pin'),
       ('get', '/api/usuarios'),
       ('get', '/api/catalogos'),
       ('get', '/api/vehiculos/{}/inventario'),

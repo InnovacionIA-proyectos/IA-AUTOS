@@ -42,13 +42,32 @@ class AlmacenSesionEnMemoria implements AlmacenSesion {
 
 class AuthRepositorioFalso implements AuthRepositorio {
   Object? error;
+  Object? errorCambioPin;
+
+  /// Sesión que devuelve el ingreso con cédula y PIN (por ejemplo, una con `debeCambiarPin`).
+  Sesion? sesionConPin;
+
   final List<(String, String)> intentos = [];
+  final List<(String, String)> cambiosDePin = [];
 
   @override
   Future<Sesion> iniciarSesion(String email, String password) async {
     intentos.add((email, password));
     if (error != null) throw error!;
     return sesionPrueba;
+  }
+
+  @override
+  Future<Sesion> iniciarSesionConPin(String cedula, String pin) async {
+    intentos.add((cedula, pin));
+    if (error != null) throw error!;
+    return sesionConPin ?? sesionPrueba;
+  }
+
+  @override
+  Future<void> cambiarPin(String pinActual, String pinNuevo) async {
+    cambiosDePin.add((pinActual, pinNuevo));
+    if (errorCambioPin != null) throw errorCambioPin!;
   }
 }
 

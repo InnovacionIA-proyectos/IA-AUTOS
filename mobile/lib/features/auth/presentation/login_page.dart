@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/proveedores.dart';
 import '../../../core/tema/tema.dart';
 import 'auth_controller.dart';
+import 'cambiar_pin_page.dart' show largoMaximoPin, largoMinimoPin;
+
+/// Cómo entra la persona. El personal de campo (conductor e inspector) puede no tener correo, así que entra con
+/// cédula y PIN; quien administra entra con correo y contraseña.
+enum ModoIngreso { pin, correo }
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -13,6 +19,11 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 class _EstadoLoginPage extends ConsumerState<LoginPage> {
+  // De campo por defecto: es quien más entra a esta app.
+  ModoIngreso _modo = ModoIngreso.pin;
+
+  final _cedula = TextEditingController();
+  final _pin = TextEditingController();
   final _correo = TextEditingController();
   final _clave = TextEditingController();
   bool _entrando = false;
@@ -21,19 +32,34 @@ class _EstadoLoginPage extends ConsumerState<LoginPage> {
 
   @override
   void dispose() {
-    _correo.dispose();
-    _clave.dispose();
+    for (final c in [_cedula, _pin, _correo, _clave]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  bool get _puedeEnviar => _correo.text.trim().contains('@') && _clave.text.isNotEmpty && !_entrando;
+  bool get _puedeEnviar =>
+      !_entrando &&
+      switch (_modo) {
+        ModoIngreso.pin => _cedula.text.trim().isNotEmpty && _pin.text.length >= largoMinimoPin,
+        ModoIngreso.correo => _correo.text.trim().contains('@') && _clave.text.isNotEmpty,
+      };
+
+  void _cambiarModo(ModoIngreso modo) => setState(() {
+        _modo = modo;
+        _error = null;
+      });
 
   Future<void> _enviar() async {
     setState(() {
       _entrando = true;
       _error = null;
     });
-    final error = await ref.read(authControllerProvider.notifier).iniciarSesion(_correo.text, _clave.text);
+    final controlador = ref.read(authControllerProvider.notifier);
+    final error = switch (_modo) {
+      ModoIngreso.pin => await controlador.iniciarSesionConPin(_cedula.text, _pin.text),
+      ModoIngreso.correo => await controlador.iniciarSesion(_correo.text, _clave.text),
+    };
     if (!mounted) return;
     // Si entró bien, el router redirige solo; este widget deja de existir.
     setState(() {
@@ -52,7 +78,7 @@ class _EstadoLoginPage extends ConsumerState<LoginPage> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(Espacio.xl),
+            padding: const EdgeInsets.all(Espacio.lg),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
@@ -74,35 +100,19 @@ class _EstadoLoginPage extends ConsumerState<LoginPage> {
                     _Aviso(texto: aviso, color: Colores.advertencia),
                     const SizedBox(height: Espacio.lg),
                   ],
-                  TextField(
-                    controller: _correo,
-                    keyboardType: TextInputType.emailAddress,
-                    autocorrect: false,
-                    textInputAction: TextInputAction.next,
-                    autofillHints: const [AutofillHints.username],
-                    decoration: const InputDecoration(labelText: 'Correo', hintText: 'nombre@boterosoto.com.co'),
-                    onChanged: (_) => setState(() {}),
+                  SegmentedButton<ModoIngreso>(
+                    segments: const [
+                      ButtonSegment(value: ModoIngreso.pin, label: Text('Cédula y PIN'), icon: Icon(Icons.badge_outlined)),
+                      ButtonSegment(value: ModoIngreso.correo, label: Text('Correo'), icon: Icon(Icons.alternate_email)),
+                    ],
+                    selected: {_modo},
+                    onSelectionChanged: (s) => _cambiarModo(s.first),
                   ),
                   const SizedBox(height: Espacio.lg),
-                  TextField(
-                    controller: _clave,
-                    obscureText: !_verClave,
-                    textInputAction: TextInputAction.done,
-                    autofillHints: const [AutofillHints.password],
-                    decoration: InputDecoration(
-                      labelText: 'Contraseña',
-                      errorText: _error,
-                      suffixIcon: IconButton(
-                        tooltip: _verClave ? 'Ocultar contraseña' : 'Mostrar contraseña',
-                        icon: Icon(_verClave ? Icons.visibility_off_outlined : Icons.visibility_outlined),
-                        onPressed: () => setState(() => _verClave = !_verClave),
-                      ),
-                    ),
-                    onChanged: (_) => setState(() {}),
-                    onSubmitted: (_) {
-                      if (_puedeEnviar && entorno.configurado) _enviar();
-                    },
-                  ),
+                  ...switch (_modo) {
+                    ModoIngreso.pin => _camposPin(),
+                    ModoIngreso.correo => _camposCorreo(),
+                  },
                   const SizedBox(height: Espacio.xl),
                   FilledButton(
                     onPressed: _puedeEnviar && entorno.configurado ? _enviar : null,
@@ -118,6 +128,67 @@ class _EstadoLoginPage extends ConsumerState<LoginPage> {
       ),
     );
   }
+
+  List<Widget> _camposPin() => [
+        TextField(
+          controller: _cedula,
+          keyboardType: TextInputType.text,
+          autocorrect: false,
+          enableSuggestions: false,
+          textCapitalization: TextCapitalization.characters,
+          textInputAction: TextInputAction.next,
+          // El servidor normaliza puntos y espacios, así que se acepta como la persona la tenga memorizada.
+          decoration: const InputDecoration(labelText: 'Cédula', hintText: '1.234.567'),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: Espacio.lg),
+        TextField(
+          controller: _pin,
+          obscureText: true,
+          keyboardType: TextInputType.number,
+          maxLength: largoMaximoPin,
+          autocorrect: false,
+          enableSuggestions: false,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          decoration: InputDecoration(labelText: 'PIN', errorText: _error, counterText: ''),
+          onChanged: (_) => setState(() {}),
+          onSubmitted: (_) {
+            if (_puedeEnviar) _enviar();
+          },
+        ),
+      ];
+
+  List<Widget> _camposCorreo() => [
+        TextField(
+          controller: _correo,
+          keyboardType: TextInputType.emailAddress,
+          autocorrect: false,
+          textInputAction: TextInputAction.next,
+          autofillHints: const [AutofillHints.username],
+          decoration: const InputDecoration(labelText: 'Correo', hintText: 'nombre@boterosoto.com.co'),
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: Espacio.lg),
+        TextField(
+          controller: _clave,
+          obscureText: !_verClave,
+          textInputAction: TextInputAction.done,
+          autofillHints: const [AutofillHints.password],
+          decoration: InputDecoration(
+            labelText: 'Contraseña',
+            errorText: _error,
+            suffixIcon: IconButton(
+              tooltip: _verClave ? 'Ocultar contraseña' : 'Mostrar contraseña',
+              icon: Icon(_verClave ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+              onPressed: () => setState(() => _verClave = !_verClave),
+            ),
+          ),
+          onChanged: (_) => setState(() {}),
+          onSubmitted: (_) {
+            if (_puedeEnviar) _enviar();
+          },
+        ),
+      ];
 }
 
 class _Aviso extends StatelessWidget {

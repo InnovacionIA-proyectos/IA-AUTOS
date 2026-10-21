@@ -49,6 +49,79 @@ class AuthController extends Notifier<EstadoAuth> {
     }
   }
 
+  /// Ingreso del personal de campo con cédula y PIN. Devuelve null si entró bien o el mensaje de error.
+  Future<String?> iniciarSesionConPin(String cedula, String pin) async {
+    try {
+      final sesion = await ref.read(authRepositorioProvider).iniciarSesionConPin(cedula.trim(), pin);
+      await ref.read(almacenSesionProvider).guardar(sesion);
+      state = EstadoAuth(FaseAuth.autenticado, sesion: sesion);
+      return null;
+    } on ErrorApi catch (e) {
+      return switch (e.status) {
+        401 => 'Cédula o PIN incorrectos.',
+        // La cuenta se bloquea tras varios PIN errados seguidos; el servidor dice hasta cuándo.
+        423 => _mensajeBloqueo(e),
+        429 => 'Demasiados intentos. Espera un minuto e inténtalo de nuevo.',
+        0 => 'No se pudo conectar con el servidor. Revisa tu conexión.',
+        _ => e.message,
+      };
+    } catch (_) {
+      return 'No se pudo iniciar sesión. Inténtalo de nuevo.';
+    }
+  }
+
+  /// Cambia el PIN propio y deja la sesión lista para usar el resto de la app con el mismo token.
+  Future<String?> cambiarPin(String pinActual, String pinNuevo) async {
+    final sesion = state.sesion;
+    if (sesion == null) return 'Tu sesión no es válida. Inicia sesión de nuevo.';
+    try {
+      await ref.read(authRepositorioProvider).cambiarPin(pinActual, pinNuevo);
+    } on ErrorApi catch (e) {
+      return switch (e.status) {
+        400 => _mensajeDeCampo(e) ?? 'Revisa el PIN actual y el nuevo.',
+        423 => _mensajeBloqueo(e),
+        0 => 'No se pudo conectar con el servidor. Revisa tu conexión.',
+        _ => e.message,
+      };
+    } catch (_) {
+      return 'No se pudo cambiar el PIN. Inténtalo de nuevo.';
+    }
+
+    // El token sigue sirviendo: solo deja de exigirse el cambio.
+    final usuario = sesion.usuario;
+    final actualizada = Sesion(
+      token: sesion.token,
+      usuario: Usuario(
+        id: usuario.id,
+        nombre: usuario.nombre,
+        email: usuario.email,
+        rol: usuario.rol,
+        cedula: usuario.cedula,
+      ),
+    );
+    await ref.read(almacenSesionProvider).guardar(actualizada);
+    state = EstadoAuth(FaseAuth.autenticado, sesion: actualizada);
+    return null;
+  }
+
+  /// «Cuenta bloqueada hasta las 14:35» a partir de `details.bloqueado_hasta`.
+  static String _mensajeBloqueo(ErrorApi e) {
+    final hasta = (e.details is Map ? (e.details! as Map)['bloqueado_hasta'] : null) as String?;
+    final fecha = hasta == null ? null : DateTime.tryParse(hasta)?.toLocal();
+    if (fecha == null) return 'Cuenta bloqueada por varios PIN errados. Espera unos minutos o pide que te desbloqueen.';
+    final hora = '${fecha.hour.toString().padLeft(2, '0')}:${fecha.minute.toString().padLeft(2, '0')}';
+    return 'Cuenta bloqueada por varios PIN errados. Vuelve a intentar a las $hora o pide que te desbloqueen.';
+  }
+
+  /// Primer error por campo que devuelve el servidor (`pin_actual` o `pin_nuevo`).
+  static String? _mensajeDeCampo(ErrorApi e) {
+    final campos = (e.details is Map ? (e.details! as Map)['fieldErrors'] : null) as Map?;
+    for (final valores in campos?.values ?? const []) {
+      if (valores is List && valores.isNotEmpty) return valores.first.toString();
+    }
+    return null;
+  }
+
   Future<void> cerrarSesion() async {
     await ref.read(almacenSesionProvider).borrar();
     state = const EstadoAuth(FaseAuth.noAutenticado);

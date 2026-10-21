@@ -86,6 +86,14 @@ las usará S5-HU-24 y los cuadrantes, S6-HU-01.
 
 ## Sesión
 
+Se entra de dos formas: **cédula y PIN** (conductor e inspector, que pueden no tener correo) o **correo y
+contraseña**. El modo de campo es el que ofrece primero la pantalla, porque es quien más usa la app.
+
+Si el PIN lo asignó o reinició un administrador, `usuario.debe_cambiar_pin` llega en `true` y el resto de la API
+responde `403 PIN_CHANGE_REQUIRED`: el router lleva a cambiarlo y no deja salir de ahí salvo cerrando sesión. El
+token no cambia, solo deja de exigirse el cambio. Tras varios PIN errados la cuenta se bloquea y el servidor dice
+hasta cuándo en `details.bloqueado_hasta`.
+
 El token se restaura del almacén seguro al arrancar. Un 401 en una petición autenticada cierra la sesión con un aviso
 (el login no cuenta). `android:allowBackup` está desactivado para que una restauración de copia no deje datos cifrados
 sin su llave.

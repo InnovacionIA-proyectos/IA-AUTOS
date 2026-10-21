@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/presentation/auth_controller.dart';
+import '../features/auth/presentation/cambiar_pin_page.dart';
 import '../features/auth/presentation/login_page.dart';
 import '../features/custodia/presentation/firma_page.dart';
 import '../features/inspecciones/presentation/captura_page.dart';
@@ -17,7 +18,7 @@ import '../features/viajes/presentation/mis_viajes_page.dart';
 /// Rutas de la app. El redirect de sesión es la única puerta: sin sesión solo existe /login.
 final routerProvider = Provider<GoRouter>((ref) {
   final cambios = ValueNotifier<int>(0);
-  ref.listen(authControllerProvider.select((e) => e.fase), (_, _) => cambios.value++);
+  ref.listen(authControllerProvider.select((e) => (e.fase, e.sesion?.usuario.debeCambiarPin)), (_, _) => cambios.value++);
   ref.onDispose(cambios.dispose);
 
   final router = GoRouter(
@@ -32,12 +33,18 @@ final routerProvider = Provider<GoRouter>((ref) {
         case FaseAuth.noAutenticado:
           return ruta == '/login' ? null : '/login';
         case FaseAuth.autenticado:
+          // Con un PIN temporal el resto de la API responde 403: no tiene sentido dejar navegar.
+          if (ref.read(authControllerProvider).sesion?.usuario.debeCambiarPin ?? false) {
+            return ruta == '/cambiar-pin' ? null : '/cambiar-pin';
+          }
+          if (ruta == '/cambiar-pin') return '/viajes';
           return ruta == '/login' || ruta == '/cargando' ? '/viajes' : null;
       }
     },
     routes: [
       GoRoute(path: '/cargando', builder: (_, _) => const Scaffold(body: Center(child: CircularProgressIndicator()))),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
+      GoRoute(path: '/cambiar-pin', builder: (_, _) => const CambiarPinPage()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => _Estructura(shell: shell),
         branches: [
