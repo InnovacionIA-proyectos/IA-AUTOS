@@ -12,7 +12,7 @@ borre estos registros.
 | `tblInspecciones` | No se borra si esta cerrada o si tiene fotos, hallazgos o transferencia; un borrador vacio si se borra | 51003 |
 
 Los triggers de las inspecciones cerradas (51000, 51001 y 51002) se conservan: una inspeccion cerrada no se modifica ni admite hallazgos o fotos nuevas
-(la foto de una constancia de no firma si se admite).
+(la foto de una constancia de no firma y la del sello de quien valida un hallazgo si se admiten: `EsConstancia` y `EsSello`).
 
 Cuando la aplicacion recibe el error 51003 responde `409 CONFLICT` con el mensaje «El registro es evidencia y no se puede borrar».
 

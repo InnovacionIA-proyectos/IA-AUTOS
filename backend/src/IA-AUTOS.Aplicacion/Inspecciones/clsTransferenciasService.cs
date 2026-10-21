@@ -24,6 +24,7 @@ public sealed partial class clsTransferenciasService(
     IUsuarioRepository usuarios,
     IConsultasInspecciones consultas,
     clsFabricaEvidencias fabricaEvidencias,
+    clsEvidenciaDeHallazgos evidenciaDeHallazgos,
     IAlmacenArchivos almacen,
     IGeneradorPdfConstancia generadorPdf,
     IUnidadDeTrabajo unidadDeTrabajo,
@@ -40,6 +41,7 @@ public sealed partial class clsTransferenciasService(
         await validadorFirma.ValidarOLanzarAsync(solicitud, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
         transferencia.Firmar(actual.IdObligatorio(), solicitud.Firma!, cliente.Ip, reloj.Ahora);
+        await evidenciaDeHallazgos.RecalcularAsync(inspeccionId, transferencia.TipoCierre, ct);
         auditor.Registrar("transferencia.firmar", "transferencias_custodia", transferencia.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.ATransferencia(transferencia);
@@ -51,6 +53,7 @@ public sealed partial class clsTransferenciasService(
         await validadorReservas.ValidarOLanzarAsync(solicitud, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
         transferencia.FirmarConReservas(actual.IdObligatorio(), solicitud.Firma!, solicitud.Reservas, cliente.Ip, reloj.Ahora);
+        await evidenciaDeHallazgos.RecalcularAsync(inspeccionId, transferencia.TipoCierre, ct);
         auditor.Registrar("transferencia.reservas", "transferencias_custodia", transferencia.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.ATransferencia(transferencia);
@@ -83,6 +86,7 @@ public sealed partial class clsTransferenciasService(
             foto.DispositivoId, foto.Nota, foto.HashSha256, ct);
         transferencia.RegistrarNoFirma(actorId, solicitud.Parte, solicitud.Motivo, testigoId, evidencia.Id, reloj.Ahora);
         inspecciones.Agregar(evidencia);
+        await evidenciaDeHallazgos.RecalcularAsync(inspeccionId, transferencia.TipoCierre, ct);
         auditor.Registrar("transferencia.no_firma", "transferencias_custodia", transferencia.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.ATransferencia(transferencia);

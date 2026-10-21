@@ -14,6 +14,7 @@ public static class clsCapacidades
     public const string ADMINISTRAR_CATALOGOS = "administrar_catalogos";
     public const string CARGAR_VEHICULOS = "cargar_vehiculos";
     public const string VER_REPORTES = "ver_reportes";
+    public const string GESTIONAR_SEGUIMIENTO = "gestionar_seguimiento";
 
     public static IReadOnlyList<string> De(string? rol)
     {
@@ -28,6 +29,7 @@ public static class clsCapacidades
         AgregarSi(capacidades, clsRol.GESTION_USUARIOS, rol, GESTIONAR_USUARIOS);
         AgregarSi(capacidades, clsRol.ADMINISTRACION_CATALOGOS, rol, ADMINISTRAR_CATALOGOS);
         AgregarSi(capacidades, clsRol.ADMINISTRACION, rol, CARGAR_VEHICULOS);
+        AgregarSi(capacidades, clsRol.GESTION_SEGUIMIENTO, rol, GESTIONAR_SEGUIMIENTO);
         return capacidades;
     }
 

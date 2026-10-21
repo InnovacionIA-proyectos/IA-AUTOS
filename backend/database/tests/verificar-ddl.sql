@@ -118,6 +118,26 @@ BEGIN CATCH
     INSERT #r VALUES (N'Trigger: evidencia en inspeccion cerrada debe fallar', CASE WHEN ERROR_NUMBER() = 51002 THEN 1 ELSE 0 END, ERROR_MESSAGE());
 END CATCH
 
+-- La foto del sello de quien valida un hallazgo (EsSello) si se admite en una inspeccion cerrada, pero no es de una vista (CHECK)
+BEGIN TRY
+    EXEC sp_executesql N'INSERT dbo.tblEvidencias (Id, InspeccionId, StoragePath, SelloFecha, SelloLat, SelloLng, EsSello) VALUES (NEWID(), @i, N''sello-base.jpg'', SYSDATETIMEOFFSET(), 4.6, -74.1, 1)', N'@i uniqueidentifier', @i1;
+    INSERT #r VALUES (N'Trigger: la foto del sello se admite en una inspeccion cerrada', 1, NULL);
+END TRY
+BEGIN CATCH
+    INSERT #r VALUES (N'Trigger: la foto del sello se admite en una inspeccion cerrada', 0, ERROR_MESSAGE());
+END CATCH
+
+BEGIN TRY
+    EXEC sp_executesql N'INSERT dbo.tblEvidencias (Id, InspeccionId, VistaId, StoragePath, SelloFecha, SelloLat, SelloLng, EsSello) SELECT NEWID(), @i, Id, N''sello-base2.jpg'', SYSDATETIMEOFFSET(), 4.6, -74.1, 1 FROM dbo.tblVistasFoto WHERE Codigo = ''frontal''', N'@i uniqueidentifier', @i1;
+    INSERT #r VALUES (N'CHECK el sello no es de una vista', 0, N'no fallo');
+END TRY
+BEGIN CATCH
+    INSERT #r VALUES (N'CHECK el sello no es de una vista', CASE WHEN ERROR_NUMBER() = 547 THEN 1 ELSE 0 END, ERROR_MESSAGE());
+END CATCH
+
+INSERT #r VALUES (N'Vista vwViajesCompletos: una unidad que no sale no cuenta como completa',
+    CASE WHEN OBJECT_DEFINITION(OBJECT_ID(N'dbo.vwViajesCompletos')) LIKE N'%no_sale%' THEN 1 ELSE 0 END, NULL);
+
 -- La transferencia de custodia SI puede registrarse sobre una inspeccion cerrada (firma posterior al cierre)
 BEGIN TRY
     INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId) VALUES (NEWID(), @i1, @u1, @u2);

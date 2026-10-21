@@ -148,17 +148,69 @@ public sealed class clsSembrador(string cadenaConexion)
         return id;
     }
 
-    /// <summary>Una inspeccion ya cerrada con un hallazgo en la zona indicada (la forma que guarda la API), para usarlo como hallazgo previo del VIN.</summary>
+    /// <summary>
+    /// Una inspeccion ya cerrada con un hallazgo en la zona indicada (la forma que guarda la API): de nivel V2 por defecto, con o sin su foto propia y de origen inspector
+    /// (o conductor, sin nivel, como una novedad que nadie reviso).
+    /// </summary>
     public async Task<(Guid InspeccionId, Guid HallazgoId)> InformeCerradoConHallazgoAsync(
-        Guid etapaId, Guid usuarioId, Guid zonaId, string clase = "golpe", string momento = "salida")
+        Guid etapaId,
+        Guid usuarioId,
+        Guid zonaId,
+        string clase = "golpe",
+        string momento = "salida",
+        string? nivel = "v2",
+        bool conFoto = false,
+        string origen = "inspector",
+        bool cerrada = true)
     {
         var inspeccion = await InformeAsync(etapaId, usuarioId, cerrada: false, momento: momento);
         var hallazgo = Guid.NewGuid();
         await EjecutarAsync(
-            "INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) VALUES (@h, @i, @z, @c, '5_10cm', 'v2')",
-            ("@h", hallazgo), ("@i", inspeccion), ("@z", zonaId), ("@c", clase));
-        await EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i", ("@i", inspeccion));
+            "INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad, Origen) VALUES (@h, @i, @z, @c, '5_10cm', @n, @o)",
+            ("@h", hallazgo), ("@i", inspeccion), ("@z", zonaId), ("@c", clase), ("@n", (object?)nivel ?? DBNull.Value), ("@o", origen));
+        if (conFoto)
+        {
+            await EjecutarAsync(
+                "INSERT dbo.tblEvidencias (Id, InspeccionId, HallazgoId, StoragePath, SelloFecha, SelloLat, SelloLng) VALUES (NEWID(), @i, @h, @p, SYSDATETIMEOFFSET(), 4.6, -74.1)",
+                ("@i", inspeccion), ("@h", hallazgo), ("@p", $"hallazgo-{hallazgo}.png"));
+        }
+
+        if (cerrada)
+        {
+            await EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i", ("@i", inspeccion));
+        }
+
         return (inspeccion, hallazgo);
+    }
+
+    /// <summary>
+    /// La transferencia de la inspeccion ya cerrada de una forma: <c>firmada</c>, <c>con_reservas</c> o <c>no_firma</c> (con su testigo y la foto de la constancia); sin tipo
+    /// queda abierta, con solo la firma de quien entrega.
+    /// </summary>
+    public async Task TransferenciaAsync(Guid inspeccionId, Guid entregaId, Guid recibeId, string? tipoCierre, Guid? testigoId = null)
+    {
+        Guid? constancia = null;
+        if (tipoCierre == "no_firma")
+        {
+            constancia = Guid.NewGuid();
+            await EjecutarAsync(
+                "INSERT dbo.tblEvidencias (Id, InspeccionId, StoragePath, SelloFecha, SelloLat, SelloLng, EsConstancia) VALUES (@e, @i, 'constancia.png', SYSDATETIMEOFFSET(), 4.6, -74.1, 1)",
+                ("@e", constancia.Value), ("@i", inspeccionId));
+        }
+
+        await EjecutarAsync(
+            "INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId, FirmaEntrega, FirmaRecibe, FirmadaAt, TipoCierre, ReservasTexto, NoFirmaParte, MotivoNoFirma, TestigoUsuarioId, EvidenciaConstanciaId) "
+            + "VALUES (NEWID(), @i, @e, @r, @fe, @fr, @fa, @t, @res, @np, @mn, @te, @ec)",
+            ("@i", inspeccionId), ("@e", entregaId), ("@r", recibeId),
+            ("@fe", (tipoCierre is "firmada" or "con_reservas" or null) ? "A" : (object)DBNull.Value),
+            ("@fr", (tipoCierre is "firmada" or "con_reservas") ? "B" : (object)DBNull.Value),
+            ("@fa", (tipoCierre is null) ? DBNull.Value : (object)DateTimeOffset.UtcNow),
+            ("@t", (object?)tipoCierre ?? DBNull.Value),
+            ("@res", tipoCierre == "con_reservas" ? "Rayon en la puerta" : (object)DBNull.Value),
+            ("@np", tipoCierre == "no_firma" ? "recibe" : (object)DBNull.Value),
+            ("@mn", tipoCierre == "no_firma" ? "Se nego a firmar" : (object)DBNull.Value),
+            ("@te", (object?)testigoId ?? DBNull.Value),
+            ("@ec", (object?)constancia ?? DBNull.Value));
     }
 
     /// <summary>La zona de un cuadrante por numero y lado (nulo del 26 en adelante).</summary>

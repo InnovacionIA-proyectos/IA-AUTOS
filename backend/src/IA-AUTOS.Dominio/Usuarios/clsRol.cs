@@ -29,6 +29,12 @@ public static class clsRol
     /// <summary>Gestion de usuarios (crear, editar, desactivar, PIN). Solo el super administrador asigna o modifica el nivel super_admin.</summary>
     public static readonly string[] GESTION_USUARIOS = [ADMIN, SUPER_ADMIN, COORDINADOR_CALIDAD];
 
+    /// <summary>Seguimiento de los hallazgos (validado, rechazado, recuperado, derogado) y su historial.</summary>
+    public static readonly string[] GESTION_SEGUIMIENTO = [COORDINADOR_CALIDAD, COMERCIAL, ADMIN, SUPER_ADMIN];
+
+    /// <summary>Marcar que una unidad con un hallazgo V1+ no sale del viaje: el inspector (del viaje) y el coordinador de calidad.</summary>
+    public static readonly string[] MARCAR_NO_SALE = [INSPECTOR, COORDINADOR_CALIDAD];
+
     public static bool EsAdministrador(string rol) => rol is ADMIN or SUPER_ADMIN;
 
     /// <summary>Inspectores y conductores solo ven los VIN, viajes e informes de los viajes en los que participan.</summary>

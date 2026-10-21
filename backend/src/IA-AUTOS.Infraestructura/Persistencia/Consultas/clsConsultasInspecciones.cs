@@ -7,6 +7,29 @@ namespace IAAutos.Infraestructura.Persistencia.Consultas;
 
 internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : IConsultasInspecciones
 {
+    public async Task<HallazgoDto?> ObtenerHallazgoAsync(Guid hallazgoId, CancellationToken ct = default)
+    {
+        var hallazgo = await contexto.Hallazgos.AsNoTracking().FirstOrDefaultAsync(h => h.Id == hallazgoId, ct);
+        return hallazgo is null ? null : (await new clsDescriptorHallazgos(contexto).DescribirAsync([hallazgo], ct))[0];
+    }
+
+    public async Task<IReadOnlyList<SeguimientoDto>> ObtenerHistorialAsync(Guid hallazgoId, CancellationToken ct = default)
+    {
+        var filas = await (from s in contexto.HallazgosSeguimiento.AsNoTracking()
+                           join u in contexto.Usuarios on s.UsuarioId equals u.Id into usuarios
+                           from u in usuarios.DefaultIfEmpty()
+                           join e in contexto.Evidencias on s.EvidenciaSelloId equals e.Id into sellos
+                           from e in sellos.DefaultIfEmpty()
+                           where s.HallazgoId == hallazgoId
+                           orderby s.CreatedAt, s.Id
+                           select new { Fila = s, UsuarioNombre = (string?)u.Nombre, Sello = e }).ToListAsync(ct);
+        return filas.Select(f => new SeguimientoDto(
+            f.Fila.Id, f.Fila.Accion, f.Fila.EstadoAnterior, f.Fila.EstadoNuevo, f.Fila.UsuarioId, f.UsuarioNombre, f.Fila.Nota,
+            f.Sello is null ? null : clsMapeadorInspecciones.AEvidencia(f.Sello),
+            f.Fila.Detalle is null ? null : System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(f.Fila.Detalle),
+            f.Fila.CreatedAt)).ToList();
+    }
+
     public Task<bool> EsDeClienteAsync(Guid inspeccionId, Guid clienteId, CancellationToken ct = default) =>
         (from i in contexto.Inspecciones.AsNoTracking()
          join e in contexto.Etapas on i.EtapaId equals e.Id

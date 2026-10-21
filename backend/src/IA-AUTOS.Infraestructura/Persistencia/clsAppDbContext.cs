@@ -50,6 +50,8 @@ public sealed class clsAppDbContext : DbContext
 
     public DbSet<clsHallazgo> Hallazgos => Set<clsHallazgo>();
 
+    public DbSet<clsHallazgoSeguimiento> HallazgosSeguimiento => Set<clsHallazgoSeguimiento>();
+
     public DbSet<clsEvidencia> Evidencias => Set<clsEvidencia>();
 
     public DbSet<clsTransferenciaCustodia> Transferencias => Set<clsTransferenciaCustodia>();

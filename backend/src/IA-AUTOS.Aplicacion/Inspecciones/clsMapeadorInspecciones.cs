@@ -18,21 +18,18 @@ public static class clsMapeadorInspecciones
         i.CreatedAt, i.UpdatedAt,
         i.IniciadaAt, i.CerradaAt, i.Version, i.CorrigeInspeccionId, clsMomento.Nombre(i.Momento));
 
-    /// <summary>Lo que falta para que el hallazgo tenga su evidencia: hoy, su foto propia.</summary>
-    public const string FALTA_FOTO_HALLAZGO = "foto_hallazgo";
-
     /// <summary>
-    /// El hallazgo con lo que se lee de otras tablas: su zona (y el nombre de su cuadrante), su nivel de severidad y si tiene su foto. Sin zona
+    /// El hallazgo con lo que se lee de otras tablas: su zona (y el nombre de su cuadrante), su nivel de severidad y lo que le falta a su evidencia. Sin zona
     /// (hallazgo historico sin ubicar) la zona de texto es la parte del vehiculo que se escribio entonces.
     /// </summary>
-    public static HallazgoDto AHallazgo(clsHallazgo h, clsZonaDano? zona, string? cuadranteNombre, clsNivelSeveridad? nivel, bool tieneFoto) => new(
+    public static HallazgoDto AHallazgo(clsHallazgo h, clsZonaDano? zona, string? cuadranteNombre, clsNivelSeveridad? nivel, IReadOnlyList<string> evidenciaFaltante) => new(
         h.Id, h.InspeccionId, h.ParteVehiculo, h.ClaseDano, h.TamanoDano,
         h.CoordsDiagrama is null ? null : new CoordsDiagramaDto(h.CoordsDiagrama.X, h.CoordsDiagrama.Y),
         zona?.Numero, zona?.Lado, zona is { Codigo: not null } ? zona.Codigo : null,
         cuadranteNombre, TextoDeZona(zona, cuadranteNombre) ?? h.ParteVehiculo,
         h.TipoNovedad, h.NivelSeveridad, nivel?.Nombre, nivel?.Accion,
         h.Origen, h.Nota, h.EsPreexistente, h.HallazgoOrigenId, h.ConfirmadoPor, h.EstadoSeguimiento,
-        h.EvidenciaCompleta, tieneFoto ? [] : [FALTA_FOTO_HALLAZGO],
+        evidenciaFaltante.Count == 0, evidenciaFaltante,
         h.RevisadoPor, h.RevisadoAt, h.CreatedAt, h.UpdatedAt);
 
     public static HallazgoCreadoDto AHallazgoCreado(HallazgoDto hallazgo, clsEvidencia foto) => new(hallazgo, AEvidencia(foto));
@@ -61,7 +58,7 @@ public static class clsMapeadorInspecciones
     public static EvidenciaDto AEvidencia(clsEvidencia e) => new(
         e.Id, e.InspeccionId, e.HallazgoId, e.SelloFecha, e.SelloLat, e.SelloLng,
         clsUrlsArchivos.ParaStoragePath(e.StoragePath), e.CreatedAt, e.UpdatedAt,
-        e.VistaId, e.HashSha256, e.SelloServidorAt, e.Precision, e.DispositivoId, e.Nota, e.SinUbicacion, e.EsConstancia);
+        e.VistaId, e.HashSha256, e.SelloServidorAt, e.Precision, e.DispositivoId, e.Nota, e.SinUbicacion, e.EsConstancia, e.EsSello);
 
     public static TransferenciaDto ATransferencia(clsTransferenciaCustodia t) => new(
         t.Id, t.InspeccionId, t.EntregaUsuarioId, t.RecibeUsuarioId, t.EstaCompleta, t.FirmadaAt, t.CreatedAt, t.UpdatedAt,

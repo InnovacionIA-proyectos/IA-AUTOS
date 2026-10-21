@@ -563,6 +563,78 @@
         ]
       }
     },
+    "/api/viajes/{id}/vehiculos/{vin}/no-sale": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_MarcarNoSale",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "vin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarcarNoSaleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/viajes/{id}/vehiculos/{vin}": {
       "delete": {
         "tags": [
@@ -1808,6 +1880,131 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TasaRechazoDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/hallazgos/{id}/seguimiento": {
+      "post": {
+        "tags": [
+          "Hallazgos"
+        ],
+        "operationId": "Hallazgos_CambiarSeguimiento",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CambiarSeguimientoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "get": {
+        "tags": [
+          "Hallazgos"
+        ],
+        "operationId": "Hallazgos_Historial",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SeguimientoDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SeguimientoDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SeguimientoDto"
+                  }
                 }
               }
             }
@@ -3638,6 +3835,91 @@
           }
         }
       },
+      "CambiarSeguimientoRequest": {
+        "required": [
+          "estado",
+          "nota",
+          "evidencia_sello"
+        ],
+        "type": "object",
+        "properties": {
+          "estado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nota": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "evidencia_sello": {
+            "required": [
+              "storage_path",
+              "sello_fecha",
+              "sello_lat",
+              "sello_lng",
+              "precision",
+              "dispositivo_id",
+              "nota",
+              "hash_sha256"
+            ],
+            "type": "object",
+            "properties": {
+              "storage_path": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "sello_fecha": {
+                "format": "date-time"
+              },
+              "sello_lat": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "sello_lng": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "precision": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "dispositivo_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "nota": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "hash_sha256": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            }
+          }
+        }
+      },
       "CargarConductoresRequest": {
         "required": [
           "filas"
@@ -4651,7 +4933,8 @@
           "dispositivo_id",
           "nota",
           "sin_ubicacion",
-          "es_constancia"
+          "es_constancia",
+          "es_sello"
         ],
         "type": "object",
         "properties": {
@@ -4732,6 +5015,9 @@
             "type": "boolean"
           },
           "es_constancia": {
+            "type": "boolean"
+          },
+          "es_sello": {
             "type": "boolean"
           }
         }
@@ -6530,6 +6816,35 @@
           }
         }
       },
+      "MarcarNoSaleRequest": {
+        "required": [
+          "motivo",
+          "hallazgo_id",
+          "vin_reemplazo"
+        ],
+        "type": "object",
+        "properties": {
+          "motivo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hallazgo_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "vin_reemplazo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "NoSaleDto": {
         "required": [
           "motivo",
@@ -7151,6 +7466,72 @@
           "hallazgos": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "SeguimientoDto": {
+        "required": [
+          "id",
+          "accion",
+          "estado_anterior",
+          "estado_nuevo",
+          "usuario_id",
+          "usuario_nombre",
+          "nota",
+          "evidencia_sello",
+          "detalle",
+          "created_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "accion": {
+            "type": "string"
+          },
+          "estado_anterior": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "estado_nuevo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "usuario_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nota": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "evidencia_sello": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EvidenciaDto"
+              }
+            ]
+          },
+          "detalle": {},
+          "created_at": {
+            "format": "date-time"
           }
         }
       },
@@ -8039,6 +8420,9 @@
     },
     {
       "name": "clsReportes"
+    },
+    {
+      "name": "clsHallazgos"
     },
     {
       "name": "clsInspecciones"

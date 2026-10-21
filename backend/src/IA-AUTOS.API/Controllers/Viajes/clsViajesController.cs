@@ -15,7 +15,7 @@ namespace IAAutos.API.Controllers.Viajes;
 /// solo ven los viajes en los que participan.
 /// </summary>
 [Route("api/viajes")]
-public sealed class clsViajesController(clsViajesService servicio, clsCargaViajesService carga, clsTransferenciasService transferencias) : clsControladorBase
+public sealed class clsViajesController(clsViajesService servicio, clsCargaViajesService carga, clsTransferenciasService transferencias, clsNoSaleService noSale) : clsControladorBase
 {
     /// <summary>Crea un viaje con su unidad, placa, trailer, conductor, codigo MTrack y, opcionalmente, sus VIN (se crean sus etapas). 409 si el codigo MTrack ya existe.</summary>
     [HttpPost]
@@ -89,6 +89,17 @@ public sealed class clsViajesController(clsViajesService servicio, clsCargaViaje
         var solicitud = await LeerCuerpoAsync<AgregarVinesRequest>(ct);
         return Ok(await servicio.AgregarVinesAsync(id, solicitud, ct));
     }
+
+    /// <summary>
+    /// Marca que la unidad no sale del viaje por un hallazgo V1+ de una inspeccion cerrada (<c>motivo</c>, <c>hallazgo_id</c> y, si ya lo hay, <c>vin_reemplazo</c>). Solo el inspector del viaje
+    /// y el coordinador de calidad (403 a los demas, incluidos admin y comercial). La unidad conserva sus etapas e inspecciones y el viaje sigue; responde con el viaje.
+    /// </summary>
+    [HttpPost("{id:guid}/vehiculos/{vin}/no-sale")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(MarcarNoSaleRequest))]
+    public async Task<IActionResult> MarcarNoSale(Guid id, string vin, CancellationToken ct) =>
+        Ok(await noSale.MarcarAsync(id, vin, await LeerCuerpoAsync<MarcarNoSaleRequest>(ct), ct));
 
     /// <summary>Quita un VIN del viaje (se borran sus etapas). 409 si ya tiene inspecciones en el viaje.</summary>
     [HttpDelete("{id:guid}/vehiculos/{vin}")]

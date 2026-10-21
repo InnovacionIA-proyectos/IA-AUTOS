@@ -16,10 +16,10 @@ public sealed class clsArchivosController(clsArchivosService servicio, IOptions<
 {
     /// <summary>
     /// Sube una foto como JSON (base64, con o sin prefijo data URI) o como multipart/form-data (campo <c>archivo</c>). Solo JPG y PNG; el
-    /// tipo se verifica por contenido. Devuelve el nombre del archivo, su URL y el hash SHA-256 calculado por el servidor.
+    /// tipo se verifica por contenido. Lo suben quien registra informes y quien da seguimiento a los hallazgos (la foto del sello de quien valida). Devuelve el nombre del archivo, su URL y el hash SHA-256 calculado por el servidor.
     /// </summary>
     [HttpPost]
-    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN, clsRol.COORDINADOR_CALIDAD, clsRol.COMERCIAL, clsRol.SUPER_ADMIN)]
     [ProducesResponseType<ArchivoSubidoDto>(StatusCodes.Status201Created)]
     [CuerpoSolicitud(typeof(IAAutos.Aplicacion.Archivos.DTOArchivos.SubirArchivoRequest), TambienMultipart = true)]
     public async Task<IActionResult> Subir(CancellationToken ct)

@@ -23,6 +23,13 @@ documento describe el modelo de datos; el modelo del propio hallazgo y de su zon
   [evidencia-inmutable.md](evidencia-inmutable.md)).
 - Las reglas de quien puede cambiar el estado, la correspondencia entre el nivel V y el estado de llegada, la evidencia completa y el «no sale» las aplica la API.
 
+## Como lo expone la API
+
+- `POST /api/hallazgos/{id}/seguimiento` agrega una fila `seguimiento` (el trigger pone el estado nuevo en el hallazgo), guarda la foto del sello si la hay y recalcula `EvidenciaCompleta`. `GET /api/hallazgos/{id}/seguimiento` lee el historial.
+- La foto del sello es una evidencia de la inspeccion con `EsSello = 1`, sin vista ni hallazgo, que se admite aunque la inspeccion este cerrada (ver [evidencia-inmutable.md](evidencia-inmutable.md)).
+- `EvidenciaCompleta` se guarda al cambiar el seguimiento y se recalcula al cerrarse la transferencia de la inspeccion; la API tambien la calcula al leer el hallazgo (`evidencia_faltante`).
+- `POST /api/viajes/{id}/vehiculos/{vin}/no-sale` marca la unidad (columnas de `tblViajeVehiculos`) y agrega una fila `no_sale`; la vista `vwViajesCompletos` deja de contar esa unidad como completa.
+
 ## Patrones por zona
 
 `vwPatronesPorCuadrante` alimenta el mapa de calor y los patrones. Devuelve una fila por zona, proceso, nivel, clase, cliente, operacion y fecha de cierre, con `Total` (cuantos hallazgos).
@@ -37,7 +44,9 @@ documento describe el modelo de datos; el modelo del propio hallazgo y de su zon
 
 ## Aplicar el cambio en una base existente
 
-Con un usuario que pueda crear tablas, triggers y vistas (no el de la aplicacion), conectado a la base de IA Autos, **antes de desplegar la API**:
+Con un usuario que pueda crear tablas, triggers y vistas (no el de la aplicacion), conectado a la base de IA Autos, **antes de desplegar la API**. Ademas del script 11, la foto del sello y la unidad que no sale
+necesitan [`14-sello-y-unidad-no-sale.sql`](../database/cambios-esquema/14-sello-y-unidad-no-sale.sql) (una columna de `tblEvidencias`, su restriccion, el trigger de evidencias y la vista `vwViajesCompletos`; no cambia ningun dato y se puede repetir).
+
 
 1. Ejecutar [`database/cambios-esquema/11-seguimiento-hallazgo.sql`](../database/cambios-esquema/11-seguimiento-hallazgo.sql) ajustando `@esquema` (`dbo`, o `db_IA_AUTOS` en la base
    compartida de pruebas). Es una sola transaccion: si algo falla, no cambia nada. Se puede repetir (si ya esta aplicado, no hace nada). Exige que

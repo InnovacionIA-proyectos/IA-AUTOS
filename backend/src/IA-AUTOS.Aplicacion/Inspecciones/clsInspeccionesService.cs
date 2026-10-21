@@ -20,6 +20,12 @@ public interface IConsultasInspecciones
     /// </summary>
     Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones filtros, Guid? soloDeUsuario, Guid? soloDeCliente, int limite, CancellationToken ct = default);
 
+    /// <summary>El hallazgo tal como esta guardado (con su zona, nivel y evidencia), o nulo si no existe.</summary>
+    Task<HallazgoDto?> ObtenerHallazgoAsync(Guid hallazgoId, CancellationToken ct = default);
+
+    /// <summary>El historial de seguimiento del hallazgo, del mas antiguo al mas reciente.</summary>
+    Task<IReadOnlyList<SeguimientoDto>> ObtenerHistorialAsync(Guid hallazgoId, CancellationToken ct = default);
+
     /// <summary>True si la inspeccion es de un VIN de ese cliente.</summary>
     Task<bool> EsDeClienteAsync(Guid inspeccionId, Guid clienteId, CancellationToken ct = default);
 
