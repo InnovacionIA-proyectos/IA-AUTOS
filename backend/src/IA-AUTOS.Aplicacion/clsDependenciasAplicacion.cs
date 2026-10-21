@@ -1,4 +1,5 @@
 using FluentValidation;
+using IAAutos.Aplicacion.Alertas;
 using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Auth;
 using IAAutos.Aplicacion.Catalogos;
@@ -6,6 +7,7 @@ using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Conductor;
 using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Notificaciones;
+using IAAutos.Aplicacion.Parametros;
 using IAAutos.Aplicacion.Reportes;
 using IAAutos.Aplicacion.Sofasa;
 using IAAutos.Aplicacion.Usuarios;
@@ -40,6 +42,9 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsRevisionService>();
         servicios.AddScoped<clsAlertaHallazgoCritico>();
         servicios.Configure<clsOpcionesAlertas>(configuracion.GetSection(clsOpcionesAlertas.SECCION));
+        servicios.AddScoped<IParametros, clsParametrosService>();
+        servicios.AddScoped<clsCalculadoraVistas>();
+        servicios.AddScoped<clsAlertasPeriodicas>();
         servicios.AddScoped<clsEvidenciaDeHallazgos>();
         servicios.AddScoped<clsSeguimientoService>();
         servicios.AddScoped<clsHallazgosService>();

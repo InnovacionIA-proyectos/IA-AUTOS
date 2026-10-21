@@ -102,6 +102,12 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
                 WHEN 'v1' THEN N'Se rechaza el veh' + NCHAR(237) + N'culo'
                 WHEN 'v2' THEN N'Validaci' + NCHAR(243) + N'n por Sofasa'
                 ELSE N'Se deroga (se acepta el defecto)' END;
+            DELETE FROM dbo.tblParametros WHERE Clave LIKE 'zz%';
+            UPDATE dbo.tblParametros SET Valor = CASE Clave
+                WHEN 'objetivo_diario_novedad' THEN N'1.2' WHEN 'reporte_diario_hora' THEN N'06:00' WHEN 'horario_operacion_inicio' THEN N'08:00' WHEN 'horario_operacion_fin' THEN N'21:00'
+                WHEN 'gps_precision_minima_m' THEN N'30' WHEN 'url_firmada_minutos' THEN N'15' WHEN 'niveles_criticos' THEN N'v1_plus,v1' WHEN 'umbral_patron_cantidad' THEN N'10'
+                WHEN 'umbral_patron_ventana_dias' THEN N'30' WHEN 'captura_incompleta_minutos' THEN N'30' WHEN 'transferencia_pendiente_minutos' THEN N'240' ELSE NULL END,
+                ActualizadoPor = NULL;
             DELETE FROM dbo.tblPanelesDano WHERE Codigo NOT IN ('superior', 'perfil_posterior_izquierdo', 'perfil_posterior_derecho', 'costado_izquierdo', 'costado_derecho');
             UPDATE dbo.tblPanelesDano SET Activo = 1, ImagenPath = NULL;
             UPDATE dbo.tblZonasDano SET Activo = 1 WHERE CuadranteId IS NULL;

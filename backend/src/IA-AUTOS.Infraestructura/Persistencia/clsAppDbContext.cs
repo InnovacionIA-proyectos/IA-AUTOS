@@ -2,6 +2,7 @@ using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Auditoria;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Notificaciones;
+using IAAutos.Dominio.Parametros;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Sofasa;
 using IAAutos.Dominio.Usuarios;
@@ -69,9 +70,12 @@ public sealed class clsAppDbContext : DbContext
 
     public DbSet<clsDispositivo> Dispositivos => Set<clsDispositivo>();
 
+    public DbSet<clsParametro> Parametros => Set<clsParametro>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(clsAppDbContext).Assembly);
         modelBuilder.Entity<clsViajeCompleto>().HasNoKey().ToView("vwViajesCompletos");
+        modelBuilder.Entity<clsHallazgoVentana>().HasNoKey().ToView("vwHallazgosVentanaUmbral");
     }
 }

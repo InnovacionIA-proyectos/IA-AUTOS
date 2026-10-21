@@ -46,6 +46,8 @@ Que haya foto, que el tamano sea un codigo activo y que existan el GPS y la fech
 
 ## Como se crean y se envian
 
+Las alertas preventivas y los avisos operativos que crean los procesos periodicos estan en [alertas.md](alertas.md).
+
 `clsEmisorNotificaciones` crea las notificaciones de una alerta: una fila de **bandeja** y una de **push** por destinatario. El push va por Firebase Cloud Messaging a cada dispositivo activo del destinatario (`IEnviadorPush`, implementado por `clsEnviadorFcm`):
 
 - El envio nunca rompe la peticion que lo origino. Como `EnviadaAt` y `ErrorEnvio` solo se fijan al crear la fila, el push se intenta **antes** de guardarla: si llego a algun dispositivo queda `EnviadaAt`; si no, queda `ErrorEnvio`

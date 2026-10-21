@@ -993,7 +993,7 @@ Quien se limita a su cliente recibe `403` con un hallazgo de otro cliente.
 si ya fue revisado, también si dos usuarios lo revisan a la vez (solo la primera revisión se guarda y se conserva).
 
 **Hallazgo crítico.** Si el `nivel_severidad` asignado es crítico, se crea una notificación `hallazgo_critico` de urgencia **alta** para cada `coordinador_calidad` y `admin` activo del cliente del vehículo, por bandeja y push (ver [Notificaciones](#notificaciones)).
-Los niveles críticos se leen de la configuración `Alertas__NivelesCriticos__0`, `__1`... (por defecto solo `v1_plus`).
+Los niveles críticos son el parámetro `niveles_criticos` (por defecto `v1_plus,v1`).
 
 ## Seguimiento del hallazgo
 
@@ -1162,8 +1162,8 @@ El conductor no ve los hallazgos que registraron otros (el inspector, por ejempl
 
 Las alertas y los avisos llegan a una **bandeja** (el portal y la app) y, las urgentes, también por **push** al celular. La capacidad `ver_alertas` de `GET /api/auth/me` la tienen `coordinador_calidad`, `admin` y `super_admin` (las alertas preventivas
 de su cliente), `inspector` (solo los avisos operativos dirigidos a él: `captura_incompleta` de una inspección que inició y `transferencia_pendiente` de su firma) y `conductor` (solo `respuesta_conductor`, `captura_incompleta` de una inspección que
-él inició en un cargue sin personal de apoyo y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Hoy se generan `novedad_conductor` y `respuesta_conductor`; los demás tipos los crean los procesos de alertas
-que llegan después. Todo lo que se hace aquí queda en la auditoría.
+él inició en un cargue sin personal de apoyo y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
+Todo lo que se hace aquí queda en la auditoría.
 
 `NotificacionDto`:
 

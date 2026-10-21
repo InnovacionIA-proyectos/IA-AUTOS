@@ -32,7 +32,7 @@ documento describe el modelo de datos; el modelo del propio hallazgo y de su zon
 
 ## Revision de la novedad
 
-`POST /api/hallazgos/{id}/revision` completa el hallazgo que registro el conductor (zona, clase y nivel V, y el tamano si se corrige) con `clsHallazgo.Revisar`: guarda `RevisadoPor` y `RevisadoAt`, escribe una fila `revision` en `tblHallazgoSeguimiento` con el detalle y, si el nivel es critico, `clsAlertaHallazgoCritico` crea la notificacion `hallazgo_critico`. `RevisadoAt` es un token de concurrencia: si dos usuarios revisan a la vez, el cambio del segundo no encuentra el hallazgo sin revisar y responde `409 HALLAZGO_YA_REVISADO`. Los niveles criticos salen de `Alertas__NivelesCriticos__N` (por defecto `v1_plus`). Ver [CONTRATO.md](../CONTRATO.md) («Revision de la novedad»).
+`POST /api/hallazgos/{id}/revision` completa el hallazgo que registro el conductor (zona, clase y nivel V, y el tamano si se corrige) con `clsHallazgo.Revisar`: guarda `RevisadoPor` y `RevisadoAt`, escribe una fila `revision` en `tblHallazgoSeguimiento` con el detalle y, si el nivel es critico, `clsAlertaHallazgoCritico` crea la notificacion `hallazgo_critico`. `RevisadoAt` es un token de concurrencia: si dos usuarios revisan a la vez, el cambio del segundo no encuentra el hallazgo sin revisar y responde `409 HALLAZGO_YA_REVISADO`. Los niveles criticos son el parametro `niveles_criticos` (por defecto `v1_plus,v1`; ver [alertas.md](alertas.md)). Ver [CONTRATO.md](../CONTRATO.md) («Revision de la novedad»).
 
 ## Listado
 

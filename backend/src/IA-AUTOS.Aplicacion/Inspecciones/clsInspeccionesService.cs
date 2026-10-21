@@ -2,12 +2,14 @@ using FluentValidation;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
+using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace IAAutos.Aplicacion.Inspecciones;
@@ -56,6 +58,8 @@ public sealed class clsInspeccionesService(
     clsFabricaEvidencias fabricaEvidencias,
     clsVerificadorEtapaPrevia etapaPrevia,
     clsResolutorZona resolutorZona,
+    clsCalculadoraVistas calculadoraVistas,
+    clsAlertaHallazgoCritico alertaCritica,
     IUsuarioRepository usuarios,
     IConsultasInspecciones consultas,
     IDescriptorHallazgos descriptorHallazgos,
@@ -65,6 +69,7 @@ public sealed class clsInspeccionesService(
     IReloj reloj,
     ICatalogosLectura catalogos,
     IOptions<clsOpcionesSeguridad> seguridad,
+    ILogger<clsInspeccionesService> registro,
     IValidator<CrearInspeccionRequest> validadorInspeccion,
     IValidator<CorregirInspeccionRequest> validadorCorreccion,
     IValidator<CrearHallazgoRequest> validadorHallazgo,
@@ -294,10 +299,11 @@ public sealed class clsInspeccionesService(
             ?? throw new clsEntidadNoEncontradaException("La etapa de la inspección no existe");
         var codigoEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
         var exigeVistas = clsEtapaCatalogo.ExigeVistas(codigoEtapa);
-        var faltantes = exigeVistas && !inspeccion.EstaCerrada ? await VistasFaltantesAsync(etapa, resumen, ct) : [];
+        var faltantes = exigeVistas && !inspeccion.EstaCerrada ? await calculadoraVistas.FaltantesAsync(etapa, resumen, ct) : [];
         inspeccion.Cerrar(resumen, faltantes, exigeUbicacionPropia: !exigeVistas, reloj.Ahora);
         auditor.Registrar("inspeccion.cerrar", "inspecciones", inspeccion.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        await AvisarHallazgosCriticosAsync(inspeccion, etapa, codigoEtapa, ct);
         return new CerrarInspeccionResponse(
             clsMapeadorInspecciones.AInspeccion(inspeccion),
             new ResumenCierreDto(resumen.TotalEvidencias, resumen.TotalHallazgos));
@@ -307,18 +313,25 @@ public sealed class clsInspeccionesService(
     private async Task<bool> EsCargueAsync(clsEtapa etapa, CancellationToken ct) =>
         (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo == clsCodigosEtapa.CARGUE;
 
-    /// <summary>Nombres de las vistas obligatorias (activas, del tipo del vehiculo o de cualquier tipo) que aun no tienen foto, en el orden del catalogo.</summary>
-    private async Task<IReadOnlyList<string>> VistasFaltantesAsync(clsEtapa etapa, clsResumenCierre resumen, CancellationToken ct)
+    /// <summary>
+    /// Al cerrarse la inspeccion, si tiene un hallazgo de nivel critico alerta al coordinador de calidad y a los administradores del cliente (una alerta por inspeccion). Un fallo al avisar no deshace el cierre.
+    /// </summary>
+    private async Task AvisarHallazgosCriticosAsync(clsInspeccion inspeccion, clsEtapa etapa, string? proceso, CancellationToken ct)
     {
-        var vehiculo = await vehiculos.ObtenerPorIdAsync(etapa.VehiculoId, ct)
-            ?? throw new clsEntidadNoEncontradaException("El vehículo de la etapa no existe");
-        return (await catalogos.ValoresAsync(clsNombresCatalogo.VISTAS_FOTO, ct))
-            .Where(v => v.Activo && v["obligatoria"] is true
-                && (v["tipo_vehiculo"] is not string tipo || string.Equals(tipo, vehiculo.TipoVehiculo, StringComparison.OrdinalIgnoreCase))
-                && !resumen.VistasFotografiadas.Contains(v.Id))
-            .OrderBy(v => v["orden"] as int? ?? 0)
-            .Select(v => v["nombre"] as string ?? v.Codigo ?? v.Id.ToString())
-            .ToList();
+        try
+        {
+            var vehiculo = await vehiculos.ObtenerPorIdAsync(etapa.VehiculoId, ct);
+            if (vehiculo is not null)
+            {
+                await alertaCritica.EmitirSiHayCriticosAsync(
+                    await inspecciones.ObtenerHallazgosDeInspeccionAsync(inspeccion.Id, ct), vehiculo, inspeccion.ViajeId, proceso ?? "la etapa", ct);
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // La inspeccion ya quedo cerrada: el aviso es un efecto secundario y no puede responder error por ella.
+            registro.LogError(ex, "No se pudo avisar del hallazgo critico de la inspeccion {Inspeccion}", inspeccion.Id);
+        }
     }
 
     /// <summary>La vista debe existir y estar activa; la foto de una vista adicional (baul, cojineria) exige la nota del faltante o dano.</summary>
