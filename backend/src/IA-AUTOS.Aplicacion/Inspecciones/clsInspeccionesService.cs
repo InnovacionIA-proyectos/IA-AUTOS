@@ -55,6 +55,7 @@ public sealed class clsInspeccionesService(
     IVehiculoRepository vehiculos,
     clsFabricaEvidencias fabricaEvidencias,
     clsVerificadorEtapaPrevia etapaPrevia,
+    clsResolutorZona resolutorZona,
     IUsuarioRepository usuarios,
     IConsultasInspecciones consultas,
     IDescriptorHallazgos descriptorHallazgos,
@@ -217,7 +218,7 @@ public sealed class clsInspeccionesService(
         inspeccion.AsegurarEditable();
         var foto = solicitud.Evidencia!;
 
-        var zona = await ResolverZonaAsync(inspeccionId, solicitud, ct);
+        var zona = await resolutorZona.ResolverAsync(inspeccionId, solicitud.CuadranteNumero, solicitud.Lado, solicitud.ZonaProvisional, ct);
         var clase = solicitud.ClaseDano!.Trim();
         if (solicitud.HallazgoOrigenId is { } origenId
             && !await inspecciones.EsHallazgoPrevioDelVehiculoAsync(origenId, inspeccionId, zona.Id, clase, ct))
@@ -246,23 +247,6 @@ public sealed class clsInspeccionesService(
         auditor.Registrar("evidencia.crear", "evidencias", evidencia.Id);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.AHallazgoCreado((await descriptorHallazgos.DescribirAsync([hallazgo], ct))[0], evidencia);
-    }
-
-    /// <summary>
-    /// La zona del hallazgo: la numerada (cuadrante + lado, del cuadrante del tipo del vehiculo o del generico) o la provisional con ese codigo. 400 con
-    /// el campo que corresponde si no existe o esta inactiva.
-    /// </summary>
-    private async Task<clsZonaDano> ResolverZonaAsync(Guid inspeccionId, CrearHallazgoRequest solicitud, CancellationToken ct)
-    {
-        if (solicitud.CuadranteNumero is { } numero)
-        {
-            var tipoVehiculo = await inspecciones.ObtenerTipoVehiculoAsync(inspeccionId, ct);
-            return await inspecciones.ObtenerZonaNumeradaAsync(numero, solicitud.Lado, tipoVehiculo, ct)
-                ?? throw clsErroresCampos.De("cuadrante_numero", "El cuadrante indicado no existe o está inactivo");
-        }
-
-        return await inspecciones.ObtenerZonaProvisionalAsync(solicitud.ZonaProvisional!, ct)
-            ?? throw clsErroresCampos.De("zona_provisional", "La zona provisional indicada no existe o está inactiva");
     }
 
     public async Task<EvidenciaDto> AgregarEvidenciaAsync(Guid inspeccionId, CrearEvidenciaRequest solicitud, CancellationToken ct = default)

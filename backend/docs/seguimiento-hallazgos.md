@@ -30,6 +30,10 @@ documento describe el modelo de datos; el modelo del propio hallazgo y de su zon
 - `EvidenciaCompleta` se guarda al cambiar el seguimiento y se recalcula al cerrarse la transferencia de la inspeccion; la API tambien la calcula al leer el hallazgo (`evidencia_faltante`).
 - `POST /api/viajes/{id}/vehiculos/{vin}/no-sale` marca la unidad (columnas de `tblViajeVehiculos`) y agrega una fila `no_sale`; la vista `vwViajesCompletos` deja de contar esa unidad como completa.
 
+## Revision de la novedad
+
+`POST /api/hallazgos/{id}/revision` completa el hallazgo que registro el conductor (zona, clase y nivel V, y el tamano si se corrige) con `clsHallazgo.Revisar`: guarda `RevisadoPor` y `RevisadoAt`, escribe una fila `revision` en `tblHallazgoSeguimiento` con el detalle y, si el nivel es critico, `clsAlertaHallazgoCritico` crea la notificacion `hallazgo_critico`. `RevisadoAt` es un token de concurrencia: si dos usuarios revisan a la vez, el cambio del segundo no encuentra el hallazgo sin revisar y responde `409 HALLAZGO_YA_REVISADO`. Los niveles criticos salen de `Alertas__NivelesCriticos__N` (por defecto `v1_plus`). Ver [CONTRATO.md](../CONTRATO.md) («Revision de la novedad»).
+
 ## Listado
 
 `GET /api/hallazgos` lee `tblHallazgos` con su inspeccion, etapa, vehiculo, viaje y zona; los indices `IX_tblHallazgos_Zona_Clase` e `IX_tblHallazgos_Seguimiento` sirven a los filtros por zona y por estado de seguimiento y origen.

@@ -1,4 +1,5 @@
 using IAAutos.Dominio.Comun;
+using IAAutos.Dominio.Inspecciones;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -94,6 +95,10 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         try
         {
             return await contexto.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException ex) when (ex.Entries.Any(e => e.Entity is clsHallazgo { RevisadoAt: not null }))
+        {
+            throw new clsHallazgoYaRevisadoException();
         }
         catch (DbUpdateException ex) when (ex.InnerException is SqlException sql)
         {

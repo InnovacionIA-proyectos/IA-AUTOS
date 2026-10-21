@@ -36,6 +36,10 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsCargaConductoresService>();
         servicios.AddScoped<clsFabricaEvidencias>();
         servicios.AddScoped<clsVerificadorEtapaPrevia>();
+        servicios.AddScoped<clsResolutorZona>();
+        servicios.AddScoped<clsRevisionService>();
+        servicios.AddScoped<clsAlertaHallazgoCritico>();
+        servicios.Configure<clsOpcionesAlertas>(configuracion.GetSection(clsOpcionesAlertas.SECCION));
         servicios.AddScoped<clsEvidenciaDeHallazgos>();
         servicios.AddScoped<clsSeguimientoService>();
         servicios.AddScoped<clsHallazgosService>();

@@ -2546,6 +2546,70 @@
         ]
       }
     },
+    "/api/hallazgos/{id}/revision": {
+      "post": {
+        "tags": [
+          "Hallazgos"
+        ],
+        "operationId": "Hallazgos_Revisar",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisarHallazgoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/hallazgos/{id}/seguimiento": {
       "post": {
         "tags": [
@@ -8905,6 +8969,63 @@
           "hallazgos": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "RevisarHallazgoRequest": {
+        "required": [
+          "cuadrante_numero",
+          "lado",
+          "zona_provisional",
+          "clase_dano",
+          "nivel_severidad",
+          "tamano_dano",
+          "nota"
+        ],
+        "type": "object",
+        "properties": {
+          "cuadrante_numero": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "lado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona_provisional": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clase_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_severidad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tamano_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nota": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

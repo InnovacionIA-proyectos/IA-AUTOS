@@ -167,6 +167,47 @@ public sealed class clsHallazgo : clsEntidadBase
     }
 
     /// <summary>
+    /// Un inspector revisa el hallazgo que registro el conductor: lo ubica en su zona, le da su clase y le asigna el nivel V (que el conductor nunca asigna) y, si hace falta, corrige el tamano que
+    /// eligio el conductor. Solo se revisa una vez: 409 si el hallazgo no es del conductor y 409 HALLAZGO_YA_REVISADO si ya se reviso.
+    /// </summary>
+    public void Revisar(Guid zonaId, string claseDano, string nivelSeveridad, string? tamanoDano, string? nota, Guid revisadoPor, DateTimeOffset ahora)
+    {
+        AsegurarRevisable();
+        var texto = clsValidador.Opcional(nota);
+        if (texto is { Length: > NOTA_MAX })
+        {
+            throw clsErroresCampos.De("nota", $"La nota admite máximo {NOTA_MAX} caracteres");
+        }
+
+        ZonaId = zonaId;
+        ClaseDano = clsValidador.Requerido(claseDano, "clase_dano es requerida");
+        NivelSeveridad = clsValidador.Requerido(nivelSeveridad, "nivel_severidad es requerido");
+        if (clsValidador.Opcional(tamanoDano) is { } tamano)
+        {
+            TamanoDano = tamano;
+        }
+
+        Nota = texto;
+        RevisadoPor = revisadoPor;
+        RevisadoAt = ahora;
+        Tocar(ahora);
+    }
+
+    /// <summary>Solo se revisa un hallazgo que registro el conductor y que nadie ha revisado: 409 si no es del conductor y 409 HALLAZGO_YA_REVISADO si ya se reviso.</summary>
+    public void AsegurarRevisable()
+    {
+        if (Origen != clsOrigenHallazgo.CONDUCTOR)
+        {
+            throw new clsConflictoException("Solo se revisa un hallazgo registrado por el conductor");
+        }
+
+        if (RevisadoAt is not null)
+        {
+            throw new clsHallazgoYaRevisadoException();
+        }
+    }
+
+    /// <summary>
     /// Crea la novedad que registra el conductor en ruta: un tipo de la lista y un tamano, sin zona, clase, nivel ni texto libre. Esos datos los completa el inspector al
     /// revisarla; mientras tanto la novedad no tiene nivel V.
     /// </summary>

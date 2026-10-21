@@ -111,6 +111,10 @@ public sealed class clsHallazgoSeguimiento : clsEntidadBase
         return Construir(hallazgoId, clsAccionSeguimiento.SEGUIMIENTO, estadoAnterior, estadoNuevo, usuarioId, nota, evidenciaSelloId, ahora);
     }
 
+    /// <summary>La revision de una novedad del conductor: quien la hizo, su nota y lo asignado (<paramref name="detalle"/>, un JSON).</summary>
+    public static clsHallazgoSeguimiento CrearRevision(Guid hallazgoId, Guid usuarioId, string? nota, string detalle, DateTimeOffset ahora) =>
+        Construir(hallazgoId, clsAccionSeguimiento.REVISION, null, null, usuarioId, nota, null, ahora, detalle);
+
     public static clsHallazgoSeguimiento CrearNoSale(Guid hallazgoId, Guid usuarioId, string motivo, DateTimeOffset ahora) =>
         Construir(hallazgoId, clsAccionSeguimiento.NO_SALE, null, null, usuarioId, motivo, null, ahora);
 
@@ -122,7 +126,8 @@ public sealed class clsHallazgoSeguimiento : clsEntidadBase
         Guid usuarioId,
         string? nota,
         Guid? evidenciaSelloId,
-        DateTimeOffset ahora)
+        DateTimeOffset ahora,
+        string? detalle = null)
     {
         var texto = clsValidador.Opcional(nota);
         if (texto is { Length: > NOTA_MAX })
@@ -139,6 +144,7 @@ public sealed class clsHallazgoSeguimiento : clsEntidadBase
             UsuarioId = usuarioId,
             Nota = texto,
             EvidenciaSelloId = evidenciaSelloId,
+            Detalle = detalle,
         };
         fila.Inicializar(ahora);
         return fila;

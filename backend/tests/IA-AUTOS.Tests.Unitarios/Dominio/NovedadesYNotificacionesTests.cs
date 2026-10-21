@@ -54,6 +54,68 @@ public class NovedadesYNotificacionesTests
         Assert.Throws<clsValidacionException>(() => clsHallazgo.CrearNovedad(Guid.NewGuid(), "golpe", "  ", AHORA));
     }
 
+    [Fact]
+    public void Revisar_la_novedad_la_completa_con_zona_clase_nivel_y_quien_la_reviso()
+    {
+        var novedad = clsHallazgo.CrearNovedad(Guid.NewGuid(), "golpe", "1_5cm", AHORA);
+        var zona = Guid.NewGuid();
+        var inspector = Guid.NewGuid();
+
+        novedad.Revisar(zona, "rotura", "v1", "  5_10cm  ", "  Sobre el frente  ", inspector, AHORA.AddHours(1));
+
+        Assert.Equal(zona, novedad.ZonaId);
+        Assert.Equal("rotura", novedad.ClaseDano);
+        Assert.Equal("v1", novedad.NivelSeveridad);
+        Assert.Equal("5_10cm", novedad.TamanoDano);
+        Assert.Equal("Sobre el frente", novedad.Nota);
+        Assert.Equal(inspector, novedad.RevisadoPor);
+        Assert.Equal(AHORA.AddHours(1), novedad.RevisadoAt);
+        Assert.Equal("golpe", novedad.TipoNovedad);
+    }
+
+    [Fact]
+    public void Revisar_sin_corregir_el_tamano_conserva_el_del_conductor()
+    {
+        var novedad = clsHallazgo.CrearNovedad(Guid.NewGuid(), "piedra", "mas_20cm", AHORA);
+
+        novedad.Revisar(Guid.NewGuid(), "golpe", "v3", "  ", null, Guid.NewGuid(), AHORA);
+
+        Assert.Equal("mas_20cm", novedad.TamanoDano);
+        Assert.Null(novedad.Nota);
+    }
+
+    [Fact]
+    public void Una_novedad_se_revisa_una_sola_vez()
+    {
+        var novedad = clsHallazgo.CrearNovedad(Guid.NewGuid(), "granizo", "1_5cm", AHORA);
+        novedad.Revisar(Guid.NewGuid(), "golpe", "v2", null, null, Guid.NewGuid(), AHORA);
+
+        var ex = Assert.Throws<clsHallazgoYaRevisadoException>(() => novedad.Revisar(Guid.NewGuid(), "rotura", "v1", null, null, Guid.NewGuid(), AHORA));
+
+        Assert.Equal(clsCodigosError.HALLAZGO_YA_REVISADO, ex.Codigo);
+        Assert.Equal("v2", novedad.NivelSeveridad);
+    }
+
+    [Fact]
+    public void Solo_se_revisa_un_hallazgo_del_conductor()
+    {
+        var delInspector = clsHallazgo.Crear(Guid.NewGuid(), Guid.NewGuid(), "golpe", "1_5cm", "v2", clsOrigenHallazgo.INSPECTOR, null, null, null, AHORA);
+
+        var ex = Assert.Throws<clsConflictoException>(() => delInspector.Revisar(Guid.NewGuid(), "golpe", "v1", null, null, Guid.NewGuid(), AHORA));
+
+        Assert.Equal(clsCodigosError.CONFLICT, ex.Codigo);
+        Assert.Null(delInspector.RevisadoAt);
+    }
+
+    [Fact]
+    public void La_nota_de_la_revision_admite_quinientos_caracteres()
+    {
+        var novedad = clsHallazgo.CrearNovedad(Guid.NewGuid(), "golpe", "1_5cm", AHORA);
+
+        Assert.Throws<clsValidacionException>(() => novedad.Revisar(Guid.NewGuid(), "golpe", "v2", null, new string('n', clsHallazgo.NOTA_MAX + 1), Guid.NewGuid(), AHORA));
+        Assert.Null(novedad.RevisadoAt);
+    }
+
     // ------------------------------------------------------------------------------ notificaciones
 
     [Fact]
