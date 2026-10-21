@@ -23,6 +23,7 @@ public sealed class clsParametro
 /// <summary>Las claves de los parametros a las que la logica del negocio hace referencia.</summary>
 public static class clsClavesParametros
 {
+    public const string URL_FIRMADA_MINUTOS = "url_firmada_minutos";
     public const string NIVELES_CRITICOS = "niveles_criticos";
     public const string UMBRAL_PATRON_CANTIDAD = "umbral_patron_cantidad";
     public const string UMBRAL_PATRON_VENTANA_DIAS = "umbral_patron_ventana_dias";

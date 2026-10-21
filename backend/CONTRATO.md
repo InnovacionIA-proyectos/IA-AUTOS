@@ -74,6 +74,7 @@ Todos los errores son JSON con la misma forma:
 | `LLEGADA_YA_CERRADA` | 409 | la llegada de Transporte de esa unidad ya estaba confirmada: es un éxito para un reintento (ver «Conductor en ruta») |
 | `HALLAZGO_YA_REVISADO` | 409 | la novedad del conductor ya fue revisada: su zona, clase y nivel ya no se cambian (ver «Revisión de la novedad») |
 | `UNIDAD_NO_SALE` | 409 | la unidad se marcó «no sale» del viaje: no admite novedades ni llegada |
+| `URL_FIRMADA_INVALIDA` | 403 | la URL de una foto no tiene firma, la firma no coincide o ya venció (ver «URL firmada de una foto») |
 | `PIN_CHANGE_REQUIRED` | 403 | el PIN fue asignado o reiniciado por un administrador: hay que cambiarlo (`POST /api/auth/cambiar-pin`) antes de usar el resto de la API |
 | `ACCOUNT_LOCKED` | 423 | la cuenta está bloqueada por PIN errados seguidos; `details.bloqueado_hasta` (ISO 8601) dice hasta cuándo, o un administrador la desbloquea |
 | `NOT_FOUND` | 404 | recurso o ruta inexistente |
@@ -1469,15 +1470,37 @@ Campo. Sube una foto de dos formas (la app móvil puede usar la que prefiera): c
 | `archivo` (multipart) | obligatorio; el archivo de la imagen. Mismas reglas de contenido y tamaño; `400` si falta, está vacío o no es JPG o PNG |
 
 ```json
-{ "storage_path": "3f2b9c6e-….jpg", "url": "/api/uploads/3f2b9c6e-….jpg", "hash_sha256": "9f86d0…" }
+{
+  "storage_path": "3f2b9c6e-….jpg",
+  "url": "https://api.ejemplo.com/api/uploads/3f2b9c6e-….jpg?exp=1792588800&firma=5d41402abc4b2a76b9719d911017c592a8c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5",
+  "url_expira_at": "2026-10-21T15:15:00.000Z",
+  "hash_sha256": "9f86d0…"
+}
 ```
 
 Use `storage_path` al registrar la evidencia (el archivo debe haberse subido antes) y `url` para mostrarla. `hash_sha256` es el hash que **calculó el servidor** al recibir el archivo: es el mismo que
 queda en la evidencia, y si la app lo reenvía como `hash_sha256` la evidencia comprueba que coincide.
 
-### `GET /api/uploads/{archivo}`
-Sirve la imagen (`image/jpeg` o `image/png`). Por defecto es **público** (se puede usar directo en un `<img src>` con la URL
-completa); si el despliegue configura la lectura privada, exige el header `Authorization`. Responde con caché larga.
+### URL firmada de una foto
+Una foto **no es pública**: solo se ve con una URL **firmada por el sistema y vigente**. Toda foto que devuelve la API (`EvidenciaDto.url`, `ArchivoSubidoDto.url`, la foto del sello, la constancia, las fotos de los hallazgos
+previos...) sale como una URL **absoluta** `/api/uploads/{archivo}?exp=<epoch>&firma=<hmac>` con su vencimiento en `url_expira_at` (ISO 8601). La firma es un HMAC-SHA256 del nombre del archivo y de `exp` con un secreto del servidor
+(`Storage__FirmaSecreto`), así que una firma solo sirve para ese archivo y ese vencimiento. La vigencia es el parámetro **`url_firmada_minutos`** (15 por defecto), que se aplica sin desplegar.
+
+Como la firma va en la URL, **no hace falta el header `Authorization`**: la URL sirve directo en un `<img src>`. Cuando vence hay que volver a pedir el recurso (el informe, el inventario...) para recibir una URL nueva; no se guarda la URL
+sino el recurso. Si la URL todavía no se ha abierto cuando vence, se pide de nuevo la lista y se usa la nueva.
+
+Si la foto de una firma de transferencia (`firma_entrega`, `firma_recibe`) es una **ruta** de imagen, sale también como URL firmada; si es un trazo SVG, sale como se guardó.
+
+### `GET /api/uploads/{archivo}?exp=&firma=`
+Sirve la imagen (`image/jpeg` o `image/png`) con `Cache-Control: private, max-age=` hasta que venza la URL (máximo 1 hora). **No exige autenticación**, solo la firma:
+
+| Respuesta | Cuándo |
+|---|---|
+| `200` | firma válida y vigente, y el archivo existe |
+| `403` con `code: "URL_FIRMADA_INVALIDA"` | sin `exp` o sin `firma`, firma que no es la del archivo o del vencimiento, o URL vencida (también con un token válido: el token no reemplaza la firma) |
+| `404` | firma válida pero el archivo no existe o su nombre no es válido |
+
+Los PDF (inventario y constancia) incrustan las imágenes leyéndolas del almacén, no por URL.
 
 ---
 

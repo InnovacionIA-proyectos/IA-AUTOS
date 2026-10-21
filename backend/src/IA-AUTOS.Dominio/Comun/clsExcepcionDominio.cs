@@ -106,6 +106,15 @@ public sealed class clsLlegadaYaCerradaException : clsExcepcionDominio
     }
 }
 
+/// <summary>La URL de una foto no tiene firma, la firma no coincide o ya vencio: 403 URL_FIRMADA_INVALIDA.</summary>
+public sealed class clsUrlFirmadaInvalidaException : clsExcepcionDominio
+{
+    public clsUrlFirmadaInvalidaException()
+        : base(clsCodigosError.URL_FIRMADA_INVALIDA, "La URL de la foto no es valida o ya vencio: pida una nueva")
+    {
+    }
+}
+
 /// <summary>La novedad del conductor ya fue revisada: 409 HALLAZGO_YA_REVISADO.</summary>
 public sealed class clsHallazgoYaRevisadoException : clsExcepcionDominio
 {

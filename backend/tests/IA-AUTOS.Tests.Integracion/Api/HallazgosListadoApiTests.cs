@@ -108,7 +108,7 @@ public sealed class HallazgosListadoApiTests(clsBaseDatosFixture bd) : clsPrueba
         Assert.Equal("Frente", fila.GetProperty("zona").GetString());
         // La foto propia viene como una evidencia con su URL; un hallazgo sin foto trae nulo.
         Assert.Equal(e.H1, fila.GetProperty("evidencia").GetProperty("hallazgo_id").GetGuid());
-        Assert.StartsWith("/api/uploads/hallazgo-", fila.GetProperty("evidencia").GetProperty("url").GetString());
+        Assert.StartsWith("http://localhost/api/uploads/hallazgo-", fila.GetProperty("evidencia").GetProperty("url").GetString());
         Assert.Equal(JsonValueKind.Null, cuerpo.GetProperty("items")[1].GetProperty("evidencia").ValueKind);
         // Una inspeccion en borrador no tiene fecha de cierre.
         var enBorrador = cuerpo.GetProperty("items").EnumerateArray().Single(h => h.GetProperty("id").GetGuid() == e.H6);

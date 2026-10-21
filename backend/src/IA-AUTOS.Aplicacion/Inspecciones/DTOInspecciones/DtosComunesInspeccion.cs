@@ -116,7 +116,8 @@ public sealed record HallazgoPrevioDto : HallazgoDto
 
 /// <summary>
 /// La ruta interna de almacenamiento no se expone: el cliente recibe solo la URL servible. Cada foto trae su propio sello (fecha, ubicacion y
-/// precision del dispositivo), el del servidor (<c>SelloServidorAt</c>) y el hash SHA-256 del archivo. <c>SinUbicacion</c> marca la foto
+/// precision del dispositivo), el del servidor (<c>SelloServidorAt</c>) y el hash SHA-256 del archivo. <c>Url</c> es una URL absoluta firmada que vence en <c>UrlExpiraAt</c> (la firma la agrega la API al
+/// responder, a partir de <c>RutaArchivo</c>, que no se expone); nula si el archivo no es de los que sirve esta API. <c>SinUbicacion</c> marca la foto
 /// tomada sin senal de GPS (hay que repetirla antes de cerrar). <c>EsSello</c> marca la foto del sello de quien valida un hallazgo.
 /// </summary>
 public sealed record EvidenciaDto(
@@ -127,6 +128,7 @@ public sealed record EvidenciaDto(
     double SelloLat,
     double SelloLng,
     string? Url,
+    DateTimeOffset? UrlExpiraAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     Guid? VistaId,
@@ -137,7 +139,8 @@ public sealed record EvidenciaDto(
     string? Nota,
     bool SinUbicacion,
     bool EsConstancia,
-    bool EsSello);
+    bool EsSello,
+    [property: System.Text.Json.Serialization.JsonIgnore] string? RutaArchivo = null);
 
 /// <summary>
 /// Las firmas dibujadas no se exponen en los listados. <c>Firmada</c> es true cuando estan las dos firmas (tambien si fue con reservas);

@@ -81,6 +81,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddSingleton<IGeneradorPdfConstancia, clsGeneradorPdfConstancia>();
 
         servicios.Configure<clsOpcionesNotificaciones>(configuracion.GetSection(clsOpcionesNotificaciones.SECCION));
+        servicios.AddSingleton<IFirmadorUrls, clsFirmadorUrls>();
         servicios.AddSingleton<IEnviadorPush>(p => new clsEnviadorFcm(
             p.GetRequiredService<IOptions<clsOpcionesNotificaciones>>(),
             new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = TimeSpan.FromSeconds(10) },

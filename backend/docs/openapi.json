@@ -4259,6 +4259,20 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "exp",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "firma",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -4467,6 +4481,7 @@
         "required": [
           "storage_path",
           "url",
+          "url_expira_at",
           "hash_sha256"
         ],
         "type": "object",
@@ -4476,6 +4491,9 @@
           },
           "url": {
             "type": "string"
+          },
+          "url_expira_at": {
+            "format": "date-time"
           },
           "hash_sha256": {
             "type": "string"
@@ -5665,6 +5683,7 @@
           "sello_lat",
           "sello_lng",
           "url",
+          "url_expira_at",
           "created_at",
           "updated_at",
           "vista_id",
@@ -5710,6 +5729,9 @@
               "null",
               "string"
             ]
+          },
+          "url_expira_at": {
+            "format": "date-time"
           },
           "created_at": {
             "format": "date-time"

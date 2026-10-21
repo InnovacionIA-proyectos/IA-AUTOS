@@ -24,8 +24,10 @@ public sealed class clsOpcionesAlmacenamiento
     /// <summary>Tamano maximo de una imagen subida, en bytes (por defecto 10 MB).</summary>
     public int MaximoBytes { get; set; } = 10 * 1024 * 1024;
 
-    /// <summary>Si es true (como en el sistema anterior) las imagenes se leen sin token; el nombre es un UUID no adivinable.</summary>
-    public bool LecturaPublica { get; set; } = true;
+    /// <summary>
+    /// Secreto con el que el servidor firma las URL de las fotos (minimo 32 caracteres). Si no se configura, se deriva del secreto de los tokens: configurelo para que las firmas no dependan de el.
+    /// </summary>
+    public string? FirmaSecreto { get; set; }
 
     /// <summary>Carpeta del almacenamiento en disco (solo si no hay S3 configurado).</summary>
     public string LocalPath { get; set; } = ".uploads";
@@ -111,7 +113,8 @@ public sealed partial class clsArchivosService(
 
         var nombre = $"{Guid.NewGuid()}.{extension}";
         await almacen.GuardarAsync(nombre, bytes, tipoContenido, ct);
-        return new ArchivoSubidoDto(nombre, clsUrlsArchivos.RUTA_BASE + nombre, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
+        // La URL firmada la arma la capa de salida con el nombre del archivo; aqui solo va la ruta sin firmar.
+        return new ArchivoSubidoDto(nombre, clsUrlsArchivos.RUTA_BASE + nombre, null, Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant());
     }
 
     public async Task<ArchivoLeidoDto> LeerAsync(string archivo, CancellationToken ct = default)
