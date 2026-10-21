@@ -114,17 +114,33 @@ void main() {
     expect(catalogos.version, 'v3');
   });
 
-  test('un cuerpo con forma inesperada no pisa la copia anterior', () async {
-    final buena = AdaptadorFalso((_) => cuerpo('v1'));
-    await repositorio(buena).sincronizar('u1');
-    final mala = AdaptadorFalso((_) => ResponseBody.fromString('[]', 200, headers: {
-          Headers.contentTypeHeader: ['application/json'],
-        }));
+  group('una respuesta 200 enganosa no pisa la copia anterior', () {
+    // Un portal cautivo o un balanceador responden 200 con un sobre JSON propio. redEstable() solo mira el tipo de
+    // conexion, asi que la peticion sale igual y el cuerpo llega con pinta de valido.
+    final enganos = <String, String>{
+      'una lista en vez de un objeto': '[]',
+      'un sobre de error del proxy': '{"message":"Authentication required"}',
+      'un objeto sin la clave catalogos': '{"version":"v9"}',
+      'catalogos vacio': '{"version":"v9","catalogos":{}}',
+      'catalogos que no es un objeto': '{"version":"v9","catalogos":[]}',
+    };
 
-    await expectLater(repositorio(mala).sincronizar('u9'), throwsA(isA<FormatException>()));
+    for (final engano in enganos.entries) {
+      test(engano.key, () async {
+        final buena = AdaptadorFalso((_) => cuerpo('v1'));
+        await repositorio(buena).sincronizar('u1');
+        final mala = AdaptadorFalso((_) => ResponseBody.fromString(engano.value, 200, headers: {
+              Headers.contentTypeHeader: ['application/json'],
+            }));
 
-    final conservada = await repositorio(buena).leerCache('u1');
-    expect(conservada!.version, 'v1');
+        await expectLater(repositorio(mala).sincronizar('u1'), throwsA(isA<FormatException>()));
+
+        final conservada = await repositorio(buena).leerCache('u1');
+        expect(conservada, isNotNull, reason: 'la copia buena debe seguir ahi');
+        expect(conservada!.version, 'v1');
+        expect(conservada.etiqueta(Catalogo.clasesDano, 'golpe'), 'Golpe');
+      });
+    }
   });
 
   test('sin señal no hay descarga, pero la copia guardada sigue disponible', () async {

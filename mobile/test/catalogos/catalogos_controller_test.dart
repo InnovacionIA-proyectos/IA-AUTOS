@@ -1,41 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:traza_autos/features/catalogos/data/catalogos_repositorio.dart';
 import 'package:traza_autos/features/catalogos/domain/catalogos.dart';
 import 'package:traza_autos/features/catalogos/presentation/catalogos_controller.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
 
 import '../support/arnes.dart';
-
-Catalogos catalogosCon(String nombre, {String version = 'v1', String usuarioId = 'u1'}) => Catalogos.desdeRespuesta(
-      {
-        'version': version,
-        'catalogos': {
-          Catalogo.clasesDano: [
-            {'id': 'i1', 'codigo': 'golpe', 'nombre': nombre, 'orden': 1, 'activo': true},
-          ],
-        },
-      },
-      usuarioId: usuarioId,
-    );
-
-class CatalogosRepositorioFalso implements CatalogosRepositorio {
-  Catalogos? guardado;
-  Catalogos? remoto;
-  Object? error;
-  int sincronizaciones = 0;
-
-  @override
-  Future<Catalogos?> leerCache(String usuarioId) async => guardado;
-
-  @override
-  Future<Catalogos> sincronizar(String usuarioId) async {
-    sincronizaciones++;
-    if (error != null) throw error!;
-    guardado = remoto;
-    return remoto!;
-  }
-}
+import '../support/dobles_catalogos.dart';
 
 Future<ProviderContainer> iniciar(Arnes arnes, CatalogosRepositorioFalso repositorio) async {
   final contenedor = ProviderContainer(

@@ -107,6 +107,13 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     }
   }
 
+  /// Hay con que registrar una novedad. Si no, no se puede cerrar el informe: uno cerrado sin hallazgos dice
+  /// que el vehiculo venia sano.
+  bool get _catalogosListos {
+    final catalogos = ref.read(catalogosProvider);
+    return catalogos.opciones(Catalogo.clasesDano).isNotEmpty && catalogos.opciones(Catalogo.tamanosDano).isNotEmpty;
+  }
+
   Future<void> _elegirNovedad(String etiqueta, CoordsDiagrama coords) async {
     final catalogos = ref.read(catalogosProvider);
     final clases = catalogos.opciones(Catalogo.clasesDano);
@@ -130,6 +137,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         placa: _placa.text,
         cantidadHallazgos: _hallazgos.length,
         cantidadFotos: _fotos.length,
+        catalogosListos: _catalogosListos,
       );
 
   Future<void> _cerrar() async {
@@ -317,8 +325,14 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                   onPressed: bloqueo == null && !_cerrando ? _cerrar : null,
                   child: _cerrando ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)) : const Text('Cerrar informe'),
                 ),
-                if (bloqueo != null && !_cerrando)
+                if (bloqueo != null && !_cerrando) ...[
                   Padding(padding: const EdgeInsets.only(top: Espacio.sm), child: Text(bloqueo.mensaje, textAlign: TextAlign.center, style: tema.bodySmall)),
+                  if (bloqueo == BloqueoCierre.sinCatalogos)
+                    TextButton(
+                      onPressed: () => ref.read(catalogosControllerProvider.notifier).reintentar(),
+                      child: const Text('Reintentar descarga'),
+                    ),
+                ],
               ],
             ),
             if (_guardandoFoto)

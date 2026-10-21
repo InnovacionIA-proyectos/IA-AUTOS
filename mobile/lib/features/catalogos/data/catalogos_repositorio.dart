@@ -67,11 +67,15 @@ class CatalogosRepositorio {
         estadosExtra: const {304},
       );
 
+  /// No basta con que el cuerpo sea un objeto JSON: un portal cautivo o un balanceador pueden responder `200` con
+  /// un sobre de error, y guardar eso dejaría al inspector sin catálogos hasta recuperar la API de verdad. Se exige
+  /// que traiga catálogos con contenido; cualquier otra cosa se rechaza y la copia anterior queda intacta.
   Map<String, dynamic> _cuerpo(RespuestaApi respuesta) {
     final datos = respuesta.datos;
-    if (datos is! Map<String, dynamic>) {
+    final catalogos = datos is Map<String, dynamic> ? datos['catalogos'] : null;
+    if (catalogos is! Map || catalogos.isEmpty) {
       throw const FormatException('La respuesta de los catálogos no tiene la forma esperada');
     }
-    return datos;
+    return datos! as Map<String, dynamic>;
   }
 }

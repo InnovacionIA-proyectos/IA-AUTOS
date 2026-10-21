@@ -5,14 +5,34 @@ import 'package:traza_autos/features/vehiculos/domain/coords_diagrama.dart';
 
 import '../support/dobles_sync.dart';
 
-BloqueoCierre? bloqueo({bool gps = true, String conductor = 'Ana', String placa = 'ABC123', int hallazgos = 0, int fotos = 0}) =>
-    bloqueoDeCierre(hayUbicacion: gps, conductor: conductor, placa: placa, cantidadHallazgos: hallazgos, cantidadFotos: fotos);
+BloqueoCierre? bloqueo({
+  bool gps = true,
+  String conductor = 'Ana',
+  String placa = 'ABC123',
+  int hallazgos = 0,
+  int fotos = 0,
+  bool catalogos = true,
+}) =>
+    bloqueoDeCierre(
+      hayUbicacion: gps,
+      conductor: conductor,
+      placa: placa,
+      cantidadHallazgos: hallazgos,
+      cantidadFotos: fotos,
+      catalogosListos: catalogos,
+    );
 
 void main() {
   group('bloqueoDeCierre', () {
     test('sin novedades no exige fotos', () => expect(bloqueo(), isNull));
 
     test('sin ubicación no se puede cerrar', () => expect(bloqueo(gps: false), BloqueoCierre.sinUbicacion));
+
+    test('sin catálogos no se puede cerrar: un informe sin hallazgos diría que el vehículo venía sano', () {
+      expect(bloqueo(catalogos: false), BloqueoCierre.sinCatalogos);
+      // Tiene prioridad: sin catálogos no hay forma de registrar la novedad, aunque todo lo demás esté listo.
+      expect(bloqueo(catalogos: false, gps: false, conductor: ''), BloqueoCierre.sinCatalogos);
+    });
 
     test('exige conductor y placa (también si solo tienen espacios)', () {
       expect(bloqueo(conductor: ''), BloqueoCierre.faltaTransporte);

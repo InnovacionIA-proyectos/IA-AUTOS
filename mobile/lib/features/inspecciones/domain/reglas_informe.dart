@@ -4,6 +4,9 @@ import 'hallazgo_local.dart';
 
 /// Motivos por los que todavía no se puede cerrar un informe.
 enum BloqueoCierre {
+  /// Sin catálogos no se pueden registrar novedades, y un informe cerrado sin ellas diría que el vehículo venía
+  /// sano. Por eso bloquea el cierre en vez de dejar pasar un informe vacío.
+  sinCatalogos('No se han descargado los catálogos de daño. Conéctate para descargarlos.'),
   sinUbicacion('Esperando ubicación…'),
   faltaTransporte('Ingresa el conductor y la placa.'),
   faltaFotoNovedad('Registraste una novedad: agrega al menos una foto.');
@@ -13,7 +16,8 @@ enum BloqueoCierre {
   final String mensaje;
 }
 
-/// Reglas de cierre (iguales a las de la app original):
+/// Reglas de cierre:
+///  - catálogos de daño descargados (si no, no se pueden registrar novedades),
 ///  - ubicación disponible,
 ///  - conductor y placa (datos del transporte),
 ///  - fotos obligatorias SOLO si hay novedad (al menos una).
@@ -24,7 +28,9 @@ BloqueoCierre? bloqueoDeCierre({
   required String placa,
   required int cantidadHallazgos,
   required int cantidadFotos,
+  bool catalogosListos = true,
 }) {
+  if (!catalogosListos) return BloqueoCierre.sinCatalogos;
   if (!hayUbicacion) return BloqueoCierre.sinUbicacion;
   if (conductor.trim().isEmpty || placa.trim().isEmpty) return BloqueoCierre.faltaTransporte;
   if (cantidadHallazgos > 0 && cantidadFotos == 0) return BloqueoCierre.faltaFotoNovedad;
