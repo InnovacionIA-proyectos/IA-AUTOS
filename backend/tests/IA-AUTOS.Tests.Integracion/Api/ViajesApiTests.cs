@@ -1011,20 +1011,20 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var delTercero = await SesionAsync("coord-tercero@ejemplo.com", clsRol.COORDINADOR_CALIDAD, clienteId: tercero);
 
         var sofasa = await LeerJsonAsync(await Cliente(d.Coordinador.Token).GetAsync("/api/viajes"));
-        var sofasaPidiendoOtro = await LeerJsonAsync(await Cliente(d.Coordinador.Token).GetAsync($"/api/viajes?clienteId={d.Otro}"));
+        var sofasaPidiendoOtro = await Cliente(d.Coordinador.Token).GetAsync($"/api/viajes?clienteId={d.Otro}");
         var otro = await LeerJsonAsync(await Cliente(delOtro.Token).GetAsync("/api/viajes"));
-        var otroPidiendoSofasa = await LeerJsonAsync(await Cliente(delOtro.Token).GetAsync($"/api/viajes?clienteId={d.Sofasa}"));
+        var otroPidiendoSofasa = await Cliente(delOtro.Token).GetAsync($"/api/viajes?clienteId={d.Sofasa}");
         var ninguno = await LeerJsonAsync(await Cliente(delTercero.Token).GetAsync("/api/viajes"));
 
         Assert.Equal([d.ViajeId], Ids(sofasa));
         Assert.Equal(["sofasa"], Codigos(sofasa[0]));
         Assert.Equal(2, sofasa[0].GetProperty("total_vehiculos").GetInt32());
-        Assert.Equal([d.ViajeId], Ids(sofasaPidiendoOtro));
-        Assert.Equal(["sofasa"], Codigos(sofasaPidiendoOtro[0]));
+        // Pedir el cliente de otro responde 403: solo el super administrador elige cliente.
+        Assert.Equal(HttpStatusCode.Forbidden, sofasaPidiendoOtro.StatusCode);
         Assert.Equal([d.ViajeId], Ids(otro));
         Assert.Equal(["otro"], Codigos(otro[0]));
         Assert.Equal(1, otro[0].GetProperty("total_vehiculos").GetInt32());
-        Assert.Equal(["otro"], Codigos(otroPidiendoSofasa[0]));
+        Assert.Equal(HttpStatusCode.Forbidden, otroPidiendoSofasa.StatusCode);
         Assert.Equal(0, ninguno.GetArrayLength());
     }
 

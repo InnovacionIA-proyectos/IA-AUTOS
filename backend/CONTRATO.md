@@ -1236,6 +1236,40 @@ Tasa de rechazo (unidades movilizadas con al menos un hallazgo) frente a la lín
 
 ---
 
+## Visibilidad por cliente
+
+Cada usuario de un cliente ve **solo las unidades de su cliente** y lo que cuelga de ellas. El cliente de una unidad es el de su vehículo (`tblVehiculos.ClienteId`) y el del usuario viene de su sesión (`cliente` en `GET /api/auth/me`).
+
+| Rol | Qué ve |
+|---|---|
+| `coordinador_calidad`, `comercial`, `admin` | solo lo de **su cliente**; un recurso de otro cliente responde `403` |
+| `super_admin` | **todos** los clientes; es el único que puede pedir un cliente distinto del suyo (`clienteId`) |
+| `inspector`, `conductor` | no se limitan por cliente sino por **viaje**: ven lo de los viajes en los que participan |
+
+Un usuario de un cliente **sin cliente asignado** no ve ninguna unidad.
+
+**Qué se filtra** (lectura):
+
+| Endpoint | Para quien se limita a su cliente |
+|---|---|
+| `GET /api/vehiculos?vin=` y `GET /api/vehiculos/listado` | solo los VIN de su cliente (el total y la paginación cuentan solo esos) |
+| `GET /api/vehiculos/{vin}/inventario` y `/pdf` | `403` con el VIN de otro cliente («El VIN no es de su cliente»); `404` si no existe |
+| `GET /api/inspecciones` | solo los informes de VIN de su cliente |
+| `GET /api/inspecciones/{id}`, `GET /api/inspecciones/{id}/hallazgos-previos` y `GET /api/inspecciones/{id}/transferencia/constancia/pdf` | `403` con un informe de un VIN de otro cliente («La inspección es de un VIN de otro cliente») |
+| `GET /api/viajes` y `GET /api/viajes/{id}` | solo los viajes con algún VIN de su cliente, y en el detalle solo esos VIN; `403` con un viaje sin VIN suyos |
+| `GET /api/sofasa/ordenes` | solo las órdenes de VIN de su cliente |
+| `GET /api/patrones`, `/api/patrones/analisis` y `/api/metricas/rechazo` | cuentan solo las unidades de su cliente |
+| `GET /api/usuarios` | solo los usuarios de su cliente |
+
+Los endpoints de hallazgos, alertas, auditoría y exportaciones que se agreguen después aplican la misma regla: filtran por el cliente de quien consulta y responden `403` con un recurso de otro.
+
+**El cliente se elige solo como super administrador.** `clienteId` en `GET /api/viajes` y `GET /api/usuarios` lo usa el super administrador para ver un cliente; quien se limita a su cliente puede enviar el suyo (no cambia nada) y enviar **otro responde `403`**
+(antes se ignoraba y se devolvía lo suyo).
+
+**Viaje con unidades de dos clientes.** El usuario de un cliente ve en el detalle solo los VIN de su cliente (`vehiculos`, `clientes`, `total_vehiculos` y `vehiculos_completos` se calculan sobre ellos). El **conductor y el inspector del viaje ven todos** los VIN: es una propuesta, pendiente de confirmar por el negocio.
+
+---
+
 ## Notas para el consumo
 
 - **CORS.** El navegador solo podrá llamar a la API si su origen exacto está en `Cors__Origins` (registre el origen del portal: un origen no registrado se bloquea). El nombre del PDF de inventario llega en `Content-Disposition`, que la API expone.

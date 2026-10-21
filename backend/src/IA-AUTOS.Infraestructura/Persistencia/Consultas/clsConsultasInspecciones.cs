@@ -7,7 +7,14 @@ namespace IAAutos.Infraestructura.Persistencia.Consultas;
 
 internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : IConsultasInspecciones
 {
-    public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones f, Guid? soloDeUsuario, int limite, CancellationToken ct = default)
+    public Task<bool> EsDeClienteAsync(Guid inspeccionId, Guid clienteId, CancellationToken ct = default) =>
+        (from i in contexto.Inspecciones.AsNoTracking()
+         join e in contexto.Etapas on i.EtapaId equals e.Id
+         join v in contexto.Vehiculos on e.VehiculoId equals v.Id
+         where i.Id == inspeccionId && v.ClienteId == clienteId
+         select i.Id).AnyAsync(ct);
+
+    public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones f, Guid? soloDeUsuario, Guid? soloDeCliente, int limite, CancellationToken ct = default)
     {
         var consulta = from i in contexto.Inspecciones.AsNoTracking()
                        join e in contexto.Etapas on i.EtapaId equals e.Id
@@ -17,6 +24,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                        join c in contexto.Usuarios on vj.ConductorId equals c.Id into conductores
                        from c in conductores.DefaultIfEmpty()
                        where (f.Vin == null || v.Vin == f.Vin)
+                          && (soloDeCliente == null || v.ClienteId == soloDeCliente)
                           && (f.UsuarioId == null || i.UsuarioId == f.UsuarioId)
                           && (f.ViajeId == null || i.ViajeId == f.ViajeId)
                           && (f.Momento == null || i.Momento == f.Momento)

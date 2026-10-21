@@ -29,8 +29,10 @@ public sealed class IngestarOrdenesRequestValidator : AbstractValidator<Ingestar
 /// <summary>Consulta de ordenes Sofasa para la web y la app (mas recientes primero, maximo 500).</summary>
 public interface IConsultasSofasa
 {
-    /// <summary>Con <paramref name="soloDeUsuario"/>, solo las ordenes de los viajes de ese usuario.</summary>
-    Task<IReadOnlyList<OrdenSofasaDto>> ListarAsync(FiltrosOrdenesSofasa filtros, Guid? soloDeUsuario, int limite, CancellationToken ct = default);
+    /// <summary>
+    /// Con <paramref name="soloDeUsuario"/>, solo las ordenes de los viajes de ese usuario; con <paramref name="soloDeCliente"/>, solo las de VIN de ese cliente.
+    /// </summary>
+    Task<IReadOnlyList<OrdenSofasaDto>> ListarAsync(FiltrosOrdenesSofasa filtros, Guid? soloDeUsuario, Guid? soloDeCliente, int limite, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -156,6 +158,7 @@ public sealed class clsSofasaService(
                 Ciudad = Limpiar(filtros.Ciudad),
             },
             actual.SoloSusViajes(),
+            actual.ClienteRestringido(),
             LIMITE_LISTADO,
             ct);
 

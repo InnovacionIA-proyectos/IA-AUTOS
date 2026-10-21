@@ -53,7 +53,7 @@ public sealed class clsUsuariosService(
 
     // ------------------------------------------------------------------------------------------------ lectura
 
-    /// <summary>Busqueda paginada (nombre, correo o cedula; rol; estado; cliente). Quien no es super administrador solo ve su cliente.</summary>
+    /// <summary>Busqueda paginada (nombre, correo o cedula; rol; estado; cliente). Quien no es super administrador solo ve su cliente: pedir otro responde 403.</summary>
     public async Task<ListadoUsuariosDto> ListarAsync(FiltrosUsuariosRequest filtros, CancellationToken ct = default)
     {
         var errores = new Dictionary<string, string[]>();
@@ -79,7 +79,7 @@ public sealed class clsUsuariosService(
 
         var pagina = Math.Max(filtros.Pagina ?? 1, 1);
         var tamano = Math.Clamp(filtros.Tamano ?? TAMANO_PAGINA_DEFECTO, 1, TAMANO_PAGINA_MAXIMO);
-        var filtro = new clsFiltroUsuarios(filtros.Q, rol, activo, VeTodosLosClientes ? clienteSolicitado : ClienteDelActor());
+        var filtro = new clsFiltroUsuarios(filtros.Q, rol, activo, actual.ClienteDelFiltro(clienteSolicitado));
         var (filas, total) = await usuarios.BuscarAsync(filtro, (pagina - 1) * tamano, tamano, ct);
         return new ListadoUsuariosDto(filas.Select(u => clsMapeadorUsuarios.ADto(u)).ToList(), total, pagina, tamano);
     }

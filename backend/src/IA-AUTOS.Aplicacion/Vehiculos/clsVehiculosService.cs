@@ -84,9 +84,9 @@ public sealed class clsVehiculosService(
         return new ResultadoCargaDto(items.Count, creados, actualizados, errores.Count, errores);
     }
 
-    /// <summary>Autocompletado. Inspectores y conductores solo encuentran los VIN de sus viajes.</summary>
+    /// <summary>Autocompletado. Inspectores y conductores solo encuentran los VIN de sus viajes; el resto, los de su cliente (el super administrador, todos).</summary>
     public async Task<IReadOnlyList<VehiculoBusquedaDto>> BuscarAsync(string? termino, CancellationToken ct = default) =>
-        string.IsNullOrWhiteSpace(termino) ? [] : await consultas.BuscarAsync(termino.Trim(), actual.SoloSusViajes(), ct);
+        string.IsNullOrWhiteSpace(termino) ? [] : await consultas.BuscarAsync(termino.Trim(), actual.SoloSusViajes(), actual.ClienteRestringido(), ct);
 
     public async Task<ListadoPaginadoDto> ListarAsync(string? tipo, string? vin, int pagina, CancellationToken ct = default)
     {
@@ -107,6 +107,7 @@ public sealed class clsVehiculosService(
             tipoFinal,
             string.IsNullOrWhiteSpace(vin) ? null : vin.Trim(),
             actual.SoloSusViajes(),
+            actual.ClienteRestringido(),
             TAMANO_PAGINA,
             (paginaFinal - 1) * TAMANO_PAGINA,
             ct);
@@ -115,10 +116,20 @@ public sealed class clsVehiculosService(
 
     /// <summary>
     /// Inventario del VIN. Un inspector o conductor solo puede abrir los VIN de sus viajes (403 si no es de ellos); de ese VIN ve unicamente
-    /// las etapas de sus viajes.
+    /// las etapas de sus viajes. Quien se limita a su cliente recibe 403 con el VIN de otro cliente.
     /// </summary>
     public async Task<InventarioDto> ObtenerInventarioAsync(string vin, CancellationToken ct = default)
     {
+        if (actual.ClienteRestringido() is { } cliente)
+        {
+            var delVin = await vehiculos.ObtenerPorVinAsync(vin, ct)
+                ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
+            if (delVin.ClienteId != cliente)
+            {
+                throw new clsProhibidoException("El VIN no es de su cliente");
+            }
+        }
+
         var soloDeUsuario = actual.SoloSusViajes();
         if (soloDeUsuario is { } usuarioId)
         {

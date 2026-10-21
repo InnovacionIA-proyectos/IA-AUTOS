@@ -14,14 +14,18 @@ public static class clsTipoListado
 /// <summary>Consultas de solo lectura sobre vehiculos (listados del tablero, busqueda e inventario por VIN).</summary>
 public interface IConsultasVehiculos
 {
-    /// <summary>Coincidencia por fragmento de VIN o marca; maximo 8 resultados. Con <paramref name="soloDeUsuario"/>, solo VIN de los viajes de ese usuario.</summary>
-    Task<IReadOnlyList<VehiculoBusquedaDto>> BuscarAsync(string termino, Guid? soloDeUsuario, CancellationToken ct = default);
+    /// <summary>
+    /// Coincidencia por fragmento de VIN o marca; maximo 8 resultados. Con <paramref name="soloDeUsuario"/>, solo VIN de los viajes de ese usuario; con
+    /// <paramref name="soloDeCliente"/>, solo los VIN de ese cliente.
+    /// </summary>
+    Task<IReadOnlyList<VehiculoBusquedaDto>> BuscarAsync(string termino, Guid? soloDeUsuario, Guid? soloDeCliente, CancellationToken ct = default);
 
-    /// <summary>Listado paginado: movilizados, pendientes por movilizar o con novedad.</summary>
+    /// <summary>Listado paginado: movilizados, pendientes por movilizar o con novedad. Con <paramref name="soloDeCliente"/>, solo los VIN de ese cliente.</summary>
     Task<(IReadOnlyList<ListadoVehiculoDto> Filas, int Total)> ListarAsync(
         string tipo,
         string? vin,
         Guid? soloDeUsuario,
+        Guid? soloDeCliente,
         int limite,
         int desplazamiento,
         CancellationToken ct = default);

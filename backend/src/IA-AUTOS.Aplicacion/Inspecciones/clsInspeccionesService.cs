@@ -15,8 +15,13 @@ namespace IAAutos.Aplicacion.Inspecciones;
 /// <summary>Consultas de solo lectura de inspecciones (listado e informe detallado).</summary>
 public interface IConsultasInspecciones
 {
-    /// <summary>Listado; con <paramref name="soloDeUsuario"/>, solo informes de los viajes de ese usuario.</summary>
-    Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones filtros, Guid? soloDeUsuario, int limite, CancellationToken ct = default);
+    /// <summary>
+    /// Listado; con <paramref name="soloDeUsuario"/>, solo informes de los viajes de ese usuario y, con <paramref name="soloDeCliente"/>, solo los de VIN de ese cliente.
+    /// </summary>
+    Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones filtros, Guid? soloDeUsuario, Guid? soloDeCliente, int limite, CancellationToken ct = default);
+
+    /// <summary>True si la inspeccion es de un VIN de ese cliente.</summary>
+    Task<bool> EsDeClienteAsync(Guid inspeccionId, Guid clienteId, CancellationToken ct = default);
 
     Task<InformeDetalleDto?> ObtenerInformeAsync(Guid id, CancellationToken ct = default);
 
@@ -144,7 +149,7 @@ public sealed class clsInspeccionesService(
     }
 
     public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspeccionesRequest solicitud, CancellationToken ct = default) =>
-        await consultas.ListarAsync(await ParsearFiltrosAsync(solicitud, ct), actual.SoloSusViajes(), LIMITE_LISTADO, ct);
+        await consultas.ListarAsync(await ParsearFiltrosAsync(solicitud, ct), actual.SoloSusViajes(), actual.ClienteRestringido(), LIMITE_LISTADO, ct);
 
     /// <summary>
     /// Los hallazgos previos del VIN de la inspeccion, para que el cliente proponga un hallazgo nuevo como preexistente. Solo inspector y administrador; el inspector
@@ -163,14 +168,18 @@ public sealed class clsInspeccionesService(
             }
         }
 
+        await AsegurarClienteAsync(inspeccionId, ct);
         return await consultas.ObtenerHallazgosPreviosAsync(inspeccionId, ct);
     }
 
-    /// <summary>Informe completo. Inspectores y conductores solo abren los informes de sus viajes (403 si es de otro).</summary>
+    /// <summary>
+    /// Informe completo. Inspectores y conductores solo abren los informes de sus viajes y quien se limita a su cliente, los de VIN de su cliente (403 si es de otro).
+    /// </summary>
     public async Task<InformeDetalleDto> ObtenerInformeAsync(Guid id, CancellationToken ct = default)
     {
         var informe = await consultas.ObtenerInformeAsync(id, ct)
             ?? throw new clsEntidadNoEncontradaException($"Inspección {id} no encontrada");
+        await AsegurarClienteAsync(id, ct);
         if (actual.SoloSusViajes() is { } usuarioViaje)
         {
             var viaje = await viajes.ObtenerPorIdAsync(informe.ViajeId, ct);
@@ -410,6 +419,15 @@ public sealed class clsInspeccionesService(
             throw new clsValidacionException(
                 "Datos inválidos",
                 new Dictionary<string, object> { ["formErrors"] = Array.Empty<string>(), ["fieldErrors"] = deCatalogo });
+        }
+    }
+
+    /// <summary>Quien se limita a su cliente solo abre inspecciones de VIN de su cliente (403 si es de otro).</summary>
+    private async Task AsegurarClienteAsync(Guid inspeccionId, CancellationToken ct)
+    {
+        if (actual.ClienteRestringido() is { } cliente && !await consultas.EsDeClienteAsync(inspeccionId, cliente, ct))
+        {
+            throw new clsProhibidoException("La inspección es de un VIN de otro cliente");
         }
     }
 
