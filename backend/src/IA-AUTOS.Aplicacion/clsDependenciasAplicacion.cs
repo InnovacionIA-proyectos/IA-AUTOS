@@ -49,6 +49,7 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsSeguimientoService>();
         servicios.AddScoped<clsHallazgosService>();
         servicios.AddScoped<clsNoSaleService>();
+        servicios.AddScoped<clsNotasAclaratoriasService>();
         servicios.AddScoped<clsConductorService>();
         servicios.AddScoped<clsEmisorNotificaciones>();
         servicios.AddScoped<clsNotificacionesService>();

@@ -2546,6 +2546,131 @@
         ]
       }
     },
+    "/api/hallazgos/{id}/notas": {
+      "post": {
+        "tags": [
+          "Hallazgos"
+        ],
+        "operationId": "Hallazgos_AgregarNota",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgregarNotaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "get": {
+        "tags": [
+          "Hallazgos"
+        ],
+        "operationId": "Hallazgos_ListarNotas",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/hallazgos/{id}/revision": {
       "post": {
         "tags": [
@@ -3014,6 +3139,131 @@
         ]
       }
     },
+    "/api/inspecciones/{id}/notas": {
+      "post": {
+        "tags": [
+          "Inspecciones"
+        ],
+        "operationId": "Inspecciones_AgregarNota",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgregarNotaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "get": {
+        "tags": [
+          "Inspecciones"
+        ],
+        "operationId": "Inspecciones_ListarNotas",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/inspecciones/{id}/hallazgos-previos": {
       "get": {
         "tags": [
@@ -3239,6 +3489,131 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CerrarInspeccionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/inspecciones/{id}/transferencia/notas": {
+      "post": {
+        "tags": [
+          "Transferencias"
+        ],
+        "operationId": "Transferencias_AgregarNota",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgregarNotaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "get": {
+        "tags": [
+          "Transferencias"
+        ],
+        "operationId": "Transferencias_ListarNotas",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/NotaAclaratoriaDto"
+                  }
                 }
               }
             }
@@ -4428,6 +4803,20 @@
             "type": [
               "null",
               "boolean"
+            ]
+          }
+        }
+      },
+      "AgregarNotaRequest": {
+        "required": [
+          "texto"
+        ],
+        "type": "object",
+        "properties": {
+          "texto": {
+            "type": [
+              "null",
+              "string"
             ]
           }
         }
@@ -6136,7 +6525,10 @@
             }
           },
           "notas_aclaratorias": {
-            "type": "array"
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotaAclaratoriaDto"
+            }
           },
           "vin": {
             "type": "string"
@@ -6899,7 +7291,8 @@
           "cerrada_at",
           "version",
           "corrige_inspeccion_id",
-          "momento_nombre"
+          "momento_nombre",
+          "notas_aclaratorias"
         ],
         "type": "object",
         "properties": {
@@ -7061,6 +7454,12 @@
           },
           "momento_nombre": {
             "type": "string"
+          },
+          "notas_aclaratorias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotaAclaratoriaDto"
+            }
           }
         }
       },
@@ -7598,7 +7997,8 @@
           "momento_nombre",
           "hallazgos",
           "evidencias",
-          "transferencia"
+          "transferencia",
+          "notas_aclaratorias"
         ],
         "type": "object",
         "properties": {
@@ -7712,6 +8112,12 @@
                 "$ref": "#/components/schemas/TransferenciaDto"
               }
             ]
+          },
+          "notas_aclaratorias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotaAclaratoriaDto"
+            }
           }
         }
       },
@@ -8114,6 +8520,54 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "NotaAclaratoriaDto": {
+        "required": [
+          "id",
+          "entidad",
+          "entidad_id",
+          "autor_id",
+          "autor_nombre",
+          "autor_rol",
+          "texto",
+          "created_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "entidad": {
+            "type": "string"
+          },
+          "entidad_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "autor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "autor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "autor_rol": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "texto": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time"
           }
         }
       },
@@ -9265,7 +9719,8 @@
           "motivo_no_firma",
           "testigo_usuario_id",
           "testigo_nombre",
-          "evidencia_constancia_id"
+          "evidencia_constancia_id",
+          "notas_aclaratorias"
         ],
         "type": "object",
         "properties": {
@@ -9382,6 +9837,12 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "notas_aclaratorias": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotaAclaratoriaDto"
+            }
           }
         }
       },

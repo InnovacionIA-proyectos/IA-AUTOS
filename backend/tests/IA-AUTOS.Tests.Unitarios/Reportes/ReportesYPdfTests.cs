@@ -137,7 +137,8 @@ public class GeneradorPdfInventarioTests
                         Guid.NewGuid(), Guid.NewGuid(), null, "golpe", "5_10cm", null, null, null, "frente", null, parte, null, "v2", "V2", null, "inspector", null, false, null, null,
                         "pendiente", false, [], null, null, FECHA, FECHA)).ToList(),
                     [],
-                    null),
+                    null,
+                    []),
             ])).ToList();
         return new InventarioDto(Guid.NewGuid(), vin, "Renault", null, null, null, null, "nacional", FECHA, FECHA, etapasDto);
     }

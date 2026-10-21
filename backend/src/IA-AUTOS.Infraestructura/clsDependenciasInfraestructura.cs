@@ -75,6 +75,8 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IConsultasHallazgos, clsConsultasHallazgos>();
         servicios.AddScoped<IConsultasNotificaciones, clsConsultasNotificaciones>();
         servicios.AddScoped<IConsultasAlertas, clsConsultasAlertas>();
+        servicios.AddScoped<IConsultasNotas, clsConsultasNotas>();
+        servicios.AddScoped<INotaAclaratoriaRepository, clsNotaAclaratoriaRepository>();
         servicios.AddScoped<IParametroRepository, clsParametroRepository>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();
         servicios.AddSingleton<IGeneradorPdfInventario, clsGeneradorPdfInventario>();

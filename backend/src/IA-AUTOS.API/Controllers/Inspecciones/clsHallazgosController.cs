@@ -13,7 +13,7 @@ namespace IAAutos.API.Controllers.Inspecciones;
 /// (coordinador de calidad, comercial y administradores, capacidad <c>gestionar_seguimiento</c>).
 /// </summary>
 [Route("api/hallazgos")]
-public sealed class clsHallazgosController(clsSeguimientoService seguimiento, clsHallazgosService hallazgos, clsRevisionService revision) : clsControladorBase
+public sealed class clsHallazgosController(clsSeguimientoService seguimiento, clsHallazgosService hallazgos, clsRevisionService revision, clsNotasAclaratoriasService notas) : clsControladorBase
 {
     /// <summary>
     /// Una pagina de hallazgos (<c>items</c>, <c>total</c>, <c>pagina</c>, <c>tamano</c> hasta 200) con filtros <c>estado_seguimiento</c>, <c>origen</c>, <c>revisado</c> (solo novedades del
@@ -49,6 +49,21 @@ public sealed class clsHallazgosController(clsSeguimientoService seguimiento, cl
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.COMERCIAL, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
     [ProducesResponseType<HallazgoDetalleDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Obtener(Guid id, CancellationToken ct) => Ok(await hallazgos.ObtenerAsync(id, ct));
+
+    /// <summary>
+    /// Agrega una nota aclaratoria al hallazgo (<c>texto</c> de hasta 1000 caracteres), tambien con su inspeccion cerrada: es un registro nuevo y el hallazgo no cambia. Solo el autor de la inspeccion del
+    /// hallazgo, el administrador y el coordinador de calidad de su cliente (403 los demas).
+    /// </summary>
+    [HttpPost("{id:guid}/notas")]
+    [ProducesResponseType<NotaAclaratoriaDto>(StatusCodes.Status201Created)]
+    [CuerpoSolicitud(typeof(AgregarNotaRequest))]
+    public async Task<IActionResult> AgregarNota(Guid id, CancellationToken ct) =>
+        Creado(await notas.AgregarAHallazgoAsync(id, await LeerCuerpoAsync<AgregarNotaRequest>(ct), ct));
+
+    /// <summary>Las notas aclaratorias del hallazgo, de la mas antigua a la mas reciente (el conductor solo las de los hallazgos que registro el).</summary>
+    [HttpGet("{id:guid}/notas")]
+    [ProducesResponseType<IReadOnlyList<NotaAclaratoriaDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListarNotas(Guid id, CancellationToken ct) => Ok(await notas.ListarDeHallazgoAsync(id, ct));
 
     /// <summary>
     /// Revisa el hallazgo que registro el conductor: <c>cuadrante_numero</c> + <c>lado</c> (o <c>zona_provisional</c>), <c>clase_dano</c> y <c>nivel_severidad</c> son obligatorios, <c>tamano_dano</c> corrige el que
