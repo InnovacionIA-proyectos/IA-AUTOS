@@ -29,8 +29,8 @@ Reglas de dependencia:
 - El estado de la red (`estadoRedProvider`) se consume como transversal desde varias funcionalidades, aunque su
   puerto viva en `sync/domain`: `inspecciones` y `catalogos` lo leen para decidir si revalidan. Moverlo a `core`
   queda pendiente; hasta entonces esa es la única dependencia admitida hacia `sync`.
-- `catalogos` no depende de ninguna funcionalidad salvo eso; el resto (`inspecciones`, `vehiculos`) depende de
-  `catalogos` para traducir códigos a etiquetas.
+- `catalogos` solo depende de `auth` (necesita saber si hay sesión antes de pedir nada) y del estado de la red,
+  igual que `sync`. `inspecciones` y `vehiculos` dependen de `catalogos` para traducir códigos a etiquetas.
 - Una feature pequeña no crea capas vacías: `sofasa` y `custodia` tienen un repositorio y una pantalla, y basta.
   Por lo mismo, un valor de catálogo se modela con un único tipo genérico que conserva sus campos, en vez de diez
   clases para diez catálogos de los que hoy se usan tres.
@@ -52,6 +52,8 @@ La lógica con más riesgo (la cola) está en `domain` precisamente para probarl
 
 Etapas, lugares, clases y tamaños de daño, niveles de severidad, vistas de foto y cuadrantes **no son listas fijas**:
 los administra TI o el coordinador de calidad desde el portal y la app los descarga de `GET /api/catalogos`.
+Se guarda el sobre completo, pero hoy la app solo consume etapas, clases y tamaños de daño; las vistas de foto
+las usará S5-HU-24 y los cuadrantes, S6-HU-01.
 
 - La copia vive en `cache_lecturas` bajo una sola clave global, como un JSON `{version, etag, usuarioId, catalogos}`.
   No se creó una tabla propia a propósito: subir `schemaVersion` obliga a una migración de Drift sobre la misma base
@@ -63,8 +65,10 @@ los administra TI o el coordinador de calidad desde el portal y la app los desca
 - Sin copia no se puede cerrar un informe: uno cerrado sin hallazgos diría que el vehículo venía sano.
 - La copia es global, no por usuario, porque la API sirve la misma a todo autenticado. Lleva anotado quién la
   descargó para que, si algún día un catálogo pasa a filtrarse por cliente, no se le muestre a otro.
-- Lo que **sí** queda fijo en el código (`vehiculos/domain/etiquetas.dart`) son los valores permitidos del contrato:
+- Lo que **sí** queda fijo a propósito (`vehiculos/domain/etiquetas.dart`) son los valores permitidos del contrato:
   `operacion`, `estado` de inspección y `rol`. No están en `/api/catalogos` y la API no manda su nombre.
+- Queda fijo lo que **todavía** no se migró: `vehiculos/domain/partes.dart` dibuja el diagrama con una lista de
+  zonas y coordenadas propia. Lo reemplazan los catálogos `cuadrantes` y `cuadrante-vistas` en S6-HU-01.
 
 ## Sesión
 

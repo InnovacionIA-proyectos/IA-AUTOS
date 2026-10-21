@@ -113,9 +113,13 @@ class Catalogos {
 
   /// Valores que se ofrecen en un selector: solo los activos, en su orden.
   ///
-  /// Se ordena aqui aunque la API ya los mande ordenados: asi el orden de la pantalla no depende de una promesa
+  /// Se ordena aquí aunque la API ya los mande ordenados: así el orden de la pantalla no depende de una promesa
   /// del servidor que nada comprueba.
   List<ValorCatalogo> opciones(String catalogo) => _ordenados(todos(catalogo).where((v) => v.activo));
+
+  /// Opciones que además sirven como respuesta: las que tienen `codigo`, que es lo que se guarda en un hallazgo.
+  /// `cuadrantes` y `cuadrante-vistas` no lo traen, y sin esto dos valores sin código se tratarían como el mismo.
+  List<ValorCatalogo> seleccionables(String catalogo) => [...opciones(catalogo).where((v) => v.codigo != null)];
 
   /// Todos los valores, activos e inactivos. Es lo que hay que usar para dibujar informes viejos: un hallazgo
   /// antiguo puede tener una clase que hoy está inactiva.
@@ -137,8 +141,17 @@ class Catalogos {
         },
       };
 
-  static List<ValorCatalogo> _ordenados(Iterable<ValorCatalogo> valores) =>
-      [...valores]..sort((a, b) => a.orden.compareTo(b.orden));
+  /// Ordena por `orden` **conservando el orden del servidor en los empates**. `List.sort` de Dart no es estable y
+  /// `orden` tiene 0 por defecto en la base, así que varios valores creados sin ponerlo empatan: sin desempatar por
+  /// la posición original, los chips saldrían barajados y en distinto orden cada vez.
+  static List<ValorCatalogo> _ordenados(Iterable<ValorCatalogo> valores) {
+    final numerados = [...valores.indexed];
+    numerados.sort((a, b) {
+      final porOrden = a.$2.orden.compareTo(b.$2.orden);
+      return porOrden != 0 ? porOrden : a.$1.compareTo(b.$1);
+    });
+    return [for (final (_, valor) in numerados) valor];
+  }
 
   static Map<String, List<ValorCatalogo>> _leerCatalogos(Object? crudo) {
     if (crudo is! Map) return {};

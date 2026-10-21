@@ -47,6 +47,37 @@ void main() {
       expect([for (final v in catalogos.opciones(Catalogo.clasesDano)) v.codigo], ['primero', 'segundo', 'tercero']);
     });
 
+    test('con el mismo orden se conserva el del servidor, no uno arbitrario', () {
+      // `orden` vale 0 por defecto en la base, así que varios valores creados sin ponerlo empatan. `List.sort` de
+      // Dart no es estable: sin desempatar, los chips saldrían barajados y distinto en cada apertura.
+      final catalogos = Catalogos.desdeRespuesta(
+        respuesta(catalogos: {
+          Catalogo.clasesDano: [for (var i = 0; i < 40; i++) valor('c$i', 'Clase $i')],
+        }),
+        usuarioId: 'u1',
+      );
+
+      expect(
+        [for (final v in catalogos.opciones(Catalogo.clasesDano)) v.codigo],
+        [for (var i = 0; i < 40; i++) 'c$i'],
+      );
+    });
+
+    test('seleccionables deja fuera los valores sin código, que no sirven como respuesta', () {
+      final catalogos = Catalogos.desdeRespuesta(
+        respuesta(catalogos: {
+          Catalogo.clasesDano: [
+            valor('golpe', 'Golpe', orden: 1),
+            {'id': 'x', 'codigo': null, 'nombre': 'Sin código', 'orden': 2, 'activo': true},
+          ],
+        }),
+        usuarioId: 'u1',
+      );
+
+      expect(catalogos.opciones(Catalogo.clasesDano).length, 2);
+      expect([for (final v in catalogos.seleccionables(Catalogo.clasesDano)) v.codigo], ['golpe']);
+    });
+
     test('etiqueta resuelve el nombre, también el de un valor inactivo (informes viejos)', () {
       final catalogos = Catalogos.desdeRespuesta(respuesta(), usuarioId: 'u1');
 

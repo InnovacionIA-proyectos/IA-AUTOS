@@ -106,6 +106,29 @@ void main() {
     expect(enviado(adaptador, 1), '"v1-gzip"');
   });
 
+  test('una copia guardada por una versión anterior, sin etag, se sigue revalidando bien', () async {
+    // Formato de 8b680d2: {version, usuarioId, catalogos}. Al no haber etag se arma desde la versión, que es
+    // exactamente lo que compara el backend.
+    await cache.escribir(
+      CatalogosRepositorio.clave,
+      jsonEncode({
+        'version': 'v1',
+        'usuarioId': 'u1',
+        'catalogos': {
+          Catalogo.clasesDano: [
+            {'id': 'i1', 'codigo': 'golpe', 'nombre': 'Golpe', 'orden': 1, 'activo': true},
+          ],
+        },
+      }),
+    );
+    final adaptador = AdaptadorFalso((opciones) => opciones.headers.containsKey('If-None-Match') ? noModificado : cuerpo('v2'));
+
+    final catalogos = await repositorio(adaptador).sincronizar('u1');
+
+    expect(enviado(adaptador, 0), '"v1"', reason: 'la copia vieja debe seguir sirviendo para revalidar');
+    expect(catalogos.version, 'v1', reason: 'el 304 la conserva, no se descarga de nuevo');
+  });
+
   test('una caché ilegible se trata como ausente: se descarga completa, sin condicionar', () async {
     await cache.escribir(CatalogosRepositorio.clave, 'esto no es json');
     final adaptador = AdaptadorFalso((_) => cuerpo('v2'));
@@ -153,6 +176,9 @@ void main() {
       'un objeto sin la clave catalogos': '{"version":"v9"}',
       'catalogos vacio': '{"version":"v9","catalogos":{}}',
       'catalogos que no es un objeto': '{"version":"v9","catalogos":[]}',
+      // Un backend a medio desplegar o una base recién migrada: hay claves, pero ningún valor. Si se guardara,
+      // su ETag haría que la siguiente revalidación respondiera 304 y la copia inservible quedaría clavada.
+      'catalogos con todas las listas vacías': '{"version":"v9","catalogos":{"clases-dano":[],"tamanos-dano":[]}}',
     };
 
     for (final engano in enganos.entries) {

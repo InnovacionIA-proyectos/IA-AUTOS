@@ -111,13 +111,13 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   /// que el vehiculo venia sano.
   bool get _catalogosListos {
     final catalogos = ref.read(catalogosProvider);
-    return catalogos.opciones(Catalogo.clasesDano).isNotEmpty && catalogos.opciones(Catalogo.tamanosDano).isNotEmpty;
+    return catalogos.seleccionables(Catalogo.clasesDano).isNotEmpty && catalogos.seleccionables(Catalogo.tamanosDano).isNotEmpty;
   }
 
   Future<void> _elegirNovedad(String etiqueta, CoordsDiagrama coords) async {
     final catalogos = ref.read(catalogosProvider);
-    final clases = catalogos.opciones(Catalogo.clasesDano);
-    final tamanos = catalogos.opciones(Catalogo.tamanosDano);
+    final clases = catalogos.seleccionables(Catalogo.clasesDano);
+    final tamanos = catalogos.seleccionables(Catalogo.tamanosDano);
     if (clases.isEmpty || tamanos.isEmpty) {
       // Mejor avisar que abrir una hoja sin opciones: los catálogos se descargan al entrar, con señal.
       ScaffoldMessenger.of(context).showSnackBar(
@@ -198,6 +198,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     final tema = Theme.of(context).textTheme;
     final bloqueo = _bloqueo;
     final catalogos = ref.watch(catalogosProvider);
+    final descargandoCatalogos = ref.watch(catalogosControllerProvider).fase == FaseCatalogos.cargando;
 
     return Scaffold(
       appBar: AppBar(title: Text('Informe · ${widget.proceso}')),
@@ -329,8 +330,11 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                   Padding(padding: const EdgeInsets.only(top: Espacio.sm), child: Text(bloqueo.mensaje, textAlign: TextAlign.center, style: tema.bodySmall)),
                   if (bloqueo == BloqueoCierre.sinCatalogos)
                     TextButton(
-                      onPressed: () => ref.read(catalogosControllerProvider.notifier).reintentar(),
-                      child: const Text('Reintentar descarga'),
+                      // Mientras hay una descarga en curso el botón lo dice, para no pulsarlo a ciegas.
+                      onPressed: descargandoCatalogos
+                          ? null
+                          : () => ref.read(catalogosControllerProvider.notifier).reintentar(),
+                      child: Text(descargandoCatalogos ? 'Descargando…' : 'Reintentar descarga'),
                     ),
                 ],
               ],

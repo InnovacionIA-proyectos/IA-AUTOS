@@ -76,11 +76,13 @@ void main() {
     final contenedor = await iniciar(Arnes(), repositorio);
     final controlador = contenedor.read(catalogosControllerProvider.notifier);
 
+    final antes = repositorio.sincronizaciones;
+
     await Future.wait([controlador.cargar(), controlador.cargar(), controlador.cargar()]);
 
-    // La del arranque, mas una sola pasada por las tres simultaneas (la segunda se anota y se repite una vez).
-    expect(repositorio.sincronizaciones, lessThanOrEqualTo(3));
-    expect(repositorio.sincronizaciones, greaterThanOrEqualTo(2));
+    // Las tres simultáneas colapsan en dos pasadas: la que estaba en curso y una repetición por las que llegaron
+    // mientras tanto. Ni tres (se solaparían) ni una (se perdería la del login en el caso real del arranque).
+    expect(repositorio.sincronizaciones - antes, 2);
   });
 
   test('al volver una señal estable se revalida', () async {

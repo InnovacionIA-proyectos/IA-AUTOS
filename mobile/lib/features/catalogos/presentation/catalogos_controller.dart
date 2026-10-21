@@ -72,6 +72,9 @@ class CatalogosController extends Notifier<EstadoCatalogos> {
       return;
     }
     _cargando = true;
+    // Se conserva la copia que ya se esté mostrando: esto solo sirve para que la pantalla sepa que hay algo en
+    // curso y el botón de reintentar dé señal de vida.
+    state = EstadoCatalogos(FaseCatalogos.cargando, state.catalogos);
     try {
       do {
         _pedidoDeNuevo = false;

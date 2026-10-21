@@ -78,7 +78,10 @@ class CatalogosRepositorio {
   Map<String, dynamic> _cuerpo(RespuestaApi respuesta) {
     final datos = respuesta.datos;
     final catalogos = datos is Map<String, dynamic> ? datos['catalogos'] : null;
-    if (catalogos is! Map || catalogos.isEmpty) {
+    // No basta con que haya claves: un backend a medio desplegar o una base recién migrada puede devolver todos
+    // los catálogos en cero. Guardar eso pisa la copia buena y, como la copia nueva trae su ETag, la siguiente
+    // revalidación responde 304 y la deja clavada hasta que cambie la versión en el servidor.
+    if (catalogos is! Map || !catalogos.values.any((v) => v is List && v.isNotEmpty)) {
       throw const FormatException('La respuesta de los catálogos no tiene la forma esperada');
     }
     return datos! as Map<String, dynamic>;
