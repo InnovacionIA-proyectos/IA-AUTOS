@@ -132,18 +132,21 @@ void main() {
     });
   });
 
-  group('etiquetas', () {
-    test('devuelven el valor tal cual si es un catálogo nuevo', () {
-      expect(etiquetar(etiquetaPuntoCustodia, 'cargue'), 'Cargue');
-      expect(etiquetar(etiquetaPuntoCustodia, 'nuevo_punto'), 'nuevo_punto');
+  group('etiquetas fijas del contrato', () {
+    test('devuelven el valor tal cual si no lo conocen', () {
+      expect(etiquetar(etiquetaOperacion, 'importacion'), 'Importación');
+      expect(etiquetar(etiquetaOperacion, 'operacion_nueva'), 'operacion_nueva');
     });
 
-    test('cubren los valores que acepta la API', () {
-      for (final c in ['deformacion', 'rotura', 'cortado', 'perforacion', 'golpe', 'mancha', 'raya_pintar', 'desconchado', 'particulas', 'faltante']) {
-        expect(etiquetaClaseDano.containsKey(c), isTrue, reason: c);
+    test('cubren los valores permitidos del contrato', () {
+      for (final o in ['importacion', 'exportacion', 'nacional']) {
+        expect(etiquetaOperacion.containsKey(o), isTrue, reason: o);
       }
-      for (final t in ['1_5cm', '5_10cm', '10_20cm', 'mas_20cm', 'requiere_reemplazo', 'mas_10_particulas']) {
-        expect(etiquetaTamanoDano.containsKey(t), isTrue, reason: t);
+      for (final e in ['borrador', 'cerrada']) {
+        expect(etiquetaEstadoInspeccion.containsKey(e), isTrue, reason: e);
+      }
+      for (final r in ['inspector', 'conductor', 'coordinador_calidad', 'comercial', 'admin', 'super_admin']) {
+        expect(etiquetaRol.containsKey(r), isTrue, reason: r);
       }
     });
   });

@@ -145,7 +145,7 @@ class _FilaInspeccion extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (item.vin != null) TextoMono(item.vin!),
-                Text('${etiquetar(etiquetaMomento, item.momento)} · ${formatearFechaIso(item.fecha)}', style: tema.bodySmall),
+                Text('${item.momentoNombre} · ${formatearFechaIso(item.fecha)}', style: tema.bodySmall),
               ],
             ),
           ),

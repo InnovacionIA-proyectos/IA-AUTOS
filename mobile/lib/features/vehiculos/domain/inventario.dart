@@ -34,6 +34,7 @@ class InspeccionVista {
   const InspeccionVista({
     required this.id,
     required this.momento,
+    required this.momentoNombre,
     required this.fecha,
     required this.estado,
     this.notas,
@@ -45,6 +46,7 @@ class InspeccionVista {
   factory InspeccionVista.fromJson(Map<String, dynamic> json) => InspeccionVista(
         id: json['id'] as String,
         momento: json['momento'] as String,
+        momentoNombre: json['momento_nombre'] as String? ?? json['momento'] as String,
         fecha: DateTime.parse(json['fecha'] as String),
         estado: json['estado'] as String,
         notas: json['notas'] as String?,
@@ -54,7 +56,13 @@ class InspeccionVista {
       );
 
   final String id;
+
+  /// Codigo del momento (`salida` o `llegada`).
   final String momento;
+
+  /// Texto listo para mostrar que manda la API («Inspección de salida»). No es un catalogo administrable.
+  final String momentoNombre;
+
   final DateTime fecha;
   final String estado;
   final String? notas;

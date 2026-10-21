@@ -11,8 +11,9 @@ import '../../../core/errores/error_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
+import '../../catalogos/domain/catalogos.dart';
+import '../../catalogos/presentation/catalogos_controller.dart';
 import '../../vehiculos/domain/coords_diagrama.dart';
-import '../../vehiculos/domain/etiquetas.dart';
 import '../../vehiculos/presentation/diagrama_vehiculo.dart';
 import '../domain/foto_local.dart';
 import '../domain/hallazgo_local.dart';
@@ -107,7 +108,18 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   }
 
   Future<void> _elegirNovedad(String etiqueta, CoordsDiagrama coords) async {
-    final dano = await pedirDano(context, titulo: etiqueta);
+    final catalogos = ref.read(catalogosProvider);
+    final clases = catalogos.opciones(Catalogo.clasesDano);
+    final tamanos = catalogos.opciones(Catalogo.tamanosDano);
+    if (clases.isEmpty || tamanos.isEmpty) {
+      // Mejor avisar que abrir una hoja sin opciones: los catálogos se descargan al entrar, con señal.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Los catálogos de daño aún no se han descargado. Conéctate e inténtalo de nuevo.')),
+      );
+      return;
+    }
+
+    final dano = await pedirDano(context, titulo: etiqueta, clases: clases, tamanos: tamanos);
     if (dano == null || !mounted) return;
     setState(() => _hallazgos.add(HallazgoLocal(parte: etiqueta, clase: dano.clase, tamano: dano.tamano, coords: coords)));
   }
@@ -177,6 +189,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
     final bloqueo = _bloqueo;
+    final catalogos = ref.watch(catalogosProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text('Informe · ${widget.proceso}')),
@@ -226,7 +239,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                       children: [
                         Expanded(
                           child: Text(
-                            '• ${_hallazgos[i].parte}: ${etiquetar(etiquetaClaseDano, _hallazgos[i].clase)} (${etiquetar(etiquetaTamanoDano, _hallazgos[i].tamano)})',
+                            '• ${_hallazgos[i].parte}: ${catalogos.etiqueta(Catalogo.clasesDano, _hallazgos[i].clase)} (${catalogos.etiqueta(Catalogo.tamanosDano, _hallazgos[i].tamano)})',
                             style: tema.bodySmall?.copyWith(color: Colores.textoPrimario),
                           ),
                         ),

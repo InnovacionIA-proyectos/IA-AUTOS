@@ -8,6 +8,8 @@ import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../catalogos/domain/catalogos.dart';
+import '../../catalogos/presentation/catalogos_controller.dart';
 import '../domain/etiquetas.dart';
 import '../domain/inventario.dart';
 import '../providers.dart';
@@ -66,6 +68,7 @@ class _Detalle extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
+    final catalogos = ref.watch(catalogosProvider);
     final ultima = inventario.ultimaInspeccion;
     final vinRuta = Uri.encodeComponent(inventario.vin);
 
@@ -100,10 +103,11 @@ class _Detalle extends ConsumerWidget {
           for (final etapa in inventario.etapas) ...[
             _TarjetaEtapa(
               etapa: etapa,
+              procesoNombre: catalogos.etiqueta(Catalogo.etapas, etapa.proceso),
               accion: accionDeEtapa(etapa, inventario),
-              alCapturar: () => alIr('/inspecciones/vin/$vinRuta/captura/${etapa.id}?proceso=${Uri.encodeQueryComponent(etiquetar(etiquetaPuntoCustodia, etapa.proceso))}'),
+              alCapturar: () => alIr('/inspecciones/vin/$vinRuta/captura/${etapa.id}?proceso=${Uri.encodeQueryComponent(catalogos.etiqueta(Catalogo.etapas, etapa.proceso))}'),
               alFirmar: (accion) => alIr(
-                '/inspecciones/vin/$vinRuta/firma/${accion.inspeccionId}?proceso=${Uri.encodeQueryComponent(etiquetar(etiquetaPuntoCustodia, etapa.proceso))}&soloFirma=${accion.soloFirma ? 1 : 0}',
+                '/inspecciones/vin/$vinRuta/firma/${accion.inspeccionId}?proceso=${Uri.encodeQueryComponent(catalogos.etiqueta(Catalogo.etapas, etapa.proceso))}&soloFirma=${accion.soloFirma ? 1 : 0}',
               ),
             ),
             const SizedBox(height: Espacio.sm),
@@ -122,6 +126,7 @@ class _UltimoInforme extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
+    final catalogos = ref.watch(catalogosProvider);
     final apiUrl = ref.watch(entornoProvider).apiUrl;
     final token = ref.watch(authControllerProvider.select((e) => e.sesion?.token));
     final fotos = [for (final e in inspeccion.evidencias) if (resolverUrlImagen(apiUrl, e.url) != null) resolverUrlImagen(apiUrl, e.url)!];
@@ -134,7 +139,7 @@ class _UltimoInforme extends ConsumerWidget {
             children: [
               Expanded(
                 child: Text(
-                  '${etiquetar(etiquetaPuntoCustodia, etapa.proceso)} · ${etiquetar(etiquetaMomento, inspeccion.momento)}',
+                  '${catalogos.etiqueta(Catalogo.etapas, etapa.proceso)} · ${inspeccion.momentoNombre}',
                   style: tema.titleMedium?.copyWith(fontSize: 15),
                 ),
               ),
@@ -173,7 +178,7 @@ class _UltimoInforme extends ConsumerWidget {
             Text('Sin hallazgos registrados.', style: tema.bodySmall)
           else
             for (final h in inspeccion.hallazgos)
-              Text('• ${h.parte}: ${etiquetar(etiquetaClaseDano, h.clase)} (${etiquetar(etiquetaTamanoDano, h.tamano)})', style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
+              Text('• ${h.parte}: ${catalogos.etiqueta(Catalogo.clasesDano, h.clase)} (${catalogos.etiqueta(Catalogo.tamanosDano, h.tamano)})', style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
           if (inspeccion.notas?.trim().isNotEmpty ?? false) ...[
             const SizedBox(height: Espacio.md),
             Text('Notas adicionales', style: tema.bodySmall),
@@ -186,9 +191,18 @@ class _UltimoInforme extends ConsumerWidget {
 }
 
 class _TarjetaEtapa extends StatelessWidget {
-  const _TarjetaEtapa({required this.etapa, required this.accion, required this.alCapturar, required this.alFirmar});
+  const _TarjetaEtapa({
+    required this.etapa,
+    required this.procesoNombre,
+    required this.accion,
+    required this.alCapturar,
+    required this.alFirmar,
+  });
 
   final EtapaVista etapa;
+
+  /// Nombre de la etapa segun el catalogo, ya resuelto por quien la construye.
+  final String procesoNombre;
   final AccionEtapa accion;
   final VoidCallback alCapturar;
   final void Function(FirmarTransferencia accion) alFirmar;
@@ -202,7 +216,7 @@ class _TarjetaEtapa extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text(etiquetar(etiquetaPuntoCustodia, etapa.proceso), style: tema.titleMedium?.copyWith(fontSize: 15))),
+              Expanded(child: Text(procesoNombre, style: tema.titleMedium?.copyWith(fontSize: 15))),
               Insignia(etapa.requiereInspeccion ? 'Requiere informe' : 'Solo firma', tono: etapa.requiereInspeccion ? TonoInsignia.info : TonoInsignia.neutro),
             ],
           ),
