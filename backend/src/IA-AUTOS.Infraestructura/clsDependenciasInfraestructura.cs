@@ -64,6 +64,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IConsultasViajes, clsConsultasViajes>();
         servicios.AddScoped<IConsultasInspecciones, clsConsultasInspecciones>();
         servicios.AddScoped<IDescriptorHallazgos, clsDescriptorHallazgos>();
+        servicios.AddScoped<IConsultasHallazgos, clsConsultasHallazgos>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();
         servicios.AddSingleton<IGeneradorPdfInventario, clsGeneradorPdfInventario>();
         servicios.AddSingleton<IGeneradorPdfConstancia, clsGeneradorPdfConstancia>();

@@ -1900,6 +1900,219 @@
         ]
       }
     },
+    "/api/hallazgos": {
+      "get": {
+        "tags": [
+          "Hallazgos"
+        ],
+        "operationId": "Hallazgos_Listar",
+        "parameters": [
+          {
+            "name": "estado_seguimiento",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origen",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "revisado",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "viaje_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "vin",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inspeccion_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nivel",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cuadrante_numero",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lado",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "proceso",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orden",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "tamano",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoHallazgosDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoHallazgosDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoHallazgosDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/hallazgos/{id}": {
+      "get": {
+        "tags": [
+          "Hallazgos"
+        ],
+        "operationId": "Hallazgos_Obtener",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoDetalleDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoDetalleDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoDetalleDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/hallazgos/{id}/seguimiento": {
       "post": {
         "tags": [
@@ -5359,6 +5572,201 @@
           }
         }
       },
+      "HallazgoDetalleDto": {
+        "required": [
+          "seguimiento",
+          "notas_aclaratorias"
+        ],
+        "type": "object",
+        "properties": {
+          "seguimiento": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SeguimientoDto"
+            }
+          },
+          "notas_aclaratorias": {
+            "type": "array"
+          },
+          "vin": {
+            "type": "string"
+          },
+          "viaje_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proceso": {
+            "type": "string"
+          },
+          "momento": {
+            "type": "string"
+          },
+          "inspeccion_estado": {
+            "type": "string"
+          },
+          "cerrada_at": {
+            "format": "date-time"
+          },
+          "evidencia": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EvidenciaDto"
+              }
+            ]
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inspeccion_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parte_vehiculo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clase_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tamano_dano": {
+            "type": "string"
+          },
+          "coords_diagrama": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CoordsDiagramaDto"
+              }
+            ]
+          },
+          "cuadrante_numero": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "lado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona_provisional": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cuadrante_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo_novedad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_severidad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_accion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "origen": {
+            "type": "string"
+          },
+          "nota": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "es_preexistente": {
+            "type": "boolean"
+          },
+          "hallazgo_origen_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "confirmado_por": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "estado_seguimiento": {
+            "type": "string"
+          },
+          "evidencia_completa": {
+            "type": "boolean"
+          },
+          "evidencia_faltante": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revisado_por": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "revisado_at": {
+            "format": "date-time"
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
       "HallazgoDto": {
         "required": [
           "id",
@@ -5391,6 +5799,198 @@
         ],
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "inspeccion_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parte_vehiculo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clase_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tamano_dano": {
+            "type": "string"
+          },
+          "coords_diagrama": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CoordsDiagramaDto"
+              }
+            ]
+          },
+          "cuadrante_numero": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "lado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona_provisional": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cuadrante_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo_novedad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_severidad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_accion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "origen": {
+            "type": "string"
+          },
+          "nota": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "es_preexistente": {
+            "type": "boolean"
+          },
+          "hallazgo_origen_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "confirmado_por": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "estado_seguimiento": {
+            "type": "string"
+          },
+          "evidencia_completa": {
+            "type": "boolean"
+          },
+          "evidencia_faltante": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revisado_por": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "revisado_at": {
+            "format": "date-time"
+          },
+          "created_at": {
+            "format": "date-time"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "HallazgoListadoDto": {
+        "required": [
+          "vin",
+          "viaje_id",
+          "codigo_mtrack",
+          "proceso",
+          "momento",
+          "inspeccion_estado",
+          "cerrada_at",
+          "evidencia"
+        ],
+        "type": "object",
+        "properties": {
+          "vin": {
+            "type": "string"
+          },
+          "viaje_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proceso": {
+            "type": "string"
+          },
+          "momento": {
+            "type": "string"
+          },
+          "inspeccion_estado": {
+            "type": "string"
+          },
+          "cerrada_at": {
+            "format": "date-time"
+          },
+          "evidencia": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EvidenciaDto"
+              }
+            ]
+          },
           "id": {
             "type": "string",
             "format": "uuid"
@@ -6562,6 +7162,35 @@
                 "$ref": "#/components/schemas/TransferenciaDto"
               }
             ]
+          }
+        }
+      },
+      "ListadoHallazgosDto": {
+        "required": [
+          "items",
+          "total",
+          "pagina",
+          "tamano"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HallazgoListadoDto"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pagina": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tamano": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

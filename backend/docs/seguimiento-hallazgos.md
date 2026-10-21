@@ -30,6 +30,11 @@ documento describe el modelo de datos; el modelo del propio hallazgo y de su zon
 - `EvidenciaCompleta` se guarda al cambiar el seguimiento y se recalcula al cerrarse la transferencia de la inspeccion; la API tambien la calcula al leer el hallazgo (`evidencia_faltante`).
 - `POST /api/viajes/{id}/vehiculos/{vin}/no-sale` marca la unidad (columnas de `tblViajeVehiculos`) y agrega una fila `no_sale`; la vista `vwViajesCompletos` deja de contar esa unidad como completa.
 
+## Listado
+
+`GET /api/hallazgos` lee `tblHallazgos` con su inspeccion, etapa, vehiculo, viaje y zona; los indices `IX_tblHallazgos_Zona_Clase` e `IX_tblHallazgos_Seguimiento` sirven a los filtros por zona y por estado de seguimiento y origen.
+El filtro `revisado` usa `RevisadoAt` y solo aplica al origen conductor. Ver [CONTRATO.md](../CONTRATO.md) («Listado de hallazgos»).
+
 ## Patrones por zona
 
 `vwPatronesPorCuadrante` alimenta el mapa de calor y los patrones. Devuelve una fila por zona, proceso, nivel, clase, cliente, operacion y fecha de cierre, con `Total` (cuantos hallazgos).
