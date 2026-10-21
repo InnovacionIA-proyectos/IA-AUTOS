@@ -6,9 +6,14 @@ namespace IAAutos.Infraestructura.Persistencia.Consultas;
 
 internal sealed class clsConsultasSofasa(clsAppDbContext contexto) : IConsultasSofasa
 {
-    public async Task<IReadOnlyList<OrdenSofasaDto>> ListarAsync(FiltrosOrdenesSofasa f, Guid? soloDeUsuario, int limite, CancellationToken ct = default)
+    public async Task<IReadOnlyList<OrdenSofasaDto>> ListarAsync(FiltrosOrdenesSofasa f, Guid? soloDeUsuario, Guid? soloDeCliente, int limite, CancellationToken ct = default)
     {
         var consulta = contexto.OrdenesSofasa.AsNoTracking().AsQueryable();
+        if (soloDeCliente is { } clienteId)
+        {
+            consulta = consulta.Where(o => o.Vin != null && contexto.Vehiculos.Any(v => v.Vin == o.Vin && v.ClienteId == clienteId));
+        }
+
         if (soloDeUsuario is { } usuarioId)
         {
             var viajesPropios = clsAlcanceViajes.Viajes(contexto, usuarioId);

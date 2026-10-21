@@ -218,8 +218,7 @@ public sealed class clsViajesService(
     /// comercial...) solo ve los VIN de su cliente y los viajes que los tienen; el conductor y el inspector, que ven lo asignado a ellos, y el
     /// super administrador ven todo. Nulo si no hay restriccion; sin cliente asignado, <see cref="Guid.Empty"/> (no ve nada).
     /// </summary>
-    private Guid? ClienteRestringido =>
-        actual.Rol is null or clsRol.SUPER_ADMIN || clsRol.VeSoloSusViajes(actual.Rol) ? null : actual.ClienteId ?? Guid.Empty;
+    private Guid? ClienteRestringido => actual.ClienteRestringido();
 
     /// <summary>Inspectores y conductores solo abren los viajes en los que participan; el resto, los de su cliente (el super administrador, todos).</summary>
     private async Task AsegurarAccesoAsync(clsViaje viaje, CancellationToken ct)
@@ -363,7 +362,7 @@ public sealed class clsViajesService(
 
     /// <summary>
     /// <c>clienteId</c> solo lo elige el super administrador; quien tiene su alcance limitado a un cliente (<paramref name="clienteRestringido"/>) siempre
-    /// recibe el suyo, venga o no el filtro (igual que en el listado de usuarios).
+    /// recibe el suyo y pedir otro cliente responde 403 (igual que en el listado de usuarios).
     /// </summary>
     private static FiltrosViajes ParsearFiltros(FiltrosViajesRequest s, Guid? clienteRestringido)
     {
@@ -376,6 +375,11 @@ public sealed class clsViajesService(
         if (errores.Count > 0)
         {
             throw clsErroresCampos.Varios(errores);
+        }
+
+        if (clienteRestringido is { } propio && clienteId is { } otro && otro != propio)
+        {
+            throw new clsProhibidoException("Solo puede consultar lo de su propio cliente");
         }
 
         return new FiltrosViajes(

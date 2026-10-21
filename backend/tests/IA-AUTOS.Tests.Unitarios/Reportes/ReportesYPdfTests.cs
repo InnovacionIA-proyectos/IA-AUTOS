@@ -6,6 +6,7 @@ using IAAutos.Aplicacion.Reportes;
 using IAAutos.Aplicacion.Reportes.DTOReportes;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
 using IAAutos.Infraestructura.Reportes;
+using IAAutos.Tests.Unitarios.Falsos;
 
 namespace IAAutos.Tests.Unitarios.Reportes;
 
@@ -17,14 +18,27 @@ internal sealed class clsConsultasReportesFalsas : IConsultasReportes
 
     public ConteosRechazo Rechazo { get; set; } = new(0, 0, 0, []);
 
-    public Task<(IReadOnlyList<ConteoProcesoDto>, IReadOnlyList<ConteoZonaDto>, IReadOnlyList<ConteoZonaProcesoDto>)> ObtenerPatronesAsync(CancellationToken ct = default) =>
-        Task.FromResult<(IReadOnlyList<ConteoProcesoDto>, IReadOnlyList<ConteoZonaDto>, IReadOnlyList<ConteoZonaProcesoDto>)>(
+    /// <summary>El cliente al que se limito la ultima consulta (nulo: sin restriccion).</summary>
+    public Guid? UltimoCliente { get; private set; }
+
+    public Task<(IReadOnlyList<ConteoProcesoDto>, IReadOnlyList<ConteoZonaDto>, IReadOnlyList<ConteoZonaProcesoDto>)> ObtenerPatronesAsync(Guid? soloDeCliente, CancellationToken ct = default)
+    {
+        UltimoCliente = soloDeCliente;
+        return Task.FromResult<(IReadOnlyList<ConteoProcesoDto>, IReadOnlyList<ConteoZonaDto>, IReadOnlyList<ConteoZonaProcesoDto>)>(
             ([new ConteoProcesoDto("cargue", 3), new ConteoProcesoDto("transporte", 2)], [], []));
+    }
 
-    public Task<(IReadOnlyList<ConteoClaseDto>, IReadOnlyList<ConteoTamanoDto>)> ObtenerAnalisisAsync(CancellationToken ct = default) =>
-        Task.FromResult<(IReadOnlyList<ConteoClaseDto>, IReadOnlyList<ConteoTamanoDto>)>((Clases, Tamanos));
+    public Task<(IReadOnlyList<ConteoClaseDto>, IReadOnlyList<ConteoTamanoDto>)> ObtenerAnalisisAsync(Guid? soloDeCliente, CancellationToken ct = default)
+    {
+        UltimoCliente = soloDeCliente;
+        return Task.FromResult<(IReadOnlyList<ConteoClaseDto>, IReadOnlyList<ConteoTamanoDto>)>((Clases, Tamanos));
+    }
 
-    public Task<ConteosRechazo> ObtenerConteosRechazoAsync(CancellationToken ct = default) => Task.FromResult(Rechazo);
+    public Task<ConteosRechazo> ObtenerConteosRechazoAsync(Guid? soloDeCliente, CancellationToken ct = default)
+    {
+        UltimoCliente = soloDeCliente;
+        return Task.FromResult(Rechazo);
+    }
 }
 
 public class ReportesServiceTests
@@ -32,7 +46,7 @@ public class ReportesServiceTests
     [Fact]
     public async Task El_total_de_patrones_es_la_suma_de_los_procesos()
     {
-        var servicio = new clsReportesService(new clsConsultasReportesFalsas());
+        var servicio = new clsReportesService(new clsConsultasReportesFalsas(), new clsUsuarioActualFalso());
 
         var patrones = await servicio.ObtenerPatronesAsync();
 
@@ -42,7 +56,7 @@ public class ReportesServiceTests
     [Fact]
     public async Task Sin_hallazgos_la_unica_sugerencia_es_que_no_hay_suficientes_datos()
     {
-        var analisis = await new clsReportesService(new clsConsultasReportesFalsas()).ObtenerAnalisisAsync();
+        var analisis = await new clsReportesService(new clsConsultasReportesFalsas(), new clsUsuarioActualFalso()).ObtenerAnalisisAsync();
 
         Assert.Equal(["Sin hallazgos suficientes para sugerir mejoras."], analisis.Sugerencias);
     }
@@ -57,8 +71,8 @@ public class ReportesServiceTests
         };
         var sinReemplazo = new clsConsultasReportesFalsas { Clases = consultas.Clases, Tamanos = [new ConteoTamanoDto("1_5cm", 6)] };
 
-        var con = await new clsReportesService(consultas).ObtenerAnalisisAsync();
-        var sin = await new clsReportesService(sinReemplazo).ObtenerAnalisisAsync();
+        var con = await new clsReportesService(consultas, new clsUsuarioActualFalso()).ObtenerAnalisisAsync();
+        var sin = await new clsReportesService(sinReemplazo, new clsUsuarioActualFalso()).ObtenerAnalisisAsync();
 
         Assert.Equal(2, con.Sugerencias.Count);
         Assert.Contains("\"rotura\" (7)", con.Sugerencias[0]);
@@ -74,7 +88,7 @@ public class ReportesServiceTests
             Rechazo = new ConteosRechazo(10, 7, 4, [new ConteoOperacion("nacional", 3, 1), new ConteoOperacion("importacion", 4, 3)]),
         };
 
-        var tasa = await new clsReportesService(consultas).ObtenerTasaRechazoAsync();
+        var tasa = await new clsReportesService(consultas, new clsUsuarioActualFalso()).ObtenerTasaRechazoAsync();
 
         Assert.Equal(["importacion", "nacional"], tasa.PorOperacion.Select(o => o.Operacion));
         Assert.Equal(75m, tasa.PorOperacion[0].TasaActual);
@@ -93,7 +107,7 @@ public class ReportesServiceTests
     {
         var consultas = new clsConsultasReportesFalsas { Rechazo = new ConteosRechazo(1, 1, 0, [new ConteoOperacion("rara", 1, 0)]) };
 
-        var tasa = await new clsReportesService(consultas).ObtenerTasaRechazoAsync();
+        var tasa = await new clsReportesService(consultas, new clsUsuarioActualFalso()).ObtenerTasaRechazoAsync();
 
         Assert.Equal(0m, tasa.PorOperacion[0].LineaBase);
     }

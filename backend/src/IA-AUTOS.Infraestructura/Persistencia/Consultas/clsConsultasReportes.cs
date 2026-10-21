@@ -11,9 +11,21 @@ internal sealed class clsConsultasReportes(clsAppDbContext contexto) : IConsulta
     // Las agrupaciones se ordenan en la base de datos sobre una proyeccion anonima y se convierten a DTO en memoria
     // (EF no traduce un OrderBy sobre propiedades de un DTO construido despues del Select).
 
-    public async Task<(IReadOnlyList<ConteoProcesoDto>, IReadOnlyList<ConteoZonaDto>, IReadOnlyList<ConteoZonaProcesoDto>)> ObtenerPatronesAsync(CancellationToken ct = default)
+    /// <summary>Las unidades movilizadas (vista de viajes completos); con <paramref name="soloDeCliente"/>, solo las de ese cliente.</summary>
+    private IQueryable<Guid> Movilizados(Guid? soloDeCliente)
     {
-        var movilizados = contexto.Set<clsViajeCompleto>().Select(m => m.VehiculoId);
+        var movilizadas = contexto.Set<clsViajeCompleto>().AsQueryable();
+        if (soloDeCliente is { } clienteId)
+        {
+            movilizadas = movilizadas.Where(m => contexto.Vehiculos.Any(v => v.Id == m.VehiculoId && v.ClienteId == clienteId));
+        }
+
+        return movilizadas.Select(m => m.VehiculoId);
+    }
+
+    public async Task<(IReadOnlyList<ConteoProcesoDto>, IReadOnlyList<ConteoZonaDto>, IReadOnlyList<ConteoZonaProcesoDto>)> ObtenerPatronesAsync(Guid? soloDeCliente, CancellationToken ct = default)
+    {
+        var movilizados = Movilizados(soloDeCliente);
         var hallazgos = from h in contexto.Hallazgos.AsNoTracking()
                         join i in contexto.Inspecciones on h.InspeccionId equals i.Id
                         join e in contexto.Etapas on i.EtapaId equals e.Id
@@ -57,10 +69,10 @@ internal sealed class clsConsultasReportes(clsAppDbContext contexto) : IConsulta
         return zonas.ToDictionary(x => x.Zona.Id, x => clsMapeadorInspecciones.TextoDeZona(x.Zona, x.CuadranteNombre) ?? string.Empty);
     }
 
-    public async Task<(IReadOnlyList<ConteoClaseDto>, IReadOnlyList<ConteoTamanoDto>)> ObtenerAnalisisAsync(CancellationToken ct = default)
+    public async Task<(IReadOnlyList<ConteoClaseDto>, IReadOnlyList<ConteoTamanoDto>)> ObtenerAnalisisAsync(Guid? soloDeCliente, CancellationToken ct = default)
     {
         // A diferencia de los patrones, el analisis cuantifica los hallazgos de unidades movilizadas de cualquier proceso.
-        var movilizados = contexto.Set<clsViajeCompleto>().Select(m => m.VehiculoId);
+        var movilizados = Movilizados(soloDeCliente);
         var hallazgos = from h in contexto.Hallazgos.AsNoTracking()
                         join i in contexto.Inspecciones on h.InspeccionId equals i.Id
                         join e in contexto.Etapas on i.EtapaId equals e.Id
@@ -82,17 +94,18 @@ internal sealed class clsConsultasReportes(clsAppDbContext contexto) : IConsulta
             porTamano.Select(x => new ConteoTamanoDto(x.Key, x.Total)).ToList());
     }
 
-    public async Task<ConteosRechazo> ObtenerConteosRechazoAsync(CancellationToken ct = default)
+    public async Task<ConteosRechazo> ObtenerConteosRechazoAsync(Guid? soloDeCliente, CancellationToken ct = default)
     {
-        var movilizados = contexto.Set<clsViajeCompleto>().Select(m => m.VehiculoId);
+        var movilizados = Movilizados(soloDeCliente);
+        var vehiculosDelAlcance = soloDeCliente is { } clienteId ? contexto.Vehiculos.Where(v => v.ClienteId == clienteId) : contexto.Vehiculos;
         var conHallazgos = (from e in contexto.Etapas
                             join i in contexto.Inspecciones on e.Id equals i.EtapaId
                             join h in contexto.Hallazgos on i.Id equals h.InspeccionId
                             select e.VehiculoId).Distinct();
 
-        var totalVehiculos = await contexto.Vehiculos.CountAsync(ct);
+        var totalVehiculos = await vehiculosDelAlcance.CountAsync(ct);
         var totalMovilizadas = await movilizados.CountAsync(ct);
-        var totalConNovedad = await contexto.Vehiculos.CountAsync(v => conHallazgos.Contains(v.Id), ct);
+        var totalConNovedad = await vehiculosDelAlcance.CountAsync(v => conHallazgos.Contains(v.Id), ct);
 
         // Dos consultas simples (en lugar de un agregado con subconsulta, que SQL Server no admite) y se unen en memoria.
         var totales = await contexto.Vehiculos.AsNoTracking()

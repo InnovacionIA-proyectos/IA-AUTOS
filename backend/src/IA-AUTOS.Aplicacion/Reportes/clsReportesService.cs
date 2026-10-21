@@ -1,3 +1,4 @@
+using IAAutos.Aplicacion.Comun;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Aplicacion.Reportes.DTOReportes;
 using IAAutos.Dominio.Inspecciones;
@@ -7,30 +8,30 @@ namespace IAAutos.Aplicacion.Reportes;
 
 /// <summary>
 /// Consultas analiticas (lecturas dedicadas, sin CQRS general). Todas consideran solo unidades movilizadas, con la misma
-/// definicion que los listados: la vista vwViajesCompletos.
+/// definicion que los listados: la vista vwViajesCompletos. Con <c>soloDeCliente</c> cuentan solo las unidades de ese cliente.
 /// </summary>
 public interface IConsultasReportes
 {
     /// <summary>Hallazgos por proceso (solo cargue, transporte y descargue), por zona y por zona y proceso, de mayor a menor.</summary>
-    Task<(IReadOnlyList<ConteoProcesoDto> PorProceso, IReadOnlyList<ConteoZonaDto> PorZona, IReadOnlyList<ConteoZonaProcesoDto> PorZonaProceso)> ObtenerPatronesAsync(CancellationToken ct = default);
+    Task<(IReadOnlyList<ConteoProcesoDto> PorProceso, IReadOnlyList<ConteoZonaDto> PorZona, IReadOnlyList<ConteoZonaProcesoDto> PorZonaProceso)> ObtenerPatronesAsync(Guid? soloDeCliente, CancellationToken ct = default);
 
-    Task<(IReadOnlyList<ConteoClaseDto> PorClase, IReadOnlyList<ConteoTamanoDto> PorTamano)> ObtenerAnalisisAsync(CancellationToken ct = default);
+    Task<(IReadOnlyList<ConteoClaseDto> PorClase, IReadOnlyList<ConteoTamanoDto> PorTamano)> ObtenerAnalisisAsync(Guid? soloDeCliente, CancellationToken ct = default);
 
-    Task<ConteosRechazo> ObtenerConteosRechazoAsync(CancellationToken ct = default);
+    Task<ConteosRechazo> ObtenerConteosRechazoAsync(Guid? soloDeCliente, CancellationToken ct = default);
 }
 
-public sealed class clsReportesService(IConsultasReportes consultas)
+public sealed class clsReportesService(IConsultasReportes consultas, IUsuarioActual actual)
 {
     public async Task<PatronesDto> ObtenerPatronesAsync(CancellationToken ct = default)
     {
-        var (porProceso, porZona, porZonaProceso) = await consultas.ObtenerPatronesAsync(ct);
+        var (porProceso, porZona, porZonaProceso) = await consultas.ObtenerPatronesAsync(actual.ClienteRestringido(), ct);
         return new PatronesDto(porProceso.Sum(p => p.Total), porProceso, porZona, porZonaProceso);
     }
 
     /// <summary>Cuantifica clases y tamanos de dano y propone mejoras sencillas segun las categorias predominantes.</summary>
     public async Task<AnalisisDto> ObtenerAnalisisAsync(CancellationToken ct = default)
     {
-        var (porClase, porTamano) = await consultas.ObtenerAnalisisAsync(ct);
+        var (porClase, porTamano) = await consultas.ObtenerAnalisisAsync(actual.ClienteRestringido(), ct);
         var sugerencias = new List<string>();
 
         if (porClase.Count > 0)
@@ -60,7 +61,7 @@ public sealed class clsReportesService(IConsultasReportes consultas)
     /// </summary>
     public async Task<TasaRechazoDto> ObtenerTasaRechazoAsync(CancellationToken ct = default)
     {
-        var conteos = await consultas.ObtenerConteosRechazoAsync(ct);
+        var conteos = await consultas.ObtenerConteosRechazoAsync(actual.ClienteRestringido(), ct);
 
         var porOperacion = conteos.PorOperacion
             .OrderBy(o => o.Operacion, StringComparer.Ordinal)

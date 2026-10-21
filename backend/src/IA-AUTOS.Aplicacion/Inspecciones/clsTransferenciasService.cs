@@ -90,13 +90,18 @@ public sealed partial class clsTransferenciasService(
 
     /// <summary>
     /// La constancia de la transferencia en PDF: firmas con su fecha e IP, reservas o motivo de la no firma, testigo y fotos. Inspector y
-    /// conductor solo la descargan de sus viajes (403 si es de otro).
+    /// conductor solo la descargan de sus viajes y quien se limita a su cliente, la de VIN de su cliente (403 si es de otro).
     /// </summary>
     public async Task<byte[]> ObtenerConstanciaPdfAsync(Guid inspeccionId, CancellationToken ct = default)
     {
         var informe = await consultas.ObtenerInformeAsync(inspeccionId, ct)
             ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
         await AsegurarVisibleAsync(informe.ViajeId, ct);
+        if (actual.ClienteRestringido() is { } cliente && !await consultas.EsDeClienteAsync(inspeccionId, cliente, ct))
+        {
+            throw new clsProhibidoException("La inspección es de un VIN de otro cliente");
+        }
+
         var transferencia = await transferencias.ObtenerPorInspeccionAsync(inspeccionId, ct)
             ?? throw new clsEntidadNoEncontradaException("La inspección no tiene transferencia de custodia");
 

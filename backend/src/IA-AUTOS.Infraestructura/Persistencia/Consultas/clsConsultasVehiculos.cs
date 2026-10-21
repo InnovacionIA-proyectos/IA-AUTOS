@@ -13,9 +13,14 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
 {
     private const int MAXIMO_BUSQUEDA = 8;
 
-    public async Task<IReadOnlyList<VehiculoBusquedaDto>> BuscarAsync(string termino, Guid? soloDeUsuario, CancellationToken ct = default)
+    public async Task<IReadOnlyList<VehiculoBusquedaDto>> BuscarAsync(string termino, Guid? soloDeUsuario, Guid? soloDeCliente, CancellationToken ct = default)
     {
         var consulta = contexto.Vehiculos.AsNoTracking().Where(v => v.Vin.Contains(termino) || v.Marca.Contains(termino));
+        if (soloDeCliente is { } clienteId)
+        {
+            consulta = consulta.Where(v => v.ClienteId == clienteId);
+        }
+
         if (soloDeUsuario is { } usuarioId)
         {
             var propios = clsAlcanceViajes.Vehiculos(contexto, usuarioId);
@@ -33,12 +38,18 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
         string tipo,
         string? vin,
         Guid? soloDeUsuario,
+        Guid? soloDeCliente,
         int limite,
         int desplazamiento,
         CancellationToken ct = default)
     {
         var movilizados = contexto.Set<clsViajeCompleto>().Select(m => m.VehiculoId);
         var consulta = contexto.Vehiculos.AsNoTracking().AsQueryable();
+        if (soloDeCliente is { } clienteId)
+        {
+            consulta = consulta.Where(v => v.ClienteId == clienteId);
+        }
+
         if (soloDeUsuario is { } usuarioId)
         {
             var propios = clsAlcanceViajes.Vehiculos(contexto, usuarioId);
