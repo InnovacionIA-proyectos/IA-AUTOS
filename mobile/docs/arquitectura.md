@@ -94,6 +94,13 @@ responde `403 PIN_CHANGE_REQUIRED`: el router lleva a cambiarlo y no deja salir 
 token no cambia, solo deja de exigirse el cambio. Tras varios PIN errados la cuenta se bloquea y el servidor dice
 hasta cuándo en `details.bloqueado_hasta`.
 
+Por eso «hay sesión» y «se puede trabajar» no son lo mismo: `EstadoAuth.puedeOperar` distingue las dos cosas y es la
+guarda de todo lo que arranca solo. Con un PIN temporal la cola de envíos y los catálogos **esperan**, porque el 403
+no se arregla reintentando y marcaría como fallido lo que solo estaba a destiempo; al cambiar el PIN los dos
+arrancan por la misma señal, sin reiniciar la app. Si el PIN se reinicia con la sesión ya abierta, el
+`403 PIN_CHANGE_REQUIRED` de cualquier petición marca la sesión y el router lleva a cambiarlo; ese 403 es el único
+que la cola trata como transitorio, para que el envío en curso se reanude después en lugar de perderse.
+
 El token se restaura del almacén seguro al arrancar. Un 401 en una petición autenticada cierra la sesión con un aviso
 (el login no cuenta). `android:allowBackup` está desactivado para que una restauración de copia no deje datos cifrados
 sin su llave.

@@ -29,6 +29,7 @@ class ClienteApi {
     required String baseUrl,
     required this.token,
     this.alNoAutorizado,
+    this.alRequerirCambioDePin,
     Dio? dio,
   }) : _dio = dio ?? Dio() {
     _dio.options
@@ -46,6 +47,10 @@ class ClienteApi {
 
   /// Se invoca cuando la API responde 401 a una petición autenticada (sesión vencida o token inválido).
   final void Function()? alNoAutorizado;
+
+  /// Se invoca cuando la API responde 403 PIN_CHANGE_REQUIRED: un administrador reinició el PIN con la sesión ya
+  /// abierta, así que desde ese momento el resto de la API está cerrada hasta cambiarlo.
+  final void Function()? alRequerirCambioDePin;
 
   Future<dynamic> get(String ruta, {Map<String, dynamic>? query, Map<String, String>? encabezados}) async =>
       (await enviar('GET', ruta, query: query, encabezados: encabezados)).datos;
@@ -88,6 +93,7 @@ class ClienteApi {
     } on DioException catch (e) {
       final error = _aErrorApi(e);
       if (error.status == 401 && jwt != null && !ruta.startsWith('/api/auth/login')) alNoAutorizado?.call();
+      if (error.esCambioPinRequerido) alRequerirCambioDePin?.call();
       throw error;
     }
   }

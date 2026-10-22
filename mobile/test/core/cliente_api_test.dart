@@ -6,9 +6,20 @@ import 'package:traza_autos/core/http/cliente_api.dart';
 
 import '../support/dio_falso.dart';
 
-ClienteApi cliente(AdaptadorFalso adaptador, {String? token = 'jwt-123', void Function()? alNoAutorizado}) {
+ClienteApi cliente(
+  AdaptadorFalso adaptador, {
+  String? token = 'jwt-123',
+  void Function()? alNoAutorizado,
+  void Function()? alRequerirCambioDePin,
+}) {
   final dio = Dio()..httpClientAdapter = adaptador;
-  return ClienteApi(baseUrl: 'https://api.test', token: () async => token, alNoAutorizado: alNoAutorizado, dio: dio);
+  return ClienteApi(
+    baseUrl: 'https://api.test',
+    token: () async => token,
+    alNoAutorizado: alNoAutorizado,
+    alRequerirCambioDePin: alRequerirCambioDePin,
+    dio: dio,
+  );
 }
 
 void main() {
@@ -166,6 +177,18 @@ void main() {
       expect(error!.status, 401);
       expect(avisos, 1);
     });
+
+    test('un 403 PIN_CHANGE_REQUIRED avisa para mandar a cambiar el PIN; otro 403 no', () async {
+      var avisos = 0;
+      final pin = AdaptadorFalso((_) => json(403, {'code': codigoCambioPinRequerido, 'message': 'Cambia tu PIN'}));
+      final otro = AdaptadorFalso((_) => json(403, {'code': 'FORBIDDEN', 'message': 'Sin permiso'}));
+
+      await cliente(pin, alRequerirCambioDePin: () => avisos++).get('/api/viajes/mios').catchError((Object _) => null);
+      expect(avisos, 1);
+
+      await cliente(otro, alRequerirCambioDePin: () => avisos++).get('/api/viajes/mios').catchError((Object _) => null);
+      expect(avisos, 1, reason: 'un 403 de permisos no manda a cambiar el PIN');
+    });
   });
 
   group('clasificación transitoria', () {
@@ -173,6 +196,17 @@ void main() {
       bool t(int s) => ErrorApi(message: '', code: '', status: s).esTransitorio;
       expect([0, 401, 408, 429, 500, 503].every(t), isTrue);
       expect([400, 403, 404, 409, 422].any(t), isFalse);
+    });
+
+    // Es el único 403 que se arregla solo: el envío es correcto y vuelve a servir en cuanto se cambia el PIN.
+    // Sin esto, un reinicio de PIN a mitad de camino deja el informe marcado como fallido.
+    test('el 403 por PIN temporal sí se reintenta, los demás 403 no', () {
+      const pin = ErrorApi(message: '', code: codigoCambioPinRequerido, status: 403);
+      const otro = ErrorApi(message: '', code: 'FORBIDDEN', status: 403);
+      expect(pin.esCambioPinRequerido, isTrue);
+      expect(pin.esTransitorio, isTrue);
+      expect(otro.esCambioPinRequerido, isFalse);
+      expect(otro.esTransitorio, isFalse);
     });
   });
 

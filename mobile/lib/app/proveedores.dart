@@ -27,6 +27,7 @@ final clienteApiProvider = Provider<ClienteApi>((ref) {
     baseUrl: entorno.apiUrl,
     token: () async => ref.read(authControllerProvider).sesion?.token,
     alNoAutorizado: () => ref.read(authControllerProvider.notifier).sesionExpirada(),
+    alRequerirCambioDePin: () => ref.read(authControllerProvider.notifier).requiereCambioDePin(),
   );
 });
 

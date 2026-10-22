@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza_autos/features/auth/presentation/auth_controller.dart';
 import 'package:traza_autos/features/catalogos/domain/catalogos.dart';
 import 'package:traza_autos/features/catalogos/presentation/catalogos_controller.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
@@ -25,6 +26,28 @@ void main() {
     await iniciar(Arnes(sesion: null), repositorio);
 
     expect(repositorio.sincronizaciones, 0);
+  });
+
+  test('con un PIN temporal no se consultan (la API respondería 403)', () async {
+    final repositorio = CatalogosRepositorioFalso()..remoto = catalogosCon('Golpe');
+
+    await iniciar(Arnes(sesion: sesionConPinTemporal), repositorio);
+
+    expect(repositorio.sincronizaciones, 0);
+  });
+
+  // Sin esto el conductor nuevo cambia su PIN, llega a trabajar y la captura le dice que no hay catálogos de daño
+  // hasta que reinicie la app o le vuelva la señal.
+  test('al cambiar el PIN se descargan solos, sin reiniciar la app', () async {
+    final repositorio = CatalogosRepositorioFalso()..remoto = catalogosCon('Golpe');
+    final contenedor = await iniciar(Arnes(sesion: sesionConPinTemporal), repositorio);
+    expect(repositorio.sincronizaciones, 0);
+
+    await contenedor.read(authControllerProvider.notifier).cambiarPin('482915', '730194');
+    await pumpEventQueue();
+
+    expect(repositorio.sincronizaciones, 1);
+    expect(contenedor.read(catalogosControllerProvider).fase, FaseCatalogos.listo);
   });
 
   test('con señal descarga y queda listo', () async {

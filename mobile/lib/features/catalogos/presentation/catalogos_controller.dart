@@ -42,11 +42,10 @@ class CatalogosController extends Notifier<EstadoCatalogos> {
     ref.onDispose(suscripcion.cancel);
 
     // Por transición, no por estado: así la descarga ocurre cuando la sesión ya existe (el login siempre tiene
-    // señal) y nunca durante FaseAuth.cargando, cuando todavía no hay token.
-    ref.listen(authControllerProvider, (anterior, actual) {
-      if (actual.fase == FaseAuth.autenticado && anterior?.fase != FaseAuth.autenticado) {
-        unawaited(cargar());
-      }
+    // señal) y nunca durante FaseAuth.cargando, cuando todavía no hay token. Por `puedeOperar` y no por la fase
+    // porque con un PIN temporal la API también responde 403 aquí; al cambiarlo, esta escucha es la que descarga.
+    ref.listen(authControllerProvider.select((e) => e.puedeOperar), (anterior, actual) {
+      if (actual && anterior != true) unawaited(cargar());
     });
 
     Future.microtask(cargar);
@@ -86,9 +85,10 @@ class CatalogosController extends Notifier<EstadoCatalogos> {
   }
 
   Future<void> _cargar() async {
-    // Sin sesión la API responde 401 y la petición no aporta nada; es la misma guarda que usa la cola.
+    // Sin sesión la API responde 401, y con un PIN temporal 403: en ninguno de los dos casos aporta nada pedir.
+    // Es la misma guarda que usa la cola.
     final autenticacion = ref.read(authControllerProvider);
-    if (autenticacion.fase != FaseAuth.autenticado) return;
+    if (!autenticacion.puedeOperar) return;
     final usuarioId = autenticacion.sesion?.usuario.id;
     if (usuarioId == null) return;
 

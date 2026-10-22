@@ -28,6 +28,11 @@ class Usuario {
   /// El PIN lo asignó o reinició un administrador: hasta cambiarlo, el resto de la API responde 403.
   final bool debeCambiarPin;
 
+  /// Copia con otra marca de cambio de PIN. Es lo único que la app cambia de un usuario ya autenticado, y
+  /// concentrarlo aquí evita que un campo nuevo se pierda en la copia.
+  Usuario conCambioDePin(bool valor) =>
+      Usuario(id: id, nombre: nombre, email: email, rol: rol, cedula: cedula, debeCambiarPin: valor);
+
   Map<String, dynamic> toJson() =>
       {'id': id, 'nombre': nombre, 'email': email, 'rol': rol, 'cedula': cedula, 'debe_cambiar_pin': debeCambiarPin};
 }

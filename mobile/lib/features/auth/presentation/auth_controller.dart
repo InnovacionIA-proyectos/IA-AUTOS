@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errores/error_api.dart';
@@ -14,6 +16,11 @@ class EstadoAuth {
 
   /// Mensaje para mostrar en el login (por ejemplo, "Tu sesión expiró").
   final String? aviso;
+
+  /// Hay sesión **y** ya se puede usar el resto de la API. Con un PIN temporal el servidor responde
+  /// 403 PIN_CHANGE_REQUIRED a todo salvo cambiarlo, así que lo que arranca solo —la cola de envíos y los
+  /// catálogos— debe esperar: si no, gasta intentos y marca como fallido lo que solo estaba a destiempo.
+  bool get puedeOperar => fase == FaseAuth.autenticado && !(sesion?.usuario.debeCambiarPin ?? false);
 }
 
 /// Sesión del usuario: se restaura de forma segura al arrancar, se cierra al vencer el token (401) y nunca se
@@ -88,20 +95,32 @@ class AuthController extends Notifier<EstadoAuth> {
     }
 
     // El token sigue sirviendo: solo deja de exigirse el cambio.
-    final usuario = sesion.usuario;
-    final actualizada = Sesion(
-      token: sesion.token,
-      usuario: Usuario(
-        id: usuario.id,
-        nombre: usuario.nombre,
-        email: usuario.email,
-        rol: usuario.rol,
-        cedula: usuario.cedula,
-      ),
-    );
-    await ref.read(almacenSesionProvider).guardar(actualizada);
+    final actualizada = Sesion(token: sesion.token, usuario: sesion.usuario.conCambioDePin(false));
+    await _guardarTolerante(actualizada);
     state = EstadoAuth(FaseAuth.autenticado, sesion: actualizada);
     return null;
+  }
+
+  /// La API respondió 403 PIN_CHANGE_REQUIRED: a esta persona le reiniciaron el PIN con la sesión abierta. Se
+  /// marca la sesión y el router la lleva a cambiarlo, igual que en el primer ingreso.
+  void requiereCambioDePin() {
+    final sesion = state.sesion;
+    if (sesion == null || sesion.usuario.debeCambiarPin) return;
+    final actualizada = Sesion(token: sesion.token, usuario: sesion.usuario.conCambioDePin(true));
+    unawaited(_guardarTolerante(actualizada));
+    state = EstadoAuth(FaseAuth.autenticado, sesion: actualizada);
+  }
+
+  /// El cambio ya ocurrió en el servidor, así que un fallo del almacén seguro no puede escaparse: dejaría la
+  /// pantalla de cambio de PIN girando sin salida. `guardar` es el único de los tres métodos del almacén que
+  /// lanza; si falla, se borra lo que hubiera para no restaurar al arrancar una sesión con la marca vieja.
+  Future<void> _guardarTolerante(Sesion sesion) async {
+    final almacen = ref.read(almacenSesionProvider);
+    try {
+      await almacen.guardar(sesion);
+    } catch (_) {
+      await almacen.borrar();
+    }
   }
 
   /// «Cuenta bloqueada hasta las 14:35» a partir de `details.bloqueado_hasta`.

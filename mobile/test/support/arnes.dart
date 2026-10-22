@@ -25,16 +25,36 @@ const sesionPrueba = Sesion(
   usuario: Usuario(id: 'u1', nombre: 'Ana Pérez', email: 'ana@boterosoto.com.co', rol: 'inspector'),
 );
 
+/// Personal de campo que entró con un PIN asignado por un administrador: tiene sesión, pero el resto de la API
+/// le responde 403 hasta que lo cambie.
+const sesionConPinTemporal = Sesion(
+  token: 'jwt-pin',
+  usuario: Usuario(
+    id: 'u9',
+    nombre: 'Luis Gómez',
+    email: '',
+    rol: 'conductor',
+    cedula: '1234567',
+    debeCambiarPin: true,
+  ),
+);
+
 class AlmacenSesionEnMemoria implements AlmacenSesion {
   AlmacenSesionEnMemoria([this.sesion]);
 
   Sesion? sesion;
 
+  /// Keystore no disponible: `guardar` lanza, como puede pasar de verdad en un dispositivo.
+  bool fallaAlGuardar = false;
+
   @override
   Future<Sesion?> leer() async => sesion;
 
   @override
-  Future<void> guardar(Sesion s) async => sesion = s;
+  Future<void> guardar(Sesion s) async {
+    if (fallaAlGuardar) throw Exception('almacén no disponible');
+    sesion = s;
+  }
 
   @override
   Future<void> borrar() async => sesion = null;

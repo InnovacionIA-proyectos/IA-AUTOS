@@ -1,22 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
-import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/auth/presentation/auth_controller.dart';
 
 import '../support/arnes.dart';
-
-const sesionConPinTemporal = Sesion(
-  token: 'jwt-pin',
-  usuario: Usuario(
-    id: 'u9',
-    nombre: 'Luis Gómez',
-    email: '',
-    rol: 'conductor',
-    cedula: '1234567',
-    debeCambiarPin: true,
-  ),
-);
 
 ErrorApi bloqueada(DateTime hasta) => ErrorApi(
       message: 'Cuenta bloqueada',
@@ -130,6 +117,46 @@ void main() {
 
       expect(await contenedor.read(authControllerProvider.notifier).cambiarPin('1', '2'), isNotNull);
       expect(arnes.auth.cambiosDePin, isEmpty);
+    });
+
+    // El PIN ya cambió en el servidor: si además se dejara escapar el fallo del almacén, la pantalla se quedaría
+    // con el botón deshabilitado y sin forma de salir salvo matando la app.
+    test('si el almacén seguro falla igual se sigue adelante, no se queda encerrada', () async {
+      final arnes = Arnes(sesion: sesionConPinTemporal)..almacen.fallaAlGuardar = true;
+      final contenedor = await iniciar(arnes);
+
+      final error = await contenedor.read(authControllerProvider.notifier).cambiarPin('482915', '730194');
+
+      expect(error, isNull);
+      expect(contenedor.read(authControllerProvider).sesion!.usuario.debeCambiarPin, isFalse);
+      expect(contenedor.read(authControllerProvider).puedeOperar, isTrue);
+      expect(arnes.almacen.sesion, isNull, reason: 'mejor entrar de nuevo que restaurar la marca vieja');
+    });
+  });
+
+  group('PIN reiniciado con la sesión abierta', () {
+    test('el 403 del servidor marca la sesión y manda a cambiar el PIN', () async {
+      final arnes = Arnes();
+      final contenedor = await iniciar(arnes);
+      expect(contenedor.read(authControllerProvider).puedeOperar, isTrue);
+
+      contenedor.read(authControllerProvider.notifier).requiereCambioDePin();
+      await pumpEventQueue();
+
+      final estado = contenedor.read(authControllerProvider);
+      expect(estado.fase, FaseAuth.autenticado, reason: 'el token sigue valiendo para cambiar el PIN');
+      expect(estado.sesion!.usuario.debeCambiarPin, isTrue);
+      expect(estado.puedeOperar, isFalse);
+      expect(arnes.almacen.sesion!.usuario.debeCambiarPin, isTrue, reason: 'también al reabrir la app');
+    });
+
+    test('no hace nada sin sesión ni cuando ya estaba marcada', () async {
+      final arnes = Arnes(sesion: null);
+      final contenedor = await iniciar(arnes);
+
+      contenedor.read(authControllerProvider.notifier).requiereCambioDePin();
+
+      expect(contenedor.read(authControllerProvider).fase, FaseAuth.noAutenticado);
     });
   });
 }

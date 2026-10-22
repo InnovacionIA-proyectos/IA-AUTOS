@@ -38,16 +38,16 @@ class SyncController extends Notifier<EstadoSync> {
     });
     ref.onDispose(suscripcion.cancel);
 
-    ref.listen(authControllerProvider, (anterior, actual) {
-      if (actual.fase == FaseAuth.autenticado && anterior?.fase != FaseAuth.autenticado) {
-        unawaited(sincronizar());
-      }
+    // Por `puedeOperar` y no por la fase: quien entra con un PIN temporal tiene sesión pero todavía no puede
+    // enviar nada, y al cambiarlo esta misma escucha es la que arranca la cola.
+    ref.listen(authControllerProvider.select((e) => e.puedeOperar), (anterior, actual) {
+      if (actual && anterior != true) unawaited(sincronizar());
     });
 
     Future.microtask(() async {
       state = state.copiar(online: await red.redEstable());
       await refrescar();
-      if (ref.read(authControllerProvider).fase == FaseAuth.autenticado) await sincronizar();
+      if (ref.read(authControllerProvider).puedeOperar) await sincronizar();
     });
     return const EstadoSync();
   }
@@ -62,7 +62,9 @@ class SyncController extends Notifier<EstadoSync> {
 
   Future<void> sincronizar() async {
     if (state.sincronizando) return;
-    if (ref.read(authControllerProvider).fase != FaseAuth.autenticado) return;
+    // Única guarda de los cuatro disparadores (señal, ingreso, arranque y reintento manual): sin sesión todo
+    // daría 401 y con un PIN temporal todo daría 403, y en ambos casos se gastarían intentos de la cola.
+    if (!ref.read(authControllerProvider).puedeOperar) return;
     state = state.copiar(sincronizando: true);
     try {
       final r = await ref.read(procesadorColaProvider).procesar();

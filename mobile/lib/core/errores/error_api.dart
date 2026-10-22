@@ -1,3 +1,7 @@
+/// Código con el que la API responde 403 a todo mientras el PIN sea temporal (lo asignó o lo reinició un
+/// administrador). Lo único que lo levanta es cambiar el PIN.
+const codigoCambioPinRequerido = 'PIN_CHANGE_REQUIRED';
+
 /// Error devuelto por la API (cuerpo uniforme `{error, code, message, timestamp, details}`) o de red.
 ///
 /// `status == 0` significa que la petición no llegó al servidor (sin red, tiempo agotado, DNS...).
@@ -18,9 +22,13 @@ class ErrorApi implements Exception {
   final int status;
   final Object? details;
 
-  /// Los errores que merecen reintento: red, 401, 408, 429 y 5xx.
-  /// El resto (400, 403, 404, 409, 422...) no se arregla reintentando.
-  bool get esTransitorio => status == 0 || status == 401 || status == 408 || status == 429 || status >= 500;
+  /// El PIN pasó a ser temporal: la petición es correcta y volverá a servir en cuanto se cambie.
+  bool get esCambioPinRequerido => status == 403 && code == codigoCambioPinRequerido;
+
+  /// Los errores que merecen reintento: red, 401, 408, 429, 5xx y el 403 por PIN temporal.
+  /// El resto (400, los demás 403, 404, 409, 422...) no se arregla reintentando.
+  bool get esTransitorio =>
+      status == 0 || status == 401 || status == 408 || status == 429 || status >= 500 || esCambioPinRequerido;
 
   @override
   String toString() => 'ErrorApi($status $code: $message)';
