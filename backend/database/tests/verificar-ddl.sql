@@ -866,6 +866,23 @@ CLOSE cParam;
 DEALLOCATE cParam;
 DELETE FROM dbo.tblParametros WHERE Clave LIKE 'zz_param_%';
 
+-- 7i) Vistas de los indicadores del tablero: existen con sus columnas y se pueden consultar (sus formulas las prueban las pruebas de integracion con datos)
+INSERT #r SELECT N'Vistas de indicadores: las cinco existen', CASE WHEN (SELECT COUNT(*) FROM sys.views WHERE name IN (N'vwCobertura', N'vwAdopcion', N'vwTiempoCaptura', N'vwAveriasPorConfiguracion', N'vwIndicadorDiario')) = 5 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Vistas de indicadores: tienen sus columnas',
+    CASE WHEN COL_LENGTH(N'dbo.vwCobertura', N'RegistrosCerrados') IS NOT NULL AND COL_LENGTH(N'dbo.vwCobertura', N'Completa') IS NOT NULL AND COL_LENGTH(N'dbo.vwCobertura', N'FechaDespacho') IS NOT NULL
+          AND COL_LENGTH(N'dbo.vwAdopcion', N'Programados') IS NOT NULL AND COL_LENGTH(N'dbo.vwAdopcion', N'ConSalidaDigital') IS NOT NULL AND COL_LENGTH(N'dbo.vwAdopcion', N'Porcentaje') IS NOT NULL
+          AND COL_LENGTH(N'dbo.vwTiempoCaptura', N'Minutos') IS NOT NULL AND COL_LENGTH(N'dbo.vwTiempoCaptura', N'Proceso') IS NOT NULL
+          AND COL_LENGTH(N'dbo.vwAveriasPorConfiguracion', N'ConductorCedula') IS NOT NULL AND COL_LENGTH(N'dbo.vwAveriasPorConfiguracion', N'NivelSeveridad') IS NOT NULL AND COL_LENGTH(N'dbo.vwAveriasPorConfiguracion', N'ZonaNombre') IS NOT NULL
+          AND COL_LENGTH(N'dbo.vwIndicadorDiario', N'Despachados') IS NOT NULL AND COL_LENGTH(N'dbo.vwIndicadorDiario', N'ConNovedad') IS NOT NULL AND COL_LENGTH(N'dbo.vwIndicadorDiario', N'Porcentaje') IS NOT NULL THEN 1 ELSE 0 END, NULL;
+DECLARE @vistasOk int = 1;
+BEGIN TRY
+    EXEC (N'SELECT COUNT(*) FROM dbo.vwCobertura; SELECT COUNT(*) FROM dbo.vwAdopcion; SELECT COUNT(*) FROM dbo.vwTiempoCaptura; SELECT COUNT(*) FROM dbo.vwAveriasPorConfiguracion; SELECT COUNT(*) FROM dbo.vwIndicadorDiario') WITH RESULT SETS UNDEFINED;
+END TRY
+BEGIN CATCH
+    SET @vistasOk = 0;
+END CATCH
+INSERT #r SELECT N'Vistas de indicadores: se consultan sin error', @vistasOk, NULL;
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';

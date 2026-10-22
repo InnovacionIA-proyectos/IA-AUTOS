@@ -79,6 +79,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IConsultasNotas, clsConsultasNotas>();
         servicios.AddScoped<IOrigenAuditoria, clsOrigenAuditoria>();
         servicios.AddScoped<IConsultasAuditoria, clsConsultasAuditoria>();
+        servicios.AddScoped<IConsultasIndicadores, clsConsultasIndicadores>();
         servicios.AddScoped<INotaAclaratoriaRepository, clsNotaAclaratoriaRepository>();
         servicios.AddScoped<IParametroRepository, clsParametroRepository>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();

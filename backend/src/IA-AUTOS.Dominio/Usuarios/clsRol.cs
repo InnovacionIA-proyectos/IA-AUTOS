@@ -41,6 +41,9 @@ public static class clsRol
     /// </summary>
     public static readonly string[] VER_ALERTAS = [COORDINADOR_CALIDAD, ADMIN, SUPER_ADMIN, INSPECTOR, CONDUCTOR];
 
+    /// <summary>Ver el tablero y los reportes (cobertura, adopcion, tiempo de captura, averias, patrones, indicador diario): el coordinador de calidad, el comercial y los administradores. El inspector y el conductor no.</summary>
+    public static readonly string[] VER_REPORTES = [COORDINADOR_CALIDAD, COMERCIAL, ADMIN, SUPER_ADMIN];
+
     /// <summary>Responder la novedad que registro el conductor: el coordinador de calidad y los administradores.</summary>
     public static readonly string[] RESPONDER_NOVEDADES = [COORDINADOR_CALIDAD, ADMIN, SUPER_ADMIN];
 

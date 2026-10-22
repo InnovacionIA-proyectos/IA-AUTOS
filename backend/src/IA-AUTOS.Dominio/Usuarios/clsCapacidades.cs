@@ -25,7 +25,8 @@ public static class clsCapacidades
             return [];
         }
 
-        var capacidades = new List<string> { VER_INSPECCIONES, VER_VIAJES, VER_REPORTES };
+        var capacidades = new List<string> { VER_INSPECCIONES, VER_VIAJES };
+        AgregarSi(capacidades, clsRol.VER_REPORTES, rol, VER_REPORTES);
         AgregarSi(capacidades, clsRol.ESCRITURA, rol, REGISTRAR_INSPECCIONES);
         AgregarSi(capacidades, clsRol.GESTION_VIAJES, rol, GESTIONAR_VIAJES);
         AgregarSi(capacidades, clsRol.GESTION_USUARIOS, rol, GESTIONAR_USUARIOS);

@@ -38,7 +38,7 @@ internal static class clsOpenApi
             {
                 Title = "IA-AUTOS API",
                 Version = "1.0.0",
-                Description = "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Los campos van en snake_case, salvo Reportes y la respuesta de la ingesta, en camelCase.",
+                Description = "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Los campos van en snake_case, salvo los reportes anteriores (patrones, analisis y rechazo) y la respuesta de la ingesta, en camelCase.",
             };
             documento.Servers = [];
             documento.Components ??= new OpenApiComponents();
@@ -63,6 +63,12 @@ internal static class clsOpenApi
                     : descriptor.ControllerName;
                 operacion.Tags = new HashSet<OpenApiTagReference> { new(controlador) };
                 operacion.OperationId = $"{controlador}_{descriptor.ActionName}";
+
+                // Una ruta marcada [Obsolete] se publica como deprecated: se retirara (y responde el encabezado Deprecation).
+                if (descriptor.MethodInfo.IsDefined(typeof(ObsoleteAttribute), false))
+                {
+                    operacion.Deprecated = true;
+                }
 
                 var cuerpo = descriptor.MethodInfo.GetCustomAttributes(typeof(CuerpoSolicitudAttribute), false)
                     .Cast<CuerpoSolicitudAttribute>()

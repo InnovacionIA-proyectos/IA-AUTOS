@@ -2,7 +2,7 @@
   "openapi": "3.1.1",
   "info": {
     "title": "IA-AUTOS API",
-    "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Los campos van en snake_case, salvo Reportes y la respuesta de la ingesta, en camelCase.",
+    "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Los campos van en snake_case, salvo los reportes anteriores (patrones, analisis y rechazo) y la respuesta de la ingesta, en camelCase.",
     "version": "1.0.0"
   },
   "paths": {
@@ -2006,6 +2006,7 @@
             }
           }
         },
+        "deprecated": true,
         "security": [
           {}
         ]
@@ -2049,6 +2050,7 @@
             }
           }
         },
+        "deprecated": true,
         "security": [
           {}
         ]
@@ -2077,6 +2079,654 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TasaRechazoDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/reportes/cobertura": {
+      "get": {
+        "tags": [
+          "ReportesTablero"
+        ],
+        "operationId": "ReportesTablero_Cobertura",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "operacion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "punto_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "marca",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trailer",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "proceso",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nivel",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoberturaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoberturaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoberturaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/reportes/adopcion": {
+      "get": {
+        "tags": [
+          "ReportesTablero"
+        ],
+        "operationId": "ReportesTablero_Adopcion",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "operacion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "punto_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "marca",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trailer",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "proceso",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nivel",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdopcionDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdopcionDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdopcionDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/reportes/tiempo-captura": {
+      "get": {
+        "tags": [
+          "ReportesTablero"
+        ],
+        "operationId": "ReportesTablero_TiempoCaptura",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "operacion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "punto_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "marca",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trailer",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "proceso",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nivel",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/TiempoCapturaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TiempoCapturaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TiempoCapturaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/reportes/averias": {
+      "get": {
+        "tags": [
+          "ReportesTablero"
+        ],
+        "operationId": "ReportesTablero_Averias",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "operacion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "punto_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "marca",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trailer",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "proceso",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nivel",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AveriasDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AveriasDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AveriasDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/reportes/patrones": {
+      "get": {
+        "tags": [
+          "ReportesTablero"
+        ],
+        "operationId": "ReportesTablero_Patrones",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "operacion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "punto_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "marca",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trailer",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "proceso",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nivel",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatronesTableroDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatronesTableroDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatronesTableroDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/reportes/indicador-diario": {
+      "get": {
+        "tags": [
+          "ReportesTablero"
+        ],
+        "operationId": "ReportesTablero_IndicadorDiario",
+        "parameters": [
+          {
+            "name": "fecha",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "operacion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "punto_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "marca",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "trailer",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "proceso",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nivel",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndicadorDiarioDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndicadorDiarioDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IndicadorDiarioDto"
                 }
               }
             }
@@ -5153,6 +5803,141 @@
           }
         }
       },
+      "AdopcionClienteDto": {
+        "required": [
+          "cliente_id",
+          "cliente_nombre",
+          "programados",
+          "con_salida_digital",
+          "adopcion"
+        ],
+        "type": "object",
+        "properties": {
+          "cliente_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cliente_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "programados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_salida_digital": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "adopcion": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "AdopcionDiaDto": {
+        "required": [
+          "fecha",
+          "programados",
+          "con_salida_digital",
+          "adopcion"
+        ],
+        "type": "object",
+        "properties": {
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "programados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_salida_digital": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "adopcion": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "AdopcionDto": {
+        "required": [
+          "programados",
+          "con_salida_digital",
+          "adopcion",
+          "meta",
+          "por_dia",
+          "por_operacion",
+          "por_cliente"
+        ],
+        "type": "object",
+        "properties": {
+          "programados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_salida_digital": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "adopcion": {
+            "type": "number",
+            "format": "double"
+          },
+          "meta": {
+            "type": "number",
+            "format": "double"
+          },
+          "por_dia": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdopcionDiaDto"
+            }
+          },
+          "por_operacion": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdopcionOperacionDto"
+            }
+          },
+          "por_cliente": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdopcionClienteDto"
+            }
+          }
+        }
+      },
+      "AdopcionOperacionDto": {
+        "required": [
+          "operacion",
+          "programados",
+          "con_salida_digital",
+          "adopcion"
+        ],
+        "type": "object",
+        "properties": {
+          "operacion": {
+            "type": "string"
+          },
+          "programados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_salida_digital": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "adopcion": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "AgregarNotaRequest": {
         "required": [
           "texto"
@@ -5351,6 +6136,227 @@
           },
           "created_at": {
             "format": "date-time"
+          }
+        }
+      },
+      "AveriaConductorDto": {
+        "required": [
+          "usuario_id",
+          "nombre",
+          "cedula",
+          "vines",
+          "con_novedad",
+          "hallazgos"
+        ],
+        "type": "object",
+        "properties": {
+          "usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "vines": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_novedad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hallazgos": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "AveriaMarcaDto": {
+        "required": [
+          "marca",
+          "vines",
+          "con_novedad",
+          "hallazgos"
+        ],
+        "type": "object",
+        "properties": {
+          "marca": {
+            "type": "string"
+          },
+          "vines": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_novedad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hallazgos": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "AveriaPlacaDto": {
+        "required": [
+          "placa",
+          "vines",
+          "con_novedad",
+          "hallazgos"
+        ],
+        "type": "object",
+        "properties": {
+          "placa": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "vines": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_novedad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hallazgos": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "AveriasDto": {
+        "required": [
+          "por_trailer",
+          "por_placa",
+          "por_conductor",
+          "por_unidad",
+          "por_marca",
+          "por_clase",
+          "por_nivel"
+        ],
+        "type": "object",
+        "properties": {
+          "por_trailer": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AveriaTrailerDto"
+            }
+          },
+          "por_placa": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AveriaPlacaDto"
+            }
+          },
+          "por_conductor": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AveriaConductorDto"
+            }
+          },
+          "por_unidad": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AveriaUnidadDto"
+            }
+          },
+          "por_marca": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AveriaMarcaDto"
+            }
+          },
+          "por_clase": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConteoClaseTableroDto"
+            }
+          },
+          "por_nivel": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConteoNivelTableroDto"
+            }
+          }
+        }
+      },
+      "AveriaTrailerDto": {
+        "required": [
+          "trailer",
+          "vines",
+          "con_novedad",
+          "hallazgos"
+        ],
+        "type": "object",
+        "properties": {
+          "trailer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "vines": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_novedad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hallazgos": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "AveriaUnidadDto": {
+        "required": [
+          "tipo_unidad_id",
+          "unidad",
+          "vines",
+          "con_novedad",
+          "hallazgos"
+        ],
+        "type": "object",
+        "properties": {
+          "tipo_unidad_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "unidad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "vines": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_novedad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "hallazgos": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -5864,6 +6870,148 @@
           }
         }
       },
+      "CoberturaClienteDto": {
+        "required": [
+          "cliente_id",
+          "cliente_nombre",
+          "despachadas",
+          "completas",
+          "cobertura"
+        ],
+        "type": "object",
+        "properties": {
+          "cliente_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cliente_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "despachadas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cobertura": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "CoberturaDto": {
+        "required": [
+          "despachadas",
+          "completas",
+          "cobertura",
+          "meta",
+          "por_operacion",
+          "por_cliente",
+          "por_punto"
+        ],
+        "type": "object",
+        "properties": {
+          "despachadas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cobertura": {
+            "type": "number",
+            "format": "double"
+          },
+          "meta": {
+            "type": "number",
+            "format": "double"
+          },
+          "por_operacion": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CoberturaOperacionDto"
+            }
+          },
+          "por_cliente": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CoberturaClienteDto"
+            }
+          },
+          "por_punto": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CoberturaPuntoDto"
+            }
+          }
+        }
+      },
+      "CoberturaOperacionDto": {
+        "required": [
+          "operacion",
+          "despachadas",
+          "completas",
+          "cobertura"
+        ],
+        "type": "object",
+        "properties": {
+          "operacion": {
+            "type": "string"
+          },
+          "despachadas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cobertura": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "CoberturaPuntoDto": {
+        "required": [
+          "punto_id",
+          "punto_nombre",
+          "despachadas",
+          "completas",
+          "cobertura"
+        ],
+        "type": "object",
+        "properties": {
+          "punto_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "punto_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "despachadas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "completas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cobertura": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "ConteoClaseDto": {
         "required": [
           "clase_dano",
@@ -5873,6 +7021,44 @@
         "properties": {
           "clase_dano": {
             "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ConteoClaseTableroDto": {
+        "required": [
+          "clase",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "clase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "ConteoNivelTableroDto": {
+        "required": [
+          "nivel",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "nivel": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "total": {
             "type": "integer",
@@ -7748,6 +8934,112 @@
           }
         }
       },
+      "IndicadorClienteDto": {
+        "required": [
+          "cliente_id",
+          "cliente_nombre",
+          "despachados",
+          "con_novedad",
+          "porcentaje"
+        ],
+        "type": "object",
+        "properties": {
+          "cliente_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "cliente_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "despachados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_novedad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "porcentaje": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "IndicadorDiarioDto": {
+        "required": [
+          "fecha",
+          "despachados",
+          "con_novedad",
+          "porcentaje",
+          "objetivo",
+          "por_operacion",
+          "por_cliente"
+        ],
+        "type": "object",
+        "properties": {
+          "fecha": {
+            "type": "string",
+            "format": "date"
+          },
+          "despachados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_novedad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "porcentaje": {
+            "type": "number",
+            "format": "double"
+          },
+          "objetivo": {
+            "type": "number",
+            "format": "double"
+          },
+          "por_operacion": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IndicadorOperacionDto"
+            }
+          },
+          "por_cliente": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IndicadorClienteDto"
+            }
+          }
+        }
+      },
+      "IndicadorOperacionDto": {
+        "required": [
+          "operacion",
+          "despachados",
+          "con_novedad",
+          "porcentaje"
+        ],
+        "type": "object",
+        "properties": {
+          "operacion": {
+            "type": "string"
+          },
+          "despachados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_novedad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "porcentaje": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "InformeDetalleDto": {
         "required": [
           "id",
@@ -9372,6 +10664,25 @@
           }
         }
       },
+      "PatronClaseDto": {
+        "required": [
+          "clase",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "clase": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "PatronesDto": {
         "required": [
           "total",
@@ -9402,6 +10713,213 @@
             "items": {
               "$ref": "#/components/schemas/ConteoZonaProcesoDto"
             }
+          }
+        }
+      },
+      "PatronesTableroDto": {
+        "required": [
+          "total",
+          "por_proceso",
+          "por_region",
+          "por_region_proceso",
+          "por_nivel",
+          "por_clase",
+          "por_tamano",
+          "umbral"
+        ],
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "por_proceso": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PatronProcesoDto"
+            }
+          },
+          "por_region": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PatronRegionDto"
+            }
+          },
+          "por_region_proceso": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PatronRegionProcesoDto"
+            }
+          },
+          "por_nivel": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PatronNivelDto"
+            }
+          },
+          "por_clase": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PatronClaseDto"
+            }
+          },
+          "por_tamano": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PatronTamanoDto"
+            }
+          },
+          "umbral": {
+            "$ref": "#/components/schemas/UmbralPatronDto"
+          }
+        }
+      },
+      "PatronNivelDto": {
+        "required": [
+          "nivel",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "nivel": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PatronProcesoDto": {
+        "required": [
+          "proceso",
+          "total",
+          "supera_umbral"
+        ],
+        "type": "object",
+        "properties": {
+          "proceso": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "supera_umbral": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PatronRegionDto": {
+        "required": [
+          "cuadrante_numero",
+          "lado",
+          "nombre",
+          "zona",
+          "total",
+          "supera_umbral"
+        ],
+        "type": "object",
+        "properties": {
+          "cuadrante_numero": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "lado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "supera_umbral": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PatronRegionProcesoDto": {
+        "required": [
+          "cuadrante_numero",
+          "lado",
+          "nombre",
+          "zona",
+          "proceso",
+          "total",
+          "supera_umbral"
+        ],
+        "type": "object",
+        "properties": {
+          "cuadrante_numero": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          },
+          "lado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proceso": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "supera_umbral": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PatronTamanoDto": {
+        "required": [
+          "tamano",
+          "total"
+        ],
+        "type": "object",
+        "properties": {
+          "tamano": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -10262,6 +11780,85 @@
           }
         }
       },
+      "TiempoCapturaDto": {
+        "required": [
+          "mediana_minutos",
+          "por_proceso",
+          "por_inspector"
+        ],
+        "type": "object",
+        "properties": {
+          "mediana_minutos": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "por_proceso": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TiempoProcesoDto"
+            }
+          },
+          "por_inspector": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TiempoInspectorDto"
+            }
+          }
+        }
+      },
+      "TiempoInspectorDto": {
+        "required": [
+          "usuario_id",
+          "nombre",
+          "mediana_minutos",
+          "inspecciones"
+        ],
+        "type": "object",
+        "properties": {
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mediana_minutos": {
+            "type": "number",
+            "format": "double"
+          },
+          "inspecciones": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "TiempoProcesoDto": {
+        "required": [
+          "proceso",
+          "mediana_minutos",
+          "inspecciones"
+        ],
+        "type": "object",
+        "properties": {
+          "proceso": {
+            "type": "string"
+          },
+          "mediana_minutos": {
+            "type": "number",
+            "format": "double"
+          },
+          "inspecciones": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "TransferenciaDetalleDto": {
         "required": [
           "id",
@@ -10505,6 +12102,23 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "UmbralPatronDto": {
+        "required": [
+          "cantidad",
+          "ventana_dias"
+        ],
+        "type": "object",
+        "properties": {
+          "cantidad": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "ventana_dias": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -11043,6 +12657,9 @@
     },
     {
       "name": "clsReportes"
+    },
+    {
+      "name": "clsReportesTablero"
     },
     {
       "name": "clsParametros"
