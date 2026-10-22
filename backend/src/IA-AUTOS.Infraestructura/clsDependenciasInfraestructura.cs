@@ -3,6 +3,7 @@ using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Auditoria;
 using IAAutos.Aplicacion.Auth.Services;
 using IAAutos.Aplicacion.Catalogos;
+using IAAutos.Aplicacion.Exportaciones;
 using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Aplicacion.Reportes;
@@ -80,11 +81,14 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IOrigenAuditoria, clsOrigenAuditoria>();
         servicios.AddScoped<IConsultasAuditoria, clsConsultasAuditoria>();
         servicios.AddScoped<IConsultasIndicadores, clsConsultasIndicadores>();
+        servicios.AddScoped<IConsultasExportaciones, clsConsultasExportaciones>();
+        servicios.AddSingleton<IGeneradorExcel, clsGeneradorExcel>();
         servicios.AddScoped<INotaAclaratoriaRepository, clsNotaAclaratoriaRepository>();
         servicios.AddScoped<IParametroRepository, clsParametroRepository>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();
         servicios.AddSingleton<IGeneradorPdfInventario, clsGeneradorPdfInventario>();
         servicios.AddSingleton<IGeneradorPdfConstancia, clsGeneradorPdfConstancia>();
+        servicios.AddSingleton<IGeneradorPdfInforme, clsGeneradorPdfInforme>();
 
         servicios.Configure<clsOpcionesNotificaciones>(configuracion.GetSection(clsOpcionesNotificaciones.SECCION));
         servicios.AddSingleton<IFirmadorUrls, clsFirmadorUrls>();

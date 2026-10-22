@@ -6,6 +6,7 @@ using IAAutos.Aplicacion.Auth;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Conductor;
+using IAAutos.Aplicacion.Exportaciones;
 using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Aplicacion.Parametros;
@@ -52,6 +53,10 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsNoSaleService>();
         servicios.AddScoped<clsAuditoriaService>();
         servicios.AddScoped<clsReportesTableroService>();
+        servicios.AddScoped<clsExportacionesService>();
+        servicios.AddScoped<clsPanelesDeDano>();
+        servicios.AddScoped<clsInformePdfService>();
+        servicios.AddScoped<clsInventarioPdfService>();
         servicios.AddScoped<clsParametrosAdminService>();
         servicios.AddScoped<clsNotasAclaratoriasService>();
         servicios.AddScoped<clsConductorService>();

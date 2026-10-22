@@ -175,7 +175,7 @@ public sealed class clsHallazgosService(
         return new HallazgoDetalleDto(fila, await consultasInspecciones.ObtenerHistorialAsync(id, ct), await notas.ListarAsync(clsEntidadNota.HALLAZGO, id, ct));
     }
 
-    private static (FiltrosHallazgos Filtros, Guid? ClienteElegido) Parsear(FiltrosHallazgosRequest s)
+    internal static (FiltrosHallazgos Filtros, Guid? ClienteElegido) Parsear(FiltrosHallazgosRequest s)
     {
         var errores = new Dictionary<string, string[]>();
         var estado = clsParseoFiltros.Catalogo(s.EstadoSeguimiento, clsEstadoSeguimiento.VALORES, "estado_seguimiento", errores);

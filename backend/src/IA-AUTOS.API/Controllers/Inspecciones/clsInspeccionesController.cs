@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace IAAutos.API.Controllers.Inspecciones;
 
 [Route("api/inspecciones")]
-public sealed class clsInspeccionesController(clsInspeccionesService servicio, clsNotasAclaratoriasService notas) : clsControladorBase
+public sealed class clsInspeccionesController(clsInspeccionesService servicio, clsNotasAclaratoriasService notas, clsInformePdfService informePdf) : clsControladorBase
 {
     /// <summary>
     /// Crea la inspeccion de salida o de llegada de una etapa. El usuario sale del token, el estado inicial es siempre borrador y la placa, el
@@ -59,6 +59,19 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
     [HttpGet("{id:guid}")]
     [ProducesResponseType<InformeDetalleDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Obtener(Guid id, CancellationToken ct) => Ok(await servicio.ObtenerInformeAsync(id, ct));
+
+    /// <summary>
+    /// El informe de la inspeccion en PDF, como descarga: los datos de la unidad, el viaje y la etapa; las fotos de cada vista con su sello (fecha, hora, ubicacion, sello del servidor y hash); los
+    /// hallazgos con su zona, clase, tamano, nivel y foto; el panel de danos con las zonas marcadas; la transferencia con sus firmas, reservas o constancia; las notas aclaratorias y el historial de
+    /// seguimiento. Lo ve quien puede ver el informe (403 si es de otro cliente o de un viaje ajeno; el conductor, sin los hallazgos que no registro). Lleva hasta 60 fotos, primero las de los hallazgos.
+    /// </summary>
+    [HttpGet("{id:guid}/pdf")]
+    [Produces("application/pdf")]
+    public async Task<IActionResult> Pdf(Guid id, CancellationToken ct)
+    {
+        var informe = await informePdf.GenerarAsync(id, ct);
+        return File(informe.Contenido, "application/pdf", informe.Nombre);
+    }
 
     /// <summary>
     /// Agrega una nota aclaratoria a la inspeccion (<c>texto</c> de hasta 1000 caracteres), tambien si ya esta cerrada: es un registro nuevo y el original no cambia. Solo el autor de la inspeccion,

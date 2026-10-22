@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace IAAutos.API.Controllers.Vehiculos;
 
 [Route("api/vehiculos")]
-public sealed class clsVehiculosController(clsVehiculosService servicio) : clsControladorBase
+public sealed class clsVehiculosController(clsVehiculosService servicio, clsInventarioPdfService inventarioPdf) : clsControladorBase
 {
     /// <summary>Carga masiva de VINs (maximo 5000 por solicitud) con su ruta Cargue, Transporte, Descargue.</summary>
     [HttpPost("cargar")]
@@ -50,7 +50,7 @@ public sealed class clsVehiculosController(clsVehiculosService servicio) : clsCo
     [HttpGet("{vin}/inventario/pdf")]
     [Produces("application/pdf")]
     public async Task<IActionResult> InventarioPdf(string vin, CancellationToken ct) =>
-        File(await servicio.ObtenerInventarioPdfAsync(vin, ct), "application/pdf", $"inventario-{vin}.pdf");
+        File(await inventarioPdf.GenerarAsync(vin, ct), "application/pdf", $"inventario-{vin}.pdf");
 
     [HttpGet("{vin}/inventario")]
     [ProducesResponseType<InventarioDto>(StatusCodes.Status200OK)]

@@ -15,7 +15,6 @@ public sealed class clsVehiculosService(
     IVehiculoRepository vehiculos,
     IConsultasVehiculos consultas,
     IConsultasViajes consultasViajes,
-    IGeneradorPdfInventario generadorPdf,
     ICatalogosLectura catalogos,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
@@ -180,10 +179,6 @@ public sealed class clsVehiculosService(
             ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
         return inventario.ParaConductor(actual);
     }
-
-    /// <summary>Inventario del VIN en PDF (soporte de rechazo).</summary>
-    public async Task<byte[]> ObtenerInventarioPdfAsync(string vin, CancellationToken ct = default) =>
-        generadorPdf.Generar(await ObtenerInventarioAsync(vin, ct));
 
     private string MensajeSeguro(Exception ex, string vin)
     {

@@ -383,7 +383,7 @@ public sealed class clsViajesService(
     /// <c>clienteId</c> solo lo elige el super administrador; quien tiene su alcance limitado a un cliente (<paramref name="clienteRestringido"/>) siempre
     /// recibe el suyo y pedir otro cliente responde 403 (igual que en el listado de usuarios).
     /// </summary>
-    private static FiltrosViajes ParsearFiltros(FiltrosViajesRequest s, Guid? clienteRestringido)
+    internal static FiltrosViajes ParsearFiltros(FiltrosViajesRequest s, Guid? clienteRestringido)
     {
         var errores = new Dictionary<string, string[]>();
         var estado = clsParseoFiltros.Catalogo(s.Estado, clsEstadoViaje.VALORES, "estado", errores);

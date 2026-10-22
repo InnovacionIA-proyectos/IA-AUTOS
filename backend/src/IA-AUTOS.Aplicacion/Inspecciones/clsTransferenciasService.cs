@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using FluentValidation;
 using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Auth;
@@ -17,7 +16,7 @@ namespace IAAutos.Aplicacion.Inspecciones;
 /// recibe puede hacerlo con reservas, y si una parte se niega a firmar se deja constancia (motivo, testigo y foto). Los firmantes son usuarios
 /// del viaje. Una transferencia sin tipo de cierre bloquea la etapa siguiente. Cada firma guarda su fecha y la IP desde la que se envio.
 /// </summary>
-public sealed partial class clsTransferenciasService(
+public sealed class clsTransferenciasService(
     IInspeccionRepository inspecciones,
     ITransferenciaCustodiaRepository transferencias,
     IViajeRepository viajes,
@@ -263,23 +262,6 @@ public sealed partial class clsTransferenciasService(
     }
 
     /// <summary>La firma de una parte para el PDF: si se guardo como archivo se incrusta la imagen; si no, se dibuja el trazo.</summary>
-    private async Task<FirmaConstancia> ArmarFirmaAsync(Guid usuarioId, string? firma, DateTimeOffset? fecha, string? ip, CancellationToken ct)
-    {
-        var nombre = (await usuarios.ObtenerPorIdAsync(usuarioId, ct))?.Nombre ?? "—";
-        if (string.IsNullOrEmpty(firma))
-        {
-            return new FirmaConstancia(nombre, fecha, ip, null, null);
-        }
-
-        if (ArchivoSubido().IsMatch(firma))
-        {
-            var imagen = await almacen.LeerAsync(firma, ct);
-            return new FirmaConstancia(nombre, fecha, ip, imagen is null ? firma : null, imagen);
-        }
-
-        return new FirmaConstancia(nombre, fecha, ip, firma, null);
-    }
-
-    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.(jpg|jpeg|png)$", RegexOptions.IgnoreCase)]
-    private static partial Regex ArchivoSubido();
+    private async Task<FirmaConstancia> ArmarFirmaAsync(Guid usuarioId, string? firma, DateTimeOffset? fecha, string? ip, CancellationToken ct) =>
+        await clsArmadorFirmas.ArmarAsync(almacen, (await usuarios.ObtenerPorIdAsync(usuarioId, ct))?.Nombre ?? "—", firma, fecha, ip, ct);
 }
