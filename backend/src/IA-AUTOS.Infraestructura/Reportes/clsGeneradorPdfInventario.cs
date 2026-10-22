@@ -1,184 +1,90 @@
 using System.Globalization;
-using System.Text;
+using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Vehiculos;
-using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
-using static IAAutos.Infraestructura.Reportes.clsPdfBasico;
 
 namespace IAAutos.Infraestructura.Reportes;
 
 /// <summary>
-/// Generador de PDF minimo y sin dependencias (sin licencias de terceros): texto en Helvetica estandar (fuentes base-14, sin
-/// incrustar) sobre paginas A4, con paginacion y ajuste de lineas largas. Reproduce el contenido del inventario original.
+/// El inventario del VIN en PDF (ver <see cref="clsDocumentoPdf"/>): el texto del inventario original (cada proceso con sus inspecciones, hallazgos y evidencias) mas las fotos de cada inspeccion
+/// con su sello y, al final, los paneles del dibujo de danos con las zonas con hallazgos marcadas (cada una con cuantos tiene).
 /// </summary>
 internal sealed class clsGeneradorPdfInventario : IGeneradorPdfInventario
 {
-    private const double ANCHO = 595;
-    private const double ALTO = 842;
-    private const double MARGEN = 50;
-    private const double Y_INICIAL = 800;
-    private const double ANCHO_UTIL = ANCHO - (2 * MARGEN);
-    private const double FACTOR_ANCHO_CARACTER = 0.55;
+    private const double FOTO_ALTO = 150;
+    private const double PANEL_ANCHO = 380;
+    private const double PANEL_ALTO = 260;
 
-    private readonly record struct Linea(string Texto, double Tamano, bool Negrita);
-
-    public byte[] Generar(InventarioDto inventario)
+    public byte[] Generar(DatosInventarioPdf datos)
     {
-        var paginas = Paginar(Componer(inventario));
-        return Ensamblar(paginas);
-    }
-
-    private static List<object> Componer(InventarioDto inv)
-    {
-        var elementos = new List<object>
+        var inv = datos.Inventario;
+        var doc = new clsDocumentoPdf();
+        doc.Escribir("Traza Autos 360° — Botero Soto", 16, true);
+        doc.Espaciar(4);
+        doc.Escribir($"VIN: {inv.Vin}", 12, true);
+        doc.Escribir($"Marca: {inv.Marca}   Operación: {inv.Operacion}", 11);
+        doc.Escribir($"Modelo: {inv.Modelo ?? "—"}   Color: {inv.Color ?? "—"}", 11);
+        if (!inv.Activo)
         {
-            new Linea("Traza Autos 360° — Botero Soto", 16, true),
-            4.0,
-            new Linea($"VIN: {inv.Vin}", 12, true),
-            new Linea($"Marca: {inv.Marca}   Operación: {inv.Operacion}", 11, false),
-            new Linea($"Modelo: {inv.Modelo ?? "—"}   Color: {inv.Color ?? "—"}", 11, false),
-            6.0,
-        };
+            doc.Escribir("Vehículo dado de baja (inactivo)", 11, true);
+        }
+
+        doc.Espaciar(6);
 
         foreach (var etapa in inv.Etapas)
         {
-            elementos.Add(new Linea($"Proceso: {etapa.Proceso} (orden {etapa.Orden})", 12, true));
+            doc.Escribir($"Proceso: {etapa.Proceso} (orden {etapa.Orden})", 12, true);
             foreach (var inspeccion in etapa.Inspecciones)
             {
                 var fecha = inspeccion.Fecha.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);
-                elementos.Add(new Linea($"  {inspeccion.MomentoNombre} — {inspeccion.Estado} — {fecha}", 11, false));
+                doc.Escribir($"  {inspeccion.MomentoNombre} — {inspeccion.Estado} — {fecha}", 11);
                 foreach (var hallazgo in inspeccion.Hallazgos)
                 {
-                    elementos.Add(new Linea($"    • {hallazgo.Zona ?? "Sin ubicar"}: {hallazgo.ClaseDano ?? "Sin clase"} ({hallazgo.TamanoDano})", 11, false));
+                    doc.Escribir($"    • {hallazgo.Zona ?? "Sin ubicar"}: {hallazgo.ClaseDano ?? "Sin clase"} ({hallazgo.TamanoDano})", 11);
                 }
 
-                elementos.Add(new Linea($"    Evidencias: {inspeccion.Evidencias.Count}", 11, false));
-            }
-
-            elementos.Add(4.0);
-        }
-
-        return elementos;
-    }
-
-    /// <summary>Reparte las lineas en paginas: salta de pagina cuando no queda espacio y parte las lineas que no caben a lo ancho.</summary>
-    private static List<List<(Linea Linea, double Y)>> Paginar(List<object> elementos)
-    {
-        var paginas = new List<List<(Linea, double)>> { new() };
-        var y = Y_INICIAL;
-
-        foreach (var elemento in elementos)
-        {
-            if (elemento is double espacio)
-            {
-                y -= espacio;
-                continue;
-            }
-
-            var linea = (Linea)elemento;
-            foreach (var tramo in Partir(linea))
-            {
-                if (y < MARGEN)
+                doc.Escribir($"    Evidencias: {inspeccion.Evidencias.Count}", 11);
+                var fotos = inspeccion.Evidencias.Where(e => datos.Fotos.ContainsKey(e.Id)).Select(e => datos.Fotos[e.Id]).ToList();
+                if (fotos.Count > 0)
                 {
-                    paginas.Add([]);
-                    y = Y_INICIAL;
+                    doc.Galeria(fotos.Select(AFoto).ToList(), 2, FOTO_ALTO);
                 }
-
-                paginas[^1].Add((tramo, y));
-                y -= tramo.Tamano + 6;
             }
+
+            doc.Espaciar(4);
         }
 
-        return paginas;
+        Paneles(doc, datos);
+        if (datos.FotosOmitidas > 0)
+        {
+            doc.Espaciar(6);
+            doc.Escribir($"Este PDF no incluye {datos.FotosOmitidas} foto(s) más para no pasar el máximo por documento: se ven en el inventario.", 10);
+        }
+
+        return doc.Generar();
     }
 
-    private static IEnumerable<Linea> Partir(Linea linea)
+    private static void Paneles(clsDocumentoPdf doc, DatosInventarioPdf datos)
     {
-        var maximo = Math.Max((int)(ANCHO_UTIL / (linea.Tamano * FACTOR_ANCHO_CARACTER)), 10);
-        var texto = linea.Texto;
-        if (texto.Length <= maximo)
+        if (datos.Paneles.Count == 0 && datos.ZonasSinRegion.Count == 0)
         {
-            yield return linea;
-            yield break;
+            return;
         }
 
-        var sangria = new string(' ', texto.Length - texto.TrimStart().Length);
-        var resto = texto;
-        var primera = true;
-        while (resto.Length > 0)
+        doc.Espaciar(6);
+        doc.Escribir("Panel de daños", 13, true);
+        doc.Escribir("Cada zona con hallazgos va marcada con la cantidad de hallazgos que tiene.", 10);
+        foreach (var panel in datos.Paneles)
         {
-            var prefijo = primera ? string.Empty : sangria + "  ";
-            var capacidad = Math.Max(maximo - prefijo.Length, 10);
-            var corte = resto.Length <= capacidad ? resto.Length : CortarEnEspacio(resto, capacidad);
-            yield return linea with { Texto = prefijo + resto[..corte].TrimEnd() };
-            resto = resto[corte..].TrimStart();
-            primera = false;
+            doc.Espaciar(4);
+            doc.PanelConRegiones(panel.Nombre, panel.Imagen, panel.Regiones.Select(r => new RegionPdf(r.Puntos.Select(p => (p.X, p.Y)).ToList(), r.Etiqueta)).ToList(), PANEL_ANCHO, PANEL_ALTO);
+        }
+
+        foreach (var sinRegion in datos.ZonasSinRegion)
+        {
+            doc.Escribir($"Sin dibujo en los paneles — {sinRegion} hallazgo(s)", 10, false, 10);
         }
     }
 
-    private static int CortarEnEspacio(string texto, int capacidad)
-    {
-        var espacio = texto.LastIndexOf(' ', capacidad - 1, capacidad);
-        return espacio > capacidad / 2 ? espacio : capacidad;
-    }
-
-    private static byte[] Ensamblar(List<List<(Linea Linea, double Y)>> paginas)
-    {
-        // Objetos: 1 catalogo, 2 paginas, 3 y 4 fuentes, luego (pagina, contenido) por cada pagina.
-        var cuerpos = new List<byte[]>();
-        var idsPagina = Enumerable.Range(0, paginas.Count).Select(i => 5 + (2 * i)).ToList();
-
-        cuerpos.Add(Texto("<< /Type /Catalog /Pages 2 0 R >>"));
-        cuerpos.Add(Texto($"<< /Type /Pages /Kids [{string.Join(' ', idsPagina.Select(id => $"{id} 0 R"))}] /Count {paginas.Count} >>"));
-        cuerpos.Add(Texto("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"));
-        cuerpos.Add(Texto("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"));
-
-        for (var i = 0; i < paginas.Count; i++)
-        {
-            var contenido = ContenidoDePagina(paginas[i]);
-            cuerpos.Add(Texto(
-                $"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {ANCHO.ToString(CultureInfo.InvariantCulture)} {ALTO.ToString(CultureInfo.InvariantCulture)}] " +
-                $"/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents {idsPagina[i] + 1} 0 R >>"));
-            cuerpos.Add([.. Texto($"<< /Length {contenido.Length} >>\nstream\n"), .. contenido, .. Texto("\nendstream")]);
-        }
-
-        using var salida = new MemoryStream();
-        salida.Write(Texto("%PDF-1.4\n%âãÏÓ\n"));
-        var desplazamientos = new List<long>();
-        for (var i = 0; i < cuerpos.Count; i++)
-        {
-            desplazamientos.Add(salida.Position);
-            salida.Write(Texto($"{i + 1} 0 obj\n"));
-            salida.Write(cuerpos[i]);
-            salida.Write(Texto("\nendobj\n"));
-        }
-
-        var inicioXref = salida.Position;
-        var tabla = new StringBuilder();
-        tabla.Append("xref\n0 ").Append(cuerpos.Count + 1).Append('\n').Append("0000000000 65535 f \n");
-        foreach (var desplazamiento in desplazamientos)
-        {
-            tabla.Append(desplazamiento.ToString("D10", CultureInfo.InvariantCulture)).Append(" 00000 n \n");
-        }
-
-        tabla.Append("trailer\n<< /Size ").Append(cuerpos.Count + 1).Append(" /Root 1 0 R >>\nstartxref\n")
-            .Append(inicioXref.ToString(CultureInfo.InvariantCulture)).Append("\n%%EOF\n");
-        salida.Write(Texto(tabla.ToString()));
-        return salida.ToArray();
-    }
-
-    private static byte[] ContenidoDePagina(List<(Linea Linea, double Y)> lineas)
-    {
-        using var flujo = new MemoryStream();
-        flujo.Write(Texto("0.06 0.14 0.28 rg\n"));
-        foreach (var (linea, y) in lineas)
-        {
-            var fuente = linea.Negrita ? "F2" : "F1";
-            flujo.Write(Texto(
-                $"BT /{fuente} {linea.Tamano.ToString(CultureInfo.InvariantCulture)} Tf {MARGEN.ToString(CultureInfo.InvariantCulture)} {y.ToString("0.##", CultureInfo.InvariantCulture)} Td ("));
-            flujo.Write(CadenaPdf(linea.Texto));
-            flujo.Write(Texto(") Tj ET\n"));
-        }
-
-        return flujo.ToArray();
-    }
+    private static FotoPdf AFoto(FotoInforme foto) =>
+        foto.Contenido is null ? new FotoPdf([], ["Archivo no disponible en el almacén", .. foto.Pie]) : new FotoPdf(foto.Contenido, foto.Pie);
 }

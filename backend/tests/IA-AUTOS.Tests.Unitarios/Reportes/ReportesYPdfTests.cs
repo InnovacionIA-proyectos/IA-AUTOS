@@ -1,3 +1,5 @@
+using IAAutos.Aplicacion.Vehiculos;
+using IAAutos.Aplicacion.Inspecciones;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -145,10 +147,13 @@ public class GeneradorPdfInventarioTests
 
     private static string Texto(byte[] pdf) => Encoding.Latin1.GetString(pdf);
 
+    private static byte[] GenerarPdf(InventarioDto inventario) =>
+        new clsGeneradorPdfInventario().Generar(new DatosInventarioPdf(inventario, new Dictionary<Guid, FotoInforme>(), [], [], 0));
+
     [Fact]
     public void Genera_un_pdf_con_estructura_valida_y_tabla_xref_coherente()
     {
-        var pdf = new clsGeneradorPdfInventario().Generar(Inventario());
+        var pdf = GenerarPdf(Inventario());
         var texto = Texto(pdf);
 
         Assert.StartsWith("%PDF-1.4", texto);
@@ -174,7 +179,7 @@ public class GeneradorPdfInventarioTests
     [Fact]
     public void Incluye_el_contenido_del_inventario()
     {
-        var texto = Texto(new clsGeneradorPdfInventario().Generar(Inventario("9FBHSR4E8PM000123", hallazgos: 2)));
+        var texto = Texto(GenerarPdf(Inventario("9FBHSR4E8PM000123", hallazgos: 2)));
 
         Assert.Contains("VIN: 9FBHSR4E8PM000123", texto);
         Assert.Contains("Marca: Renault   Operaci\\363n: nacional", texto);
@@ -188,7 +193,7 @@ public class GeneradorPdfInventarioTests
     [Fact]
     public void Escapa_parentesis_y_barras_para_no_romper_la_cadena_del_pdf()
     {
-        var texto = Texto(new clsGeneradorPdfInventario().Generar(Inventario(parte: @"Panel (izq.) \ der.")));
+        var texto = Texto(GenerarPdf(Inventario(parte: @"Panel (izq.) \ der.")));
 
         Assert.Contains(@"Panel \(izq.\) \\ der.", texto);
     }
@@ -196,7 +201,7 @@ public class GeneradorPdfInventarioTests
     [Fact]
     public void Los_caracteres_fuera_de_winansi_se_reemplazan_sin_fallar()
     {
-        var texto = Texto(new clsGeneradorPdfInventario().Generar(Inventario(parte: "Capot 日本 ✓")));
+        var texto = Texto(GenerarPdf(Inventario(parte: "Capot 日本 ✓")));
 
         Assert.Contains("Capot ", texto);
         Assert.StartsWith("%PDF-1.4", texto);
@@ -205,7 +210,7 @@ public class GeneradorPdfInventarioTests
     [Fact]
     public void Un_inventario_largo_se_reparte_en_varias_paginas_con_conteo_consistente()
     {
-        var pdf = new clsGeneradorPdfInventario().Generar(Inventario(hallazgos: 60, etapas: 3));
+        var pdf = GenerarPdf(Inventario(hallazgos: 60, etapas: 3));
         var texto = Texto(pdf);
 
         var paginas = Regex.Matches(texto, @"/Type /Page /Parent").Count;
@@ -220,7 +225,7 @@ public class GeneradorPdfInventarioTests
     {
         var parte = string.Join(' ', Enumerable.Repeat("palabra", 40));
 
-        var texto = Texto(new clsGeneradorPdfInventario().Generar(Inventario(parte: parte, etapas: 1)));
+        var texto = Texto(GenerarPdf(Inventario(parte: parte, etapas: 1)));
 
         var tramos = Regex.Matches(texto, @"\(\s*\\225 palabra|\(\s+palabra").Count + Regex.Matches(texto, @"\(\s{6,}palabra").Count;
         Assert.True(tramos >= 1);
@@ -234,7 +239,7 @@ public class GeneradorPdfInventarioTests
     [Fact]
     public void Sin_etapas_genera_solo_el_encabezado()
     {
-        var texto = Texto(new clsGeneradorPdfInventario().Generar(Inventario(etapas: 0)));
+        var texto = Texto(GenerarPdf(Inventario(etapas: 0)));
 
         Assert.Contains("VIN: VIN123", texto);
         Assert.DoesNotContain("Proceso:", texto);

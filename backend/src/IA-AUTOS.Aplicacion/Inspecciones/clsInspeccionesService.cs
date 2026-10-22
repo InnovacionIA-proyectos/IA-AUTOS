@@ -170,7 +170,7 @@ public sealed class clsInspeccionesService(
     }
 
     public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspeccionesRequest solicitud, CancellationToken ct = default) =>
-        await consultas.ListarAsync(await ParsearFiltrosAsync(solicitud, ct), actual.SoloSusViajes(), actual.ClienteRestringido(), LIMITE_LISTADO, ct);
+        await consultas.ListarAsync(await ParsearFiltrosAsync(solicitud, catalogos, ct), actual.SoloSusViajes(), actual.ClienteRestringido(), LIMITE_LISTADO, ct);
 
     /// <summary>
     /// Los hallazgos previos del VIN de la inspeccion, para que el cliente proponga un hallazgo nuevo como preexistente. Solo inspector y administrador; el inspector
@@ -429,7 +429,7 @@ public sealed class clsInspeccionesService(
         }
     }
 
-    private async Task<FiltrosInspecciones> ParsearFiltrosAsync(FiltrosInspeccionesRequest s, CancellationToken ct)
+    internal static async Task<FiltrosInspecciones> ParsearFiltrosAsync(FiltrosInspeccionesRequest s, ICatalogosLectura catalogos, CancellationToken ct)
     {
         var errores = new Dictionary<string, string[]>();
 

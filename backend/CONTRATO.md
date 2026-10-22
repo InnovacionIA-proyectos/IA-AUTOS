@@ -498,6 +498,10 @@ Autenticado. Devuelve el inventario en PDF (`Content-Type: application/pdf`, nom
 descarga binaria, no JSON; en errores sí devuelve el JSON de error. La solicitud necesita el header `Authorization`, así que
 use `fetch` con el token y descargue el `blob` (un enlace directo no lo envía).
 
+El PDF trae el inventario (cada proceso con sus inspecciones, hallazgos y evidencias) **más las fotos de cada inspección con su sello** (fecha y hora, ubicación, sello del servidor y hash SHA-256) y, al final, los **paneles del dibujo de daños**
+con la imagen del panel y cada zona con hallazgos resaltada y marcada con **cuántos hallazgos tiene**; las zonas sin dibujo en los paneles (el frente, las llantas) se listan aparte. Un vehículo dado de baja lo dice. Un PDF lleva hasta **60 fotos**
+(primero las de los hallazgos): si hay más, el PDF avisa cuántas dejó fuera. Lo ve quien ve el inventario (el conductor, sin los hallazgos que no registró).
+
 ---
 
 ## Viajes
@@ -777,6 +781,19 @@ Autenticado. Listado de hasta **200** informes. Todos los filtros son opcionales
 | `desde`, `hasta` | fecha ISO |
 
 Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es el `InspeccionDto` más `vin` y `proceso`. Inspector y conductor solo reciben los informes de sus viajes.
+
+### `GET /api/inspecciones/{id}/pdf`
+Autenticado. El **informe de la inspección en PDF** (`Content-Type: application/pdf`, nombre `informe-{vin}-{proceso}-{momento}-v{version}.pdf`), como descarga binaria (use `fetch` con el token y descargue el `blob`). Lleva:
+
+- los datos de la **unidad** (VIN, marca, modelo, tipo de vehículo, color, operación y cliente), del **viaje** (código MTrack, placa, tráiler, unidad, conductor y cédula) y de la **etapa** (proceso, lugar, momento, versión, inicio, cierre e inspector);
+- las **fotos de cada vista** con su sello: fecha y hora, ubicación (y precisión), sello del servidor y hash SHA-256;
+- los **hallazgos** con su zona (lado + número + nombre), clase, tamaño, nivel (con su acción), origen, si es preexistente, su estado de seguimiento, su nota y su foto, con las notas aclaratorias de cada uno;
+- el **panel de daños**: la imagen de cada panel con las zonas de los hallazgos resaltadas y marcadas con el número del hallazgo (las zonas sin dibujo se listan aparte);
+- la **transferencia** con las dos firmas (imagen o trazo, con su fecha e IP), las reservas o la constancia de no firma (motivo, testigo y foto) y sus notas aclaratorias;
+- las **notas aclaratorias** de la inspección y el **historial de seguimiento** de cada hallazgo (con la foto del sello de quien valida).
+
+Las imágenes salen del almacén; una foto cuyo archivo ya no está se indica en su lugar. Lleva hasta **60 fotos** (primero las de los hallazgos): si hay más, el PDF avisa cuántas dejó fuera y se ven en el informe. Lo ve quien puede ver el informe:
+`403` si es de otro cliente o de un viaje ajeno (inspector y conductor), y el conductor lo recibe sin los hallazgos que no registró; `404` si no existe. Reemplaza al PDF de texto plano.
 
 ### `GET /api/inspecciones/{id}`
 Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de la inspección más el contexto y sus partes. Inspector y conductor reciben `403` si el informe es de un viaje que no es suyo.
@@ -1651,6 +1668,25 @@ agregarlo o en la siguiente ingesta. Respuesta en `camelCase`:
 
 ---
 
+## Exportaciones a Excel
+
+Tres archivos `.xlsx` (`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`) para el coordinador de calidad, el comercial, el `admin` y el `super_admin` (la capacidad `exportar_soportes` de `GET /api/auth/me`); el `inspector` y el
+`conductor` reciben `403` y no la tienen. Traen **solo los datos del cliente del usuario** (el `super_admin` ve todos y es el único que elige uno con `clienteId` / `cliente_id`; los demás reciben `403` si piden otro). Son descargas binarias:
+use `fetch` con el token y descargue el `blob`. El nombre viene en `Content-Disposition` con el tipo y el día de Colombia (`viajes-2026-10-22.xlsx`, `inspecciones-…`, `hallazgos-…`). Las fechas con hora van en hora de Colombia (UTC-5) como fechas de Excel.
+Un archivo no pasa de **50 000 filas**: si el filtro trae más responde `400` para que se acote (por ejemplo, con el rango de fechas).
+
+Aceptan los **mismos filtros que el listado** correspondiente (con los mismos nombres y la misma validación: un filtro mal formado responde `400`).
+
+Todas las filas traen: **VIN, marca, tipo de vehículo, operación, cliente, viaje** (código MTrack, placa, tráiler, unidad, conductor y cédula), **etapa y lugar, momento, versión, estado y fechas de inicio y cierre**.
+
+| Ruta | Una fila por | Filtros | Además trae |
+|---|---|---|---|
+| `GET /api/exportaciones/viajes.xlsx` | unidad (VIN), etapa y momento (salida o llegada) de cada viaje: los seis registros de la unidad | `estado`, `codigoMtrack`, `vin`, `conductorId`, `desde`, `hasta` (sobre la creación del viaje) y `clienteId` | estado del viaje y de la unidad, origen y destino; `Estado` es `sin_inspeccion`, `borrador` o `cerrada` (versión y fechas vacías si no hay inspección) |
+| `GET /api/exportaciones/inspecciones.xlsx` | inspección (cada versión) | `vin`, `usuarioId`, `viajeId`, `momento`, `estado`, `proceso`, `desde`, `hasta` (sobre la fecha de la inspección) y `clienteId` | el inspector y las **firmas** de la transferencia: tipo de cierre y, de quien entrega y de quien recibe, quién, fecha e IP |
+| `GET /api/exportaciones/hallazgos.xlsx` | hallazgo | `estado_seguimiento`, `origen`, `revisado`, `cliente_id`, `viaje_id`, `vin`, `inspeccion_id`, `nivel`, `cuadrante_numero`, `lado`, `proceso`, `desde`, `hasta` (sobre el cierre de la inspección) | **zona** (lado, número y nombre), clase, tamaño, nivel, si es preexistente, origen, estado de seguimiento y la **fecha, hora y ubicación de su foto** |
+
+Los nombres de los filtros son los de cada listado hoy (`clienteId` en viajes e inspecciones, `cliente_id` en hallazgos) y cambiarán junto con ellos cuando los listados unifiquen su formato.
+
 ## Reportes
 
 ### Reportes del tablero (`/api/reportes/*`)
@@ -1825,7 +1861,7 @@ Un usuario de un cliente **sin cliente asignado** no ve ninguna unidad.
 | `GET /api/vehiculos?vin=` y `GET /api/vehiculos/listado` | solo los VIN de su cliente (el total y la paginación cuentan solo esos) |
 | `GET /api/vehiculos/{vin}/inventario` y `/pdf` | `403` con el VIN de otro cliente («El VIN no es de su cliente»); `404` si no existe |
 | `GET /api/inspecciones` | solo los informes de VIN de su cliente |
-| `GET /api/inspecciones/{id}`, `GET /api/inspecciones/{id}/hallazgos-previos` y `GET /api/inspecciones/{id}/transferencia/constancia/pdf` | `403` con un informe de un VIN de otro cliente («La inspección es de un VIN de otro cliente») |
+| `GET /api/inspecciones/{id}`, `GET /api/inspecciones/{id}/pdf`, `GET /api/inspecciones/{id}/hallazgos-previos` y `GET /api/inspecciones/{id}/transferencia/constancia/pdf` | `403` con un informe de un VIN de otro cliente («La inspección es de un VIN de otro cliente») |
 | `GET /api/viajes` y `GET /api/viajes/{id}` | solo los viajes con algún VIN de su cliente, y en el detalle solo esos VIN; `403` con un viaje sin VIN suyos |
 | `GET /api/sofasa/ordenes` | solo las órdenes de VIN de su cliente |
 | `GET /api/patrones`, `/api/patrones/analisis` y `/api/metricas/rechazo` | cuentan solo las unidades de su cliente |
