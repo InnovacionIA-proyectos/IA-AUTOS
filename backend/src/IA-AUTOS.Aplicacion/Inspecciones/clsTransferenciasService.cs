@@ -40,9 +40,10 @@ public sealed partial class clsTransferenciasService(
     {
         await validadorFirma.ValidarOLanzarAsync(solicitud, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
+        var antes = clsInstantaneasAuditoria.De(transferencia);
         transferencia.Firmar(actual.IdObligatorio(), solicitud.Firma!, cliente.Ip, reloj.Ahora);
         await evidenciaDeHallazgos.RecalcularAsync(inspeccionId, transferencia.TipoCierre, ct);
-        auditor.Registrar("transferencia.firmar", "transferencias_custodia", transferencia.Id);
+        await RegistrarAsync("transferencia.firmar", inspeccionId, transferencia, antes, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.ATransferencia(transferencia);
     }
@@ -52,9 +53,10 @@ public sealed partial class clsTransferenciasService(
     {
         await validadorReservas.ValidarOLanzarAsync(solicitud, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
+        var antes = clsInstantaneasAuditoria.De(transferencia);
         transferencia.FirmarConReservas(actual.IdObligatorio(), solicitud.Firma!, solicitud.Reservas, cliente.Ip, reloj.Ahora);
         await evidenciaDeHallazgos.RecalcularAsync(inspeccionId, transferencia.TipoCierre, ct);
-        auditor.Registrar("transferencia.reservas", "transferencias_custodia", transferencia.Id);
+        await RegistrarAsync("transferencia.reservas", inspeccionId, transferencia, antes, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.ATransferencia(transferencia);
     }
@@ -67,6 +69,7 @@ public sealed partial class clsTransferenciasService(
     {
         await validadorNoFirma.ValidarOLanzarAsync(solicitud, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
+        var antes = clsInstantaneasAuditoria.De(transferencia);
         var actorId = actual.IdObligatorio();
         if (transferencia.ParteDe(actorId) is null)
         {
@@ -87,9 +90,17 @@ public sealed partial class clsTransferenciasService(
         transferencia.RegistrarNoFirma(actorId, solicitud.Parte, solicitud.Motivo, testigoId, evidencia.Id, reloj.Ahora);
         inspecciones.Agregar(evidencia);
         await evidenciaDeHallazgos.RecalcularAsync(inspeccionId, transferencia.TipoCierre, ct);
-        auditor.Registrar("transferencia.no_firma", "transferencias_custodia", transferencia.Id);
+        await RegistrarAsync("transferencia.no_firma", inspeccionId, transferencia, antes, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.ATransferencia(transferencia);
+    }
+
+    /// <summary>Audita la accion sobre la transferencia con su estado antes y despues, en el viaje y el cliente de la inspeccion.</summary>
+    private async Task RegistrarAsync(string accion, Guid inspeccionId, clsTransferenciaCustodia transferencia, object antes, CancellationToken ct)
+    {
+        var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct) ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
+        await auditor.RegistrarDeViajeAsync(
+            accion, "transferencias_custodia", transferencia.Id, inspeccion.ViajeId, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(transferencia)), ct: ct);
     }
 
     /// <summary>

@@ -12,7 +12,10 @@ public sealed record ErrorCargaDto(string Vin, string Error);
 
 public sealed record ResultadoCargaDto(int Recibidos, int Creados, int Actualizados, int Fallidos, IReadOnlyList<ErrorCargaDto> Errores);
 
-public sealed record VehiculoBusquedaDto(string Vin, string Marca, string? Modelo, string? Color, string Operacion);
+public sealed record VehiculoBusquedaDto(string Vin, string Marca, string? Modelo, string? Color, string Operacion, bool Activo);
+
+/// <summary>Resultado de dar de baja un vehiculo: siempre "inactivado" (nunca se borra: conserva su historial).</summary>
+public sealed record BajaVehiculoResponse(string Modo);
 
 public sealed record ListadoVehiculoDto(
     Guid Id,
@@ -21,6 +24,7 @@ public sealed record ListadoVehiculoDto(
     string? Modelo,
     string? Color,
     string Operacion,
+    bool Activo,
     int Etapas,
     int Completas,
     int Novedades);
@@ -79,6 +83,7 @@ public sealed record InventarioDto(
     string? Chasis,
     string? Color,
     string Operacion,
+    bool Activo,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     IReadOnlyList<InventarioEtapaDto> Etapas);

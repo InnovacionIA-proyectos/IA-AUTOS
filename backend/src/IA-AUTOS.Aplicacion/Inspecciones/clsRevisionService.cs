@@ -80,11 +80,13 @@ public sealed class clsRevisionService(
 
         var zona = await resolutorZona.ResolverAsync(inspeccion.Id, solicitud.CuadranteNumero, solicitud.Lado, solicitud.ZonaProvisional, ct);
         var tamanoAnterior = hallazgo.TamanoDano;
+        var antes = clsInstantaneasAuditoria.De(hallazgo);
         var tamano = clsValidador.Opcional(solicitud.TamanoDano);
         hallazgo.Revisar(zona.Id, solicitud.ClaseDano!.Trim(), solicitud.NivelSeveridad!.Trim(), tamano, solicitud.Nota, actual.IdObligatorio(), reloj.Ahora);
 
         inspecciones.Agregar(clsHallazgoSeguimiento.CrearRevision(hallazgo.Id, actual.IdObligatorio(), solicitud.Nota, Detalle(solicitud, zona, hallazgo, tamanoAnterior), reloj.Ahora));
-        auditor.Registrar("hallazgo.revision", "hallazgos", hallazgo.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "hallazgo.revision", "hallazgos", hallazgo.Id, viaje.Id, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(hallazgo)), vehiculo.ClienteId, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
 
         var proceso = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo ?? "la etapa";

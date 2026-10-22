@@ -1,6 +1,7 @@
 using FluentValidation;
 using IAAutos.Aplicacion.Alertas;
 using IAAutos.Aplicacion.Archivos;
+using IAAutos.Aplicacion.Auditoria;
 using IAAutos.Aplicacion.Auth;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
@@ -49,6 +50,7 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsSeguimientoService>();
         servicios.AddScoped<clsHallazgosService>();
         servicios.AddScoped<clsNoSaleService>();
+        servicios.AddScoped<clsAuditoriaService>();
         servicios.AddScoped<clsNotasAclaratoriasService>();
         servicios.AddScoped<clsConductorService>();
         servicios.AddScoped<clsEmisorNotificaciones>();

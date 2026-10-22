@@ -16,7 +16,8 @@ OpenAPI ([docs/openapi.json](docs/openapi.json)), que la API genera y una prueba
 | Nulos | Los campos opcionales sin valor llegan como `null` (nunca se omiten) |
 | VIN | 17 caracteres alfanuméricos en mayúscula, sin las letras `I`, `O` ni `Q`; se normaliza a mayúscula y sin espacios |
 | Imágenes | Se referencian por `url` **relativa** (`/api/uploads/<archivo>`): anteponga la URL base |
-| CORS | La API solo acepta los orígenes **exactos** de `Cors__Origins` (sin comodín `*`) y expone `Content-Disposition` (nombre del PDF de inventario). La web debe estar en esa lista |
+| CORS | La API solo acepta los orígenes **exactos** de `Cors__Origins` (sin comodín `*`), acepta las cabeceras `Content-Type`, `Authorization` y `X-Dispositivo-Id`, y expone `Content-Disposition` (nombre del PDF de inventario). La web debe estar en esa lista |
+| Dispositivo | La app y la web pueden enviar `X-Dispositivo-Id` (identificador estable del dispositivo) en cualquier solicitud: queda en la auditoría junto con la IP. Sin esa cabecera se guarda el `User-Agent` |
 
 ## Autenticación
 
@@ -425,8 +426,10 @@ Los vehículos **nuevos** quedan en el cliente de quien carga (el `super_admin`,
 Autenticado. Autocompletado por fragmento de VIN o marca (máximo **8** resultados). Inspector y conductor solo encuentran los VIN de sus viajes.
 
 ```json
-[ { "vin": "9BWZZZ377VT004251", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional" } ]
+[ { "vin": "9BWZZZ377VT004251", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional", "activo": true } ]
 ```
+
+Un vehículo dado de baja (`activo: false`) **no aparece** en esta búsqueda.
 
 ### `GET /api/vehiculos/listado?tipo=&vin=&page=`
 Autenticado. Listado paginado, **500** filas por página. `movilizados` son los VIN que completaron su ruta (todas sus etapas con informe cerrado) en algún viaje; `pendientes`, el resto,
@@ -441,7 +444,7 @@ incluidos los que aún no están en un viaje. Inspector y conductor solo ven los
 ```json
 {
   "rows": [
-    { "id": "uuid", "vin": "…", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional",
+    { "id": "uuid", "vin": "…", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional", "activo": true,
       "etapas": 3, "completas": 3, "novedades": 1 }
   ],
   "total": 120, "page": 1, "pageSize": 500
@@ -455,7 +458,7 @@ transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus v
 ```json
 {
   "id": "uuid", "vin": "…", "marca": "…", "tipo_vehiculo": null, "modelo": null, "chasis": null, "color": null,
-  "operacion": "nacional", "created_at": "…", "updated_at": "…",
+  "operacion": "nacional", "activo": true, "created_at": "…", "updated_at": "…",
   "etapas": [
     {
       "id": "uuid", "orden": 1, "proceso": "cargue", "lugar": "CEDI 1", "requiere_inspeccion": true,
@@ -480,6 +483,15 @@ transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus v
 ```
 
 `vin_reemplazo` es el VIN que reemplaza a la unidad, o `null` si aún no se asignó. Una unidad que no sale **conserva su vínculo con el viaje** y el inventario devuelve las etapas de ese viaje igual que las demás, con su historial completo (incluido el hallazgo que la sacó del viaje).
+
+### `DELETE /api/vehiculos/{vin}`
+Baja lógica. Solo `admin`, `super_admin` y `coordinador_calidad` (de un VIN de su cliente: `403` si es de otro). Responde `200` con `{ "modo": "inactivado" }`: el vehículo queda con `activo: false` y **no se borra**; conserva sus
+etapas, inspecciones, hallazgos y evidencias.
+
+- Un vehículo inactivo **no aparece** en `GET /api/vehiculos?vin=` y **no se puede agregar a un viaje** (`400` en `vines`).
+- **Sigue apareciendo** en `GET /api/vehiculos/listado`, en el inventario (`GET /api/vehiculos/{vin}/inventario`), en los informes y en los reportes, con `activo: false`.
+- Repetir la baja responde igual y no cambia nada. `404` si el VIN no existe; `403` para cualquier otro rol.
+- Queda en la auditoría (`vehiculo.baja`, con `activo` antes y después).
 
 ### `GET /api/vehiculos/{vin}/inventario/pdf`
 Autenticado. Devuelve el inventario en PDF (`Content-Type: application/pdf`, nombre `inventario-{vin}.pdf`). Es una
@@ -1262,6 +1274,46 @@ Cuerpo: `{ "texto": "…" }`, obligatorio y de **hasta 1000 caracteres** (`400` 
 conductor, solo en sus viajes; el conductor no ve las notas de los hallazgos que registraron otros; el resto, de su cliente). Además traen `notas_aclaratorias[]` el informe (`InformeDetalleDto`, las de la inspección), cada inspección del inventario
 (`InventarioInspeccionDto`), el detalle del hallazgo (`GET /api/hallazgos/{id}`) y la transferencia del informe (`TransferenciaDetalleDto`).
 
+## Auditoría
+
+Toda acción de escritura (y el inicio de sesión) queda en un registro **que nadie modifica ni borra** (no existen `PATCH`, `PUT` ni `DELETE`; la base de datos también lo impide). Cada registro guarda quién actuó, la **IP** y el **dispositivo**
+(`X-Dispositivo-Id` o, si no llega, el `User-Agent`; ambos `null` en las acciones del sistema, como la ingesta Sofasa), el **detalle** del cambio y el **viaje** y el **cliente** de lo auditado. El detalle nunca incluye contraseñas, PIN ni tokens.
+
+Acciones registradas: inicio de sesión, PIN errado y bloqueo (`auth.*`); usuarios (`usuario.*`); catálogos (`catalogo.{nombre}.*`); vehículos (`vehiculos.cargar`, `vehiculo.baja`); viajes (`viaje.*`, `viajes.cargar`);
+inspecciones (`inspeccion.crear`, `inspeccion.cerrar`, `inspeccion.corregir`, `llegada.registrar`); hallazgos y novedades (`hallazgo.crear`, `novedad.crear`, `hallazgo.revision`, `hallazgo.seguimiento`); evidencias (`evidencia.crear`);
+transferencias (`transferencia.firmar`, `transferencia.reservas`, `transferencia.no_firma`); notas aclaratorias (`nota.crear`); notificaciones (`notificacion.leer`, `notificacion.responder`); dispositivos y la ingesta Sofasa.
+
+### `GET /api/auditoria`
+Capacidad `ver_auditoria` de `GET /api/auth/me`: la tienen `admin` (ve la de **su cliente**) y `super_admin` (ve la de todos); cualquier otro rol recibe `403`. Una página, de la más reciente a la más antigua.
+
+| Parámetro | Descripción |
+|---|---|
+| `usuario_id` | quien actuó (UUID) |
+| `entidad`, `entidad_id` | el registro auditado: `entidad` es `inspecciones`, `hallazgos`, `viajes`, `usuarios`, `vehiculos`, `notas_aclaratorias`… y `entidad_id` su UUID |
+| `viaje_id` | todo lo auditado de un viaje (UUID) |
+| `accion` | una acción exacta, por ejemplo `inspeccion.cerrar` |
+| `desde`, `hasta` | rango de fechas ISO con zona (`desde` no puede ser posterior a `hasta`) |
+| `pagina`, `tamano` | desde 1 (50 por defecto, máximo 200) |
+
+Un filtro mal formado responde `400` con el campo en `details.fieldErrors`.
+
+```json
+{
+  "items": [
+    { "id": "uuid", "usuario_id": "uuid", "usuario_nombre": "Ines Pérez", "rol": "inspector", "accion": "inspeccion.cerrar", "entidad": "inspecciones", "entidad_id": "uuid",
+      "viaje_id": "uuid", "codigo_mtrack": "MTK-001", "cliente_id": "uuid", "ip": "203.0.113.7", "dispositivo": "tablet-bodega-3",
+      "detalle": { "antes": { "estado": "borrador", "cerrada_at": null }, "despues": { "estado": "cerrada", "cerrada_at": "2026-07-17T12:30:15.123Z" } },
+      "created_at": "2026-07-17T12:30:15.123Z" }
+  ],
+  "total": 1, "pagina": 1, "tamano": 50
+}
+```
+
+`detalle` es `null` en lo que no cambia datos (un inicio de sesión) y, dentro, `antes` es `null` en un alta y `despues` en una baja. `usuario_id` es `null` en las acciones del sistema.
+
+### `GET /api/auditoria/{id}`
+Un registro con su detalle. `404` si no existe; `403` si es de otro cliente (el `super_admin` ve cualquiera) o el rol no tiene la capacidad.
+
 ## Transferencia de custodia
 
 Entrega y recibo de la unidad entre dos personas **del viaje** (su conductor y su inspector; `GET /api/viajes/{id}/firmantes` dice quiénes). **Cada firma la envía su titular**: la
@@ -1639,7 +1691,7 @@ Los endpoints de hallazgos, alertas, auditoría y exportaciones que se agreguen 
 
 ## Notas para el consumo
 
-- **CORS.** El navegador solo podrá llamar a la API si su origen exacto está en `Cors__Origins` (registre el origen del portal: un origen no registrado se bloquea). El nombre del PDF de inventario llega en `Content-Disposition`, que la API expone.
+- **CORS.** El navegador solo podrá llamar a la API si su origen exacto está en `Cors__Origins` (registre el origen del portal: un origen no registrado se bloquea). El nombre del PDF de inventario llega en `Content-Disposition`, que la API expone. La cabecera `X-Dispositivo-Id` está permitida.
 - **Reintentos.** Reintente solo `401` (tras renovar sesión), `408`, `429` y `5xx`. No reintente `400`, `403`, `404` ni `409`
   (salvo el `409` al cerrar, ver arriba).
 - **Cierre de sesión por inactividad y expiración.** Ante un `401` en una ruta protegida, borre el token y vaya al login.

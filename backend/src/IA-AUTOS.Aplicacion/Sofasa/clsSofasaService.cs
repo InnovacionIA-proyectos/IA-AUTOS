@@ -144,7 +144,12 @@ public sealed class clsSofasaService(
         }
 
         // Accion del sistema (el ETL no es un usuario): UsuarioId nulo.
-        auditor.Registrar("sofasa.ingesta", "ordenes_sofasa");
+        auditor.Registrar(
+            "sofasa.ingesta",
+            "ordenes_sofasa",
+            detalle: new DetalleAuditoria(
+                null,
+                new { recibidas = lote.Count, guardadas, vehiculos_creados = vehiculosCreados, vehiculos_actualizados = vehiculosActualizados, errores = errores.Count }));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return new ResultadoIngestaDto(lote.Count, guardadas, vehiculosCreados, vehiculosActualizados, errores);
     }

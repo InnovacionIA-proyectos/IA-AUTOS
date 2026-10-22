@@ -122,7 +122,8 @@ public sealed class clsInspeccionesService(
             reloj.Ahora);
         viaje.RegistrarActividad(reloj.Ahora);
         inspecciones.Agregar(inspeccion);
-        auditor.Registrar("inspeccion.crear", "inspecciones", inspeccion.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "inspeccion.crear", "inspecciones", inspeccion.Id, viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(inspeccion)), ct: ct);
 
         // Un usuario inexistente (404) y una segunda inspeccion original del mismo momento en la etapa (409) se traducen al confirmar.
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -161,7 +162,8 @@ public sealed class clsInspeccionesService(
         var nueva = original.Corregir(actual.IdObligatorio(), solicitud.Fecha ?? ahora, solicitud.Lat, solicitud.Lng, solicitud.Notas, ahora);
         viaje.RegistrarActividad(ahora);
         inspecciones.Agregar(nueva);
-        auditor.Registrar("inspeccion.corregir", "inspecciones", nueva.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "inspeccion.corregir", "inspecciones", nueva.Id, viaje.Id, new DetalleAuditoria(clsInstantaneasAuditoria.De(original), clsInstantaneasAuditoria.De(nueva)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         var conductor = viaje.ConductorId is { } conductorId ? (await usuarios.ObtenerPorIdAsync(conductorId, ct))?.Nombre : null;
         return clsMapeadorInspecciones.AInspeccion(nueva, viaje.Placa, viaje.Trailer, conductor);
@@ -248,8 +250,10 @@ public sealed class clsInspeccionesService(
             foto.DispositivoId, foto.Nota, foto.HashSha256, ct);
         inspecciones.Agregar(hallazgo);
         inspecciones.Agregar(evidencia);
-        auditor.Registrar("hallazgo.crear", "hallazgos", hallazgo.Id);
-        auditor.Registrar("evidencia.crear", "evidencias", evidencia.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "hallazgo.crear", "hallazgos", hallazgo.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(hallazgo)), ct: ct);
+        await auditor.RegistrarDeViajeAsync(
+            "evidencia.crear", "evidencias", evidencia.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(evidencia)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.AHallazgoCreado((await descriptorHallazgos.DescribirAsync([hallazgo], ct))[0], evidencia);
     }
@@ -281,7 +285,8 @@ public sealed class clsInspeccionesService(
             inspeccionId, solicitud.HallazgoId, solicitud.VistaId, esConstancia: false, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat,
             solicitud.SelloLng, solicitud.Precision, solicitud.DispositivoId, solicitud.Nota, solicitud.HashSha256, ct);
         inspecciones.Agregar(evidencia);
-        auditor.Registrar("evidencia.crear", "evidencias", evidencia.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "evidencia.crear", "evidencias", evidencia.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(evidencia)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.AEvidencia(evidencia);
     }
@@ -300,8 +305,10 @@ public sealed class clsInspeccionesService(
         var codigoEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
         var exigeVistas = clsEtapaCatalogo.ExigeVistas(codigoEtapa);
         var faltantes = exigeVistas && !inspeccion.EstaCerrada ? await calculadoraVistas.FaltantesAsync(etapa, resumen, ct) : [];
+        var antes = clsInstantaneasAuditoria.De(inspeccion);
         inspeccion.Cerrar(resumen, faltantes, exigeUbicacionPropia: !exigeVistas, reloj.Ahora);
-        auditor.Registrar("inspeccion.cerrar", "inspecciones", inspeccion.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "inspeccion.cerrar", "inspecciones", inspeccion.Id, inspeccion.ViajeId, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(inspeccion)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         await AvisarHallazgosCriticosAsync(inspeccion, etapa, codigoEtapa, ct);
         return new CerrarInspeccionResponse(

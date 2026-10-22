@@ -156,6 +156,23 @@ public sealed class clsAuditoriaRepositoryFalso : IAuditoriaRepository
     public void Agregar(clsAuditLog registro) => _pendientes.Add(registro);
 }
 
+/// <summary>La IP y el dispositivo de una solicitud fija (nulos por defecto, como fuera de una solicitud HTTP).</summary>
+public sealed class clsContextoSolicitudFalso : IContextoSolicitud
+{
+    public string? Ip { get; set; }
+
+    public string? Dispositivo { get; set; }
+}
+
+/// <summary>El cliente de cada viaje, el que se haya registrado (nulo si no se registro).</summary>
+public sealed class clsOrigenAuditoriaFalso : IOrigenAuditoria
+{
+    public Dictionary<Guid, Guid> ClientesPorViaje { get; } = [];
+
+    public Task<Guid?> ClienteDelViajeAsync(Guid viajeId, CancellationToken ct = default) =>
+        Task.FromResult<Guid?>(ClientesPorViaje.TryGetValue(viajeId, out var cliente) ? cliente : null);
+}
+
 public sealed class clsUsuarioRepositoryFalso : IUsuarioRepository
 {
     private readonly List<clsUsuario> _pendientesDeEliminar = [];

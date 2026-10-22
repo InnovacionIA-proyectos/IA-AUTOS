@@ -90,7 +90,14 @@ public sealed class clsNotasAclaratoriasService(
         AsegurarCliente(registro);
         var nota = clsNotaAclaratoria.Crear(entidad, registro.EntidadId, autor, solicitud.Texto, reloj.Ahora);
         notas.Agregar(nota);
-        auditor.Registrar("nota.crear", "notas_aclaratorias", nota.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "nota.crear",
+            "notas_aclaratorias",
+            nota.Id,
+            registro.Viaje.Id,
+            new DetalleAuditoria(null, new { nota.Entidad, nota.EntidadId, nota.Texto }),
+            registro.ClienteId,
+            ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         var usuario = await usuarios.ObtenerPorIdAsync(autor, ct);
         return new NotaAclaratoriaDto(nota.Id, nota.Entidad, nota.EntidadId, nota.AutorId, usuario?.Nombre, usuario?.Rol, nota.Texto, nota.CreatedAt);

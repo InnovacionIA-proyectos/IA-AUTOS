@@ -25,7 +25,8 @@ Cambios intencionales que corrigen riesgos detectados en el diagnostico. Ninguno
 | Errores | mensajes crudos de la base en lotes | mensajes seguros; el detalle solo en el log del servidor |
 | `/health` | devolvia el texto del error de la base | solo conectado o no, sin detalle |
 | Inmutabilidad | solo en codigo | tambien en la base de datos (triggers) |
-| Auditoria | tabla sin escribir | toda accion relevante se registra |
+| Auditoria | tabla sin escribir | toda accion relevante se registra con usuario, IP, dispositivo, detalle antes y despues (sin contrasenas, PIN ni tokens), viaje y cliente; no se modifica ni se borra; la consulta el administrador de su cliente y el super administrador |
+| Vehiculos | un vehiculo no se podia dar de baja | baja logica (`DELETE /api/vehiculos/{vin}`): queda inactivo y conserva todo su historial |
 | Imagen Docker | root, con dependencias de desarrollo | usuario sin privilegios, solo el runtime |
 
 ## Controles vigentes

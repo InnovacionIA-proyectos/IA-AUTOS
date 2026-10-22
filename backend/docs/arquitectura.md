@@ -45,7 +45,7 @@ El esquema lo crea `database/ddl.sql` (no se usan migraciones de EF). Ademas de 
 
 ## Auditoria
 
-Toda accion relevante se registra en `tblAuditLog` dentro de la misma transaccion del caso de uso (login, altas y cambios de usuarios, carga de VIN, viajes y su carga por Excel, inspecciones, hallazgos, evidencias, firmas, cierres). La ingesta del ETL se registra como accion del sistema (usuario nulo). Los logs estructurados con correlacion de solicitudes no se implementan por defecto (solo si el requerimiento lo solicita).
+Toda accion relevante se registra en `tblAuditLog` dentro de la misma transaccion del caso de uso (login, PIN errado, altas y cambios de usuarios, catalogos, carga de VIN, baja de vehiculos, viajes y su carga por Excel, inspecciones, hallazgos, evidencias, firmas, notas aclaratorias, cierres). Cada registro guarda quien actuo, la IP y el dispositivo de la solicitud (`X-Dispositivo-Id` o el User-Agent), el detalle `{antes, despues}` en JSON (nunca contrasenas, PIN ni tokens: `DetalleAuditoria` descarta esos campos aunque se pasen por descuido) y el viaje y el cliente de lo auditado (el cliente de los vehiculos del viaje, para que el administrador de ese cliente vea tambien lo que hizo el super administrador). El registro no se modifica ni se borra (triggers, error 51005 y 51003) y se consulta con `GET /api/auditoria` (administrador de su cliente y super administrador). La ingesta del ETL se registra como accion del sistema (usuario, IP y dispositivo nulos). El esquema esta en `database/cambios-esquema/18-auditoria-completa.sql`. Los logs estructurados con correlacion de solicitudes no se implementan por defecto (solo si el requerimiento lo solicita).
 
 ## Decisiones respecto al plan inicial
 

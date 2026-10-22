@@ -85,7 +85,7 @@ public sealed class clsCatalogosService(
     public async Task<ValorCatalogo> CrearAsync(string nombre, IReadOnlyDictionary<string, JsonElement> campos, CancellationToken ct = default)
     {
         var valor = await Buscar(nombre).CrearAsync(campos, ct);
-        auditor.Registrar($"catalogo.{nombre}.crear", nombre, valor.Id);
+        auditor.Registrar($"catalogo.{nombre}.crear", nombre, valor.Id, detalle: new DetalleAuditoria(null, valor), clienteId: ClienteDelValor(nombre, valor.Id));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         Invalidar();
         return valor;
@@ -93,8 +93,10 @@ public sealed class clsCatalogosService(
 
     public async Task<ValorCatalogo> ActualizarAsync(string nombre, Guid id, IReadOnlyDictionary<string, JsonElement> campos, CancellationToken ct = default)
     {
-        var valor = await Buscar(nombre).ActualizarAsync(id, campos, ct);
-        auditor.Registrar($"catalogo.{nombre}.actualizar", nombre, id);
+        var catalogo = Buscar(nombre);
+        var antes = (await catalogo.ListarAsync(ct)).FirstOrDefault(v => v.Id == id);
+        var valor = await catalogo.ActualizarAsync(id, campos, ct);
+        auditor.Registrar($"catalogo.{nombre}.actualizar", nombre, id, detalle: new DetalleAuditoria(antes, valor), clienteId: ClienteDelValor(nombre, id));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         Invalidar();
         return valor;
@@ -102,8 +104,10 @@ public sealed class clsCatalogosService(
 
     public async Task EliminarAsync(string nombre, Guid id, CancellationToken ct = default)
     {
-        await Buscar(nombre).EliminarAsync(id, ct);
-        auditor.Registrar($"catalogo.{nombre}.eliminar", nombre, id);
+        var catalogo = Buscar(nombre);
+        var antes = (await catalogo.ListarAsync(ct)).FirstOrDefault(v => v.Id == id);
+        await catalogo.EliminarAsync(id, ct);
+        auditor.Registrar($"catalogo.{nombre}.eliminar", nombre, id, detalle: new DetalleAuditoria(antes, null), clienteId: ClienteDelValor(nombre, id));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         Invalidar();
     }
@@ -136,13 +140,20 @@ public sealed class clsCatalogosService(
             throw clsErroresCampos.De("archivo", "El archivo no existe: súbalo primero con POST /api/uploads");
         }
 
+        var anterior = await imagenesPaneles.ObtenerNombreAsync(codigoPanel, ct);
         await imagenesPaneles.CambiarAsync(codigoPanel, archivo, ct);
-        auditor.Registrar($"catalogo.{clsNombresCatalogo.PANELES_DANO}.imagen", clsNombresCatalogo.PANELES_DANO);
+        auditor.Registrar(
+            $"catalogo.{clsNombresCatalogo.PANELES_DANO}.imagen",
+            clsNombresCatalogo.PANELES_DANO,
+            detalle: new DetalleAuditoria(new { panel = codigoPanel, archivo = anterior }, new { panel = codigoPanel, archivo }));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         Invalidar();
     }
 
     // ----------------------------------------------------------------------------------------------- internos
+
+    /// <summary>Un cliente del catalogo de clientes es su propio cliente en la auditoria; el resto de los catalogos no pertenece a uno.</summary>
+    private static Guid? ClienteDelValor(string catalogo, Guid id) => catalogo == clsNombresCatalogo.CLIENTES ? id : null;
 
     private ICatalogo Buscar(string nombre) =>
         _porNombre.TryGetValue(nombre, out var catalogo)

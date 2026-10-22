@@ -114,7 +114,15 @@ public sealed class clsSeguimientoService(
         inspecciones.Agregar(clsHallazgoSeguimiento.CrearCambioDeEstado(
             hallazgo.Id, hallazgo.EstadoSeguimiento, estado, actual.IdObligatorio(), solicitud.Nota, sello?.Id, reloj.Ahora));
         await evidenciaDeHallazgos.RecalcularAsync(inspeccion.Id, (await transferencias.ObtenerPorInspeccionAsync(inspeccion.Id, ct))?.TipoCierre, ct);
-        auditor.Registrar("hallazgo.seguimiento", "hallazgos", hallazgo.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "hallazgo.seguimiento",
+            "hallazgos",
+            hallazgo.Id,
+            inspeccion.ViajeId,
+            new DetalleAuditoria(
+                new { estado_seguimiento = hallazgo.EstadoSeguimiento },
+                new { estado_seguimiento = estado, solicitud.Nota, evidencia_sello_id = sello?.Id }),
+            ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await consultas.ObtenerHallazgoAsync(hallazgo.Id, ct) ?? throw new clsEntidadNoEncontradaException($"Hallazgo {hallazgoId} no encontrado");
     }

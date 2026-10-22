@@ -140,7 +140,7 @@ public class GeneradorPdfInventarioTests
                     null,
                     []),
             ])).ToList();
-        return new InventarioDto(Guid.NewGuid(), vin, "Renault", null, null, null, null, "nacional", FECHA, FECHA, etapasDto);
+        return new InventarioDto(Guid.NewGuid(), vin, "Renault", null, null, null, null, "nacional", true, FECHA, FECHA, etapasDto);
     }
 
     private static string Texto(byte[] pdf) => Encoding.Latin1.GetString(pdf);

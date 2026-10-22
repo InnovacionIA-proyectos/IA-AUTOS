@@ -28,6 +28,7 @@ public sealed class clsDispositivosService(
         var ahora = reloj.Ahora;
         var token = clsDispositivo.TokenValido(solicitud.TokenFcm);
         var dispositivo = await dispositivos.ObtenerPorTokenAsync(token, ct);
+        object? antes = dispositivo is null ? null : new { dispositivo.Plataforma, dispositivo.Modelo, dispositivo.Activo, dispositivo.UsuarioId };
         if (dispositivo is null)
         {
             dispositivo = clsDispositivo.Registrar(actual.IdObligatorio(), token, solicitud.Plataforma, solicitud.Modelo, ahora);
@@ -38,7 +39,11 @@ public sealed class clsDispositivosService(
             dispositivo.Actualizar(actual.IdObligatorio(), solicitud.Plataforma, solicitud.Modelo, ahora);
         }
 
-        auditor.Registrar("dispositivo.registrar", "dispositivos", dispositivo.Id);
+        auditor.Registrar(
+            "dispositivo.registrar",
+            "dispositivos",
+            dispositivo.Id,
+            detalle: new DetalleAuditoria(antes, new { dispositivo.Plataforma, dispositivo.Modelo, dispositivo.Activo, dispositivo.UsuarioId }));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return new DispositivoDto(dispositivo.Id, dispositivo.Plataforma, dispositivo.Modelo, dispositivo.Activo, dispositivo.UltimoUsoAt);
     }
@@ -55,7 +60,8 @@ public sealed class clsDispositivosService(
         }
 
         dispositivo.Desactivar(reloj.Ahora);
-        auditor.Registrar("dispositivo.retirar", "dispositivos", dispositivo.Id);
+        auditor.Registrar(
+            "dispositivo.retirar", "dispositivos", dispositivo.Id, detalle: new DetalleAuditoria(new { activo = true }, new { activo = false }));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
     }
 }

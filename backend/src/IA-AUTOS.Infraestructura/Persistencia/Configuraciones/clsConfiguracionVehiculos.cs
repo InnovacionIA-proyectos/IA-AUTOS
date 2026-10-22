@@ -20,6 +20,7 @@ internal sealed class clsConfiguracionVehiculo : IEntityTypeConfiguration<clsVeh
         builder.Property(v => v.Chasis).HasMaxLength(100);
         builder.Property(v => v.Color).HasMaxLength(100);
         builder.Property(v => v.Operacion).HasColumnType("varchar(20)").IsRequired();
+        builder.HasIndex(v => v.Activo).HasDatabaseName("IX_tblVehiculos_Activo");
         builder.HasIndex(v => v.Vin).IsUnique().HasDatabaseName("UQ_tblVehiculos_Vin");
         builder.HasOne<clsCliente>().WithMany().HasForeignKey(v => v.ClienteId)
             .HasConstraintName("FK_tblVehiculos_Cliente").OnDelete(DeleteBehavior.ClientNoAction);
