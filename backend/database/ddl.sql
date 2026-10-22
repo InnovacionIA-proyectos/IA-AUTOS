@@ -1488,5 +1488,120 @@ LEFT JOIN dbo.tblZonasDano z ON z.Id = h.ZonaId
 WHERE NOT (h.Origen = ''conductor'' AND h.RevisadoAt IS NULL)');
 GO
 
+/* -----------------------------------------------------------------------------
+   Vistas de los indicadores del tablero (cobertura, adopcion, tiempo de captura, averias por configuracion e indicador diario). Todas calculan el cliente por el vehiculo y los dias en
+   hora de Colombia (UTC-5). vwCobertura: una fila por unidad despachada (VIN de un viaje con la salida de su Cargue cerrada, sin las unidades "no sale"); RegistrosCerrados cuenta de 0 a 6
+   (salida y llegada de las 3 etapas) y Completa = 1 solo con los 6. vwAdopcion (formula propuesta, pendiente de confirmar por Calidad): por dia, Programados = VIN de los viajes no cancelados
+   creados ese dia y ConSalidaDigital = los que tienen una inspeccion de salida en el sistema. vwTiempoCaptura: una fila por inspeccion cerrada de Cargue y Descargue, con Minutos = cierre - inicio.
+   vwAveriasPorConfiguracion: una fila por hallazgo revisado de una inspeccion cerrada, con la configuracion del viaje y la zona (lado + numero). vwIndicadorDiario: por dia, Despachados y
+   ConNovedad (unidades con al menos un hallazgo V1 o V1+ ese dia). Se crean con SQL dinamico para poder ejecutar este script tambien sobre una base que aun no tiene las columnas que usan.
+   ----------------------------------------------------------------------------- */
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'EstadoUnidad') IS NOT NULL
+   AND COL_LENGTH(N'dbo.tblHallazgos', N'NivelSeveridad') IS NOT NULL
+   AND COL_LENGTH(N'dbo.tblHallazgos', N'ZonaId') IS NOT NULL
+   AND COL_LENGTH(N'dbo.tblHallazgos', N'RevisadoAt') IS NOT NULL
+BEGIN
+    EXEC (N'CREATE OR ALTER VIEW dbo.vwCobertura
+AS
+SELECT vv.ViajeId, vv.VehiculoId, v.Vin, v.ClienteId, v.Operacion, vj.OrigenId, vj.DestinoId, v.Marca, vj.Placa, vj.Trailer, vj.TipoUnidadId, vj.ConductorId,
+       d.FechaDespacho,
+       CAST(SWITCHOFFSET(d.FechaDespacho, N''-05:00'') AS date) AS Fecha,
+       r.RegistrosCerrados,
+       CAST(CASE WHEN r.RegistrosCerrados >= 6 THEN 1 ELSE 0 END AS bit) AS Completa
+FROM dbo.tblViajeVehiculos vv
+JOIN dbo.tblViajes vj ON vj.Id = vv.ViajeId
+JOIN dbo.tblVehiculos v ON v.Id = vv.VehiculoId
+CROSS APPLY (
+    SELECT MIN(i.CerradaAt) AS FechaDespacho
+    FROM dbo.tblInspecciones i
+    JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+    JOIN dbo.tblEtapasCatalogo ec ON ec.Id = e.EtapaCatalogoId
+    WHERE e.ViajeId = vv.ViajeId AND e.VehiculoId = vv.VehiculoId AND ec.Codigo = ''cargue'' AND i.Momento = ''salida'' AND i.Estado = ''cerrada''
+) d
+CROSS APPLY (
+    SELECT CASE WHEN COUNT(*) > 6 THEN 6 ELSE COUNT(*) END AS RegistrosCerrados
+    FROM (
+        SELECT DISTINCT i.EtapaId, i.Momento
+        FROM dbo.tblInspecciones i
+        JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+        WHERE e.ViajeId = vv.ViajeId AND e.VehiculoId = vv.VehiculoId AND i.Estado = ''cerrada''
+    ) AS registros
+) r
+WHERE vv.EstadoUnidad <> ''no_sale'' AND d.FechaDespacho IS NOT NULL');
+    EXEC (N'CREATE OR ALTER VIEW dbo.vwAdopcion
+AS
+SELECT x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer,
+       COUNT(*) AS Programados,
+       SUM(x.ConSalidaDigital) AS ConSalidaDigital,
+       CAST(ROUND(SUM(x.ConSalidaDigital) * 100.0 / COUNT(*), 2) AS decimal(5, 2)) AS Porcentaje
+FROM (
+    SELECT CAST(SWITCHOFFSET(vj.CreatedAt, N''-05:00'') AS date) AS Fecha, v.ClienteId, v.Operacion, vj.OrigenId, vj.DestinoId, v.Marca, vj.Trailer,
+           CASE WHEN EXISTS (SELECT 1
+                             FROM dbo.tblInspecciones i
+                             JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+                             WHERE e.ViajeId = vv.ViajeId AND e.VehiculoId = vv.VehiculoId AND i.Momento = ''salida'')
+                THEN 1 ELSE 0 END AS ConSalidaDigital
+    FROM dbo.tblViajeVehiculos vv
+    JOIN dbo.tblViajes vj ON vj.Id = vv.ViajeId
+    JOIN dbo.tblVehiculos v ON v.Id = vv.VehiculoId
+    WHERE vj.Estado <> ''cancelado''
+) AS x
+GROUP BY x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer');
+    EXEC (N'CREATE OR ALTER VIEW dbo.vwTiempoCaptura
+AS
+SELECT i.Id AS InspeccionId, i.ViajeId, e.VehiculoId, v.ClienteId, v.Operacion, vj.OrigenId, vj.DestinoId, v.Marca, vj.Trailer,
+       ec.Codigo AS Proceso, i.Momento, i.UsuarioId,
+       CAST(SWITCHOFFSET(i.CerradaAt, N''-05:00'') AS date) AS Fecha,
+       CAST(DATEDIFF(SECOND, i.IniciadaAt, i.CerradaAt) / 60.0 AS decimal(10, 2)) AS Minutos
+FROM dbo.tblInspecciones i
+JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+JOIN dbo.tblEtapasCatalogo ec ON ec.Id = e.EtapaCatalogoId
+JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId
+JOIN dbo.tblViajes vj ON vj.Id = i.ViajeId
+WHERE i.Estado = ''cerrada'' AND i.CerradaAt IS NOT NULL AND i.CerradaAt >= i.IniciadaAt AND ec.Codigo IN (''cargue'', ''descargue'')');
+    EXEC (N'CREATE OR ALTER VIEW dbo.vwAveriasPorConfiguracion
+AS
+SELECT h.Id AS HallazgoId, h.InspeccionId, i.ViajeId, e.VehiculoId, v.Vin, v.ClienteId, v.Operacion, vj.OrigenId, vj.DestinoId, v.Marca, vj.Placa, vj.Trailer,
+       vj.TipoUnidadId, tu.Codigo AS UnidadCodigo, tu.Nombre AS Unidad, vj.ConductorId, cu.Nombre AS ConductorNombre, cu.Cedula AS ConductorCedula,
+       ec.Codigo AS Proceso, i.Momento, h.ClaseDano, h.TamanoDano, h.NivelSeveridad,
+       z.Id AS ZonaId, z.Numero, z.Lado, z.Codigo AS ZonaCodigo, c.Nombre AS CuadranteNombre,
+       CASE WHEN z.Lado IS NOT NULL THEN CONCAT(UPPER(LEFT(z.Lado, 1)), SUBSTRING(z.Lado, 2, 20), N'' '', z.Numero, N'' '', NCHAR(183), N'' '', c.Nombre)
+            WHEN z.Numero IS NOT NULL THEN CONCAT(z.Numero, N'' '', NCHAR(183), N'' '', c.Nombre)
+            ELSE z.Nombre END AS ZonaNombre,
+       CAST(SWITCHOFFSET(i.CerradaAt, N''-05:00'') AS date) AS Fecha
+FROM dbo.tblHallazgos h
+JOIN dbo.tblInspecciones i ON i.Id = h.InspeccionId AND i.Estado = ''cerrada''
+JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+JOIN dbo.tblEtapasCatalogo ec ON ec.Id = e.EtapaCatalogoId
+JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId
+JOIN dbo.tblViajes vj ON vj.Id = i.ViajeId
+LEFT JOIN dbo.tblTiposUnidadTransportadora tu ON tu.Id = vj.TipoUnidadId
+LEFT JOIN dbo.tblUsuarios cu ON cu.Id = vj.ConductorId
+LEFT JOIN dbo.tblZonasDano z ON z.Id = h.ZonaId
+LEFT JOIN dbo.tblCuadrantes c ON c.Id = z.CuadranteId
+WHERE NOT (h.Origen = ''conductor'' AND h.RevisadoAt IS NULL)');
+    EXEC (N'CREATE OR ALTER VIEW dbo.vwIndicadorDiario
+AS
+SELECT x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer,
+       COUNT(*) AS Despachados,
+       SUM(x.ConNovedad) AS ConNovedad,
+       CAST(ROUND(SUM(x.ConNovedad) * 100.0 / COUNT(*), 2) AS decimal(5, 2)) AS Porcentaje
+FROM (
+    SELECT c.Fecha, c.ClienteId, c.Operacion, c.OrigenId, c.DestinoId, c.Marca, c.Trailer,
+           CASE WHEN EXISTS (SELECT 1
+                             FROM dbo.tblHallazgos h
+                             JOIN dbo.tblInspecciones i ON i.Id = h.InspeccionId AND i.Estado = ''cerrada''
+                             JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+                             WHERE e.ViajeId = c.ViajeId AND e.VehiculoId = c.VehiculoId
+                               AND h.NivelSeveridad IN (''v1'', ''v1_plus'')
+                               AND NOT (h.Origen = ''conductor'' AND h.RevisadoAt IS NULL)
+                               AND CAST(SWITCHOFFSET(i.CerradaAt, N''-05:00'') AS date) = c.Fecha)
+                THEN 1 ELSE 0 END AS ConNovedad
+    FROM dbo.vwCobertura c
+) AS x
+GROUP BY x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer');
+END
+GO
+
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';
 GO

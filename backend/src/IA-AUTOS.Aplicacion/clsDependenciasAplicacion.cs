@@ -51,6 +51,7 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsHallazgosService>();
         servicios.AddScoped<clsNoSaleService>();
         servicios.AddScoped<clsAuditoriaService>();
+        servicios.AddScoped<clsReportesTableroService>();
         servicios.AddScoped<clsParametrosAdminService>();
         servicios.AddScoped<clsNotasAclaratoriasService>();
         servicios.AddScoped<clsConductorService>();

@@ -90,8 +90,9 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | GET `/api/catalogos/paneles-dano/{codigo}/imagen` | publico | la imagen de fondo de un panel de dano, con cache larga; `404` si aun no tiene |
 | PUT `/api/catalogos/paneles-dano/{codigo}/imagen` | admin, super_admin | cambia la imagen del panel con un archivo ya subido (`{ "archivo": "…png" }`) |
 | POST `/api/catalogos/{nombre}`, PATCH `/api/catalogos/{nombre}/{id}`, DELETE `/api/catalogos/{nombre}/{id}` | admin, super_admin, coordinador_calidad | crea, edita o borra un valor; uno en uso no se borra (`409`), se inactiva |
-| GET `/api/patrones` | autenticado | hallazgos por proceso y zona de unidades movilizadas |
-| GET `/api/patrones/analisis` | autenticado | clases y tamanos de dano con sugerencias |
+| GET `/api/reportes/cobertura`, `/adopcion`, `/tiempo-captura`, `/averias`, `/patrones`, `/indicador-diario` | ver_reportes (coordinador_calidad, comercial, admin, super_admin; `403` inspector y conductor) | los reportes del tablero, en snake_case, con los filtros `desde`, `hasta` (ultimos 30 dias por defecto), `operacion`, `cliente_id` (solo super_admin), `punto_id`, `marca`, `trailer`, `proceso` y `nivel`; cuentan hallazgos de inspecciones cerradas aunque la unidad no haya terminado el viaje y el cliente del vehiculo |
+| GET `/api/patrones` | autenticado | OBSOLETO (encabezado `Deprecation`): usar `/api/reportes/patrones` |
+| GET `/api/patrones/analisis` | autenticado | OBSOLETO (encabezado `Deprecation`): usar `/api/reportes/patrones` |
 | GET `/api/metricas/rechazo` | autenticado | tasa de rechazo frente a la linea base |
 | GET `/health` | publico | `200` si la base responde, `503` si no |
 

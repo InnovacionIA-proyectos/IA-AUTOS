@@ -10,7 +10,7 @@ OpenAPI ([docs/openapi.json](docs/openapi.json)), que la API genera y una prueba
 |---|---|
 | URL base | La del despliegue, sin barra final (por ejemplo `https://<dominio>`). Todas las rutas empiezan por `/api`, salvo `/health` |
 | Formato | JSON (`Content-Type: application/json`), codificación UTF-8 |
-| Nombres de campo | `snake_case` (`etapa_id`, `created_at`). **Excepciones en `camelCase`:** todo lo de Reportes (`/api/patrones`, `/api/patrones/analisis`, `/api/metricas/rechazo`), la respuesta de la ingesta Sofasa y `pageSize` del listado de vehículos |
+| Nombres de campo | `snake_case` (`etapa_id`, `created_at`). **Excepciones en `camelCase`:** los reportes anteriores (`/api/patrones`, `/api/patrones/analisis`, `/api/metricas/rechazo`; los nuevos `/api/reportes/*` van en `snake_case`), la respuesta de la ingesta Sofasa y `pageSize` del listado de vehículos |
 | Fechas | ISO 8601 UTC con milisegundos: `2026-07-17T12:30:15.123Z`. **Las fechas que se envían deben llevar zona horaria** (`Z` o `+hh:mm`) |
 | Identificadores | UUID (`string`), salvo el VIN (texto) y `source_id` de Sofasa (entero largo) |
 | Nulos | Los campos opcionales sin valor llegan como `null` (nunca se omiten) |
@@ -1653,10 +1653,123 @@ agregarlo o en la siguiente ingesta. Respuesta en `camelCase`:
 
 ## Reportes
 
+### Reportes del tablero (`/api/reportes/*`)
+
+Los ven el `coordinador_calidad`, el `comercial`, el `admin` y el `super_admin` (la capacidad `ver_reportes` de `GET /api/auth/me`); el `inspector` y el `conductor` reciben `403` y no la tienen. Van en `snake_case`.
+Cuentan **los hallazgos de las inspecciones cerradas aunque la unidad no haya terminado el viaje** (una unidad que sigue en ruta ya cuenta), por zona (**lado + número**) y por el **cliente del vehículo** (no el del viaje).
+Los días son días de Colombia (UTC-5). Quien no es `super_admin` recibe solo los datos de su cliente.
+
+**Filtros** (los mismos en todos; un valor mal formado responde `400` con el campo en `details.fieldErrors`):
+
+| Parámetro | Descripción |
+|---|---|
+| `desde`, `hasta` | días `AAAA-MM-DD`, ambos incluidos; por defecto los **últimos 30 días** hasta hoy; `desde` no puede ser posterior a `hasta` ni el periodo pasar de 366 días |
+| `operacion` | `importacion`, `exportacion` o `nacional` |
+| `cliente_id` | solo el `super_admin` elige un cliente (o ninguno: ve todos); los demás reciben su cliente y `403` si piden otro |
+| `punto_id` | un punto de custodia: los viajes que **salen de él o llegan a él** |
+| `marca`, `trailer` | texto exacto |
+| `proceso` | `cargue`, `transporte` o `descargue` (en tiempo de captura y en los hallazgos: averías y patrones) |
+| `nivel` | `v1_plus`, `v1`, `v2` o `v3` (en los hallazgos: averías y patrones) |
+
+El `proceso` y el `nivel` se ignoran en los reportes que no tienen esos datos (cobertura, adopción e indicador diario). La fecha de cada reporte es la del **despacho** (cierre de la salida del Cargue) en la cobertura y el indicador diario, la de
+**programación** del viaje en la adopción y la del **cierre de la inspección** en el tiempo de captura, las averías y los patrones.
+
+### `GET /api/reportes/cobertura`
+Unidades despachadas (un VIN de un viaje con la **salida del Cargue cerrada**, sin las unidades marcadas «no sale») y cuántas tienen sus **seis registros cerrados** (salida y llegada de las tres etapas). `cobertura` = completas / despachadas, en porcentaje con dos
+decimales; `meta` es 90. Una unidad cuenta en el punto de origen y en el de destino de su viaje.
+
+```json
+{
+  "despachadas": 120, "completas": 96, "cobertura": 80.0, "meta": 90,
+  "por_operacion": [ { "operacion": "nacional", "despachadas": 80, "completas": 70, "cobertura": 87.5 } ],
+  "por_cliente": [ { "cliente_id": "uuid", "cliente_nombre": "Sofasa", "despachadas": 120, "completas": 96, "cobertura": 80.0 } ],
+  "por_punto": [ { "punto_id": "uuid", "punto_nombre": "CEDI 1", "despachadas": 60, "completas": 50, "cobertura": 83.33 } ]
+}
+```
+
+### `GET /api/reportes/adopcion`
+**Fórmula propuesta, pendiente de confirmar por Calidad:** de los VIN de los viajes programados cada día (no cancelados, no solo los que ya salieron del Cargue: con ese denominador la adopción daría siempre 100 %), cuántos tienen una **inspección de salida registrada en el
+sistema**; el que no la tiene se hizo en papel o no se hizo. Como el viaje aún no guarda su fecha programada, el día es el de su **creación**. `meta` es 95.
+
+```json
+{
+  "programados": 100, "con_salida_digital": 92, "adopcion": 92.0, "meta": 95,
+  "por_dia": [ { "fecha": "2026-10-20", "programados": 40, "con_salida_digital": 38, "adopcion": 95.0 } ],
+  "por_operacion": [ { "operacion": "nacional", "programados": 60, "con_salida_digital": 58, "adopcion": 96.67 } ],
+  "por_cliente": [ { "cliente_id": "uuid", "cliente_nombre": "Sofasa", "programados": 100, "con_salida_digital": 92, "adopcion": 92.0 } ]
+}
+```
+
+### `GET /api/reportes/tiempo-captura`
+La **mediana**, en minutos, entre el inicio y el cierre de las inspecciones **cerradas de Cargue y Descargue** (las de Transporte no cuentan). `mediana_minutos` es `null` si no hubo inspecciones.
+
+```json
+{
+  "mediana_minutos": 15.0,
+  "por_proceso": [ { "proceso": "cargue", "mediana_minutos": 15.0, "inspecciones": 5 } ],
+  "por_inspector": [ { "usuario_id": "uuid", "nombre": "Ines Uno", "mediana_minutos": 20.0, "inspecciones": 5 } ]
+}
+```
+
+### `GET /api/reportes/averias`
+Por configuración del viaje, los VIN (`vines`: las unidades despachadas más las que tienen hallazgos aunque no se hayan despachado, como la que no sale), cuántos tienen novedad (`con_novedad`: al menos un hallazgo) y cuántos hallazgos. Cada agrupación puede traer una
+fila con la clave en `null` (unidades sin trailer, sin conductor o sin tipo de unidad). Ordenadas de más a menos VIN.
+
+```json
+{
+  "por_trailer": [ { "trailer": "TR-1", "vines": 12, "con_novedad": 3, "hallazgos": 4 } ],
+  "por_placa": [ { "placa": "ABC123", "vines": 12, "con_novedad": 3, "hallazgos": 4 } ],
+  "por_conductor": [ { "usuario_id": "uuid", "nombre": "Carlos Conductor", "cedula": "1032456789", "vines": 12, "con_novedad": 3, "hallazgos": 4 } ],
+  "por_unidad": [ { "tipo_unidad_id": "uuid", "unidad": "Niñera", "vines": 12, "con_novedad": 3, "hallazgos": 4 } ],
+  "por_marca": [ { "marca": "Renault", "vines": 12, "con_novedad": 3, "hallazgos": 4 } ],
+  "por_clase": [ { "clase": "golpe", "total": 6 } ],
+  "por_nivel": [ { "nivel": "v1", "total": 2 } ]
+}
+```
+
+### `GET /api/reportes/patrones`
+El mapa de calor: los hallazgos por proceso, por **zona (lado + número de cuadrante, o la zona provisional)** y por zona y proceso, y por nivel, clase y tamaño. `supera_umbral` es `true` si los hallazgos del grupo **en la ventana del umbral** (los `ventana_dias`
+días que terminan en `hasta`, con los mismos filtros) llegan a `umbral.cantidad`; el umbral sale de los parámetros `umbral_patron_cantidad` y `umbral_patron_ventana_dias`. Absorbe a `GET /api/patrones` y `GET /api/patrones/analisis`.
+
+```json
+{
+  "total": 40,
+  "por_proceso": [ { "proceso": "cargue", "total": 12, "supera_umbral": true } ],
+  "por_region": [ { "cuadrante_numero": 7, "lado": "izquierdo", "nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera", "total": 9, "supera_umbral": false } ],
+  "por_region_proceso": [ { "cuadrante_numero": 7, "lado": "izquierdo", "nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera", "proceso": "cargue", "total": 4, "supera_umbral": false } ],
+  "por_nivel": [ { "nivel": "v1", "total": 5 } ],
+  "por_clase": [ { "clase": "golpe", "total": 14 } ],
+  "por_tamano": [ { "tamano": "5_10cm", "total": 8 } ],
+  "umbral": { "cantidad": 10, "ventana_dias": 30 }
+}
+```
+
+Una zona provisional (sin cuadrante) trae `cuadrante_numero` y `lado` en `null` y su nombre en `nombre` y `zona`.
+
+### `GET /api/reportes/indicador-diario?fecha=`
+De las unidades **despachadas el día `fecha`** (`AAAA-MM-DD`; por defecto `hasta` o, si tampoco llega, hoy), el porcentaje de **vehículos con novedad**: los que tuvieron **al menos un hallazgo de nivel V1** ese día (no cualquier hallazgo; los de nivel V1+ también cuentan, como
+propuesta pendiente de confirmar por el negocio). `objetivo` es el parámetro `objetivo_diario_novedad` (1,2 por defecto). `desde` se ignora.
+
+```json
+{
+  "fecha": "2026-10-20", "despachados": 80, "con_novedad": 1, "porcentaje": 1.25, "objetivo": 1.2,
+  "por_operacion": [ { "operacion": "nacional", "despachados": 50, "con_novedad": 1, "porcentaje": 2.0 } ],
+  "por_cliente": [ { "cliente_id": "uuid", "cliente_nombre": "Sofasa", "despachados": 80, "con_novedad": 1, "porcentaje": 1.25 } ]
+}
+```
+
+La tasa de rechazo (`GET /api/metricas/rechazo`) sigue publicada como está; no hay `GET /api/reportes/rechazo`.
+
+### Rutas obsoletas
+
+`GET /api/patrones` y `GET /api/patrones/analisis` **se retirarán**: responden como antes pero con los encabezados `Deprecation: true` y `Link: </api/reportes/patrones>; rel="successor-version"` (y `deprecated` en el contrato OpenAPI). Use `GET /api/reportes/patrones`.
+
+### Reportes anteriores (camelCase)
+
 Autenticados. Todos sus campos van en `camelCase`.
 
-### `GET /api/patrones`
-Hallazgos de unidades movilizadas por proceso y zona (mapa de calor).
+### `GET /api/patrones` (obsoleto)
+Hallazgos de unidades movilizadas por proceso y zona (mapa de calor). **Obsoleto:** use `GET /api/reportes/patrones`.
 
 ```json
 {
@@ -1670,8 +1783,8 @@ Hallazgos de unidades movilizadas por proceso y zona (mapa de calor).
 Las filas internas conservan `snake_case` (`parte_vehiculo`); lo que va en `camelCase` son las claves de primer nivel.
 `parte_vehiculo` conserva su nombre pero ahora trae el **texto de la zona** del hallazgo («Izquierdo 7 · Puerta delantera», «Frente»); en un hallazgo histórico sin ubicar, la parte que se escribió entonces.
 
-### `GET /api/patrones/analisis`
-Clases y tamaños de daño, con sugerencias.
+### `GET /api/patrones/analisis` (obsoleto)
+Clases y tamaños de daño, con sugerencias. **Obsoleto:** use `GET /api/reportes/patrones`.
 
 ```json
 {

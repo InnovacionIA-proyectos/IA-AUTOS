@@ -79,5 +79,10 @@ public sealed class clsAppDbContext : DbContext
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(clsAppDbContext).Assembly);
         modelBuilder.Entity<clsViajeCompleto>().HasNoKey().ToView("vwViajesCompletos");
         modelBuilder.Entity<clsHallazgoVentana>().HasNoKey().ToView("vwHallazgosVentanaUmbral");
+        modelBuilder.Entity<clsFilaCobertura>().HasNoKey().ToView("vwCobertura");
+        modelBuilder.Entity<clsFilaAdopcion>().HasNoKey().ToView("vwAdopcion");
+        modelBuilder.Entity<clsFilaTiempoCaptura>().HasNoKey().ToView("vwTiempoCaptura");
+        modelBuilder.Entity<clsFilaAveria>().HasNoKey().ToView("vwAveriasPorConfiguracion");
+        modelBuilder.Entity<clsFilaIndicadorDiario>().HasNoKey().ToView("vwIndicadorDiario");
     }
 }

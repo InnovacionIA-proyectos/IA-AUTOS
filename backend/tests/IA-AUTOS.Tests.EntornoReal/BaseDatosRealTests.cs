@@ -598,6 +598,32 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Las_vistas_de_los_indicadores_estan_migradas_y_se_consultan_con_los_datos_reales()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/20-vistas-de-indicadores.sql y comprueba que cada vista se consulta con los datos reales.
+        await using var conexion = await AbrirAsync();
+
+        var vistas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE schema_id = SCHEMA_ID() AND name IN (N'vwCobertura', N'vwAdopcion', N'vwTiempoCaptura', N'vwAveriasPorConfiguracion', N'vwIndicadorDiario')");
+        Assert.True(vistas == 5, $"Faltan vistas de indicadores (hay {vistas} de 5). Ejecute database/cambios-esquema/20-vistas-de-indicadores.sql.");
+
+        var cobertura = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura WHERE RegistrosCerrados BETWEEN 1 AND 6 AND Fecha IS NOT NULL AND ClienteId IS NOT NULL");
+        var completasMalContadas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura WHERE (Completa = 1 AND RegistrosCerrados <> 6) OR (Completa = 0 AND RegistrosCerrados = 6)");
+        var sinNoSale = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura c JOIN tblViajeVehiculos vv ON vv.ViajeId = c.ViajeId AND vv.VehiculoId = c.VehiculoId WHERE vv.EstadoUnidad = 'no_sale'");
+        var tiempos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwTiempoCaptura WHERE Proceso NOT IN ('cargue', 'descargue') OR Minutos < 0");
+        var adopcion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwAdopcion WHERE ConSalidaDigital > Programados");
+        var indicador = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwIndicadorDiario WHERE ConNovedad > Despachados");
+        var averias = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwAveriasPorConfiguracion WHERE ClienteId IS NULL OR Fecha IS NULL");
+
+        Assert.True(cobertura >= 0);
+        Assert.Equal(0, completasMalContadas);
+        Assert.Equal(0, sinNoSale);
+        Assert.Equal(0, tiempos);
+        Assert.Equal(0, adopcion);
+        Assert.Equal(0, indicador);
+        Assert.Equal(0, averias);
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();
