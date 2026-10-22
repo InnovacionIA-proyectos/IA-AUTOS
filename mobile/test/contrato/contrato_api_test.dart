@@ -45,7 +45,14 @@ void main() {
     'UsuarioAutenticadoDto': ['id', 'nombre', 'email', 'rol', 'cedula', 'debe_cambiar_pin'],
     'UsuarioDto': ['id', 'nombre', 'rol'],
     'InventarioDto': ['id', 'vin', 'marca', 'modelo', 'operacion', 'etapas'],
-    'InventarioEtapaDto': ['id', 'orden', 'proceso', 'requiere_inspeccion', 'inspecciones'],
+    // `lugar` se pinta en la tarjeta de la etapa y `viaje_id` es lo que lleva a la captura los datos del
+    // transporte: sin él la captura no tiene de dónde sacar la placa ni el conductor.
+    'InventarioEtapaDto': ['id', 'orden', 'proceso', 'lugar', 'requiere_inspeccion', 'viaje_id', 'inspecciones'],
+    'ViajeDto': [
+      'id', 'codigo_mtrack', 'placa', 'estado', 'unidad', 'trailer', 'conductor_nombre', 'inspector_nombre',
+      'origen', 'destino', 'vehiculos',
+    ],
+    'ViajeVehiculoDto': ['vin', 'marca', 'modelo', 'color', 'operacion'],
     'InventarioInspeccionDto': ['id', 'momento', 'momento_nombre', 'fecha', 'estado', 'notas', 'hallazgos', 'evidencias', 'transferencia'],
     'TransferenciaDto': ['firmada'],
     'HallazgoDto': ['id', 'parte_vehiculo', 'clase_dano', 'tamano_dano', 'coords_diagrama'],
@@ -93,6 +100,8 @@ void main() {
       ('post', '/api/auth/cambiar-pin'),
       ('get', '/api/usuarios'),
       ('get', '/api/catalogos'),
+      ('get', '/api/viajes/mios'),
+      ('get', '/api/viajes/{}'),
       ('get', '/api/vehiculos/{}/inventario'),
       ('get', '/api/inspecciones'),
       ('post', '/api/inspecciones'),
