@@ -287,6 +287,12 @@ public sealed class clsViajeVehiculo : clsEntidadBase
     public bool NoSale => EstadoUnidad == clsEstadoUnidad.NO_SALE;
 
     /// <summary>
+    /// El VIN ya completo su ruta en este viaje (todas sus etapas con informe cerrado y la unidad no esta marcada <c>no_sale</c>): la misma regla de <c>vwViajesCompletos</c>. La mantienen los triggers
+    /// de la base al cambiar lo que la determina; la aplicacion solo la lee.
+    /// </summary>
+    public bool Completa { get; private set; }
+
+    /// <summary>
     /// La unidad no sale de este viaje por el hallazgo indicado: queda con su motivo, el hallazgo, quien la marco y cuando. Conserva sus etapas e inspecciones y el
     /// viaje sigue. 409 si ya estaba marcada.
     /// </summary>

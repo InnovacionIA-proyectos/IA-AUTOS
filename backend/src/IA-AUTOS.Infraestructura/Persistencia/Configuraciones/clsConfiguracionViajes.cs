@@ -49,6 +49,10 @@ internal sealed class clsConfiguracionViajeVehiculo : IEntityTypeConfiguration<c
         builder.HasOne<clsVehiculo>().WithMany().HasForeignKey(v => v.VehiculoId)
             .HasConstraintName("FK_tblViajeVehiculos_Vehiculo").OnDelete(DeleteBehavior.NoAction);
         builder.Property(v => v.EstadoUnidad).HasMaxLength(10).HasDefaultValue(clsEstadoUnidad.ACTIVA);
+        // Completa la calculan los triggers de la base: la aplicacion nunca la escribe.
+        builder.Property(v => v.Completa).HasDefaultValue(false)
+            .Metadata.SetBeforeSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
+        builder.Property(v => v.Completa).Metadata.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
         builder.Property(v => v.NoSaleMotivo).HasMaxLength(clsViajeVehiculo.NO_SALE_MOTIVO_MAX);
         builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(v => v.NoSaleHallazgoId)
             .HasConstraintName("FK_tblViajeVehiculos_NoSaleHallazgo").OnDelete(DeleteBehavior.NoAction);

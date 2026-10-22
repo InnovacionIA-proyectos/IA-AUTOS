@@ -191,8 +191,9 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
     }
 
     /// <summary>Con <paramref name="soloDeCliente"/> los conteos de VIN solo cuentan los de ese cliente.</summary>
-    private async Task<List<FilaViaje>> ProyectarAsync(IQueryable<clsViaje> consulta, Guid? soloDeCliente, CancellationToken ct) =>
-        (await (from v in consulta
+    private async Task<List<FilaViaje>> ProyectarAsync(IQueryable<clsViaje> consulta, Guid? soloDeCliente, CancellationToken ct)
+    {
+        var filas = await (from v in consulta
                 join t in contexto.TiposUnidad on v.TipoUnidadId equals t.Id into tipos
                 from t in tipos.DefaultIfEmpty()
                 join c in contexto.Usuarios on v.ConductorId equals c.Id into conductores
@@ -211,14 +212,23 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                     Inspector = (string?)i.Nombre,
                     Origen = (string?)o.Nombre,
                     Destino = (string?)d.Nombre,
-                    ConPersonalApoyo = contexto.Etapas.Any(e => e.ViajeId == v.Id && e.ConPersonalApoyo),
-                    TotalVehiculos = contexto.ViajeVehiculos.Count(vv => vv.ViajeId == v.Id
-                        && (soloDeCliente == null || contexto.Vehiculos.Any(h => h.Id == vv.VehiculoId && h.ClienteId == soloDeCliente))),
-                    VehiculosCompletos = contexto.Set<clsViajeCompleto>().Count(x => x.ViajeId == v.Id
-                        && (soloDeCliente == null || contexto.Vehiculos.Any(h => h.Id == x.VehiculoId && h.ClienteId == soloDeCliente))),
-                }).ToListAsync(ct))
-        .Select(f => new FilaViaje(f.Viaje, f.Unidad, f.Conductor, f.Inspector, f.Origen, f.Destino, f.ConPersonalApoyo, f.TotalVehiculos, f.VehiculosCompletos))
-        .ToList();
+                }).ToListAsync(ct);
+
+        // Los conteos de los viajes se piden aparte, una consulta por tabla agrupada por viaje (y no una subconsulta por cada fila). Completa es la regla de vwViajesCompletos guardada en cada VIN.
+        var ids = filas.Select(f => f.Viaje.Id).ToList();
+        var conPersonalApoyo = (await contexto.Etapas.Where(e => ids.Contains(e.ViajeId) && e.ConPersonalApoyo).Select(e => e.ViajeId).Distinct().ToListAsync(ct)).ToHashSet();
+        var conteos = (await (from vv in contexto.ViajeVehiculos
+                              join h in contexto.Vehiculos on vv.VehiculoId equals h.Id
+                              where ids.Contains(vv.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente)
+                              group vv by vv.ViajeId into g
+                              select new { ViajeId = g.Key, Total = g.Count(), Completos = g.Count(x => x.Completa) }).ToListAsync(ct))
+            .ToDictionary(x => x.ViajeId);
+        return filas
+            .Select(f => new FilaViaje(
+                f.Viaje, f.Unidad, f.Conductor, f.Inspector, f.Origen, f.Destino, conPersonalApoyo.Contains(f.Viaje.Id),
+                conteos.GetValueOrDefault(f.Viaje.Id)?.Total ?? 0, conteos.GetValueOrDefault(f.Viaje.Id)?.Completos ?? 0))
+            .ToList();
+    }
 
     /// <summary>
     /// Los clientes de los VIN de cada viaje (sin repetir, por nombre), con el mismo objeto que <c>cliente</c> en el perfil. Con
