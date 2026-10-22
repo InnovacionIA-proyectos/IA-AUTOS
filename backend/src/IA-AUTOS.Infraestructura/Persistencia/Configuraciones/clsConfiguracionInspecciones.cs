@@ -16,7 +16,11 @@ internal sealed class clsConfiguracionInspeccion : IEntityTypeConfiguration<clsI
     public void Configure(EntityTypeBuilder<clsInspeccion> builder)
     {
         // El trigger de inmutabilidad se declara para que EF no use OUTPUT directo en las actualizaciones.
-        builder.ToTable("tblInspecciones", t => t.HasTrigger("TR_tblInspecciones_Inmutable"));
+        builder.ToTable("tblInspecciones", t =>
+        {
+            t.HasTrigger("TR_tblInspecciones_Inmutable");
+            t.HasTrigger("TR_tblInspecciones_Completa");
+        });
         clsConfiguracionBase.Base(builder);
         builder.Property(i => i.Momento).HasColumnType("varchar(20)").IsRequired();
         builder.Property(i => i.Fecha).HasColumnType(clsConfiguracionBase.TIPO_FECHA);

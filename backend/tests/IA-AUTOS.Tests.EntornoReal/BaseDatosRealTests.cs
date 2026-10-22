@@ -624,6 +624,32 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Los_indices_de_filtros_y_la_columna_Completa_estan_migrados_y_coinciden_con_la_vista()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/21-indices-de-filtros-y-completa.sql y comprueba que Completa coincide con vwViajesCompletos en los datos reales.
+        await using var conexion = await AbrirAsync();
+
+        var indices = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.indexes
+             WHERE name IN (N'IX_tblVehiculos_Filtros', N'IX_tblVehiculos_Activo', N'IX_tblOrdenesSofasa_Filtros', N'IX_tblInspecciones_Filtros', N'IX_tblViajeVehiculos_EstadoUnidad')
+               AND object_id IN (OBJECT_ID(N'tblVehiculos'), OBJECT_ID(N'tblOrdenesSofasa'), OBJECT_ID(N'tblInspecciones'), OBJECT_ID(N'tblViajeVehiculos'))
+            """);
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajeVehiculos') AND name = N'Completa'");
+        var procedimiento = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.procedures WHERE name = N'usp_RecalcularCompleta' AND schema_id = SCHEMA_ID()");
+        var triggers = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE is_disabled = 0 AND name IN (N'TR_tblInspecciones_Completa', N'TR_tblEtapas_Completa', N'TR_tblViajeVehiculos_Completa')");
+        Assert.True(indices == 5, $"Faltan indices de filtros (hay {indices} de 5). Ejecute database/cambios-esquema/21-indices-de-filtros-y-completa.sql.");
+        Assert.True(columna == 1, "Falta tblViajeVehiculos.Completa. Ejecute database/cambios-esquema/21-indices-de-filtros-y-completa.sql.");
+        Assert.True(procedimiento == 1, "Falta usp_RecalcularCompleta. Ejecute database/cambios-esquema/21-indices-de-filtros-y-completa.sql.");
+        Assert.True(triggers == 3, $"Faltan triggers de Completa activos (hay {triggers} de 3). Ejecute database/cambios-esquema/21-indices-de-filtros-y-completa.sql.");
+
+        var diferentes = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM tblViajeVehiculos vv
+             WHERE vv.Completa <> CASE WHEN EXISTS (SELECT 1 FROM vwViajesCompletos c WHERE c.ViajeId = vv.ViajeId AND c.VehiculoId = vv.VehiculoId) THEN 1 ELSE 0 END
+            """);
+        Assert.True(diferentes == 0, $"{diferentes} filas de tblViajeVehiculos tienen Completa distinta de vwViajesCompletos: ejecute EXEC usp_RecalcularCompleta.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

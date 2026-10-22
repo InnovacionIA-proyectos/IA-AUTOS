@@ -37,6 +37,25 @@ programado lo pasa a `en_curso`. Un viaje cancelado deja de ser visible para ins
   [notificaciones.md](notificaciones.md).
 - **Fuera de este servicio:** la integración con MTrack (el código se digita o llega en el Excel) y la visibilidad por cliente del resto de recursos (vehículos, inspecciones, órdenes).
 
+## `Completa` e indices de los listados
+
+`tblViajeVehiculos.Completa` (bit, 0 por defecto) guarda si el VIN ya completo su ruta en ese viaje, con **la misma regla de `vwViajesCompletos`** (que sigue siendo la definicion de referencia): todas las etapas del VIN en el viaje, y al menos una, con
+informe cerrado, y la unidad no esta marcada `no_sale`. Asi un listado de miles de unidades lee una columna en lugar de calcular la vista. No es una columna calculada de SQL Server (no admite consultas a otras tablas): la mantienen tres triggers.
+
+| Cambia | Trigger que recalcula la fila |
+|---|---|
+| un informe se crea, se cierra o se borra | `TR_tblInspecciones_Completa` |
+| una etapa se agrega o se quita | `TR_tblEtapas_Completa` |
+| un VIN entra al viaje o cambia el estado de su unidad (`activa` / `no_sale`) | `TR_tblViajeVehiculos_Completa` |
+
+`EXEC dbo.usp_RecalcularCompleta` recalcula todas las filas con la regla de la vista (solo toca las que difieren). **Hay que ejecutarlo despues de cualquier carga o limpieza que apague los triggers** (`DISABLE TRIGGER`).
+
+Indices para los filtros de los listados paginados: `tblVehiculos (ClienteId, Operacion, Marca, CreatedAt)` y `(Activo)`, `tblOrdenesSofasa (StatusCode, DestinationCity, DatetimeEvent)`, `tblInspecciones (ViajeId, Momento, Estado, Fecha)` y
+`tblViajeVehiculos (EstadoUnidad)`.
+
+Los crea [`database/cambios-esquema/21-indices-de-filtros-y-completa.sql`](../database/cambios-esquema/21-indices-de-filtros-y-completa.sql) (ajustando `@esquema`, en una sola ejecucion, una sola transaccion, repetible; exige `14-sello-y-unidad-no-sale.sql`).
+Resultado esperado: 5 indices, 1 columna, 1 procedimiento, 3 triggers y 0 filas distintas de la vista.
+
 ## Mapeo del modelo anterior
 
 | Antes | Ahora |

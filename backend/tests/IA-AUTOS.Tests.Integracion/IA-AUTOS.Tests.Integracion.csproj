@@ -49,7 +49,9 @@
     <Content Include="..\..\database\cambios-esquema\19-notas-aclaratorias.sql" Link="database\cambios-esquema\19-notas-aclaratorias.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-auditoria.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\20-vistas-de-indicadores.sql" Link="database\cambios-esquema\20-vistas-de-indicadores.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\21-indices-de-filtros-y-completa.sql" Link="database\cambios-esquema\21-indices-de-filtros-y-completa.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-indicadores.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-completa.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>

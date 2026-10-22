@@ -1247,6 +1247,93 @@ HAVING COUNT(*) > 0 AND COUNT(*) = SUM(x.Cerrada)');
 GO
 
 /* -----------------------------------------------------------------------------
+   Indices de los filtros de los listados y estado "completa" de la unidad en el viaje.
+   - Indices: tblVehiculos (ClienteId, Operacion, Marca, CreatedAt) y (Activo, arriba); tblOrdenesSofasa (StatusCode, DestinationCity, DatetimeEvent);
+     tblInspecciones (ViajeId, Momento, Estado, Fecha); tblViajeVehiculos (EstadoUnidad).
+   - tblViajeVehiculos.Completa: 1 cuando el VIN ya completo su ruta en ese viaje, con LA MISMA regla de vwViajesCompletos (que sigue siendo la definicion de referencia). Se guarda en la
+     fila para no calcular la vista sobre miles de unidades en cada listado. No es una columna calculada de SQL Server (no admite consultas a otras tablas): la mantienen triggers al
+     cambiar lo que la determina. dbo.usp_RecalcularCompleta la recalcula toda; hay que ejecutarla despues de cualquier carga o limpieza que apague los triggers.
+   ----------------------------------------------------------------------------- */
+IF COL_LENGTH(N'dbo.tblVehiculos', N'ClienteId') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblVehiculos_Filtros' AND object_id = OBJECT_ID(N'dbo.tblVehiculos'))
+    EXEC (N'CREATE INDEX IX_tblVehiculos_Filtros ON dbo.tblVehiculos (ClienteId, Operacion, Marca, CreatedAt)');
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblOrdenesSofasa_Filtros' AND object_id = OBJECT_ID(N'dbo.tblOrdenesSofasa'))
+    CREATE INDEX IX_tblOrdenesSofasa_Filtros ON dbo.tblOrdenesSofasa (StatusCode, DestinationCity, DatetimeEvent);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblInspecciones_Filtros' AND object_id = OBJECT_ID(N'dbo.tblInspecciones'))
+    CREATE INDEX IX_tblInspecciones_Filtros ON dbo.tblInspecciones (ViajeId, Momento, Estado, Fecha);
+GO
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'EstadoUnidad') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblViajeVehiculos_EstadoUnidad' AND object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
+    EXEC (N'CREATE INDEX IX_tblViajeVehiculos_EstadoUnidad ON dbo.tblViajeVehiculos (EstadoUnidad)');
+GO
+
+-- La columna, el procedimiento y los triggers se crean con SQL dinamico: cada uno necesita que el anterior ya exista como lote aparte.
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'Completa') IS NULL
+    EXEC (N'ALTER TABLE dbo.tblViajeVehiculos ADD Completa bit NOT NULL CONSTRAINT DF_tblViajeVehiculos_Completa DEFAULT (0)');
+GO
+EXEC (N'CREATE OR ALTER PROCEDURE dbo.usp_RecalcularCompleta
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE vv SET Completa = n.Valor
+    FROM dbo.tblViajeVehiculos vv
+    CROSS APPLY (SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos c WHERE c.ViajeId = vv.ViajeId AND c.VehiculoId = vv.VehiculoId) THEN 1 ELSE 0 END AS bit) AS Valor) n
+    WHERE vv.Completa <> n.Valor;
+END');
+GO
+EXEC (N'CREATE OR ALTER TRIGGER dbo.TR_tblInspecciones_Completa
+ON dbo.tblInspecciones
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    -- Solo importa un informe nuevo, uno borrado o un cambio de estado.
+    IF EXISTS (SELECT 1 FROM inserted) AND EXISTS (SELECT 1 FROM deleted) AND NOT UPDATE(Estado) RETURN;
+    UPDATE vv SET Completa = n.Valor
+    FROM dbo.tblViajeVehiculos vv
+    JOIN (SELECT e.ViajeId, e.VehiculoId FROM inserted i JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+          UNION
+          SELECT e.ViajeId, e.VehiculoId FROM deleted d JOIN dbo.tblEtapas e ON e.Id = d.EtapaId) p ON p.ViajeId = vv.ViajeId AND p.VehiculoId = vv.VehiculoId
+    CROSS APPLY (SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos c WHERE c.ViajeId = vv.ViajeId AND c.VehiculoId = vv.VehiculoId) THEN 1 ELSE 0 END AS bit) AS Valor) n
+    WHERE vv.Completa <> n.Valor;
+END');
+GO
+EXEC (N'CREATE OR ALTER TRIGGER dbo.TR_tblEtapas_Completa
+ON dbo.tblEtapas
+AFTER INSERT, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    UPDATE vv SET Completa = n.Valor
+    FROM dbo.tblViajeVehiculos vv
+    JOIN (SELECT ViajeId, VehiculoId FROM inserted UNION SELECT ViajeId, VehiculoId FROM deleted) p ON p.ViajeId = vv.ViajeId AND p.VehiculoId = vv.VehiculoId
+    CROSS APPLY (SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos c WHERE c.ViajeId = vv.ViajeId AND c.VehiculoId = vv.VehiculoId) THEN 1 ELSE 0 END AS bit) AS Valor) n
+    WHERE vv.Completa <> n.Valor;
+END');
+GO
+-- Sin EstadoUnidad (una base que aun no tiene el estado de la unidad) no hay estado que vigilar: el trigger se crea cuando la columna existe.
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'EstadoUnidad') IS NOT NULL
+    EXEC (N'CREATE OR ALTER TRIGGER dbo.TR_tblViajeVehiculos_Completa
+ON dbo.tblViajeVehiculos
+AFTER INSERT, UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    -- Un VIN nuevo en el viaje o un cambio del estado de la unidad (una unidad "no_sale" no cuenta como completa). Cambiar solo Completa no vuelve a calcular nada.
+    IF EXISTS (SELECT 1 FROM deleted) AND NOT UPDATE(EstadoUnidad) RETURN;
+    UPDATE vv SET Completa = n.Valor
+    FROM dbo.tblViajeVehiculos vv
+    JOIN inserted p ON p.Id = vv.Id
+    CROSS APPLY (SELECT CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos c WHERE c.ViajeId = vv.ViajeId AND c.VehiculoId = vv.VehiculoId) THEN 1 ELSE 0 END AS bit) AS Valor) n
+    WHERE vv.Completa <> n.Valor;
+END');
+GO
+EXEC dbo.usp_RecalcularCompleta;
+GO
+
+/* -----------------------------------------------------------------------------
    Inmutabilidad a nivel de base de datos (ultima defensa; la aplicacion ya la
    aplica en el dominio):
    - una inspeccion cerrada no puede modificarse,
