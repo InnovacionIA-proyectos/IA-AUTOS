@@ -285,7 +285,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         });
         var evidencias = insp.GetProperty("evidencias");
         Assert.Equal(2, evidencias.GetArrayLength());
-        Assert.Equal("/api/uploads/foto-0.jpg", evidencias[0].GetProperty("url").GetString());
+        Assert.StartsWith("http://localhost/api/uploads/foto-0.jpg?exp=", evidencias[0].GetProperty("url").GetString());
         Assert.False(evidencias[0].TryGetProperty("storage_path", out _));
         var transferencia = insp.GetProperty("transferencia");
         Assert.True(transferencia.GetProperty("firmada").GetBoolean());

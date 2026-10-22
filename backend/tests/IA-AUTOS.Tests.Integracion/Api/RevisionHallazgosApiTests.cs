@@ -217,7 +217,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     public async Task Los_niveles_criticos_son_el_parametro_niveles_criticos()
     {
         var e = await EscenarioAsync();
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblParametros SET Valor = N'v1_plus, v2' WHERE Clave = 'niveles_criticos'");
+        await CambiarParametroAsync("niveles_criticos", "v1_plus, v2", _api);
 
         await RevisarAsync(e.Inspector, e.Novedad, Cuerpo(c => c["nivel_severidad"] = "v2"));
 

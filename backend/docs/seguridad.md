@@ -36,13 +36,14 @@ Cambios intencionales que corrigen riesgos detectados en el diagnostico. Ninguno
 - Todo el acceso a datos es parametrizado (EF Core).
 - La API se conecta con un usuario de base de datos de minimo privilegio (`database/01-crear-usuario-app.sql`), no con `sa`.
 - El secreto JWT se valida al arrancar (minimo 32 caracteres).
+- Las fotos no son publicas: solo se ven con una URL firmada por el servidor (HMAC-SHA256 del nombre del archivo y su vencimiento con `Storage__FirmaSecreto`, minimo 32 caracteres) y vigente (`url_firmada_minutos`). Una URL sin firma, con otra firma o vencida
+  responde `403 URL_FIRMADA_INVALIDA`; la firma se compara en tiempo constante y no hace falta enviar el token, asi que sirve en una etiqueta de imagen.
 - Los secretos solo llegan por variables de entorno; `.env` esta en `.gitignore` y fuera de la imagen (`.dockerignore`).
 
 ## Riesgos aceptados y recomendaciones
 
 | Riesgo | Estado | Recomendacion |
 |---|---|---|
-| Las imagenes se leen sin token (decision del sistema anterior: las etiquetas de imagen no envian cabeceras; el nombre es un UUID no adivinable) | se mantiene por compatibilidad | cuando web y app puedan enviar el token, active `Storage__LecturaPublica=false` |
 | El token dura 30 dias y no hay refresh | se mantiene por compatibilidad con la app instalada | la revocacion es inmediata por baja del usuario; evaluar tokens cortos con refresh al migrar la app a Flutter |
 | Una consulta a la base por solicitud para validar al usuario | costo bajo (clave primaria) | si el volumen lo exige, agregar un cache de pocos segundos |
 | El limite de intentos es por IP y en memoria de la instancia | basico | con varias instancias, mover el limite a un almacen compartido o al proxy |

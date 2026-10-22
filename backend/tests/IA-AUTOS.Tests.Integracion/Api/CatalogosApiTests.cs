@@ -788,7 +788,7 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal("image/png", imagen.Content.Headers.ContentType?.MediaType);
         Assert.Contains("max-age=31536000", imagen.Headers.CacheControl?.ToString());
         Assert.Contains("public", imagen.Headers.CacheControl?.ToString());
-        Assert.Equal(await (await anonimo.GetAsync($"/api/uploads/{archivo}")).Content.ReadAsByteArrayAsync(), await imagen.Content.ReadAsByteArrayAsync());
+        Assert.Equal(await (await anonimo.GetAsync(UrlFirmada(archivo))).Content.ReadAsByteArrayAsync(), await imagen.Content.ReadAsByteArrayAsync());
     }
 
     [Fact]

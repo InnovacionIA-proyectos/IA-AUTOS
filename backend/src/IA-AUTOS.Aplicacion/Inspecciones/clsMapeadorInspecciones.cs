@@ -57,8 +57,8 @@ public static class clsMapeadorInspecciones
 
     public static EvidenciaDto AEvidencia(clsEvidencia e) => new(
         e.Id, e.InspeccionId, e.HallazgoId, e.SelloFecha, e.SelloLat, e.SelloLng,
-        clsUrlsArchivos.ParaStoragePath(e.StoragePath), e.CreatedAt, e.UpdatedAt,
-        e.VistaId, e.HashSha256, e.SelloServidorAt, e.Precision, e.DispositivoId, e.Nota, e.SinUbicacion, e.EsConstancia, e.EsSello);
+        clsUrlsArchivos.ParaStoragePath(e.StoragePath), null, e.CreatedAt, e.UpdatedAt,
+        e.VistaId, e.HashSha256, e.SelloServidorAt, e.Precision, e.DispositivoId, e.Nota, e.SinUbicacion, e.EsConstancia, e.EsSello, e.StoragePath);
 
     public static TransferenciaDto ATransferencia(clsTransferenciaCustodia t) => new(
         t.Id, t.InspeccionId, t.EntregaUsuarioId, t.RecibeUsuarioId, t.EstaCompleta, t.FirmadaAt, t.CreatedAt, t.UpdatedAt,

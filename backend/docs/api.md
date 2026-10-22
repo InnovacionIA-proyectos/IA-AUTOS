@@ -72,8 +72,8 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | DELETE `/api/dispositivos/{token_fcm}` | autenticado | retira el token al cerrar sesion (siempre `204`) |
 | POST `/api/viajes/{id}/vehiculos/{vin}/no-sale` | inspector del viaje y coordinador_calidad (403 a los demas) | marca que la unidad no sale del viaje por un hallazgo V1+ de una inspeccion cerrada (`motivo`, `hallazgo_id`, `vin_reemplazo` opcional); responde el viaje; `409` si no es V1+, no es de ese VIN, la inspeccion no esta cerrada, ya no sale o el reemplazo esta en un viaje activo o antes no salio y no esta recuperado |
 | POST `/api/inspecciones/{id}/cerrar` | campo, creador o administrador | cierra el informe; `{ inspeccion, resumen }`. En Cargue y Descargue exige las 7 vistas obligatorias (`400` con el nombre de la que falta), una foto propia por hallazgo y ubicacion en toda foto; en Transporte exige el GPS del registro |
-| POST `/api/uploads` | campo | sube una foto en base64 (JSON) o como `multipart/form-data` (campo `archivo`); JPG o PNG; `{ storage_path, url, hash_sha256 }` |
-| GET `/api/uploads/{archivo}` | publico por defecto | sirve la imagen |
+| POST `/api/uploads` | campo | sube una foto en base64 (JSON) o como `multipart/form-data` (campo `archivo`); JPG o PNG; `{ storage_path, url, url_expira_at, hash_sha256 }` con la URL absoluta y firmada |
+| GET `/api/uploads/{archivo}?exp=&firma=` | URL firmada (sin token) | sirve la imagen; `403 URL_FIRMADA_INVALIDA` sin firma, con firma invalida o vencida; `404` si no existe |
 | POST `/api/etl/sofasa/ordenes` | token del ETL | ingesta idempotente por `source_id` |
 | GET `/api/sofasa/ordenes` | autenticado | ordenes mas recientes primero (maximo 500), con `viaje_id` y `codigo_mtrack`; inspector y conductor solo ven las de sus viajes |
 | GET `/api/catalogos` | autenticado | todos los catalogos maestros (etapas, lugares, clases y tamanos de dano, niveles, vistas, cuadrantes con las zonas provisionales, paneles de dano y sus regiones, clientes...) con version (`ETag`, `304` con `If-None-Match`) |
@@ -105,6 +105,7 @@ Siempre JSON:
 | METHOD_NOT_ALLOWED | 405 | metodo no admitido en una ruta existente |
 | CONFLICT | 409 | duplicados, inspeccion cerrada, transferencia ya cerrada, firmantes de la transferencia que no se pueden cambiar, registro que es evidencia y no se puede borrar |
 | HALLAZGO_YA_REVISADO | 409 | la novedad del conductor ya fue revisada por un inspector |
+| URL_FIRMADA_INVALIDA | 403 | la URL de una foto no tiene firma, la firma no coincide o ya vencio |
 | LLEGADA_YA_CERRADA | 409 | la llegada de Transporte de esa unidad ya estaba confirmada (un reintento del conductor es un exito) |
 | UNIDAD_NO_SALE | 409 | la unidad se marco «no sale» del viaje: no admite novedades ni llegada |
 | ETAPA_PREVIA_SIN_CIERRE | 409 | la etapa anterior del VIN no esta terminada (sin llegada cerrada o con la transferencia sin tipo de cierre): no se puede crear la salida de la siguiente |

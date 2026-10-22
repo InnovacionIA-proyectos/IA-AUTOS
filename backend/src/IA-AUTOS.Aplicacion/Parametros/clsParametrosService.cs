@@ -16,6 +16,9 @@ public interface IParametros
 
     /// <summary>Los codigos de un parametro de tipo lista (separados por coma, sin espacios sobrantes ni repetidos); <paramref name="porDefecto"/> si no existe o no tiene valor.</summary>
     Task<IReadOnlyList<string>> ListaAsync(string clave, IReadOnlyList<string> porDefecto, CancellationToken ct = default);
+
+    /// <summary>Descarta los valores guardados: la proxima lectura va a la base. Se usa cuando se sabe que un valor cambio (por ejemplo, al editarlo) para no esperar el minuto de la cache.</summary>
+    void Invalidar();
 }
 
 /// <summary>
@@ -39,6 +42,8 @@ public sealed class clsParametrosService(IParametroRepository repositorio, IMemo
         var lista = (await ValorAsync(clave, ct))?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.Ordinal).ToList();
         return lista is { Count: > 0 } ? lista : porDefecto;
     }
+
+    public void Invalidar() => cache.Remove(CLAVE_CACHE);
 
     private async Task<IReadOnlyDictionary<string, string?>> ObtenerAsync(CancellationToken ct)
     {

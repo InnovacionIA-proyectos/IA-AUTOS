@@ -22,7 +22,7 @@ La API se configura solo con variables de entorno (o `appsettings`). El doble gu
 | `Storage__S3__Endpoint`, `__Bucket`, `__Region`, `__AccessKey`, `__SecretKey` | no | almacenamiento S3 compatible; si Endpoint o Bucket faltan se usa disco |
 | `Storage__LocalPath` | no (`.uploads`) | carpeta para el almacenamiento en disco |
 | `Storage__MaximoBytes` | no (10 MB) | tamano maximo de una imagen |
-| `Storage__LecturaPublica` | no (`true`) | `false` exige token para leer imagenes |
+| `Storage__FirmaSecreto` | recomendada | secreto (minimo 32 caracteres) con el que el servidor firma las URL de las fotos; si falta se deriva del secreto de los tokens (y se avisa en el log), pero conviene configurarlo. La vigencia de la URL es el parametro `url_firmada_minutos` |
 | `Alertas__ProcesosActivos` | no (`true`) | `false` apaga los procesos periodicos de alertas (por ejemplo, en una instancia que solo atiende peticiones) |
 | `Alertas__AvisosCadaMinutos`, `Alertas__UmbralesCadaMinutos` | no (10 y 60) | cada cuanto corren los avisos operativos y los patrones por umbral; los umbrales y los minutos de espera de las alertas son parametros (`tblParametros`), no variables de entorno |
 | `Notificaciones__FcmProyectoId`, `__FcmClientEmail`, `__FcmClavePrivada` | no | cuenta de servicio de Firebase para enviar los push (el id del proyecto, el correo de la cuenta y su clave privada; los saltos de linea de la clave pueden ir como `\n`). Sin ellas el push no se envia y cada notificacion queda con su error de envio |

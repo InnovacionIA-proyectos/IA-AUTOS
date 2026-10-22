@@ -23,6 +23,9 @@ public static class clsCodigosError
     /// <summary>La llegada de Transporte de esa unidad ya estaba cerrada (409): un reintento del conductor es un exito, el servidor no la repite.</summary>
     public const string LLEGADA_YA_CERRADA = "LLEGADA_YA_CERRADA";
 
+    /// <summary>La URL de la foto no tiene firma, la firma no coincide o ya vencio (403): hay que pedir una URL nueva al sistema.</summary>
+    public const string URL_FIRMADA_INVALIDA = "URL_FIRMADA_INVALIDA";
+
     /// <summary>La novedad del conductor ya fue revisada por un inspector (409): su zona, clase y nivel ya no se cambian.</summary>
     public const string HALLAZGO_YA_REVISADO = "HALLAZGO_YA_REVISADO";
 

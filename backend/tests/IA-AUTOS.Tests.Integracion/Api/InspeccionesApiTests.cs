@@ -692,7 +692,9 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var lista = (await ClonarAsync(await Cliente(sesion.Token).GetAsync($"/api/inspecciones/{actual}/hallazgos-previos"))).EnumerateArray().ToList();
 
         var foto = Assert.Single(lista).GetProperty("evidencias").EnumerateArray().Single();
-        Assert.Equal("/api/uploads/hallazgo-previo.png", foto.GetProperty("url").GetString());
+        Assert.StartsWith("http://localhost/api/uploads/hallazgo-previo.png?exp=", foto.GetProperty("url").GetString());
+        Assert.Contains("&firma=", foto.GetProperty("url").GetString());
+        Assert.NotEqual(JsonValueKind.Null, foto.GetProperty("url_expira_at").ValueKind);
         Assert.Equal(hallazgo, foto.GetProperty("hallazgo_id").GetGuid());
         Assert.False(foto.TryGetProperty("storage_path", out _));
     }
@@ -780,7 +782,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var e = await ClonarAsync(r);
         Assert.Equal(
             [
-                "id", "inspeccion_id", "hallazgo_id", "sello_fecha", "sello_lat", "sello_lng", "url", "created_at", "updated_at", "vista_id", "hash_sha256",
+                "id", "inspeccion_id", "hallazgo_id", "sello_fecha", "sello_lat", "sello_lng", "url", "url_expira_at", "created_at", "updated_at", "vista_id", "hash_sha256",
                 "sello_servidor_at", "precision", "dispositivo_id", "nota", "sin_ubicacion", "es_constancia", "es_sello",
             ],
             e.EnumerateObject().Select(p => p.Name).ToList());
@@ -791,7 +793,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal("tablet-1", e.GetProperty("dispositivo_id").GetString());
         Assert.Equal(64, e.GetProperty("hash_sha256").GetString()!.Length);
         Assert.False(e.GetProperty("sin_ubicacion").GetBoolean());
-        Assert.StartsWith("/api/uploads/", e.GetProperty("url").GetString());
+        Assert.StartsWith("http://localhost/api/uploads/", e.GetProperty("url").GetString());
+        Assert.True(DateTimeOffset.Parse(e.GetProperty("url_expira_at").GetString()!) > DateTimeOffset.UtcNow.AddMinutes(14));
         Assert.Equal(JsonValueKind.Null, e.GetProperty("hallazgo_id").ValueKind);
         // El sello del servidor es la hora en que llego la foto (no la del dispositivo, que era de 2026).
         var recibida = DateTimeOffset.Parse(e.GetProperty("sello_servidor_at").GetString()!);
@@ -1801,7 +1804,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(1, inf.GetProperty("hallazgos").GetArrayLength());
         Assert.Equal("Frente", inf.GetProperty("hallazgos")[0].GetProperty("zona").GetString());
         Assert.Equal("v2", inf.GetProperty("hallazgos")[0].GetProperty("nivel_severidad").GetString());
-        Assert.Equal($"/api/uploads/{ruta}", inf.GetProperty("evidencias")[0].GetProperty("url").GetString());
+        Assert.StartsWith($"http://localhost/api/uploads/{ruta}?exp=", inf.GetProperty("evidencias")[0].GetProperty("url").GetString());
         Assert.Equal(1, inf.GetProperty("version").GetInt32());
         Assert.Equal("Inspección de salida", inf.GetProperty("momento_nombre").GetString());
         var t = inf.GetProperty("transferencia");

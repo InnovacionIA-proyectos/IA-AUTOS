@@ -153,7 +153,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
     public async Task Los_niveles_criticos_son_un_parametro_que_se_cambia_sin_desplegar()
     {
         var e = await EscenarioAsync();
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblParametros SET Valor = N'v2' WHERE Clave = 'niveles_criticos'");
+        await CambiarParametroAsync("niveles_criticos", "v2", _api);
 
         var r = await CerrarTransporteConHallazgosAsync(e, "v2");
 
@@ -192,7 +192,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
     public async Task Al_llegar_al_umbral_una_zona_y_un_proceso_alertan_una_sola_vez_por_ventana()
     {
         var e = await EscenarioAsync();
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblParametros SET Valor = N'2' WHERE Clave = 'umbral_patron_cantidad'");
+        await CambiarParametroAsync("umbral_patron_cantidad", "2", _api);
         await HallazgoCerradoAsync(e.Etapas[0], e.Inspector.UsuarioId, "salida");
         await HallazgoCerradoAsync(e.Etapas[0], e.Inspector.UsuarioId, "llegada");
         await HallazgoCerradoAsync(e.Etapas[1], e.Inspector.UsuarioId, "salida");
@@ -233,7 +233,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
         Assert.Equal(0, await NotificacionesAsync("umbral_patron"));
 
         // Cambiado el parametro, una instancia que lee de nuevo (la lectura se guarda un minuto) alerta.
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblParametros SET Valor = N'2' WHERE Clave = 'umbral_patron_cantidad'");
+        await CambiarParametroAsync("umbral_patron_cantidad", "2", _api);
         _api = CrearFabrica(servicios: s => s.AddSingleton<IEnviadorPush>(_push));
         Assert.Equal(4, await ConProcesosAsync(p => p.EjecutarUmbralesAsync()));
     }
@@ -242,7 +242,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
     public async Task Los_hallazgos_fuera_de_la_ventana_y_los_de_otro_cliente_no_cuentan()
     {
         var e = await EscenarioAsync();
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblParametros SET Valor = N'3' WHERE Clave = 'umbral_patron_cantidad'");
+        await CambiarParametroAsync("umbral_patron_cantidad", "3", _api);
         await HallazgoCerradoAsync(e.Etapas[0], e.Inspector.UsuarioId, "salida");
         await HallazgoCerradoAsync(e.Etapas[0], e.Inspector.UsuarioId, "llegada");
         // Un tercero de hace 40 dias: fuera de la ventana de 30.
@@ -265,7 +265,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
     public async Task Un_hallazgo_de_otro_cliente_alerta_solo_al_coordinador_de_su_cliente()
     {
         var e = await EscenarioAsync();
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblParametros SET Valor = N'2' WHERE Clave = 'umbral_patron_cantidad'");
+        await CambiarParametroAsync("umbral_patron_cantidad", "2", _api);
         var otroCliente = Guid.NewGuid();
         await Sembrador.EjecutarAsync("INSERT dbo.tblClientes (Id, Codigo, Nombre, Orden) VALUES (@id, 'otro', N'Otro cliente', 2)", ("@id", otroCliente));
         var coordinadorOtro = await SesionAsync("coord-otro@ejemplo.com", clsRol.COORDINADOR_CALIDAD, otroCliente);
@@ -362,7 +362,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
         await BorradorAsync(e.Etapas[0], e.Inspector.UsuarioId, minutosAbierta: 20);
         Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));
 
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblParametros SET Valor = N'15' WHERE Clave = 'captura_incompleta_minutos'");
+        await CambiarParametroAsync("captura_incompleta_minutos", "15", _api);
         _api = CrearFabrica(servicios: s => s.AddSingleton<IEnviadorPush>(_push));
 
         Assert.Equal(1, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));
@@ -472,7 +472,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
         await LlegadaCerradaAsync(e.Etapas[2], e.Inspector.UsuarioId);
         Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));
 
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblParametros SET Valor = N'30' WHERE Clave = 'transferencia_pendiente_minutos'");
+        await CambiarParametroAsync("transferencia_pendiente_minutos", "30", _api);
         _api = CrearFabrica(servicios: s => s.AddSingleton<IEnviadorPush>(_push));
         Assert.Equal(1, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));
 

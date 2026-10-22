@@ -251,7 +251,7 @@ public sealed class SeguimientoHallazgosApiTests(clsBaseDatosFixture bd) : clsPr
         var historial = (await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync($"/api/hallazgos/{e.Hallazgo}/seguimiento"))).EnumerateArray().ToList();
         var sello = Assert.Single(historial).GetProperty("evidencia_sello");
         Assert.True(sello.GetProperty("es_sello").GetBoolean());
-        Assert.Equal($"/api/uploads/{ruta}", sello.GetProperty("url").GetString());
+        Assert.StartsWith($"http://localhost/api/uploads/{ruta}?exp=", sello.GetProperty("url").GetString());
         Assert.Equal(hash, sello.GetProperty("hash_sha256").GetString());
         Assert.Equal(e.Inspeccion, sello.GetProperty("inspeccion_id").GetGuid());
         Assert.Equal(JsonValueKind.Null, sello.GetProperty("hallazgo_id").ValueKind);
