@@ -22,6 +22,15 @@ public sealed class clsVehiculosController(clsVehiculosService servicio) : clsCo
         return Creado(await servicio.CargarVinsAsync(solicitud, ct));
     }
 
+    /// <summary>
+    /// Baja logica del vehiculo: <c>activo = false</c> y responde <c>{ "modo": "inactivado" }</c>. Ya no se busca ni se agrega a un viaje, pero conserva sus etapas, inspecciones y evidencias. Solo el
+    /// administrador, el super administrador y el coordinador de calidad (de un VIN de su cliente). 404 si no existe.
+    /// </summary>
+    [HttpDelete("{vin}")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<BajaVehiculoResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> DarDeBaja(string vin, CancellationToken ct) => Ok(await servicio.DarDeBajaAsync(vin, ct));
+
     /// <summary>Autocompletado del inventario: fragmento de VIN o de marca (maximo 8 resultados).</summary>
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<VehiculoBusquedaDto>>(StatusCodes.Status200OK)]

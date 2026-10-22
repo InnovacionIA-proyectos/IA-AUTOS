@@ -117,7 +117,7 @@ public sealed class clsUsuariosService(
         }
 
         usuarios.Agregar(usuario);
-        auditor.Registrar("usuario.crear", "usuarios", usuario.Id);
+        auditor.Registrar("usuario.crear", "usuarios", usuario.Id, detalle: new DetalleAuditoria(null, clsInstantaneasAuditoria.De(usuario)), clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorUsuarios.ADto(usuario, pinTemporal);
     }
@@ -182,7 +182,7 @@ public sealed class clsUsuariosService(
         if (!await usuarios.TieneHistorialAsync(id, ct))
         {
             usuarios.Eliminar(usuario);
-            auditor.Registrar("usuario.eliminar", "usuarios", id);
+            auditor.Registrar("usuario.eliminar", "usuarios", id, detalle: new DetalleAuditoria(clsInstantaneasAuditoria.De(usuario), null), clienteId: usuario.ClienteId);
             try
             {
                 await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -196,8 +196,10 @@ public sealed class clsUsuariosService(
             }
         }
 
+        var antesDeRetirar = clsInstantaneasAuditoria.De(usuario);
         usuario.Retirar(reloj.Ahora);
-        auditor.Registrar("usuario.retirar", "usuarios", usuario.Id);
+        auditor.Registrar(
+            "usuario.retirar", "usuarios", usuario.Id, detalle: new DetalleAuditoria(antesDeRetirar, clsInstantaneasAuditoria.De(usuario)), clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return new EliminarUsuarioResponse("retirado");
     }
@@ -212,8 +214,10 @@ public sealed class clsUsuariosService(
     {
         var usuario = await ObtenerGestionableAsync(id, ct);
         var pin = solicitud.Pin is null ? clsPin.Generar() : clsPin.Validar(solicitud.Pin);
+        var antesDelPin = clsInstantaneasAuditoria.De(usuario);
         usuario.AsignarPin(contrasenas.Hashear(pin), debeCambiar: true, reloj.Ahora);
-        auditor.Registrar("usuario.pin_asignar", "usuarios", usuario.Id);
+        auditor.Registrar(
+            "usuario.pin_asignar", "usuarios", usuario.Id, detalle: new DetalleAuditoria(antesDelPin, clsInstantaneasAuditoria.De(usuario)), clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorUsuarios.ADto(usuario, solicitud.Pin is null ? pin : null);
     }
@@ -222,8 +226,10 @@ public sealed class clsUsuariosService(
     public async Task<UsuarioDto> ForzarCambioDePinAsync(Guid id, CancellationToken ct = default)
     {
         var usuario = await ObtenerGestionableAsync(id, ct);
+        var antesDeForzar = clsInstantaneasAuditoria.De(usuario);
         usuario.ForzarCambioDePin(reloj.Ahora);
-        auditor.Registrar("usuario.pin_forzar_cambio", "usuarios", usuario.Id);
+        auditor.Registrar(
+            "usuario.pin_forzar_cambio", "usuarios", usuario.Id, detalle: new DetalleAuditoria(antesDeForzar, clsInstantaneasAuditoria.De(usuario)), clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorUsuarios.ADto(usuario);
     }
@@ -233,7 +239,7 @@ public sealed class clsUsuariosService(
     {
         var usuario = await ObtenerGestionableAsync(id, ct);
         usuario.Desbloquear(reloj.Ahora);
-        auditor.Registrar("usuario.desbloquear", "usuarios", usuario.Id);
+        auditor.Registrar("usuario.desbloquear", "usuarios", usuario.Id, clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorUsuarios.ADto(usuario);
     }
@@ -279,6 +285,7 @@ public sealed class clsUsuariosService(
             }
         }
 
+        var antes = clsInstantaneasAuditoria.De(usuario);
         usuario.Modificar(
             cambios.Nombre,
             cambios.CambiaEmail, cambios.Email,
@@ -296,7 +303,8 @@ public sealed class clsUsuariosService(
             usuario.AsignarCliente(await ClienteDeAltaAsync(usuario.Rol, null, ct), reloj.Ahora);
         }
 
-        auditor.Registrar("usuario.actualizar", "usuarios", usuario.Id);
+        auditor.Registrar(
+            "usuario.actualizar", "usuarios", usuario.Id, detalle: new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(usuario)), clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorUsuarios.ADto(usuario);
     }

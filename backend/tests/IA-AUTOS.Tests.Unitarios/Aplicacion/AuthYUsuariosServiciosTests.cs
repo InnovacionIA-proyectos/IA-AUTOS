@@ -41,15 +41,15 @@ internal sealed class clsContexto
     private readonly IOptions<clsOpcionesSeguridad> _seguridad = Options.Create(new clsOpcionesSeguridad { PasswordMinimo = 8, PinMaxIntentos = 5, PinBloqueoMinutos = 15 });
 
     public clsAuthService Auth() => new(Usuarios, Contrasenas, new clsEmisorTokenFalso(), UnidadDeTrabajo,
-        new clsAuditor(Auditoria, Actual, Reloj), Reloj, Catalogos, _seguridad,
+        new clsAuditor(Auditoria, Actual, new clsContextoSolicitudFalso(), new clsOrigenAuditoriaFalso(), Reloj), Reloj, Catalogos, _seguridad,
         new LoginRequestValidator(), new LoginConductorRequestValidator(), new CambiarPinRequestValidator());
 
     public clsUsuariosService ServicioUsuarios() => new(Usuarios, Contrasenas, UnidadDeTrabajo,
-        new clsAuditor(Auditoria, Actual, Reloj), Actual, Reloj, Catalogos, _seguridad,
+        new clsAuditor(Auditoria, Actual, new clsContextoSolicitudFalso(), new clsOrigenAuditoriaFalso(), Reloj), Actual, Reloj, Catalogos, _seguridad,
         new CrearUsuarioRequestValidator(_seguridad));
 
     public clsCargaConductoresService CargaConductores() => new(Usuarios, Contrasenas, Catalogos, UnidadDeTrabajo,
-        new clsAuditor(Auditoria, Actual, Reloj), Actual, Reloj, new CargarConductoresRequestValidator(),
+        new clsAuditor(Auditoria, Actual, new clsContextoSolicitudFalso(), new clsOrigenAuditoriaFalso(), Reloj), Actual, Reloj, new CargarConductoresRequestValidator(),
         Microsoft.Extensions.Logging.Abstractions.NullLogger<clsCargaConductoresService>.Instance);
 
     /// <summary>Conductor (o inspector) que entra con cedula y PIN. <paramref name="debeCambiar"/> en false deja el PIN como ya cambiado por la persona.</summary>

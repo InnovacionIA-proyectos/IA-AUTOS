@@ -74,7 +74,8 @@ public sealed class clsCargaConductoresService(
         if (confirmar)
         {
             creados = await GuardarAsync(validas, ct);
-            auditor.Registrar("usuarios.cargar_conductores", "usuarios");
+            auditor.Registrar(
+                "usuarios.cargar_conductores", "usuarios", detalle: new DetalleAuditoria(null, new { filas = filas.Count, creados }));
             await unidadDeTrabajo.GuardarCambiosAsync(ct);
         }
 
@@ -215,7 +216,7 @@ public sealed class clsCargaConductoresService(
             {
                 var usuario = clsUsuario.CrearConPin(fila.Nombre!, fila.Email, clsRol.CONDUCTOR, null, fila.Cedula, hashes[i], reloj.Ahora, clienteId);
                 usuarios.Agregar(usuario);
-                auditor.Registrar("usuario.crear", "usuarios", usuario.Id);
+                auditor.Registrar("usuario.crear", "usuarios", usuario.Id, detalle: new DetalleAuditoria(null, clsInstantaneasAuditoria.De(usuario)), clienteId: usuario.ClienteId);
                 await unidadDeTrabajo.GuardarCambiosAsync(ct);
                 fila.UsuarioId = usuario.Id;
                 fila.Pin = pines[i];

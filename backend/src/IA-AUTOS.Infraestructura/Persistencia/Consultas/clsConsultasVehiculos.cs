@@ -15,7 +15,8 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
 
     public async Task<IReadOnlyList<VehiculoBusquedaDto>> BuscarAsync(string termino, Guid? soloDeUsuario, Guid? soloDeCliente, CancellationToken ct = default)
     {
-        var consulta = contexto.Vehiculos.AsNoTracking().Where(v => v.Vin.Contains(termino) || v.Marca.Contains(termino));
+        // Un vehiculo dado de baja ya no se ofrece al buscar (sigue en los listados, el inventario y los reportes).
+        var consulta = contexto.Vehiculos.AsNoTracking().Where(v => v.Activo && (v.Vin.Contains(termino) || v.Marca.Contains(termino)));
         if (soloDeCliente is { } clienteId)
         {
             consulta = consulta.Where(v => v.ClienteId == clienteId);
@@ -30,7 +31,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
         return await consulta
             .OrderBy(v => v.Vin)
             .Take(MAXIMO_BUSQUEDA)
-            .Select(v => new VehiculoBusquedaDto(v.Vin, v.Marca, v.Modelo, v.Color, v.Operacion))
+            .Select(v => new VehiculoBusquedaDto(v.Vin, v.Marca, v.Modelo, v.Color, v.Operacion, v.Activo))
             .ToListAsync(ct);
     }
 
@@ -82,6 +83,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                 v.Modelo,
                 v.Color,
                 v.Operacion,
+                v.Activo,
                 contexto.Etapas.Count(e => e.VehiculoId == v.Id),
                 contexto.Etapas.Count(e => e.VehiculoId == v.Id
                     && contexto.Inspecciones.Any(i => i.EtapaId == e.Id && i.Estado == clsEstadoInspeccion.CERRADA)),
@@ -183,6 +185,6 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
 
         return new InventarioDto(
             vehiculo.Id, vehiculo.Vin, vehiculo.Marca, vehiculo.TipoVehiculo, vehiculo.Modelo, vehiculo.Chasis,
-            vehiculo.Color, vehiculo.Operacion, vehiculo.CreatedAt, vehiculo.UpdatedAt, etapasDto);
+            vehiculo.Color, vehiculo.Operacion, vehiculo.Activo, vehiculo.CreatedAt, vehiculo.UpdatedAt, etapasDto);
     }
 }

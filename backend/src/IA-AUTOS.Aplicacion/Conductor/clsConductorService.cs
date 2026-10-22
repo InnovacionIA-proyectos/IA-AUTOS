@@ -60,7 +60,8 @@ public sealed class clsConductorService(
             salida = clsInspeccion.Crear(
                 unidad.Transporte.Id, unidad.Viaje.Id, actual.IdObligatorio(), clsMomento.SALIDA, solicitud.Fecha!.Value, solicitud.Lat, solicitud.Lng, null, null, ahora);
             inspecciones.Agregar(salida);
-            auditor.Registrar("inspeccion.crear", "inspecciones", salida.Id);
+            await auditor.RegistrarDeViajeAsync(
+                "inspeccion.crear", "inspecciones", salida.Id, unidad.Viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(salida)), unidad.Vehiculo.ClienteId, ct);
         }
         else
         {
@@ -75,8 +76,10 @@ public sealed class clsConductorService(
         unidad.Viaje.RegistrarActividad(ahora);
         inspecciones.Agregar(hallazgo);
         inspecciones.Agregar(evidencia);
-        auditor.Registrar("novedad.crear", "hallazgos", hallazgo.Id);
-        auditor.Registrar("evidencia.crear", "evidencias", evidencia.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "novedad.crear", "hallazgos", hallazgo.Id, unidad.Viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(hallazgo)), unidad.Vehiculo.ClienteId, ct);
+        await auditor.RegistrarDeViajeAsync(
+            "evidencia.crear", "evidencias", evidencia.Id, unidad.Viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(evidencia)), unidad.Vehiculo.ClienteId, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
 
         await AvisarNovedadAsync(unidad, hallazgo, ct);
@@ -102,25 +105,31 @@ public sealed class clsConductorService(
         var salida = await inspecciones.ObtenerUltimaDeEtapaAsync(unidad.Transporte.Id, clsMomento.SALIDA, ct);
         if (salida is { EstaCerrada: false })
         {
+            var salidaAntes = clsInstantaneasAuditoria.De(salida);
             salida.Cerrar(await inspecciones.ObtenerResumenCierreAsync(salida.Id, ct), [], exigeUbicacionPropia: true, ahora);
-            auditor.Registrar("inspeccion.cerrar", "inspecciones", salida.Id);
+            await auditor.RegistrarDeViajeAsync(
+                "inspeccion.cerrar", "inspecciones", salida.Id, unidad.Viaje.Id, new DetalleAuditoria(salidaAntes, clsInstantaneasAuditoria.De(salida)), unidad.Vehiculo.ClienteId, ct);
         }
 
+        object? llegadaAntes = null;
         if (llegada is null)
         {
             llegada = clsInspeccion.Crear(
                 unidad.Transporte.Id, unidad.Viaje.Id, actual.IdObligatorio(), clsMomento.LLEGADA, solicitud.Fecha!.Value, solicitud.Lat, solicitud.Lng, null, null, ahora);
             inspecciones.Agregar(llegada);
-            auditor.Registrar("inspeccion.crear", "inspecciones", llegada.Id);
+            await auditor.RegistrarDeViajeAsync(
+                "inspeccion.crear", "inspecciones", llegada.Id, unidad.Viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(llegada)), unidad.Vehiculo.ClienteId, ct);
             llegada.Cerrar(new clsResumenCierre(0, 0, 0, 0, []), [], exigeUbicacionPropia: true, ahora);
         }
         else
         {
+            llegadaAntes = clsInstantaneasAuditoria.De(llegada);
             llegada.Cerrar(await inspecciones.ObtenerResumenCierreAsync(llegada.Id, ct), [], exigeUbicacionPropia: true, ahora);
         }
 
         unidad.Viaje.RegistrarActividad(ahora);
-        auditor.Registrar("llegada.registrar", "inspecciones", llegada.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "llegada.registrar", "inspecciones", llegada.Id, unidad.Viaje.Id, new DetalleAuditoria(llegadaAntes, clsInstantaneasAuditoria.De(llegada)), unidad.Vehiculo.ClienteId, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
 
         var novedades = salida is null ? 0 : await inspecciones.ContarNovedadesAsync(salida.Id, ct);

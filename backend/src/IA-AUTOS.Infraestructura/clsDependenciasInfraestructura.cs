@@ -1,5 +1,6 @@
 using IAAutos.Aplicacion.Alertas;
 using IAAutos.Aplicacion.Archivos;
+using IAAutos.Aplicacion.Auditoria;
 using IAAutos.Aplicacion.Auth.Services;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Inspecciones;
@@ -76,6 +77,8 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IConsultasNotificaciones, clsConsultasNotificaciones>();
         servicios.AddScoped<IConsultasAlertas, clsConsultasAlertas>();
         servicios.AddScoped<IConsultasNotas, clsConsultasNotas>();
+        servicios.AddScoped<IOrigenAuditoria, clsOrigenAuditoria>();
+        servicios.AddScoped<IConsultasAuditoria, clsConsultasAuditoria>();
         servicios.AddScoped<INotaAclaratoriaRepository, clsNotaAclaratoriaRepository>();
         servicios.AddScoped<IParametroRepository, clsParametroRepository>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();

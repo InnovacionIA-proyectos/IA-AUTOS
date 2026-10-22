@@ -276,7 +276,7 @@ public sealed class CatalogosServiceTests
         [_etapas, _clases],
         new MemoryCache(new MemoryCacheOptions()),
         _uow,
-        new clsAuditor(_auditoria, new clsUsuarioActualFalso(), new clsRelojFijo(AHORA)),
+        new clsAuditor(_auditoria, new clsUsuarioActualFalso(), new clsContextoSolicitudFalso(), new clsOrigenAuditoriaFalso(), new clsRelojFijo(AHORA)),
         _imagenes,
         new clsArchivosService(_almacen, new SubirArchivoRequestValidator(), Options.Create(new clsOpcionesAlmacenamiento())),
         Options.Create(new clsOpcionesCatalogos { CacheSegundos = cacheSegundos }));

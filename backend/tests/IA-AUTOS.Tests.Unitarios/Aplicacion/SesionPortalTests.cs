@@ -40,7 +40,7 @@ public sealed class SesionPortalTests
         _contrasenas,
         new clsEmisorTokenFalso(),
         _uow,
-        new clsAuditor(_auditoria, new clsUsuarioActualFalso(), _reloj),
+        new clsAuditor(_auditoria, new clsUsuarioActualFalso(), new clsContextoSolicitudFalso(), new clsOrigenAuditoriaFalso(), _reloj),
         _reloj,
         Options.Create(_sesion),
         Options.Create(_opcionesPortal),

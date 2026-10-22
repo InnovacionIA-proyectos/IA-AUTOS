@@ -1000,6 +1000,59 @@
         ]
       }
     },
+    "/api/vehiculos/{vin}": {
+      "delete": {
+        "tags": [
+          "Vehiculos"
+        ],
+        "operationId": "Vehiculos_DarDeBaja",
+        "parameters": [
+          {
+            "name": "vin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/BajaVehiculoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BajaVehiculoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BajaVehiculoResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/vehiculos": {
       "get": {
         "tags": [
@@ -4553,6 +4606,170 @@
         ]
       }
     },
+    "/api/auditoria": {
+      "get": {
+        "tags": [
+          "Auditoria"
+        ],
+        "operationId": "Auditoria_Listar",
+        "parameters": [
+          {
+            "name": "usuario_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entidad",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "entidad_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "viaje_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "accion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "tamano",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoAuditoriaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoAuditoriaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListadoAuditoriaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/auditoria/{id}": {
+      "get": {
+        "tags": [
+          "Auditoria"
+        ],
+        "operationId": "Auditoria_Obtener",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditoriaDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditoriaDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditoriaDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/uploads": {
       "post": {
         "tags": [
@@ -4900,6 +5117,122 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "AuditoriaDto": {
+        "required": [
+          "id",
+          "usuario_id",
+          "usuario_nombre",
+          "rol",
+          "accion",
+          "entidad",
+          "entidad_id",
+          "viaje_id",
+          "codigo_mtrack",
+          "cliente_id",
+          "ip",
+          "dispositivo",
+          "detalle",
+          "created_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "usuario_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rol": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "accion": {
+            "type": "string"
+          },
+          "entidad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entidad_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "viaje_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cliente_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "ip": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "dispositivo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "detalle": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DetalleAuditoriaDto"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "BajaVehiculoResponse": {
+        "required": [
+          "modo"
+        ],
+        "type": "object",
+        "properties": {
+          "modo": {
+            "type": "string"
           }
         }
       },
@@ -5951,6 +6284,35 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "DetalleAuditoriaDto": {
+        "required": [
+          "antes",
+          "despues"
+        ],
+        "type": "object",
+        "properties": {
+          "antes": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "despues": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
           }
         }
       },
@@ -7846,6 +8208,7 @@
           "chasis",
           "color",
           "operacion",
+          "activo",
           "created_at",
           "updated_at",
           "etapas"
@@ -7888,6 +8251,9 @@
           },
           "operacion": {
             "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
           },
           "created_at": {
             "format": "date-time"
@@ -8121,6 +8487,36 @@
           }
         }
       },
+      "JsonElement": {},
+      "ListadoAuditoriaDto": {
+        "required": [
+          "items",
+          "total",
+          "pagina",
+          "tamano"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditoriaDto"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pagina": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tamano": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "ListadoHallazgosDto": {
         "required": [
           "items",
@@ -8250,6 +8646,7 @@
           "modelo",
           "color",
           "operacion",
+          "activo",
           "etapas",
           "completas",
           "novedades"
@@ -8280,6 +8677,9 @@
           },
           "operacion": {
             "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
           },
           "etapas": {
             "type": "integer",
@@ -10067,7 +10467,8 @@
           "marca",
           "modelo",
           "color",
-          "operacion"
+          "operacion",
+          "activo"
         ],
         "type": "object",
         "properties": {
@@ -10091,6 +10492,9 @@
           },
           "operacion": {
             "type": "string"
+          },
+          "activo": {
+            "type": "boolean"
           }
         }
       },
@@ -10493,6 +10897,9 @@
     },
     {
       "name": "clsAuth"
+    },
+    {
+      "name": "clsAuditoria"
     },
     {
       "name": "clsArchivos"

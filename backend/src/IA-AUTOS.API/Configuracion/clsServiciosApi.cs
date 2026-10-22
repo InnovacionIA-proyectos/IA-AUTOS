@@ -27,6 +27,7 @@ public static class clsServiciosApi
         servicios.AddHttpContextAccessor();
         servicios.Configure<clsOpcionesEtl>(configuracion.GetSection(clsOpcionesEtl.SECCION));
         servicios.AddScoped<IUsuarioActual, clsUsuarioActualHttp>();
+        servicios.AddScoped<IContextoSolicitud, clsContextoSolicitudHttp>();
 
         servicios
             // Todo controlador exige autenticacion salvo [AllowAnonymous] (login y health). Un filtro global, a diferencia de una
@@ -94,7 +95,7 @@ public static class clsServiciosApi
             o.AddPolicy(POLITICA_CORS, politica => politica
                 .WithOrigins(origenes)
                 .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                .WithHeaders("Content-Type", "Authorization")
+                .WithHeaders("Content-Type", "Authorization", clsContextoSolicitudHttp.CABECERA_DISPOSITIVO)
                 .WithExposedHeaders("Content-Disposition")
                 .SetPreflightMaxAge(TimeSpan.FromSeconds(86400)));
         });

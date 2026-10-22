@@ -76,7 +76,14 @@ public sealed class clsNoSaleService(
 
         inspecciones.Agregar(clsHallazgoSeguimiento.CrearNoSale(hallazgo.Id, actual.IdObligatorio(), motivo, ahora));
         viaje.RegistrarActividad(ahora);
-        auditor.Registrar("viaje.no_sale", "viajes", viaje.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "viaje.no_sale",
+            "viajes",
+            viaje.Id,
+            viaje.Id,
+            new DetalleAuditoria(null, new { vin = vehiculo.Vin, motivo, hallazgo_id = hallazgo.Id, vin_reemplazo = reemplazo?.Vin }),
+            vehiculo.ClienteId,
+            ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await consultas.ObtenerAsync(viaje.Id, actual.ClienteRestringido(), ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {viajeId} no encontrado");
     }

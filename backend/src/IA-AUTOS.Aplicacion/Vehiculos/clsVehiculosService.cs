@@ -80,9 +80,40 @@ public sealed class clsVehiculosService(
             }
         }
 
-        auditor.Registrar("vehiculos.cargar", "vehiculos");
+        auditor.Registrar(
+            "vehiculos.cargar",
+            "vehiculos",
+            detalle: new DetalleAuditoria(null, new { recibidos = items.Count, creados, actualizados, con_error = errores.Count }));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return new ResultadoCargaDto(items.Count, creados, actualizados, errores.Count, errores);
+    }
+
+    /// <summary>
+    /// Baja logica del vehiculo: queda inactivo (<c>activo = false</c>) y ya no se busca ni se agrega a un viaje, pero conserva sus etapas, inspecciones y evidencias. 404 si el VIN no existe;
+    /// 403 si es de otro cliente. Darlo de baja otra vez responde igual y no cambia nada. Queda en la auditoria.
+    /// </summary>
+    public async Task<BajaVehiculoResponse> DarDeBajaAsync(string vin, CancellationToken ct = default)
+    {
+        var vehiculo = await vehiculos.ObtenerPorVinAsync(vin, ct)
+            ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
+        if (actual.ClienteRestringido() is { } cliente && vehiculo.ClienteId != cliente)
+        {
+            throw new clsProhibidoException("El VIN no es de su cliente");
+        }
+
+        if (vehiculo.Activo)
+        {
+            vehiculo.DarDeBaja(reloj.Ahora);
+            auditor.Registrar(
+                "vehiculo.baja",
+                "vehiculos",
+                vehiculo.Id,
+                detalle: new DetalleAuditoria(new { vehiculo.Vin, activo = true }, new { vehiculo.Vin, activo = false }),
+                clienteId: vehiculo.ClienteId);
+            await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        }
+
+        return new BajaVehiculoResponse("inactivado");
     }
 
     /// <summary>Autocompletado. Inspectores y conductores solo encuentran los VIN de sus viajes; el resto, los de su cliente (el super administrador, todos).</summary>

@@ -43,10 +43,21 @@ internal sealed class clsConfiguracionAuditLog : IEntityTypeConfiguration<clsAud
 {
     public void Configure(EntityTypeBuilder<clsAuditLog> builder)
     {
-        builder.ToTable("tblAuditLog");
+        // La auditoria no se modifica ni se borra (triggers INSTEAD OF): solo se inserta.
+        builder.ToTable("tblAuditLog", t =>
+        {
+            t.HasTrigger("TR_tblAuditLog_NoModificar");
+            t.HasTrigger("TR_tblAuditLog_NoBorrar");
+        });
         clsConfiguracionBase.Base(builder);
         builder.Property(a => a.Accion).HasMaxLength(100).IsRequired();
         builder.Property(a => a.Entidad).HasMaxLength(100);
+        builder.Property(a => a.Ip).HasColumnType("varchar(45)");
+        builder.Property(a => a.Dispositivo).HasMaxLength(clsAuditLog.DISPOSITIVO_MAX);
+        builder.Property(a => a.Detalle).HasColumnType("nvarchar(max)");
+        builder.HasIndex(a => new { a.Entidad, a.EntidadId }).HasDatabaseName("IX_tblAuditLog_Entidad");
+        builder.HasIndex(a => a.ViajeId).HasDatabaseName("IX_tblAuditLog_Viaje");
+        builder.HasIndex(a => a.ClienteId).HasDatabaseName("IX_tblAuditLog_Cliente");
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(a => a.UsuarioId)
             .HasConstraintName("FK_tblAuditLog_Usuario").OnDelete(DeleteBehavior.NoAction);
     }

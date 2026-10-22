@@ -172,7 +172,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
 
         Assert.Equal(8, porVin.GetArrayLength());
         Assert.Equal("ABC00XYZ", porVin[0].GetProperty("vin").GetString());
-        Assert.Equal(["vin", "marca", "modelo", "color", "operacion"], porVin[0].EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["vin", "marca", "modelo", "color", "operacion", "activo"], porVin[0].EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("OTRO-VIN", porMarca[0].GetProperty("vin").GetString());
         Assert.Equal(0, vacio.GetArrayLength());
         Assert.Equal(0, comodin.GetArrayLength()); // el comodin % se trata como texto literal
@@ -256,7 +256,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal(vehiculoId, inv.GetProperty("id").GetGuid());
         Assert.Equal("INV-VIN-0001", inv.GetProperty("vin").GetString());
         Assert.Equal(
-            ["id", "vin", "marca", "tipo_vehiculo", "modelo", "chasis", "color", "operacion", "created_at", "updated_at", "etapas"],
+            ["id", "vin", "marca", "tipo_vehiculo", "modelo", "chasis", "color", "operacion", "activo", "created_at", "updated_at", "etapas"],
             inv.EnumerateObject().Select(p => p.Name).ToList());
         var listaEtapas = inv.GetProperty("etapas");
         Assert.Equal(["cargue", "transporte", "descargue"], listaEtapas.EnumerateArray().Select(e => e.GetProperty("proceso").GetString()).ToList());
@@ -357,5 +357,134 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         {
             Assert.Equal(HttpStatusCode.Unauthorized, (await Cliente().GetAsync(ruta)).StatusCode);
         }
+    }
+
+    // ---------------------------------------------------------------------------------------- baja logica
+
+    [Theory]
+    [InlineData(clsRol.ADMIN)]
+    [InlineData(clsRol.SUPER_ADMIN)]
+    [InlineData(clsRol.COORDINADOR_CALIDAD)]
+    public async Task Dar_de_baja_un_vehiculo_lo_inactiva_y_responde_modo_inactivado(string rol)
+    {
+        var token = await TokenAsync(rol, $"{rol}@ejemplo.com");
+        await Sembrador.VehiculoAsync("VIN-BAJA-0001");
+
+        var r = await Cliente(token).DeleteAsync("/api/vehiculos/vin-baja-0001");
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var cuerpo = await ClonarAsync(r);
+        Assert.Equal(["modo"], cuerpo.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal("inactivado", cuerpo.GetProperty("modo").GetString());
+        Assert.Equal(false, await Sembrador.EscalarAsync("SELECT Activo FROM dbo.tblVehiculos WHERE Vin = 'VIN-BAJA-0001'"));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblVehiculos WHERE Vin = 'VIN-BAJA-0001'"));
+    }
+
+    [Fact]
+    public async Task La_baja_queda_en_la_auditoria_con_el_antes_y_el_despues_y_repetirla_no_cambia_nada()
+    {
+        var token = await TokenAsync(clsRol.ADMIN, "admin@ejemplo.com");
+        await Sembrador.VehiculoAsync("VIN-BAJA-0002");
+
+        var primera = await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0002");
+        var segunda = await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0002");
+
+        Assert.Equal(HttpStatusCode.OK, primera.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, segunda.StatusCode);
+        Assert.Equal("inactivado", (await ClonarAsync(segunda)).GetProperty("modo").GetString());
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'vehiculo.baja'"));
+        var detalle = (string)(await Sembrador.EscalarAsync("SELECT Detalle FROM dbo.tblAuditLog WHERE Accion = 'vehiculo.baja'"))!;
+        using var doc = JsonDocument.Parse(detalle);
+        Assert.True(doc.RootElement.GetProperty("antes").GetProperty("activo").GetBoolean());
+        Assert.False(doc.RootElement.GetProperty("despues").GetProperty("activo").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Un_vehiculo_dado_de_baja_no_aparece_en_la_busqueda_pero_si_en_el_listado_y_el_inventario_con_activo_false()
+    {
+        var token = await TokenAsync(clsRol.ADMIN, "admin@ejemplo.com");
+        await Sembrador.VehiculoAsync("VIN-BUSCA-0001");
+        await Sembrador.VehiculoAsync("VIN-BUSCA-0002");
+        await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BUSCA-0001");
+
+        var busqueda = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos?vin=VIN-BUSCA"));
+        var listado = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/listado?tipo=pendientes"));
+        var inventario = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/VIN-BUSCA-0001/inventario"));
+
+        Assert.Equal(["VIN-BUSCA-0002"], busqueda.EnumerateArray().Select(v => v.GetProperty("vin").GetString()).ToList());
+        Assert.True(busqueda[0].GetProperty("activo").GetBoolean());
+        var filas = listado.GetProperty("rows").EnumerateArray().ToDictionary(v => v.GetProperty("vin").GetString()!, v => v.GetProperty("activo").GetBoolean());
+        Assert.False(filas["VIN-BUSCA-0001"]);
+        Assert.True(filas["VIN-BUSCA-0002"]);
+        Assert.False(inventario.GetProperty("activo").GetBoolean());
+    }
+
+    [Fact]
+    public async Task La_baja_conserva_etapas_inspecciones_y_hallazgos_del_vehiculo()
+    {
+        var token = await TokenAsync(clsRol.ADMIN, "admin@ejemplo.com");
+        var inspector = await Fabrica.SembrarUsuarioAsync("insp@ejemplo.com", "Clave-Segura-1", clsRol.INSPECTOR);
+        var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-BAJA-0003", inspectorId: inspector.Id);
+        await Sembrador.InformeAsync(etapas[0], inspector.Id, cerrada: true, hallazgos: 1);
+
+        var r = await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0003");
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal(3, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas"));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones"));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
+        var inventario = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/VIN-BAJA-0003/inventario"));
+        Assert.Equal(3, inventario.GetProperty("etapas").GetArrayLength());
+        Assert.Equal(1, inventario.GetProperty("etapas")[0].GetProperty("inspecciones").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Un_vehiculo_dado_de_baja_no_se_agrega_a_un_viaje()
+    {
+        var token = await TokenAsync(clsRol.COORDINADOR_CALIDAD, "coord@ejemplo.com");
+        await Sembrador.VehiculoAsync("VIN-BAJA-0004");
+        var viaje = await Sembrador.ViajeAsync();
+        await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0004");
+
+        var agregado = await Cliente(token).PostAsJsonAsync($"/api/viajes/{viaje}/vehiculos", new { vines = new[] { "VIN-BAJA-0004" } });
+
+        Assert.Equal(HttpStatusCode.BadRequest, agregado.StatusCode);
+        Assert.Contains("VIN-BAJA-0004", (await ClonarAsync(agregado)).GetProperty("details").GetProperty("fieldErrors").GetProperty("vines")[0].GetString());
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajeVehiculos WHERE ViajeId = @v", ("@v", viaje)));
+    }
+
+    [Fact]
+    public async Task Dar_de_baja_un_vin_inexistente_responde_404_y_los_demas_roles_403()
+    {
+        var admin = await TokenAsync(clsRol.ADMIN, "admin@ejemplo.com");
+        await Sembrador.VehiculoAsync("VIN-BAJA-0005");
+
+        Assert.Equal(HttpStatusCode.NotFound, (await Cliente(admin).DeleteAsync("/api/vehiculos/NO-EXISTE")).StatusCode);
+        foreach (var rol in new[] { clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.COMERCIAL })
+        {
+            var token = await TokenAsync(rol, $"{rol}@ejemplo.com");
+            Assert.Equal(HttpStatusCode.Forbidden, (await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0005")).StatusCode);
+        }
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Cliente().DeleteAsync("/api/vehiculos/VIN-BAJA-0005")).StatusCode);
+        Assert.Equal(true, await Sembrador.EscalarAsync("SELECT Activo FROM dbo.tblVehiculos WHERE Vin = 'VIN-BAJA-0005'"));
+    }
+
+    [Fact]
+    public async Task Quien_se_limita_a_su_cliente_no_da_de_baja_un_vehiculo_de_otro_cliente()
+    {
+        var otro = Guid.NewGuid();
+        await Sembrador.EjecutarAsync("INSERT dbo.tblClientes (Id, Codigo, Nombre, Orden) VALUES (@id, 'otro', N'Otro cliente', 2)", ("@id", otro));
+        await Sembrador.VehiculoAsync("VIN-BAJA-0006");
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblVehiculos SET ClienteId = @c WHERE Vin = 'VIN-BAJA-0006'", ("@c", otro));
+        var coordinador = await TokenAsync(clsRol.COORDINADOR_CALIDAD, "coord@ejemplo.com");
+        var super = await TokenAsync(clsRol.SUPER_ADMIN, "super@ejemplo.com");
+
+        var ajeno = await Cliente(coordinador).DeleteAsync("/api/vehiculos/VIN-BAJA-0006");
+        var deTodos = await Cliente(super).DeleteAsync("/api/vehiculos/VIN-BAJA-0006");
+
+        Assert.Equal(HttpStatusCode.Forbidden, ajeno.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, deTodos.StatusCode);
+        Assert.Equal(false, await Sembrador.EscalarAsync("SELECT Activo FROM dbo.tblVehiculos WHERE Vin = 'VIN-BAJA-0006'"));
     }
 }

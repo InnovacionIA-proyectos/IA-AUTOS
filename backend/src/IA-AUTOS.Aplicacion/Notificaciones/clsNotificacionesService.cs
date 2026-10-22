@@ -83,7 +83,13 @@ public sealed class clsNotificacionesService(
         if (!notificacion.EstaLeida)
         {
             notificacion.MarcarLeida(reloj.Ahora);
-            auditor.Registrar("notificacion.leer", "notificaciones", notificacion.Id);
+            auditor.Registrar(
+                "notificacion.leer",
+                "notificaciones",
+                notificacion.Id,
+                detalle: new DetalleAuditoria(new { leida = false }, new { leida = true, notificacion.LeidaAt }),
+                viajeId: notificacion.ViajeId,
+                clienteId: notificacion.ClienteId);
             await unidadDeTrabajo.GuardarCambiosAsync(ct);
         }
 
@@ -121,7 +127,13 @@ public sealed class clsNotificacionesService(
             throw new clsConflictoException("La novedad ya fue respondida");
         }
 
-        auditor.Registrar("notificacion.responder", "notificaciones", notificacion.Id);
+        auditor.Registrar(
+            "notificacion.responder",
+            "notificaciones",
+            notificacion.Id,
+            detalle: new DetalleAuditoria(new { respondida = false }, new { respondida = true, texto, medio = solicitud.Medio, hallazgo_id = hallazgoId }),
+            viajeId: notificacion.ViajeId,
+            clienteId: notificacion.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
 
         var viaje = notificacion.ViajeId is { } viajeId ? await viajes.ObtenerPorIdAsync(viajeId, ct) : null;

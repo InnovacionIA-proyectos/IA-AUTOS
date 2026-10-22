@@ -109,15 +109,18 @@ public sealed class clsSesionPortalService(
         if (usuario.PortalUsuarioId is null)
         {
             usuario.VincularPortal(idPortal, reloj.Ahora);
-            auditor.Registrar("usuario.vincular_portal", "usuarios", usuario.Id, usuario.Id);
+            auditor.Registrar(
+                "usuario.vincular_portal", "usuarios", usuario.Id, usuario.Id, new DetalleAuditoria(new { portal_usuario_id = (long?)null }, new { portal_usuario_id = idPortal }), clienteId: usuario.ClienteId);
             cambios = true;
         }
 
         if (usuario.Rol != rol)
         {
             // El portal manda sobre el rol: si cambio desde la ultima vez, se refleja de inmediato.
+            var rolAnterior = usuario.Rol;
             usuario.Actualizar(nombre: null, email: null, rol, subtipoInspector: null, nuevoPasswordHash: null, activo: null, reloj.Ahora);
-            auditor.Registrar("usuario.rol_desde_portal", "usuarios", usuario.Id, usuario.Id);
+            auditor.Registrar(
+                "usuario.rol_desde_portal", "usuarios", usuario.Id, usuario.Id, new DetalleAuditoria(new { rol = rolAnterior }, new { rol }), clienteId: usuario.ClienteId);
             cambios = true;
         }
 
@@ -163,7 +166,8 @@ public sealed class clsSesionPortalService(
         var usuario = clsUsuario.Crear(nombre.Trim(), correo, rol, subtipoInspector: null, passwordInerte, reloj.Ahora, clienteId: clienteId);
         usuario.VincularPortal(info.Id, reloj.Ahora);
         usuarios.Agregar(usuario);
-        auditor.Registrar("usuario.crear_desde_portal", "usuarios", usuario.Id, usuarioId: null);
+        auditor.Registrar(
+            "usuario.crear_desde_portal", "usuarios", usuario.Id, usuarioId: null, new DetalleAuditoria(null, new { usuario.Nombre, usuario.Email, usuario.Rol, portal_usuario_id = info.Id }), clienteId: clienteId);
 
         // Se guarda aqui para que la cuenta exista antes del refresh token y la auditoria que la referencian.
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -298,7 +302,7 @@ public sealed class clsSesionPortalService(
         var dto = clsAuthService.ADto(usuario);
         var access = emisor.EmitirSesion(dto, familiaId, TimeSpan.FromMinutes(Math.Max(opciones.AccessMinutos, 1)));
 
-        auditor.Registrar(accionAuditoria, "usuarios", usuario.Id, usuario.Id);
+        auditor.Registrar(accionAuditoria, "usuarios", usuario.Id, usuario.Id, clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return new SesionEmitida(access, dto, plano, nuevo.ExpiraAt);
     }

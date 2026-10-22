@@ -52,7 +52,14 @@ public sealed class clsViajesService(
         var vehiculosAAgregar = await ResolverVehiculosAsync(viaje, solicitud.Vines ?? [], new HashSet<Guid>(), ct);
         viajes.Agregar(viaje);
         await ensamblaje.AgregarVehiculosAsync(viaje, vehiculosAAgregar, solicitud.ConPersonalApoyo ?? false, await catalogos.RutaEstandarAsync(ct), ct);
-        auditor.Registrar("viaje.crear", "viajes", viaje.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "viaje.crear",
+            "viajes",
+            viaje.Id,
+            viaje.Id,
+            new DetalleAuditoria(null, new { viaje = clsInstantaneasAuditoria.De(viaje), vines = vehiculosAAgregar.Select(v => v.Vin).ToList() }),
+            vehiculosAAgregar.Select(v => (Guid?)v.ClienteId).FirstOrDefault(),
+            ct);
 
         // Un codigo MTrack repetido que se coló entre la consulta y el guardado se traduce a 409 al confirmar.
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -116,6 +123,7 @@ public sealed class clsViajesService(
         var destinoId = lector.Identificador("destino_id");
         await ValidarReferenciasAsync(tipoUnidadId, conductorId, inspectorId, origenId, destinoId, ct);
 
+        var antes = clsInstantaneasAuditoria.De(viaje);
         viaje.Actualizar(
             codigo,
             tipoUnidadId,
@@ -133,7 +141,8 @@ public sealed class clsViajesService(
             await PropagarAEtapasAsync(viaje, lector.Tiene("origen_id"), lector.Tiene("destino_id"), personalApoyo, ct);
         }
 
-        auditor.Registrar("viaje.actualizar", "viajes", viaje.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "viaje.actualizar", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(viaje)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ObtenerDtoAsync(id, ct);
     }
@@ -142,8 +151,10 @@ public sealed class clsViajesService(
     {
         await validadorEstado.ValidarOLanzarAsync(solicitud, ct);
         var viaje = await ObtenerViajeAsync(id, ct);
+        var estadoAnterior = viaje.Estado;
         viaje.CambiarEstado(solicitud.Estado!, reloj.Ahora);
-        auditor.Registrar($"viaje.estado.{viaje.Estado}", "viajes", viaje.Id);
+        await auditor.RegistrarDeViajeAsync(
+            $"viaje.estado.{viaje.Estado}", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(new { estado = estadoAnterior }, new { estado = viaje.Estado }), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ObtenerDtoAsync(id, ct);
     }
@@ -159,7 +170,8 @@ public sealed class clsViajesService(
         var conPersonalApoyo = (await viajes.ObtenerEtapasAsync(id, null, ct)).Any(e => e.ConPersonalApoyo);
         var vehiculosAAgregar = await ResolverVehiculosAsync(viaje, solicitud.Vines!, yaEnElViaje, ct);
         await ensamblaje.AgregarVehiculosAsync(viaje, vehiculosAAgregar, conPersonalApoyo, await catalogos.RutaEstandarAsync(ct), ct);
-        auditor.Registrar("viaje.agregar_vin", "viajes", viaje.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "viaje.agregar_vin", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(null, new { vines = vehiculosAAgregar.Select(v => v.Vin).ToList() }), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ObtenerDtoAsync(id, ct);
     }
@@ -180,7 +192,8 @@ public sealed class clsViajesService(
 
         viajes.Eliminar(await viajes.ObtenerEtapasAsync(id, vehiculo.Id, ct));
         viajes.Eliminar(enlace);
-        auditor.Registrar("viaje.quitar_vin", "viajes", viaje.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "viaje.quitar_vin", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(new { vines = new[] { vehiculo.Vin } }, null), vehiculo.ClienteId, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ObtenerDtoAsync(id, ct);
     }
@@ -201,7 +214,7 @@ public sealed class clsViajesService(
         }
 
         viajes.Eliminar(viaje);
-        auditor.Registrar("viaje.eliminar", "viajes", id);
+        await auditor.RegistrarDeViajeAsync("viaje.eliminar", "viajes", id, id, new DetalleAuditoria(clsInstantaneasAuditoria.De(viaje), null), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
     }
 
@@ -315,6 +328,12 @@ public sealed class clsViajesService(
         }
 
         var encontrados = normalizados.Select(v => existentes[v]).ToList();
+        var inactivos = encontrados.Where(v => !v.Activo).Select(v => v.Vin).ToList();
+        if (inactivos.Count > 0)
+        {
+            throw clsErroresCampos.De("vines", $"Están dados de baja y no se asignan a un viaje: {string.Join(", ", inactivos)}");
+        }
+
         var repetidos = encontrados.Where(v => yaEnElViaje.Contains(v.Id)).Select(v => v.Vin).ToList();
         if (repetidos.Count > 0)
         {
