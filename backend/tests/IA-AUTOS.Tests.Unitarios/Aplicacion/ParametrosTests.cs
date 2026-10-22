@@ -32,6 +32,8 @@ public class ParametrosTests
             }).ToList();
             return Task.FromResult<IReadOnlyList<clsParametro>>(filas);
         }
+
+        public Task<clsParametro?> ObtenerAsync(string clave, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private static (clsParametrosService Servicio, RepositorioFalso Repositorio) Crear(Dictionary<string, string?> valores)

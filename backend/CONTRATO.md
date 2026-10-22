@@ -1274,6 +1274,44 @@ Cuerpo: `{ "texto": "…" }`, obligatorio y de **hasta 1000 caracteres** (`400` 
 conductor, solo en sus viajes; el conductor no ve las notas de los hallazgos que registraron otros; el resto, de su cliente). Además traen `notas_aclaratorias[]` el informe (`InformeDetalleDto`, las de la inspección), cada inspección del inventario
 (`InventarioInspeccionDto`), el detalle del hallazgo (`GET /api/hallazgos/{id}`) y la transferencia del informe (`TransferenciaDetalleDto`).
 
+## Parámetros
+
+Los valores que el negocio ajusta **sin desplegar código** (el objetivo diario, los destinatarios y la hora del reporte diario, el horario de operación, la vigencia de las URL firmadas, los umbrales de las alertas...). Los ven y los cambian
+`admin`, `super_admin` y `coordinador_calidad` (la capacidad `administrar_catalogos` de `GET /api/auth/me`); cualquier otro rol recibe `403`. Las claves las crea la base de datos: **la API solo cambia valores**, no crea ni borra claves
+(`POST`, `PUT` y `DELETE` responden `405`).
+
+### `GET /api/parametros`
+Todos los parámetros, ordenados por `clave`.
+
+```json
+[
+  { "clave": "reporte_diario_hora", "valor": "06:00", "tipo": "hora", "descripcion": "Hora (hora de Colombia) a la que se envía el reporte diario",
+    "actualizado_por": null, "updated_at": "2026-10-01T00:00:00.000Z" },
+  { "clave": "reporte_diario_destinatarios", "valor": null, "tipo": "correos", "descripcion": "…", "actualizado_por": "uuid", "updated_at": "2026-10-22T14:12:00.000Z" }
+]
+```
+
+`valor` es siempre texto (o `null` si el parámetro no tiene valor). `actualizado_por` es el usuario que lo cambió por última vez (`null` en el valor inicial).
+
+### `PATCH /api/parametros/{clave}`
+Cuerpo `{ "valor": "07:30" }` (texto o número). Responde `200` con el parámetro ya actualizado. El valor se valida según el `tipo` del parámetro y se guarda normalizado; si no lo cumple responde `400` con el mensaje en `details.fieldErrors.valor` y el parámetro **no cambia**.
+
+| `tipo` | Qué se acepta | Se guarda como |
+|---|---|---|
+| `numero` | entero de 1 a 1.000.000 | el entero (`007` pasa a `7`) |
+| `porcentaje` | de 0 a 100, con punto decimal (hasta 4 decimales) | el número (`1.50` pasa a `1.5`) |
+| `hora` | `HH:mm` de `00:00` a `23:59` | tal cual |
+| `lista` | códigos separados por coma que **existan** en su catálogo (`niveles_criticos`: el catálogo `niveles-severidad`) | sin espacios ni repetidos |
+| `correos` | direcciones válidas separadas por coma | en minúsculas, sin espacios ni repetidos |
+| `texto` | hasta 1000 caracteres | tal cual |
+
+- `null` (o un texto vacío) deja el parámetro **sin valor**, pero solo en `reporte_diario_destinatarios` (sin destinatarios no se envía el reporte) y `retencion_dias` (aún no definida). En los demás responde `400`.
+- `400` también si falta `valor`, si no es texto ni número o si el cuerpo trae otro campo (`tipo`, `clave`...: no se cambian). `404` si la clave no existe.
+- Dar el mismo valor que ya tiene responde `200` y no cambia ni audita nada.
+- **Vigencia.** El cambio se aplica en **un minuto o menos** en las alertas, la vigencia de las URL firmadas y los demás procesos que leen el parámetro (la lectura se guarda un minuto; quien lo cambia lo ve de inmediato en esa instancia y las demás instancias de
+  la API lo toman al vencer el minuto), sin desplegar.
+- **Auditoría.** Cada cambio queda en la auditoría (`parametro.actualizar`, `entidad` `parametros`) con el valor antes y después en `detalle`: `{ "antes": { "parametro": "reporte_diario_hora", "valor": "06:00" }, "despues": { "parametro": "reporte_diario_hora", "valor": "07:30" } }`.
+
 ## Auditoría
 
 Toda acción de escritura (y el inicio de sesión) queda en un registro **que nadie modifica ni borra** (no existen `PATCH`, `PUT` ni `DELETE`; la base de datos también lo impide). Cada registro guarda quién actuó, la **IP** y el **dispositivo**

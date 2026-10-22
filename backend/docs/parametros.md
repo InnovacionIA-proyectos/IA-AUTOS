@@ -1,7 +1,8 @@
 # Parametros
 
 Los valores que el negocio ajusta sin desplegar codigo viven en `tblParametros`: el objetivo diario, los destinatarios y la hora del reporte diario, el horario de operacion, la retencion, la precision minima del GPS,
-la vigencia de las URL firmadas y los umbrales de las alertas. Los valores iniciales los confirma Calidad; este documento describe el modelo de datos. La API para consultarlos y cambiarlos esta en [CONTRATO.md](../CONTRATO.md).
+la vigencia de las URL firmadas y los umbrales de las alertas. Los valores iniciales los confirma Calidad; este documento describe el modelo de datos. La API para consultarlos y cambiarlos (`GET /api/parametros` y `PATCH /api/parametros/{clave}`, para quien administra los catalogos) esta en [CONTRATO.md](../CONTRATO.md) («Parametros»): valida el valor segun su tipo, no crea ni borra claves,
+se aplica en un minuto o menos sin desplegar y cada cambio queda en la auditoria con el valor antes y despues.
 
 ## Tabla
 

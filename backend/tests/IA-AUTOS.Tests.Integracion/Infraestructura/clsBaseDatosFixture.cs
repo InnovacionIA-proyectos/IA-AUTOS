@@ -63,6 +63,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             DELETE FROM dbo.tblEtapas;
             DELETE FROM dbo.tblViajes;
             DELETE FROM dbo.tblVehiculos;
+            UPDATE dbo.tblParametros SET ActualizadoPor = NULL;
             DELETE FROM dbo.tblUsuarios;
             ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblEvidencias ENABLE TRIGGER ALL;
