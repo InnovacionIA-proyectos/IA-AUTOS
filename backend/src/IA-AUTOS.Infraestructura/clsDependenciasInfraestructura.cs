@@ -7,6 +7,7 @@ using IAAutos.Aplicacion.Exportaciones;
 using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Aplicacion.Reportes;
+using IAAutos.Aplicacion.ReporteDiario;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Sofasa;
 using IAAutos.Aplicacion.Vehiculos;
@@ -25,6 +26,7 @@ using IAAutos.Aplicacion.Viajes;
 using IAAutos.Infraestructura.Alertas;
 using IAAutos.Infraestructura.Almacenamiento;
 using IAAutos.Infraestructura.Catalogos;
+using IAAutos.Infraestructura.Correo;
 using IAAutos.Infraestructura.Notificaciones;
 using IAAutos.Infraestructura.Persistencia;
 using IAAutos.Infraestructura.Portal;
@@ -125,6 +127,12 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<INotificacionRepository, clsNotificacionRepository>();
         servicios.AddScoped<IDispositivoRepository, clsDispositivoRepository>();
         servicios.AddHostedService<clsProcesoAlertas>();
+        servicios.Configure<clsOpcionesCorreo>(configuracion.GetSection(clsOpcionesCorreo.SECCION));
+        servicios.AddSingleton<IEnviadorCorreo>(p => new clsEnviadorMailSender(
+            p.GetRequiredService<IOptions<clsOpcionesCorreo>>(),
+            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = TimeSpan.FromSeconds(30) },
+            p.GetRequiredService<ILogger<clsEnviadorMailSender>>()));
+        servicios.AddHostedService<clsProcesoReporteDiario>();
         return servicios;
     }
 

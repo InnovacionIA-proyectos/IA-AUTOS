@@ -11,6 +11,7 @@ using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Aplicacion.Parametros;
 using IAAutos.Aplicacion.Reportes;
+using IAAutos.Aplicacion.ReporteDiario;
 using IAAutos.Aplicacion.Sofasa;
 using IAAutos.Aplicacion.Usuarios;
 using IAAutos.Aplicacion.Vehiculos;
@@ -47,6 +48,8 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<IParametros, clsParametrosService>();
         servicios.AddScoped<clsCalculadoraVistas>();
         servicios.AddScoped<clsAlertasPeriodicas>();
+        servicios.Configure<clsOpcionesReporteDiario>(configuracion.GetSection(clsOpcionesReporteDiario.SECCION));
+        servicios.AddScoped<clsReporteDiarioService>();
         servicios.AddScoped<clsEvidenciaDeHallazgos>();
         servicios.AddScoped<clsSeguimientoService>();
         servicios.AddScoped<clsHallazgosService>();

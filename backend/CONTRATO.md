@@ -1796,6 +1796,18 @@ propuesta pendiente de confirmar por el negocio). `objetivo` es el parámetro `o
 
 La tasa de rechazo (`GET /api/metricas/rechazo`) sigue publicada como está; no hay `GET /api/reportes/rechazo`.
 
+### Reporte diario por correo
+Cada día, a la hora del parámetro `reporte_diario_hora` (hora de Colombia, `06:00` por defecto), el backend calcula **el día anterior** con el mismo cálculo de `GET /api/reportes/indicador-diario?fecha=` (despachados, con novedad, porcentaje frente a `objetivo_diario_novedad`,
+por operación y por cliente) y con la mediana del tiempo de captura de `GET /api/reportes/tiempo-captura` de ese día, y lo envía por correo a `reporte_diario_destinatarios` (correos separados por coma):
+
+- **Asunto:** `Reporte diario IA Autos {AAAA-MM-DD}` (el día reportado). **Cuerpo:** tablas en HTML con el indicador, sus filas por operación y por cliente, y la mediana de captura (global y por proceso). No trae «rechazos del día».
+- **Adjunto:** `hallazgos-{AAAA-MM-DD}.xlsx`, el mismo Excel de `GET /api/exportaciones/hallazgos.xlsx` con los hallazgos de las inspecciones cerradas ese día (hora de Colombia), de todos los clientes.
+- **Registro:** cada ejecución que actúa deja una fila en `tblNotificaciones` con `Tipo = reporte_diario`, `Canal = correo` y sin destinatario (`UsuarioId` nulo), con `EnviadaAt` si el correo salió o `ErrorEnvio` si no. Son filas de la tabla; no aparecen en `GET /api/notificaciones`, que muestra la bandeja de cada usuario.
+- **Sin destinatarios** (el valor inicial): no se envía nada y queda una fila con `ErrorEnvio = «No se envió: el parámetro reporte_diario_destinatarios no tiene destinatarios»`. Ese día queda cerrado aunque se configuren destinatarios después.
+- **Si el envío falla** (servidor de correo caído o sin configurar) queda la fila con el error y se reintenta cada 15 minutos hasta 3 intentos por día; no se repite un día ya enviado.
+
+El correo sale por el servicio interno MailSender API, que se configura por variables de entorno (`Correo__Url` y `Correo__Remitente`; ver [docs/configuracion.md](docs/configuracion.md)). La hora y los destinatarios se cambian con `PUT /api/parametros/{clave}` y se aplican en un minuto.
+
 ### Rutas obsoletas
 
 `GET /api/patrones` y `GET /api/patrones/analisis` **se retirarán**: responden como antes pero con los encabezados `Deprecation: true` y `Link: </api/reportes/patrones>; rel="successor-version"` (y `deprecated` en el contrato OpenAPI). Use `GET /api/reportes/patrones`.
