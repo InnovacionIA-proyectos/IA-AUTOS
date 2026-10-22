@@ -102,7 +102,7 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
 | S5-HU-22.3 | CRUD de viajes, asignación de VIN, carga masiva por Excel | `ViajesApiTests.La_carga_por_excel_muestra_el_error_de_cada_fila_antes_de_confirmar_y_solo_guarda_las_validas` | Verificado con prueba real |
 | S5-HU-22.4 | Creación automática de las 3 etapas por VIN con origen/destino | `ViajesApiTests.Crear_un_viaje_crea_las_tres_etapas_de_cada_vin_con_origen_y_destino` | Verificado con prueba real |
 | S5-HU-22.5/22.10 | Visibilidad por asignación; 403 en viaje/VIN ajeno; vínculo Sofasa↔viaje | `ViajesApiTests.El_detalle_de_un_viaje_ajeno_es_403_el_propio_se_ve_y_uno_inexistente_es_404`; `SofasaApiTests.Una_orden_de_un_vin_que_ya_esta_en_un_viaje_queda_vinculada_a_ese_viaje` | Verificado con prueba real |
-| S5-HU-22.8/22.9 | "Mis viajes" como pantalla principal en mobile; captura toma datos del viaje | Cobertura parcial en `mobile/test/vehiculos/inventario_test.dart` | **Abierta/pendiente** (#91, #92) |
+| S5-HU-22.8/22.9 | "Mis viajes" como pantalla principal en mobile; captura toma datos del viaje | `mobile/test/widgets/captura_page_test.dart` (los cuatro datos salen del viaje y no quedan campos escribibles), `mobile/test/viajes/` (repositorio y búsqueda), `mobile/test/vehiculos/inventario_test.dart` (`lugar` y `viaje_id`), contrato atado a `/api/viajes/*` | Implementado en `S5-HU-21-23`; falta prueba de widget de `MisViajesPage`/`BuscarVinPage` (#91) |
 | S5-HU-22.5b (#148) | Filtro por cliente en `GET /api/viajes` y lista de clientes por viaje | — | **Abierta/pendiente** (#148, rol Backend) |
 
 ## S5-HU-23 — Identidad: cédula y PIN, clientes y permisos por rol
@@ -114,7 +114,7 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
 | S5-HU-23.3 | `POST /api/auth/login-conductor` (cédula+PIN), scrypt, bloqueo | `IdentidadApiTests.Cedula_y_pin_correctos_dan_un_token_de_conductor_que_sirve_en_la_api` | Verificado con prueba real |
 | S5-HU-23.4 | Gestión de PIN por rol; `GET /api/auth/me` con capacidades | `IdentidadApiTests.El_administrador_asigna_reinicia_y_fuerza_el_cambio_de_pin` | Verificado con prueba real |
 | S5-HU-23.5 | Gestión de usuarios (admin/coordinador), carga masiva de conductores | `IdentidadApiTests.La_vista_previa_de_conductores_no_guarda_y_la_confirmacion_crea_los_validos_con_su_pin` | Verificado con prueba real |
-| S5-HU-23.8/23.9 | Mobile: login con dos modos y cambio de PIN forzado; router/menú por rol; cola etiquetada por usuario | `mobile/test/widgets/login_page_test.dart`, `mobile/test/auth/auth_controller_test.dart` cubren el login; router y cola etiquetada aún no | **Abierta/pendiente** (#99, #100) |
+| S5-HU-23.8/23.9 | Mobile: login con dos modos y cambio de PIN forzado; router/menú por rol; cola etiquetada por usuario | `mobile/test/widgets/login_page_test.dart`, `mobile/test/auth/login_pin_test.dart` y `auth_controller_test.dart` cubren el login, el bloqueo, el cambio de PIN y el 403 a mitad de sesión; router y cola etiquetada aún no | 23.8 implementado en `S5-HU-21-23`; **abierta/pendiente** 23.9 (#100) |
 
 ## S5-HU-24 — Inspección de salida y llegada con 7 fotos obligatorias y 2 adicionales
 
@@ -158,13 +158,29 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
    versionado, la geometría de cuadrantes y los códigos Sofasa, pero mobile mantiene listas hardcodeadas en
    paralelo (`selector_dano.dart`, `etiquetas.dart`) en vez de consumir la API.
 
-4. **UX de viajes pendiente en mobile (#91, #92, #148).** El modelo de viaje como eje ya está completo en
-   backend; "Mis viajes" como pantalla principal, la captura tomando datos del viaje (no texto libre) y el
-   filtro por cliente siguen sin resolver.
+4. **UX de viajes pendiente en mobile (#148; #91 y #92 implementados en `S5-HU-21-23`).** El modelo de viaje
+   como eje está completo en backend, y mobile ya entra por "Mis viajes" y toma los datos del viaje en la
+   captura. Queda el filtro por cliente (#148). Dos puntos a revisar al retomar #91:
+   - `MisViajesPage` y `BuscarVinPage` no tienen prueba de widget: los cuatro estados (cargando, error, sin
+     conexión, sin viajes), el contenido de la tarjeta y que tocar un VIN navegue solo se han comprobado a mano.
+     La captura sí quedó cubierta (`captura_page_test.dart`).
+   - `ViajesRepositorio.deLaEtapa` sirve la copia guardada y **no la revalida** aunque haya señal: si el
+     coordinador corrige la placa después de la descarga, la captura muestra la vieja. Es informativo —el
+     servidor toma el dato real del viaje al recibir el informe— y leer primero la copia es lo que hace que la
+     captura funcione sin señal. El arreglo correcto es servir y refrescar después, como los catálogos.
 
-5. **Identidad en mobile incompleta (#99, #100).** El backend ya expone login por cédula+PIN y capacidades por
-   rol; el cliente móvil aún no implementa el selector de modo de login ni el router/menú por rol con cola
-   etiquetada por usuario.
+5. **Identidad en mobile: falta el reparto por rol (#100; #99 implementado en `S5-HU-21-23`).** El login con
+   cédula y PIN, el cambio de PIN forzado y el 403 `PIN_CHANGE_REQUIRED` a mitad de sesión ya están. Lo que
+   sigue abierto en #100, y conviene revisar junto:
+   - **Menú por rol.** La barra inferior es la misma para todos, así que un conductor ve la pestaña "Sofasa".
+     No es un agujero de seguridad —la API impone la autorización real revalidando el rol contra la base en
+     cada petición— pero el escenario de la HU pide "ve el menú de conductor" y hoy `usuario.rol` solo se usa
+     para un tooltip en la pantalla de firma.
+   - **Cola etiquetada por usuario.** La tabla `jobs` no tiene columna de usuario y el procesador manda con el
+     token de la sesión vigente: si Ana encola sin señal y cierra sesión, el informe sale a nombre de Luis. El
+     escenario "celular compartido" **no se cumple**. Se volvió más probable con #99: antes solo entraban
+     inspectores con correo, ahora el personal de campo entra con cédula y PIN y comparte equipo entre turnos.
+   - Sin prueba de widget: `CambiarPinPage` y el redirect del router a `/cambiar-pin`.
 
 6. **Inspecciones: UI y pruebas de campo pendientes (#107–#112).** La lógica de dominio y las reglas de cierre
    tienen prueba automatizada tanto en backend como en `reglas_informe_test.dart`; falta la capa de pantallas y

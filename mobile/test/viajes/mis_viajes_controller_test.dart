@@ -2,42 +2,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/features/auth/presentation/auth_controller.dart';
 import 'package:traza_autos/features/sync/presentation/sync_controller.dart';
-import 'package:traza_autos/features/viajes/data/viajes_repositorio.dart';
-import 'package:traza_autos/features/viajes/domain/viaje.dart';
 import 'package:traza_autos/features/viajes/presentation/mis_viajes_controller.dart';
 import 'package:traza_autos/features/viajes/providers.dart';
 
 import '../support/arnes.dart';
-
-Viaje viaje(String id, {List<String> vines = const [], String codigo = 'MTK-1', String placa = 'ABC123'}) => Viaje(
-      id: id,
-      codigoMtrack: codigo,
-      placa: placa,
-      estado: 'en_curso',
-      unidad: 'Niñera',
-      vehiculos: [for (final v in vines) ViajeVehiculo(vin: v, marca: 'Renault', modelo: 'Kwid')],
-    );
-
-class ViajesRepositorioFalso implements ViajesRepositorio {
-  List<Viaje>? guardados;
-  List<Viaje> remotos = const [];
-  Object? error;
-  int llamadasRemotas = 0;
-
-  @override
-  Future<List<Viaje>?> leerCache(String usuarioId) async => guardados;
-
-  @override
-  Future<List<Viaje>> listarRemoto(String usuarioId) async {
-    llamadasRemotas++;
-    if (error != null) throw error!;
-    guardados = remotos;
-    return remotos;
-  }
-
-  @override
-  Future<Viaje?> deLaEtapa(String usuarioId, String viajeId) async => null;
-}
+import '../support/dobles_viajes.dart';
 
 Future<ProviderContainer> iniciar(Arnes arnes, ViajesRepositorioFalso repositorio) async {
   final contenedor = ProviderContainer(
