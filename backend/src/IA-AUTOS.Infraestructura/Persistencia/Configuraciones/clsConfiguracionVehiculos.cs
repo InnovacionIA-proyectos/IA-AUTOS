@@ -32,7 +32,7 @@ internal sealed class clsConfiguracionEtapa : IEntityTypeConfiguration<clsEtapa>
 {
     public void Configure(EntityTypeBuilder<clsEtapa> builder)
     {
-        builder.ToTable("tblEtapas");
+        builder.ToTable("tblEtapas", t => t.HasTrigger("TR_tblEtapas_Completa"));
         clsConfiguracionBase.Base(builder);
         builder.HasOne<clsVehiculo>().WithMany().HasForeignKey(e => e.VehiculoId)
             .HasConstraintName("FK_tblEtapas_Vehiculo").OnDelete(DeleteBehavior.NoAction);

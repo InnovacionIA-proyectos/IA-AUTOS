@@ -92,10 +92,22 @@ INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VAL
 
 -- 1) Vista de viajes completos (un VIN completa su ruta en un viaje cuando todas sus etapas tienen informe cerrado)
 INSERT #r SELECT N'Vista: sin informes cerrados no esta movilizado', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.vwViajesCompletos WHERE ViajeId = @vj AND VehiculoId = @v) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Completa: sin informes cerrados es 0 y coincide con la vista', CASE WHEN (SELECT Completa FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND VehiculoId = @v) = 0 AND (SELECT Completa FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND VehiculoId = @v) = CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos WHERE ViajeId = @vj AND VehiculoId = @v) THEN 1 ELSE 0 END THEN 1 ELSE 0 END, NULL;
 UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i1;
 INSERT #r SELECT N'Vista: con una de dos etapas cerrada sigue pendiente', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.vwViajesCompletos WHERE ViajeId = @vj AND VehiculoId = @v) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Completa: con una de dos etapas cerrada sigue en 0', CASE WHEN (SELECT Completa FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND VehiculoId = @v) = 0 AND (SELECT Completa FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND VehiculoId = @v) = CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos WHERE ViajeId = @vj AND VehiculoId = @v) THEN 1 ELSE 0 END THEN 1 ELSE 0 END, NULL;
 UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i2;
 INSERT #r SELECT N'Vista: con todas las etapas cerradas esta movilizado', CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos WHERE ViajeId = @vj AND VehiculoId = @v) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Completa: al cerrar la ultima etapa pasa a 1', CASE WHEN (SELECT Completa FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND VehiculoId = @v) = 1 AND (SELECT Completa FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND VehiculoId = @v) = CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos WHERE ViajeId = @vj AND VehiculoId = @v) THEN 1 ELSE 0 END THEN 1 ELSE 0 END, NULL;
+-- Una etapa nueva sin informe deja la unidad incompleta; al quitarla vuelve a estar completa.
+DECLARE @e3zz uniqueidentifier = NEWID();
+INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@e3zz, @v, @vj, (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'descargue'), 3);
+INSERT #r SELECT N'Completa: una etapa nueva sin informe la deja en 0', CASE WHEN (SELECT Completa FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND VehiculoId = @v) = 0 AND (SELECT Completa FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND VehiculoId = @v) = CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos WHERE ViajeId = @vj AND VehiculoId = @v) THEN 1 ELSE 0 END THEN 1 ELSE 0 END, NULL;
+DELETE FROM dbo.tblEtapas WHERE Id = @e3zz;
+INSERT #r SELECT N'Completa: al quitar esa etapa vuelve a 1', CASE WHEN (SELECT Completa FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND VehiculoId = @v) = 1 AND (SELECT Completa FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND VehiculoId = @v) = CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos WHERE ViajeId = @vj AND VehiculoId = @v) THEN 1 ELSE 0 END THEN 1 ELSE 0 END, NULL;
+-- Un VIN agregado a un viaje sin etapas nace sin completar; recalcular no cambia nada cuando el campo ya coincide con la vista.
+EXEC dbo.usp_RecalcularCompleta;
+INSERT #r SELECT N'Completa: recalcular todo no cambia una fila que ya coincide', CASE WHEN (SELECT Completa FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND VehiculoId = @v) = 1 AND (SELECT Completa FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND VehiculoId = @v) = CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos WHERE ViajeId = @vj AND VehiculoId = @v) THEN 1 ELSE 0 END THEN 1 ELSE 0 END, NULL;
 
 -- 2) Triggers de inmutabilidad
 BEGIN TRY
@@ -827,6 +839,25 @@ INSERT #r SELECT N'Indices del hallazgo: zona + clase con la inspeccion incluida
           AND (SELECT STRING_AGG(c.name, N',') WITHIN GROUP (ORDER BY ic.key_ordinal) FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
                WHERE ic.object_id = OBJECT_ID(N'dbo.tblHallazgos') AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE name = N'IX_tblHallazgos_Seguimiento' AND object_id = OBJECT_ID(N'dbo.tblHallazgos'))) = N'EstadoSeguimiento,Origen,RevisadoAt'
           AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblHallazgos_Parte_Clase' AND object_id = OBJECT_ID(N'dbo.tblHallazgos')) THEN 1 ELSE 0 END, NULL;
+
+-- 7j) Indices de los filtros de los listados y la columna Completa con sus triggers
+INSERT #r SELECT N'Indice IX_tblVehiculos_Filtros: ClienteId,Operacion,Marca,CreatedAt', CASE WHEN (SELECT STRING_AGG(c.name, N',') WITHIN GROUP (ORDER BY ic.key_ordinal) FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+               WHERE ic.object_id = OBJECT_ID(N'dbo.tblVehiculos') AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE name = N'IX_tblVehiculos_Filtros' AND object_id = OBJECT_ID(N'dbo.tblVehiculos')) AND ic.is_included_column = 0) = N'ClienteId,Operacion,Marca,CreatedAt' THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Indice IX_tblVehiculos_Activo: Activo', CASE WHEN (SELECT STRING_AGG(c.name, N',') WITHIN GROUP (ORDER BY ic.key_ordinal) FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+               WHERE ic.object_id = OBJECT_ID(N'dbo.tblVehiculos') AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE name = N'IX_tblVehiculos_Activo' AND object_id = OBJECT_ID(N'dbo.tblVehiculos')) AND ic.is_included_column = 0) = N'Activo' THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Indice IX_tblOrdenesSofasa_Filtros: StatusCode,DestinationCity,DatetimeEvent', CASE WHEN (SELECT STRING_AGG(c.name, N',') WITHIN GROUP (ORDER BY ic.key_ordinal) FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+               WHERE ic.object_id = OBJECT_ID(N'dbo.tblOrdenesSofasa') AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE name = N'IX_tblOrdenesSofasa_Filtros' AND object_id = OBJECT_ID(N'dbo.tblOrdenesSofasa')) AND ic.is_included_column = 0) = N'StatusCode,DestinationCity,DatetimeEvent' THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Indice IX_tblInspecciones_Filtros: ViajeId,Momento,Estado,Fecha', CASE WHEN (SELECT STRING_AGG(c.name, N',') WITHIN GROUP (ORDER BY ic.key_ordinal) FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+               WHERE ic.object_id = OBJECT_ID(N'dbo.tblInspecciones') AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE name = N'IX_tblInspecciones_Filtros' AND object_id = OBJECT_ID(N'dbo.tblInspecciones')) AND ic.is_included_column = 0) = N'ViajeId,Momento,Estado,Fecha' THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Indice IX_tblViajeVehiculos_EstadoUnidad: EstadoUnidad', CASE WHEN (SELECT STRING_AGG(c.name, N',') WITHIN GROUP (ORDER BY ic.key_ordinal) FROM sys.index_columns ic JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+               WHERE ic.object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND ic.index_id = (SELECT index_id FROM sys.indexes WHERE name = N'IX_tblViajeVehiculos_EstadoUnidad' AND object_id = OBJECT_ID(N'dbo.tblViajeVehiculos')) AND ic.is_included_column = 0) = N'EstadoUnidad' THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Completa: columna bit no nula con 0 por defecto, el procedimiento que la recalcula y los tres triggers que la mantienen',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns c JOIN sys.types t ON t.user_type_id = c.user_type_id WHERE c.object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND c.name = N'Completa' AND t.name = N'bit' AND c.is_nullable = 0)
+          AND EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'DF_tblViajeVehiculos_Completa' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
+          AND OBJECT_ID(N'dbo.usp_RecalcularCompleta', N'P') IS NOT NULL
+          AND (SELECT COUNT(*) FROM sys.triggers WHERE name IN (N'TR_tblInspecciones_Completa', N'TR_tblEtapas_Completa', N'TR_tblViajeVehiculos_Completa') AND is_disabled = 0) = 3 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Completa: ninguna fila difiere de la vista vwViajesCompletos', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblViajeVehiculos vv
+    WHERE vv.Completa <> CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos c WHERE c.ViajeId = vv.ViajeId AND c.VehiculoId = vv.VehiculoId) THEN 1 ELSE 0 END) THEN 1 ELSE 0 END, NULL;
 
 -- 7g) Parametros: la tabla, sus filas iniciales y sus restricciones
 INSERT #r SELECT N'Parametros: la tabla existe con sus 8 filas iniciales (6 con valor y 2 sin valor) y sin linea base de rechazo',

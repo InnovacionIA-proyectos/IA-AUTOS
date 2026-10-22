@@ -42,7 +42,7 @@ internal sealed class clsConfiguracionViajeVehiculo : IEntityTypeConfiguration<c
 {
     public void Configure(EntityTypeBuilder<clsViajeVehiculo> builder)
     {
-        builder.ToTable("tblViajeVehiculos");
+        builder.ToTable("tblViajeVehiculos", t => t.HasTrigger("TR_tblViajeVehiculos_Completa"));
         clsConfiguracionBase.Base(builder);
         builder.HasOne<clsViaje>().WithMany().HasForeignKey(v => v.ViajeId)
             .HasConstraintName("FK_tblViajeVehiculos_Viaje").OnDelete(DeleteBehavior.Cascade);
