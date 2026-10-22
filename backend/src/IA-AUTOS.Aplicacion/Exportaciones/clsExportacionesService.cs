@@ -12,9 +12,6 @@ namespace IAAutos.Aplicacion.Exportaciones;
 /// <summary>Un archivo listo para descargar: su contenido, su nombre (con la fecha) y su tipo de contenido.</summary>
 public sealed record ArchivoExportado(byte[] Contenido, string Nombre, string TipoContenido);
 
-/// <summary>Filtros de la exportacion de inspecciones: los del listado de inspecciones y el cliente (solo lo elige el super administrador).</summary>
-public sealed record FiltrosExportacionInspeccionesRequest(FiltrosInspeccionesRequest Filtros, string? ClienteId);
-
 /// <summary>
 /// Las exportaciones a Excel (viajes, inspecciones y hallazgos) para quien exporta soportes: coordinador de calidad, comercial y administradores. Aceptan los mismos filtros de los listados
 /// y solo traen los datos del cliente de quien las pide (el super administrador ve todos y es el unico que elige un cliente). Un archivo no pasa de <see cref="MAXIMO_FILAS"/> filas: si el
@@ -53,11 +50,10 @@ public sealed class clsExportacionesService(
 
     // ------------------------------------------------------------------------------------------- inspecciones
 
-    public async Task<ArchivoExportado> ExportarInspeccionesAsync(FiltrosExportacionInspeccionesRequest solicitud, CancellationToken ct = default)
+    public async Task<ArchivoExportado> ExportarInspeccionesAsync(FiltrosInspeccionesRequest solicitud, CancellationToken ct = default)
     {
-        var filtros = await clsInspeccionesService.ParsearFiltrosAsync(solicitud.Filtros, catalogos, ct);
-        var cliente = ClienteDelPedido(solicitud.ClienteId);
-        var resultado = await consultas.InspeccionesAsync(filtros, cliente, MAXIMO_FILAS, ct);
+        var filtros = await clsInspeccionesService.ParsearFiltrosAsync(solicitud, catalogos, ct);
+        var resultado = await consultas.InspeccionesAsync(filtros, actual.ClienteDelFiltro(filtros.ClienteId), MAXIMO_FILAS, ct);
         var clientes = await ClientesAsync(ct);
         return Armar(
             "inspecciones",
@@ -105,19 +101,6 @@ public sealed class clsExportacionesService(
 
     private static object?[] Contexto(ContextoExportacion c, IReadOnlyDictionary<Guid, string> clientes) =>
         [c.Vin, c.Marca, c.TipoVehiculo, c.Operacion, clientes.GetValueOrDefault(c.ClienteId), c.CodigoMtrack, c.Placa, c.Trailer, c.Unidad, c.ConductorNombre, c.ConductorCedula, c.Etapa, c.Lugar];
-
-    /// <summary>El cliente de la consulta: el del usuario, o el que elige el super administrador (nulo = todos). Quien se limita a su cliente y pide otro recibe 403.</summary>
-    private Guid? ClienteDelPedido(string? clienteId)
-    {
-        var errores = new Dictionary<string, string[]>();
-        var elegido = clsParseoFiltros.Uuid(clienteId, "clienteId", errores);
-        if (errores.Count > 0)
-        {
-            throw clsErroresCampos.Varios(errores);
-        }
-
-        return actual.ClienteDelFiltro(elegido);
-    }
 
     private async Task<Dictionary<Guid, string>> ClientesAsync(CancellationToken ct) =>
         (await catalogos.ValoresAsync(clsNombresCatalogo.CLIENTES, ct))

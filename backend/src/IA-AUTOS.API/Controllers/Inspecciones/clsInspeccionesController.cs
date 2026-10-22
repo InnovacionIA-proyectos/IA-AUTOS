@@ -1,6 +1,7 @@
 using IAAutos.API.Configuracion;
 using IAAutos.API.Controllers.Comun;
 using IAAutos.API.Seguridad;
+using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Dominio.Usuarios;
@@ -40,20 +41,33 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
         return Creado(await servicio.CorregirAsync(id, solicitud, ct));
     }
 
-    /// <summary>Listado (maximo 200, mas recientes primero) con filtros por VIN, usuario, viaje, momento, estado, proceso y fechas. Inspectores y conductores ven solo los informes de sus viajes.</summary>
+    /// <summary>
+    /// Una pagina de informes <c>{items, total, pagina, tamano}</c> (mas recientes primero por defecto). Filtros: <c>vin</c>, <c>viaje_id</c>, <c>usuario_id</c>, <c>momento</c>, <c>estado</c>, <c>proceso</c>, <c>operacion</c>,
+    /// <c>marca</c>, <c>cliente_id</c> (solo el super administrador elige otro), <c>origen_id</c>, <c>destino_id</c>, <c>desde</c> y <c>hasta</c>; <c>pagina</c>, <c>tamano</c> (50, maximo 200) y <c>orden</c> (<c>campo:asc|desc</c>).
+    /// Inspectores y conductores ven solo los informes de sus viajes.
+    /// </summary>
     [HttpGet]
-    [ProducesResponseType<IReadOnlyList<InspeccionListadoDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<PaginaDto<InspeccionListadoDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Listar(
         [FromQuery] string? vin,
-        [FromQuery] string? usuarioId,
-        [FromQuery] string? viajeId,
+        [FromQuery(Name = "usuario_id")] string? usuarioId,
+        [FromQuery(Name = "viaje_id")] string? viajeId,
         [FromQuery] string? momento,
         [FromQuery] string? estado,
         [FromQuery] string? proceso,
+        [FromQuery] string? operacion,
+        [FromQuery] string? marca,
+        [FromQuery(Name = "cliente_id")] string? clienteId,
+        [FromQuery(Name = "origen_id")] string? origenId,
+        [FromQuery(Name = "destino_id")] string? destinoId,
         [FromQuery] string? desde,
         [FromQuery] string? hasta,
+        [FromQuery] string? pagina,
+        [FromQuery] string? tamano,
+        [FromQuery] string? orden,
         CancellationToken ct) =>
-        Ok(await servicio.ListarAsync(new FiltrosInspeccionesRequest(vin, usuarioId, viajeId, momento, estado, proceso, desde, hasta), ct));
+        Ok(await servicio.ListarAsync(
+            new FiltrosInspeccionesRequest(vin, usuarioId, viajeId, momento, estado, proceso, operacion, marca, clienteId, origenId, destinoId, desde, hasta, pagina, tamano, orden), ct));
 
     /// <summary>Informe completo para revision: contexto, hallazgos, evidencias con URL y transferencia con firmas.</summary>
     [HttpGet("{id:guid}")]

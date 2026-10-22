@@ -1,4 +1,5 @@
 using IAAutos.Dominio.Auditoria;
+using IAAutos.Infraestructura.Persistencia.Consultas;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
@@ -74,7 +75,19 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
         }
 
         var total = await consulta.CountAsync(ct);
-        var filas = await consulta.OrderBy(u => u.Nombre).ThenBy(u => u.Id).Skip(saltar).Take(tomar).ToListAsync(ct);
+        var ordenada = clsOrdenamiento.De(consulta)
+            .Campo("nombre", u => u.Nombre)
+            .Campo("email", u => u.Email)
+            .Campo("rol", u => u.Rol)
+            .Campo("cedula", u => u.Cedula)
+            .Campo("activo", u => u.Activo)
+            .Campo("created_at", u => u.CreatedAt)
+            .Campo("ultimo_acceso", u => u.UltimoAccesoAt)
+            .Aplicar(
+                filtro.Orden is null ? null : new IAAutos.Aplicacion.Comun.OrdenSolicitado(filtro.Orden, filtro.Descendente),
+                q => q.OrderBy(u => u.Nombre),
+                q => q.ThenBy(u => u.Id));
+        var filas = await ordenada.Skip(saltar).Take(tomar).ToListAsync(ct);
         return (filas, total);
     }
 

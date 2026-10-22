@@ -1,3 +1,4 @@
+using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
 
 namespace IAAutos.Aplicacion.Vehiculos;
@@ -20,14 +21,16 @@ public interface IConsultasVehiculos
     /// </summary>
     Task<IReadOnlyList<VehiculoBusquedaDto>> BuscarAsync(string termino, Guid? soloDeUsuario, Guid? soloDeCliente, CancellationToken ct = default);
 
-    /// <summary>Listado paginado: movilizados, pendientes por movilizar o con novedad. Con <paramref name="soloDeCliente"/>, solo los VIN de ese cliente.</summary>
+    /// <summary>
+    /// Una pagina del listado (movilizados, pendientes por movilizar o con novedad; sin <paramref name="orden"/>, por VIN) y el total que cumple los filtros. Con <paramref name="soloDeCliente"/>, solo los
+    /// VIN de ese cliente.
+    /// </summary>
     Task<(IReadOnlyList<ListadoVehiculoDto> Filas, int Total)> ListarAsync(
-        string tipo,
-        string? vin,
+        FiltrosVehiculos filtros,
         Guid? soloDeUsuario,
         Guid? soloDeCliente,
-        int limite,
-        int desplazamiento,
+        PaginaSolicitada pagina,
+        OrdenSolicitado? orden,
         CancellationToken ct = default);
 
     /// <summary>Inventario completo del VIN o nulo si no existe. Con <paramref name="soloDeUsuario"/>, solo las etapas de los viajes de ese usuario.</summary>

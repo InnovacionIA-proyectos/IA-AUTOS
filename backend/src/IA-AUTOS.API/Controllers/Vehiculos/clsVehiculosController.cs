@@ -1,6 +1,7 @@
 using IAAutos.API.Configuracion;
 using IAAutos.API.Controllers.Comun;
 using IAAutos.API.Seguridad;
+using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Vehiculos;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
 using IAAutos.Dominio.Usuarios;
@@ -37,14 +38,28 @@ public sealed class clsVehiculosController(clsVehiculosService servicio, clsInve
     public async Task<IActionResult> Buscar([FromQuery] string? vin, CancellationToken ct) =>
         Ok(await servicio.BuscarAsync(vin, ct));
 
-    /// <summary>Listados del tablero: tipo = movilizados, pendientes o novedad (500 por pagina).</summary>
+    /// <summary>
+    /// Listado del tablero por paginas <c>{items, total, pagina, tamano}</c>. Filtros: <c>tipo</c> (<c>movilizados</c> por defecto, <c>pendientes</c> o <c>novedad</c>), <c>vin</c>, <c>operacion</c>, <c>marca</c>,
+    /// <c>cliente_id</c> (solo el super administrador elige otro), <c>estado_unidad</c>, <c>activo</c>, <c>desde</c> y <c>hasta</c> (alta del vehiculo); <c>pagina</c>, <c>tamano</c> (50, maximo 200) y <c>orden</c>
+    /// (<c>campo:asc|desc</c>).
+    /// </summary>
     [HttpGet("listado")]
-    [ProducesResponseType<ListadoPaginadoDto>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> Listar([FromQuery] string? tipo, [FromQuery] string? vin, [FromQuery] string? page, CancellationToken ct)
-    {
-        var pagina = int.TryParse(page, out var p) ? p : 1;
-        return Ok(await servicio.ListarAsync(tipo, vin, pagina, ct));
-    }
+    [ProducesResponseType<PaginaDto<ListadoVehiculoDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Listar(
+        [FromQuery] string? tipo,
+        [FromQuery] string? vin,
+        [FromQuery] string? operacion,
+        [FromQuery] string? marca,
+        [FromQuery(Name = "cliente_id")] string? clienteId,
+        [FromQuery(Name = "estado_unidad")] string? estadoUnidad,
+        [FromQuery] string? activo,
+        [FromQuery] string? desde,
+        [FromQuery] string? hasta,
+        [FromQuery] string? pagina,
+        [FromQuery] string? tamano,
+        [FromQuery] string? orden,
+        CancellationToken ct) =>
+        Ok(await servicio.ListarAsync(new FiltrosVehiculosRequest(tipo, vin, operacion, marca, clienteId, estadoUnidad, activo, desde, hasta, pagina, tamano, orden), ct));
 
     /// <summary>Inventario del VIN en PDF, como descarga.</summary>
     [HttpGet("{vin}/inventario/pdf")]

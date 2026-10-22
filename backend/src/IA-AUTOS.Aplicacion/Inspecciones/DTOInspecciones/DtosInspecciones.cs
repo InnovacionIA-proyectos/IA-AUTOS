@@ -89,9 +89,29 @@ public sealed record RegistrarNoFirmaRequest(
 /// <summary>Un usuario del viaje que puede firmar una transferencia.</summary>
 public sealed record FirmanteDto(Guid Id, string Nombre, string Rol);
 
-/// <summary>Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio.</summary>
-public sealed record FiltrosInspeccionesRequest(string? Vin, string? UsuarioId, string? ViajeId, string? Momento, string? Estado, string? Proceso, string? Desde, string? Hasta);
+/// <summary>
+/// Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio. <c>Pagina</c>, <c>Tamano</c> y <c>Orden</c> son el formato comun de los listados; la exportacion a Excel
+/// los ignora.
+/// </summary>
+public sealed record FiltrosInspeccionesRequest(
+    string? Vin,
+    string? UsuarioId,
+    string? ViajeId,
+    string? Momento,
+    string? Estado,
+    string? Proceso,
+    string? Operacion,
+    string? Marca,
+    string? ClienteId,
+    string? OrigenId,
+    string? DestinoId,
+    string? Desde,
+    string? Hasta,
+    string? Pagina = null,
+    string? Tamano = null,
+    string? Orden = null);
 
+/// <summary>Los filtros ya validados. <c>OrigenId</c> y <c>DestinoId</c> son los del viaje de la inspeccion; <c>Operacion</c>, <c>Marca</c> y <c>ClienteId</c>, los de su vehiculo.</summary>
 public sealed record FiltrosInspecciones(
     string? Vin,
     Guid? UsuarioId,
@@ -99,6 +119,11 @@ public sealed record FiltrosInspecciones(
     string? Momento,
     string? Estado,
     string? Proceso,
+    string? Operacion,
+    string? Marca,
+    Guid? ClienteId,
+    Guid? OrigenId,
+    Guid? DestinoId,
     DateTimeOffset? Desde,
     DateTimeOffset? Hasta);
 

@@ -110,9 +110,9 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         }
 
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
-        var antes = (await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes"))).EnumerateArray().Single();
+        var antes = (Items(await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes")))).EnumerateArray().Single();
         var marcada = await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
-        var despues = (await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes"))).EnumerateArray().Single();
+        var despues = (Items(await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes")))).EnumerateArray().Single();
 
         Assert.Equal(HttpStatusCode.OK, marcada.StatusCode);
         Assert.Equal(2, antes.GetProperty("vehiculos_completos").GetInt32());

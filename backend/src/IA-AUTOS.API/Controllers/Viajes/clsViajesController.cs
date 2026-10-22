@@ -1,6 +1,7 @@
 using IAAutos.API.Configuracion;
 using IAAutos.API.Controllers.Comun;
 using IAAutos.API.Seguridad;
+using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Conductor;
 using IAAutos.Aplicacion.Conductor.DTOConductor;
 using IAAutos.Aplicacion.Inspecciones;
@@ -36,21 +37,29 @@ public sealed class clsViajesController(
     }
 
     /// <summary>
-    /// Listado (maximo 200, mas recientes primero). Inspectores y conductores ven solo sus viajes. <c>clienteId</c> trae los viajes con algun VIN de ese
-    /// cliente (solo el super administrador elige otro; el resto recibe siempre los de su cliente). Cada fila trae los clientes de sus VIN.
+    /// Una pagina de viajes <c>{items, total, pagina, tamano}</c> (mas recientes primero por defecto). Filtros: <c>estado</c>, <c>codigo_mtrack</c>, <c>vin</c>, <c>conductor_id</c>, <c>inspector_id</c>, <c>cliente_id</c>,
+    /// <c>origen_id</c>, <c>destino_id</c>, <c>desde</c> y <c>hasta</c>; <c>pagina</c>, <c>tamano</c> (50, maximo 200) y <c>orden</c> (<c>campo:asc|desc</c>). Inspectores y conductores ven solo sus viajes.
+    /// <c>cliente_id</c> trae los viajes con algun VIN de ese cliente (solo el super administrador elige otro; el resto recibe siempre los de su cliente). Cada fila trae los clientes de sus VIN.
     /// </summary>
     [HttpGet]
-    [ProducesResponseType<IReadOnlyList<ViajeResumenDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<PaginaDto<ViajeResumenDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Listar(
         [FromQuery] string? estado,
-        [FromQuery] string? codigoMtrack,
+        [FromQuery(Name = "codigo_mtrack")] string? codigoMtrack,
         [FromQuery] string? vin,
-        [FromQuery] string? conductorId,
+        [FromQuery(Name = "conductor_id")] string? conductorId,
+        [FromQuery(Name = "inspector_id")] string? inspectorId,
+        [FromQuery(Name = "cliente_id")] string? clienteId,
+        [FromQuery(Name = "origen_id")] string? origenId,
+        [FromQuery(Name = "destino_id")] string? destinoId,
         [FromQuery] string? desde,
         [FromQuery] string? hasta,
-        [FromQuery] string? clienteId,
+        [FromQuery] string? pagina,
+        [FromQuery] string? tamano,
+        [FromQuery] string? orden,
         CancellationToken ct) =>
-        Ok(await servicio.ListarAsync(new FiltrosViajesRequest(estado, codigoMtrack, vin, conductorId, desde, hasta, clienteId), ct));
+        Ok(await servicio.ListarAsync(
+            new FiltrosViajesRequest(estado, codigoMtrack, vin, conductorId, inspectorId, clienteId, origenId, destinoId, desde, hasta, pagina, tamano, orden), ct));
 
     /// <summary>Los viajes del usuario autenticado (como conductor o inspector) con sus VIN. Sin estado: los programados y en curso.</summary>
     [HttpGet("mios")]

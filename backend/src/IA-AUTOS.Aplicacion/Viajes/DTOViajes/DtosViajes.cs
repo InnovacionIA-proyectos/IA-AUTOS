@@ -116,10 +116,37 @@ public sealed record ViajeResumenDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
-/// <summary>Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio.</summary>
-public sealed record FiltrosViajesRequest(string? Estado, string? CodigoMtrack, string? Vin, string? ConductorId, string? Desde, string? Hasta, string? ClienteId = null);
+/// <summary>
+/// Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio. <c>Pagina</c>, <c>Tamano</c> y <c>Orden</c> son el formato comun de los listados; la exportacion a Excel los
+/// ignora.
+/// </summary>
+public sealed record FiltrosViajesRequest(
+    string? Estado,
+    string? CodigoMtrack,
+    string? Vin,
+    string? ConductorId,
+    string? InspectorId,
+    string? ClienteId,
+    string? OrigenId,
+    string? DestinoId,
+    string? Desde,
+    string? Hasta,
+    string? Pagina = null,
+    string? Tamano = null,
+    string? Orden = null);
 
-public sealed record FiltrosViajes(string? Estado, string? CodigoMtrack, string? Vin, Guid? ConductorId, DateTimeOffset? Desde, DateTimeOffset? Hasta, Guid? ClienteId = null);
+/// <summary>Los filtros ya validados. <c>ClienteId</c> pide los viajes con algun VIN de ese cliente.</summary>
+public sealed record FiltrosViajes(
+    string? Estado,
+    string? CodigoMtrack,
+    string? Vin,
+    Guid? ConductorId,
+    Guid? InspectorId,
+    Guid? ClienteId,
+    Guid? OrigenId,
+    Guid? DestinoId,
+    DateTimeOffset? Desde,
+    DateTimeOffset? Hasta);
 
 /// <summary>
 /// Fila de la carga masiva de viajes (una por VIN). Las filas con el mismo codigo MTrack forman un viaje. <c>Fila</c> es el

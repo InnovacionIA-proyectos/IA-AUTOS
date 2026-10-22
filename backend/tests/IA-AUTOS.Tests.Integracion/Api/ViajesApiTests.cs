@@ -428,19 +428,19 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var coordinador = await CoordinadorAsync();
         var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
         var inspector = await SesionAsync("insp@ejemplo.com", clsRol.INSPECTOR);
-        await ViajeConVinesAsync(coordinador, "MTK-L1", ["VIN-L-01", "VIN-L-02"], conductor.UsuarioId);
-        await ViajeConVinesAsync(coordinador, "MTK-L2", ["VIN-L-03"], inspectorId: inspector.UsuarioId);
-        var tercero = await ViajeConVinesAsync(coordinador, "MTK-L3", ["VIN-L-04"]);
+        await ViajeConVinesAsync(coordinador, "MTK-L1", ["VINL01", "VINL02"], conductor.UsuarioId);
+        await ViajeConVinesAsync(coordinador, "MTK-L2", ["VINL03"], inspectorId: inspector.UsuarioId);
+        var tercero = await ViajeConVinesAsync(coordinador, "MTK-L3", ["VINL04"]);
         await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{tercero}/estado", Cuerpo(new { estado = "cancelado" }));
 
-        var todos = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes"));
-        var porEstado = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes?estado=cancelado"));
-        var porCodigo = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes?codigoMtrack=l2"));
-        var porVin = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes?vin=vin-l-02"));
-        var porConductor = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync($"/api/viajes?conductorId={conductor.UsuarioId}"));
-        var delConductor = await LeerJsonAsync(await Cliente(conductor.Token).GetAsync("/api/viajes"));
-        var delInspector = await LeerJsonAsync(await Cliente(inspector.Token).GetAsync("/api/viajes"));
-        var invalido = await Cliente(coordinador.Token).GetAsync("/api/viajes?estado=volando&conductorId=no&desde=ayer");
+        var todos = Items(await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes")));
+        var porEstado = Items(await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes?estado=cancelado")));
+        var porCodigo = Items(await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes?codigo_mtrack=l2")));
+        var porVin = Items(await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes?vin=vinl02")));
+        var porConductor = Items(await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync($"/api/viajes?conductor_id={conductor.UsuarioId}")));
+        var delConductor = Items(await LeerJsonAsync(await Cliente(conductor.Token).GetAsync("/api/viajes")));
+        var delInspector = Items(await LeerJsonAsync(await Cliente(inspector.Token).GetAsync("/api/viajes")));
+        var invalido = await Cliente(coordinador.Token).GetAsync("/api/viajes?estado=volando&conductor_id=no&desde=ayer");
 
         Assert.Equal(3, todos.GetArrayLength());
         Assert.Equal(["MTK-L3", "MTK-L2", "MTK-L1"], todos.EnumerateArray().Select(v => v.GetProperty("codigo_mtrack").GetString()).ToList());
@@ -453,7 +453,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(["MTK-L1"], delConductor.EnumerateArray().Select(v => v.GetProperty("codigo_mtrack").GetString()).ToList());
         Assert.Equal(["MTK-L2"], delInspector.EnumerateArray().Select(v => v.GetProperty("codigo_mtrack").GetString()).ToList());
         Assert.Equal(HttpStatusCode.BadRequest, invalido.StatusCode);
-        Assert.Equal(["estado", "conductorId", "desde"], (await LeerJsonAsync(invalido)).GetProperty("details").GetProperty("fieldErrors").EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["estado", "conductor_id", "desde"], (await LeerJsonAsync(invalido)).GetProperty("details").GetProperty("fieldErrors").EnumerateObject().Select(p => p.Name).ToList());
     }
 
     [Fact]
@@ -792,7 +792,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
 
         Assert.Equal(["VIN-LIS-MIO"], busquedaInspector.EnumerateArray().Select(v => v.GetProperty("vin").GetString()).ToList());
         Assert.Equal(3, busquedaCoordinador.GetArrayLength());
-        Assert.Equal(["VIN-LIS-MIO"], listadoInspector.GetProperty("rows").EnumerateArray().Select(v => v.GetProperty("vin").GetString()).ToList());
+        Assert.Equal(["VIN-LIS-MIO"], listadoInspector.GetProperty("items").EnumerateArray().Select(v => v.GetProperty("vin").GetString()).ToList());
         Assert.Equal(1, listadoInspector.GetProperty("total").GetInt32());
         Assert.Equal(3, listadoCoordinador.GetProperty("total").GetInt32());
     }
@@ -809,9 +809,9 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var informeMio = await Sembrador.InformeAsync(EtapaDe(mio), inspector.UsuarioId, cerrada: false);
         var informeAjeno = await Sembrador.InformeAsync(EtapaDe(ajeno), otro.UsuarioId, cerrada: false);
 
-        var delInspector = await LeerJsonAsync(await Cliente(inspector.Token).GetAsync("/api/inspecciones"));
-        var delCoordinador = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones"));
-        var porViaje = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync($"/api/inspecciones?viajeId={ajeno}"));
+        var delInspector = Items(await LeerJsonAsync(await Cliente(inspector.Token).GetAsync("/api/inspecciones")));
+        var delCoordinador = Items(await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones")));
+        var porViaje = Items(await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync($"/api/inspecciones?viaje_id={ajeno}")));
         var abrirMio = await Cliente(inspector.Token).GetAsync($"/api/inspecciones/{informeMio}");
         var abrirAjeno = await Cliente(inspector.Token).GetAsync($"/api/inspecciones/{informeAjeno}");
 
@@ -853,12 +853,12 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
 
         await Sembrador.InformeAsync(etapas[3], inspector.UsuarioId, cerrada: true);
 
-        var parcial = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes"));
+        var parcial = Items(await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes")));
         var movilizados = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/vehiculos/listado?tipo=movilizados"));
 
         Assert.Equal(1, parcial[0].GetProperty("vehiculos_completos").GetInt32());
         Assert.Equal(2, parcial[0].GetProperty("total_vehiculos").GetInt32());
-        Assert.Equal(["VIN-VC-01"], movilizados.GetProperty("rows").EnumerateArray().Select(v => v.GetProperty("vin").GetString()).ToList());
+        Assert.Equal(["VIN-VC-01"], movilizados.GetProperty("items").EnumerateArray().Select(v => v.GetProperty("vin").GetString()).ToList());
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.vwViajesCompletos WHERE ViajeId = @v", ("@v", viaje)));
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM sys.views WHERE name = 'vwVehiculosMovilizados'"));
     }
@@ -966,9 +966,9 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var d = await ViajeDosMarcasAsync();
         var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
 
-        var porSofasa = await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes?clienteId={d.Sofasa}"));
-        var porOtro = await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes?clienteId={d.Otro}"));
-        var sinFiltro = await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync("/api/viajes"));
+        var porSofasa = Items(await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes?cliente_id={d.Sofasa}")));
+        var porOtro = Items(await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes?cliente_id={d.Otro}")));
+        var sinFiltro = Items(await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync("/api/viajes")));
 
         Assert.Equal([d.ViajeId], Ids(porSofasa));
         Assert.Equal([d.ViajeId], Ids(porOtro));
@@ -989,16 +989,16 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
         var sinViajes = await ClienteAsync("tercero", "Tercero", 3);
 
-        var vacioReal = await Cliente(superAdmin.Token).GetAsync($"/api/viajes?clienteId={sinViajes}");
-        var vacioInexistente = await Cliente(superAdmin.Token).GetAsync($"/api/viajes?clienteId={Guid.NewGuid()}");
-        var invalido = await Cliente(superAdmin.Token).GetAsync("/api/viajes?clienteId=no-es-uuid");
-        var invalidoDelCoordinador = await Cliente(d.Coordinador.Token).GetAsync("/api/viajes?clienteId=no-es-uuid");
+        var vacioReal = await Cliente(superAdmin.Token).GetAsync($"/api/viajes?cliente_id={sinViajes}");
+        var vacioInexistente = await Cliente(superAdmin.Token).GetAsync($"/api/viajes?cliente_id={Guid.NewGuid()}");
+        var invalido = await Cliente(superAdmin.Token).GetAsync("/api/viajes?cliente_id=no-es-uuid");
+        var invalidoDelCoordinador = await Cliente(d.Coordinador.Token).GetAsync("/api/viajes?cliente_id=no-es-uuid");
 
-        Assert.Equal(0, (await LeerJsonAsync(vacioReal)).GetArrayLength());
+        Assert.Equal(0, Items(await LeerJsonAsync(vacioReal)).GetArrayLength());
         Assert.Equal(HttpStatusCode.OK, vacioInexistente.StatusCode);
-        Assert.Equal(0, (await LeerJsonAsync(vacioInexistente)).GetArrayLength());
+        Assert.Equal(0, Items(await LeerJsonAsync(vacioInexistente)).GetArrayLength());
         Assert.Equal(HttpStatusCode.BadRequest, invalido.StatusCode);
-        Assert.True((await LeerJsonAsync(invalido)).GetProperty("details").GetProperty("fieldErrors").TryGetProperty("clienteId", out _));
+        Assert.True((await LeerJsonAsync(invalido)).GetProperty("details").GetProperty("fieldErrors").TryGetProperty("cliente_id", out _));
         Assert.Equal(HttpStatusCode.BadRequest, invalidoDelCoordinador.StatusCode);
     }
 
@@ -1010,11 +1010,11 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var tercero = await ClienteAsync("tercero", "Tercero", 3);
         var delTercero = await SesionAsync("coord-tercero@ejemplo.com", clsRol.COORDINADOR_CALIDAD, clienteId: tercero);
 
-        var sofasa = await LeerJsonAsync(await Cliente(d.Coordinador.Token).GetAsync("/api/viajes"));
-        var sofasaPidiendoOtro = await Cliente(d.Coordinador.Token).GetAsync($"/api/viajes?clienteId={d.Otro}");
-        var otro = await LeerJsonAsync(await Cliente(delOtro.Token).GetAsync("/api/viajes"));
-        var otroPidiendoSofasa = await Cliente(delOtro.Token).GetAsync($"/api/viajes?clienteId={d.Sofasa}");
-        var ninguno = await LeerJsonAsync(await Cliente(delTercero.Token).GetAsync("/api/viajes"));
+        var sofasa = Items(await LeerJsonAsync(await Cliente(d.Coordinador.Token).GetAsync("/api/viajes")));
+        var sofasaPidiendoOtro = await Cliente(d.Coordinador.Token).GetAsync($"/api/viajes?cliente_id={d.Otro}");
+        var otro = Items(await LeerJsonAsync(await Cliente(delOtro.Token).GetAsync("/api/viajes")));
+        var otroPidiendoSofasa = await Cliente(delOtro.Token).GetAsync($"/api/viajes?cliente_id={d.Sofasa}");
+        var ninguno = Items(await LeerJsonAsync(await Cliente(delTercero.Token).GetAsync("/api/viajes")));
 
         Assert.Equal([d.ViajeId], Ids(sofasa));
         Assert.Equal(["sofasa"], Codigos(sofasa[0]));
@@ -1058,7 +1058,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var delInspector = await LeerJsonAsync(await Cliente(d.Inspector.Token).GetAsync($"/api/viajes/{d.ViajeId}"));
         var delSuper = await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes/{d.ViajeId}"));
         var mios = await LeerJsonAsync(await Cliente(d.Conductor.Token).GetAsync("/api/viajes/mios"));
-        var listadoDelConductor = await LeerJsonAsync(await Cliente(d.Conductor.Token).GetAsync("/api/viajes"));
+        var listadoDelConductor = Items(await LeerJsonAsync(await Cliente(d.Conductor.Token).GetAsync("/api/viajes")));
 
         foreach (var viaje in new[] { delConductor, delInspector, delSuper, mios[0] })
         {
@@ -1082,11 +1082,11 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
         var viajeId = (await LeerJsonAsync(creado)).GetProperty("id").GetGuid();
 
-        var propio = await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes"));
-        var ajeno = await LeerJsonAsync(await Cliente(delOtro.Token).GetAsync("/api/viajes"));
+        var propio = Items(await LeerJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes")));
+        var ajeno = Items(await LeerJsonAsync(await Cliente(delOtro.Token).GetAsync("/api/viajes")));
         var detalleAjeno = await Cliente(delOtro.Token).GetAsync($"/api/viajes/{viajeId}");
         var detallePropio = await Cliente(coordinador.Token).GetAsync($"/api/viajes/{viajeId}");
-        var delSuper = await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes?clienteId={sofasa}"));
+        var delSuper = Items(await LeerJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes?cliente_id={sofasa}")));
 
         Assert.Equal([viajeId], Ids(propio));
         Assert.Empty(Codigos(propio[0]));

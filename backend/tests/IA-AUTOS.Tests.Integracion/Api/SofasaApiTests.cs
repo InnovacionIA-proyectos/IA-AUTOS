@@ -208,9 +208,9 @@ public sealed class SofasaApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     {
         await Fabrica.SembrarUsuarioAsync("admin@ejemplo.com", "Clave-Segura-1", clsRol.COORDINADOR_CALIDAD);
         var token = await LoginAsync("admin@ejemplo.com", "Clave-Segura-1");
-        var antigua = FilaEtl(6001, "VIN-LIST-0001");
+        var antigua = FilaEtl(6001, "VINLIST0001");
         antigua["datetime_event"] = "2026-01-01T00:00:00Z";
-        var reciente = FilaEtl(6002, "VIN-LIST-0002");
+        var reciente = FilaEtl(6002, "VINLIST0002");
         reciente["datetime_event"] = "2026-07-01T00:00:00Z";
         reciente["destination_city"] = "Medellín";
         reciente["status_code"] = "ENTREGADA";
@@ -218,11 +218,11 @@ public sealed class SofasaApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         sinFecha["datetime_event"] = null;
         await ClienteEtl().PostAsJsonAsync(RUTA_ETL, new { ordenes = new[] { antigua, reciente, sinFecha } });
 
-        var todas = await ClonarAsync(await Cliente(token).GetAsync("/api/sofasa/ordenes"));
-        var porVin = await ClonarAsync(await Cliente(token).GetAsync("/api/sofasa/ordenes?vin=list"));
-        var porCiudad = await ClonarAsync(await Cliente(token).GetAsync("/api/sofasa/ordenes?ciudad=medell"));
-        var porEstado = await ClonarAsync(await Cliente(token).GetAsync("/api/sofasa/ordenes?estado=ENTREGADA"));
-        var porRango = await ClonarAsync(await Cliente(token).GetAsync("/api/sofasa/ordenes?desde=2026-06-01T00:00:00Z&hasta=2026-08-01T00:00:00Z"));
+        var todas = Items(await ClonarAsync(await Cliente(token).GetAsync("/api/sofasa/ordenes")));
+        var porVin = Items(await ClonarAsync(await Cliente(token).GetAsync("/api/sofasa/ordenes?vin=vinlist")));
+        var porCiudad = Items(await ClonarAsync(await Cliente(token).GetAsync("/api/sofasa/ordenes?ciudad=medell")));
+        var porEstado = Items(await ClonarAsync(await Cliente(token).GetAsync("/api/sofasa/ordenes?estado=ENTREGADA")));
+        var porRango = Items(await ClonarAsync(await Cliente(token).GetAsync("/api/sofasa/ordenes?desde=2026-06-01T00:00:00Z&hasta=2026-08-01T00:00:00Z")));
         var sinAuth = await Cliente().GetAsync("/api/sofasa/ordenes");
 
         Assert.Equal([6002L, 6001L, 6003L], todas.EnumerateArray().Select(o => o.GetProperty("source_id").GetInt64()).ToList());
@@ -293,7 +293,7 @@ public sealed class SofasaApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         await Sembrador.VehiculoConRutaAsync("VIN-AJENO-01");
         await ClienteEtl().PostAsJsonAsync(RUTA_ETL, new { ordenes = new[] { FilaEtl(7301, "VIN-MIO-01"), FilaEtl(7302, "VIN-AJENO-01"), FilaEtl(7303, "VIN-SIN-VIAJE") } });
 
-        var propias = await ClonarAsync(await Cliente(token).GetAsync("/api/sofasa/ordenes"));
+        var propias = Items(await ClonarAsync(await Cliente(token).GetAsync("/api/sofasa/ordenes")));
 
         Assert.Equal([7301L], propias.EnumerateArray().Select(o => o.GetProperty("source_id").GetInt64()).ToList());
     }

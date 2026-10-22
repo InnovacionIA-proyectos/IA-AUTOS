@@ -184,14 +184,17 @@ public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsP
     public async Task Los_viajes_aceptan_los_filtros_del_listado()
     {
         await EscenarioAsync();
+        // El filtro de VIN sigue la regla unica: los VIN del escenario pasan a ser VIN ISO validos.
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblVehiculos SET Vin = REPLACE(Vin, 'VIN-IND-', '9FBHSR4E8PM00')");
+
         var coordinador = await SesionAsync(clsRol.COORDINADOR_CALIDAD);
 
-        Assert.Equal(10, (await DescargarAsync(coordinador, RUTAS[0], "?codigoMtrack=MTK-IND-A")).Hoja.Filas.Count);
-        Assert.Equal(4, (await DescargarAsync(coordinador, RUTAS[0], "?vin=IND-0003")).Hoja.Filas.Count);
+        Assert.Equal(10, (await DescargarAsync(coordinador, RUTAS[0], "?codigo_mtrack=MTK-IND-A")).Hoja.Filas.Count);
+        Assert.Equal(4, (await DescargarAsync(coordinador, RUTAS[0], "?vin=PM000003")).Hoja.Filas.Count);
         Assert.Empty((await DescargarAsync(coordinador, RUTAS[0], "?estado=programado")).Hoja.Filas);
         Assert.Equal(2, (await DescargarAsync(coordinador, RUTAS[0], "?estado=finalizado")).Hoja.Filas.Count);
         var conductor = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblUsuarios WHERE Cedula = '1032456789'"))!;
-        Assert.Equal(10, (await DescargarAsync(coordinador, RUTAS[0], $"?conductorId={conductor}")).Hoja.Filas.Count);
+        Assert.Equal(10, (await DescargarAsync(coordinador, RUTAS[0], $"?conductor_id={conductor}")).Hoja.Filas.Count);
         var reciente = DateTimeOffset.UtcNow.AddDays(-10).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture);
         Assert.Equal(14, (await DescargarAsync(coordinador, RUTAS[0], $"?desde={reciente}")).Hoja.Filas.Count);
         Assert.Equal(HttpStatusCode.BadRequest, (await Cliente(coordinador.Token).GetAsync(RUTAS[0] + "?estado=volando")).StatusCode);
@@ -244,15 +247,15 @@ public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsP
 
         Assert.Equal(4, (await DescargarAsync(coordinador, RUTAS[1], "?momento=llegada")).Hoja.Filas.Count);
         var viajeA = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = 'MTK-IND-A'"))!;
-        Assert.Equal(7, (await DescargarAsync(coordinador, RUTAS[1], $"?viajeId={viajeA}")).Hoja.Filas.Count);
+        Assert.Equal(7, (await DescargarAsync(coordinador, RUTAS[1], $"?viaje_id={viajeA}")).Hoja.Filas.Count);
         Assert.Equal(2, (await DescargarAsync(coordinador, RUTAS[1], "?proceso=descargue")).Hoja.Filas.Count);
-        Assert.Equal(5, (await DescargarAsync(coordinador, RUTAS[1], $"?usuarioId={e.I1}&estado=cerrada&momento=salida")).Hoja.Filas.Count);
+        Assert.Equal(5, (await DescargarAsync(coordinador, RUTAS[1], $"?usuario_id={e.I1}&estado=cerrada&momento=salida")).Hoja.Filas.Count);
         Assert.Equal(11, (await DescargarAsync(superAdmin, RUTAS[1])).Hoja.Filas.Count);
-        Assert.Single((await DescargarAsync(superAdmin, RUTAS[1], $"?clienteId={e.Otro}")).Hoja.Filas);
+        Assert.Single((await DescargarAsync(superAdmin, RUTAS[1], $"?cliente_id={e.Otro}")).Hoja.Filas);
         Assert.Equal("Otro cliente", (await DescargarAsync(delOtro, RUTAS[1])).Hoja.Filas.Single()["Cliente"]);
-        Assert.Equal(HttpStatusCode.Forbidden, (await Cliente(coordinador.Token).GetAsync($"{RUTAS[1]}?clienteId={e.Otro}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Cliente(coordinador.Token).GetAsync($"{RUTAS[1]}?cliente_id={e.Otro}")).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await Cliente(coordinador.Token).GetAsync(RUTAS[1] + "?momento=ayer")).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, (await Cliente(coordinador.Token).GetAsync(RUTAS[1] + "?clienteId=x")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Cliente(coordinador.Token).GetAsync(RUTAS[1] + "?cliente_id=x")).StatusCode);
     }
 
     // ------------------------------------------------------------------------------------ hallazgos.xlsx
@@ -326,10 +329,12 @@ public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsP
     public async Task Los_textos_con_caracteres_especiales_se_escriben_sin_romper_el_archivo()
     {
         await EscenarioAsync();
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblVehiculos SET Vin = REPLACE(Vin, 'VIN-IND-', '9FBHSR4E8PM00')");
+
         await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET Placa = N'A&B<C>\"D''' WHERE CodigoMtrack = 'MTK-IND-B'");
         var coordinador = await SesionAsync(clsRol.COORDINADOR_CALIDAD);
 
-        var (_, hoja) = await DescargarAsync(coordinador, RUTAS[0], "?vin=IND-0003");
+        var (_, hoja) = await DescargarAsync(coordinador, RUTAS[0], "?vin=PM000003");
 
         Assert.All(hoja.Filas, f => Assert.Equal("A&B<C>\"D'", f["Placa"]));
     }

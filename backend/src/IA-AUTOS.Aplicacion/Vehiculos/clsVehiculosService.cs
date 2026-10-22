@@ -6,6 +6,7 @@ using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
 using IAAutos.Dominio.Comun;
 using IAAutos.Aplicacion.Viajes;
 using IAAutos.Dominio.Vehiculos;
+using IAAutos.Dominio.Viajes;
 using Microsoft.Extensions.Logging;
 
 namespace IAAutos.Aplicacion.Vehiculos;
@@ -23,7 +24,8 @@ public sealed class clsVehiculosService(
     IValidator<CargarVinsRequest> validadorCarga,
     ILogger<clsVehiculosService> registro)
 {
-    public const int TAMANO_PAGINA = 500;
+    /// <summary>Los campos por los que se puede ordenar el listado (<c>orden=campo:asc|desc</c>).</summary>
+    public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "vin", "marca", "modelo", "color", "operacion", "activo", "created_at" };
 
     /// <summary>
     /// Carga masiva de vehiculos. Cada VIN se inserta (o se actualiza si ya existe). Las etapas no se crean aqui: nacen cuando el VIN
@@ -115,34 +117,51 @@ public sealed class clsVehiculosService(
         return new BajaVehiculoResponse("inactivado");
     }
 
-    /// <summary>Autocompletado. Inspectores y conductores solo encuentran los VIN de sus viajes; el resto, los de su cliente (el super administrador, todos).</summary>
-    public async Task<IReadOnlyList<VehiculoBusquedaDto>> BuscarAsync(string? termino, CancellationToken ct = default) =>
-        string.IsNullOrWhiteSpace(termino) ? [] : await consultas.BuscarAsync(termino.Trim(), actual.SoloSusViajes(), actual.ClienteRestringido(), ct);
-
-    public async Task<ListadoPaginadoDto> ListarAsync(string? tipo, string? vin, int pagina, CancellationToken ct = default)
+    /// <summary>
+    /// Autocompletado por fragmento de VIN o de marca (el de Inventario). Un fragmento corto o una marca se aceptan tal cual; un texto de 17 caracteres alfanumericos es un VIN completo y debe cumplir la regla
+    /// del VIN (sin las letras I, O ni Q), si no responde 400 con el motivo. Inspectores y conductores solo encuentran los VIN de sus viajes; el resto, los de su cliente (el super administrador, todos).
+    /// </summary>
+    public async Task<IReadOnlyList<VehiculoBusquedaDto>> BuscarAsync(string? termino, CancellationToken ct = default)
     {
-        var tipoFinal = tipo ?? clsTipoListado.MOVILIZADOS;
-        if (!clsTipoListado.VALORES.Contains(tipoFinal))
+        if (string.IsNullOrWhiteSpace(termino))
         {
-            throw new clsValidacionException(
-                "Datos inválidos",
-                new Dictionary<string, object>
-                {
-                    ["formErrors"] = Array.Empty<string>(),
-                    ["fieldErrors"] = new Dictionary<string, string[]> { ["tipo"] = [$"Valor inválido. Permitidos: {string.Join(", ", clsTipoListado.VALORES.Order())}"] },
-                });
+            return [];
         }
 
-        var paginaFinal = Math.Max(pagina, 1);
-        var (filas, total) = await consultas.ListarAsync(
-            tipoFinal,
-            string.IsNullOrWhiteSpace(vin) ? null : vin.Trim(),
-            actual.SoloSusViajes(),
-            actual.ClienteRestringido(),
-            TAMANO_PAGINA,
-            (paginaFinal - 1) * TAMANO_PAGINA,
-            ct);
-        return new ListadoPaginadoDto(filas, total, paginaFinal, TAMANO_PAGINA);
+        if (clsVin.ParecePesquisaDeVinCompleto(termino) && clsVin.Validar(termino) is { } motivo)
+        {
+            throw clsErroresCampos.De("vin", motivo);
+        }
+
+        return await consultas.BuscarAsync(termino.Trim(), actual.SoloSusViajes(), actual.ClienteRestringido(), ct);
+    }
+
+    /// <summary>
+    /// Una pagina de vehiculos: <c>{items, total, pagina, tamano}</c> (50 por defecto, maximo 200). Los filtros, la pagina y el orden se validan juntos y un error responde 400. Quien se limita a su cliente solo
+    /// ve el suyo (pedir otro responde 403).
+    /// </summary>
+    public async Task<PaginaDto<ListadoVehiculoDto>> ListarAsync(FiltrosVehiculosRequest solicitud, CancellationToken ct = default)
+    {
+        var errores = new Dictionary<string, string[]>();
+        var filtros = new FiltrosVehiculos(
+            clsParseoFiltros.Catalogo(solicitud.Tipo, clsTipoListado.VALORES, "tipo", errores) ?? clsTipoListado.MOVILIZADOS,
+            clsParseoFiltros.Vin(solicitud.Vin, "vin", errores),
+            clsParseoFiltros.Catalogo(solicitud.Operacion, clsOperacion.VALORES, "operacion", errores),
+            clsValidador.Opcional(solicitud.Marca),
+            clsParseoFiltros.Uuid(solicitud.ClienteId, "cliente_id", errores),
+            clsParseoFiltros.Catalogo(solicitud.EstadoUnidad, clsEstadoUnidad.VALORES, "estado_unidad", errores),
+            clsParseoFiltros.Booleano(solicitud.Activo, "activo", errores),
+            clsParseoFiltros.Fecha(solicitud.Desde, "desde", errores),
+            clsParseoFiltros.Fecha(solicitud.Hasta, "hasta", errores));
+        var pagina = clsPaginacion.Pagina(solicitud.Pagina, solicitud.Tamano, errores);
+        var orden = clsPaginacion.Orden(solicitud.Orden, CAMPOS_ORDEN, errores);
+        if (errores.Count > 0)
+        {
+            throw clsErroresCampos.Varios(errores);
+        }
+
+        var (filas, total) = await consultas.ListarAsync(filtros, actual.SoloSusViajes(), actual.ClienteDelFiltro(filtros.ClienteId), pagina, orden, ct);
+        return new PaginaDto<ListadoVehiculoDto>(filas, total, pagina.Pagina, pagina.Tamano);
     }
 
     /// <summary>

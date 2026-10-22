@@ -27,8 +27,8 @@ public sealed class clsUsuariosService(
     IOptions<clsOpcionesSeguridad> opciones,
     IValidator<CrearUsuarioRequest> validadorCrear)
 {
-    public const int TAMANO_PAGINA_DEFECTO = 50;
-    public const int TAMANO_PAGINA_MAXIMO = 200;
+    /// <summary>Los campos por los que se puede ordenar el listado (<c>orden=campo:asc|desc</c>).</summary>
+    public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "nombre", "email", "rol", "cedula", "activo", "created_at", "ultimo_acceso" };
 
     private static readonly string[] CAMPOS_EDITABLES = ["nombre", "email", "rol", "subtipo_inspector", "password", "activo", "cedula", "cliente_id"];
     private static readonly string[] CAMPOS_SIN_NULO = ["nombre", "rol", "password", "activo"];
@@ -59,29 +59,17 @@ public sealed class clsUsuariosService(
         var errores = new Dictionary<string, string[]>();
         var rol = clsParseoFiltros.Catalogo(filtros.Rol, clsRol.VALORES, "rol", errores);
         var clienteSolicitado = clsParseoFiltros.Uuid(filtros.ClienteId, "cliente_id", errores);
-        bool? activo = null;
-        if (!string.IsNullOrWhiteSpace(filtros.Activo))
-        {
-            if (bool.TryParse(filtros.Activo, out var valor))
-            {
-                activo = valor;
-            }
-            else
-            {
-                errores["activo"] = ["activo debe ser true o false"];
-            }
-        }
-
+        var activo = clsParseoFiltros.Booleano(filtros.Activo, "activo", errores);
+        var pagina = clsPaginacion.Pagina(filtros.Pagina, filtros.Tamano, errores);
+        var orden = clsPaginacion.Orden(filtros.Orden, CAMPOS_ORDEN, errores);
         if (errores.Count > 0)
         {
             throw clsErroresCampos.Varios(errores);
         }
 
-        var pagina = Math.Max(filtros.Pagina ?? 1, 1);
-        var tamano = Math.Clamp(filtros.Tamano ?? TAMANO_PAGINA_DEFECTO, 1, TAMANO_PAGINA_MAXIMO);
-        var filtro = new clsFiltroUsuarios(filtros.Q, rol, activo, actual.ClienteDelFiltro(clienteSolicitado));
-        var (filas, total) = await usuarios.BuscarAsync(filtro, (pagina - 1) * tamano, tamano, ct);
-        return new ListadoUsuariosDto(filas.Select(u => clsMapeadorUsuarios.ADto(u)).ToList(), total, pagina, tamano);
+        var filtro = new clsFiltroUsuarios(filtros.Q, rol, activo, actual.ClienteDelFiltro(clienteSolicitado), orden?.Campo, orden?.Descendente ?? false);
+        var (filas, total) = await usuarios.BuscarAsync(filtro, pagina.Desplazamiento, pagina.Tamano, ct);
+        return new ListadoUsuariosDto(filas.Select(u => clsMapeadorUsuarios.ADto(u)).ToList(), total, pagina.Pagina, pagina.Tamano);
     }
 
     /// <summary>Lista reducida (id, nombre y rol) de los usuarios activos del cliente, para quien no administra usuarios.</summary>

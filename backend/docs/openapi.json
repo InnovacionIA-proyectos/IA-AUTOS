@@ -72,7 +72,7 @@
             }
           },
           {
-            "name": "codigoMtrack",
+            "name": "codigo_mtrack",
             "in": "query",
             "schema": {
               "type": "string"
@@ -86,7 +86,35 @@
             }
           },
           {
-            "name": "conductorId",
+            "name": "conductor_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inspector_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origen_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "destino_id",
             "in": "query",
             "schema": {
               "type": "string"
@@ -107,7 +135,21 @@
             }
           },
           {
-            "name": "clienteId",
+            "name": "pagina",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tamano",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orden",
             "in": "query",
             "schema": {
               "type": "string"
@@ -120,26 +162,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ViajeResumenDto"
-                  }
+                  "$ref": "#/components/schemas/PaginaDtoOfViajeResumenDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ViajeResumenDto"
-                  }
+                  "$ref": "#/components/schemas/PaginaDtoOfViajeResumenDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ViajeResumenDto"
-                  }
+                  "$ref": "#/components/schemas/PaginaDtoOfViajeResumenDto"
                 }
               }
             }
@@ -1136,7 +1169,70 @@
             }
           },
           {
-            "name": "page",
+            "name": "operacion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "marca",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "estado_unidad",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "activo",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "desde",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tamano",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orden",
             "in": "query",
             "schema": {
               "type": "string"
@@ -1149,17 +1245,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListadoPaginadoDto"
+                  "$ref": "#/components/schemas/PaginaDtoOfListadoVehiculoDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListadoPaginadoDto"
+                  "$ref": "#/components/schemas/PaginaDtoOfListadoVehiculoDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListadoPaginadoDto"
+                  "$ref": "#/components/schemas/PaginaDtoOfListadoVehiculoDto"
                 }
               }
             }
@@ -1311,16 +1407,21 @@
             "name": "pagina",
             "in": "query",
             "schema": {
-              "type": "integer",
-              "format": "int32"
+              "type": "string"
             }
           },
           {
             "name": "tamano",
             "in": "query",
             "schema": {
-              "type": "integer",
-              "format": "int32"
+              "type": "string"
+            }
+          },
+          {
+            "name": "orden",
+            "in": "query",
+            "schema": {
+              "type": "string"
             }
           }
         ],
@@ -1897,6 +1998,27 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tamano",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orden",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1905,26 +2027,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/OrdenSofasaDto"
-                  }
+                  "$ref": "#/components/schemas/PaginaDtoOfOrdenSofasaDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/OrdenSofasaDto"
-                  }
+                  "$ref": "#/components/schemas/PaginaDtoOfOrdenSofasaDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/OrdenSofasaDto"
-                  }
+                  "$ref": "#/components/schemas/PaginaDtoOfOrdenSofasaDto"
                 }
               }
             }
@@ -3744,14 +3857,14 @@
             }
           },
           {
-            "name": "usuarioId",
+            "name": "usuario_id",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "viajeId",
+            "name": "viaje_id",
             "in": "query",
             "schema": {
               "type": "string"
@@ -3779,6 +3892,41 @@
             }
           },
           {
+            "name": "operacion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "marca",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origen_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "destino_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "desde",
             "in": "query",
             "schema": {
@@ -3791,6 +3939,27 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tamano",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "orden",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3799,26 +3968,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/InspeccionListadoDto"
-                  }
+                  "$ref": "#/components/schemas/PaginaDtoOfInspeccionListadoDto"
                 }
               },
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/InspeccionListadoDto"
-                  }
+                  "$ref": "#/components/schemas/PaginaDtoOfInspeccionListadoDto"
                 }
               },
               "text/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/InspeccionListadoDto"
-                  }
+                  "$ref": "#/components/schemas/PaginaDtoOfInspeccionListadoDto"
                 }
               }
             }
@@ -4739,7 +4899,7 @@
             }
           },
           {
-            "name": "codigoMtrack",
+            "name": "codigo_mtrack",
             "in": "query",
             "schema": {
               "type": "string"
@@ -4753,7 +4913,35 @@
             }
           },
           {
-            "name": "conductorId",
+            "name": "conductor_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "inspector_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origen_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "destino_id",
             "in": "query",
             "schema": {
               "type": "string"
@@ -4768,13 +4956,6 @@
           },
           {
             "name": "hasta",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "clienteId",
             "in": "query",
             "schema": {
               "type": "string"
@@ -4823,14 +5004,14 @@
             }
           },
           {
-            "name": "usuarioId",
+            "name": "usuario_id",
             "in": "query",
             "schema": {
               "type": "string"
             }
           },
           {
-            "name": "viajeId",
+            "name": "viaje_id",
             "in": "query",
             "schema": {
               "type": "string"
@@ -4858,6 +5039,41 @@
             }
           },
           {
+            "name": "operacion",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "marca",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cliente_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origen_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "destino_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "desde",
             "in": "query",
             "schema": {
@@ -4866,13 +5082,6 @@
           },
           {
             "name": "hasta",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "clienteId",
             "in": "query",
             "schema": {
               "type": "string"
@@ -10349,35 +10558,6 @@
           }
         }
       },
-      "ListadoPaginadoDto": {
-        "required": [
-          "rows",
-          "total",
-          "page",
-          "pageSize"
-        ],
-        "type": "object",
-        "properties": {
-          "rows": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ListadoVehiculoDto"
-            }
-          },
-          "total": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "page": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "pageSize": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
       "ListadoUsuariosDto": {
         "required": [
           "items",
@@ -10971,6 +11151,122 @@
           },
           "updated_at": {
             "format": "date-time"
+          }
+        }
+      },
+      "PaginaDtoOfInspeccionListadoDto": {
+        "required": [
+          "items",
+          "total",
+          "pagina",
+          "tamano"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InspeccionListadoDto"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pagina": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tamano": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PaginaDtoOfListadoVehiculoDto": {
+        "required": [
+          "items",
+          "total",
+          "pagina",
+          "tamano"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ListadoVehiculoDto"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pagina": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tamano": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PaginaDtoOfOrdenSofasaDto": {
+        "required": [
+          "items",
+          "total",
+          "pagina",
+          "tamano"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrdenSofasaDto"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pagina": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tamano": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PaginaDtoOfViajeResumenDto": {
+        "required": [
+          "items",
+          "total",
+          "pagina",
+          "tamano"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViajeResumenDto"
+            }
+          },
+          "total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pagina": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tamano": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },

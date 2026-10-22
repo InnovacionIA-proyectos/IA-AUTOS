@@ -1,6 +1,8 @@
+using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Vehiculos;
 using Microsoft.EntityFrameworkCore;
 
 namespace IAAutos.Infraestructura.Persistencia.Consultas;
@@ -37,8 +39,10 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
          where i.Id == inspeccionId && v.ClienteId == clienteId
          select i.Id).AnyAsync(ct);
 
-    public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones f, Guid? soloDeUsuario, Guid? soloDeCliente, int limite, CancellationToken ct = default)
+    public async Task<(IReadOnlyList<InspeccionListadoDto> Filas, int Total)> ListarAsync(
+        FiltrosInspecciones f, Guid? soloDeUsuario, Guid? soloDeCliente, PaginaSolicitada pagina, OrdenSolicitado? orden, CancellationToken ct = default)
     {
+        var vinExacto = f.Vin?.Length == clsVin.LONGITUD_ISO;
         var consulta = from i in contexto.Inspecciones.AsNoTracking()
                        join e in contexto.Etapas on i.EtapaId equals e.Id
                        join v in contexto.Vehiculos on e.VehiculoId equals v.Id
@@ -46,8 +50,12 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                        join vj in contexto.Viajes on i.ViajeId equals vj.Id
                        join c in contexto.Usuarios on vj.ConductorId equals c.Id into conductores
                        from c in conductores.DefaultIfEmpty()
-                       where (f.Vin == null || v.Vin == f.Vin)
+                       where (f.Vin == null || (vinExacto ? v.Vin == f.Vin : v.Vin.Contains(f.Vin)))
                           && (soloDeCliente == null || v.ClienteId == soloDeCliente)
+                          && (f.Operacion == null || v.Operacion == f.Operacion)
+                          && (f.Marca == null || v.Marca == f.Marca)
+                          && (f.OrigenId == null || vj.OrigenId == f.OrigenId)
+                          && (f.DestinoId == null || vj.DestinoId == f.DestinoId)
                           && (f.UsuarioId == null || i.UsuarioId == f.UsuarioId)
                           && (f.ViajeId == null || i.ViajeId == f.ViajeId)
                           && (f.Momento == null || i.Momento == f.Momento)
@@ -62,10 +70,22 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
             consulta = consulta.Where(x => viajesPropios.Contains(x.Inspeccion.ViajeId));
         }
 
+        var total = await consulta.CountAsync(ct);
+        var ordenada = clsOrdenamiento.De(consulta)
+            .Campo("fecha", x => x.Inspeccion.Fecha)
+            .Campo("vin", x => x.Vin)
+            .Campo("momento", x => x.Inspeccion.Momento)
+            .Campo("estado", x => x.Inspeccion.Estado)
+            .Campo("proceso", x => x.Proceso)
+            .Campo("version", x => x.Inspeccion.Version)
+            .Campo("created_at", x => x.Inspeccion.CreatedAt)
+            .Campo("cerrada_at", x => x.Inspeccion.CerradaAt)
+            .Aplicar(orden, q => q.OrderByDescending(x => x.Inspeccion.Fecha), q => q.ThenBy(x => x.Inspeccion.Id));
+
         // La placa, el trailer y el conductor son los del viaje; lo capturado a mano antes de los viajes tiene prioridad.
-        return await consulta
-            .OrderByDescending(x => x.Inspeccion.Fecha)
-            .Take(limite)
+        var filas = await ordenada
+            .Skip(pagina.Desplazamiento)
+            .Take(pagina.Tamano)
             .Select(x => new InspeccionListadoDto(
                 x.Inspeccion.Id, x.Inspeccion.EtapaId, x.Inspeccion.ViajeId, x.Inspeccion.UsuarioId, x.Inspeccion.Momento, x.Inspeccion.Fecha,
                 x.Inspeccion.Lat, x.Inspeccion.Lng, x.Inspeccion.Estado,
@@ -74,6 +94,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                 x.Inspeccion.IniciadaAt, x.Inspeccion.CerradaAt, x.Inspeccion.Version, x.Inspeccion.CorrigeInspeccionId,
                 x.Inspeccion.Momento == clsMomento.SALIDA ? "Inspección de salida" : x.Inspeccion.Momento == clsMomento.LLEGADA ? "Inspección de llegada" : x.Inspeccion.Momento))
             .ToListAsync(ct);
+        return (filas, total);
     }
 
     public async Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosAsync(Guid inspeccionId, CancellationToken ct = default)
