@@ -18,9 +18,11 @@ namespace IAAutos.Aplicacion.Inspecciones;
 public interface IConsultasInspecciones
 {
     /// <summary>
-    /// Listado; con <paramref name="soloDeUsuario"/>, solo informes de los viajes de ese usuario y, con <paramref name="soloDeCliente"/>, solo los de VIN de ese cliente.
+    /// Una pagina del listado y el total que cumple los filtros; con <paramref name="soloDeUsuario"/>, solo informes de los viajes de ese usuario y, con <paramref name="soloDeCliente"/>, solo los de VIN
+    /// de ese cliente. Sin <paramref name="orden"/>, las mas recientes primero.
     /// </summary>
-    Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones filtros, Guid? soloDeUsuario, Guid? soloDeCliente, int limite, CancellationToken ct = default);
+    Task<(IReadOnlyList<InspeccionListadoDto> Filas, int Total)> ListarAsync(
+        FiltrosInspecciones filtros, Guid? soloDeUsuario, Guid? soloDeCliente, PaginaSolicitada pagina, OrdenSolicitado? orden, CancellationToken ct = default);
 
     /// <summary>El hallazgo tal como esta guardado (con su zona, nivel y evidencia), o nulo si no existe.</summary>
     Task<HallazgoDto?> ObtenerHallazgoAsync(Guid hallazgoId, CancellationToken ct = default);
@@ -75,7 +77,8 @@ public sealed class clsInspeccionesService(
     IValidator<CrearHallazgoRequest> validadorHallazgo,
     IValidator<CrearEvidenciaRequest> validadorEvidencia)
 {
-    public const int LIMITE_LISTADO = 200;
+    /// <summary>Los campos por los que se puede ordenar el listado (<c>orden=campo:asc|desc</c>).</summary>
+    public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "fecha", "vin", "momento", "estado", "proceso", "version", "created_at", "cerrada_at" };
 
     public async Task<InspeccionDto> CrearAsync(CrearInspeccionRequest solicitud, CancellationToken ct = default)
     {
@@ -169,8 +172,21 @@ public sealed class clsInspeccionesService(
         return clsMapeadorInspecciones.AInspeccion(nueva, viaje.Placa, viaje.Trailer, conductor);
     }
 
-    public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspeccionesRequest solicitud, CancellationToken ct = default) =>
-        await consultas.ListarAsync(await ParsearFiltrosAsync(solicitud, catalogos, ct), actual.SoloSusViajes(), actual.ClienteRestringido(), LIMITE_LISTADO, ct);
+    /// <summary>Una pagina de informes: <c>{items, total, pagina, tamano}</c>. Quien se limita a su cliente solo ve el suyo (pedir otro responde 403); el resto puede elegir uno con <c>cliente_id</c>.</summary>
+    public async Task<PaginaDto<InspeccionListadoDto>> ListarAsync(FiltrosInspeccionesRequest solicitud, CancellationToken ct = default)
+    {
+        var errores = new Dictionary<string, string[]>();
+        var filtros = await LeerFiltrosAsync(solicitud, catalogos, errores, ct);
+        var pagina = clsPaginacion.Pagina(solicitud.Pagina, solicitud.Tamano, errores);
+        var orden = clsPaginacion.Orden(solicitud.Orden, CAMPOS_ORDEN, errores);
+        if (errores.Count > 0)
+        {
+            throw clsErroresCampos.Varios(errores);
+        }
+
+        var (filas, total) = await consultas.ListarAsync(filtros, actual.SoloSusViajes(), actual.ClienteDelFiltro(filtros.ClienteId), pagina, orden, ct);
+        return new PaginaDto<InspeccionListadoDto>(filas, total, pagina.Pagina, pagina.Tamano);
+    }
 
     /// <summary>
     /// Los hallazgos previos del VIN de la inspeccion, para que el cliente proponga un hallazgo nuevo como preexistente. Solo inspector y administrador; el inspector
@@ -429,36 +445,35 @@ public sealed class clsInspeccionesService(
         }
     }
 
+    /// <summary>Los filtros del listado validados (la exportacion a Excel los usa tambien): todos los errores juntos, con 400.</summary>
     internal static async Task<FiltrosInspecciones> ParsearFiltrosAsync(FiltrosInspeccionesRequest s, ICatalogosLectura catalogos, CancellationToken ct)
     {
         var errores = new Dictionary<string, string[]>();
-
-        string? vin = null;
-        if (!string.IsNullOrWhiteSpace(s.Vin))
+        var filtros = await LeerFiltrosAsync(s, catalogos, errores, ct);
+        if (errores.Count > 0)
         {
-            vin = clsVin.Normalizar(s.Vin);
-            if (!clsVin.EsFormatoIso(vin))
-            {
-                errores["vin"] = ["VIN inválido: 17 caracteres alfanuméricos, sin las letras I, O ni Q"];
-            }
+            throw clsErroresCampos.Varios(errores);
         }
 
-        var usuarioId = clsParseoFiltros.Uuid(s.UsuarioId, "usuarioId", errores);
-        var viajeId = clsParseoFiltros.Uuid(s.ViajeId, "viajeId", errores);
+        return filtros;
+    }
+
+    /// <summary>Lee los filtros acumulando los errores por campo (la validacion unica del VIN incluida) para responder todos juntos.</summary>
+    private static async Task<FiltrosInspecciones> LeerFiltrosAsync(FiltrosInspeccionesRequest s, ICatalogosLectura catalogos, Dictionary<string, string[]> errores, CancellationToken ct)
+    {
+        var vin = clsParseoFiltros.Vin(s.Vin, "vin", errores);
+        var usuarioId = clsParseoFiltros.Uuid(s.UsuarioId, "usuario_id", errores);
+        var viajeId = clsParseoFiltros.Uuid(s.ViajeId, "viaje_id", errores);
         var momento = clsParseoFiltros.Catalogo(s.Momento, clsMomento.VALORES, "momento", errores);
         var estado = clsParseoFiltros.Catalogo(s.Estado, clsEstadoInspeccion.VALORES, "estado", errores);
         // El proceso es una etapa del catalogo; se aceptan tambien las inactivas porque hay informes historicos de ellas.
         var proceso = clsParseoFiltros.Catalogo(s.Proceso, await catalogos.CodigosAsync(clsNombresCatalogo.ETAPAS, soloActivos: false, ct), "proceso", errores);
+        var operacion = clsParseoFiltros.Catalogo(s.Operacion, clsOperacion.VALORES, "operacion", errores);
+        var clienteId = clsParseoFiltros.Uuid(s.ClienteId, "cliente_id", errores);
+        var origenId = clsParseoFiltros.Uuid(s.OrigenId, "origen_id", errores);
+        var destinoId = clsParseoFiltros.Uuid(s.DestinoId, "destino_id", errores);
         var desde = clsParseoFiltros.Fecha(s.Desde, "desde", errores);
         var hasta = clsParseoFiltros.Fecha(s.Hasta, "hasta", errores);
-
-        if (errores.Count > 0)
-        {
-            throw new clsValidacionException(
-                "Datos inválidos",
-                new Dictionary<string, object> { ["formErrors"] = Array.Empty<string>(), ["fieldErrors"] = errores });
-        }
-
-        return new FiltrosInspecciones(vin, usuarioId, viajeId, momento, estado, proceso, desde, hasta);
+        return new FiltrosInspecciones(vin, usuarioId, viajeId, momento, estado, proceso, operacion, clsValidador.Opcional(s.Marca), clienteId, origenId, destinoId, desde, hasta);
     }
 }

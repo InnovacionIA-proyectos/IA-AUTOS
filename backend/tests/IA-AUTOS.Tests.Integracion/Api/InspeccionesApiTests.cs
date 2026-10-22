@@ -1871,13 +1871,13 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         await Task.Delay(20);
         var b = await CrearInspeccionAsync(otra, etapas2[1]);
 
-        var todas = await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones"));
-        var porUsuario = await ClonarAsync(await Cliente(coordinador.Token).GetAsync($"/api/inspecciones?usuarioId={otra.UsuarioId}"));
-        var porEstado = await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?estado=cerrada"));
-        var porMomento = await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?momento=llegada"));
-        var porProceso = await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?proceso=transporte"));
-        var porVin = await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?vin=9fbhsr4e8pm000999"));
-        var porFecha = await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?desde=2026-07-01T00:00:00Z&hasta=2026-07-31T00:00:00Z"));
+        var todas = Items(await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones")));
+        var porUsuario = Items(await ClonarAsync(await Cliente(coordinador.Token).GetAsync($"/api/inspecciones?usuario_id={otra.UsuarioId}")));
+        var porEstado = Items(await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?estado=cerrada")));
+        var porMomento = Items(await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?momento=llegada")));
+        var porProceso = Items(await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?proceso=transporte")));
+        var porVin = Items(await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?vin=9fbhsr4e8pm000999")));
+        var porFecha = Items(await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?desde=2026-07-01T00:00:00Z&hasta=2026-07-31T00:00:00Z")));
 
         Assert.Equal(3, todas.GetArrayLength());
         Assert.Equal(["iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre"], todas[0].EnumerateObject().Select(p => p.Name).TakeLast(5).ToList());
@@ -1897,11 +1897,11 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (sesion, _) = await EscenarioAsync();
 
-        var r = await Cliente(sesion.Token).GetAsync("/api/inspecciones?vin=corto&usuarioId=no&momento=x&estado=y&proceso=z&desde=ayer");
+        var r = await Cliente(sesion.Token).GetAsync("/api/inspecciones?vin=corto&usuario_id=no&momento=x&estado=y&proceso=z&desde=ayer");
 
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
         var campos = (await ClonarAsync(r)).GetProperty("details").GetProperty("fieldErrors").EnumerateObject().Select(p => p.Name).ToList();
-        Assert.Equal(["vin", "usuarioId", "momento", "estado", "proceso", "desde"], campos);
+        Assert.Equal(["vin", "usuario_id", "momento", "estado", "proceso", "desde"], campos);
     }
 
     [Fact]

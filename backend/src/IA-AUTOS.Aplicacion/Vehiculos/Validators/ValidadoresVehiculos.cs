@@ -9,6 +9,15 @@ public sealed class VinCargaItemValidator : AbstractValidator<VinCargaItem>
     public VinCargaItemValidator()
     {
         RuleFor(x => x.Vin).Must(v => !string.IsNullOrWhiteSpace(v)).WithMessage("VIN requerido");
+        // Un VIN presente debe cumplir la regla unica: 17 caracteres ISO (sin I, O ni Q) o un chasis de 6 a 20 alfanumericos; el motivo es el del propio VIN.
+        RuleFor(x => x.Vin)
+            .Custom((vin, contexto) =>
+            {
+                if (!string.IsNullOrWhiteSpace(vin) && clsVin.Validar(vin) is { } motivo)
+                {
+                    contexto.AddFailure(motivo);
+                }
+            });
         RuleFor(x => x.Marca).Must(m => !string.IsNullOrWhiteSpace(m)).WithMessage("Marca requerida");
         RuleFor(x => x.Operacion).Must(o => o is not null && clsOperacion.VALORES.Contains(o)).WithMessage("Operación inválida");
     }

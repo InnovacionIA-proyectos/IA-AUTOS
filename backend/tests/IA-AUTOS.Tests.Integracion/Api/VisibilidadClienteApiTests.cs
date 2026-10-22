@@ -81,10 +81,10 @@ public sealed class VisibilidadClienteApiTests(clsBaseDatosFixture bd) : clsPrue
         Assert.Equal(["VIN-SOF"], Vines(busquedaSofasa));
         Assert.Equal(["VIN-OTRO"], Vines(busquedaOtro));
         Assert.Equal(["VIN-OTRO", "VIN-SOF"], Vines(busquedaSuper));
-        Assert.Equal(["VIN-SOF"], Vines(listadoSofasa.GetProperty("rows")));
+        Assert.Equal(["VIN-SOF"], Vines(listadoSofasa.GetProperty("items")));
         Assert.Equal(1, listadoSofasa.GetProperty("total").GetInt32());
-        Assert.Equal(["VIN-OTRO"], Vines(listadoOtro.GetProperty("rows")));
-        Assert.Equal(["VIN-OTRO", "VIN-SOF"], Vines(listadoSuper.GetProperty("rows")));
+        Assert.Equal(["VIN-OTRO"], Vines(listadoOtro.GetProperty("items")));
+        Assert.Equal(["VIN-OTRO", "VIN-SOF"], Vines(listadoSuper.GetProperty("items")));
     }
 
     [Fact]
@@ -120,9 +120,9 @@ public sealed class VisibilidadClienteApiTests(clsBaseDatosFixture bd) : clsPrue
         var comercial = await SesionAsync("comercial@ejemplo.com", clsRol.COMERCIAL, e.Otro);
         var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
 
-        var listado = await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones"));
-        var listadoOtro = await ComoJsonAsync(await Cliente(comercial.Token).GetAsync("/api/inspecciones"));
-        var listadoSuper = await ComoJsonAsync(await Cliente(superAdmin.Token).GetAsync("/api/inspecciones"));
+        var listado = Items(await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones")));
+        var listadoOtro = Items(await ComoJsonAsync(await Cliente(comercial.Token).GetAsync("/api/inspecciones")));
+        var listadoSuper = Items(await ComoJsonAsync(await Cliente(superAdmin.Token).GetAsync("/api/inspecciones")));
         var propio = await Cliente(coordinador.Token).GetAsync($"/api/inspecciones/{e.InformeSofasa}");
         var ajeno = await Cliente(coordinador.Token).GetAsync($"/api/inspecciones/{e.InformeOtro}");
         var delSuper = await Cliente(superAdmin.Token).GetAsync($"/api/inspecciones/{e.InformeOtro}");
@@ -167,10 +167,10 @@ public sealed class VisibilidadClienteApiTests(clsBaseDatosFixture bd) : clsPrue
 
         var propio = await Cliente(coordinador.Token).GetAsync($"/api/viajes/{e.ViajeSofasa}");
         var ajeno = await Cliente(coordinador.Token).GetAsync($"/api/viajes/{e.ViajeOtro}");
-        var listado = await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes"));
-        var conSuCliente = await Cliente(coordinador.Token).GetAsync($"/api/viajes?clienteId={e.Sofasa}");
-        var conOtroCliente = await Cliente(coordinador.Token).GetAsync($"/api/viajes?clienteId={e.Otro}");
-        var delSuper = await ComoJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes?clienteId={e.Otro}"));
+        var listado = Items(await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes")));
+        var conSuCliente = await Cliente(coordinador.Token).GetAsync($"/api/viajes?cliente_id={e.Sofasa}");
+        var conOtroCliente = await Cliente(coordinador.Token).GetAsync($"/api/viajes?cliente_id={e.Otro}");
+        var delSuper = Items(await ComoJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/viajes?cliente_id={e.Otro}")));
 
         Assert.Equal(HttpStatusCode.OK, propio.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, ajeno.StatusCode);
@@ -214,9 +214,9 @@ public sealed class VisibilidadClienteApiTests(clsBaseDatosFixture bd) : clsPrue
         var delOtro = await SesionAsync("comercial@ejemplo.com", clsRol.COMERCIAL, e.Otro);
         var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
 
-        var deSofasa = await ComoJsonAsync(await Cliente(delSofasa.Token).GetAsync("/api/sofasa/ordenes"));
-        var deOtro = await ComoJsonAsync(await Cliente(delOtro.Token).GetAsync("/api/sofasa/ordenes"));
-        var deTodos = await ComoJsonAsync(await Cliente(superAdmin.Token).GetAsync("/api/sofasa/ordenes"));
+        var deSofasa = Items(await ComoJsonAsync(await Cliente(delSofasa.Token).GetAsync("/api/sofasa/ordenes")));
+        var deOtro = Items(await ComoJsonAsync(await Cliente(delOtro.Token).GetAsync("/api/sofasa/ordenes")));
+        var deTodos = Items(await ComoJsonAsync(await Cliente(superAdmin.Token).GetAsync("/api/sofasa/ordenes")));
 
         Assert.Equal(["VIN-SOF"], deSofasa.EnumerateArray().Select(o => o.GetProperty("vin").GetString()).ToList());
         Assert.Equal(["VIN-OTRO", "VIN-OTRO"], deOtro.EnumerateArray().Select(o => o.GetProperty("vin").GetString()).ToList());

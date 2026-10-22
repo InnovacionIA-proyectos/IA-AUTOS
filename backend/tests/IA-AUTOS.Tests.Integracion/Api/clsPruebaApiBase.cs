@@ -74,6 +74,9 @@ public abstract class clsPruebaApiBase(clsBaseDatosFixture bd) : IAsyncLifetime
     protected string UrlFirmada(string archivo, clsFabricaApi? fabrica = null) =>
         (fabrica ?? Fabrica).Services.GetRequiredService<IFirmadorUrls>().Firmar(archivo, "http://localhost", 15)!.Url;
 
+    /// <summary>Las filas de una pagina de un listado (<c>{items, total, pagina, tamano}</c>).</summary>
+    protected static JsonElement Items(JsonElement pagina) => pagina.GetProperty("items");
+
     protected static StringContent Json(string texto) => new(texto, Encoding.UTF8, "application/json");
 
     protected static async Task<JsonDocument> LeerAsync(HttpResponseMessage respuesta) =>

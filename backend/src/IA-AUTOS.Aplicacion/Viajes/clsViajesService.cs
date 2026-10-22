@@ -29,7 +29,8 @@ public sealed class clsViajesService(
     IValidator<AgregarVinesRequest> validadorVines,
     IValidator<CambiarEstadoViajeRequest> validadorEstado)
 {
-    public const int LIMITE_LISTADO = 200;
+    /// <summary>Los campos por los que se puede ordenar el listado (<c>orden=campo:asc|desc</c>).</summary>
+    public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "created_at", "updated_at", "codigo_mtrack", "estado", "placa", "trailer" };
 
     private static readonly string[] CAMPOS_EDITABLES =
         ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "inspector_id", "origen_id", "destino_id", "con_personal_apoyo"];
@@ -68,8 +69,21 @@ public sealed class clsViajesService(
 
     // ---------------------------------------------------------------------------------------------- consulta
 
-    public async Task<IReadOnlyList<ViajeResumenDto>> ListarAsync(FiltrosViajesRequest solicitud, CancellationToken ct = default) =>
-        await consultas.ListarAsync(ParsearFiltros(solicitud, ClienteRestringido), actual.SoloSusViajes(), ClienteRestringido, LIMITE_LISTADO, ct);
+    /// <summary>Una pagina de viajes: <c>{items, total, pagina, tamano}</c>, con los filtros, la pagina y el orden validados juntos (400 con todos los errores).</summary>
+    public async Task<PaginaDto<ViajeResumenDto>> ListarAsync(FiltrosViajesRequest solicitud, CancellationToken ct = default)
+    {
+        var errores = new Dictionary<string, string[]>();
+        var filtros = LeerFiltros(solicitud, errores);
+        var pagina = clsPaginacion.Pagina(solicitud.Pagina, solicitud.Tamano, errores);
+        var orden = clsPaginacion.Orden(solicitud.Orden, CAMPOS_ORDEN, errores);
+        if (errores.Count > 0)
+        {
+            throw clsErroresCampos.Varios(errores);
+        }
+
+        var (filas, total) = await consultas.ListarAsync(AlcanzarCliente(filtros, ClienteRestringido), actual.SoloSusViajes(), ClienteRestringido, pagina, orden, ct);
+        return new PaginaDto<ViajeResumenDto>(filas, total, pagina.Pagina, pagina.Tamano);
+    }
 
     /// <summary>Los viajes del usuario (como conductor o inspector). Sin estado: los programados y en curso.</summary>
     public async Task<IReadOnlyList<ViajeDto>> MiosAsync(string? estado, CancellationToken ct = default)
@@ -380,34 +394,42 @@ public sealed class clsViajesService(
     }
 
     /// <summary>
-    /// <c>clienteId</c> solo lo elige el super administrador; quien tiene su alcance limitado a un cliente (<paramref name="clienteRestringido"/>) siempre
-    /// recibe el suyo y pedir otro cliente responde 403 (igual que en el listado de usuarios).
+    /// <c>cliente_id</c> solo lo elige el super administrador; quien tiene su alcance limitado a un cliente (<paramref name="clienteRestringido"/>) siempre
+    /// recibe el suyo y pedir otro cliente responde 403 (igual que en el listado de usuarios). El VIN sigue la regla unica del VIN.
     /// </summary>
     internal static FiltrosViajes ParsearFiltros(FiltrosViajesRequest s, Guid? clienteRestringido)
     {
         var errores = new Dictionary<string, string[]>();
-        var estado = clsParseoFiltros.Catalogo(s.Estado, clsEstadoViaje.VALORES, "estado", errores);
-        var conductorId = clsParseoFiltros.Uuid(s.ConductorId, "conductorId", errores);
-        var desde = clsParseoFiltros.Fecha(s.Desde, "desde", errores);
-        var hasta = clsParseoFiltros.Fecha(s.Hasta, "hasta", errores);
-        var clienteId = clsParseoFiltros.Uuid(s.ClienteId, "clienteId", errores);
+        var filtros = LeerFiltros(s, errores);
         if (errores.Count > 0)
         {
             throw clsErroresCampos.Varios(errores);
         }
 
-        if (clienteRestringido is { } propio && clienteId is { } otro && otro != propio)
+        return AlcanzarCliente(filtros, clienteRestringido);
+    }
+
+    /// <summary>Lee los filtros acumulando los errores por campo para responder todos juntos.</summary>
+    private static FiltrosViajes LeerFiltros(FiltrosViajesRequest s, Dictionary<string, string[]> errores) => new(
+        clsParseoFiltros.Catalogo(s.Estado, clsEstadoViaje.VALORES, "estado", errores),
+        clsValidador.Opcional(s.CodigoMtrack),
+        clsParseoFiltros.Vin(s.Vin, "vin", errores),
+        clsParseoFiltros.Uuid(s.ConductorId, "conductor_id", errores),
+        clsParseoFiltros.Uuid(s.InspectorId, "inspector_id", errores),
+        clsParseoFiltros.Uuid(s.ClienteId, "cliente_id", errores),
+        clsParseoFiltros.Uuid(s.OrigenId, "origen_id", errores),
+        clsParseoFiltros.Uuid(s.DestinoId, "destino_id", errores),
+        clsParseoFiltros.Fecha(s.Desde, "desde", errores),
+        clsParseoFiltros.Fecha(s.Hasta, "hasta", errores));
+
+    /// <summary>Quien se limita a su cliente no elige otro (403) y su cliente ya se aplica como alcance: el filtro solo lo usa quien ve todos los clientes.</summary>
+    private static FiltrosViajes AlcanzarCliente(FiltrosViajes filtros, Guid? clienteRestringido)
+    {
+        if (clienteRestringido is { } propio && filtros.ClienteId is { } otro && otro != propio)
         {
             throw new clsProhibidoException("Solo puede consultar lo de su propio cliente");
         }
 
-        return new FiltrosViajes(
-            estado,
-            clsValidador.Opcional(s.CodigoMtrack),
-            string.IsNullOrWhiteSpace(s.Vin) ? null : clsVin.Normalizar(s.Vin),
-            conductorId,
-            desde,
-            hasta,
-            clienteRestringido is null ? clienteId : null);
+        return clienteRestringido is null ? filtros : filtros with { ClienteId = null };
     }
 }

@@ -40,4 +40,5 @@ public interface IUsuarioRepository
 }
 
 /// <summary>Filtros de la busqueda de usuarios. <c>Texto</c> busca en nombre, correo y cedula.</summary>
-public sealed record clsFiltroUsuarios(string? Texto, string? Rol, bool? Activo, Guid? ClienteId);
+/// <summary>Los filtros de la busqueda de usuarios y su orden (<c>Orden</c> es uno de los campos que admite la API; sin el, por nombre).</summary>
+public sealed record clsFiltroUsuarios(string? Texto, string? Rol, bool? Activo, Guid? ClienteId, string? Orden = null, bool Descendente = false);

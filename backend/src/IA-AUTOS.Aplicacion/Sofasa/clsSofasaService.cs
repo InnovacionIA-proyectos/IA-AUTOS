@@ -26,13 +26,15 @@ public sealed class IngestarOrdenesRequestValidator : AbstractValidator<Ingestar
     }
 }
 
-/// <summary>Consulta de ordenes Sofasa para la web y la app (mas recientes primero, maximo 500).</summary>
+/// <summary>Consulta de ordenes Sofasa para la web y la app, por paginas.</summary>
 public interface IConsultasSofasa
 {
     /// <summary>
-    /// Con <paramref name="soloDeUsuario"/>, solo las ordenes de los viajes de ese usuario; con <paramref name="soloDeCliente"/>, solo las de VIN de ese cliente.
+    /// Una pagina de ordenes (sin <paramref name="orden"/>, las mas recientes primero) y el total que cumple los filtros. Con <paramref name="soloDeUsuario"/>, solo las ordenes de los viajes de ese usuario;
+    /// con <paramref name="soloDeCliente"/>, solo las de VIN de ese cliente.
     /// </summary>
-    Task<IReadOnlyList<OrdenSofasaDto>> ListarAsync(FiltrosOrdenesSofasa filtros, Guid? soloDeUsuario, Guid? soloDeCliente, int limite, CancellationToken ct = default);
+    Task<(IReadOnlyList<OrdenSofasaDto> Filas, int Total)> ListarAsync(
+        FiltrosOrdenesSofasa filtros, Guid? soloDeUsuario, Guid? soloDeCliente, PaginaSolicitada pagina, OrdenSolicitado? orden, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -53,7 +55,8 @@ public sealed class clsSofasaService(
     IValidator<IngestarOrdenesRequest> validador,
     ILogger<clsSofasaService> registro)
 {
-    public const int LIMITE_LISTADO = 500;
+    /// <summary>Los campos por los que se puede ordenar el listado (<c>orden=campo:asc|desc</c>).</summary>
+    public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "fecha", "vin", "estado", "ciudad", "orden", "marca", "created_at" };
 
     public async Task<ResultadoIngestaDto> IngestarAsync(IngestarOrdenesRequest solicitud, CancellationToken ct = default)
     {
@@ -154,18 +157,47 @@ public sealed class clsSofasaService(
         return new ResultadoIngestaDto(lote.Count, guardadas, vehiculosCreados, vehiculosActualizados, errores);
     }
 
-    public async Task<IReadOnlyList<OrdenSofasaDto>> ListarAsync(FiltrosOrdenesSofasa filtros, CancellationToken ct = default) =>
-        await consultas.ListarAsync(
-            filtros with
-            {
-                Vin = Limpiar(filtros.Vin),
-                Estado = Limpiar(filtros.Estado),
-                Ciudad = Limpiar(filtros.Ciudad),
-            },
-            actual.SoloSusViajes(),
-            actual.ClienteRestringido(),
-            LIMITE_LISTADO,
-            ct);
+    /// <summary>
+    /// Una pagina de ordenes: <c>{items, total, pagina, tamano}</c>. Los filtros (<c>vin</c> con la regla unica del VIN, <c>estado</c>, <c>ciudad</c>, <c>desde</c> y <c>hasta</c>), la pagina y el orden se
+    /// validan juntos y un error responde 400. Una fecha sin zona horaria se toma como UTC.
+    /// </summary>
+    public async Task<PaginaDto<OrdenSofasaDto>> ListarAsync(FiltrosOrdenesSofasaRequest solicitud, CancellationToken ct = default)
+    {
+        var errores = new Dictionary<string, string[]>();
+        var filtros = new FiltrosOrdenesSofasa(
+            clsParseoFiltros.Vin(solicitud.Vin, "vin", errores),
+            Limpiar(solicitud.Estado),
+            Limpiar(solicitud.Ciudad),
+            FechaDeFiltro(solicitud.Desde, "desde", errores),
+            FechaDeFiltro(solicitud.Hasta, "hasta", errores));
+        var pagina = clsPaginacion.Pagina(solicitud.Pagina, solicitud.Tamano, errores);
+        var orden = clsPaginacion.Orden(solicitud.Orden, CAMPOS_ORDEN, errores);
+        if (errores.Count > 0)
+        {
+            throw clsErroresCampos.Varios(errores);
+        }
+
+        var (filas, total) = await consultas.ListarAsync(filtros, actual.SoloSusViajes(), actual.ClienteRestringido(), pagina, orden, ct);
+        return new PaginaDto<OrdenSofasaDto>(filas, total, pagina.Pagina, pagina.Tamano);
+    }
+
+    /// <summary>La fecha ISO de un filtro (sin zona, UTC); un valor que no es fecha agrega el error del campo.</summary>
+    private static DateTimeOffset? FechaDeFiltro(string? texto, string campo, Dictionary<string, string[]> errores)
+    {
+        var limpio = Limpiar(texto);
+        if (limpio is null)
+        {
+            return null;
+        }
+
+        if (DateTimeOffset.TryParse(limpio, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var fecha))
+        {
+            return fecha;
+        }
+
+        errores[campo] = [$"{campo} debe ser una fecha ISO"];
+        return null;
+    }
 
     /// <summary>Vacios y espacios pasan a nulo (evita guardar cadenas vacias en columnas de texto o fecha).</summary>
     internal static string? Limpiar(string? valor)

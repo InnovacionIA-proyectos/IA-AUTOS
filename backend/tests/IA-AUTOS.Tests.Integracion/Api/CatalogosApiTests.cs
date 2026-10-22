@@ -489,8 +489,8 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-FILTRO");
         await Sembrador.InformeAsync(etapas[1], usuario.Id, cerrada: false);
 
-        var transporte = await LeerJsonAsync(await cliente.GetAsync("/api/inspecciones?proceso=transporte"));
-        var cargue = await LeerJsonAsync(await cliente.GetAsync("/api/inspecciones?proceso=cargue"));
+        var transporte = Items(await LeerJsonAsync(await cliente.GetAsync("/api/inspecciones?proceso=transporte")));
+        var cargue = Items(await LeerJsonAsync(await cliente.GetAsync("/api/inspecciones?proceso=cargue")));
         var invalido = await cliente.GetAsync("/api/inspecciones?proceso=inventado");
 
         Assert.Equal(1, transporte.GetArrayLength());

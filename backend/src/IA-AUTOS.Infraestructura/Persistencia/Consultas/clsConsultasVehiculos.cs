@@ -1,9 +1,11 @@
+using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Vehiculos;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
 using IAAutos.Aplicacion.Viajes;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,14 +38,16 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
     }
 
     public async Task<(IReadOnlyList<ListadoVehiculoDto> Filas, int Total)> ListarAsync(
-        string tipo,
-        string? vin,
+        FiltrosVehiculos f,
         Guid? soloDeUsuario,
         Guid? soloDeCliente,
-        int limite,
-        int desplazamiento,
+        PaginaSolicitada pagina,
+        OrdenSolicitado? orden,
         CancellationToken ct = default)
     {
+        var tipo = f.Tipo;
+        var vin = f.Vin;
+        var vinExacto = vin?.Length == clsVin.LONGITUD_ISO;
         var movilizados = contexto.Set<clsViajeCompleto>().Select(m => m.VehiculoId);
         var consulta = contexto.Vehiculos.AsNoTracking().AsQueryable();
         if (soloDeCliente is { } clienteId)
@@ -59,7 +63,42 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
 
         if (vin is not null)
         {
-            consulta = consulta.Where(v => v.Vin.Contains(vin));
+            consulta = consulta.Where(v => vinExacto ? v.Vin == vin : v.Vin.Contains(vin));
+        }
+
+        if (f.Operacion is not null)
+        {
+            consulta = consulta.Where(v => v.Operacion == f.Operacion);
+        }
+
+        if (f.Marca is not null)
+        {
+            consulta = consulta.Where(v => v.Marca == f.Marca);
+        }
+
+        if (f.ClienteId is { } clienteFiltro)
+        {
+            consulta = consulta.Where(v => v.ClienteId == clienteFiltro);
+        }
+
+        if (f.Activo is { } activo)
+        {
+            consulta = consulta.Where(v => v.Activo == activo);
+        }
+
+        if (f.EstadoUnidad is not null)
+        {
+            consulta = consulta.Where(v => contexto.ViajeVehiculos.Any(vv => vv.VehiculoId == v.Id && vv.EstadoUnidad == f.EstadoUnidad));
+        }
+
+        if (f.Desde is not null)
+        {
+            consulta = consulta.Where(v => v.CreatedAt >= f.Desde);
+        }
+
+        if (f.Hasta is not null)
+        {
+            consulta = consulta.Where(v => v.CreatedAt <= f.Hasta);
         }
 
         consulta = tipo switch
@@ -72,10 +111,18 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
         };
 
         var total = await consulta.CountAsync(ct);
-        var filas = await consulta
-            .OrderBy(v => v.Vin)
-            .Skip(desplazamiento)
-            .Take(limite)
+        var ordenada = clsOrdenamiento.De(consulta)
+            .Campo("vin", v => v.Vin)
+            .Campo("marca", v => v.Marca)
+            .Campo("modelo", v => v.Modelo)
+            .Campo("color", v => v.Color)
+            .Campo("operacion", v => v.Operacion)
+            .Campo("activo", v => v.Activo)
+            .Campo("created_at", v => v.CreatedAt)
+            .Aplicar(orden, q => q.OrderBy(v => v.Vin), q => q.ThenBy(v => v.Id));
+        var filas = await ordenada
+            .Skip(pagina.Desplazamiento)
+            .Take(pagina.Tamano)
             .Select(v => new ListadoVehiculoDto(
                 v.Id,
                 v.Vin,

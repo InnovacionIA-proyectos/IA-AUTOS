@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using IAAutos.API.Controllers.Comun;
+using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Sofasa;
 using IAAutos.Aplicacion.Sofasa.DTOSofasa;
 using IAAutos.Dominio.Comun;
@@ -34,41 +35,23 @@ public sealed class clsSofasaController(clsSofasaService servicio, IOptions<clsO
         return Ok(await servicio.IngestarAsync(solicitud, ct));
     }
 
-    /// <summary>Listado de ordenes (mas recientes primero, maximo 500) para la web y la app.</summary>
+    /// <summary>
+    /// Una pagina de ordenes <c>{items, total, pagina, tamano}</c> (mas recientes primero por defecto) para la web y la app. Filtros: <c>vin</c>, <c>estado</c> (el <c>status_code</c>), <c>ciudad</c>, <c>desde</c> y
+    /// <c>hasta</c>; <c>pagina</c>, <c>tamano</c> (50, maximo 200) y <c>orden</c> (<c>campo:asc|desc</c>).
+    /// </summary>
     [HttpGet("api/sofasa/ordenes")]
-    [ProducesResponseType<IReadOnlyList<OrdenSofasaDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<PaginaDto<OrdenSofasaDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Listar(
         [FromQuery] string? vin,
         [FromQuery] string? estado,
         [FromQuery] string? ciudad,
         [FromQuery] string? desde,
         [FromQuery] string? hasta,
-        CancellationToken ct)
-    {
-        var filtros = new FiltrosOrdenesSofasa(vin, estado, ciudad, LeerFecha(desde, "desde"), LeerFecha(hasta, "hasta"));
-        return Ok(await servicio.ListarAsync(filtros, ct));
-    }
-
-    private static DateTimeOffset? LeerFecha(string? texto, string campo)
-    {
-        if (string.IsNullOrWhiteSpace(texto))
-        {
-            return null;
-        }
-
-        if (DateTimeOffset.TryParse(texto, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var fecha))
-        {
-            return fecha;
-        }
-
-        throw new clsValidacionException(
-            "Datos inválidos",
-            new Dictionary<string, object>
-            {
-                ["formErrors"] = Array.Empty<string>(),
-                ["fieldErrors"] = new Dictionary<string, string[]> { [campo] = [$"{campo} debe ser una fecha ISO"] },
-            });
-    }
+        [FromQuery] string? pagina,
+        [FromQuery] string? tamano,
+        [FromQuery] string? orden,
+        CancellationToken ct) =>
+        Ok(await servicio.ListarAsync(new FiltrosOrdenesSofasaRequest(vin, estado, ciudad, desde, hasta, pagina, tamano, orden), ct));
 
     /// <summary>Compara el token en tiempo constante (se comparan los hashes para igualar longitudes).</summary>
     private void AsegurarTokenEtl()

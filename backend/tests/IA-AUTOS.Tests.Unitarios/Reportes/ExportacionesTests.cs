@@ -192,7 +192,7 @@ public sealed class ExportacionesTests
     {
         var (servicio, _, excel) = Crear();
 
-        var archivo = await servicio.ExportarViajesAsync(new FiltrosViajesRequest(null, null, null, null, null, null));
+        var archivo = await servicio.ExportarViajesAsync(new FiltrosViajesRequest(null, null, null, null, null, null, null, null, null, null));
 
         Assert.Equal("viajes-2026-10-21.xlsx", archivo.Nombre);
         Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", archivo.TipoContenido);
@@ -209,9 +209,9 @@ public sealed class ExportacionesTests
     {
         var (servicio, consultas, _) = Crear();
 
-        await servicio.ExportarViajesAsync(new FiltrosViajesRequest(null, null, null, null, null, null));
+        await servicio.ExportarViajesAsync(new FiltrosViajesRequest(null, null, null, null, null, null, null, null, null, null));
         Assert.Equal(clsCatalogosLecturaFalso.SOFASA, consultas.ClienteDeViajes);
-        await servicio.ExportarInspeccionesAsync(new FiltrosExportacionInspeccionesRequest(new FiltrosInspeccionesRequest(null, null, null, null, null, null, null, null), null));
+        await servicio.ExportarInspeccionesAsync(new FiltrosInspeccionesRequest(null, null, null, null, null, null, null, null, null, null, null, null, null));
         Assert.Equal(clsCatalogosLecturaFalso.SOFASA, consultas.ClienteRecibido);
         consultas.ClienteRecibido = null;
         await servicio.ExportarHallazgosAsync(new FiltrosHallazgosRequest(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null));
@@ -223,15 +223,15 @@ public sealed class ExportacionesTests
     {
         var (superAdmin, consultasSuper, _) = Crear(clsRol.SUPER_ADMIN);
         var (coordinador, _, _) = Crear();
-        var vacio = new FiltrosInspeccionesRequest(null, null, null, null, null, null, null, null);
+        var vacio = new FiltrosInspeccionesRequest(null, null, null, null, null, null, null, null, null, null, null, null, null);
 
-        await superAdmin.ExportarInspeccionesAsync(new FiltrosExportacionInspeccionesRequest(vacio, null));
+        await superAdmin.ExportarInspeccionesAsync(vacio);
         Assert.Null(consultasSuper.ClienteRecibido);
-        await superAdmin.ExportarInspeccionesAsync(new FiltrosExportacionInspeccionesRequest(vacio, clsCatalogosLecturaFalso.OTRO.ToString()));
+        await superAdmin.ExportarInspeccionesAsync(vacio with { ClienteId = clsCatalogosLecturaFalso.OTRO.ToString() });
         Assert.Equal(clsCatalogosLecturaFalso.OTRO, consultasSuper.ClienteRecibido);
         await Assert.ThrowsAsync<clsProhibidoException>(() =>
-            coordinador.ExportarInspeccionesAsync(new FiltrosExportacionInspeccionesRequest(vacio, clsCatalogosLecturaFalso.OTRO.ToString())));
-        await Assert.ThrowsAsync<clsValidacionException>(() => coordinador.ExportarInspeccionesAsync(new FiltrosExportacionInspeccionesRequest(vacio, "no-es-uuid")));
+            coordinador.ExportarInspeccionesAsync(vacio with { ClienteId = clsCatalogosLecturaFalso.OTRO.ToString() }));
+        await Assert.ThrowsAsync<clsValidacionException>(() => coordinador.ExportarInspeccionesAsync(vacio with { ClienteId = "no-es-uuid" }));
     }
 
     [Fact]
@@ -240,7 +240,7 @@ public sealed class ExportacionesTests
         var (servicio, consultas, _) = Crear();
         consultas.Excedido = true;
 
-        var ex = await Assert.ThrowsAsync<clsValidacionException>(() => servicio.ExportarViajesAsync(new FiltrosViajesRequest(null, null, null, null, null, null)));
+        var ex = await Assert.ThrowsAsync<clsValidacionException>(() => servicio.ExportarViajesAsync(new FiltrosViajesRequest(null, null, null, null, null, null, null, null, null, null)));
         Assert.Contains(clsExportacionesService.MAXIMO_FILAS.ToString(CultureInfo.InvariantCulture), ex.Message + string.Join(' ', ((Dictionary<string, string[]>)((Dictionary<string, object>)ex.Detalles!)["fieldErrors"]).Values.SelectMany(v => v)));
         await Assert.ThrowsAsync<clsValidacionException>(() => servicio.ExportarHallazgosAsync(new FiltrosHallazgosRequest(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)));
     }

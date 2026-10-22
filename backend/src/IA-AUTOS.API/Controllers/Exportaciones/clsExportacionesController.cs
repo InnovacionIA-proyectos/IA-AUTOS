@@ -23,42 +23,51 @@ public sealed class clsExportacionesController(clsExportacionesService servicio)
 
     /// <summary>
     /// Viajes en Excel: una fila por unidad (VIN), etapa y momento (salida o llegada) con los datos del viaje, el estado de la unidad y de su registro (<c>sin_inspeccion</c>, <c>borrador</c> o <c>cerrada</c>).
-    /// Filtros del listado de viajes: <c>estado</c>, <c>codigoMtrack</c>, <c>vin</c>, <c>conductorId</c>, <c>desde</c>, <c>hasta</c> y <c>clienteId</c> (solo el super administrador). Maximo 50000 filas.
+    /// Filtros del listado de viajes: <c>estado</c>, <c>codigo_mtrack</c>, <c>vin</c>, <c>conductor_id</c>, <c>inspector_id</c>, <c>cliente_id</c> (solo el super administrador), <c>origen_id</c>, <c>destino_id</c>,
+    /// <c>desde</c> y <c>hasta</c>. Maximo 50000 filas.
     /// </summary>
     [HttpGet("viajes.xlsx")]
     [Produces(XLSX)]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK, XLSX)]
     public async Task<IActionResult> Viajes(
         [FromQuery] string? estado,
-        [FromQuery] string? codigoMtrack,
+        [FromQuery(Name = "codigo_mtrack")] string? codigoMtrack,
         [FromQuery] string? vin,
-        [FromQuery] string? conductorId,
+        [FromQuery(Name = "conductor_id")] string? conductorId,
+        [FromQuery(Name = "inspector_id")] string? inspectorId,
+        [FromQuery(Name = "cliente_id")] string? clienteId,
+        [FromQuery(Name = "origen_id")] string? origenId,
+        [FromQuery(Name = "destino_id")] string? destinoId,
         [FromQuery] string? desde,
         [FromQuery] string? hasta,
-        [FromQuery] string? clienteId,
         CancellationToken ct) =>
-        Descargar(await servicio.ExportarViajesAsync(new FiltrosViajesRequest(estado, codigoMtrack, vin, conductorId, desde, hasta, clienteId), ct));
+        Descargar(await servicio.ExportarViajesAsync(new FiltrosViajesRequest(estado, codigoMtrack, vin, conductorId, inspectorId, clienteId, origenId, destinoId, desde, hasta), ct));
 
     /// <summary>
     /// Inspecciones en Excel: una fila por inspeccion (cada version) con los datos del viaje, la etapa, el inspector y las firmas de la transferencia (quien, fecha, IP y tipo de cierre).
-    /// Filtros del listado de inspecciones: <c>vin</c>, <c>usuarioId</c>, <c>viajeId</c>, <c>momento</c>, <c>estado</c>, <c>proceso</c>, <c>desde</c>, <c>hasta</c>; y <c>clienteId</c> (solo el super administrador). Maximo 50000 filas.
+    /// Filtros del listado de inspecciones: <c>vin</c>, <c>usuario_id</c>, <c>viaje_id</c>, <c>momento</c>, <c>estado</c>, <c>proceso</c>, <c>operacion</c>, <c>marca</c>, <c>cliente_id</c> (solo el super administrador),
+    /// <c>origen_id</c>, <c>destino_id</c>, <c>desde</c> y <c>hasta</c>. Maximo 50000 filas.
     /// </summary>
     [HttpGet("inspecciones.xlsx")]
     [Produces(XLSX)]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK, XLSX)]
     public async Task<IActionResult> Inspecciones(
         [FromQuery] string? vin,
-        [FromQuery] string? usuarioId,
-        [FromQuery] string? viajeId,
+        [FromQuery(Name = "usuario_id")] string? usuarioId,
+        [FromQuery(Name = "viaje_id")] string? viajeId,
         [FromQuery] string? momento,
         [FromQuery] string? estado,
         [FromQuery] string? proceso,
+        [FromQuery] string? operacion,
+        [FromQuery] string? marca,
+        [FromQuery(Name = "cliente_id")] string? clienteId,
+        [FromQuery(Name = "origen_id")] string? origenId,
+        [FromQuery(Name = "destino_id")] string? destinoId,
         [FromQuery] string? desde,
         [FromQuery] string? hasta,
-        [FromQuery] string? clienteId,
         CancellationToken ct) =>
         Descargar(await servicio.ExportarInspeccionesAsync(
-            new FiltrosExportacionInspeccionesRequest(new FiltrosInspeccionesRequest(vin, usuarioId, viajeId, momento, estado, proceso, desde, hasta), clienteId), ct));
+            new FiltrosInspeccionesRequest(vin, usuarioId, viajeId, momento, estado, proceso, operacion, marca, clienteId, origenId, destinoId, desde, hasta), ct));
 
     /// <summary>
     /// Hallazgos en Excel: una fila por hallazgo con los datos del viaje y la etapa, la zona (lado + numero + nombre), la clase, el tamano, el nivel, si es preexistente, su origen, su estado de seguimiento y la

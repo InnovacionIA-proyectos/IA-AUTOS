@@ -50,8 +50,8 @@ public sealed record UsuarioDto(
     DateTimeOffset UpdatedAt,
     string? PinTemporal = null);
 
-/// <summary>Filtros de la lista de usuarios (todos opcionales). <c>Q</c> busca en nombre, correo y cedula.</summary>
-public sealed record FiltrosUsuariosRequest(string? Q, string? Rol, string? Activo, string? ClienteId, int? Pagina, int? Tamano);
+/// <summary>Filtros de la lista de usuarios (todos opcionales) y su pagina y orden. <c>Q</c> busca en nombre, correo y cedula.</summary>
+public sealed record FiltrosUsuariosRequest(string? Q, string? Rol, string? Activo, string? ClienteId, string? Pagina = null, string? Tamano = null, string? Orden = null);
 
 /// <summary>Una pagina de usuarios.</summary>
 public sealed record ListadoUsuariosDto(IReadOnlyList<UsuarioDto> Items, int Total, int Pagina, int Tamano);

@@ -29,11 +29,35 @@ public sealed record ListadoVehiculoDto(
     int Completas,
     int Novedades);
 
-public sealed record ListadoPaginadoDto(
-    IReadOnlyList<ListadoVehiculoDto> Rows,
-    int Total,
-    int Page,
-    [property: JsonPropertyName("pageSize")] int PageSize);
+/// <summary>
+/// Filtros del listado de vehiculos tal como llegan en la consulta (texto) y su pagina y orden: el servicio los valida juntos. <c>Tipo</c> es <c>movilizados</c> (por defecto), <c>pendientes</c> o
+/// <c>novedad</c>; <c>EstadoUnidad</c>, el de la unidad en algun viaje (<c>activa</c> o <c>no_sale</c>); <c>Desde</c> y <c>Hasta</c> acotan la fecha de alta del vehiculo.
+/// </summary>
+public sealed record FiltrosVehiculosRequest(
+    string? Tipo,
+    string? Vin,
+    string? Operacion,
+    string? Marca,
+    string? ClienteId,
+    string? EstadoUnidad,
+    string? Activo,
+    string? Desde,
+    string? Hasta,
+    string? Pagina = null,
+    string? Tamano = null,
+    string? Orden = null);
+
+/// <summary>Los filtros del listado ya validados.</summary>
+public sealed record FiltrosVehiculos(
+    string Tipo,
+    string? Vin,
+    string? Operacion,
+    string? Marca,
+    Guid? ClienteId,
+    string? EstadoUnidad,
+    bool? Activo,
+    DateTimeOffset? Desde,
+    DateTimeOffset? Hasta);
 
 public sealed record InventarioInspeccionDto(
     Guid Id,

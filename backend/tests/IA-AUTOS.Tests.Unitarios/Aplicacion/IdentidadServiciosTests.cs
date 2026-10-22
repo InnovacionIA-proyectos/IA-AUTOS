@@ -496,7 +496,7 @@ public class GestionDeUsuariosTests
         var servicio = c.ServicioUsuarios();
         var porCedula = await servicio.ListarAsync(new FiltrosUsuariosRequest("1000003", null, null, null, null, null));
         var conductoresActivos = await servicio.ListarAsync(new FiltrosUsuariosRequest(null, "conductor", "true", null, null, null));
-        var paginaDos = await servicio.ListarAsync(new FiltrosUsuariosRequest(null, "conductor", null, null, 2, 4));
+        var paginaDos = await servicio.ListarAsync(new FiltrosUsuariosRequest(null, "conductor", null, null, "2", "4"));
         var porCorreo = await servicio.ListarAsync(new FiltrosUsuariosRequest("ines@", null, null, null, null, null));
 
         Assert.Equal(["1000003"], porCedula.Items.Select(u => u.Cedula));
@@ -516,7 +516,7 @@ public class GestionDeUsuariosTests
 
         await Assert.ThrowsAsync<clsValidacionException>(() => servicio.ListarAsync(new FiltrosUsuariosRequest(null, "gerente", "tal", "no-guid", null, null)));
 
-        var enorme = await servicio.ListarAsync(new FiltrosUsuariosRequest(null, null, null, null, -3, 99999));
+        var enorme = await servicio.ListarAsync(new FiltrosUsuariosRequest(null, null, null, null, "-3", "99999"));
         Assert.Equal(1, enorme.Pagina);
         Assert.Equal(clsUsuariosServiceLimites.MAXIMO, enorme.Tamano);
     }
@@ -584,7 +584,7 @@ public class GestionDeUsuariosTests
 /// <summary>Limites de pagina del servicio de usuarios (para no repetir el numero en las pruebas).</summary>
 internal static class clsUsuariosServiceLimites
 {
-    public const int MAXIMO = IAAutos.Aplicacion.Usuarios.clsUsuariosService.TAMANO_PAGINA_MAXIMO;
+    public const int MAXIMO = IAAutos.Aplicacion.Comun.clsPaginacion.TAMANO_MAXIMO;
 }
 
 public class CargaConductoresTests

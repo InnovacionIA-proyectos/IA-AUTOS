@@ -582,10 +582,10 @@ public sealed class IdentidadApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         await Fabrica.SembrarUsuarioAsync("admin-otro@ejemplo.com", "Clave-Segura-1", clsRol.ADMIN, clienteId: otro);
         var token = await LoginAsync("admin-otro@ejemplo.com", "Clave-Segura-1");
 
-        var carga = await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new { items = new[] { new { vin = "VIN-OTRO-0001", marca = "Renault", operacion = "nacional" } } });
+        var carga = await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new { items = new[] { new { vin = "VINOTRO0001", marca = "Renault", operacion = "nacional" } } });
 
         Assert.Equal(HttpStatusCode.Created, carga.StatusCode);
-        Assert.Equal(otro, (Guid)(await Sembrador.EscalarAsync("SELECT ClienteId FROM dbo.tblVehiculos WHERE Vin = 'VIN-OTRO-0001'"))!);
+        Assert.Equal(otro, (Guid)(await Sembrador.EscalarAsync("SELECT ClienteId FROM dbo.tblVehiculos WHERE Vin = 'VINOTRO0001'"))!);
     }
 
     [Fact]

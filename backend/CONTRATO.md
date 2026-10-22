@@ -10,11 +10,12 @@ OpenAPI ([docs/openapi.json](docs/openapi.json)), que la API genera y una prueba
 |---|---|
 | URL base | La del despliegue, sin barra final (por ejemplo `https://<dominio>`). Todas las rutas empiezan por `/api`, salvo `/health` |
 | Formato | JSON (`Content-Type: application/json`), codificación UTF-8 |
-| Nombres de campo | `snake_case` (`etapa_id`, `created_at`). **Excepciones en `camelCase`:** los reportes anteriores (`/api/patrones`, `/api/patrones/analisis`, `/api/metricas/rechazo`; los nuevos `/api/reportes/*` van en `snake_case`), la respuesta de la ingesta Sofasa y `pageSize` del listado de vehículos |
+| Nombres de campo | `snake_case` (`etapa_id`, `created_at`). **Excepciones en `camelCase`:** los reportes anteriores (`/api/patrones`, `/api/patrones/analisis`, `/api/metricas/rechazo`; los nuevos `/api/reportes/*` van en `snake_case`) y la respuesta de la ingesta Sofasa |
 | Fechas | ISO 8601 UTC con milisegundos: `2026-07-17T12:30:15.123Z`. **Las fechas que se envían deben llevar zona horaria** (`Z` o `+hh:mm`) |
 | Identificadores | UUID (`string`), salvo el VIN (texto) y `source_id` de Sofasa (entero largo) |
 | Nulos | Los campos opcionales sin valor llegan como `null` (nunca se omiten) |
-| VIN | 17 caracteres alfanuméricos en mayúscula, sin las letras `I`, `O` ni `Q`; se normaliza a mayúscula y sin espacios |
+| VIN | 17 caracteres alfanuméricos en mayúscula, sin las letras `I`, `O` ni `Q` (o un chasis de Sofasa de 6 a 20 alfanuméricos al cargar y buscar; ver «Paginación y filtros»); se normaliza a mayúscula y sin espacios |
+| Listados | Por páginas: `?pagina=&tamano=&orden=campo:asc` → `{ items, total, pagina, tamano }` (50 por defecto, máximo 200). Ver «Paginación y filtros» |
 | Imágenes | Se referencian por `url` **relativa** (`/api/uploads/<archivo>`): anteponga la URL base |
 | CORS | La API solo acepta los orígenes **exactos** de `Cors__Origins` (sin comodín `*`), acepta las cabeceras `Content-Type`, `Authorization` y `X-Dispositivo-Id`, y expone `Content-Disposition` (nombre del PDF de inventario). La web debe estar en esa lista |
 | Dispositivo | La app y la web pueden enviar `X-Dispositivo-Id` (identificador estable del dispositivo) en cualquier solicitud: queda en la auditoría junto con la IP. Sin esa cabecera se guarda el `User-Agent` |
@@ -93,6 +94,39 @@ Todos los errores son JSON con la misma forma:
 
 Al cerrar una inspección que no cumple los requisitos, `details` es la lista de requisitos incumplidos. Muestre `message`
 al usuario y use `code` (no el texto) para decidir qué hacer.
+
+## Paginación y filtros
+
+Los listados de **vehículos** (`GET /api/vehiculos/listado`), **inspecciones** (`GET /api/inspecciones`), **viajes** (`GET /api/viajes`), **órdenes Sofasa** (`GET /api/sofasa/ordenes`) y **usuarios** (`GET /api/usuarios`) usan el mismo formato, igual que los de
+hallazgos, notificaciones y auditoría: se piden por páginas y responden **un objeto** (ya no una lista ni `rows`/`page`/`pageSize`).
+
+```json
+{ "items": [ { "...fila..." } ], "total": 17342, "pagina": 1, "tamano": 50 }
+```
+
+| Parámetro | Descripción |
+|---|---|
+| `pagina` | número de página desde 1 (por defecto 1; un valor menor se toma como 1) |
+| `tamano` | filas por página: **50 por defecto y máximo 200** (uno mayor se reduce a 200; ya no hay páginas fijas de 200 ni de 500). `total` cuenta todas las filas que cumplen los filtros |
+| `orden` | `campo:asc` o `campo:desc` (sin sentido, `asc`). Cada listado admite solo los campos de la tabla de abajo; otro campo o un formato distinto responde `400` con el motivo en `fieldErrors.orden`. Sin `orden` cada listado usa el suyo |
+
+Un valor de `pagina` o `tamano` que no es un número entero, un filtro o un orden mal formados responden `400` con `fieldErrors` por campo (todos los errores juntos). Las filas de una página siguen un orden estable: dos páginas seguidas no repiten ni saltan filas.
+
+| Listado | Filtros (todos opcionales, en `snake_case`) | Campos de `orden` | Orden por defecto |
+|---|---|---|---|
+| `GET /api/vehiculos/listado` | `tipo` (`movilizados` por defecto, `pendientes` o `novedad`), `vin`, `operacion`, `marca`, `cliente_id`, `estado_unidad` (`activa` o `no_sale`), `activo` (`true` o `false`), `desde`, `hasta` | `vin`, `marca`, `modelo`, `color`, `operacion`, `activo`, `created_at` | `vin:asc` |
+| `GET /api/inspecciones` | `vin`, `viaje_id`, `usuario_id`, `momento`, `estado`, `proceso`, `operacion`, `marca`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` | `fecha`, `vin`, `momento`, `estado`, `proceso`, `version`, `created_at`, `cerrada_at` | `fecha:desc` |
+| `GET /api/viajes` | `estado`, `codigo_mtrack`, `vin`, `conductor_id`, `inspector_id`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` | `created_at`, `updated_at`, `codigo_mtrack`, `estado`, `placa`, `trailer` | `created_at:desc` |
+| `GET /api/sofasa/ordenes` | `vin`, `estado` (el `status_code`), `ciudad`, `desde`, `hasta` | `fecha`, `vin`, `estado`, `ciudad`, `orden`, `marca`, `created_at` | `fecha:desc` (las sin fecha al final) |
+| `GET /api/usuarios` | `q`, `rol`, `activo`, `clienteId` (los de siempre) | `nombre`, `email`, `rol`, `cedula`, `activo`, `created_at`, `ultimo_acceso` | `nombre:asc` |
+
+Los nombres `codigoMtrack`, `conductorId`, `usuarioId`, `viajeId` y `clienteId` de los listados de viajes e inspecciones **ya no se aceptan** (se ignoran como cualquier parámetro desconocido): use `codigo_mtrack`, `conductor_id`, `usuario_id`, `viaje_id` y `cliente_id`.
+`desde` y `hasta` son fechas ISO con zona y acotan, según el listado, la fecha de la inspección (inspecciones), la creación del viaje (viajes), el evento de la orden (Sofasa) o el alta del vehículo (vehículos). `cliente_id` lo elige solo el `super_admin`: quien se limita a su cliente
+recibe siempre el suyo y un `cliente_id` distinto responde `403`. `origen_id` y `destino_id` son los del viaje.
+
+**VIN.** Un solo criterio para cargar y buscar un VIN: **17 caracteres alfanuméricos sin las letras `I`, `O` ni `Q`** (ISO 3779) **o un chasis de Sofasa de 6 a 20 caracteres alfanuméricos**; se normaliza a mayúscula y sin espacios en los bordes. Lo aplican la carga
+(`POST /api/vehiculos/cargar`, por fila: una fila inválida responde `400`), el filtro `vin` de los listados de arriba y de sus exportaciones, y el autocompletado `GET /api/vehiculos?vin=` cuando el texto tiene 17 caracteres alfanuméricos. Un VIN de 17 caracteres se busca exacto; un chasis
+(de 6 a 20), por contenido. Un valor que no cumple responde `400` con el motivo, por ejemplo: `VIN inválido: los de 17 caracteres son alfanuméricos y no llevan las letras I, O ni Q`. El autocompletado de Inventario sigue buscando por **fragmento** de VIN o de marca.
 
 ## Catálogos (valores permitidos)
 
@@ -294,8 +328,8 @@ Un usuario entra de una de dos formas (`tipo_credencial`): con **correo y contra
 Autenticado. La respuesta depende del rol:
 
 - `admin`, `coordinador_calidad` y `super_admin`: **una página** de `UsuarioDto` completos, ordenados por nombre. Filtros opcionales: `q` (texto en nombre,
-  correo o cédula), `rol`, `activo` (`true` o `false`), `clienteId` (solo `super_admin`; los demás siempre ven su cliente), `pagina` (desde 1) y `tamano`
-  (50 por defecto, máximo 200). Un filtro mal formado es `400`.
+  correo o cédula), `rol`, `activo` (`true` o `false`), `clienteId` (solo `super_admin`; los demás siempre ven su cliente), `pagina` (desde 1), `tamano`
+  (50 por defecto, máximo 200) y `orden` (`campo:asc|desc`; ver «Paginación y filtros»). Un filtro mal formado es `400`.
 - Los demás roles: solo usuarios activos de su cliente con `{ id, nombre, rol }`, sin paginar (sirve para el selector de quién entrega y quién recibe).
 
 ```json
@@ -407,7 +441,7 @@ cuando el VIN se agrega a un viaje**, no aquí. `201`.
 
 | Campo | Obligatorio |
 |---|---|
-| `vin` | sí |
+| `vin` | sí: 17 caracteres alfanuméricos sin `I`, `O` ni `Q`, o un chasis de 6 a 20 alfanuméricos (ver «Paginación y filtros»); si alguna fila no cumple, la carga responde `400` con el motivo de esa fila |
 | `marca` | sí |
 | `operacion` | sí (`importacion`, `exportacion` o `nacional`) |
 | `modelo`, `color` | no |
@@ -423,7 +457,8 @@ Los errores por fila no cancelan la carga: vienen en `errores` y suman a `fallid
 Los vehículos **nuevos** quedan en el cliente de quien carga (el `super_admin`, que no tiene, usa el cliente por defecto); un VIN que ya existe conserva el suyo.
 
 ### `GET /api/vehiculos?vin=`
-Autenticado. Autocompletado por fragmento de VIN o marca (máximo **8** resultados). Inspector y conductor solo encuentran los VIN de sus viajes.
+Autenticado. Autocompletado por fragmento de VIN o marca (máximo **8** resultados). Inspector y conductor solo encuentran los VIN de sus viajes. Un texto de **17 caracteres alfanuméricos** se toma como un VIN completo y debe cumplir la regla del VIN (sin `I`, `O` ni `Q`),
+si no responde `400` con el motivo; un fragmento más corto o una marca se aceptan tal cual.
 
 ```json
 [ { "vin": "9BWZZZ377VT004251", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional", "activo": true } ]
@@ -431,25 +466,32 @@ Autenticado. Autocompletado por fragmento de VIN o marca (máximo **8** resultad
 
 Un vehículo dado de baja (`activo: false`) **no aparece** en esta búsqueda.
 
-### `GET /api/vehiculos/listado?tipo=&vin=&page=`
-Autenticado. Listado paginado, **500** filas por página. `movilizados` son los VIN que completaron su ruta (todas sus etapas con informe cerrado) en algún viaje; `pendientes`, el resto,
+### `GET /api/vehiculos/listado`
+Autenticado. Listado paginado (`{ items, total, pagina, tamano }`, 50 por defecto, máximo 200; ver «Paginación y filtros» para `pagina`, `tamano` y `orden`). `movilizados` son los VIN que completaron su ruta (todas sus etapas con informe cerrado) en algún viaje; `pendientes`, el resto,
 incluidos los que aún no están en un viaje. Inspector y conductor solo ven los VIN de sus viajes.
 
 | Parámetro | Descripción |
 |---|---|
 | `tipo` | `movilizados` (por defecto), `pendientes` o `novedad`; otro valor da `400` |
-| `vin` | filtro por VIN (opcional) |
-| `page` | número de página desde 1 (si no es un entero, usa 1) |
+| `vin` | VIN o chasis válido (ver «Paginación y filtros»); un VIN de 17 caracteres coincide exacto y un chasis, por contenido |
+| `operacion` | `importacion`, `exportacion` o `nacional` |
+| `marca` | la marca del vehículo |
+| `cliente_id` | UUID del cliente (solo el `super_admin` elige otro; los demás reciben `403`) |
+| `estado_unidad` | `activa` o `no_sale`: vehículos que tienen o tuvieron ese estado en algún viaje |
+| `activo` | `true` o `false`: sin la baja lógica o dados de baja |
+| `desde`, `hasta` | fecha ISO del alta del vehículo |
 
 ```json
 {
-  "rows": [
+  "items": [
     { "id": "uuid", "vin": "…", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional", "activo": true,
       "etapas": 3, "completas": 3, "novedades": 1 }
   ],
-  "total": 120, "page": 1, "pageSize": 500
+  "total": 120, "pagina": 1, "tamano": 50
 }
 ```
+
+**Cambio frente a la versión anterior:** el listado ya no responde `rows`, `page` ni `pageSize`, ni acepta `page`, ni trae páginas fijas de 500; usa `items`, `pagina` y `tamano` (50 por defecto, máximo 200).
 
 ### `GET /api/vehiculos/{vin}/inventario`
 Autenticado. Inventario completo de un VIN: etapas (de todos sus viajes), y dentro de cada una sus inspecciones con hallazgos, evidencias y
@@ -586,15 +628,15 @@ campo es inválido, una referencia no existe, está inactiva o es de otro rol, o
 ninguna etapa.
 
 ### `GET /api/viajes`
-Autenticado. Hasta **200** viajes, los más recientes primero, como `ViajeResumenDto` (los campos del viaje sin `vehiculos`, más `total_vehiculos` y
-`vehiculos_completos`: cuántos VIN ya completaron su ruta en el viaje). Filtros opcionales en la consulta: `estado`, `codigoMtrack` (fragmento),
-`vin` (fragmento), `conductorId`, `clienteId`, `desde`, `hasta` (fecha ISO sobre la creación). Un filtro mal formado responde `400` con `fieldErrors`. Inspectores y
+Autenticado. Una **página** de viajes (`{ items, total, pagina, tamano }`; 50 por defecto, máximo 200; ver «Paginación y filtros»), los más recientes primero, con cada fila como `ViajeResumenDto` (los campos del viaje sin `vehiculos`, más `total_vehiculos` y
+`vehiculos_completos`: cuántos VIN ya completaron su ruta en el viaje). Filtros opcionales en la consulta: `estado`, `codigo_mtrack` (fragmento),
+`vin` (VIN o chasis válido), `conductor_id`, `inspector_id`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` (fecha ISO sobre la creación); además `pagina`, `tamano` y `orden`. Un filtro mal formado responde `400` con `fieldErrors`. Inspectores y
 conductores solo reciben sus viajes. Cada fila trae `clientes` (ver «Clientes del viaje»).
 
-`clienteId` (uuid) trae los viajes que tienen **al menos un VIN de ese cliente**: un viaje con VIN de dos clientes aparece al filtrar por cualquiera de los dos. Un cliente sin
-viajes o que no existe da una lista vacía; un valor que no es uuid, `400`. **Solo el super administrador elige el cliente**: quien no lo es siempre recibe los viajes de su cliente
-(con o sin `clienteId`; si pide otro, se ignora), igual que en `GET /api/usuarios`. Un viaje **sin VIN** todavía no tiene cliente: lo ven los de su cliente
-si lo creó alguien de su cliente (así quien lo crea lo encuentra antes de asignarle unidades) y el super administrador, pero no sale al filtrar por `clienteId`.
+`cliente_id` (uuid) trae los viajes que tienen **al menos un VIN de ese cliente**: un viaje con VIN de dos clientes aparece al filtrar por cualquiera de los dos. Un cliente sin
+viajes o que no existe da una página vacía; un valor que no es uuid, `400`. **Solo el super administrador elige el cliente**: quien no lo es siempre recibe los viajes de su cliente
+(con o sin `cliente_id`; si pide otro, `403`), igual que en `GET /api/usuarios`. Un viaje **sin VIN** todavía no tiene cliente: lo ven los de su cliente
+si lo creó alguien de su cliente (así quien lo crea lo encuentra antes de asignarle unidades) y el super administrador, pero no sale al filtrar por `cliente_id`.
 
 ### `GET /api/viajes/mios`
 Autenticado. Los viajes del usuario (donde es conductor o inspector) **con sus VIN**, como `ViajeDto`. Sin parámetros trae los `programado` y `en_curso`;
@@ -768,17 +810,21 @@ que referencia a la anterior; **la anterior no cambia**. `201` con la `Inspeccio
 - La versión nueva tiene sus propias fotos, hallazgos, transferencia y reglas de cierre. Una etapa puede tener varias versiones; los listados e informes las muestran todas con su `version`.
 
 ### `GET /api/inspecciones`
-Autenticado. Listado de hasta **200** informes. Todos los filtros son opcionales y van en la consulta:
+Autenticado. Una **página** de informes (`{ items, total, pagina, tamano }`; 50 por defecto, máximo 200; los más recientes primero; ver «Paginación y filtros» para `pagina`, `tamano` y `orden`). Todos los filtros son opcionales y van en la consulta:
 
 | Filtro | Valor |
 |---|---|
-| `vin` | VIN completo válido (17 caracteres) |
-| `usuarioId` | UUID del inspector |
-| `viajeId` | UUID del viaje |
+| `vin` | VIN (17 caracteres sin `I`, `O` ni `Q`) o chasis de 6 a 20 alfanuméricos |
+| `usuario_id` | UUID del inspector |
+| `viaje_id` | UUID del viaje |
 | `momento` | `salida` o `llegada` |
 | `estado` | `borrador` o `cerrada` |
 | `proceso` | `codigo` de una etapa del catálogo `etapas` (por ejemplo `cargue`, `transporte` o `descargue`), activa o no |
-| `desde`, `hasta` | fecha ISO |
+| `operacion` | `importacion`, `exportacion` o `nacional` (la del vehículo) |
+| `marca` | la marca del vehículo |
+| `cliente_id` | UUID del cliente del vehículo (solo el `super_admin` elige otro; los demás reciben `403`) |
+| `origen_id`, `destino_id` | UUID del origen y del destino del viaje |
+| `desde`, `hasta` | fecha ISO sobre la fecha de la inspección |
 
 Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es el `InspeccionDto` más `vin` y `proceso`. Inspector y conductor solo reciben los informes de sus viajes.
 
@@ -1641,11 +1687,11 @@ Los PDF (inventario y constancia) incrustan las imágenes leyéndolas del almac�
 ## Sofasa
 
 ### `GET /api/sofasa/ordenes`
-Autenticado. Hasta **500** órdenes, las más recientes primero. Filtros opcionales: `vin`, `estado`, `ciudad`, `desde`, `hasta`
-(fechas ISO; una fecha inválida responde `400`). Inspector y conductor solo reciben las órdenes vinculadas a sus viajes.
+Autenticado. Una **página** de órdenes (`{ items, total, pagina, tamano }`; 50 por defecto, máximo 200; las más recientes primero; ver «Paginación y filtros» para `pagina`, `tamano` y `orden`). Filtros opcionales: `vin` (VIN o chasis válido), `estado` (el `status_code`), `ciudad`, `desde`, `hasta`
+(fechas ISO, sin zona se toman como UTC; una fecha inválida responde `400`). Inspector y conductor solo reciben las órdenes vinculadas a sus viajes.
 
 ```json
-[
+{ "total": 1, "pagina": 1, "tamano": 50, "items": [
   {
     "id": "uuid", "source_id": 12345, "status_code": "…", "datetime_event": "2026-07-17T12:30:15.123Z",
     "orden_number": "…", "orden_sap": "…", "origin_cedi": "…", "vin": "…", "make": "…", "model_description": "…",
@@ -1653,7 +1699,7 @@ Autenticado. Hasta **500** órdenes, las más recientes primero. Filtros opciona
     "loading_date": null, "appointment": null, "loading_dock": null, "weight": 1250.5,
     "vehiculo_id": "uuid", "codigo_mtrack": null, "viaje_id": "uuid", "synced_at": "…", "created_at": "…", "updated_at": "…"
   }
-]
+] }
 ```
 
 ### `POST /api/etl/sofasa/ordenes` *(solo el ETL; el frontend no lo usa)*
@@ -1671,7 +1717,7 @@ agregarlo o en la siguiente ingesta. Respuesta en `camelCase`:
 ## Exportaciones a Excel
 
 Tres archivos `.xlsx` (`Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`) para el coordinador de calidad, el comercial, el `admin` y el `super_admin` (la capacidad `exportar_soportes` de `GET /api/auth/me`); el `inspector` y el
-`conductor` reciben `403` y no la tienen. Traen **solo los datos del cliente del usuario** (el `super_admin` ve todos y es el único que elige uno con `clienteId` / `cliente_id`; los demás reciben `403` si piden otro). Son descargas binarias:
+`conductor` reciben `403` y no la tienen. Traen **solo los datos del cliente del usuario** (el `super_admin` ve todos y es el único que elige uno con `cliente_id`; los demás reciben `403` si piden otro). Son descargas binarias:
 use `fetch` con el token y descargue el `blob`. El nombre viene en `Content-Disposition` con el tipo y el día de Colombia (`viajes-2026-10-22.xlsx`, `inspecciones-…`, `hallazgos-…`). Las fechas con hora van en hora de Colombia (UTC-5) como fechas de Excel.
 Un archivo no pasa de **50 000 filas**: si el filtro trae más responde `400` para que se acote (por ejemplo, con el rango de fechas).
 
@@ -1681,11 +1727,11 @@ Todas las filas traen: **VIN, marca, tipo de vehículo, operación, cliente, via
 
 | Ruta | Una fila por | Filtros | Además trae |
 |---|---|---|---|
-| `GET /api/exportaciones/viajes.xlsx` | unidad (VIN), etapa y momento (salida o llegada) de cada viaje: los seis registros de la unidad | `estado`, `codigoMtrack`, `vin`, `conductorId`, `desde`, `hasta` (sobre la creación del viaje) y `clienteId` | estado del viaje y de la unidad, origen y destino; `Estado` es `sin_inspeccion`, `borrador` o `cerrada` (versión y fechas vacías si no hay inspección) |
-| `GET /api/exportaciones/inspecciones.xlsx` | inspección (cada versión) | `vin`, `usuarioId`, `viajeId`, `momento`, `estado`, `proceso`, `desde`, `hasta` (sobre la fecha de la inspección) y `clienteId` | el inspector y las **firmas** de la transferencia: tipo de cierre y, de quien entrega y de quien recibe, quién, fecha e IP |
+| `GET /api/exportaciones/viajes.xlsx` | unidad (VIN), etapa y momento (salida o llegada) de cada viaje: los seis registros de la unidad | `estado`, `codigo_mtrack`, `vin`, `conductor_id`, `inspector_id`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` (sobre la creación del viaje) | estado del viaje y de la unidad, origen y destino; `Estado` es `sin_inspeccion`, `borrador` o `cerrada` (versión y fechas vacías si no hay inspección) |
+| `GET /api/exportaciones/inspecciones.xlsx` | inspección (cada versión) | `vin`, `usuario_id`, `viaje_id`, `momento`, `estado`, `proceso`, `operacion`, `marca`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` (sobre la fecha de la inspección) | el inspector y las **firmas** de la transferencia: tipo de cierre y, de quien entrega y de quien recibe, quién, fecha e IP |
 | `GET /api/exportaciones/hallazgos.xlsx` | hallazgo | `estado_seguimiento`, `origen`, `revisado`, `cliente_id`, `viaje_id`, `vin`, `inspeccion_id`, `nivel`, `cuadrante_numero`, `lado`, `proceso`, `desde`, `hasta` (sobre el cierre de la inspección) | **zona** (lado, número y nombre), clase, tamaño, nivel, si es preexistente, origen, estado de seguimiento y la **fecha, hora y ubicación de su foto** |
 
-Los nombres de los filtros son los de cada listado hoy (`clienteId` en viajes e inspecciones, `cliente_id` en hallazgos) y cambiarán junto con ellos cuando los listados unifiquen su formato.
+Los filtros llevan los nombres `snake_case` de cada listado (ver «Paginación y filtros»); la exportación no pagina ni ordena (`pagina`, `tamano` y `orden` no aplican). El filtro `vin` sigue la regla única del VIN. `cliente_id` (viajes, inspecciones y hallazgos) solo lo elige el `super_admin`.
 
 ## Reportes
 

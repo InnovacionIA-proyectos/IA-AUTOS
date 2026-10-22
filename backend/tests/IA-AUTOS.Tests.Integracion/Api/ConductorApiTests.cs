@@ -630,7 +630,7 @@ public sealed class ConductorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var inspector = await SesionAsync("inspector@ejemplo.com", clsRol.INSPECTOR);
         await HallazgoDelInspectorAsync(e, inspector);
 
-        var listado = await ComoJsonAsync(await Como(e.Conductor).GetAsync($"/api/inspecciones?viajeId={e.Viaje}"));
+        var listado = Items(await ComoJsonAsync(await Como(e.Conductor).GetAsync($"/api/inspecciones?viaje_id={e.Viaje}")));
 
         Assert.True(listado.GetArrayLength() >= 1);
         Assert.All(listado.EnumerateArray(), fila => Assert.False(fila.TryGetProperty("hallazgos", out _)));

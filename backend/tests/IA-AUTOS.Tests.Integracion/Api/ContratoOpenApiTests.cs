@@ -28,7 +28,7 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
 
         var inspeccion = contrato["components"]!["schemas"]!["InspeccionDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList();
         var tasa = contrato["components"]!["schemas"]!["TasaRechazoDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList();
-        var pagina = contrato["components"]!["schemas"]!["ListadoPaginadoDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList();
+        var pagina = contrato["components"]!["schemas"]!["PaginaDtoOfListadoVehiculoDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList();
 
         Assert.Contains("etapa_id", inspeccion);
         Assert.Contains("viaje_id", inspeccion);
@@ -36,7 +36,7 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Contains("created_at", inspeccion);
         Assert.DoesNotContain("etapaId", inspeccion);
         Assert.Equal(["tasaGlobal", "totalMovilizadas", "totalPendientes", "totalConNovedad", "totalNovedad", "porOperacion"], tasa);
-        Assert.Equal(["rows", "total", "page", "pageSize"], pagina);
+        Assert.Equal(["items", "total", "pagina", "tamano"], pagina);
     }
 
     [Fact]

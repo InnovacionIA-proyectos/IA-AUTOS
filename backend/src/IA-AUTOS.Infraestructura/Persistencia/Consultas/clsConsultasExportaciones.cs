@@ -3,6 +3,7 @@ using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Vehiculos;
 using Microsoft.EntityFrameworkCore;
 
 namespace IAAutos.Infraestructura.Persistencia.Consultas;
@@ -61,6 +62,7 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
     {
         var codigo = f.CodigoMtrack;
         var vinParcial = f.Vin;
+        var vinExacto = vinParcial?.Length == clsVin.LONGITUD_ISO;
         var consulta = from e in contexto.Etapas.AsNoTracking()
                        join vj in contexto.Viajes on e.ViajeId equals vj.Id
                        join v in contexto.Vehiculos on e.VehiculoId equals v.Id
@@ -80,8 +82,11 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                           && (f.ClienteId == null || v.ClienteId == f.ClienteId)
                           && (f.Estado == null || vj.Estado == f.Estado)
                           && (codigo == null || (vj.CodigoMtrack != null && vj.CodigoMtrack!.Contains(codigo!)))
-                          && (vinParcial == null || v.Vin.Contains(vinParcial!))
+                          && (vinParcial == null || (vinExacto ? v.Vin == vinParcial : v.Vin.Contains(vinParcial!)))
                           && (f.ConductorId == null || vj.ConductorId == f.ConductorId)
+                          && (f.InspectorId == null || vj.InspectorId == f.InspectorId)
+                          && (f.OrigenId == null || vj.OrigenId == f.OrigenId)
+                          && (f.DestinoId == null || vj.DestinoId == f.DestinoId)
                           && (f.Desde == null || vj.CreatedAt >= f.Desde)
                           && (f.Hasta == null || vj.CreatedAt <= f.Hasta)
                        orderby vj.CreatedAt descending, vj.Id, v.Vin, e.Orden
@@ -166,6 +171,7 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
 
     public async Task<ResultadoExportacion<FilaExportInspeccion>> InspeccionesAsync(FiltrosInspecciones f, Guid? clienteId, int maximo, CancellationToken ct = default)
     {
+        var vinExacto = f.Vin?.Length == clsVin.LONGITUD_ISO;
         var consulta = from i in contexto.Inspecciones.AsNoTracking()
                        join e in contexto.Etapas on i.EtapaId equals e.Id
                        join v in contexto.Vehiculos on e.VehiculoId equals v.Id
@@ -186,12 +192,16 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                        join re in contexto.Usuarios on tr.RecibeUsuarioId equals re.Id into recibos
                        from re in recibos.DefaultIfEmpty()
                        where (clienteId == null || v.ClienteId == clienteId)
-                          && (f.Vin == null || v.Vin == f.Vin)
+                          && (f.Vin == null || (vinExacto ? v.Vin == f.Vin : v.Vin.Contains(f.Vin)))
                           && (f.UsuarioId == null || i.UsuarioId == f.UsuarioId)
                           && (f.ViajeId == null || i.ViajeId == f.ViajeId)
                           && (f.Momento == null || i.Momento == f.Momento)
                           && (f.Estado == null || i.Estado == f.Estado)
                           && (f.Proceso == null || ec.Codigo == f.Proceso)
+                          && (f.Operacion == null || v.Operacion == f.Operacion)
+                          && (f.Marca == null || v.Marca == f.Marca)
+                          && (f.OrigenId == null || vj.OrigenId == f.OrigenId)
+                          && (f.DestinoId == null || vj.DestinoId == f.DestinoId)
                           && (f.Desde == null || i.Fecha >= f.Desde)
                           && (f.Hasta == null || i.Fecha <= f.Hasta)
                        orderby i.Fecha descending, i.Id
