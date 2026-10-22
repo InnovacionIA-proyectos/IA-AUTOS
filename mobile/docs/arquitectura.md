@@ -26,13 +26,17 @@ Reglas de dependencia:
 - `presentation` importa los providers de su propia feature; acude a `app/proveedores.dart` únicamente por los
   transversales (`entornoProvider`, `servicioUbicacionProvider`, `servicioFotosProvider`).
 - `sync` depende de `inspecciones` (transporta sus fotos y hallazgos) y no al revés.
-- El estado de la red (`estadoRedProvider`) se consume como transversal desde varias funcionalidades, aunque su
-  puerto viva en `sync/domain`: `inspecciones` y `catalogos` lo leen para decidir si revalidan. Moverlo a `core`
-  queda pendiente; hasta entonces esa es la única dependencia admitida hacia `sync`.
+- `sync` se consume como transversal, aunque viva en una funcionalidad. Son dos cosas distintas y ambas van en un
+  solo sentido: el estado de la red (`estadoRedProvider`, cuyo puerto está en `sync/domain`) lo leen `inspecciones`,
+  `catalogos` y `viajes` para decidir si revalidan; y el estado de la cola (`syncControllerProvider` y `BarraSync`,
+  en `sync/presentation`) lo usan las pantallas de listado para mostrar lo pendiente y avisar antes de salir.
+  Moverlos a `core` queda pendiente; hasta entonces son las únicas dependencias admitidas hacia `sync`, y nada en
+  `sync` puede importar de vuelta.
 - `catalogos` solo depende de `auth` (necesita saber si hay sesión antes de pedir nada) y del estado de la red,
   igual que `sync`. `inspecciones` y `vehiculos` dependen de `catalogos` para traducir códigos a etiquetas.
-- `viajes` depende de `auth` y del estado de la red. `inspecciones` depende de `viajes`: la captura lee de ahí la
-  placa, el tráiler, la unidad y el conductor, que ya no se escriben.
+- `viajes` depende de `auth` y de `sync` como transversal (red y estado de la cola), igual que `inspecciones`.
+  `inspecciones` depende de `viajes`: la captura lee de ahí la placa, el tráiler, la unidad y el conductor, que ya
+  no se escriben.
 - Una feature pequeña no crea capas vacías: `sofasa` y `custodia` tienen un repositorio y una pantalla, y basta.
   Por lo mismo, un valor de catálogo se modela con un único tipo genérico que conserva sus campos, en vez de diez
   clases para diez catálogos de los que hoy se usan tres.
@@ -46,7 +50,7 @@ La lógica con más riesgo (la cola) está en `domain` precisamente para probarl
 | Estado | Riverpod 3 (`Notifier`, `FutureProvider`) | sin generación de código; reintento automático de providers desactivado |
 | Navegación | go_router | un solo `redirect` por sesión; sin sesión solo existe `/login` |
 | HTTP | Dio | `ClienteApi` adjunta el JWT y convierte todo fallo en `ErrorApi` |
-| Persistencia | Drift (SQLite) | tablas `jobs` (cola) y `cache_lecturas` (listado de inspecciones y catálogos) |
+| Persistencia | Drift (SQLite) | tablas `jobs` (cola) y `cache_lecturas` (listado de inspecciones, catálogos y viajes) |
 | Secretos | flutter_secure_storage | el token vive en el Keystore; nunca en SQLite ni en preferencias |
 | Dispositivo | camera, geolocator, connectivity_plus | detrás de interfaces (`ServicioUbicacion`, `ServicioFotos`, `EstadoRed`) |
 

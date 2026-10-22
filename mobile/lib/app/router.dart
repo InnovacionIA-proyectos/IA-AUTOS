@@ -97,8 +97,8 @@ final routerProvider = Provider<GoRouter>((ref) {
   return router;
 });
 
-/// Barra de navegación inferior: dos pestañas mínimas (herramienta de campo enfocada), con la cantidad de envíos
-/// pendientes como insignia en Inspecciones.
+/// Barra de navegación inferior: las tres pantallas de campo, con «Mis viajes» primera porque es la entrada del
+/// trabajo, y la cantidad de envíos pendientes como insignia en Inspecciones.
 class _Estructura extends ConsumerWidget {
   const _Estructura({required this.shell});
 

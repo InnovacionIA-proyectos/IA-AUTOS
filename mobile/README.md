@@ -1,8 +1,8 @@
 # Traza Autos 360 - App móvil (Flutter)
 
-App de campo para inspectores y conductores: abre un VIN, revisa su último informe, captura informes con novedades sobre
-el diagrama del vehículo, fotos selladas con fecha y ubicación, y firma el cambio de responsabilidad. Reemplaza a la app
-Expo (React Native) y consume la API .NET de [../backend](../backend).
+App de campo para inspectores y conductores: entra por sus viajes, abre una de sus unidades, revisa el último informe,
+captura informes con novedades sobre el diagrama del vehículo, fotos selladas con fecha y ubicación, y firma el cambio
+de responsabilidad. Reemplaza a la app Expo (React Native) y consume la API .NET de [../backend](../backend).
 
 Funciona **sin señal**: los informes y las firmas se guardan en una cola persistente (SQLite) y se envían solos cuando
 hay una conexión estable.
