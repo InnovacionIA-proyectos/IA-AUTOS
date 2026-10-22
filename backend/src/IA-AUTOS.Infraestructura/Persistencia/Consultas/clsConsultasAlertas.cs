@@ -30,6 +30,9 @@ internal sealed class clsParametroRepository(clsAppDbContext contexto) : IParame
 {
     public async Task<IReadOnlyList<clsParametro>> ListarAsync(CancellationToken ct = default) =>
         await contexto.Parametros.AsNoTracking().ToListAsync(ct);
+
+    public Task<clsParametro?> ObtenerAsync(string clave, CancellationToken ct = default) =>
+        contexto.Parametros.FirstOrDefaultAsync(p => p.Clave == clave, ct);
 }
 
 /// <summary>Lo que leen los procesos periodicos de alertas: conteos de patrones y las capturas y transferencias que siguen pendientes.</summary>

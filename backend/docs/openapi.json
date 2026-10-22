@@ -2097,6 +2097,121 @@
         ]
       }
     },
+    "/api/parametros": {
+      "get": {
+        "tags": [
+          "Parametros"
+        ],
+        "operationId": "Parametros_Listar",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ParametroDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ParametroDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ParametroDto"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/parametros/{clave}": {
+      "patch": {
+        "tags": [
+          "Parametros"
+        ],
+        "operationId": "Parametros_Actualizar",
+        "parameters": [
+          {
+            "name": "clave",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActualizarParametroRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParametroDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParametroDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParametroDto"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error (ver docs/api.md): VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT, RATE_LIMITED, INTERNAL_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/dispositivos": {
       "post": {
         "tags": [
@@ -4887,6 +5002,20 @@
   },
   "components": {
     "schemas": {
+      "ActualizarParametroRequest": {
+        "required": [
+          "valor"
+        ],
+        "type": "object",
+        "properties": {
+          "valor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ActualizarUsuarioRequest": {
         "required": [
           "nombre",
@@ -9205,6 +9334,44 @@
           }
         }
       },
+      "ParametroDto": {
+        "required": [
+          "clave",
+          "valor",
+          "tipo",
+          "descripcion",
+          "actualizado_por",
+          "updated_at"
+        ],
+        "type": "object",
+        "properties": {
+          "clave": {
+            "type": "string"
+          },
+          "valor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tipo": {
+            "type": "string"
+          },
+          "descripcion": {
+            "type": "string"
+          },
+          "actualizado_por": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "updated_at": {
+            "format": "date-time"
+          }
+        }
+      },
       "PatronesDto": {
         "required": [
           "total",
@@ -10876,6 +11043,9 @@
     },
     {
       "name": "clsReportes"
+    },
+    {
+      "name": "clsParametros"
     },
     {
       "name": "clsDispositivos"
