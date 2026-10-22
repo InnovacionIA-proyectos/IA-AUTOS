@@ -149,6 +149,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
         }
 
         var insp = fila.Inspeccion;
+        var consultaNotas = new clsConsultasNotas(contexto);
         var viaje = (await clsDatosDeViaje.CargarAsync(contexto, [insp.ViajeId], ct)).GetValueOrDefault(insp.ViajeId);
 
         var hallazgos = await contexto.Hallazgos.AsNoTracking().Where(h => h.InspeccionId == id).OrderBy(h => h.CreatedAt).ToListAsync(ct);
@@ -210,11 +211,13 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                     transferencia.Transferencia.MotivoNoFirma,
                     transferencia.Transferencia.TestigoUsuarioId,
                     transferencia.TestigoNombre,
-                    transferencia.Transferencia.EvidenciaConstanciaId),
+                    transferencia.Transferencia.EvidenciaConstanciaId,
+                    await consultaNotas.ListarAsync(clsEntidadNota.TRANSFERENCIA, transferencia.Transferencia.Id, ct)),
             insp.IniciadaAt,
             insp.CerradaAt,
             insp.Version,
             insp.CorrigeInspeccionId,
-            clsMomento.Nombre(insp.Momento));
+            clsMomento.Nombre(insp.Momento),
+            await consultaNotas.ListarAsync(clsEntidadNota.INSPECCION, insp.Id, ct));
     }
 }

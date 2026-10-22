@@ -54,7 +54,8 @@ public sealed record InventarioInspeccionDto(
     string MomentoNombre,
     IReadOnlyList<HallazgoDto> Hallazgos,
     IReadOnlyList<EvidenciaDto> Evidencias,
-    TransferenciaDto? Transferencia);
+    TransferenciaDto? Transferencia,
+    IReadOnlyList<IAAutos.Aplicacion.Inspecciones.NotaAclaratoriaDto> NotasAclaratorias);
 
 public sealed record InventarioEtapaDto(
     Guid Id,

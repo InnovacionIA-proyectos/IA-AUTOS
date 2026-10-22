@@ -1235,6 +1235,33 @@ El push sale por **Firebase Cloud Messaging** a cada dispositivo activo del dest
 la alerta responde igual y la notificación de push guarda el motivo en `ErrorEnvio` (un token que FCM ya no reconoce deja el dispositivo inactivo). Una misma alerta no se repite: su clave (alerta, destinatario y canal) es única. Se configura con
 `Notificaciones__FcmProyectoId`, `Notificaciones__FcmClientEmail` y `Notificaciones__FcmClavePrivada` (ver [docs/configuracion.md](docs/configuracion.md)).
 
+## Notas aclaratorias
+
+Una aclaración de un registro ya guardado (una inspección, un hallazgo o una transferencia) es un **registro nuevo** con su autor y su fecha: **el original no cambia** (aunque su inspección esté cerrada) y **nadie edita ni borra una nota**
+(no existen `PATCH` ni `DELETE`; la base de datos también lo impide). Cada nota queda en la auditoría (`nota.crear`).
+
+`NotaAclaratoriaDto`:
+
+```json
+{ "id": "uuid", "entidad": "hallazgo", "entidad_id": "uuid", "autor_id": "uuid", "autor_nombre": "Ines Pérez", "autor_rol": "inspector", "texto": "Se aclara que el golpe ya estaba al recibir", "created_at": "2026-10-21T14:12:00.000Z" }
+```
+
+| Ruta | Agrega una nota a | `entidad_id` |
+|---|---|---|
+| `POST /api/inspecciones/{id}/notas` | la inspección | el id de la inspección |
+| `POST /api/hallazgos/{id}/notas` | el hallazgo | el id del hallazgo |
+| `POST /api/inspecciones/{id}/transferencia/notas` | la transferencia de la inspección | el id de la transferencia (`404` si la inspección aún no tiene) |
+
+Cuerpo: `{ "texto": "…" }`, obligatorio y de **hasta 1000 caracteres** (`400` en `texto` si falta o excede). Responde `201` con el `NotaAclaratoriaDto`, también con la inspección cerrada.
+
+**Quién agrega.** El **autor del registro** (el usuario de la inspección; para un hallazgo, el de su inspección; para la transferencia, quien la **firmó**: quien entrega si ya firmó su parte y quien recibe si ya firmó la suya), el
+`admin`, el `super_admin` y el `coordinador_calidad` (propuesta pendiente de confirmar por el negocio) de su cliente. Cualquier otro rol o usuario recibe `403` y la nota no se guarda; `403` también con un registro de un VIN de otro cliente.
+`404` si la inspección, el hallazgo o la transferencia no existen.
+
+**Dónde se ven.** `GET /api/inspecciones/{id}/notas`, `GET /api/hallazgos/{id}/notas` y `GET /api/inspecciones/{id}/transferencia/notas` devuelven la lista, de la más antigua a la más reciente, a quien puede ver el registro (el inspector y el
+conductor, solo en sus viajes; el conductor no ve las notas de los hallazgos que registraron otros; el resto, de su cliente). Además traen `notas_aclaratorias[]` el informe (`InformeDetalleDto`, las de la inspección), cada inspección del inventario
+(`InventarioInspeccionDto`), el detalle del hallazgo (`GET /api/hallazgos/{id}`) y la transferencia del informe (`TransferenciaDetalleDto`).
+
 ## Transferencia de custodia
 
 Entrega y recibo de la unidad entre dos personas **del viaje** (su conductor y su inspector; `GET /api/viajes/{id}/firmantes` dice quiénes). **Cada firma la envía su titular**: la

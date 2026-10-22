@@ -151,7 +151,8 @@ public sealed record TransferenciaDetalleDto(
     string? MotivoNoFirma,
     Guid? TestigoUsuarioId,
     string? TestigoNombre,
-    Guid? EvidenciaConstanciaId);
+    Guid? EvidenciaConstanciaId,
+    IReadOnlyList<NotaAclaratoriaDto> NotasAclaratorias);
 
 /// <summary>
 /// Informe completo para revision: inspeccion con su contexto (VIN, proceso, lugar, inspector), hallazgos, evidencias con URL
@@ -190,7 +191,8 @@ public sealed record InformeDetalleDto(
     DateTimeOffset? CerradaAt,
     int Version,
     Guid? CorrigeInspeccionId,
-    string MomentoNombre);
+    string MomentoNombre,
+    IReadOnlyList<NotaAclaratoriaDto> NotasAclaratorias);
 
 public sealed record ResumenCierreDto(int Evidencias, int Hallazgos);
 

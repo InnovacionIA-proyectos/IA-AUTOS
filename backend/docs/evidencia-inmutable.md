@@ -58,6 +58,8 @@ No borra ni cambia ningun dato: solo cambia relaciones, crea los triggers y agre
 - **`tblNotasAclaratorias`**: la aclaracion de un registro ya guardado es un registro NUEVO (`Entidad`: `inspeccion`, `hallazgo` o `transferencia`; `EntidadId`, `AutorId`, `Texto` de hasta 1000 y `CreatedAt`) con indice por `(Entidad, EntidadId)`.
   El original no cambia y la nota no se edita (51005) ni se borra (51003). Script: `database/cambios-esquema/19-notas-aclaratorias.sql`.
 
+La API de las notas esta en [CONTRATO.md](../CONTRATO.md) («Notas aclaratorias»): las agrega el autor del registro, el administrador o el coordinador de calidad, tambien con la inspeccion cerrada, y quedan en la auditoria.
+
 Cada script se ejecuta completo, en una sola ejecucion, antes de desplegar la API, ajustando `@esquema`; es una transaccion y se puede repetir. `tests/verificar-ddl.sql` prueba cada restriccion y cada trigger.
 
 Una base nueva se crea con `ddl.sql`, que ya trae el esquema. `tests/verificar-ddl.sql` prueba cada trigger (un caso de error 51003 por tabla, la

@@ -53,10 +53,10 @@ public record HallazgoListadoDto : HallazgoDto
     public EvidenciaDto? Evidencia { get; init; }
 }
 
-/// <summary>El hallazgo con su historial de seguimiento y sus notas aclaratorias (arreglo vacio mientras no existan).</summary>
+/// <summary>El hallazgo con su historial de seguimiento y sus notas aclaratorias (vacio si no tiene).</summary>
 public sealed record HallazgoDetalleDto : HallazgoListadoDto
 {
-    public HallazgoDetalleDto(HallazgoListadoDto fila, IReadOnlyList<SeguimientoDto> seguimiento, IReadOnlyList<object> notasAclaratorias)
+    public HallazgoDetalleDto(HallazgoListadoDto fila, IReadOnlyList<SeguimientoDto> seguimiento, IReadOnlyList<NotaAclaratoriaDto> notasAclaratorias)
         : base(fila)
     {
         Seguimiento = seguimiento;
@@ -65,7 +65,7 @@ public sealed record HallazgoDetalleDto : HallazgoListadoDto
 
     public IReadOnlyList<SeguimientoDto> Seguimiento { get; init; }
 
-    public IReadOnlyList<object> NotasAclaratorias { get; init; }
+    public IReadOnlyList<NotaAclaratoriaDto> NotasAclaratorias { get; init; }
 }
 
 public sealed record ListadoHallazgosDto(IReadOnlyList<HallazgoListadoDto> Items, int Total, int Pagina, int Tamano);
@@ -143,6 +143,7 @@ public interface IConsultasHallazgos
 public sealed class clsHallazgosService(
     IConsultasHallazgos consultas,
     IConsultasInspecciones consultasInspecciones,
+    IConsultasNotas notas,
     IUsuarioActual actual)
 {
     public const int TAMANO_POR_DEFECTO = 50;
@@ -171,8 +172,7 @@ public sealed class clsHallazgosService(
             throw new clsProhibidoException("El hallazgo es de un VIN de otro cliente");
         }
 
-        // Las notas aclaratorias llegan con la tarea de las fotos y notas de una inspeccion cerrada: hasta entonces el arreglo va vacio.
-        return new HallazgoDetalleDto(fila, await consultasInspecciones.ObtenerHistorialAsync(id, ct), []);
+        return new HallazgoDetalleDto(fila, await consultasInspecciones.ObtenerHistorialAsync(id, ct), await notas.ListarAsync(clsEntidadNota.HALLAZGO, id, ct));
     }
 
     private static (FiltrosHallazgos Filtros, Guid? ClienteElegido) Parsear(FiltrosHallazgosRequest s)

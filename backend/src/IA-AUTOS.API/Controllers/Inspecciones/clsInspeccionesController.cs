@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace IAAutos.API.Controllers.Inspecciones;
 
 [Route("api/inspecciones")]
-public sealed class clsInspeccionesController(clsInspeccionesService servicio) : clsControladorBase
+public sealed class clsInspeccionesController(clsInspeccionesService servicio, clsNotasAclaratoriasService notas) : clsControladorBase
 {
     /// <summary>
     /// Crea la inspeccion de salida o de llegada de una etapa. El usuario sale del token, el estado inicial es siempre borrador y la placa, el
@@ -59,6 +59,21 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio) :
     [HttpGet("{id:guid}")]
     [ProducesResponseType<InformeDetalleDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Obtener(Guid id, CancellationToken ct) => Ok(await servicio.ObtenerInformeAsync(id, ct));
+
+    /// <summary>
+    /// Agrega una nota aclaratoria a la inspeccion (<c>texto</c> de hasta 1000 caracteres), tambien si ya esta cerrada: es un registro nuevo y el original no cambia. Solo el autor de la inspeccion,
+    /// el administrador y el coordinador de calidad de su cliente (403 los demas). Nadie la edita ni la borra.
+    /// </summary>
+    [HttpPost("{id:guid}/notas")]
+    [ProducesResponseType<NotaAclaratoriaDto>(StatusCodes.Status201Created)]
+    [CuerpoSolicitud(typeof(AgregarNotaRequest))]
+    public async Task<IActionResult> AgregarNota(Guid id, CancellationToken ct) =>
+        Creado(await notas.AgregarAInspeccionAsync(id, await LeerCuerpoAsync<AgregarNotaRequest>(ct), ct));
+
+    /// <summary>Las notas aclaratorias de la inspeccion, de la mas antigua a la mas reciente. Las ve quien puede ver la inspeccion.</summary>
+    [HttpGet("{id:guid}/notas")]
+    [ProducesResponseType<IReadOnlyList<NotaAclaratoriaDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListarNotas(Guid id, CancellationToken ct) => Ok(await notas.ListarDeInspeccionAsync(id, ct));
 
     /// <summary>
     /// Los hallazgos de las inspecciones cerradas anteriores del mismo VIN, del mas reciente al mas antiguo, con su viaje, proceso, momento, cierre y fotos. El cliente
