@@ -88,6 +88,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
 
             -- Catalogos: vuelven a su estado inicial (sin valores creados por las pruebas, todos activos y sin cambios de forma).
             DELETE FROM dbo.tblCuadrantes;
+            DELETE FROM dbo.tblEstadosSofasa;
             DELETE FROM dbo.tblEtapasCatalogo WHERE Codigo NOT IN ('cargue', 'transporte', 'descargue');
             DELETE FROM dbo.tblPuntosCustodia WHERE Codigo NOT IN ('cedi_1', 'origen', 'certificadora', 'destino', 'cedi_2', 'concesionario');
             DELETE FROM dbo.tblClientes WHERE Codigo <> 'sofasa';

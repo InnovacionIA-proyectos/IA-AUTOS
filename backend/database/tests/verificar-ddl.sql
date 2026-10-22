@@ -179,7 +179,11 @@ INSERT @casos VALUES
  (N'FK clase de dano invalida', N'DECLARE @ins uniqueidentifier=(SELECT TOP 1 i.Id FROM dbo.tblInspecciones i JOIN dbo.tblEtapas e ON e.Id=i.EtapaId JOIN dbo.tblVehiculos v ON v.Id=e.VehiculoId WHERE v.Vin=''ZZ_TEST_VIN_0001''); INSERT dbo.tblHallazgos (Id,InspeccionId,ParteVehiculo,ClaseDano,TamanoDano) VALUES (NEWID(),@ins,N''Capot'',''inventada'',''1_5cm'')', 547),
  (N'CHECK JSON de coordenadas', N'DECLARE @ins uniqueidentifier=(SELECT TOP 1 i.Id FROM dbo.tblInspecciones i JOIN dbo.tblEtapas e ON e.Id=i.EtapaId JOIN dbo.tblVehiculos v ON v.Id=e.VehiculoId WHERE v.Vin=''ZZ_TEST_VIN_0001''); INSERT dbo.tblHallazgos (Id,InspeccionId,ParteVehiculo,ClaseDano,TamanoDano,CoordsDiagrama) VALUES (NEWID(),@ins,N''Capot'',''golpe'',''1_5cm'',N''no es json'')', 547),
  (N'UNIQUE transferencia por inspeccion', N'INSERT dbo.tblTransferenciasCustodia (Id,InspeccionId,EntregaUsuarioId,RecibeUsuarioId) SELECT NEWID(),InspeccionId,EntregaUsuarioId,RecibeUsuarioId FROM dbo.tblTransferenciasCustodia WHERE EntregaUsuarioId=(SELECT Id FROM dbo.tblUsuarios WHERE Email=N''zz_test_uno@ejemplo.com'')', 2627),
- (N'UNIQUE orden Sofasa por SourceId', N'INSERT dbo.tblOrdenesSofasa (Id,SourceId) VALUES (NEWID(),-424242); INSERT dbo.tblOrdenesSofasa (Id,SourceId) VALUES (NEWID(),-424242)', 2627);
+ (N'UNIQUE orden Sofasa por SourceId', N'INSERT dbo.tblOrdenesSofasa (Id,SourceId) VALUES (NEWID(),-424242); INSERT dbo.tblOrdenesSofasa (Id,SourceId) VALUES (NEWID(),-424242)', 2627),
+ (N'UNIQUE estado Sofasa por codigo (sin distinguir mayusculas)', N'INSERT dbo.tblEstadosSofasa (Id,Codigo,Nombre) VALUES (NEWID(),N''ZZ_TEST_ESTADO'',N''Uno''); INSERT dbo.tblEstadosSofasa (Id,Codigo,Nombre) VALUES (NEWID(),N''zz_test_estado'',N''Dos'')', 2627),
+ (N'CHECK estado Sofasa: codigo con espacios al inicio', N'INSERT dbo.tblEstadosSofasa (Id,Codigo,Nombre) VALUES (NEWID(),N'' ZZ_TEST_ESPACIO'',N''Uno'')', 547),
+ (N'CHECK estado Sofasa: nombre vacio', N'INSERT dbo.tblEstadosSofasa (Id,Codigo,Nombre) VALUES (NEWID(),N''ZZ_TEST_SIN_NOMBRE'',N''  '')', 547),
+ (N'CHECK estado Sofasa: orden negativo', N'INSERT dbo.tblEstadosSofasa (Id,Codigo,Nombre,Orden) VALUES (NEWID(),N''ZZ_TEST_ORDEN'',N''Uno'',-1)', 547);
 
 DECLARE @prueba nvarchar(200), @sql nvarchar(max), @esp int;
 DECLARE c CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casos;
@@ -858,6 +862,19 @@ INSERT #r SELECT N'Completa: columna bit no nula con 0 por defecto, el procedimi
           AND (SELECT COUNT(*) FROM sys.triggers WHERE name IN (N'TR_tblInspecciones_Completa', N'TR_tblEtapas_Completa', N'TR_tblViajeVehiculos_Completa') AND is_disabled = 0) = 3 THEN 1 ELSE 0 END, NULL;
 INSERT #r SELECT N'Completa: ninguna fila difiere de la vista vwViajesCompletos', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblViajeVehiculos vv
     WHERE vv.Completa <> CASE WHEN EXISTS (SELECT 1 FROM dbo.vwViajesCompletos c WHERE c.ViajeId = vv.ViajeId AND c.VehiculoId = vv.VehiculoId) THEN 1 ELSE 0 END) THEN 1 ELSE 0 END, NULL;
+
+-- 7k) Catalogo de estados de las ordenes Sofasa: el codigo es el StatusCode real (con sus mayusculas), sin llave foranea desde las ordenes
+-- (la ingesta no debe fallar por un estado nuevo) y un valor se borra sin ordenes que lo referencien por llave.
+DELETE FROM dbo.tblEstadosSofasa WHERE Codigo LIKE N'ZZ_TEST%';
+INSERT dbo.tblEstadosSofasa (Id, Codigo, Nombre, Orden) VALUES (NEWID(), N'ZZ_TEST_ENTREGADA Mixta', N'Entregada', 3);
+INSERT dbo.tblOrdenesSofasa (Id, SourceId, StatusCode) VALUES (NEWID(), -424244, N'ZZ_TEST_ESTADO_QUE_NO_ESTA_EN_EL_CATALOGO');
+INSERT #r SELECT N'Estados Sofasa: la tabla guarda el codigo con sus mayusculas y una orden con un StatusCode fuera del catalogo se guarda (sin llave foranea)',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblEstadosSofasa WHERE Codigo = N'ZZ_TEST_ENTREGADA Mixta' COLLATE Latin1_General_CS_AS AND Nombre = N'Entregada' AND Orden = 3 AND Activo = 1)
+          AND EXISTS (SELECT 1 FROM dbo.tblOrdenesSofasa WHERE SourceId = -424244)
+          AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE referenced_object_id = OBJECT_ID(N'dbo.tblEstadosSofasa')) THEN 1 ELSE 0 END, NULL;
+DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424244;
+DELETE FROM dbo.tblEstadosSofasa WHERE Codigo LIKE N'ZZ_TEST%';
+INSERT #r SELECT N'Estados Sofasa: lo de prueba se limpio', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblEstadosSofasa WHERE Codigo LIKE N'ZZ_TEST%') THEN 1 ELSE 0 END, NULL;
 
 -- 7g) Parametros: la tabla, sus filas iniciales y sus restricciones
 INSERT #r SELECT N'Parametros: la tabla existe con sus 8 filas iniciales (6 con valor y 2 sin valor) y sin linea base de rechazo',

@@ -650,6 +650,25 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task El_catalogo_de_estados_sofasa_esta_migrado_y_cubre_los_statuscode_de_las_ordenes()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/22-catalogo-estados-sofasa.sql y comprueba que cada StatusCode de las ordenes reales tiene su estado en el catalogo.
+        await using var conexion = await AbrirAsync();
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblEstadosSofasa' AND schema_id = SCHEMA_ID()");
+        Assert.True(tabla == 1, "Falta tblEstadosSofasa. Ejecute database/cambios-esquema/22-catalogo-estados-sofasa.sql.");
+
+        var sinEstado = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(DISTINCT LTRIM(RTRIM(o.StatusCode))) FROM tblOrdenesSofasa o
+             WHERE o.StatusCode IS NOT NULL AND LEN(LTRIM(RTRIM(o.StatusCode))) > 0
+               AND NOT EXISTS (SELECT 1 FROM tblEstadosSofasa e WHERE e.Codigo = LTRIM(RTRIM(o.StatusCode)))
+            """);
+        var invalidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblEstadosSofasa WHERE LEN(Codigo) = 0 OR Codigo <> LTRIM(RTRIM(Codigo)) OR LEN(LTRIM(RTRIM(Nombre))) = 0 OR Orden < 0");
+        Assert.True(sinEstado == 0, $"{sinEstado} StatusCode de las ordenes no estan en el catalogo: ejecute de nuevo 22-catalogo-estados-sofasa.sql o agreguelos desde el portal.");
+        Assert.Equal(0, invalidos);
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

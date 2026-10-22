@@ -14,6 +14,7 @@ vistas de foto, cuadrantes, tipos de unidad) viven ahora en tablas y se administ
 | `tblClientes` | Clientes (empresas) a los que pertenecen los usuarios y los vehículos (ver [identidad.md](identidad.md)) | `sofasa` |
 | `tblClasesDano` | Clases de daño de un hallazgo | 10 (`deformacion`, `rotura`, `cortado`, `perforacion`, `golpe`, `mancha`, `raya_pintar`, `desconchado`, `particulas`, `faltante`) |
 | `tblTamanosDano` | Tamaños de daño de un hallazgo | 6 (`1_5cm`, `5_10cm`, `10_20cm`, `mas_20cm`, `requiere_reemplazo`, `mas_10_particulas`) |
+| `tblEstadosSofasa` | Estados de las órdenes Sofasa: `Codigo` es el `StatusCode` **real** de la orden (texto libre, con sus mayúsculas, hasta 100 caracteres, único sin distinguir mayúsculas) y `Nombre` su etiqueta. Sin llave foránea desde `tblOrdenesSofasa` (la ingesta del ETL no debe fallar por un estado nuevo): «en uso» se valida en la API | los `StatusCode` distintos de las órdenes existentes, con el código como etiqueta provisional; vacío si aún no hay órdenes |
 | `tblNivelesSeveridad` | Niveles V1+, V1, V2, V3 con su `Accion` | 4, con su acción: «Se recupera antes del despacho», «Se rechaza el vehículo», «Validación por Sofasa» y «Se deroga (se acepta el defecto)» (script 13) |
 | `tblVistasFoto` | Vistas de foto; `Obligatoria` = 1 se toma siempre, 0 solo con faltante o daño; `TipoVehiculo` opcional | 9: 7 obligatorias (`frontal`, `trasera`, `lateral_derecha`, `lateral_izquierda`, `diagonal_trasera_izquierda`, `diagonal_delantera_derecha`, `superior`) y 2 adicionales (`piezas_baul`, `cojineria`) |
 | `tblCuadrantes` | Las **zonas** numeradas de la carrocería, por tipo de vehículo (la puerta delantera es una zona aunque se vea desde varias vistas) | 36 de la ficha del vehículo genérico (script 04); los números 4 y 12 no existen en la ficha |
@@ -71,6 +72,12 @@ Con un usuario que pueda crear tablas (no el de la aplicación), conectado a la 
 
 Una base nueva se crea con `ddl.sql`, que ya trae el esquema y las semillas. `tests/verificar-ddl.sql` comprueba las semillas, las llaves foráneas y que un
 valor en uso no se borra.
+
+## Estados de las órdenes Sofasa
+
+`tblEstadosSofasa` la crea [`22-catalogo-estados-sofasa.sql`](../database/cambios-esquema/22-catalogo-estados-sofasa.sql) (ajustando `@esquema`, en una sola ejecución, una transacción, repetible) y la llena con los `StatusCode` distintos que ya tienen las
+órdenes (sin distinguir mayúsculas ni espacios de los bordes), con el código como etiqueta provisional. **La etiqueta de cada estado la define Calidad/Operaciones (PAB-032)** y se cambia desde el portal (`PATCH /api/catalogos/estados-sofasa/{id}` con `nombre`). Mientras no haya
+órdenes el catálogo queda vacío; cuando lleguen, se vuelve a ejecutar el script para agregar los estados que falten (no cambia una etiqueta ya editada) o se agregan desde el portal. Resultado esperado: `Tabla = 1` y `SinEstado = 0`.
 
 ## Cargar los cuadrantes y las acciones de los niveles
 

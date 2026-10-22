@@ -1502,7 +1502,7 @@ Que la app no se los muestre ni se los notifique en esa pantalla es una regla de
 ## Catálogos maestros
 
 Las etapas, los lugares, los tipos de unidad, las clases y tamaños de daño, los niveles de severidad, las vistas de foto, los
-cuadrantes, los paneles de daño y sus regiones y los clientes **ya no son listas fijas en el código**: viven en tablas y los administra TI o el coordinador de calidad desde el portal.
+cuadrantes, los paneles de daño y sus regiones, los clientes y los estados de las órdenes Sofasa **ya no son listas fijas en el código**: viven en tablas y los administra TI o el coordinador de calidad desde el portal.
 La web y la app deben leerlos de la API (y guardar una copia para trabajar sin señal), no escribirlos a mano.
 
 | Nombre (ruta y clave) | Qué contiene | Campos de cada valor |
@@ -1518,8 +1518,14 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | `paneles-dano` | Los **5 paneles** del dibujo de daños (`superior`, `perfil_posterior_izquierdo`, `perfil_posterior_derecho`, `costado_izquierdo`, `costado_derecho`), separados de las vistas de foto | `id`, `codigo`, `nombre`, `orden`, `activo`, `imagen_url` (la imagen de fondo del panel o `null` si aún no se cargó) |
 | `cuadrante-regiones` | La **región tocable** de cada zona numerada en cada panel (una fila por aparición). Las zonas provisionales no tienen región | `id`, `panel` (código), `cuadrante_id`, `numero`, `nombre`, `lado` (`izquierdo`, `derecho` o `null` del 26 en adelante), `geometria` |
 | `clientes` | Las empresas a las que pertenecen los usuarios y los vehículos (hoy `sofasa`). El primero activo por `orden` es el cliente por defecto de lo que se crea sin cliente explícito | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `estados-sofasa` | Los estados de las órdenes Sofasa: el `codigo` es el `status_code` **real** de la orden y el `nombre`, su etiqueta (ver «Estados Sofasa» abajo). Empieza con los `status_code` que ya tienen las órdenes | `id`, `codigo`, `nombre`, `orden`, `activo` |
 
-`codigo` es la **clave estable** (minúsculas, números y `_`, máximo 30 caracteres): es lo que viaja en el resto de la API
+**Estados Sofasa (`estados-sofasa`).** `GET /api/sofasa/ordenes` sigue devolviendo `status_code` **sin traducir**; el portal lo traduce con este catálogo (`items.find(i => i.codigo === orden.status_code)?.nombre`; si el estado no está, muestra el código). A diferencia de los demás
+catálogos, su `codigo` **no se limita a minúsculas y `_`**: es el texto que trae la orden del origen, y se guarda tal cual (recortado, con sus mayúsculas, hasta 100 caracteres y sin saltos de línea); es único sin distinguir mayúsculas, así que `ENTREGADA` y `entregada` son el mismo. Las demás
+reglas son las de los otros catálogos: lo crean y editan `admin`, `super_admin` y `coordinador_calidad` (`403` los demás), el `codigo` no se cambia después (`400`), `nombre` es obligatorio (máx. 100) y `orden` un entero ≥ 0, un valor que alguna orden usa **no se borra** (`409`, se inactiva con `activo: false`) y cada cambio queda en la auditoría
+(`catalogo.estados-sofasa.crear|actualizar|eliminar`). El `status_code` de una orden sigue siendo texto libre: la ingesta del ETL **no** falla por un estado que aún no está en el catálogo.
+
+`codigo` es la **clave estable** (minúsculas, números y `_`, máximo 30 caracteres; los de `estados-sofasa`, ver arriba): es lo que viaja en el resto de la API
 (`proceso`, `clase_dano`, `tamano_dano`) y no cambia nunca. `nombre` es la etiqueta que se muestra y sí puede cambiar. Los valores
 vienen ordenados por `orden`.
 
