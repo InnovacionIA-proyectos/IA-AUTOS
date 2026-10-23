@@ -48,7 +48,8 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
         var tipo = f.Tipo;
         var vin = f.Vin;
         var vinExacto = vin?.Length == clsVin.LONGITUD_ISO;
-        var movilizados = contexto.Set<clsViajeCompleto>().Select(m => m.VehiculoId);
+        // Movilizada = alguna fila de tblViajeVehiculos con Completa (la regla de vwViajesCompletos, guardada en la fila por los triggers).
+        var movilizados = contexto.ViajeVehiculos.Where(vv => vv.Completa).Select(vv => vv.VehiculoId);
         var consulta = contexto.Vehiculos.AsNoTracking().AsQueryable();
         if (soloDeCliente is { } clienteId)
         {
@@ -88,7 +89,8 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
 
         if (f.EstadoUnidad is not null)
         {
-            consulta = consulta.Where(v => contexto.ViajeVehiculos.Any(vv => vv.VehiculoId == v.Id && vv.EstadoUnidad == f.EstadoUnidad));
+            var conEstado = contexto.ViajeVehiculos.Where(vv => vv.EstadoUnidad == f.EstadoUnidad).Select(vv => vv.VehiculoId);
+            consulta = consulta.Where(v => conEstado.Contains(v.Id));
         }
 
         if (f.Desde is not null)
@@ -101,13 +103,15 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
             consulta = consulta.Where(v => v.CreatedAt <= f.Hasta);
         }
 
+        var conHallazgos = from h in contexto.Hallazgos
+                           join i in contexto.Inspecciones on h.InspeccionId equals i.Id
+                           join e in contexto.Etapas on i.EtapaId equals e.Id
+                           select e.VehiculoId;
         consulta = tipo switch
         {
             clsTipoListado.MOVILIZADOS => consulta.Where(v => movilizados.Contains(v.Id)),
             clsTipoListado.PENDIENTES => consulta.Where(v => !movilizados.Contains(v.Id)),
-            _ => consulta.Where(v => contexto.Etapas.Any(e => e.VehiculoId == v.Id
-                && contexto.Inspecciones.Any(i => i.EtapaId == e.Id
-                    && contexto.Hallazgos.Any(h => h.InspeccionId == i.Id)))),
+            _ => consulta.Where(v => conHallazgos.Contains(v.Id)),
         };
 
         var total = await consulta.CountAsync(ct);
@@ -120,26 +124,34 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
             .Campo("activo", v => v.Activo)
             .Campo("created_at", v => v.CreatedAt)
             .Aplicar(orden, q => q.OrderBy(v => v.Vin), q => q.ThenBy(v => v.Id));
-        var filas = await ordenada
+        var filasPagina = await ordenada
             .Skip(pagina.Desplazamiento)
             .Take(pagina.Tamano)
-            .Select(v => new ListadoVehiculoDto(
-                v.Id,
-                v.Vin,
-                v.Marca,
-                v.Modelo,
-                v.Color,
-                v.Operacion,
-                v.Activo,
-                contexto.Etapas.Count(e => e.VehiculoId == v.Id),
-                contexto.Etapas.Count(e => e.VehiculoId == v.Id
-                    && contexto.Inspecciones.Any(i => i.EtapaId == e.Id && i.Estado == clsEstadoInspeccion.CERRADA)),
-                (from e in contexto.Etapas
-                 join i in contexto.Inspecciones on e.Id equals i.EtapaId
-                 join h in contexto.Hallazgos on i.Id equals h.InspeccionId
-                 where e.VehiculoId == v.Id
-                 select h.Id).Count()))
+            .Select(v => new { v.Id, v.Vin, v.Marca, v.Modelo, v.Color, v.Operacion, v.Activo })
             .ToListAsync(ct);
+
+        // Los conteos de la pagina se piden aparte, una consulta por tabla agrupada por vehiculo (y no una subconsulta por cada fila).
+        var ids = filasPagina.Select(v => v.Id).ToList();
+        var etapas = await contexto.Etapas.Where(e => ids.Contains(e.VehiculoId))
+            .GroupBy(e => e.VehiculoId).Select(g => new { VehiculoId = g.Key, Total = g.Count() }).ToListAsync(ct);
+        var conInformeCerrado = await (from e in contexto.Etapas
+                                       join i in contexto.Inspecciones on e.Id equals i.EtapaId
+                                       where ids.Contains(e.VehiculoId) && i.Estado == clsEstadoInspeccion.CERRADA
+                                       select new { e.VehiculoId, EtapaId = e.Id }).Distinct().ToListAsync(ct);
+        var novedades = await (from e in contexto.Etapas
+                               join i in contexto.Inspecciones on e.Id equals i.EtapaId
+                               join h in contexto.Hallazgos on i.Id equals h.InspeccionId
+                               where ids.Contains(e.VehiculoId)
+                               group h by e.VehiculoId into g
+                               select new { VehiculoId = g.Key, Total = g.Count() }).ToListAsync(ct);
+        var porEtapas = etapas.ToDictionary(x => x.VehiculoId, x => x.Total);
+        var porCompletas = conInformeCerrado.GroupBy(x => x.VehiculoId).ToDictionary(g => g.Key, g => g.Count());
+        var porNovedades = novedades.ToDictionary(x => x.VehiculoId, x => x.Total);
+        var filas = filasPagina
+            .Select(v => new ListadoVehiculoDto(
+                v.Id, v.Vin, v.Marca, v.Modelo, v.Color, v.Operacion, v.Activo,
+                porEtapas.GetValueOrDefault(v.Id), porCompletas.GetValueOrDefault(v.Id), porNovedades.GetValueOrDefault(v.Id)))
+            .ToList();
         return (filas, total);
     }
 

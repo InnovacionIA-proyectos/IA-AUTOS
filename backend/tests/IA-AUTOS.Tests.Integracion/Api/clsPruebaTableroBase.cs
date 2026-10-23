@@ -114,6 +114,8 @@ public abstract class clsPruebaTableroBase(clsBaseDatosFixture bd) : clsPruebaAp
                 (NEWID(), '44444444-0000-0000-0000-000000000001', @frente, 'golpe', '5_10cm', 'v1');
             ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
+            -- Con los triggers apagados no se mantuvo Completa: se recalcula con la regla de la vista.
+            EXEC dbo.usp_RecalcularCompleta;
             """,
             ("@sof", sofasa), ("@otro", otro), ("@cond", conductor.Id), ("@i1", i1.Id), ("@i2", i2.Id), ("@origen", origen), ("@destino", destino), ("@zona7", zona7), ("@t0", despacho));
         return (dias, sofasa, otro, conductor.Id, i1.Id, i2.Id, origen, destino);
