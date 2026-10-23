@@ -18,7 +18,15 @@ import '../support/dobles_viajes.dart';
 ///
 /// La superficie es alta a propósito: el `ListView` de la captura es perezoso y en una pantalla de teléfono no
 /// construye el campo de notas ni el botón de cierre, que son justo lo que hay que mirar.
-Future<Arnes> abrir(WidgetTester tester, ViajesRepositorioFalso viajes, {String? viajeId = 'v1', Arnes? arnes}) async {
+Future<Arnes> abrir(
+  WidgetTester tester,
+  ViajesRepositorioFalso viajes, {
+  String? viajeId = 'v1',
+  Arnes? arnes,
+  List<Map<String, dynamic>> vistas = const [],
+  String proceso = 'Cargue',
+  String procesoCodigo = 'cargue',
+}) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final usado = arnes ?? Arnes();
@@ -32,8 +40,8 @@ Future<Arnes> abrir(WidgetTester tester, ViajesRepositorioFalso viajes, {String?
         // el celular tras el primer ingreso. Sin ellos el cierre se bloquea y no se llega al desenlace.
         catalogosRepositorioProvider.overrideWithValue(
           CatalogosRepositorioFalso()
-            ..guardado = catalogosCon('Golpe')
-            ..remoto = catalogosCon('Golpe'),
+            ..guardado = catalogosCon('Golpe', vistas: vistas)
+            ..remoto = catalogosCon('Golpe', vistas: vistas),
         ),
       ],
       child: MaterialApp(
@@ -41,7 +49,7 @@ Future<Arnes> abrir(WidgetTester tester, ViajesRepositorioFalso viajes, {String?
         home: CapturaPage(
           vin: 'VIN00000000000001',
           etapaId: 'e1',
-          proceso: 'Cargue',
+          proceso: procesoCodigo,
           momento: Momento.salida,
           viajeId: viajeId,
         ),
@@ -164,5 +172,45 @@ void main() {
       expect(find.textContaining('Cola'), findsOneWidget, reason: 'dónde recuperarlo');
     });
 
+  });
+
+  group('el checklist de vistas', () {
+    testWidgets('lista las vistas del catálogo, con su condición', (tester) async {
+      await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'), vistas: vistasDePrueba);
+
+      expect(find.text('Fotos de la inspección'), findsOneWidget);
+      expect(find.text('Frontal'), findsOneWidget);
+      expect(find.text('Piezas en el baúl'), findsOneWidget);
+      expect(find.text('Solo si hay faltante o daño'), findsOneWidget,
+          reason: 'la adicional dice cuándo se toma; la obligatoria no lo necesita');
+      expect(find.widgetWithText(TextButton, 'Tomar'), findsNWidgets(2));
+    });
+
+    // Sin catálogo no se inventa un checklist: pedir vistas que nadie configuró sería peor que no pedir ninguna.
+    testWidgets('sin vistas descargadas no se inventan', (tester) async {
+      await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'));
+
+      expect(find.text('Fotos de la inspección'), findsNothing);
+      expect(find.widgetWithText(TextButton, 'Tomar'), findsNothing);
+    });
+
+    // En Transporte la salida y la llegada son el registro del conductor: lo que se exige es el GPS, no 7 fotos.
+    testWidgets('en Transporte no hay checklist y se dice por qué', (tester) async {
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'),
+        vistas: vistasDePrueba,
+        procesoCodigo: 'transporte',
+      );
+
+      expect(find.text('Fotos de la inspección'), findsNothing);
+      expect(find.textContaining('no pide fotos por vista'), findsOneWidget);
+    });
+
+    testWidgets('el título dice qué momento se está capturando', (tester) async {
+      await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'), vistas: vistasDePrueba);
+
+      expect(find.text('Inspección de salida · cargue'), findsOneWidget);
+    });
   });
 }

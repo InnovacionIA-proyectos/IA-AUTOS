@@ -19,10 +19,12 @@ import '../../vehiculos/domain/coords_diagrama.dart';
 import '../../vehiculos/domain/etiquetas.dart';
 import '../../vehiculos/presentation/diagrama_vehiculo.dart';
 import '../../viajes/providers.dart';
+import '../domain/checklist_vistas.dart';
 import '../domain/foto_local.dart';
 import '../domain/hallazgo_local.dart';
 import '../domain/reglas_informe.dart';
 import 'camara_page.dart';
+import 'nota_foto.dart';
 import 'selector_dano.dart';
 
 /// Captura de un informe: datos del transporte, novedades sobre el diagrama, fotos selladas y notas.
@@ -92,16 +94,39 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     }
   }
 
+  /// Toma la foto de una vista del checklist.
+  ///
   /// Cada foto lleva su PROPIO sello de fecha y ubicación (el de cuando se tomó), no el del cierre del informe.
-  Future<void> _agregarFoto() async {
-    final temporal = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const CamaraPage()));
+  /// Repetir una vista no borra lo anterior: se agrega otra foto de la misma vista y la última es la que cuenta.
+  Future<void> _tomarFoto(VistaChecklist vista) async {
+    final temporal = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => CamaraPage(titulo: vista.nombre, guia: guiaDe(vista.codigo))),
+    );
     if (temporal == null || !mounted) return;
+
+    // Las adicionales exigen nota: sin ella el servidor responde 400 y el informe moriría al enviarse.
+    String? nota;
+    if (!vista.obligatoria) {
+      nota = await pedirNotaDeFoto(context, vista: vista.nombre);
+      if (nota == null || !mounted) return;
+    }
+
     setState(() => _guardandoFoto = true);
     try {
       final ruta = await ref.read(servicioFotosProvider).guardar(temporal);
-      final pos = await ref.read(servicioUbicacionProvider).obtenerRapida() ?? _gps;
+      final pos = await ref.read(servicioUbicacionProvider).obtenerRapida();
       if (!mounted) return;
-      setState(() => _fotos.add(FotoLocal(ruta: ruta, selloFecha: DateTime.now().toUtc().toIso8601String(), selloLat: pos?.lat, selloLng: pos?.lng)));
+      setState(() {
+        _fotos.add(FotoLocal(
+          ruta: ruta,
+          selloFecha: DateTime.now().toUtc().toIso8601String(),
+          // Sin GPS no se hereda el del informe: la foto queda marcada «sin ubicación» y hay que repetirla.
+          selloLat: pos?.lat,
+          selloLng: pos?.lng,
+          vistaId: vista.id,
+          nota: nota,
+        ));
+      });
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo guardar la foto. Inténtalo de nuevo.')));
     } finally {
@@ -109,15 +134,8 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     }
   }
 
-  Future<void> _quitarFoto(int indice) async {
-    final foto = _fotos[indice];
-    setState(() => _fotos.removeAt(indice));
-    try {
-      await File(foto.ruta).delete();
-    } catch (_) {
-      // Un archivo huérfano no afecta al informe.
-    }
-  }
+  // Quitar una foto ya no existe: una vista se repite, y repetirla conserva la anterior (la última cuenta). Lo
+  // que se tomó en el patio no se borra desde aquí.
 
   /// Hay con que registrar una novedad. Si no, no se puede cerrar el informe: uno cerrado sin hallazgos dice
   /// que el vehiculo venia sano.
@@ -222,6 +240,8 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     final bloqueo = _bloqueo;
     final catalogos = ref.watch(catalogosProvider);
     final descargandoCatalogos = ref.watch(catalogosControllerProvider).fase == FaseCatalogos.cargando;
+    // El checklist sale del catálogo y depende de la etapa: Transporte no pide vistas.
+    final checklist = pideChecklist(widget.proceso) ? checklistDeVistas(catalogos) : const <VistaChecklist>[];
 
     return Scaffold(
       appBar: AppBar(title: Text('${etiquetar(etiquetaMomento, widget.momento)} · ${widget.proceso}')),
@@ -264,60 +284,27 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                     ),
                 ],
                 const SizedBox(height: Espacio.lg),
-                Text('Fotos ${_hallazgos.isNotEmpty ? '(obligatorias por la novedad)' : '(opcionales)'}', style: tema.titleMedium),
-                Text('Puedes tomar todas las que necesites; una novedad puede requerir varias.', style: tema.bodySmall),
-                const SizedBox(height: Espacio.md),
-                Wrap(
-                  spacing: Espacio.sm,
-                  runSpacing: Espacio.sm,
-                  children: [
-                    for (var i = 0; i < _fotos.length; i++)
-                      Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          ClipRRect(borderRadius: BorderRadius.circular(10), child: Image.file(File(_fotos[i].ruta), width: 92, height: 80, fit: BoxFit.cover, semanticLabel: 'Foto ${i + 1}')),
-                          Positioned(
-                            top: -6,
-                            right: -6,
-                            child: Semantics(
-                              button: true,
-                              label: 'Quitar foto ${i + 1}',
-                              child: GestureDetector(
-                                onTap: () => _quitarFoto(i),
-                                child: Container(
-                                  width: 26,
-                                  height: 26,
-                                  decoration: const BoxDecoration(color: Colores.peligro, shape: BoxShape.circle),
-                                  child: const Icon(Icons.close, size: 16, color: Colors.white),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    Semantics(
-                      button: true,
-                      label: 'Agregar foto',
-                      child: InkWell(
-                        onTap: _guardandoFoto ? null : _agregarFoto,
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          width: 92,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            color: Colores.superficie,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colores.primario),
-                          ),
-                          child: const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [Icon(Icons.photo_camera_outlined, color: Colores.primario), Text('Agregar', style: TextStyle(color: Colores.primario, fontSize: 13))],
-                          ),
-                        ),
-                      ),
+                if (checklist.isEmpty)
+                  Text(
+                    'Esta etapa no pide fotos por vista; basta la ubicación del registro.',
+                    style: tema.bodySmall,
+                  )
+                else ...[
+                  Text('Fotos de la inspección', style: tema.titleMedium),
+                  Text(
+                    'Las obligatorias se piden siempre. Las adicionales, solo si hay faltante o daño, y con su nota.',
+                    style: tema.bodySmall,
+                  ),
+                  const SizedBox(height: Espacio.md),
+                  for (final vista in checklist) ...[
+                    _FilaVista(
+                      vista: vista,
+                      foto: _fotos.ultimaDeLaVista(vista.id),
+                      alTomar: _guardandoFoto ? null : () => _tomarFoto(vista),
                     ),
+                    const SizedBox(height: Espacio.sm),
                   ],
-                ),
+                ],
                 const SizedBox(height: Espacio.lg),
                 TextField(
                   controller: _notas,
@@ -444,6 +431,61 @@ class _FilaUbicacion extends StatelessWidget {
           TextButton(onPressed: alReintentar, child: const Text('Reintentar')),
           if (error?.permanente ?? false) TextButton(onPressed: alAbrirAjustes, child: const Text('Abrir ajustes')),
         ]),
+      ],
+    );
+  }
+}
+
+/// Una fila del checklist: qué vista es, si ya tiene foto y cómo está esa foto.
+class _FilaVista extends StatelessWidget {
+  const _FilaVista({required this.vista, required this.foto, required this.alTomar});
+
+  final VistaChecklist vista;
+
+  /// La última foto de la vista; null si todavía no hay.
+  final FotoLocal? foto;
+  final VoidCallback? alTomar;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    final actual = foto;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (actual == null)
+          Container(
+            width: 56,
+            height: 48,
+            decoration: BoxDecoration(color: Colores.superficie, borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Icons.photo_camera_outlined, size: 20, color: Colores.textoSecundario),
+          )
+        else
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.file(File(actual.ruta), width: 56, height: 48, fit: BoxFit.cover, semanticLabel: 'Foto de ${vista.nombre}'),
+          ),
+        const SizedBox(width: Espacio.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(vista.nombre, style: tema.bodyMedium?.copyWith(color: Colores.textoPrimario)),
+              if (!vista.obligatoria && actual == null)
+                Text('Solo si hay faltante o daño', style: tema.bodySmall)
+              else if (actual != null && actual.sinUbicacion)
+                // El sello es lo que da valor a la evidencia: sin ubicación hay que repetirla antes de cerrar.
+                Text('Sin ubicación: repítela', style: tema.bodySmall?.copyWith(color: Colores.peligro))
+              else if (actual?.nota case final nota? when nota.isNotEmpty)
+                Text(nota, style: tema.bodySmall),
+            ],
+          ),
+        ),
+        const SizedBox(width: Espacio.sm),
+        TextButton(
+          onPressed: alTomar,
+          child: Text(actual == null ? 'Tomar' : 'Repetir'),
+        ),
       ],
     );
   }

@@ -5,9 +5,13 @@ import '../../../core/tema/tema.dart';
 
 /// Cámara a pantalla completa. Devuelve la ruta temporal de la foto tomada o null si se cancela.
 class CamaraPage extends StatefulWidget {
-  const CamaraPage({super.key, this.titulo = 'Nueva foto'});
+  const CamaraPage({super.key, this.titulo = 'Nueva foto', this.guia});
 
   final String titulo;
+
+  /// Imagen de encuadre de la vista que se va a tomar (`assets/guias/...`). Null en las vistas que no tienen:
+  /// entonces queda solo la etiqueta, que ya dice qué fotografiar.
+  final String? guia;
 
   @override
   State<CamaraPage> createState() => _EstadoCamaraPage();
@@ -100,7 +104,25 @@ class _EstadoCamaraPage extends State<CamaraPage> {
     if (controlador == null) return const Center(child: CircularProgressIndicator(color: Colors.white));
     return Column(
       children: [
-        Expanded(child: Center(child: CameraPreview(controlador))),
+        Expanded(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Center(child: CameraPreview(controlador)),
+              // Guía de encuadre encima de la vista previa: se ve el dibujo y la foto a la vez, para igualar el
+              // ángulo. Translúcida y sin capturar toques, que lo que se toca es el obturador.
+              if (widget.guia case final guia?)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: 0.35,
+                      child: Image.asset(guia, fit: BoxFit.contain, semanticLabel: 'Guía de encuadre: ${widget.titulo}'),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
         Container(
           color: Colors.black,
           padding: const EdgeInsets.symmetric(vertical: Espacio.xl),

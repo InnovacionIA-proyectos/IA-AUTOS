@@ -1,7 +1,14 @@
 import 'package:traza_autos/features/catalogos/data/catalogos_repositorio.dart';
 import 'package:traza_autos/features/catalogos/domain/catalogos.dart';
 
-Catalogos catalogosCon(String nombre, {String version = 'v1', String usuarioId = 'u1'}) => Catalogos.desdeRespuesta(
+Catalogos catalogosCon(
+  String nombre, {
+  String version = 'v1',
+  String usuarioId = 'u1',
+  /// Vistas de foto del checklist. Vacío = la app no tiene de dónde armarlo, que es el caso del primer arranque.
+  List<Map<String, dynamic>> vistas = const [],
+}) =>
+    Catalogos.desdeRespuesta(
       {
         'version': version,
         'catalogos': {
@@ -11,10 +18,17 @@ Catalogos catalogosCon(String nombre, {String version = 'v1', String usuarioId =
           Catalogo.tamanosDano: [
             {'id': 'i2', 'codigo': 'mas_20cm', 'nombre': 'Más de 20 cm', 'orden': 1, 'activo': true},
           ],
+          Catalogo.vistasFoto: vistas,
         },
       },
       usuarioId: usuarioId,
     );
+
+/// Dos vistas del checklist: una obligatoria y una adicional, que es lo que distingue el comportamiento.
+const vistasDePrueba = [
+  {'id': 'v-frontal', 'codigo': 'frontal', 'nombre': 'Frontal', 'orden': 1, 'activo': true, 'obligatoria': true},
+  {'id': 'v-baul', 'codigo': 'baul', 'nombre': 'Piezas en el baúl', 'orden': 2, 'activo': true, 'obligatoria': false},
+];
 
 class CatalogosRepositorioFalso implements CatalogosRepositorio {
   Catalogos? guardado;
