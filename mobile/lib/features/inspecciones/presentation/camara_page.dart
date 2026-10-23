@@ -106,16 +106,24 @@ class _EstadoCamaraPage extends State<CamaraPage> {
       children: [
         Expanded(
           child: Stack(
-            alignment: Alignment.center,
             children: [
-              Center(child: CameraPreview(controlador)),
-              // Guía de encuadre encima de la vista previa: se ve el dibujo y la foto a la vez, para igualar el
-              // ángulo. Translúcida y sin capturar toques, que lo que se toca es el obturador.
+              Positioned.fill(child: Center(child: CameraPreview(controlador))),
+              // Guía de encuadre como referencia en una esquina, no superpuesta a la vista previa: los dibujos
+              // tienen fondo opaco, así que encima lavaban la cámara en vez de guiar. Se mira el dibujo, se
+              // busca ese ángulo y se dispara.
               if (widget.guia case final guia?)
-                Positioned.fill(
+                Positioned(
+                  top: Espacio.md,
+                  right: Espacio.md,
                   child: IgnorePointer(
-                    child: Opacity(
-                      opacity: 0.35,
+                    child: Container(
+                      width: 128,
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white),
+                      ),
                       child: Image.asset(guia, fit: BoxFit.contain, semanticLabel: 'Guía de encuadre: ${widget.titulo}'),
                     ),
                   ),

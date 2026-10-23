@@ -70,6 +70,10 @@ List<VistaChecklist> adicionalesDe(List<VistaChecklist> checklist) => [...checkl
 /// Salen del prototipo de inspección de carrocería. Frontal y trasera no tienen: se toman sin guía, con la
 /// etiqueta sola. «Vista superior» tampoco todavía; en el prototipo solo existe dentro de la ficha de daños, con
 /// la numeración de cuadrantes, que es otra cosa (el panel de daño es S6-HU-01).
+///
+/// Se muestran como **referencia en una esquina**, no superpuestas a la vista previa: los dibujos tienen fondo
+/// opaco y encima lavaban la cámara en vez de guiar. Para superponerlas de verdad harían falta PNG con fondo
+/// transparente y sin el rótulo impreso.
 const guiasDeVista = <String, String>{
   'lateral_izquierda': 'assets/guias/lateral_izquierda.png',
   'lateral_derecha': 'assets/guias/lateral_derecha.png',
