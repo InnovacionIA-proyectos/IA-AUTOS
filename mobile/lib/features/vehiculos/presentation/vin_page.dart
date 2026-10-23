@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/proveedores.dart';
 import '../../../core/errores/error_api.dart';
 import '../../../core/tema/tema.dart';
+import '../../../core/ui/visor_imagen.dart';
 import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
 import '../../auth/presentation/auth_controller.dart';
@@ -164,17 +165,24 @@ class _UltimoInforme extends ConsumerWidget {
                 scrollDirection: Axis.horizontal,
                 itemCount: fotos.length,
                 separatorBuilder: (_, _) => const SizedBox(width: Espacio.sm),
-                itemBuilder: (_, i) => ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: Image.network(
-                    fotos[i],
-                    width: 88,
-                    height: 88,
-                    fit: BoxFit.cover,
-                    // Si la API no sirve las imágenes públicamente, se piden con la sesión.
-                    headers: token == null ? null : {'Authorization': 'Bearer $token'},
-                    semanticLabel: 'Foto de evidencia del informe',
-                    errorBuilder: (_, _, _) => Container(width: 88, height: 88, color: Colores.borde, child: const Icon(Icons.broken_image_outlined)),
+                itemBuilder: (_, i) => GestureDetector(
+                  onTap: () => mostrarVisorImagen(
+                    context,
+                    imagen: NetworkImage(fotos[i], headers: token == null ? null : {'Authorization': 'Bearer $token'}),
+                    titulo: 'Evidencia ${i + 1} de ${fotos.length}',
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.network(
+                      fotos[i],
+                      width: 88,
+                      height: 88,
+                      fit: BoxFit.cover,
+                      // Si la API no sirve las imágenes públicamente, se piden con la sesión.
+                      headers: token == null ? null : {'Authorization': 'Bearer $token'},
+                      semanticLabel: 'Foto de evidencia del informe',
+                      errorBuilder: (_, _, _) => Container(width: 88, height: 88, color: Colores.borde, child: const Icon(Icons.broken_image_outlined)),
+                    ),
                   ),
                 ),
               ),

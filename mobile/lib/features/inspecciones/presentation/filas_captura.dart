@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../core/tema/tema.dart';
+import '../../../core/ui/visor_imagen.dart';
 import '../domain/checklist_vistas.dart';
 import '../domain/foto_local.dart';
 import '../domain/hallazgo_local.dart';
@@ -36,9 +37,13 @@ class FilaVista extends StatelessWidget {
             child: const Icon(Icons.photo_camera_outlined, size: 20, color: Colores.textoSecundario),
           )
         else
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.file(File(actual.ruta), width: 56, height: 48, fit: BoxFit.cover, semanticLabel: 'Foto de ${vista.nombre}'),
+          // Se puede abrir: a 56 px no se ve si la foto salió movida u oscura.
+          GestureDetector(
+            onTap: () => mostrarVisorImagen(context, imagen: FileImage(File(actual.ruta)), titulo: vista.nombre),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.file(File(actual.ruta), width: 56, height: 48, fit: BoxFit.cover, semanticLabel: 'Foto de ${vista.nombre}'),
+            ),
           ),
         const SizedBox(width: Espacio.sm),
         Expanded(
@@ -97,14 +102,21 @@ class FilaHallazgo extends StatelessWidget {
         if (hallazgo.foto case final foto?)
           Padding(
             padding: const EdgeInsets.only(right: Espacio.sm),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.file(
-                File(foto.ruta),
-                width: 44,
-                height: 38,
-                fit: BoxFit.cover,
-                semanticLabel: 'Foto de la novedad en ${hallazgo.parte}',
+            child: GestureDetector(
+              onTap: () => mostrarVisorImagen(
+                context,
+                imagen: FileImage(File(foto.ruta)),
+                titulo: 'Novedad en ${hallazgo.parte}',
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(
+                  File(foto.ruta),
+                  width: 44,
+                  height: 38,
+                  fit: BoxFit.cover,
+                  semanticLabel: 'Foto de la novedad en ${hallazgo.parte}',
+                ),
               ),
             ),
           ),

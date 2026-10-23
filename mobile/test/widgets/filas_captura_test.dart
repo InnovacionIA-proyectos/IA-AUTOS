@@ -135,4 +135,48 @@ void main() {
       expect(find.byType(Image), findsNothing);
     });
   });
+
+  // A 56 px no se distingue si una foto salió movida u oscura, y eso se descubre cuando ya no se tiene el
+  // vehículo delante. Tocarla la abre en grande.
+  group('abrir la foto', () {
+    testWidgets('tocar la miniatura de una vista abre el visor', (tester) async {
+      await montar(
+        tester,
+        const FilaVista(
+          vista: vistaObligatoria,
+          foto: FotoLocal(ruta: 'frontal.jpg', selloFecha: '2026-01-02T10:00:00.000Z', selloLat: 6.2, selloLng: -75.5),
+          alTomar: null,
+        ),
+      );
+
+      await tester.tap(find.bySemanticsLabel('Foto de Frontal'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      expect(find.text('Frontal'), findsWidgets);
+    });
+
+    testWidgets('tocar la foto de una novedad también', (tester) async {
+      await montar(
+        tester,
+        FilaHallazgo(
+          hallazgo: const HallazgoLocal(
+            parte: 'Capot',
+            clase: 'golpe',
+            tamano: '1_5cm',
+            foto: FotoLocal(ruta: 'dano.jpg', selloFecha: '2026-01-02T10:00:00.000Z'),
+          ),
+          clase: 'Golpe',
+          tamano: 'De 1 a 5 cm',
+          alQuitar: () {},
+        ),
+      );
+
+      await tester.tap(find.bySemanticsLabel('Foto de la novedad en Capot'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      expect(find.text('Novedad en Capot'), findsOneWidget);
+    });
+  });
 }
