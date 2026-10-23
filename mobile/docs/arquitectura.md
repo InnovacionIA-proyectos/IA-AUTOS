@@ -66,6 +66,27 @@ están asignados, y de ahí salen las unidades que pueden abrir.
 - La captura ya no pide placa, tráiler ni conductor: salen del viaje de la etapa (`viaje_id`) y el servidor los toma
   de ahí. Si el viaje no está en la copia se pide suelto; si tampoco se puede, la captura sigue siendo posible.
 
+## La inspección: dos momentos y un checklist
+
+Cada etapa que exige inspección tiene **dos**: salida y llegada. Son dos registros distintos y el servidor solo
+acepta esos dos valores de `momento`. La tarjeta de la etapa muestra una fila por momento, con su estado y su
+fecha de cierre.
+
+- **La salida espera a la etapa anterior**, que debe tener su llegada cerrada y su transferencia con tipo de
+  cierre (firmada, con reservas o sin firma; que esté «firmada» no alcanza). La app lo calcula con lo que ya
+  tiene en el inventario y deshabilita el botón diciendo por qué, con los mismos códigos de motivo que manda el
+  servidor en el `details` de su 409, para que el texto sea el mismo lo decida quien lo decida.
+- **Las fotos salen del catálogo `vistas-foto`**, no de una lista en el código: las obligatorias se piden
+  siempre y las adicionales solo si hay faltante o daño, con nota obligatoria. La cámara muestra la guía de
+  encuadre de la vista encima de la vista previa; frontal, trasera y —por ahora— superior no tienen guía.
+- **Cada foto lleva su propio sello**: fecha, ubicación, precisión y equipo. Sin GPS **no hereda** la del
+  informe: queda marcada «sin ubicación» y hay que repetirla, y repetirla no borra la anterior.
+- **Una novedad va con su foto**, en la misma llamada. Sin ella el servidor responde 400.
+- Las reglas de cierre son las del servidor, comprobadas antes de encolar: una foto por vista obligatoria, una
+  por hallazgo, ninguna sin ubicación. En Transporte no hay checklist y solo se exige la ubicación del registro.
+  La precisión baja (más de 30 m) **avisa pero no bloquea**: en un patio techado el GPS siempre es malo.
+- **El conductor no captura un cargue con personal de apoyo**: lo inspecciona ese personal y él solo firma.
+
 ## Catálogos maestros
 
 Etapas, lugares, clases y tamaños de daño, niveles de severidad, vistas de foto y cuadrantes **no son listas fijas**:

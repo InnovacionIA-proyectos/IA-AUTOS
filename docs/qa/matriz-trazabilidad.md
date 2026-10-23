@@ -120,6 +120,24 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
 
 | ID | Decisión/regla | Prueba | Estado |
 |---|---|---|---|
+| S5-HU-24.6/24.7/24.8/24.9 (Mobile) | Checklist de vistas desde el catálogo con guía de cámara; foto por hallazgo; reglas de cierre iguales a las del servidor; evidencia completa y multipart con hash; dos momentos por etapa con bloqueo del 409 | `mobile/test/inspecciones/checklist_vistas_test.dart`, `reglas_informe_test.dart`, `mobile/test/sync/gateway_informes_api_test.dart`, `procesador_cola_test.dart`, `mobile/test/vehiculos/inventario_test.dart`, `mobile/test/widgets/captura_page_test.dart` | Implementadas en `S5-HU-21-23`; **sin probar en dispositivo** |
+
+**Pendientes anotados de estas cuatro:**
+
+- **Falta la imagen guía de la «Vista superior».** Las otras cuatro salieron del prototipo; la superior solo
+  existe dentro de la ficha de daños, con la numeración de cuadrantes, que es el panel de daño de S6-HU-01 y no
+  una guía de encuadre. Mientras tanto esa vista se toma sin guía, como frontal y trasera.
+- **El umbral de precisión baja (30 m) es valor inicial**, pendiente de confirmar con Calidad. Está en un solo
+  sitio: `precisionBajaMetros` en `reglas_informe.dart`.
+- **Falta la compresión de las fotos** que pide el título de S5-HU-24.8: necesita una dependencia nueva y hoy no
+  urge, porque la cámara captura a 720p, muy por debajo del límite de 10 MB.
+- **El filtro de vistas por tipo de vehículo admite dos lecturas** y se tomó la prudente (las sin tipo valen para
+  cualquiera y se suman a las del tipo); con la estricta, un VIN con tipo se quedaría sin vistas y el checklist
+  saldría vacío. Hoy es teórico: el inventario no trae el tipo del VIN.
+
+
+| ID | Decisión/regla | Prueba | Estado |
+|---|---|---|---|
 | S5-HU-24.1 | `tblEvidencias`: vista, hash SHA-256, sello del servidor, GPS obligatorio | `MigracionInspeccionesTests.cs` | Verificado con prueba real |
 | S5-HU-24.2 | `momento` restringido a salida/llegada; versión y corrección referenciada | `InspeccionesApiTests.Los_momentos_retirados_ya_no_se_aceptan`, `Corregir_crea_una_version_nueva_que_referencia_a_la_anterior_y_la_anterior_no_cambia` | Verificado con prueba real (ver también §PR #146 abajo) |
 | S5-HU-24.4 | 409 `ETAPA_PREVIA_SIN_CIERRE` si la llegada anterior no está cerrada | `InspeccionesApiTests.La_salida_exige_que_la_llegada_de_la_etapa_anterior_este_cerrada` | Verificado con prueba real |

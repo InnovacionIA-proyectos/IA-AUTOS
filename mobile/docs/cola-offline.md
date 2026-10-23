@@ -7,11 +7,13 @@ ver `test/sync/procesador_cola_test.dart`) y añade dos mejoras.
 
 Al cerrar un informe o registrar una firma NO se llama a la API directamente: se guarda un *job* en SQLite (Drift,
 tabla `jobs`) y, si hay señal estable, se sincroniza de inmediato. Las fotos se guardan como archivos en el almacenamiento
-privado de la app (no en base64 dentro de la base de datos).
+privado de la app (no en base64 dentro de la base de datos) y se suben como **multipart**: base64 infla el cuerpo un
+tercio y obliga a tener la foto entera en memoria dos veces. El servidor devuelve el **hash** de cada archivo; la app lo
+guarda y lo reenvía con la evidencia, que es como se detecta que llegó dañado.
 
 | Job | Pasos al enviarlo |
 |---|---|
-| Informe | crear inspección, subir cada foto y crear su evidencia, crear cada hallazgo, cerrar |
+| Informe | crear inspección, subir cada foto y crear su evidencia, subir la foto de cada hallazgo y crear el hallazgo con ella, cerrar |
 | Firma | firmar la transferencia (entrega y/o recibe) |
 
 ## Reglas de procesamiento
