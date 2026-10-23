@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,6 +22,7 @@ import '../domain/foto_local.dart';
 import '../domain/hallazgo_local.dart';
 import '../domain/reglas_informe.dart';
 import 'camara_page.dart';
+import 'filas_captura.dart';
 import 'nota_foto.dart';
 import 'selector_dano.dart';
 
@@ -293,19 +292,11 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                 if (_hallazgos.isNotEmpty) ...[
                   const SizedBox(height: Espacio.md),
                   for (var i = 0; i < _hallazgos.length; i++)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '• ${_hallazgos[i].parte}: ${catalogos.etiqueta(Catalogo.clasesDano, _hallazgos[i].clase)} (${catalogos.etiqueta(Catalogo.tamanosDano, _hallazgos[i].tamano)})',
-                            style: tema.bodySmall?.copyWith(color: Colores.textoPrimario),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => setState(() => _hallazgos.removeAt(i)),
-                          child: Semantics(label: 'Quitar hallazgo ${_hallazgos[i].parte}', child: const Text('Quitar', style: TextStyle(color: Colores.peligro))),
-                        ),
-                      ],
+                    FilaHallazgo(
+                      hallazgo: _hallazgos[i],
+                      clase: catalogos.etiqueta(Catalogo.clasesDano, _hallazgos[i].clase),
+                      tamano: catalogos.etiqueta(Catalogo.tamanosDano, _hallazgos[i].tamano),
+                      alQuitar: () => setState(() => _hallazgos.removeAt(i)),
                     ),
                 ],
                 const SizedBox(height: Espacio.lg),
@@ -322,7 +313,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                   ),
                   const SizedBox(height: Espacio.md),
                   for (final vista in checklist) ...[
-                    _FilaVista(
+                    FilaVista(
                       vista: vista,
                       foto: _fotos.ultimaDeLaVista(vista.id),
                       alTomar: _guardandoFoto ? null : () => _tomarFoto(vista),
@@ -456,67 +447,6 @@ class _FilaUbicacion extends StatelessWidget {
           TextButton(onPressed: alReintentar, child: const Text('Reintentar')),
           if (error?.permanente ?? false) TextButton(onPressed: alAbrirAjustes, child: const Text('Abrir ajustes')),
         ]),
-      ],
-    );
-  }
-}
-
-/// Una fila del checklist: qué vista es, si ya tiene foto y cómo está esa foto.
-class _FilaVista extends StatelessWidget {
-  const _FilaVista({required this.vista, required this.foto, required this.alTomar});
-
-  final VistaChecklist vista;
-
-  /// La última foto de la vista; null si todavía no hay.
-  final FotoLocal? foto;
-  final VoidCallback? alTomar;
-
-  @override
-  Widget build(BuildContext context) {
-    final tema = Theme.of(context).textTheme;
-    final actual = foto;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (actual == null)
-          Container(
-            width: 56,
-            height: 48,
-            decoration: BoxDecoration(color: Colores.superficie, borderRadius: BorderRadius.circular(8)),
-            child: const Icon(Icons.photo_camera_outlined, size: 20, color: Colores.textoSecundario),
-          )
-        else
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.file(File(actual.ruta), width: 56, height: 48, fit: BoxFit.cover, semanticLabel: 'Foto de ${vista.nombre}'),
-          ),
-        const SizedBox(width: Espacio.sm),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(vista.nombre, style: tema.bodyMedium?.copyWith(color: Colores.textoPrimario)),
-              if (!vista.obligatoria && actual == null)
-                Text('Solo si hay faltante o daño', style: tema.bodySmall)
-              else if (actual != null && actual.sinUbicacion)
-                // El sello es lo que da valor a la evidencia: sin ubicación hay que repetirla antes de cerrar.
-                Text('Sin ubicación: repítela', style: tema.bodySmall?.copyWith(color: Colores.peligro))
-              else if (actual != null && (actual.precision ?? 0) > precisionBajaMetros)
-                // Avisa, no bloquea: en un patio techado el GPS siempre es malo.
-                Text(
-                  'Ubicación poco precisa (±${actual.precision!.round()} m)',
-                  style: tema.bodySmall?.copyWith(color: Colores.advertencia),
-                )
-              else if (actual?.nota case final nota? when nota.isNotEmpty)
-                Text(nota, style: tema.bodySmall),
-            ],
-          ),
-        ),
-        const SizedBox(width: Espacio.sm),
-        TextButton(
-          onPressed: alTomar,
-          child: Text(actual == null ? 'Tomar' : 'Repetir'),
-        ),
       ],
     );
   }
