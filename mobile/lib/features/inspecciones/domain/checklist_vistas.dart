@@ -65,20 +65,22 @@ List<VistaChecklist> obligatoriasDe(List<VistaChecklist> checklist) => [...check
 /// Las que solo se toman si hay faltante o daño, y entonces con nota.
 List<VistaChecklist> adicionalesDe(List<VistaChecklist> checklist) => [...checklist.where((v) => !v.obligatoria)];
 
-/// Las vistas que tienen imagen guía para la cámara, por código.
+/// La imagen guía de cada vista obligatoria, por código.
 ///
-/// Salen del prototipo de inspección de carrocería. Frontal y trasera no tienen: se toman sin guía, con la
-/// etiqueta sola. «Vista superior» tampoco todavía; en el prototipo solo existe dentro de la ficha de daños, con
-/// la numeración de cuadrantes, que es otra cosa (el panel de daño es S6-HU-01).
+/// Son plantillas de encuadre, no dibujos del vehículo: vienen en la proporción de la vista previa (3:4), con el
+/// contorno en el tamaño y la posición en que debe quedar el carro. Trazo blanco sobre transparencia, sin texto
+/// y sin nada que se vea a través del vidrio, para que encima de la cámara se lea la línea y no estorbe.
 ///
-/// Se muestran como **referencia en una esquina**, no superpuestas a la vista previa: los dibujos tienen fondo
-/// opaco y encima lavaban la cámara en vez de guiar. Para superponerlas de verdad harían falta PNG con fondo
-/// transparente y sin el rótulo impreso.
+/// Las dos vistas adicionales (baúl y cojinería) no llevan: son fotos de un faltante o un daño concreto y no hay
+/// un encuadre estándar que imponer.
 const guiasDeVista = <String, String>{
+  'frontal': 'assets/guias/frontal.png',
+  'trasera': 'assets/guias/trasera.png',
   'lateral_izquierda': 'assets/guias/lateral_izquierda.png',
   'lateral_derecha': 'assets/guias/lateral_derecha.png',
   'diagonal_trasera_izquierda': 'assets/guias/diagonal_trasera_izquierda.png',
   'diagonal_delantera_derecha': 'assets/guias/diagonal_delantera_derecha.png',
+  'superior': 'assets/guias/superior.png',
 };
 
 String? guiaDe(String codigoVista) => guiasDeVista[codigoVista];

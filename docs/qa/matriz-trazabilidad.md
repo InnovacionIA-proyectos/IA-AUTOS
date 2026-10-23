@@ -131,17 +131,13 @@ para el flujo de «cada quien firma desde su sesión» es S5-HU-25.4 (#116), no 
 
 **Pendientes anotados de estas cuatro:**
 
-- **El juego de imágenes guía hay que rehacerlo con diseño.** Las cuatro que hay salieron del prototipo y no
-  sirven como guía de encuadre: tres son dibujos de línea de un **Renault Kwid concreto** (no de un vehículo
-  genérico) y la de la diagonal delantera derecha es una **fotografía de otro SUV blanco**. Además tienen fondo
-  opaco —por eso no se pueden superponer a la cámara y hoy se muestran como referencia en una esquina— y el
-  rótulo impreso dentro del PNG, que duplica el título y no se puede cambiar sin reeditar la imagen. Lo que hay
-  que pedir: **PNG con fondo transparente, sin rótulo, un juego por tipo de vehículo**, para las 7 vistas
-  obligatorias. El catálogo `vistas-foto` ya trae el campo `tipo_vehiculo`, así que el modelo de datos lo
-  soporta; lo que faltan son los archivos.
-- **Falta la imagen guía de la «Vista superior».** Las otras cuatro salieron del prototipo; la superior solo
-  existe dentro de la ficha de daños, con la numeración de cuadrantes, que es el panel de daño de S6-HU-01 y no
-  una guía de encuadre. Mientras tanto esa vista se toma sin guía, como frontal y trasera.
+- **Las 7 imágenes guía quedaron rehechas** (23-oct-2026), reemplazando las del prototipo. Son plantillas de
+  encuadre en la proporción de la vista previa (3:4), trazo blanco sobre transparencia, sin texto y sin nada
+  visible a través del vidrio, del mismo vehículo genérico en las siete. Por eso la guía volvió a mostrarse
+  **superpuesta** a la cámara, que es su sitio: las del prototipo tenían fondo opaco y hubo que dejarlas en una
+  esquina. Las dos vistas adicionales no llevan guía: son fotos de un daño concreto, sin encuadre estándar.
+  Queda por confirmar con quien inspecciona cómo se toma en la práctica la vista superior, porque nadie se sube
+  encima del vehículo y una guía cenital imposible de cumplir se ignora.
 - **El umbral de precisión baja (30 m) es valor inicial**, pendiente de confirmar con Calidad. Está en un solo
   sitio: `precisionBajaMetros` en `reglas_informe.dart`.
 - **Falta la compresión de las fotos** que pide el título de S5-HU-24.8: necesita una dependencia nueva y hoy no

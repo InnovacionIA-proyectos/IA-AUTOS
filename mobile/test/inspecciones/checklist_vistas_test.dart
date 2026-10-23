@@ -160,18 +160,27 @@ void main() {
   });
 
   group('guías de cámara', () {
-    test('las cuatro que entregó diseño, por código de vista', () {
-      for (final codigo in ['lateral_izquierda', 'lateral_derecha', 'diagonal_trasera_izquierda', 'diagonal_delantera_derecha']) {
-        expect(guiaDe(codigo), startsWith('assets/guias/'), reason: codigo);
+    // El sentido de una lista fija de vistas es que las fotos sean comparables entre inspecciones: la guía es
+    // lo que fija la distancia y el encuadre, no solo de qué lado pararse. Por eso las siete.
+    test('las siete obligatorias tienen la suya', () {
+      const obligatorias = [
+        'frontal',
+        'trasera',
+        'lateral_izquierda',
+        'lateral_derecha',
+        'diagonal_trasera_izquierda',
+        'diagonal_delantera_derecha',
+        'superior',
+      ];
+
+      for (final codigo in obligatorias) {
+        expect(guiaDe(codigo), 'assets/guias/$codigo.png', reason: codigo);
       }
     });
 
-    test('frontal, trasera y superior se toman sin guía', () {
-      // Frontal y trasera por diseño; superior porque todavía no existe limpia (en el prototipo solo está
-      // dentro de la ficha de daños, con la numeración de cuadrantes, que es otra cosa).
-      expect(guiaDe('frontal'), isNull);
-      expect(guiaDe('trasera'), isNull);
-      expect(guiaDe('superior'), isNull);
+    test('las adicionales no: son fotos de un daño concreto, sin encuadre estándar', () {
+      expect(guiaDe('piezas_baul'), isNull);
+      expect(guiaDe('cojineria'), isNull);
     });
   });
 }
