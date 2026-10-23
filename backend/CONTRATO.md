@@ -4,6 +4,8 @@ Describe cómo consumir hoy los endpoints del backend. Es una guía de consumo; 
 OpenAPI ([docs/openapi.json](docs/openapi.json)), que la API genera y una prueba vigila para que no se desvíe. Con
 `Documentacion__Habilitada=true` también se ve en `GET /swagger` (interfaz) y `GET /openapi/v1.json`.
 
+> Esta es la referencia de la API. La especificación de negocio, las historias de usuario y el índice de la documentación por tema están en [../docs/README.md](../docs/README.md); la guía para pasar de la versión 1 a la 2 del contrato, en [docs/migracion-v1-v2.md](docs/migracion-v1-v2.md).
+
 ## Convenciones
 
 | Tema | Regla |
@@ -1314,6 +1316,21 @@ Se llama al cerrar sesión: el dispositivo deja de recibir push. Responde siempr
 El push sale por **Firebase Cloud Messaging** a cada dispositivo activo del destinatario, con `tipo`, `notificacion_id`, `hallazgo_id` y `viaje_id` como datos para abrir la alerta. Si FCM falla, no está configurado o el usuario no tiene dispositivos, la petición que originó
 la alerta responde igual y la notificación de push guarda el motivo en `ErrorEnvio` (un token que FCM ya no reconoce deja el dispositivo inactivo). Una misma alerta no se repite: su clave (alerta, destinatario y canal) es única. Se configura con
 `Notificaciones__FcmProyectoId`, `Notificaciones__FcmClientEmail` y `Notificaciones__FcmClavePrivada` (ver [docs/configuracion.md](docs/configuracion.md)).
+
+## Alertas
+
+El sistema avisa de lo que requiere atención sin que nadie revise listados. Las alertas y los avisos **no tienen endpoints propios**: se guardan como notificaciones y se leen en la bandeja (`GET /api/notificaciones`, ver «Notificaciones»); aquí está qué genera cada una y a quién llega. El detalle de los procesos está en
+[docs/alertas.md](docs/alertas.md).
+
+| `tipo` | Clase | Urgencia | A quién llega | Cuándo |
+|---|---|---|---|---|
+| `hallazgo_critico` | preventiva | `alta` | `coordinador_calidad` y `admin` activos del cliente de la unidad | al **cerrar** una inspección con un hallazgo de nivel crítico y al **revisar** una novedad del conductor con ese nivel; una por inspección |
+| `umbral_patron` | preventiva | `media` | `coordinador_calidad` y `admin` activos del cliente | cada hora, cuando los hallazgos de una zona (lado + número) o de un proceso, de ese cliente, llegan al umbral dentro de la ventana; una vez por ventana |
+| `captura_incompleta` | operativo | `media` | quien inició la inspección (el inspector o, solo en un Cargue sin personal de apoyo, el conductor) | cada 10 minutos, si una inspección de Cargue o Descargue sigue en borrador y le faltan fotos de vistas obligatorias; una por inspección |
+| `transferencia_pendiente` | operativo | `media` | el firmante que falta (o, si aún no hay transferencia, el conductor o el inspector del viaje) | cada 10 minutos, si una llegada cerrada sigue sin transferencia con tipo de cierre; una por inspección y destinatario |
+
+Los umbrales y los tiempos de espera son **parámetros** que se cambian sin desplegar (`niveles_criticos`, `umbral_patron_cantidad`, `umbral_patron_ventana_dias`, `captura_incompleta_minutos` y `transferencia_pendiente_minutos`; ver «Parámetros»). Las alertas preventivas nunca llegan a un usuario de otro cliente
+(ver «Visibilidad por cliente»). Cada una lleva su clave de dedupe: correr un proceso otra vez, o dos instancias a la vez, no repite nada. Llegan por **bandeja** y, por **push**, a los dispositivos activos del destinatario; **nunca por correo** (el único correo es el reporte diario).
 
 ## Notas aclaratorias
 

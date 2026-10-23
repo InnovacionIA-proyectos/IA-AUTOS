@@ -1,5 +1,10 @@
 # Plan de migración web: Next.js a Angular
 
+> **Estado: retirado.** La web de IA Autos **no vive en este repositorio**: es un **módulo del portal de administración**, en el repositorio [`administracion`](https://github.com/InnovacionIA-proyectos/administracion), carpeta
+> [`src/app/ia-autos`](https://github.com/InnovacionIA-proyectos/administracion/tree/QA/src/app/ia-autos). Entra por la sesión del portal (inicio de sesión único) y consume el mismo contrato OpenAPI v2 que la app
+> ([guía v1 → v2](../../backend/docs/migracion-v1-v2.md)). El front Angular 22 de `frontend/` queda **retirado** (HU S6-HU-08); este documento se conserva como registro de la planeación original y **no describe el estado actual**.
+> Dónde está cada pieza y las historias de usuario: [docs/README.md](../README.md).
+
 Proyecto: Traza Autos 360° / Inventario Visual por VIN. Documento de planeación; no modifica el proyecto original. Fecha: 2026-10-01.
 
 Planes hermanos en esta carpeta: PLAN-MIGRACION-BACKEND.md (.NET 10 + SQL Server 2019) y PLAN-MIGRACION-FLUTTER.md (móvil).
