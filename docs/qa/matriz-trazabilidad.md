@@ -183,6 +183,8 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
      inspectora y el conductor, solo las dos primeras. El menú se arma con lo que responde `/api/auth/me`.
      El conductor con PIN reiniciado entra, se le exige el cambio, y al hacerlo llega a sus viajes con el mismo
      token: se ve el viaje en curso con su código MTrack, su lugar y su tráiler, y la búsqueda filtra bien.
+     La captura que se abre después del cambio trae los datos del viaje y la ubicación, sin el aviso de
+     catálogos: es el único camino que ejercita la descarga tras la transición `autenticado→autenticado`.
      Sin cubrir en dispositivo: que la cola no se marque fallida al entrar con PIN temporal (haría falta dejar
      un informe encolado antes de que se lo reinicien).
    - **Abierto, para revisar con el equipo: qué hace un coordinador en la app de campo.** Entra y ve tres
