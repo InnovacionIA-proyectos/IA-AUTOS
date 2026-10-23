@@ -182,10 +182,15 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         ));
   }
 
+  /// Las vistas que pide esta etapa. Transporte no pide ninguna.
+  List<VistaChecklist> get _checklist =>
+      pideChecklist(widget.proceso) ? checklistDeVistas(ref.read(catalogosProvider)) : const [];
+
   BloqueoCierre? get _bloqueo => bloqueoDeCierre(
         hayUbicacion: _gps != null,
-        cantidadHallazgos: _hallazgos.length,
-        cantidadFotos: _fotos.length,
+        fotos: _fotos,
+        hallazgos: _hallazgos,
+        checklist: _checklist,
         catalogosListos: _catalogosListos,
       );
 
@@ -261,8 +266,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     final bloqueo = _bloqueo;
     final catalogos = ref.watch(catalogosProvider);
     final descargandoCatalogos = ref.watch(catalogosControllerProvider).fase == FaseCatalogos.cargando;
-    // El checklist sale del catálogo y depende de la etapa: Transporte no pide vistas.
-    final checklist = pideChecklist(widget.proceso) ? checklistDeVistas(catalogos) : const <VistaChecklist>[];
+    final checklist = _checklist;
 
     return Scaffold(
       appBar: AppBar(title: Text('${etiquetar(etiquetaMomento, widget.momento)} · ${widget.proceso}')),
@@ -340,7 +344,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                 ),
                 if (bloqueo != null && !_cerrando) ...[
                   Padding(padding: const EdgeInsets.only(top: Espacio.sm), child: Text(bloqueo.mensaje, textAlign: TextAlign.center, style: tema.bodySmall)),
-                  if (bloqueo == BloqueoCierre.sinCatalogos)
+                  if (bloqueo is SinCatalogos)
                     TextButton(
                       // Mientras hay una descarga en curso el botón lo dice, para no pulsarlo a ciegas.
                       onPressed: descargandoCatalogos
@@ -497,6 +501,12 @@ class _FilaVista extends StatelessWidget {
               else if (actual != null && actual.sinUbicacion)
                 // El sello es lo que da valor a la evidencia: sin ubicación hay que repetirla antes de cerrar.
                 Text('Sin ubicación: repítela', style: tema.bodySmall?.copyWith(color: Colores.peligro))
+              else if (actual != null && (actual.precision ?? 0) > precisionBajaMetros)
+                // Avisa, no bloquea: en un patio techado el GPS siempre es malo.
+                Text(
+                  'Ubicación poco precisa (±${actual.precision!.round()} m)',
+                  style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+                )
               else if (actual?.nota case final nota? when nota.isNotEmpty)
                 Text(nota, style: tema.bodySmall),
             ],

@@ -34,6 +34,23 @@ class ErrorApi implements Exception {
   bool get esTransitorio =>
       status == 0 || status == 401 || status == 408 || status == 429 || status >= 500 || esCambioPinRequerido;
 
+  /// Lo que el servidor detalla por campo, una línea por cosa que falta. Un «Datos inválidos» a secas no le
+  /// dice nada a quien está en el patio; «Falta la foto de la vista Superior» sí.
+  List<String> get detalles {
+    final campos = (details is Map ? (details! as Map)['fieldErrors'] : null) as Map?;
+    return [
+      for (final valores in campos?.values ?? const [])
+        if (valores is List)
+          for (final linea in valores) linea.toString(),
+    ];
+  }
+
+  /// El mensaje con su detalle, una línea por cosa que falta, para guardarlo en la cola y mostrarlo tal cual.
+  String get mensajeDetallado {
+    if (detalles.isEmpty) return message;
+    return [message, ...detalles.map((d) => '· $d')].join('\n');
+  }
+
   @override
   String toString() => 'ErrorApi($status $code: $message)';
 }

@@ -222,4 +222,33 @@ void main() {
       expect(const Entorno(flavor: Flavor.prod, apiUrl: 'https://x').esProduccion, isTrue);
     });
   });
+
+  group('el detalle del servidor', () {
+    // «Datos invalidos» a secas no le dice nada a quien esta en el patio; «Falta la foto de la vista Superior» si.
+    test('se expone linea por linea y se pega al mensaje', () {
+      const error = ErrorApi(
+        message: 'Datos invalidos',
+        code: 'VALIDATION_ERROR',
+        status: 400,
+        details: {
+          'fieldErrors': {
+            'evidencias': ['Falta la foto de la vista Superior', 'Falta la foto de la vista Frontal'],
+            'hallazgos': ['El hallazgo de Capot necesita su foto'],
+          },
+        },
+      );
+
+      expect(error.detalles, hasLength(3));
+      expect(error.mensajeDetallado, contains('Datos invalidos'));
+      expect(error.mensajeDetallado, contains('· Falta la foto de la vista Superior'));
+      expect(error.mensajeDetallado.split('\n'), hasLength(4));
+    });
+
+    test('sin detalle queda el mensaje solo', () {
+      const error = ErrorApi(message: 'No se pudo', code: 'X', status: 400);
+
+      expect(error.detalles, isEmpty);
+      expect(error.mensajeDetallado, 'No se pudo');
+    });
+  });
 }

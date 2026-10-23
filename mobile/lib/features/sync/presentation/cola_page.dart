@@ -106,6 +106,9 @@ class _FilaJob extends StatelessWidget {
               Expanded(child: Text(job.etiqueta, style: tema.titleMedium?.copyWith(fontSize: 15))),
               if (ajeno || job.esProhibido)
                 const Insignia('De otro usuario', tono: TonoInsignia.neutro)
+              else if (job.codigoError == 'VALIDATION_ERROR')
+                // No es un fallo de envío: al informe le falta algo, y el detalle de abajo dice qué.
+                const Insignia('Captura incompleta', tono: TonoInsignia.advertencia)
               else if (job.fallido)
                 const Insignia('Con error', tono: TonoInsignia.peligro)
               else

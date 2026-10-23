@@ -116,7 +116,8 @@ class ProcesadorCola {
           await cola.guardar(
             actual.conIntento(
               intentos: intentos,
-              error: e is ErrorApi ? e.message : e.toString(),
+              // Con su detalle: lo que el servidor rechazó, línea por línea, es lo único accionable.
+              error: e is ErrorApi ? e.mensajeDetallado : e.toString(),
               codigo: e is ErrorApi ? e.code : null,
               fallido: !transitorio || intentos >= maxIntentos,
             ),
