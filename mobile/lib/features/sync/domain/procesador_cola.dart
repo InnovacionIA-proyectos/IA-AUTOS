@@ -50,9 +50,15 @@ class ProcesadorCola {
   Future<List<Job>> _suyos(String usuarioId) async =>
       (await cola.listar()).where((j) => j.esDe(usuarioId)).toList();
 
-  /// Jobs visibles para esta persona: los suyos y los huérfanos, que alguien tiene que resolver a mano.
+  /// Jobs sobre los que esta persona puede actuar: los suyos y los huérfanos. Son los que se cuentan en la
+  /// insignia, porque son el trabajo que le queda por delante. Los de otra persona se ven en la pantalla de la
+  /// cola, pero no son suyos ni para enviar ni para contar.
   Future<List<Job>> visibles(String usuarioId) async =>
       (await cola.listar()).where((j) => j.esDe(usuarioId) || j.esHuerfano).toList();
+
+  /// Todo lo que hay en el dispositivo, para la pantalla de la cola: lo de esta persona y lo que quedó de otras,
+  /// que tiene que verse —si no, quien usa el equipo no entiende por qué hay envíos que nunca salen—.
+  Future<List<Job>> enElDispositivo() => cola.listar();
 
   /// Cantidad de jobs que aún se reintentarán solos.
   Future<int> contarPendientes(String usuarioId) async => (await visibles(usuarioId)).where((j) => !j.fallido).length;
@@ -104,7 +110,10 @@ class ProcesadorCola {
           final actual = (await cola.listar()).where((j) => j.id == job.id).firstOrNull;
           if (actual == null) continue;
           final transitorio = e is! ErrorApi || e.esTransitorio;
-          final intentos = actual.intentos + 1;
+          // El PIN temporal no es un fallo del envío: la cola queda en pausa hasta que la persona lo cambie, así
+          // que no gasta uno de los ocho intentos. Cualquier otro error sí cuenta.
+          final enPausaPorPin = e is ErrorApi && e.esCambioPinRequerido;
+          final intentos = enPausaPorPin ? actual.intentos : actual.intentos + 1;
           await cola.guardar(
             actual.conIntento(
               intentos: intentos,

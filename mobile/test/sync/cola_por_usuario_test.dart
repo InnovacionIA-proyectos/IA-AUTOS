@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
 
+import '../support/arnes.dart';
 import '../support/dobles_sync.dart';
 
 /// El escenario de la HU: «Dado un celular donde dos usuarios dejaron envíos pendientes, cuando el segundo tiene
@@ -118,5 +120,46 @@ void main() {
     expect(job.conIntento(intentos: 3, error: 'x', fallido: false).usuarioId, ana);
     expect(job.conProgreso(inspeccionId: 'i-1').usuarioId, ana);
     expect(InformeJob.fromJson(job.toJson()).usuarioId, ana, reason: 'viaja en el payload, sin migrar la tabla');
+  });
+
+  test('lo de otra persona se ve en el dispositivo aunque no se envie ni se cuente', () async {
+    await cola.agregar(informe(id: 'de-ana', usuarioId: ana));
+    await cola.agregar(informe(id: 'de-luis', usuarioId: luis));
+
+    // Si lo ajeno no apareciera, quien usa el equipo no tendria como saber por que hay trabajo que nunca sale.
+    expect((await procesador.enElDispositivo()).map((j) => j.id), ['de-ana', 'de-luis']);
+    expect((await procesador.visibles(luis)).map((j) => j.id), ['de-luis']);
+    expect(await procesador.contarPendientes(luis), 1);
+  });
+
+  group('la pausa por PIN temporal', () {
+    setUp(() {
+      gateway.errores['crearInspeccion'] = [
+        const ErrorApi(message: 'Debes cambiar tu PIN antes de continuar', code: codigoCambioPinRequerido, status: 403),
+      ];
+    });
+
+    // La cola queda en pausa hasta que la persona cambie el PIN: no es un fallo del envio, asi que no puede
+    // gastar uno de los ocho intentos. Con ocho pausas el informe habria muerto sin que nada estuviera mal.
+    test('no gasta un intento ni marca el job como fallido', () async {
+      await cola.agregar(informe(id: 'j', usuarioId: luis));
+
+      await procesador.procesar(luis);
+
+      final job = cola.jobs.single;
+      expect(job.intentos, 0);
+      expect(job.fallido, isFalse);
+    });
+
+    test('un 403 que no sea el del PIN si gasta intento y marca fallido', () async {
+      gateway.errores['crearInspeccion'] = [errorApi(403, 'No tiene permisos sobre esta inspeccion')];
+      await cola.agregar(informe(id: 'j', usuarioId: luis));
+
+      await procesador.procesar(luis);
+
+      final job = cola.jobs.single;
+      expect(job.intentos, 1);
+      expect(job.fallido, isTrue);
+    });
   });
 }

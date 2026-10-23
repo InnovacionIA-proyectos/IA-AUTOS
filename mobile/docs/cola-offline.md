@@ -26,7 +26,8 @@ privado de la app (no en base64 dentro de la base de datos).
 - **Errores no recuperables** (400, 403, 404, 409 en pasos distintos del cierre, 422...): el job pasa a *fallido* y se
   continúa con el siguiente.
 - **403 `PIN_CHANGE_REQUIRED` es la excepción**: es el único 403 transitorio. El envío es correcto y vuelve a servir en
-  cuanto la persona cambia su PIN, así que se reanuda en vez de morir.
+  cuanto la persona cambia su PIN, así que se reanuda en vez de morir, y **no gasta uno de los ocho intentos**: la cola
+  queda en pausa, no está fallando.
 - **409 al cerrar** significa "ya estaba cerrada": cuenta como éxito.
 - **Máximo 8 intentos**; al octavo el job pasa a *fallido*.
 - **Cuándo se dispara**: al recuperar una señal estable, al iniciar sesión, al abrir la app y a demanda ("Sincronizar").
@@ -65,6 +66,9 @@ recién rechazado por el servidor se anunciaba como enviado y cerrado. Lo destap
   usuario de la sesión: el servidor atribuye el informe al dueño del token, así que sin esto, en un celular compartido, lo
   de una persona salía firmado por la siguiente. El dueño va dentro del `payload`, no en una columna, para no migrar la
   base donde vive la cola.
+- Lo que dejó otra persona en el equipo **se ve** en «Envíos pendientes», marcado «De otro usuario» y sin botones: no
+  se envía con esta sesión, no se cuenta en la insignia y no se puede descartar (sería tirar su evidencia). Si no
+  apareciera, quien usa el equipo no tendría cómo saber por qué hay trabajo que nunca sale.
 - Los jobs que encoló una versión anterior no tienen dueño y quedan **huérfanos**: se ven en la cola pero no se envían
   solos. Se resuelven de dos formas, ambas deliberadas: al arrancar, la sesión guardada los adopta (es casi con certeza
   quien los encoló, porque es la última que se usó); o alguien los reintenta a mano y se hace cargo. Un informe solo
