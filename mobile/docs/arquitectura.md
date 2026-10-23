@@ -133,7 +133,7 @@ Los modelos son manuales (snake_case, igual que la API). `test/contrato/contrato
 - **Persistencia**: cola y caché sobre SQLite real (en memoria y en archivo, para comprobar que sobrevive a
   reabrir), incluida la descarga y revalidación de catálogos.
 - **Controladores**: sesión, sincronización, listado y catálogos, con dobles de red, API y almacén.
-- **Widgets**: login, menú por rol y rutas sin permiso, captura (los datos del viaje y el desenlace que se anuncia al
+- **Widgets**: login, cambio de PIN y su redirect, menú por rol y rutas sin permiso, captura (los datos del viaje y el desenlace que se anuncia al
   cerrar), lienzo de firma, diagrama del vehículo, barra de sincronización y arranque de la app.
 - **Contrato**: campos y rutas contra el OpenAPI del backend.
 

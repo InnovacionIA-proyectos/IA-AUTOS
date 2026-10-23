@@ -19,7 +19,15 @@ Sesion sesionCon(String rol, List<String> capacidades) => Sesion(
       usuario: Usuario(id: 'u1', nombre: 'Quien Sea', email: '', rol: rol, capacidades: capacidades),
     );
 
-/// Varios fotogramas en vez de pumpAndSettle: la app muestra indicadores que no paran solos.
+/// Varios fotogramas en vez de pumpAndSettle: la app muestra indicadores que no paran solos. Son bastantes
+/// porque hay que dejar terminar la animación de la transición: hasta que acaba, la página que sale sigue en el
+/// árbol y `find` la encuentra.
+Future<void> avanzar(WidgetTester tester) async {
+  for (var i = 0; i < 16; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
+
 Future<void> abrir(WidgetTester tester, Sesion? sesion) async {
   await tester.pumpWidget(
     ProviderScope(
@@ -31,9 +39,7 @@ Future<void> abrir(WidgetTester tester, Sesion? sesion) async {
       child: const TrazaApp(),
     ),
   );
-  for (var i = 0; i < 6; i++) {
-    await tester.pump(const Duration(milliseconds: 50));
-  }
+  await avanzar(tester);
 }
 
 List<String> etiquetas(WidgetTester tester) => tester
@@ -67,9 +73,7 @@ void main() {
     await abrir(tester, sesionCon('conductor', capacidadesDeRol('conductor')));
 
     tester.element(find.byType(MisViajesPage)).go('/sofasa');
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+    await avanzar(tester);
 
     expect(find.byType(SinPermisosPage), findsOneWidget);
     expect(find.text('Sin permisos'), findsOneWidget);
@@ -78,9 +82,7 @@ void main() {
   testWidgets('la pantalla de sin permisos dice a dónde sí puede ir', (tester) async {
     await abrir(tester, sesionCon('conductor', capacidadesDeRol('conductor')));
     tester.element(find.byType(MisViajesPage)).go('/sofasa');
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+    await avanzar(tester);
 
     expect(find.textContaining('Mis viajes, Inspecciones'), findsOneWidget);
   });
@@ -90,9 +92,7 @@ void main() {
   testWidgets('capturar exige más que mirar', (tester) async {
     await abrir(tester, sesionCon('inspector', [Capacidad.verViajes, Capacidad.verInspecciones]));
     tester.element(find.byType(MisViajesPage)).go('/inspecciones/vin/VIN1/captura/e1?proceso=Cargue');
-    for (var i = 0; i < 6; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+    await avanzar(tester);
 
     expect(find.byType(SinPermisosPage), findsOneWidget);
   });

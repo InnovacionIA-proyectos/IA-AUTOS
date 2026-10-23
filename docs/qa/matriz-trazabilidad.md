@@ -114,7 +114,7 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
 | S5-HU-23.3 | `POST /api/auth/login-conductor` (cédula+PIN), scrypt, bloqueo | `IdentidadApiTests.Cedula_y_pin_correctos_dan_un_token_de_conductor_que_sirve_en_la_api` | Verificado con prueba real |
 | S5-HU-23.4 | Gestión de PIN por rol; `GET /api/auth/me` con capacidades | `IdentidadApiTests.El_administrador_asigna_reinicia_y_fuerza_el_cambio_de_pin` | Verificado con prueba real |
 | S5-HU-23.5 | Gestión de usuarios (admin/coordinador), carga masiva de conductores | `IdentidadApiTests.La_vista_previa_de_conductores_no_guarda_y_la_confirmacion_crea_los_validos_con_su_pin` | Verificado con prueba real |
-| S5-HU-23.8/23.9 | Mobile: login con dos modos y cambio de PIN forzado; router/menú por rol; cola etiquetada por usuario | `login_page_test.dart`, `login_pin_test.dart` y `auth_controller_test.dart` (login, bloqueo, cambio de PIN y 403 a mitad de sesión); `capacidades_test.dart` (capacidades y su respaldo por rol); `menu_por_rol_test.dart` (menú y rutas sin permiso); `cola_por_usuario_test.dart` (celular compartido y huérfanos) | 23.8 y 23.9 implementadas en `S5-HU-21-23`; 23.8 **verificada en dispositivo**, 23.9 pendiente de probar en dispositivo |
+| S5-HU-23.8/23.9 | Mobile: login con dos modos y cambio de PIN forzado; router/menú por rol; cola etiquetada por usuario | `login_page_test.dart`, `login_pin_test.dart` y `auth_controller_test.dart` (login, bloqueo, cambio de PIN y 403 a mitad de sesión); `capacidades_test.dart` (capacidades y su respaldo por rol); `menu_por_rol_test.dart` (menú y rutas sin permiso); `cola_por_usuario_test.dart` (celular compartido y huérfanos); `cambiar_pin_page_test.dart` (la pantalla y el redirect del router) | 23.8 y 23.9 implementadas en `S5-HU-21-23`; 23.8 **verificada en dispositivo**, 23.9 pendiente de probar en dispositivo |
 
 ## S5-HU-24 — Inspección de salida y llegada con 7 fotos obligatorias y 2 adicionales
 
@@ -180,7 +180,6 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
      sigue igual hasta el siguiente ingreso. El daño está acotado —la API revalida el rol en cada petición, así
      que una pestaña de más termina en «sin permisos» o en 403—, pero conviene revisarlo si aparece el caso.
    - **#100 no se ha probado en dispositivo** (sí #99).
-   - Sin prueba de widget: `CambiarPinPage` y el redirect del router a `/cambiar-pin`.
 
 6. **Inspecciones: UI y pruebas de campo pendientes (#107–#112).** La lógica de dominio y las reglas de cierre
    tienen prueba automatizada tanto en backend como en `reglas_informe_test.dart`; falta la capa de pantallas y
