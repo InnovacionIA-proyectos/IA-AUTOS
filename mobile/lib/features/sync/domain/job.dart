@@ -1,3 +1,4 @@
+import '../../../core/errores/error_api.dart';
 import '../../inspecciones/domain/foto_local.dart';
 import '../../inspecciones/domain/hallazgo_local.dart';
 
@@ -10,6 +11,7 @@ sealed class Job {
     required this.creadoEn,
     this.intentos = 0,
     this.error,
+    this.codigoError,
     this.fallido = false,
     this.usuarioId,
   });
@@ -22,8 +24,16 @@ sealed class Job {
   final int intentos;
   final String? error;
 
+  /// Código del último error de la API (`FORBIDDEN`, `VALIDATION_ERROR`...). Se guarda además del mensaje porque
+  /// la pantalla necesita decidir según el fallo, y comparar textos se rompe en cuanto el servidor los reescribe.
+  final String? codigoError;
+
   /// Un job fallido deja de reintentarse por sí solo y queda visible hasta que se reintente a mano o se descarte.
   final bool fallido;
+
+  /// Lo rechazó el servidor por permisos: lo empezó otra persona, o el rol no alcanza. No lo arregla nadie más
+  /// que su dueño, y por eso esta sesión no puede ni reintentarlo ni descartarlo.
+  bool get esProhibido => fallido && codigoError == codigoProhibido;
 
   /// Quién lo encoló. La cola sobrevive al cierre de sesión y el servidor atribuye el informe al dueño del token,
   /// así que sin esto, en un equipo compartido, lo de una persona salía a nombre de la siguiente.
@@ -40,7 +50,7 @@ sealed class Job {
 
   String get tipo;
 
-  Job conIntento({required int intentos, required String? error, required bool fallido});
+  Job conIntento({required int intentos, required String? error, String? codigo, required bool fallido});
 
   Map<String, dynamic> toJson();
 
@@ -58,6 +68,7 @@ class InformeJob extends Job {
     required super.creadoEn,
     super.intentos,
     super.error,
+    super.codigoError,
     super.fallido,
     super.usuarioId,
     required this.etapaId,
@@ -79,6 +90,7 @@ class InformeJob extends Job {
         creadoEn: json['creado_en'] as int,
         intentos: json['intentos'] as int? ?? 0,
         error: json['error'] as String?,
+        codigoError: json['codigo_error'] as String?,
         fallido: json['fallido'] as bool? ?? false,
         usuarioId: json['usuario_id'] as String?,
         etapaId: json['etapa_id'] as String,
@@ -117,6 +129,7 @@ class InformeJob extends Job {
         creadoEn: creadoEn,
         intentos: intentos,
         error: error,
+        codigoError: codigoError,
         fallido: fallido,
         usuarioId: usuarioId,
         etapaId: etapaId,
@@ -133,12 +146,13 @@ class InformeJob extends Job {
       );
 
   @override
-  InformeJob conIntento({required int intentos, required String? error, required bool fallido}) => InformeJob(
+  InformeJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) => InformeJob(
         id: id,
         etiqueta: etiqueta,
         creadoEn: creadoEn,
         intentos: intentos,
         error: error,
+        codigoError: codigo,
         fallido: fallido,
         usuarioId: usuarioId,
         etapaId: etapaId,
@@ -161,6 +175,7 @@ class InformeJob extends Job {
         creadoEn: creadoEn,
         intentos: intentos,
         error: error,
+        codigoError: codigoError,
         fallido: fallido,
         usuarioId: usuario,
         etapaId: etapaId,
@@ -184,6 +199,7 @@ class InformeJob extends Job {
         'creado_en': creadoEn,
         'intentos': intentos,
         'error': error,
+        'codigo_error': codigoError,
         'fallido': fallido,
         'usuario_id': usuarioId,
         'etapa_id': etapaId,
@@ -207,6 +223,7 @@ class FirmaJob extends Job {
     required super.creadoEn,
     super.intentos,
     super.error,
+    super.codigoError,
     super.fallido,
     super.usuarioId,
     required this.inspeccionId,
@@ -222,6 +239,7 @@ class FirmaJob extends Job {
         creadoEn: json['creado_en'] as int,
         intentos: json['intentos'] as int? ?? 0,
         error: json['error'] as String?,
+        codigoError: json['codigo_error'] as String?,
         fallido: json['fallido'] as bool? ?? false,
         usuarioId: json['usuario_id'] as String?,
         inspeccionId: json['inspeccion_id'] as String,
@@ -243,12 +261,13 @@ class FirmaJob extends Job {
   String get tipo => 'firma';
 
   @override
-  FirmaJob conIntento({required int intentos, required String? error, required bool fallido}) => FirmaJob(
+  FirmaJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) => FirmaJob(
         id: id,
         etiqueta: etiqueta,
         creadoEn: creadoEn,
         intentos: intentos,
         error: error,
+        codigoError: codigo,
         fallido: fallido,
         usuarioId: usuarioId,
         inspeccionId: inspeccionId,
@@ -265,6 +284,7 @@ class FirmaJob extends Job {
         creadoEn: creadoEn,
         intentos: intentos,
         error: error,
+        codigoError: codigoError,
         fallido: fallido,
         usuarioId: usuario,
         inspeccionId: inspeccionId,
@@ -282,6 +302,7 @@ class FirmaJob extends Job {
         'creado_en': creadoEn,
         'intentos': intentos,
         'error': error,
+        'codigo_error': codigoError,
         'fallido': fallido,
         'usuario_id': usuarioId,
         'inspeccion_id': inspeccionId,

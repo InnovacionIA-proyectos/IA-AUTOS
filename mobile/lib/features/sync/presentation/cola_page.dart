@@ -104,7 +104,7 @@ class _FilaJob extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(job.etiqueta, style: tema.titleMedium?.copyWith(fontSize: 15))),
-              if (ajeno)
+              if (ajeno || job.esProhibido)
                 const Insignia('De otro usuario', tono: TonoInsignia.neutro)
               else if (job.fallido)
                 const Insignia('Con error', tono: TonoInsignia.peligro)
@@ -119,8 +119,18 @@ class _FilaJob extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: Espacio.xs),
               child: Text('Lo dejó otra persona en este equipo. Se enviará cuando entre con su usuario.', style: tema.bodySmall),
+            )
+          // El servidor lo rechazó por permisos: este informe lo empezó otra persona y solo ella puede
+          // terminarlo. No se ofrece descartarlo, que seria borrar fotos que no son de quien está mirando.
+          else if (job.esProhibido)
+            Padding(
+              padding: const EdgeInsets.only(top: Espacio.xs),
+              child: Text(
+                'Este informe lo empezó otra persona; solo ella puede terminarlo desde su usuario.',
+                style: tema.bodySmall,
+              ),
             ),
-          if (job.fallido && !ajeno) ...[
+          if (job.fallido && !ajeno && !job.esProhibido) ...[
             const SizedBox(height: Espacio.md),
             Row(
               children: [

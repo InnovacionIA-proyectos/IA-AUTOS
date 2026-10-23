@@ -118,6 +118,7 @@ class ProcesadorCola {
             actual.conIntento(
               intentos: intentos,
               error: e is ErrorApi ? e.message : e.toString(),
+              codigo: e is ErrorApi ? e.code : null,
               fallido: !transitorio || intentos >= maxIntentos,
             ),
           );

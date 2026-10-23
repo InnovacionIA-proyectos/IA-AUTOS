@@ -162,4 +162,66 @@ void main() {
       expect(job.fallido, isTrue);
     });
   });
+
+  group('un informe que el servidor rechaza por permisos', () {
+    // Solo puede pasar con un job adoptado: la inspeccion la creo otra persona y el servidor no deja
+    // continuarla. Nadie mas que su dueno la termina, asi que quien esta mirando no deberia poder borrarla.
+    test('guarda el codigo del error, no solo el mensaje', () async {
+      gateway.errores['crearInspeccion'] = [
+        const ErrorApi(message: 'No tiene permisos sobre esta inspeccion', code: codigoProhibido, status: 403),
+      ];
+      await cola.agregar(informe(id: 'j', usuarioId: luis));
+
+      await procesador.procesar(luis);
+
+      final job = cola.jobs.single;
+      expect(job.codigoError, codigoProhibido);
+      expect(job.fallido, isTrue);
+      expect(job.esProhibido, isTrue, reason: 'la pantalla decide por el codigo, no comparando textos');
+    });
+
+    test('otro fallo no se marca como prohibido', () async {
+      gateway.errores['crearInspeccion'] = [
+        const ErrorApi(message: 'Momento invalido', code: 'VALIDATION_ERROR', status: 400),
+      ];
+      await cola.agregar(informe(id: 'j', usuarioId: luis));
+
+      await procesador.procesar(luis);
+
+      final job = cola.jobs.single;
+      expect(job.codigoError, 'VALIDATION_ERROR');
+      expect(job.esProhibido, isFalse, reason: 'ese si se puede descartar: es la unica salida de la cola');
+    });
+
+    test('el codigo viaja en el payload y sobrevive a releer la cola', () async {
+      const job = InformeJob(
+        id: 'j',
+        etiqueta: 'Informe',
+        creadoEn: 1,
+        usuarioId: luis,
+        error: 'No tiene permisos',
+        codigoError: codigoProhibido,
+        fallido: true,
+        etapaId: 'e',
+        momento: 'informe',
+        fecha: '2026-01-02T10:00:00.000Z',
+        lat: 1,
+        lng: 2,
+      );
+
+      expect(InformeJob.fromJson(job.toJson()).esProhibido, isTrue);
+    });
+
+    test('reintentar a mano limpia el codigo', () async {
+      await cola.agregar(informe(id: 'j', usuarioId: null, fallido: true));
+      gateway.errores['crearInspeccion'] = [
+        const ErrorApi(message: 'x', code: codigoProhibido, status: 403),
+      ];
+
+      await procesador.reintentar('j', luis);
+
+      expect(cola.jobs.single.codigoError, isNull);
+      expect(cola.jobs.single.esProhibido, isFalse);
+    });
+  });
 }

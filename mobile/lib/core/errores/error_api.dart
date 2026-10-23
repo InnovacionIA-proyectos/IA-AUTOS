@@ -2,6 +2,10 @@
 /// administrador). Lo único que lo levanta es cambiar el PIN.
 const codigoCambioPinRequerido = 'PIN_CHANGE_REQUIRED';
 
+/// Código con el que la API rechaza una acción que no le corresponde a quien la pide: rol insuficiente, o un
+/// informe que empezó otra persona (solo su autor o un administrador lo continúan).
+const codigoProhibido = 'FORBIDDEN';
+
 /// Error devuelto por la API (cuerpo uniforme `{error, code, message, timestamp, details}`) o de red.
 ///
 /// `status == 0` significa que la petición no llegó al servidor (sin red, tiempo agotado, DNS...).

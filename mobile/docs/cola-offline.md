@@ -66,6 +66,11 @@ recién rechazado por el servidor se anunciaba como enviado y cerrado. Lo destap
   usuario de la sesión: el servidor atribuye el informe al dueño del token, así que sin esto, en un celular compartido, lo
   de una persona salía firmado por la siguiente. El dueño va dentro del `payload`, no en una columna, para no migrar la
   base donde vive la cola.
+- Cada job guarda el **código** del último error, no solo su mensaje: la pantalla decide qué ofrecer según el fallo, y
+  comparar textos se rompe en cuanto el servidor los reescribe. Un `FORBIDDEN` significa que el informe lo empezó otra
+  persona (solo su autor o un administrador lo continúan): se muestra sin botones, porque descartarlo sería borrar
+  fotos ajenas y reintentarlo volvería a fallar. Cualquier otro fallo conserva «Reintentar» y «Descartar», que es la
+  única salida de la cola para un envío que nunca va a salir.
 - Lo que dejó otra persona en el equipo **se ve** en «Envíos pendientes», marcado «De otro usuario» y sin botones: no
   se envía con esta sesión, no se cuenta en la insignia y no se puede descartar (sería tirar su evidencia). Si no
   apareciera, quien usa el equipo no tendría cómo saber por qué hay trabajo que nunca sale.
