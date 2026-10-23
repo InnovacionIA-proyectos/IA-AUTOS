@@ -19,6 +19,13 @@ const etiquetaEstadoInspeccion = <String, String>{
   'cerrada': 'Cerrada',
 };
 
+const etiquetaEstadoViaje = <String, String>{
+  'programado': 'Programado',
+  'en_curso': 'En curso',
+  'finalizado': 'Finalizado',
+  'cancelado': 'Cancelado',
+};
+
 const etiquetaRol = <String, String>{
   'inspector': 'Inspector',
   'conductor': 'Conductor',

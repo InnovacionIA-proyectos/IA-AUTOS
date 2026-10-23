@@ -9,12 +9,13 @@ Viaje viaje(
   String? trailer,
   String? unidad = 'Niñera',
   String? conductor,
+  String estado = 'en_curso',
 }) =>
     Viaje(
       id: id,
       codigoMtrack: codigo,
       placa: placa,
-      estado: 'en_curso',
+      estado: estado,
       unidad: unidad,
       trailer: trailer,
       conductorNombre: conductor,

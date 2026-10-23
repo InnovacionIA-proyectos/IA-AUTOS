@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/features/auth/presentation/auth_controller.dart';
 import 'package:traza_autos/features/sync/presentation/sync_controller.dart';
+import 'package:traza_autos/features/vehiculos/domain/etiquetas.dart';
 import 'package:traza_autos/features/viajes/presentation/mis_viajes_controller.dart';
 import 'package:traza_autos/features/viajes/providers.dart';
 
@@ -101,6 +102,22 @@ void main() {
 
     test('un VIN que no es de mis viajes no aparece: la API lo rechazaría con 403', () {
       expect(estado.buscar('VINQUENOEXISTE00'), isEmpty);
+    });
+  });
+
+  group('la insignia del estado del viaje', () {
+    // El contrato admite cuatro estados. Con un ternario, «finalizado» y «cancelado» se mostraban como
+    // «Programado»: no es que faltara traducción, es que decía algo falso. Hoy no se nota porque `mios` solo
+    // trae los activos, pero la S6-HU-09.5 pide consultar los terminados.
+    test('los cuatro estados del contrato tienen su texto', () {
+      expect(etiquetar(etiquetaEstadoViaje, 'programado'), 'Programado');
+      expect(etiquetar(etiquetaEstadoViaje, 'en_curso'), 'En curso');
+      expect(etiquetar(etiquetaEstadoViaje, 'finalizado'), 'Finalizado');
+      expect(etiquetar(etiquetaEstadoViaje, 'cancelado'), 'Cancelado');
+    });
+
+    test('un estado que no conocemos se muestra tal cual, no como otro', () {
+      expect(etiquetar(etiquetaEstadoViaje, 'en_revision'), 'en_revision');
     });
   });
 }

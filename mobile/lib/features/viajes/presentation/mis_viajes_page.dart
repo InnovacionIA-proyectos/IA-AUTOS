@@ -7,6 +7,7 @@ import '../../../core/ui/widgets.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../sync/presentation/barra_sync.dart';
 import '../../sync/presentation/sync_controller.dart';
+import '../../vehiculos/domain/etiquetas.dart';
 import '../domain/viaje.dart';
 import 'mis_viajes_controller.dart';
 
@@ -151,8 +152,10 @@ class _TarjetaViaje extends StatelessWidget {
           Row(
             children: [
               Expanded(child: TextoMono(viaje.codigoMtrack)),
+              // Por el catálogo del contrato y no por un ternario: hoy «mios» solo trae los activos, pero en
+              // cuanto se consulten los terminados, un `finalizado` se mostraría como «Programado».
               Insignia(
-                viaje.estado == 'en_curso' ? 'En curso' : 'Programado',
+                etiquetar(etiquetaEstadoViaje, viaje.estado),
                 tono: viaje.estado == 'en_curso' ? TonoInsignia.info : TonoInsignia.neutro,
               ),
             ],
