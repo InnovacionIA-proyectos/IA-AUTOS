@@ -244,6 +244,20 @@ void main() {
       expect(error.mensajeDetallado.split('\n'), hasLength(4));
     });
 
+    // Forma real del 400 al cerrar una inspeccion, comprobada contra la API: `details` es una LISTA de textos,
+    // no el mapa `fieldErrors`. Con solo el mapa se perdia justo lo accionable.
+    test('tambien cuando el servidor manda una lista de textos', () {
+      const error = ErrorApi(
+        message: 'La inspeccion no cumple los requisitos para cerrarse',
+        code: 'VALIDATION_ERROR',
+        status: 400,
+        details: ['Falta la foto de la vista Trasera', 'Falta la foto de la vista Superior'],
+      );
+
+      expect(error.detalles, ['Falta la foto de la vista Trasera', 'Falta la foto de la vista Superior']);
+      expect(error.mensajeDetallado, contains('Falta la foto de la vista Superior'));
+    });
+
     test('sin detalle queda el mensaje solo', () {
       const error = ErrorApi(message: 'No se pudo', code: 'X', status: 400);
 
