@@ -161,13 +161,25 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       final sync = ref.read(syncControllerProvider.notifier);
       await sync.refrescar();
       await sync.sincronizar();
+      // Se mira ESTE job y no el contador de pendientes de la cola, que excluye los fallidos: con eso, un
+      // informe que el servidor acababa de rechazar se anunciaba como «enviado y cerrado».
+      final enCola = (await ref.read(colaRepositorioProvider).listar()).where((j) => j.id == job.id).firstOrNull;
       if (!mounted) return;
-      final enCola = ref.read(syncControllerProvider).pendientes > 0;
+      final (titulo, mensaje) = switch (enCola) {
+        null => ('Informe enviado', 'Quedó cerrado en el servidor.'),
+        // No se arregla reintentando: quien está en el patio tiene que saberlo ahora, no descubrirlo después.
+        final j when j.fallido => (
+            'No se pudo enviar',
+            'El servidor rechazó el informe${j.error == null ? '' : ': ${j.error}'}. Nada se perdió: quedó '
+                'guardado en Inspecciones › Cola, para reintentarlo o descartarlo.',
+          ),
+        _ => ('Informe guardado', 'Quedó en cola; se enviará automáticamente cuando la señal sea estable.'),
+      };
       await showDialog<void>(
         context: context,
         builder: (contexto) => AlertDialog(
-          title: const Text('Informe guardado'),
-          content: Text(enCola ? 'Quedó en cola; se enviará automáticamente cuando la señal sea estable.' : 'Informe enviado y cerrado.'),
+          title: Text(titulo),
+          content: Text(mensaje),
           actions: [TextButton(onPressed: () => Navigator.of(contexto).pop(), child: const Text('OK'))],
         ),
       );

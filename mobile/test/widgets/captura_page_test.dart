@@ -17,17 +17,23 @@ import '../support/dobles_viajes.dart';
 ///
 /// La superficie es alta a propósito: el `ListView` de la captura es perezoso y en una pantalla de teléfono no
 /// construye el campo de notas ni el botón de cierre, que son justo lo que hay que mirar.
-Future<void> abrir(WidgetTester tester, ViajesRepositorioFalso viajes, {String? viajeId = 'v1'}) async {
+Future<Arnes> abrir(WidgetTester tester, ViajesRepositorioFalso viajes, {String? viajeId = 'v1', Arnes? arnes}) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  final arnes = Arnes();
+  final usado = arnes ?? Arnes();
   await tester.pumpWidget(
     ProviderScope(
       retry: (_, _) => null,
       overrides: [
-        ...arnes.overrides,
+        ...usado.overrides,
         viajesRepositorioProvider.overrideWithValue(viajes),
-        catalogosRepositorioProvider.overrideWithValue(CatalogosRepositorioFalso()..remoto = catalogosCon('Golpe')),
+        // Con copia guardada además de la remota: así los catálogos están listos también sin señal, como queda
+        // el celular tras el primer ingreso. Sin ellos el cierre se bloquea y no se llega al desenlace.
+        catalogosRepositorioProvider.overrideWithValue(
+          CatalogosRepositorioFalso()
+            ..guardado = catalogosCon('Golpe')
+            ..remoto = catalogosCon('Golpe'),
+        ),
       ],
       child: MaterialApp(
         theme: crearTema(),
@@ -36,6 +42,15 @@ Future<void> abrir(WidgetTester tester, ViajesRepositorioFalso viajes, {String? 
     ),
   );
   for (var i = 0; i < 5; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  return usado;
+}
+
+/// Cierra el informe y espera a que salga el diálogo del desenlace.
+Future<void> cerrarInforme(WidgetTester tester) async {
+  await tester.tap(find.widgetWithText(FilledButton, 'Cerrar informe'));
+  for (var i = 0; i < 8; i++) {
     await tester.pump(const Duration(milliseconds: 50));
   }
 }
@@ -102,5 +117,45 @@ void main() {
     expect(find.text('No se pudieron cargar los datos del viaje.'), findsOneWidget);
     final boton = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Cerrar informe'));
     expect(boton.onPressed, isNotNull);
+  });
+
+  // Lo que el informe le dice a quien está en el patio tiene que ser verdad: es su única señal de si el trabajo
+  // quedó hecho. El mensaje se decidía con el contador de pendientes de TODA la cola, que excluye los fallidos,
+  // así que un rechazo del servidor se anunciaba como «enviado».
+  group('el desenlace que se anuncia al cerrar', () {
+    testWidgets('enviado: el job salió de la cola', (tester) async {
+      final arnes = await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'));
+
+      await cerrarInforme(tester);
+
+      expect(find.text('Informe enviado'), findsOneWidget);
+      expect(arnes.cola.jobs, isEmpty);
+    });
+
+    testWidgets('en cola: sin señal se queda pendiente y se enviará solo', (tester) async {
+      final arnes = Arnes()..red.estable = false;
+      await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'), arnes: arnes);
+
+      await cerrarInforme(tester);
+
+      expect(find.text('Informe guardado'), findsOneWidget);
+      expect(find.textContaining('se enviará automáticamente'), findsOneWidget);
+      expect(arnes.cola.jobs.single.fallido, isFalse);
+    });
+
+    testWidgets('rechazado: NO dice enviado, dice qué pasó y dónde quedó', (tester) async {
+      final arnes = Arnes()
+        ..gateway.errores['crearInspeccion'] = [errorApi(400, 'Momento inválido: use salida o llegada')];
+      await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'), arnes: arnes);
+
+      await cerrarInforme(tester);
+
+      expect(arnes.cola.jobs.single.fallido, isTrue, reason: 'un 400 no se arregla reintentando');
+      expect(find.text('Informe enviado'), findsNothing);
+      expect(find.text('No se pudo enviar'), findsOneWidget);
+      expect(find.textContaining('Momento inválido'), findsOneWidget, reason: 'el motivo del servidor, tal cual');
+      expect(find.textContaining('Cola'), findsOneWidget, reason: 'dónde recuperarlo');
+    });
+
   });
 }
