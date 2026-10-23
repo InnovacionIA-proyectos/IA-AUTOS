@@ -104,9 +104,13 @@ class _Detalle extends ConsumerWidget {
             _TarjetaEtapa(
               etapa: etapa,
               procesoNombre: catalogos.etiqueta(Catalogo.etapas, etapa.proceso),
+              momentos: momentosDeEtapa(etapa, inventario),
               accion: accionDeEtapa(etapa, inventario),
-              alCapturar: () => alIr(
+              // El bloqueo nombra la etapa anterior, y el nombre sale del catálogo: el dominio solo da su código.
+              nombreDeEtapa: (codigo) => catalogos.etiqueta(Catalogo.etapas, codigo),
+              alCapturar: (momento) => alIr(
                 '/inspecciones/vin/$vinRuta/captura/${etapa.id}?proceso=${Uri.encodeQueryComponent(catalogos.etiqueta(Catalogo.etapas, etapa.proceso))}'
+                '&momento=$momento'
                 '${etapa.viajeId == null ? '' : '&viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}'}',
               ),
               alFirmar: (accion) => alIr(
@@ -197,7 +201,9 @@ class _TarjetaEtapa extends StatelessWidget {
   const _TarjetaEtapa({
     required this.etapa,
     required this.procesoNombre,
+    required this.momentos,
     required this.accion,
+    required this.nombreDeEtapa,
     required this.alCapturar,
     required this.alFirmar,
   });
@@ -206,8 +212,10 @@ class _TarjetaEtapa extends StatelessWidget {
 
   /// Nombre de la etapa segun el catalogo, ya resuelto por quien la construye.
   final String procesoNombre;
+  final List<MomentoEtapa> momentos;
   final AccionEtapa accion;
-  final VoidCallback alCapturar;
+  final String Function(String codigoEtapa) nombreDeEtapa;
+  final void Function(String momento) alCapturar;
   final void Function(FirmarTransferencia accion) alFirmar;
 
   @override
@@ -233,9 +241,12 @@ class _TarjetaEtapa extends StatelessWidget {
               Insignia(etapa.requiereInspeccion ? 'Requiere informe' : 'Solo firma', tono: etapa.requiereInspeccion ? TonoInsignia.info : TonoInsignia.neutro),
             ],
           ),
+          for (final momento in momentos) ...[
+            const SizedBox(height: Espacio.sm),
+            _FilaMomento(momento: momento, nombreDeEtapa: nombreDeEtapa, alCapturar: () => alCapturar(momento.momento)),
+          ],
           const SizedBox(height: Espacio.sm),
           switch (accion) {
-            CapturarInforme() => FilledButton(onPressed: alCapturar, child: const Text('Hacer informe nuevo')),
             FirmarTransferencia(firmada: true) => const Insignia('Transferencia firmada', tono: TonoInsignia.exito),
             final FirmarTransferencia a => FilledButton(
                 onPressed: () => alFirmar(a),
@@ -245,6 +256,55 @@ class _TarjetaEtapa extends StatelessWidget {
           },
         ],
       ),
+    );
+  }
+}
+
+/// Una de las dos filas de la etapa: «Inspección de salida» o «Inspección de llegada», con lo que hay hecho y lo
+/// que se puede hacer.
+class _FilaMomento extends StatelessWidget {
+  const _FilaMomento({required this.momento, required this.nombreDeEtapa, required this.alCapturar});
+
+  final MomentoEtapa momento;
+  final String Function(String codigoEtapa) nombreDeEtapa;
+  final VoidCallback alCapturar;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    final inspeccion = momento.inspeccion;
+    // El nombre lo manda la API cuando la inspección existe; para la que todavía no, lo pone la app.
+    final nombre = inspeccion?.momentoNombre ?? etiquetar(etiquetaMomento, momento.momento);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(nombre, style: tema.bodyMedium?.copyWith(color: Colores.textoPrimario)),
+              if (momento.cerrada && inspeccion?.cerradaEn != null)
+                Text('Cerrada el ${formatearFecha(inspeccion!.cerradaEn)}', style: tema.bodySmall)
+              else if (momento.enBorrador)
+                Text('Empezada el ${formatearFecha(inspeccion!.fecha)}', style: tema.bodySmall)
+              else if (momento.bloqueo case final bloqueo?)
+                Text(
+                  mensajeBloqueo(bloqueo.motivo, nombreDeEtapa(bloqueo.procesoPrevio)),
+                  style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: Espacio.sm),
+        if (momento.cerrada)
+          const Insignia('Cerrada', tono: TonoInsignia.exito)
+        else if (momento.enBorrador)
+          const Insignia('Borrador', tono: TonoInsignia.info)
+        else
+          // Deshabilitado, no escondido: que se vea que falta y por qué.
+          OutlinedButton(onPressed: momento.sePuedeCapturar ? alCapturar : null, child: const Text('Capturar')),
+      ],
     );
   }
 }

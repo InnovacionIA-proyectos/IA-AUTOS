@@ -12,6 +12,7 @@ import '../features/inspecciones/presentation/lista_inspecciones_page.dart';
 import '../features/sofasa/presentation/sofasa_page.dart';
 import '../features/sync/presentation/cola_page.dart';
 import '../features/sync/presentation/sync_controller.dart';
+import '../features/vehiculos/domain/inventario.dart';
 import '../features/vehiculos/presentation/vin_page.dart';
 import '../features/viajes/presentation/buscar_vin_page.dart';
 import '../features/viajes/presentation/mis_viajes_page.dart';
@@ -93,6 +94,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                           vin: state.pathParameters['vin']!,
                           etapaId: state.pathParameters['etapaId']!,
                           proceso: state.uri.queryParameters['proceso'] ?? '',
+                          momento: state.uri.queryParameters['momento'] ?? Momento.salida,
                           viajeId: state.uri.queryParameters['viajeId'],
                         ),
                       ),

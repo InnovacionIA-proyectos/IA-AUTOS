@@ -19,6 +19,13 @@ const etiquetaEstadoInspeccion = <String, String>{
   'cerrada': 'Cerrada',
 };
 
+/// Solo para el momento que **todavía no existe**: en cuanto hay inspección, la API manda `momento_nombre` y ese
+/// manda. La app necesita el texto antes, para ofrecer «Capturar» en una fila que aún no tiene nada detrás.
+const etiquetaMomento = <String, String>{
+  'salida': 'Inspección de salida',
+  'llegada': 'Inspección de llegada',
+};
+
 const etiquetaEstadoViaje = <String, String>{
   'programado': 'Programado',
   'en_curso': 'En curso',

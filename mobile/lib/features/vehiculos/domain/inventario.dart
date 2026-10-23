@@ -30,6 +30,14 @@ class EvidenciaVista {
   final String? url;
 }
 
+/// Los dos momentos de una etapa. Son valores fijos del contrato: la API solo acepta estos dos.
+abstract final class Momento {
+  static const salida = 'salida';
+  static const llegada = 'llegada';
+
+  static const todos = [salida, llegada];
+}
+
 class InspeccionVista {
   const InspeccionVista({
     required this.id,
@@ -38,22 +46,29 @@ class InspeccionVista {
     required this.fecha,
     required this.estado,
     this.notas,
+    this.cerradaEn,
     this.hallazgos = const [],
     this.evidencias = const [],
     this.transferenciaFirmada = false,
+    this.transferenciaTipoCierre,
   });
 
-  factory InspeccionVista.fromJson(Map<String, dynamic> json) => InspeccionVista(
-        id: json['id'] as String,
-        momento: json['momento'] as String,
-        momentoNombre: json['momento_nombre'] as String? ?? json['momento'] as String,
-        fecha: DateTime.parse(json['fecha'] as String),
-        estado: json['estado'] as String,
-        notas: json['notas'] as String?,
-        hallazgos: [for (final h in (json['hallazgos'] as List<dynamic>? ?? [])) HallazgoVista.fromJson(h as Map<String, dynamic>)],
-        evidencias: [for (final e in (json['evidencias'] as List<dynamic>? ?? [])) EvidenciaVista.fromJson(e as Map<String, dynamic>)],
-        transferenciaFirmada: ((json['transferencia'] as Map<String, dynamic>?)?['firmada'] as bool?) ?? false,
-      );
+  factory InspeccionVista.fromJson(Map<String, dynamic> json) {
+    final transferencia = json['transferencia'] as Map<String, dynamic>?;
+    return InspeccionVista(
+      id: json['id'] as String,
+      momento: json['momento'] as String,
+      momentoNombre: json['momento_nombre'] as String? ?? json['momento'] as String,
+      fecha: DateTime.parse(json['fecha'] as String),
+      estado: json['estado'] as String,
+      notas: json['notas'] as String?,
+      cerradaEn: switch (json['cerrada_at']) { final String f => DateTime.tryParse(f), _ => null },
+      hallazgos: [for (final h in (json['hallazgos'] as List<dynamic>? ?? [])) HallazgoVista.fromJson(h as Map<String, dynamic>)],
+      evidencias: [for (final e in (json['evidencias'] as List<dynamic>? ?? [])) EvidenciaVista.fromJson(e as Map<String, dynamic>)],
+      transferenciaFirmada: (transferencia?['firmada'] as bool?) ?? false,
+      transferenciaTipoCierre: transferencia?['tipo_cierre'] as String?,
+    );
+  }
 
   final String id;
 
@@ -66,9 +81,17 @@ class InspeccionVista {
   final DateTime fecha;
   final String estado;
   final String? notas;
+  /// Cuándo se cerró; null si sigue en borrador.
+  final DateTime? cerradaEn;
+
   final List<HallazgoVista> hallazgos;
   final List<EvidenciaVista> evidencias;
   final bool transferenciaFirmada;
+
+  /// Cómo se cerró la transferencia (firmada, con reservas, sin firma). Null = todavía abierta, que es lo que
+  /// bloquea la salida de la etapa siguiente; «firmada» no alcanza, porque una transferencia puede cerrarse de
+  /// tres formas distintas.
+  final String? transferenciaTipoCierre;
 
   bool get cerrada => estado == 'cerrada';
 }
@@ -141,14 +164,85 @@ class Inventario {
   }
 }
 
+/// Por qué todavía no se puede crear la salida de una etapa.
+///
+/// Se calcula con lo que ya está en el inventario, para deshabilitar el botón **antes** de llamar. Los códigos
+/// son los mismos que manda el servidor en el `details` de su 409 `ETAPA_PREVIA_SIN_CIERRE`, así que el mensaje
+/// que ve la persona es el mismo lo haya decidido la app o el servidor.
+class BloqueoMomento {
+  const BloqueoMomento({required this.motivo, required this.procesoPrevio});
+
+  static const sinLlegada = 'etapa_previa_sin_cierre';
+  static const transferenciaAbierta = 'transferencia_sin_cierre';
+
+  final String motivo;
+
+  /// Código de la etapa anterior, para que la pantalla lo traduzca con el catálogo.
+  final String procesoPrevio;
+}
+
+/// Uno de los dos momentos de una etapa, tal como lo ve la pantalla.
+class MomentoEtapa {
+  const MomentoEtapa({required this.momento, this.inspeccion, this.bloqueo});
+
+  final String momento;
+
+  /// La inspección de ese momento, si ya existe. Si hay varias versiones, la última.
+  final InspeccionVista? inspeccion;
+
+  /// Null si se puede empezar.
+  final BloqueoMomento? bloqueo;
+
+  bool get cerrada => inspeccion?.cerrada ?? false;
+  bool get enBorrador => inspeccion != null && !inspeccion!.cerrada;
+  bool get sePuedeCapturar => inspeccion == null && bloqueo == null;
+}
+
+/// Los dos momentos de una etapa que exige inspección, en orden. Una etapa que no la exige no tiene ninguno:
+/// ahí solo se firma.
+List<MomentoEtapa> momentosDeEtapa(EtapaVista etapa, Inventario inventario) {
+  if (!etapa.requiereInspeccion) return const [];
+  final bloqueoSalida = _bloqueoDeLaPrevia(etapa, inventario);
+  return [
+    for (final momento in Momento.todos)
+      MomentoEtapa(
+        momento: momento,
+        inspeccion: etapa.inspecciones.where((i) => i.momento == momento).lastOrNull,
+        // Solo la salida espera a la etapa anterior; la llegada depende de su propia salida, que impone el
+        // servidor.
+        bloqueo: momento == Momento.salida ? bloqueoSalida : null,
+      ),
+  ];
+}
+
+/// La etapa anterior del mismo viaje debe tener cerrada su llegada y cerrada su transferencia.
+BloqueoMomento? _bloqueoDeLaPrevia(EtapaVista etapa, Inventario inventario) {
+  EtapaVista? previa;
+  for (final otra in inventario.etapas) {
+    if (otra.viajeId != etapa.viajeId || otra.orden >= etapa.orden) continue;
+    if (previa == null || otra.orden > previa.orden) previa = otra;
+  }
+  if (previa == null) return null; // la primera etapa no tiene anterior
+
+  final llegada = previa.inspecciones.where((i) => i.momento == Momento.llegada).lastOrNull;
+  if (llegada == null || !llegada.cerrada) {
+    return BloqueoMomento(motivo: BloqueoMomento.sinLlegada, procesoPrevio: previa.proceso);
+  }
+  if (llegada.transferenciaTipoCierre == null) {
+    return BloqueoMomento(motivo: BloqueoMomento.transferenciaAbierta, procesoPrevio: previa.proceso);
+  }
+  return null;
+}
+
+/// El texto del bloqueo, con el nombre de la etapa ya traducido. Sirve para el que calcula la app y para el que
+/// trae el 409 del servidor.
+String mensajeBloqueo(String motivo, String etapaPrevia) => motivo == BloqueoMomento.transferenciaAbierta
+    ? 'Falta cerrar la transferencia de $etapaPrevia'
+    : 'Falta cerrar la llegada de $etapaPrevia';
+
 /// Qué se puede hacer hoy en una etapa de la ruta de custodia.
 sealed class AccionEtapa {
   const AccionEtapa();
-}
-
-/// La etapa requiere informe y aún no hay: hacer uno nuevo.
-class CapturarInforme extends AccionEtapa {
-  const CapturarInforme();
 }
 
 /// Hay un informe sobre el que firmar la transferencia. [soloFirma] = la etapa no exige informe propio y se firma
@@ -166,11 +260,13 @@ class SinInforme extends AccionEtapa {
   const SinInforme();
 }
 
+/// Sobre qué se firma la transferencia de una etapa. Capturar ya no sale de aquí: eso lo deciden los momentos,
+/// que son dos por etapa.
 AccionEtapa accionDeEtapa(EtapaVista etapa, Inventario inventario) {
   final inspecciones = etapa.inspecciones;
   final referencia = inspecciones.where((i) => i.cerrada).firstOrNull ?? inspecciones.firstOrNull;
   if (etapa.requiereInspeccion) {
-    if (referencia == null) return const CapturarInforme();
+    if (referencia == null) return const SinInforme();
     return FirmarTransferencia(inspeccionId: referencia.id, soloFirma: false, firmada: referencia.transferenciaFirmada);
   }
   final base = referencia ?? inventario.ultimaInspeccion?.inspeccion;

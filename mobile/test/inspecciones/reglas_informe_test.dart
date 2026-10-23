@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/features/inspecciones/domain/reglas_informe.dart';
+import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/vehiculos/domain/coords_diagrama.dart';
 
@@ -54,6 +55,7 @@ void main() {
           id: 'id-1',
           creadoEn: 99,
           usuarioId: 'u1',
+          momento: Momento.salida,
           vin: 'VIN123',
           proceso: 'Cargue',
           etapaId: 'etapa-1',
@@ -68,7 +70,7 @@ void main() {
     test('arma el job con la fecha en UTC y la etiqueta del viaje', () {
       final job = construir();
       expect(job.fecha, '2026-01-02T10:00:00.000Z');
-      expect(job.momento, 'informe');
+      expect(job.momento, 'salida');
       expect(job.etiqueta, 'Informe VIN123 · Cargue');
       expect((job.intentos, job.fallido, job.inspeccionId, job.cerrada), (0, false, null, false));
     });

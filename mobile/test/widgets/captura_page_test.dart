@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
 import 'package:traza_autos/features/inspecciones/presentation/captura_page.dart';
+import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
 import 'package:traza_autos/features/viajes/providers.dart';
 
 import '../support/arnes.dart';
@@ -37,7 +38,13 @@ Future<Arnes> abrir(WidgetTester tester, ViajesRepositorioFalso viajes, {String?
       ],
       child: MaterialApp(
         theme: crearTema(),
-        home: CapturaPage(vin: 'VIN00000000000001', etapaId: 'e1', proceso: 'Cargue', viajeId: viajeId),
+        home: CapturaPage(
+          vin: 'VIN00000000000001',
+          etapaId: 'e1',
+          proceso: 'Cargue',
+          momento: Momento.salida,
+          viajeId: viajeId,
+        ),
       ),
     ),
   );

@@ -16,6 +16,7 @@ import '../../sync/providers.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
 import '../../vehiculos/domain/coords_diagrama.dart';
+import '../../vehiculos/domain/etiquetas.dart';
 import '../../vehiculos/presentation/diagrama_vehiculo.dart';
 import '../../viajes/providers.dart';
 import '../domain/foto_local.dart';
@@ -29,11 +30,21 @@ import 'selector_dano.dart';
 /// Funciona sin señal: al cerrar, el informe completo se guarda en la cola persistente y se envía cuando la conexión
 /// sea estable.
 class CapturaPage extends ConsumerStatefulWidget {
-  const CapturaPage({super.key, required this.vin, required this.etapaId, required this.proceso, this.viajeId});
+  const CapturaPage({
+    super.key,
+    required this.vin,
+    required this.etapaId,
+    required this.proceso,
+    required this.momento,
+    this.viajeId,
+  });
 
   final String vin;
   final String etapaId;
   final String proceso;
+
+  /// `salida` o `llegada`: son dos inspecciones distintas por etapa y el servidor no acepta otra cosa.
+  final String momento;
 
   /// Viaje del que cuelga la etapa. De él salen la placa, el tráiler, la unidad y el conductor.
   final String? viajeId;
@@ -151,6 +162,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         id: const Uuid().v4(),
         creadoEn: ahora.millisecondsSinceEpoch,
         usuarioId: usuarioId,
+        momento: widget.momento,
         vin: widget.vin,
         proceso: widget.proceso,
         etapaId: widget.etapaId,
@@ -212,7 +224,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     final descargandoCatalogos = ref.watch(catalogosControllerProvider).fase == FaseCatalogos.cargando;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Informe · ${widget.proceso}')),
+      appBar: AppBar(title: Text('${etiquetar(etiquetaMomento, widget.momento)} · ${widget.proceso}')),
       body: SafeArea(
         child: Stack(
           children: [
