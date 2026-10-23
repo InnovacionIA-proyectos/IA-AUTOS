@@ -1,6 +1,6 @@
 # Guía de migración v1 → v2
 
-La versión **2.0.0** del contrato (`docs/openapi.json`, `info.version`) es la que consumen la app y el módulo del portal. **No hay prefijo de versión**: la API sigue en `/api` (no hay clientes externos de la v1). Esta guía es la lista **cerrada** de los cambios de
+La versión **2.1.0** del contrato (`docs/openapi.json`, `info.version`) es la que consumen la app y el módulo del portal; la 2.0.0 sigue registrada en `docs/openapi-versiones.json`. **No hay prefijo de versión**: la API sigue en `/api` (no hay clientes externos de la v1). Esta guía es la lista **cerrada** de los cambios de
 ruptura entre lo que ya estaba publicado (v1) y la v2: lo que no está aquí no cambió de forma que rompa a un cliente. El detalle de cada endpoint está en [CONTRATO.md](../CONTRATO.md); el contrato máquina-legible, con ejemplos y los códigos de error por endpoint, en
 [openapi.json](openapi.json).
 
@@ -77,10 +77,10 @@ La foto solo se ve con una URL firmada y vigente (`403 URL_FIRMADA_INVALIDA` si 
 
 El menú debe armarse con `capacidades`, no con el nombre del rol.
 
-### 8. `/api/patrones` y `/api/patrones/analisis` obsoletos
+### 8. `/api/patrones` y `/api/patrones/analisis` retirados (2.1.0)
 
-`GET /api/patrones` y `GET /api/patrones/analisis` **siguen respondiendo igual** pero con los encabezados `Deprecation: true` y `Link: </api/reportes/patrones>; rel="successor-version"`, y se publican como `deprecated` en el contrato. Use `GET /api/reportes/patrones` (y el resto de
-`/api/reportes/*`, en `snake_case`). Se retiran en la versión **2.1.0** (S6-HU-08.3).
+`GET /api/patrones` y `GET /api/patrones/analisis` **ya no existen** (responden `404`) y sus esquemas (`PatronesDto`, `AnalisisDto`) salieron del contrato. Los reemplaza `GET /api/reportes/patrones` (y el resto de
+`/api/reportes/*`, en `snake_case`), que trae los hallazgos por proceso, por zona y por zona y proceso, y por nivel, clase y tamaño. Hasta la 2.0.0 respondían igual pero con los encabezados `Deprecation: true` y `Link: </api/reportes/patrones>; rel="successor-version"`.
 
 ### 9. `Storage__LecturaPublica` retirada
 
@@ -95,7 +95,7 @@ Todo el contrato va en **`snake_case`** (cuerpos, respuestas, filtros y parámet
 |---|---|
 | El cuerpo de `POST /api/auth/login-portal` (`nombreUsuario`…) | lo fija el portal |
 | La respuesta de la ingesta Sofasa (`vehiculosCreados`, `vehiculosActualizados`) | la lee el ETL |
-| Los endpoints obsoletos: `/api/patrones`, `/api/patrones/analisis` y `/api/metricas/rechazo` | se retiran (`/api/metricas/rechazo` en S6-HU-04.11) |
+| El endpoint `/api/metricas/rechazo` | se retira en S6-HU-04.11 |
 
 Un test del contrato falla si aparece un nombre en `camelCase` fuera de esa lista.
 
@@ -106,8 +106,8 @@ Sigue siendo `{ "error", "code", "message", "timestamp", "details" }`; `details`
 
 ## Lo que esta guía no incluye
 
-- El retiro de `/api/metricas/rechazo`: va en S6-HU-04.11 (condicionada a P-050).
-- El retiro de los endpoints y campos obsoletos (punto 8, `parte_vehiculo` y `coords_diagrama` históricos): S6-HU-08.3, con la versión 2.1.0.
+- El retiro de `/api/metricas/rechazo`: va en S6-HU-04.11 (condicionada a P-050); sigue publicado hasta entonces.
+- Lo que no se retira: `parte_vehiculo` y `coords_diagrama` siguen apareciendo, con valor, en los hallazgos históricos que ya existen (el cliente que los lea no cambia); solo dejó de aceptarse al crear un hallazgo (punto 3).
 
 ## Cómo se versiona el contrato
 

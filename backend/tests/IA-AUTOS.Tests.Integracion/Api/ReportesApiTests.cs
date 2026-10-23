@@ -51,53 +51,6 @@ public sealed class ReportesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
     }
 
     [Fact]
-    public async Task Patrones_cuentan_solo_hallazgos_de_unidades_movilizadas_en_los_tres_procesos()
-    {
-        var (token, usuarioId) = await AutenticarAsync();
-        await SembrarEscenarioAsync(usuarioId);
-
-        var r = await Cliente(token).GetAsync("/api/patrones");
-
-        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
-        var p = await ClonarAsync(r);
-        Assert.Equal(["total", "porProceso", "porZona", "porZonaProceso"], p.EnumerateObject().Select(x => x.Name).ToList());
-        Assert.Equal(4, p.GetProperty("total").GetInt32());
-        Assert.Equal(
-            ["cargue=2", "descargue=1", "transporte=1"],
-            p.GetProperty("porProceso").EnumerateArray().Select(x => $"{x.GetProperty("proceso").GetString()}={x.GetProperty("total").GetInt32()}").ToList());
-        Assert.Equal(
-            ["Capot=2", "Puertas=1", "Techo=1"],
-            p.GetProperty("porZona").EnumerateArray().Select(x => $"{x.GetProperty("parte_vehiculo").GetString()}={x.GetProperty("total").GetInt32()}").ToList());
-        Assert.Equal(
-            ["cargue/Capot=1", "cargue/Techo=1", "descargue/Puertas=1", "transporte/Capot=1"],
-            p.GetProperty("porZonaProceso").EnumerateArray().Select(x => $"{x.GetProperty("proceso").GetString()}/{x.GetProperty("parte_vehiculo").GetString()}={x.GetProperty("total").GetInt32()}").ToList());
-    }
-
-    [Fact]
-    public async Task Analisis_cuantifica_clases_y_tamanos_y_sugiere_mejoras()
-    {
-        var (token, usuarioId) = await AutenticarAsync();
-        await SembrarEscenarioAsync(usuarioId);
-
-        var r = await Cliente(token).GetAsync("/api/patrones/analisis");
-
-        var a = await ClonarAsync(r);
-        Assert.Equal(["porClase", "porTamano", "sugerencias"], a.EnumerateObject().Select(x => x.Name).ToList());
-        Assert.Equal(
-            ["golpe=2", "mancha=1", "rotura=1"],
-            a.GetProperty("porClase").EnumerateArray().Select(x => $"{x.GetProperty("clase_dano").GetString()}={x.GetProperty("total").GetInt32()}").ToList());
-        Assert.Equal(
-            ["1_5cm=2", "5_10cm=1", "requiere_reemplazo=1"],
-            a.GetProperty("porTamano").EnumerateArray().Select(x => $"{x.GetProperty("tamano_dano").GetString()}={x.GetProperty("total").GetInt32()}").ToList());
-        Assert.Equal(
-            [
-                "La clase de daño más frecuente es \"golpe\" (2). Revisar el procedimiento de manipulación asociado.",
-                "1 hallazgo(s) requieren reemplazo de pieza: priorizar inspección reforzada en cargue.",
-            ],
-            a.GetProperty("sugerencias").EnumerateArray().Select(x => x.GetString()).ToList());
-    }
-
-    [Fact]
     public async Task La_tasa_de_rechazo_se_calcula_sobre_movilizadas_y_se_compara_con_la_linea_base()
     {
         var (token, usuarioId) = await AutenticarAsync();
@@ -129,29 +82,21 @@ public sealed class ReportesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
     }
 
     [Fact]
-    public async Task Sin_datos_los_reportes_responden_vacios_y_en_cero()
+    public async Task Sin_datos_la_tasa_de_rechazo_responde_en_cero()
     {
         var (token, _) = await AutenticarAsync();
 
-        var patrones = await ClonarAsync(await Cliente(token).GetAsync("/api/patrones"));
-        var analisis = await ClonarAsync(await Cliente(token).GetAsync("/api/patrones/analisis"));
         var rechazo = await ClonarAsync(await Cliente(token).GetAsync("/api/metricas/rechazo"));
 
-        Assert.Equal(0, patrones.GetProperty("total").GetInt32());
-        Assert.Equal(0, patrones.GetProperty("porProceso").GetArrayLength());
-        Assert.Equal(["Sin hallazgos suficientes para sugerir mejoras."], analisis.GetProperty("sugerencias").EnumerateArray().Select(x => x.GetString()).ToList());
         Assert.Equal(0m, rechazo.GetProperty("tasaGlobal").GetDecimal());
         Assert.Equal(0, rechazo.GetProperty("totalMovilizadas").GetInt32());
         Assert.Equal(0, rechazo.GetProperty("porOperacion").GetArrayLength());
     }
 
     [Fact]
-    public async Task Los_reportes_exigen_autenticacion()
+    public async Task La_tasa_de_rechazo_exige_autenticacion()
     {
-        foreach (var ruta in new[] { "/api/patrones", "/api/patrones/analisis", "/api/metricas/rechazo" })
-        {
-            Assert.Equal(HttpStatusCode.Unauthorized, (await Cliente().GetAsync(ruta)).StatusCode);
-        }
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Cliente().GetAsync("/api/metricas/rechazo")).StatusCode);
     }
 
     [Fact]

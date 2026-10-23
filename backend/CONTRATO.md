@@ -12,7 +12,7 @@ OpenAPI ([docs/openapi.json](docs/openapi.json)), que la API genera y una prueba
 |---|---|
 | URL base | La del despliegue, sin barra final (por ejemplo `https://<dominio>`). Todas las rutas empiezan por `/api`, salvo `/health` |
 | Formato | JSON (`Content-Type: application/json`), codificación UTF-8 |
-| Nombres de campo | `snake_case` (`etapa_id`, `created_at`). **Excepciones en `camelCase`** (solo estas): el cuerpo de `login-portal` (lo fija el portal), la respuesta de la ingesta Sofasa y los endpoints obsoletos (`/api/patrones`, `/api/patrones/analisis` y `/api/metricas/rechazo`; los nuevos `/api/reportes/*` van en `snake_case`) |
+| Nombres de campo | `snake_case` (`etapa_id`, `created_at`). **Excepciones en `camelCase`** (solo estas): el cuerpo de `login-portal` (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint `/api/metricas/rechazo` (los `/api/reportes/*` van en `snake_case`) |
 | Fechas | ISO 8601 UTC con milisegundos: `2026-07-17T12:30:15.123Z`. **Las fechas que se envían deben llevar zona horaria** (`Z` o `+hh:mm`) |
 | Identificadores | UUID (`string`), salvo el VIN (texto) y `source_id` de Sofasa (entero largo) |
 | Nulos | Los campos opcionales sin valor llegan como `null` (nunca se omiten) |
@@ -742,7 +742,7 @@ Se aplica a:
 | `POST /api/inspecciones` | `403` si la etapa es de otro viaje |
 | `GET /api/sofasa/ordenes` | solo las órdenes vinculadas a sus viajes |
 
-Los reportes (`/api/patrones`, `/api/metricas/rechazo`) son agregados y no se filtran. La visibilidad por **cliente** está hoy en los **viajes**: el listado y el detalle
+Los reportes (`/api/reportes/*`, `/api/metricas/rechazo`) son agregados y no se filtran. La visibilidad por **cliente** está hoy en los **viajes**: el listado y el detalle
 (`GET /api/viajes`, `GET /api/viajes/{id}`) muestran a quien no es super administrador solo los viajes y los VIN de su cliente (ver «Clientes del viaje»). El resto de recursos
 (vehículos, inspecciones, órdenes) aún no se filtra por cliente.
 
@@ -1575,7 +1575,7 @@ Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inacti
 
 ### `GET /api/catalogos/{nombre}`
 Un solo catálogo con **su propia versión**: `{ "version": "…", "items": [ … ] }`. `404` si el nombre no existe (el mensaje lista los
-disponibles). `cuadrante-vistas` (el catálogo anterior de polígonos por vista de foto) **ya no existe**: responde `404` con «El catálogo cuadrante-vistas fue reemplazado por cuadrante-regiones».
+disponibles). `cuadrante-vistas` (el catálogo anterior de polígonos por vista de foto) **ya no existe**: responde `404` como cualquier nombre desconocido (lo reemplazan `paneles-dano` y `cuadrante-regiones`).
 
 ### Versión y copia sin conexión
 Cada respuesta trae la versión en el encabezado `ETag` (por ejemplo `"9f2c4a7b1d3e5f60"`) y también en el cuerpo. La versión es una
@@ -1839,7 +1839,7 @@ fila con la clave en `null` (unidades sin trailer, sin conductor o sin tipo de u
 
 ### `GET /api/reportes/patrones`
 El mapa de calor: los hallazgos por proceso, por **zona (lado + número de cuadrante, o la zona provisional)** y por zona y proceso, y por nivel, clase y tamaño. `supera_umbral` es `true` si los hallazgos del grupo **en la ventana del umbral** (los `ventana_dias`
-días que terminan en `hasta`, con los mismos filtros) llegan a `umbral.cantidad`; el umbral sale de los parámetros `umbral_patron_cantidad` y `umbral_patron_ventana_dias`. Absorbe a `GET /api/patrones` y `GET /api/patrones/analisis`.
+días que terminan en `hasta`, con los mismos filtros) llegan a `umbral.cantidad`; el umbral sale de los parámetros `umbral_patron_cantidad` y `umbral_patron_ventana_dias`. Reemplaza a `GET /api/patrones` y `GET /api/patrones/analisis`, que se retiraron en la versión 2.1.0 (responden `404`).
 
 ```json
 {
@@ -1882,39 +1882,9 @@ por operación y por cliente) y con la mediana del tiempo de captura de `GET /ap
 
 El correo sale por el servicio interno MailSender API, que se configura por variables de entorno (`Correo__Url` y `Correo__Remitente`; ver [docs/configuracion.md](docs/configuracion.md)). La hora y los destinatarios se cambian con `PUT /api/parametros/{clave}` y se aplican en un minuto.
 
-### Rutas obsoletas
+### Reporte anterior (camelCase)
 
-`GET /api/patrones` y `GET /api/patrones/analisis` **se retirarán**: responden como antes pero con los encabezados `Deprecation: true` y `Link: </api/reportes/patrones>; rel="successor-version"` (y `deprecated` en el contrato OpenAPI). Use `GET /api/reportes/patrones`.
-
-### Reportes anteriores (camelCase)
-
-Autenticados. Todos sus campos van en `camelCase`.
-
-### `GET /api/patrones` (obsoleto)
-Hallazgos de unidades movilizadas por proceso y zona (mapa de calor). **Obsoleto:** use `GET /api/reportes/patrones`.
-
-```json
-{
-  "total": 40,
-  "porProceso": [ { "proceso": "cargue", "total": 12 } ],
-  "porZona": [ { "parte_vehiculo": "Puerta", "total": 9 } ],
-  "porZonaProceso": [ { "proceso": "cargue", "parte_vehiculo": "Puerta", "total": 4 } ]
-}
-```
-
-Las filas internas conservan `snake_case` (`parte_vehiculo`); lo que va en `camelCase` son las claves de primer nivel.
-`parte_vehiculo` conserva su nombre pero ahora trae el **texto de la zona** del hallazgo («Izquierdo 7 · Puerta delantera», «Frente»); en un hallazgo histórico sin ubicar, la parte que se escribió entonces.
-
-### `GET /api/patrones/analisis` (obsoleto)
-Clases y tamaños de daño, con sugerencias. **Obsoleto:** use `GET /api/reportes/patrones`.
-
-```json
-{
-  "porClase": [ { "clase_dano": "rotura", "total": 7 } ],
-  "porTamano": [ { "tamano_dano": "5_10cm", "total": 5 } ],
-  "sugerencias": [ "…" ]
-}
-```
+Autenticado. Todos sus campos van en `camelCase`.
 
 ### `GET /api/metricas/rechazo`
 Tasa de rechazo (unidades movilizadas con al menos un hallazgo) frente a la línea base.
@@ -1950,7 +1920,7 @@ Un usuario de un cliente **sin cliente asignado** no ve ninguna unidad.
 | `GET /api/inspecciones/{id}`, `GET /api/inspecciones/{id}/pdf`, `GET /api/inspecciones/{id}/hallazgos-previos` y `GET /api/inspecciones/{id}/transferencia/constancia/pdf` | `403` con un informe de un VIN de otro cliente («La inspección es de un VIN de otro cliente») |
 | `GET /api/viajes` y `GET /api/viajes/{id}` | solo los viajes con algún VIN de su cliente, y en el detalle solo esos VIN; `403` con un viaje sin VIN suyos |
 | `GET /api/sofasa/ordenes` | solo las órdenes de VIN de su cliente |
-| `GET /api/patrones`, `/api/patrones/analisis` y `/api/metricas/rechazo` | cuentan solo las unidades de su cliente |
+| `GET /api/reportes/*` y `/api/metricas/rechazo` | cuentan solo las unidades de su cliente |
 | `GET /api/usuarios` | solo los usuarios de su cliente |
 
 Los endpoints de hallazgos, alertas, auditoría y exportaciones que se agreguen después aplican la misma regla: filtran por el cliente de quien consulta y responden `403` con un recurso de otro.

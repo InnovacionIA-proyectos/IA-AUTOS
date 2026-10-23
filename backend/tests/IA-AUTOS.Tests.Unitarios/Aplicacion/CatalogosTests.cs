@@ -287,16 +287,16 @@ public sealed class CatalogosServiceTests
         ((Dictionary<string, string[]>)((Dictionary<string, object>)ex.Detalles!)["fieldErrors"]).Keys;
 
     [Fact]
-    public async Task Cuadrante_vistas_responde_no_encontrado_con_el_aviso_de_que_lo_reemplazo_cuadrante_regiones()
+    public async Task Cuadrante_vistas_ya_no_es_un_catalogo_y_responde_como_cualquier_nombre_desconocido()
     {
         var servicio = Servicio();
 
-        var lectura = await Assert.ThrowsAsync<clsEntidadNoEncontradaException>(() => servicio.ObtenerAsync(clsNombresCatalogo.CUADRANTE_VISTAS));
+        var lectura = await Assert.ThrowsAsync<clsEntidadNoEncontradaException>(() => servicio.ObtenerAsync("cuadrante-vistas"));
         var escritura = await Assert.ThrowsAsync<clsEntidadNoEncontradaException>(
-            () => servicio.CrearAsync(clsNombresCatalogo.CUADRANTE_VISTAS, Cuerpo("{\"cuadrante_id\":\"11111111-1111-1111-1111-111111111111\"}")));
+            () => servicio.CrearAsync("cuadrante-vistas", Cuerpo("{\"cuadrante_id\":\"11111111-1111-1111-1111-111111111111\"}")));
 
-        Assert.Contains("reemplazado por cuadrante-regiones", lectura.Message);
-        Assert.Contains("reemplazado por cuadrante-regiones", escritura.Message);
+        Assert.StartsWith("Catálogo desconocido: cuadrante-vistas", lectura.Message);
+        Assert.StartsWith("Catálogo desconocido: cuadrante-vistas", escritura.Message);
     }
 
     [Fact]

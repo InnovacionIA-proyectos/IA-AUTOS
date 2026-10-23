@@ -1,60 +1,20 @@
 using IAAutos.Aplicacion.Comun;
-using IAAutos.Dominio.Catalogos;
 using IAAutos.Aplicacion.Reportes.DTOReportes;
-using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Reportes;
 
 namespace IAAutos.Aplicacion.Reportes;
 
 /// <summary>
-/// Consultas analiticas (lecturas dedicadas, sin CQRS general). Todas consideran solo unidades movilizadas, con la misma
-/// definicion que los listados: la vista vwViajesCompletos. Con <c>soloDeCliente</c> cuentan solo las unidades de ese cliente.
+/// Consulta de la tasa de rechazo (lectura dedicada, sin CQRS general). Considera solo unidades movilizadas, con la misma
+/// definicion que los listados: la vista vwViajesCompletos. Con <c>soloDeCliente</c> cuenta solo las unidades de ese cliente.
 /// </summary>
 public interface IConsultasReportes
 {
-    /// <summary>Hallazgos por proceso (solo cargue, transporte y descargue), por zona y por zona y proceso, de mayor a menor.</summary>
-    Task<(IReadOnlyList<ConteoProcesoDto> PorProceso, IReadOnlyList<ConteoZonaDto> PorZona, IReadOnlyList<ConteoZonaProcesoDto> PorZonaProceso)> ObtenerPatronesAsync(Guid? soloDeCliente, CancellationToken ct = default);
-
-    Task<(IReadOnlyList<ConteoClaseDto> PorClase, IReadOnlyList<ConteoTamanoDto> PorTamano)> ObtenerAnalisisAsync(Guid? soloDeCliente, CancellationToken ct = default);
-
     Task<ConteosRechazo> ObtenerConteosRechazoAsync(Guid? soloDeCliente, CancellationToken ct = default);
 }
 
 public sealed class clsReportesService(IConsultasReportes consultas, IUsuarioActual actual)
 {
-    public async Task<PatronesDto> ObtenerPatronesAsync(CancellationToken ct = default)
-    {
-        var (porProceso, porZona, porZonaProceso) = await consultas.ObtenerPatronesAsync(actual.ClienteRestringido(), ct);
-        return new PatronesDto(porProceso.Sum(p => p.Total), porProceso, porZona, porZonaProceso);
-    }
-
-    /// <summary>Cuantifica clases y tamanos de dano y propone mejoras sencillas segun las categorias predominantes.</summary>
-    public async Task<AnalisisDto> ObtenerAnalisisAsync(CancellationToken ct = default)
-    {
-        var (porClase, porTamano) = await consultas.ObtenerAnalisisAsync(actual.ClienteRestringido(), ct);
-        var sugerencias = new List<string>();
-
-        if (porClase.Count > 0)
-        {
-            var principal = porClase[0];
-            sugerencias.Add(
-                $"La clase de daño más frecuente es \"{principal.ClaseDano}\" ({principal.Total}). Revisar el procedimiento de manipulación asociado.");
-        }
-
-        var reemplazos = porTamano.FirstOrDefault(t => t.TamanoDano == clsTamanoDano.REQUIERE_REEMPLAZO);
-        if (reemplazos is { Total: > 0 })
-        {
-            sugerencias.Add($"{reemplazos.Total} hallazgo(s) requieren reemplazo de pieza: priorizar inspección reforzada en cargue.");
-        }
-
-        if (sugerencias.Count == 0)
-        {
-            sugerencias.Add("Sin hallazgos suficientes para sugerir mejoras.");
-        }
-
-        return new AnalisisDto(porClase, porTamano, sugerencias);
-    }
-
     /// <summary>
     /// Tasa de rechazo por operacion (unidades movilizadas con al menos un hallazgo) frente a la linea base del PRD.
     /// Las unidades pendientes se reportan aparte y no afectan la tasa.
