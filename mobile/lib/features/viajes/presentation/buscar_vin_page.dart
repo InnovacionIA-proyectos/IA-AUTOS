@@ -86,7 +86,12 @@ class _EstadoBuscarVinPage extends ConsumerState<BuscarVinPage> {
                           children: [
                             TextoMono(vehiculo.vin),
                             if (descripcion.isNotEmpty) Text(descripcion, style: tema.bodySmall),
-                            Text('${viaje.codigoMtrack} · ${viaje.placa}', style: tema.bodySmall),
+                            Row(
+                              children: [
+                                Text('${viaje.codigoMtrack} · ', style: tema.bodySmall),
+                                TextoMono(viaje.placa, estilo: tema.bodySmall),
+                              ],
+                            ),
                           ],
                         ),
                       );

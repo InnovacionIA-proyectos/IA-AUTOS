@@ -213,4 +213,13 @@ void main() {
       expect(find.text('Inspección de salida · cargue'), findsOneWidget);
     });
   });
+
+  // Pautas del Entendimiento (S5-HU-24.12): la placa es un código que se lee carácter a carácter contra la
+  // unidad que se tiene delante, igual que el VIN.
+  testWidgets('la placa va en monoespaciada, como el VIN', (tester) async {
+    await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1', placa: 'XKL482'));
+
+    final placa = tester.widget<Text>(find.text('XKL482'));
+    expect(placa.style?.fontFamily, 'monospace');
+  });
 }

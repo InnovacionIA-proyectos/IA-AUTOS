@@ -112,8 +112,9 @@ class FilaHallazgo extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 child: Image.file(
                   File(foto.ruta),
-                  width: 44,
-                  height: 38,
+                  // 48 de alto: es una zona táctil desde que la foto se puede abrir.
+                  width: 56,
+                  height: 48,
                   fit: BoxFit.cover,
                   semanticLabel: 'Foto de la novedad en ${hallazgo.parte}',
                 ),

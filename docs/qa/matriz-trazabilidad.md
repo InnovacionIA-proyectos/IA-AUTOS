@@ -129,6 +129,16 @@ queda pendiente; verificado contra la API: firmar deja `entrega_firmada_at` pues
 transferencia sin tipo de cierre. **La pantalla sigue mostrando las dos partes y sus selectores**: rediseñarla
 para el flujo de «cada quien firma desde su sesión» es S5-HU-25.4 (#116), no esta corrección.
 
+**S5-HU-24.12 (#112), pautas del Entendimiento §6 y §7:** cumplidas la acción primaria por pantalla con botón
+grande, las zonas táctiles de 48 px, el modo claro (`ThemeMode.light` fijo, la app no sigue el modo oscuro del
+teléfono), las listas de selección en vez de texto libre, el VIN y la placa en monoespaciada, el acuse visual al
+tomar, marcar o firmar, y el acuse en color al cerrar (verde enviado, ámbar en cola, rojo rechazado).
+
+**Falta el rojo de hallazgo crítico, y no por el color:** la app no usa el catálogo `niveles-severidad`, que la
+API ya sirve con los cuatro niveles (`v1_plus`, `v1`, `v2`, `v3`) y su campo `accion`. Hoy un hallazgo se
+registra con clase y tamaño, sin nivel, así que no hay dato con el que decidir qué es crítico. El nivel V entra
+con **S6-HU-01**, que añade cuadrante, nivel y preexistente al hallazgo; pintar un rojo antes sería inventarlo.
+
 **Pendientes anotados de estas cuatro:**
 
 - **Las 7 imágenes guía quedaron rehechas** (23-oct-2026), reemplazando las del prototipo. Son plantillas de

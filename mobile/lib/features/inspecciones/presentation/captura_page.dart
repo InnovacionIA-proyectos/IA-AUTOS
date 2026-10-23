@@ -224,20 +224,30 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       // informe que el servidor acababa de rechazar se anunciaba como «enviado y cerrado».
       final enCola = (await ref.read(colaRepositorioProvider).listar()).where((j) => j.id == job.id).firstOrNull;
       if (!mounted) return;
-      final (titulo, mensaje) = switch (enCola) {
-        null => ('Informe enviado', 'Quedó cerrado en el servidor.'),
+      // El color dice el desenlace de un vistazo, que es como se lee algo en el patio: verde si quedó hecho,
+      // ámbar si falta que salga, rojo si lo rechazaron.
+      final (titulo, mensaje, icono, color) = switch (enCola) {
+        null => ('Informe enviado', 'Quedó cerrado en el servidor.', Icons.check_circle, Colores.exito),
         // No se arregla reintentando: quien está en el patio tiene que saberlo ahora, no descubrirlo después.
         final j when j.fallido => (
             'No se pudo enviar',
             'El servidor rechazó el informe${j.error == null ? '' : ': ${j.error}'}. Nada se perdió: quedó '
                 'guardado en Inspecciones › Cola, para reintentarlo o descartarlo.',
+            Icons.error_outline,
+            Colores.peligro,
           ),
-        _ => ('Informe guardado', 'Quedó en cola; se enviará automáticamente cuando la señal sea estable.'),
+        _ => (
+            'Informe guardado',
+            'Quedó en cola; se enviará automáticamente cuando la señal sea estable.',
+            Icons.schedule,
+            Colores.advertencia,
+          ),
       };
       await showDialog<void>(
         context: context,
         builder: (contexto) => AlertDialog(
-          title: Text(titulo),
+          icon: Icon(icono, color: color, size: 40),
+          title: Text(titulo, style: TextStyle(color: color)),
           content: Text(mensaje),
           actions: [TextButton(onPressed: () => Navigator.of(contexto).pop(), child: const Text('OK'))],
         ),
@@ -398,7 +408,13 @@ class _DatosDelViaje extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               SizedBox(width: 96, child: Text(etiqueta, style: tema.bodySmall)),
-                              Expanded(child: Text(valor, style: tema.bodySmall?.copyWith(color: Colores.textoPrimario))),
+                              // La placa en monoespaciada, como el VIN: son códigos que se leen carácter a
+                              // carácter y se comparan contra algo que se tiene delante.
+                              Expanded(
+                                child: etiqueta == 'Placa'
+                                    ? TextoMono(valor, estilo: tema.bodySmall)
+                                    : Text(valor, style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
+                              ),
                             ],
                           ),
                         ),

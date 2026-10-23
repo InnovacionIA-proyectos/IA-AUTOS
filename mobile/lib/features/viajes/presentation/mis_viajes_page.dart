@@ -160,9 +160,16 @@ class _TarjetaViaje extends StatelessWidget {
               ),
             ],
           ),
-          Text(
-            [viaje.placa, viaje.unidad, viaje.trailer].whereType<String>().where((v) => v.isNotEmpty).join(' · '),
-            style: tema.bodySmall,
+          // La placa en monoespaciada, como el VIN: se lee carácter a carácter contra la unidad que se tiene
+          // delante. El resto es texto corriente.
+          Row(
+            children: [
+              TextoMono(viaje.placa, estilo: tema.bodySmall),
+              Text(
+                [viaje.unidad, viaje.trailer].whereType<String>().where((v) => v.isNotEmpty).map((v) => ' · $v').join(),
+                style: tema.bodySmall,
+              ),
+            ],
           ),
           if (ruta.isNotEmpty) Text(ruta, style: tema.bodySmall),
           const SizedBox(height: Espacio.sm),
