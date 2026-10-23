@@ -57,7 +57,7 @@ internal abstract class clsCatalogoEf<T>(clsAppDbContext contexto, IReloj reloj,
         lector.SoloPermitidos(CamposPermitidos);
         var entidad = await BuscarAsync(id, ct);
 
-        if (entidad is clsCatalogoCodificado codificado && lector.Tiene("codigo") && lector.Texto("codigo") != codificado.Codigo)
+        if (entidad is IConCodigo codificado && lector.Tiene("codigo") && lector.Texto("codigo") != codificado.Codigo)
         {
             throw clsErroresCampos.De("codigo", "El código no se puede cambiar: cree un valor nuevo e inactive este");
         }
@@ -75,7 +75,7 @@ internal abstract class clsCatalogoEf<T>(clsAppDbContext contexto, IReloj reloj,
         return await MapearAsync(entidad, ct);
     }
 
-    public async Task EliminarAsync(Guid id, CancellationToken ct = default) => Conjunto.Remove(await BuscarAsync(id, ct));
+    public virtual async Task EliminarAsync(Guid id, CancellationToken ct = default) => Conjunto.Remove(await BuscarAsync(id, ct));
 
     private async Task<T> BuscarAsync(Guid id, CancellationToken ct) =>
         await Conjunto.FirstOrDefaultAsync(e => e.Id == id, ct)
@@ -105,6 +105,39 @@ internal sealed class clsCatalogoSimple<T>(
 
     protected override Task<T> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct) =>
         Task.FromResult(fabrica(campos.Texto("codigo"), campos.Texto("nombre"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora));
+}
+
+/// <summary>
+/// Los estados de las ordenes Sofasa: codigo (el <c>StatusCode</c> real), nombre (la etiqueta), orden y activo. Un estado que alguna orden usa no se borra (409): se inactiva.
+/// </summary>
+internal sealed class clsCatalogoEstadosSofasa(clsAppDbContext contexto, IReloj reloj) : clsCatalogoEf<clsEstadoSofasa>(contexto, reloj, clsNombresCatalogo.ESTADOS_SOFASA)
+{
+    protected override IReadOnlyList<string> CamposPermitidos => clsCamposCatalogo.COMUNES;
+
+    protected override ValorCatalogo Mapear(clsEstadoSofasa e) => new()
+    {
+        ["id"] = e.Id,
+        ["codigo"] = e.Codigo,
+        ["nombre"] = e.Nombre,
+        ["orden"] = e.Orden,
+        ["activo"] = e.Activo,
+    };
+
+    protected override Task<clsEstadoSofasa> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct) =>
+        Task.FromResult(clsEstadoSofasa.Crear(campos.Texto("codigo"), campos.Texto("nombre"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora));
+
+    public override async Task EliminarAsync(Guid id, CancellationToken ct = default)
+    {
+        // La orden guarda el StatusCode como texto libre (sin llave foranea, para que la ingesta del ETL no falle con un estado nuevo): la regla de «en uso» se aplica aqui.
+        var estado = await Conjunto.FirstOrDefaultAsync(e => e.Id == id, ct)
+            ?? throw new clsEntidadNoEncontradaException($"No existe el valor {id} en el catálogo {Nombre}");
+        if (await Contexto.OrdenesSofasa.AnyAsync(o => o.StatusCode == estado.Codigo, ct))
+        {
+            throw new clsConflictoException("El valor está en uso y no se puede borrar: solo puede inactivarlo");
+        }
+
+        Conjunto.Remove(estado);
+    }
 }
 
 internal sealed class clsCatalogoNiveles(clsAppDbContext contexto, IReloj reloj)

@@ -153,6 +153,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsTamanoDano>(
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.TAMANOS_DANO, clsTamanoDano.Crear));
         servicios.AddScoped<ICatalogo, clsCatalogoNiveles>();
+        servicios.AddScoped<ICatalogo, clsCatalogoEstadosSofasa>();
         servicios.AddScoped<ICatalogo, clsCatalogoVistas>();
         servicios.AddScoped<ICatalogo, clsCatalogoCuadrantes>();
         servicios.AddScoped<ICatalogo, clsCatalogoPanelesDano>();

@@ -49,6 +49,19 @@ internal sealed class clsConfiguracionTamanoDano : IEntityTypeConfiguration<clsT
     public void Configure(EntityTypeBuilder<clsTamanoDano> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblTamanosDano");
 }
 
+internal sealed class clsConfiguracionEstadoSofasa : IEntityTypeConfiguration<clsEstadoSofasa>
+{
+    public void Configure(EntityTypeBuilder<clsEstadoSofasa> builder)
+    {
+        builder.ToTable("tblEstadosSofasa");
+        clsConfiguracionBase.Base(builder);
+        // El codigo es el StatusCode real de la orden (texto libre, con sus mayusculas): no se limita como el de los demas catalogos.
+        builder.Property(e => e.Codigo).HasMaxLength(clsEstadoSofasa.CODIGO_MAX).IsRequired();
+        builder.Property(e => e.Nombre).HasMaxLength(clsCatalogoBase.NOMBRE_MAX).IsRequired();
+        builder.HasIndex(e => e.Codigo).IsUnique().HasDatabaseName("UQ_tblEstadosSofasa_Codigo");
+    }
+}
+
 internal sealed class clsConfiguracionNivelSeveridad : IEntityTypeConfiguration<clsNivelSeveridad>
 {
     public void Configure(EntityTypeBuilder<clsNivelSeveridad> builder)

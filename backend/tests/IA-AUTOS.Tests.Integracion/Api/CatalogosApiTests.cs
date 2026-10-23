@@ -12,7 +12,7 @@ namespace IAAutos.Tests.Integracion.Api;
 public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private static readonly string[] NOMBRES =
-        ["etapas", "puntos-custodia", "tipos-unidad", "clases-dano", "tamanos-dano", "niveles-severidad", "vistas-foto", "cuadrantes", "paneles-dano", "cuadrante-regiones", "clientes"];
+        ["etapas", "puntos-custodia", "tipos-unidad", "clases-dano", "tamanos-dano", "niveles-severidad", "vistas-foto", "cuadrantes", "paneles-dano", "cuadrante-regiones", "clientes", "estados-sofasa"];
 
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);
 

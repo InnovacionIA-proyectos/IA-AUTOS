@@ -1076,6 +1076,29 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
+   tblEstadosSofasa: catalogo de los estados de las ordenes Sofasa. Codigo es el StatusCode REAL de la orden (texto libre, con sus mayusculas; unico sin distinguir mayusculas); Nombre, la
+   etiqueta que se muestra. tblOrdenesSofasa.StatusCode sigue siendo texto libre y NO lleva llave foranea: la ingesta del ETL no debe fallar por un estado que aun no este en el catalogo.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblEstadosSofasa', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblEstadosSofasa
+    (
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblEstadosSofasa PRIMARY KEY,
+        Codigo     nvarchar(100)     NOT NULL,
+        Nombre     nvarchar(100)     NOT NULL,
+        Orden      int               NOT NULL CONSTRAINT DF_tblEstadosSofasa_Orden DEFAULT (0),
+        Activo     bit               NOT NULL CONSTRAINT DF_tblEstadosSofasa_Activo DEFAULT (1),
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEstadosSofasa_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEstadosSofasa_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblEstadosSofasa_Codigo UNIQUE (Codigo),
+        CONSTRAINT CK_tblEstadosSofasa_Codigo CHECK (LEN(Codigo) > 0 AND Codigo = LTRIM(RTRIM(Codigo))),
+        CONSTRAINT CK_tblEstadosSofasa_Nombre CHECK (LEN(LTRIM(RTRIM(Nombre))) > 0),
+        CONSTRAINT CK_tblEstadosSofasa_Orden CHECK (Orden >= 0)
+    );
+END
+GO
+
+/* -----------------------------------------------------------------------------
    tblAuditLog (registro append-only de toda accion relevante).
    UsuarioId nulo = accion del sistema (por ejemplo, ingesta del ETL).
    ----------------------------------------------------------------------------- */

@@ -36,6 +36,7 @@ public sealed class clsAppDbContext : DbContext
     public DbSet<clsClaseDano> ClasesDano => Set<clsClaseDano>();
     public DbSet<clsTamanoDano> TamanosDano => Set<clsTamanoDano>();
     public DbSet<clsNivelSeveridad> NivelesSeveridad => Set<clsNivelSeveridad>();
+    public DbSet<clsEstadoSofasa> EstadosSofasa => Set<clsEstadoSofasa>();
     public DbSet<clsVistaFoto> VistasFoto => Set<clsVistaFoto>();
     public DbSet<clsCuadrante> Cuadrantes => Set<clsCuadrante>();
     public DbSet<clsCuadranteVista> CuadranteVistas => Set<clsCuadranteVista>();

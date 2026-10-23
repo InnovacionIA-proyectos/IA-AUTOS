@@ -88,6 +88,7 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | POST `/api/etl/sofasa/ordenes` | token del ETL | ingesta idempotente por `source_id` |
 | GET `/api/sofasa/ordenes` | autenticado | pagina `{items, total, pagina, tamano}` (50 por defecto, maximo 200; mas recientes primero) con `orden` y filtros `vin`, `estado`, `ciudad`, `desde`, `hasta`; cada orden trae `viaje_id` y `codigo_mtrack`; inspector y conductor solo ven las de sus viajes |
 | GET `/api/catalogos` | autenticado | todos los catalogos maestros (etapas, lugares, clases y tamanos de dano, niveles, vistas, cuadrantes con las zonas provisionales, paneles de dano y sus regiones, clientes...) con version (`ETag`, `304` con `If-None-Match`) |
+| GET `/api/catalogos/estados-sofasa` | autenticado | los estados de las ordenes Sofasa (`codigo` = el `status_code` real, `nombre`, `orden`, `activo`); se administra como los demas catalogos y un estado que alguna orden usa no se borra (`409`); `GET /api/sofasa/ordenes` sigue devolviendo `status_code` sin traducir |
 | GET `/api/catalogos/{nombre}` | autenticado | un catalogo con su version (`cuadrante-vistas` ya no existe: `404`, lo reemplazo `cuadrante-regiones`) |
 | GET `/api/catalogos/paneles-dano/{codigo}/imagen` | publico | la imagen de fondo de un panel de dano, con cache larga; `404` si aun no tiene |
 | PUT `/api/catalogos/paneles-dano/{codigo}/imagen` | admin, super_admin | cambia la imagen del panel con un archivo ya subido (`{ "archivo": "…png" }`) |
