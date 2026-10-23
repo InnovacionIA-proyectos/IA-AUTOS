@@ -53,6 +53,7 @@ public sealed class clsArchivosController(clsArchivosService servicio, IFirmador
     /// </summary>
     [HttpGet("{archivo}")]
     [AllowAnonymous]
+    [CodigoError("URL_FIRMADA_INVALIDA", "La URL no tiene firma, la firma no coincide o ya vencio: pida una URL nueva")]
     public async Task<IActionResult> Obtener(string archivo, [FromQuery] string? exp, [FromQuery] string? firma, CancellationToken ct)
     {
         if (!firmador.Validar(archivo, exp, firma))

@@ -188,9 +188,9 @@ public sealed class VisibilidadClienteApiTests(clsBaseDatosFixture bd) : clsPrue
         var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
         await SesionAsync("usuario-otro@ejemplo.com", clsRol.COORDINADOR_CALIDAD, e.Otro);
 
-        var propio = await Cliente(administrador.Token).GetAsync($"/api/usuarios?clienteId={e.Sofasa}");
-        var ajeno = await Cliente(administrador.Token).GetAsync($"/api/usuarios?clienteId={e.Otro}");
-        var delSuper = await ComoJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/usuarios?clienteId={e.Otro}"));
+        var propio = await Cliente(administrador.Token).GetAsync($"/api/usuarios?cliente_id={e.Sofasa}");
+        var ajeno = await Cliente(administrador.Token).GetAsync($"/api/usuarios?cliente_id={e.Otro}");
+        var delSuper = await ComoJsonAsync(await Cliente(superAdmin.Token).GetAsync($"/api/usuarios?cliente_id={e.Otro}"));
 
         Assert.Equal(HttpStatusCode.OK, propio.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, ajeno.StatusCode);

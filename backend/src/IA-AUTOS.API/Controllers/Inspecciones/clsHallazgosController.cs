@@ -72,6 +72,7 @@ public sealed class clsHallazgosController(clsSeguimientoService seguimiento, cl
     /// </summary>
     [HttpPost("{id:guid}/revision")]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [CodigoError("HALLAZGO_YA_REVISADO", "La novedad del conductor ya fue revisada: su zona, clase y nivel ya no se cambian")]
     [ProducesResponseType<HallazgoDto>(StatusCodes.Status200OK)]
     [CuerpoSolicitud(typeof(RevisarHallazgoRequest))]
     public async Task<IActionResult> Revisar(Guid id, CancellationToken ct) =>

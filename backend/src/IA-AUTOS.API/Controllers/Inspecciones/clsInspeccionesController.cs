@@ -19,6 +19,7 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
     /// </summary>
     [HttpPost]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
+    [CodigoError("ETAPA_PREVIA_SIN_CIERRE", "La salida exige la llegada cerrada de la etapa anterior del VIN (details.etapa_previa dice cual)")]
     [ProducesResponseType<InspeccionDto>(StatusCodes.Status201Created)]
     [CuerpoSolicitud(typeof(IAAutos.Aplicacion.Inspecciones.DTOInspecciones.CrearInspeccionRequest))]
     public async Task<IActionResult> Crear(CancellationToken ct)

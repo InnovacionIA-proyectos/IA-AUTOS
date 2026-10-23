@@ -42,6 +42,7 @@ public sealed class clsAuthController(
     /// </summary>
     [HttpPost("login-conductor")]
     [AllowAnonymous]
+    [CodigoError("ACCOUNT_LOCKED", "La cuenta esta bloqueada por PIN errados seguidos (details.bloqueado_hasta)")]
     [EnableRateLimiting(POLITICA_LIMITE_LOGIN_CONDUCTOR)]
     [ProducesResponseType<LoginResponse>(StatusCodes.Status200OK)]
     [CuerpoSolicitud(typeof(LoginConductorRequest))]
@@ -73,6 +74,7 @@ public sealed class clsAuthController(
     /// </summary>
     [HttpPost("login-portal")]
     [AllowAnonymous]
+    [CodigoError("PORTAL_USER_NOT_LINKED", "La persona del portal no tiene acceso habilitado a IA Autos")]
     [EnableRateLimiting(POLITICA_LIMITE_LOGIN_PORTAL)]
     [ProducesResponseType<LoginPortalResponse>(StatusCodes.Status200OK)]
     [CuerpoSolicitud(typeof(LoginPortalUsuarioDto), EsArreglo = true)]
