@@ -243,9 +243,9 @@ public sealed class VisibilidadClienteApiTests(clsBaseDatosFixture bd) : clsPrue
         var delOtro = await SesionAsync("coord-otro@ejemplo.com", clsRol.COORDINADOR_CALIDAD, e.Otro);
         var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
 
-        var patronesSofasa = await ComoJsonAsync(await Cliente(delSofasa.Token).GetAsync("/api/patrones"));
-        var patronesOtro = await ComoJsonAsync(await Cliente(delOtro.Token).GetAsync("/api/patrones"));
-        var patronesTodos = await ComoJsonAsync(await Cliente(superAdmin.Token).GetAsync("/api/patrones"));
+        var patronesSofasa = await ComoJsonAsync(await Cliente(delSofasa.Token).GetAsync("/api/reportes/patrones"));
+        var patronesOtro = await ComoJsonAsync(await Cliente(delOtro.Token).GetAsync("/api/reportes/patrones"));
+        var patronesTodos = await ComoJsonAsync(await Cliente(superAdmin.Token).GetAsync("/api/reportes/patrones"));
         var rechazoSofasa = await ComoJsonAsync(await Cliente(delSofasa.Token).GetAsync("/api/metricas/rechazo"));
         var rechazoTodos = await ComoJsonAsync(await Cliente(superAdmin.Token).GetAsync("/api/metricas/rechazo"));
 
