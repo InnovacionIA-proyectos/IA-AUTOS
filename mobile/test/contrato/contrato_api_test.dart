@@ -64,7 +64,7 @@ void main() {
     // Los catálogos maestros no son listas fijas en la app: se descargan y se guardan con su versión.
     'CatalogosDto': ['version', 'catalogos'],
     'InspeccionDto': ['id'],
-    'ArchivoSubidoDto': ['storage_path'],
+    'ArchivoSubidoDto': ['storage_path', 'hash_sha256'],
     'OrdenSofasaDto': [
       'id', 'vin', 'status_code', 'model_description', 'orden_number', 'orden_sap', 'origin_cedi', 'destination_city',
       'destination_address', 'loading_date', 'appointment', 'loading_dock', 'weight',
@@ -77,10 +77,14 @@ void main() {
     'LoginConductorRequest': ['cedula', 'pin'],
     'CambiarPinRequest': ['pin_actual', 'pin_nuevo'],
     'CrearInspeccionRequest': ['etapa_id', 'momento', 'fecha', 'lat', 'lng', 'notas'],
-    'CrearEvidenciaRequest': ['storage_path', 'sello_fecha', 'sello_lat', 'sello_lng'],
+    // Las diez claves van siempre, aunque algunas puedan ir nulas: la API las exige presentes.
+    'CrearEvidenciaRequest': [
+      'hallazgo_id', 'vista_id', 'storage_path', 'sello_fecha', 'sello_lat', 'sello_lng',
+      'precision', 'dispositivo_id', 'nota', 'hash_sha256',
+    ],
     'CrearHallazgoRequest': ['parte_vehiculo', 'clase_dano', 'tamano_dano', 'coords_diagrama'],
     'FirmarTransferenciaRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma_entrega', 'firma_recibe'],
-    'SubirArchivoRequest': ['data', 'ext'],
+    // La app sube multipart, no base64: `SubirArchivoRequest` ya no se usa.
   };
 
   group('campos que la app lee', () {
@@ -122,6 +126,11 @@ void main() {
         expect(operaciones!.containsKey(metodo), isTrue, reason: 'Ya no existe $metodo en $ruta');
       });
     }
+
+    test('la subida de archivos acepta multipart', () {
+      final contenido = ((rutas['/api/uploads'] as Map<String, dynamic>)['post'] as Map<String, dynamic>)['requestBody'] as Map<String, dynamic>;
+      expect((contenido['content'] as Map<String, dynamic>).keys, contains('multipart/form-data'));
+    });
 
     test('el listado de inspecciones admite filtrar por usuarioId', () {
       final parametros = ((rutas['/api/inspecciones'] as Map<String, dynamic>)['get'] as Map<String, dynamic>)['parameters'] as List<dynamic>;

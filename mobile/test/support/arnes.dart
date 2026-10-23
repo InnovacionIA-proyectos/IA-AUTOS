@@ -142,6 +142,11 @@ class InspeccionesRepositorioFalso implements InspeccionesRepositorio {
   }
 }
 
+class DispositivoFalso implements ServicioDispositivo {
+  @override
+  Future<String> id() async => 'equipo-de-prueba';
+}
+
 class UbicacionFalsa implements ServicioUbicacion {
   Posicion? posicion = const Posicion(6.2, -75.5);
   UbicacionNoDisponible? error;
@@ -169,7 +174,8 @@ class Arnes {
         archivos = ArchivosFalsos(const []),
         auth = AuthRepositorioFalso(),
         inspecciones = InspeccionesRepositorioFalso(),
-        ubicacion = UbicacionFalsa();
+        ubicacion = UbicacionFalsa(),
+        dispositivo = DispositivoFalso();
 
   final Entorno entorno;
   final AlmacenSesionEnMemoria almacen;
@@ -180,6 +186,7 @@ class Arnes {
   final AuthRepositorioFalso auth;
   final InspeccionesRepositorioFalso inspecciones;
   final UbicacionFalsa ubicacion;
+  final DispositivoFalso dispositivo;
 
   late final ProcesadorCola procesador = ProcesadorCola(cola: cola, gateway: gateway, red: red, archivos: archivos);
 
@@ -192,6 +199,7 @@ class Arnes {
         procesadorColaProvider.overrideWithValue(procesador),
         inspeccionesRepositorioProvider.overrideWithValue(inspecciones),
         servicioUbicacionProvider.overrideWithValue(ubicacion),
+        servicioDispositivoProvider.overrideWithValue(dispositivo),
       ];
 
   ProviderContainer contenedor() => ProviderContainer(overrides: overrides, retry: (_, _) => null);

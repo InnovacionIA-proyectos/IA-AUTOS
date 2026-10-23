@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/entorno.dart';
 import '../core/db/app_database.dart';
+import '../core/db/cache_lecturas.dart';
+import '../core/dispositivo/servicio_dispositivo_local.dart';
 import '../core/dispositivo/servicios.dart';
 import '../core/dispositivo/servicios_reales.dart';
 import '../core/http/cliente_api.dart';
@@ -32,4 +34,10 @@ final clienteApiProvider = Provider<ClienteApi>((ref) {
 });
 
 final servicioUbicacionProvider = Provider<ServicioUbicacion>((ref) => const ServicioUbicacionGeolocator());
+
+/// La identidad del equipo vive con la caché, no con la sesión: es del celular y sobrevive a cerrar sesión.
+final servicioDispositivoProvider = Provider<ServicioDispositivo>(
+  (ref) => ServicioDispositivoLocal(CacheLecturasRepo(ref.watch(appDatabaseProvider))),
+);
+
 final servicioFotosProvider = Provider<ServicioFotos>((ref) => const ServicioFotosArchivos());

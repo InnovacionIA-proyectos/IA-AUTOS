@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
@@ -305,6 +306,36 @@ void main() {
       expect(cola.jobs, isEmpty);
     });
   });
+
+  group('lo que viaja con cada evidencia', () {
+    test('la vista, el sello, la precision, el equipo, la nota y el hash del servidor', () async {
+      await cola.agregar(informe(
+        fotos: [
+          FotoLocal(
+            ruta: 'a.jpg',
+            selloFecha: '2026-01-02T10:01:00.000Z',
+            selloLat: 6.21,
+            selloLng: -75.51,
+            vistaId: 'v-frontal',
+            nota: 'rayon',
+            precision: 12.5,
+            dispositivoId: 'equipo-1',
+          ),
+        ],
+      ));
+
+      await procesador.procesar(usuarioPrueba);
+
+      final evidencia = gateway.evidencias.single;
+      expect(evidencia['vista_id'], 'v-frontal');
+      expect(evidencia['precision'], 12.5);
+      expect(evidencia['dispositivo_id'], 'equipo-1');
+      expect(evidencia['nota'], 'rayon');
+      // El hash lo calcula el servidor al subir el archivo y la app lo reenvia: asi se detecta un archivo danado.
+      expect(evidencia['hash_sha256'], 'hash-1');
+    });
+  });
+
 }
 
 class _ArchivosQueFallanAlBorrar extends ArchivosFalsos {

@@ -24,8 +24,20 @@ abstract interface class EstadoRed {
 
 /// Acceso a los archivos de las fotos guardadas en el dispositivo.
 abstract interface class ArchivosLocales {
-  Future<String> leerBase64(String ruta);
+  /// Contenido del archivo para subirlo como multipart.
+  Future<List<int>> leerBytes(String ruta);
+
   Future<void> borrar(String ruta);
+}
+
+/// Lo que devuelve la API al subir un archivo: dónde quedó y su huella.
+class ArchivoSubido {
+  const ArchivoSubido({required this.storagePath, this.hash});
+
+  final String storagePath;
+
+  /// La calcula el servidor. La app la guarda y la reenvía con la evidencia.
+  final String? hash;
 }
 
 /// Operaciones de la API que usa la cola, ya con los nombres y formas del contrato.
@@ -40,15 +52,23 @@ abstract interface class GatewayInformes {
     String? notas,
   });
 
-  /// Sube la imagen en base64 y devuelve su `storage_path`.
-  Future<String> subirImagen(String base64, {String ext = 'jpg'});
+  /// Sube la imagen como multipart y devuelve dónde quedó y su huella.
+  Future<ArchivoSubido> subirImagen(List<int> bytes, {String nombre = 'foto.jpg'});
 
+  /// Registra una evidencia. [vistaId] es la vista del checklist que cubre; [hallazgoId], el hallazgo al que
+  /// pertenece. La API exige todos los campos presentes, aunque algunos puedan ir nulos.
   Future<void> agregarEvidencia(
     String inspeccionId, {
     required String storagePath,
     required String selloFecha,
     double? selloLat,
     double? selloLng,
+    String? vistaId,
+    String? hallazgoId,
+    double? precision,
+    String? dispositivoId,
+    String? nota,
+    String? hash,
   });
 
   Future<void> agregarHallazgo(String inspeccionId, HallazgoLocal hallazgo);

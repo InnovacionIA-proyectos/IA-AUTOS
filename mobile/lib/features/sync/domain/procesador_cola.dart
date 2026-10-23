@@ -172,8 +172,10 @@ class ProcesadorCola {
     for (var i = 0; i < job.fotos.length; i++) {
       var foto = job.fotos[i];
       if (foto.storagePath == null) {
-        final storagePath = await gateway.subirImagen(await archivos.leerBase64(foto.ruta));
-        foto = foto.copyWith(storagePath: storagePath);
+        final subido = await gateway.subirImagen(await archivos.leerBytes(foto.ruta), nombre: 'foto-$i.jpg');
+        // El hash lo calcula el servidor al recibir el archivo; se guarda y se reenvía con la evidencia, que es
+        // como se detecta que el archivo llegó dañado.
+        foto = foto.copyWith(storagePath: subido.storagePath, hash: subido.hash);
         job = job.conProgreso(fotos: _reemplazar(job.fotos, i, foto));
         await cola.guardar(job);
       }
@@ -184,6 +186,11 @@ class ProcesadorCola {
           selloFecha: foto.selloFecha,
           selloLat: foto.selloLat,
           selloLng: foto.selloLng,
+          vistaId: foto.vistaId,
+          precision: foto.precision,
+          dispositivoId: foto.dispositivoId,
+          nota: foto.nota,
+          hash: foto.hash,
         );
         foto = foto.copyWith(enviada: true);
         job = job.conProgreso(fotos: _reemplazar(job.fotos, i, foto));

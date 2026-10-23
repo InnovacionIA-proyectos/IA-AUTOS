@@ -30,9 +30,9 @@ class GatewayInformesApi implements GatewayInformes {
   }
 
   @override
-  Future<String> subirImagen(String base64, {String ext = 'jpg'}) async {
-    final r = await _api.post('/api/uploads', cuerpo: {'data': base64, 'ext': ext});
-    return (r as Map<String, dynamic>)['storage_path'] as String;
+  Future<ArchivoSubido> subirImagen(List<int> bytes, {String nombre = 'foto.jpg'}) async {
+    final r = await _api.subirArchivo('/api/uploads', bytes: bytes, nombre: nombre) as Map<String, dynamic>;
+    return ArchivoSubido(storagePath: r['storage_path'] as String, hash: r['hash_sha256'] as String?);
   }
 
   @override
@@ -42,12 +42,25 @@ class GatewayInformesApi implements GatewayInformes {
     required String selloFecha,
     double? selloLat,
     double? selloLng,
+    String? vistaId,
+    String? hallazgoId,
+    double? precision,
+    String? dispositivoId,
+    String? nota,
+    String? hash,
   }) async {
+    // La API exige las diez claves presentes; el valor puede ir nulo (una foto sin GPS, una vista sin nota).
     await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/evidencias', cuerpo: {
+      'hallazgo_id': hallazgoId,
+      'vista_id': vistaId,
       'storage_path': storagePath,
       'sello_fecha': selloFecha,
       'sello_lat': selloLat,
       'sello_lng': selloLng,
+      'precision': precision,
+      'dispositivo_id': dispositivoId,
+      'nota': nota,
+      'hash_sha256': hash,
     });
   }
 

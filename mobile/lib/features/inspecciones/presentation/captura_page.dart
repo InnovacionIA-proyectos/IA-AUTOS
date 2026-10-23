@@ -115,6 +115,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     try {
       final ruta = await ref.read(servicioFotosProvider).guardar(temporal);
       final pos = await ref.read(servicioUbicacionProvider).obtenerRapida();
+      final dispositivo = await ref.read(servicioDispositivoProvider).id();
       if (!mounted) return;
       setState(() {
         _fotos.add(FotoLocal(
@@ -125,6 +126,8 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
           selloLng: pos?.lng,
           vistaId: vista.id,
           nota: nota,
+          precision: pos?.precision,
+          dispositivoId: dispositivo,
         ));
       });
     } catch (_) {

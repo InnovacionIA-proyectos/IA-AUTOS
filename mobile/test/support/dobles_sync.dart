@@ -54,9 +54,9 @@ class ArchivosFalsos implements ArchivosLocales {
   final List<String> borrados = [];
 
   @override
-  Future<String> leerBase64(String ruta) async {
+  Future<List<int>> leerBytes(String ruta) async {
     if (!existentes.contains(ruta)) throw StateError('No existe $ruta');
-    return 'base64:$ruta';
+    return ruta.codeUnits;
   }
 
   @override
@@ -106,9 +106,10 @@ class GatewayFalso implements GatewayInformes {
   }
 
   @override
-  Future<String> subirImagen(String base64, {String ext = 'jpg'}) async {
+  Future<ArchivoSubido> subirImagen(List<int> bytes, {String nombre = 'foto.jpg'}) async {
     await _paso('subirImagen');
-    return 'ruta/${++_imagenes}.$ext';
+    final n = ++_imagenes;
+    return ArchivoSubido(storagePath: 'ruta/$n.jpg', hash: 'hash-$n');
   }
 
   @override
@@ -118,9 +119,27 @@ class GatewayFalso implements GatewayInformes {
     required String selloFecha,
     double? selloLat,
     double? selloLng,
+    String? vistaId,
+    String? hallazgoId,
+    double? precision,
+    String? dispositivoId,
+    String? nota,
+    String? hash,
   }) async {
     await _paso('agregarEvidencia');
-    evidencias.add({'inspeccion': inspeccionId, 'path': storagePath, 'fecha': selloFecha, 'lat': selloLat, 'lng': selloLng});
+    evidencias.add({
+      'inspeccion': inspeccionId,
+      'path': storagePath,
+      'fecha': selloFecha,
+      'lat': selloLat,
+      'lng': selloLng,
+      'vista_id': vistaId,
+      'hallazgo_id': hallazgoId,
+      'precision': precision,
+      'dispositivo_id': dispositivoId,
+      'nota': nota,
+      'hash_sha256': hash,
+    });
   }
 
   @override

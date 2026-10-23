@@ -58,6 +58,15 @@ class ClienteApi {
   Future<dynamic> post(String ruta, {Object? cuerpo, Map<String, String>? encabezados}) async =>
       (await enviar('POST', ruta, cuerpo: cuerpo, encabezados: encabezados)).datos;
 
+  /// Sube un archivo como `multipart/form-data`.
+  ///
+  /// Multipart y no base64: base64 infla el cuerpo un tercio y obliga a tener la foto entera en memoria dos
+  /// veces, que en un celular de gama baja con varias fotos en cola es justo lo que lo tumba.
+  Future<dynamic> subirArchivo(String ruta, {required List<int> bytes, required String nombre, String campo = 'archivo'}) async {
+    final datos = FormData.fromMap({campo: MultipartFile.fromBytes(bytes, filename: nombre)});
+    return (await enviar('POST', ruta, cuerpo: datos)).datos;
+  }
+
   /// Petición que devuelve la respuesta completa (estado, encabezados y cuerpo).
   ///
   /// [estadosExtra] son los estados fuera de 2xx que NO son un error para quien llama; por ejemplo `{304}` en una
