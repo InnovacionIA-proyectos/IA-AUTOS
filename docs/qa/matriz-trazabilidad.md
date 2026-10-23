@@ -212,6 +212,13 @@ para el flujo de «cada quien firma desde su sesión» es S5-HU-25.4 (#116), no 
      catálogos: es el único camino que ejercita la descarga tras la transición `autenticado→autenticado`.
      Sin cubrir en dispositivo: que la cola no se marque fallida al entrar con PIN temporal (haría falta dejar
      un informe encolado antes de que se lo reinicien).
+   - **La pantalla «Sin permisos» de la ruta de captura no se puede alcanzar en campo, por diseño.** Queda
+     cubierta por `mobile/test/widgets/menu_por_rol_test.dart`. La razón: ningún rol ve viajes y a la vez tiene
+     prohibido capturar. `GET /api/viajes/mios` solo devuelve los viajes donde se participa como conductor o
+     inspector, y esos dos roles son justo los que pueden capturar (`clsRol.ESCRITURA` = inspector, conductor,
+     admin). Comprobado también con el super administrador, que **no** tiene `registrar_inspecciones` y recibe
+     cero viajes. La guarda protege el enlace directo y el caso de que a alguien le cambien el rol con la sesión
+     abierta; para verla en campo habría que cambiarle el rol a un inspector con viajes y hacerlo reingresar.
    - **Abierto, para revisar con el equipo: qué hace un coordinador en la app de campo.** Entra y ve tres
      pestañas vacías, y es correcto: `GET /api/viajes/mios` devuelve los viajes donde se participa como
      conductor o inspector, y un coordinador no participa en ninguno (comprobado: `/mios` responde `[]` y
