@@ -34,6 +34,7 @@ Map<String, dynamic> etapaJson(
   String proceso, {
   bool requiere = true,
   String? viajeId,
+  bool conApoyo = false,
   List<Map<String, dynamic>> inspecciones = const [],
 }) =>
     {
@@ -42,6 +43,7 @@ Map<String, dynamic> etapaJson(
       'proceso': proceso,
       'requiere_inspeccion': requiere,
       'viaje_id': viajeId,
+      'con_personal_apoyo': conApoyo,
       'inspecciones': inspecciones,
     };
 
@@ -317,6 +319,29 @@ void main() {
 
         expect(momentosDeEtapa(inv.etapas[1], inv).first.sePuedeCapturar, isTrue);
       });
+    });
+  });
+
+  group('quien captura la etapa', () {
+    // La API se lo permitiria igual; es la app la que no se lo ofrece, porque ese cargue lo inspecciona el
+    // personal de apoyo y el conductor solo firma lo que recibe.
+    test('el conductor no captura un cargue con personal de apoyo', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue', conApoyo: true)]);
+
+      expect(puedeCapturar(inv.etapas.single, rol: 'conductor'), isFalse);
+      expect(puedeCapturar(inv.etapas.single, rol: 'inspector'), isTrue, reason: 'a el si le toca');
+    });
+
+    test('sin personal de apoyo el conductor si captura: no hay quien lo haga por el', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue')]);
+
+      expect(puedeCapturar(inv.etapas.single, rol: 'conductor'), isTrue);
+    });
+
+    test('solo aplica al cargue: en descargue el conductor captura igual', () {
+      final inv = inventario([etapaJson('e1', 1, 'descargue', conApoyo: true)]);
+
+      expect(puedeCapturar(inv.etapas.single, rol: 'conductor'), isTrue);
     });
   });
 }

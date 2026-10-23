@@ -49,14 +49,19 @@ void main() {
     'InventarioDto': ['id', 'vin', 'marca', 'modelo', 'operacion', 'etapas'],
     // `lugar` se pinta en la tarjeta de la etapa y `viaje_id` es lo que lleva a la captura los datos del
     // transporte: sin él la captura no tiene de dónde sacar la placa ni el conductor.
-    'InventarioEtapaDto': ['id', 'orden', 'proceso', 'lugar', 'requiere_inspeccion', 'viaje_id', 'inspecciones'],
+    'InventarioEtapaDto': [
+      'id', 'orden', 'proceso', 'lugar', 'requiere_inspeccion', 'viaje_id', 'con_personal_apoyo', 'inspecciones',
+    ],
     'ViajeDto': [
       'id', 'codigo_mtrack', 'placa', 'estado', 'unidad', 'trailer', 'conductor_nombre', 'inspector_nombre',
       'origen', 'destino', 'vehiculos',
     ],
     'ViajeVehiculoDto': ['vin', 'marca', 'modelo', 'color', 'operacion'],
-    'InventarioInspeccionDto': ['id', 'momento', 'momento_nombre', 'fecha', 'estado', 'notas', 'hallazgos', 'evidencias', 'transferencia'],
-    'TransferenciaDto': ['firmada'],
+    'InventarioInspeccionDto': [
+      'id', 'momento', 'momento_nombre', 'fecha', 'cerrada_at', 'estado', 'notas', 'hallazgos', 'evidencias',
+      'transferencia',
+    ],
+    'TransferenciaDto': ['firmada', 'tipo_cierre'],
     'HallazgoDto': ['id', 'parte_vehiculo', 'clase_dano', 'tamano_dano', 'coords_diagrama'],
     'CoordsDiagramaDto': ['x', 'y'],
     'EvidenciaDto': ['id', 'url'],
@@ -82,7 +87,8 @@ void main() {
       'hallazgo_id', 'vista_id', 'storage_path', 'sello_fecha', 'sello_lat', 'sello_lng',
       'precision', 'dispositivo_id', 'nota', 'hash_sha256',
     ],
-    'CrearHallazgoRequest': ['parte_vehiculo', 'clase_dano', 'tamano_dano', 'coords_diagrama'],
+    // La evidencia va DENTRO: el servidor no acepta un hallazgo sin su foto.
+    'CrearHallazgoRequest': ['parte_vehiculo', 'clase_dano', 'tamano_dano', 'coords_diagrama', 'evidencia'],
     'FirmarTransferenciaRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma_entrega', 'firma_recibe'],
     // La app sube multipart, no base64: `SubirArchivoRequest` ya no se usa.
   };

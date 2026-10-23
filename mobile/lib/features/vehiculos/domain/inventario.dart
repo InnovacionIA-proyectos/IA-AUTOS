@@ -104,6 +104,7 @@ class EtapaVista {
     required this.requiereInspeccion,
     this.lugar,
     this.viajeId,
+    this.conPersonalApoyo = false,
     this.inspecciones = const [],
   });
 
@@ -114,6 +115,7 @@ class EtapaVista {
         requiereInspeccion: json['requiere_inspeccion'] as bool,
         lugar: json['lugar'] as String?,
         viajeId: json['viaje_id'] as String?,
+        conPersonalApoyo: json['con_personal_apoyo'] as bool? ?? false,
         inspecciones: [for (final i in (json['inspecciones'] as List<dynamic>? ?? [])) InspeccionVista.fromJson(i as Map<String, dynamic>)],
       );
 
@@ -129,6 +131,9 @@ class EtapaVista {
 
   /// Viaje del que cuelga la etapa: de él salen la placa, el tráiler, la unidad y el conductor.
   final String? viajeId;
+
+  /// En el cargue hay inspector o embarcador. Entonces el conductor no captura: solo firma el recibo.
+  final bool conPersonalApoyo;
 
   final List<InspeccionVista> inspecciones;
 }
@@ -197,6 +202,16 @@ class MomentoEtapa {
   bool get enBorrador => inspeccion != null && !inspeccion!.cerrada;
   bool get sePuedeCapturar => inspeccion == null && bloqueo == null;
 }
+
+/// Quién captura esta etapa: el conductor solo cuando no hay quien lo haga por él.
+///
+/// La API se lo permitiría igual; es la app la que no se lo ofrece, porque el cargue con personal de apoyo lo
+/// inspecciona ese personal y el conductor solo firma lo que recibe.
+bool puedeCapturar(EtapaVista etapa, {required String rol}) =>
+    !(rol == 'conductor' && etapa.proceso == 'cargue' && etapa.conPersonalApoyo);
+
+/// Lo que se le dice al conductor cuando no le toca a él.
+const mensajeCargueConApoyo = 'Este cargue tiene personal de apoyo: solo firmas el recibo.';
 
 /// Los dos momentos de una etapa que exige inspección, en orden. Una etapa que no la exige no tiene ninguno:
 /// ahí solo se firma.

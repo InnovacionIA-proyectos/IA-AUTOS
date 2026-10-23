@@ -71,6 +71,7 @@ class _Detalle extends ConsumerWidget {
     final catalogos = ref.watch(catalogosProvider);
     final ultima = inventario.ultimaInspeccion;
     final vinRuta = Uri.encodeComponent(inventario.vin);
+    final rol = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol)) ?? '';
 
     return ListView(
       padding: const EdgeInsets.all(Espacio.lg),
@@ -105,6 +106,7 @@ class _Detalle extends ConsumerWidget {
               etapa: etapa,
               procesoNombre: catalogos.etiqueta(Catalogo.etapas, etapa.proceso),
               momentos: momentosDeEtapa(etapa, inventario),
+              capturaAjena: !puedeCapturar(etapa, rol: rol),
               accion: accionDeEtapa(etapa, inventario),
               // El bloqueo nombra la etapa anterior, y el nombre sale del catálogo: el dominio solo da su código.
               nombreDeEtapa: (codigo) => catalogos.etiqueta(Catalogo.etapas, codigo),
@@ -202,6 +204,7 @@ class _TarjetaEtapa extends StatelessWidget {
     required this.etapa,
     required this.procesoNombre,
     required this.momentos,
+    required this.capturaAjena,
     required this.accion,
     required this.nombreDeEtapa,
     required this.alCapturar,
@@ -213,6 +216,9 @@ class _TarjetaEtapa extends StatelessWidget {
   /// Nombre de la etapa segun el catalogo, ya resuelto por quien la construye.
   final String procesoNombre;
   final List<MomentoEtapa> momentos;
+
+  /// La captura de esta etapa no le toca a quien está mirando.
+  final bool capturaAjena;
   final AccionEtapa accion;
   final String Function(String codigoEtapa) nombreDeEtapa;
   final void Function(String momento) alCapturar;
@@ -241,10 +247,16 @@ class _TarjetaEtapa extends StatelessWidget {
               Insignia(etapa.requiereInspeccion ? 'Requiere informe' : 'Solo firma', tono: etapa.requiereInspeccion ? TonoInsignia.info : TonoInsignia.neutro),
             ],
           ),
-          for (final momento in momentos) ...[
-            const SizedBox(height: Espacio.sm),
-            _FilaMomento(momento: momento, nombreDeEtapa: nombreDeEtapa, alCapturar: () => alCapturar(momento.momento)),
-          ],
+          if (capturaAjena)
+            Padding(
+              padding: const EdgeInsets.only(top: Espacio.sm),
+              child: Text(mensajeCargueConApoyo, style: tema.bodySmall),
+            )
+          else
+            for (final momento in momentos) ...[
+              const SizedBox(height: Espacio.sm),
+              _FilaMomento(momento: momento, nombreDeEtapa: nombreDeEtapa, alCapturar: () => alCapturar(momento.momento)),
+            ],
           const SizedBox(height: Espacio.sm),
           switch (accion) {
             FirmarTransferencia(firmada: true) => const Insignia('Transferencia firmada', tono: TonoInsignia.exito),
