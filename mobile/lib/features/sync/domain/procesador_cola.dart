@@ -1,5 +1,4 @@
 import '../../../core/errores/error_api.dart';
-import '../../inspecciones/domain/foto_local.dart';
 import 'job.dart';
 import 'puertos.dart';
 
@@ -198,9 +197,18 @@ class ProcesadorCola {
       }
     }
 
-    // 3) Hallazgos (reanudable por índice).
+    // 3) Hallazgos (reanudable por índice). Cada uno va con su foto dentro, así que primero se sube el archivo
+    //    y se guarda el progreso: si se corta aquí, al reanudar no se vuelve a subir.
     for (var i = job.hallazgosEnviados; i < job.hallazgos.length; i++) {
-      await gateway.agregarHallazgo(inspeccionId, job.hallazgos[i]);
+      var hallazgo = job.hallazgos[i];
+      final foto = hallazgo.foto;
+      if (foto != null && foto.storagePath == null) {
+        final subido = await gateway.subirImagen(await archivos.leerBytes(foto.ruta), nombre: 'hallazgo-$i.jpg');
+        hallazgo = hallazgo.conFoto(foto.copyWith(storagePath: subido.storagePath, hash: subido.hash));
+        job = job.conProgreso(hallazgos: _reemplazar(job.hallazgos, i, hallazgo));
+        await cola.guardar(job);
+      }
+      await gateway.agregarHallazgo(inspeccionId, hallazgo);
       job = job.conProgreso(hallazgosEnviados: i + 1);
       await cola.guardar(job);
     }
@@ -238,6 +246,8 @@ class ProcesadorCola {
     }
   }
 
-  List<FotoLocal> _reemplazar(List<FotoLocal> fotos, int indice, FotoLocal nueva) =>
-      [for (var i = 0; i < fotos.length; i++) i == indice ? nueva : fotos[i]];
+  /// Copia la lista con un elemento cambiado. Sirve para las fotos y para los hallazgos: en los dos casos lo que
+  /// se guarda es el progreso de un elemento, no la lista entera.
+  List<T> _reemplazar<T>(List<T> lista, int indice, T nuevo) =>
+      [for (var i = 0; i < lista.length; i++) i == indice ? nuevo : lista[i]];
 }

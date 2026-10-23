@@ -123,7 +123,14 @@ class InformeJob extends Job {
   @override
   String get tipo => 'informe';
 
-  InformeJob conProgreso({String? inspeccionId, List<FotoLocal>? fotos, int? hallazgosEnviados, bool? cerrada}) => InformeJob(
+  InformeJob conProgreso({
+    String? inspeccionId,
+    List<FotoLocal>? fotos,
+    List<HallazgoLocal>? hallazgos,
+    int? hallazgosEnviados,
+    bool? cerrada,
+  }) =>
+      InformeJob(
         id: id,
         etiqueta: etiqueta,
         creadoEn: creadoEn,
@@ -139,7 +146,7 @@ class InformeJob extends Job {
         lng: lng,
         notas: notas,
         fotos: fotos ?? this.fotos,
-        hallazgos: hallazgos,
+        hallazgos: hallazgos ?? this.hallazgos,
         inspeccionId: inspeccionId ?? this.inspeccionId,
         hallazgosEnviados: hallazgosEnviados ?? this.hallazgosEnviados,
         cerrada: cerrada ?? this.cerrada,

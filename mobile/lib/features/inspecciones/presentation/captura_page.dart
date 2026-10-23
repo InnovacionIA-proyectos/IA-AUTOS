@@ -111,27 +111,33 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       if (nota == null || !mounted) return;
     }
 
+    final foto = await _sellar(temporal, vistaId: vista.id, nota: nota);
+    if (foto != null && mounted) setState(() => _fotos.add(foto));
+  }
+
+  /// Guarda la foto y le pone su sello: fecha, ubicación, precisión y equipo.
+  ///
+  /// Devuelve null si no se pudo guardar. El sello es de cuando se tomó, y sin GPS **no se hereda** el del
+  /// informe: la foto queda marcada «sin ubicación».
+  Future<FotoLocal?> _sellar(String temporal, {String? vistaId, String? nota}) async {
     setState(() => _guardandoFoto = true);
     try {
       final ruta = await ref.read(servicioFotosProvider).guardar(temporal);
       final pos = await ref.read(servicioUbicacionProvider).obtenerRapida();
       final dispositivo = await ref.read(servicioDispositivoProvider).id();
-      if (!mounted) return;
-      setState(() {
-        _fotos.add(FotoLocal(
-          ruta: ruta,
-          selloFecha: DateTime.now().toUtc().toIso8601String(),
-          // Sin GPS no se hereda el del informe: la foto queda marcada «sin ubicación» y hay que repetirla.
-          selloLat: pos?.lat,
-          selloLng: pos?.lng,
-          vistaId: vista.id,
-          nota: nota,
-          precision: pos?.precision,
-          dispositivoId: dispositivo,
-        ));
-      });
+      return FotoLocal(
+        ruta: ruta,
+        selloFecha: DateTime.now().toUtc().toIso8601String(),
+        selloLat: pos?.lat,
+        selloLng: pos?.lng,
+        vistaId: vistaId,
+        nota: nota,
+        precision: pos?.precision,
+        dispositivoId: dispositivo,
+      );
     } catch (_) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo guardar la foto. Inténtalo de nuevo.')));
+      return null;
     } finally {
       if (mounted) setState(() => _guardandoFoto = false);
     }
@@ -161,7 +167,19 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 
     final dano = await pedirDano(context, titulo: etiqueta, clases: clases, tamanos: tamanos);
     if (dano == null || !mounted) return;
-    setState(() => _hallazgos.add(HallazgoLocal(parte: etiqueta, clase: dano.clase, tamano: dano.tamano, coords: coords)));
+
+    // Un daño sin foto es la palabra de alguien contra la del siguiente, y el servidor lo rechaza con 400. Se
+    // pide aquí, con la novedad recién marcada, y si no se toma no se registra nada.
+    final temporal = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => CamaraPage(titulo: 'Foto de la novedad: $etiqueta')),
+    );
+    if (temporal == null || !mounted) return;
+    final foto = await _sellar(temporal);
+    if (foto == null || !mounted) return;
+
+    setState(() => _hallazgos.add(
+          HallazgoLocal(parte: etiqueta, clase: dano.clase, tamano: dano.tamano, coords: coords, foto: foto),
+        ));
   }
 
   BloqueoCierre? get _bloqueo => bloqueoDeCierre(

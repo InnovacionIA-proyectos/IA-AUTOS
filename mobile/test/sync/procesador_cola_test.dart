@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
+import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
@@ -333,6 +334,51 @@ void main() {
       expect(evidencia['nota'], 'rayon');
       // El hash lo calcula el servidor al subir el archivo y la app lo reenvia: asi se detecta un archivo danado.
       expect(evidencia['hash_sha256'], 'hash-1');
+    });
+  });
+
+
+  group('el hallazgo viaja con su foto', () {
+    test('primero se sube el archivo y luego se crea el hallazgo con su evidencia', () async {
+      await cola.agregar(informe(
+        hallazgos: [
+          HallazgoLocal(
+            parte: 'Capot',
+            clase: 'golpe',
+            tamano: '1_5cm',
+            foto: FotoLocal(ruta: 'a.jpg', selloFecha: '2026-01-02T10:01:00.000Z', selloLat: 6.2, selloLng: -75.5),
+          ),
+        ],
+      ));
+
+      await procesador.procesar(usuarioPrueba);
+
+      // El orden importa: sin storage_path el hallazgo no se puede crear.
+      expect(gateway.llamadas, containsAllInOrder(['subirImagen', 'agregarHallazgo']));
+      expect(cola.jobs, isEmpty);
+    });
+
+    test('al reanudar no se vuelve a subir la foto del hallazgo', () async {
+      // El hallazgo ya tiene su archivo subido: una pasada anterior llego hasta ahi y se corto.
+      await cola.agregar(informe(
+        hallazgos: [
+          HallazgoLocal(
+            parte: 'Capot',
+            clase: 'golpe',
+            tamano: '1_5cm',
+            foto: const FotoLocal(
+              ruta: 'a.jpg',
+              selloFecha: '2026-01-02T10:01:00.000Z',
+              storagePath: 'ruta/ya-subida.jpg',
+              hash: 'hash-viejo',
+            ),
+          ),
+        ],
+      ));
+
+      await procesador.procesar(usuarioPrueba);
+
+      expect(gateway.llamadas.where((l) => l == 'subirImagen'), isEmpty);
     });
   });
 
