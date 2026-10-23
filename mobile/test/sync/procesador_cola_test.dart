@@ -27,7 +27,7 @@ void main() {
         hallazgos: [hallazgoEjemplo, hallazgoEjemplo],
       ));
 
-      final r = await procesador.procesar();
+      final r = await procesador.procesar(usuarioPrueba);
 
       expect(gateway.llamadas, [
         'crearInspeccion',
@@ -48,7 +48,7 @@ void main() {
 
     test('un informe sin novedades ni fotos solo crea y cierra', () async {
       await cola.agregar(informe());
-      await procesador.procesar();
+      await procesador.procesar(usuarioPrueba);
       expect(gateway.llamadas, ['crearInspeccion', 'cerrarInspeccion']);
     });
 
@@ -60,7 +60,7 @@ void main() {
         hallazgosEnviados: 2,
       ));
 
-      await procesador.procesar();
+      await procesador.procesar(usuarioPrueba);
 
       expect(gateway.llamadas, ['agregarEvidencia', 'agregarHallazgo', 'cerrarInspeccion']);
       expect(gateway.evidencias.single['path'], 'ruta/y.jpg');
@@ -70,7 +70,7 @@ void main() {
       await cola.agregar(informe(fotos: [foto('a.jpg'), foto('b.jpg')], hallazgos: [hallazgoEjemplo]));
       gateway.fallarEnLlamada('subirImagen', 2, errorHttp(503)); // la 1ª foto sube bien, la 2ª falla
 
-      final primera = await procesador.procesar();
+      final primera = await procesador.procesar(usuarioPrueba);
       expect(primera.enviados, 0);
       expect(primera.pendientes, 1);
       final guardado = cola.jobs.single as InformeJob;
@@ -80,7 +80,7 @@ void main() {
       expect(guardado.intentos, 1);
 
       gateway.llamadas.clear();
-      final segunda = await procesador.procesar();
+      final segunda = await procesador.procesar(usuarioPrueba);
 
       expect(segunda.enviados, 1);
       expect(gateway.llamadas, ['subirImagen', 'agregarEvidencia', 'agregarHallazgo', 'cerrarInspeccion']);
@@ -91,7 +91,7 @@ void main() {
       await cola.agregar(informe());
       gateway.errores['cerrarInspeccion'] = [errorHttp(409)];
 
-      final r = await procesador.procesar();
+      final r = await procesador.procesar(usuarioPrueba);
 
       expect(r.enviados, 1);
       expect(cola.jobs, isEmpty);
@@ -101,7 +101,7 @@ void main() {
       await cola.agregar(informe(hallazgos: [hallazgoEjemplo]));
       gateway.errores['agregarHallazgo'] = [errorHttp(409, 'Inspección cerrada')];
 
-      final r = await procesador.procesar();
+      final r = await procesador.procesar(usuarioPrueba);
 
       expect(r.enviados, 0);
       expect((cola.jobs.single).fallido, isTrue);
@@ -113,7 +113,7 @@ void main() {
       final conFallo = _ArchivosQueFallanAlBorrar(archivos);
       procesador = ProcesadorCola(cola: cola, gateway: gateway, red: red, archivos: conFallo);
 
-      final r = await procesador.procesar();
+      final r = await procesador.procesar(usuarioPrueba);
 
       expect(r.enviados, 1);
       expect(cola.jobs, isEmpty);
@@ -126,13 +126,14 @@ void main() {
         id: 'f1',
         etiqueta: 'Firma',
         creadoEn: 1,
+        usuarioId: usuarioPrueba,
         inspeccionId: 'insp-9',
         entregaId: 'u1',
         recibeId: 'u2',
         firmaEntrega: 'M 1 1 L 2 2',
       ));
 
-      final r = await procesador.procesar();
+      final r = await procesador.procesar(usuarioPrueba);
 
       expect(gateway.llamadas, ['firmarTransferencia']);
       expect(r.enviados, 1);
@@ -145,7 +146,7 @@ void main() {
       await cola.agregar(informe(id: 'primero'));
       await cola.agregar(informe(id: 'segundo'));
 
-      final r = await procesador.procesar();
+      final r = await procesador.procesar(usuarioPrueba);
 
       expect(r.enviados, 2);
       expect(gateway.llamadas, ['crearInspeccion', 'cerrarInspeccion', 'crearInspeccion', 'cerrarInspeccion']);
@@ -156,7 +157,7 @@ void main() {
       await cola.agregar(informe(id: 'segundo'));
       gateway.errores['crearInspeccion'] = [errorHttp(503)];
 
-      final r = await procesador.procesar();
+      final r = await procesador.procesar(usuarioPrueba);
 
       expect(gateway.llamadas, ['crearInspeccion']);
       expect(r.enviados, 0);
@@ -169,7 +170,7 @@ void main() {
       await cola.agregar(informe());
       red.estable = false;
 
-      final r = await procesador.procesar();
+      final r = await procesador.procesar(usuarioPrueba);
 
       expect(gateway.llamadas, isEmpty);
       expect(r.pendientes, 1);
@@ -179,7 +180,7 @@ void main() {
       await cola.agregar(informe());
       red.alcanzable = false;
 
-      await procesador.procesar();
+      await procesador.procesar(usuarioPrueba);
 
       expect(gateway.llamadas, isEmpty);
     });
@@ -190,7 +191,7 @@ void main() {
       // 1ª consulta (listo para sincronizar) y 2ª (antes del primer job) estables; luego se cae.
       red.consultasEstables = 2;
 
-      final r = await procesador.procesar();
+      final r = await procesador.procesar(usuarioPrueba);
 
       expect(r.enviados, 1);
       expect(cola.jobs.single.id, 'segundo');
@@ -199,7 +200,7 @@ void main() {
     test('no se reentra: una segunda llamada mientras procesa no duplica envíos', () async {
       await cola.agregar(informe());
 
-      final resultados = await Future.wait([procesador.procesar(), procesador.procesar()]);
+      final resultados = await Future.wait([procesador.procesar(usuarioPrueba), procesador.procesar(usuarioPrueba)]);
 
       expect(gateway.llamadas.where((l) => l == 'crearInspeccion'), hasLength(1));
       expect(resultados.map((r) => r.enviados).reduce((a, b) => a + b), 1);
@@ -213,7 +214,7 @@ void main() {
         await cola.agregar(informe(id: 'b'));
         gateway.errores['crearInspeccion'] = [status == 0 ? const ErrorApi.red() : errorHttp(status)];
 
-        await procesador.procesar();
+        await procesador.procesar(usuarioPrueba);
 
         expect(cola.jobs.first.fallido, isFalse);
         expect(cola.jobs.first.intentos, 1);
@@ -227,7 +228,7 @@ void main() {
         await cola.agregar(informe(id: 'b'));
         gateway.errores['crearInspeccion'] = [errorHttp(status, 'Datos inválidos')];
 
-        final r = await procesador.procesar();
+        final r = await procesador.procesar(usuarioPrueba);
 
         final a = cola.jobs.firstWhere((j) => j.id == 'a');
         expect(a.fallido, isTrue);
@@ -240,7 +241,7 @@ void main() {
     test('un error que no es de la API (por ejemplo un archivo ilegible) se trata como transitorio', () async {
       await cola.agregar(informe(fotos: [foto('falta.jpg')]));
 
-      await procesador.procesar();
+      await procesador.procesar(usuarioPrueba);
 
       final job = cola.jobs.single;
       expect(job.fallido, isFalse);
@@ -252,7 +253,7 @@ void main() {
       await cola.agregar(informe(id: 'b'));
       gateway.errores['crearInspeccion'] = [errorHttp(503)];
 
-      final r = await procesador.procesar();
+      final r = await procesador.procesar(usuarioPrueba);
 
       final a = cola.jobs.firstWhere((j) => j.id == 'a');
       expect((a.fallido, a.intentos), (true, 8));
@@ -263,7 +264,7 @@ void main() {
       await cola.agregar(informe(intentos: 6));
       gateway.errores['crearInspeccion'] = [errorHttp(503)];
 
-      await procesador.procesar();
+      await procesador.procesar(usuarioPrueba);
 
       expect((cola.jobs.single.fallido, cola.jobs.single.intentos), (false, 7));
     });
@@ -273,7 +274,7 @@ void main() {
     test('un job fallido no se reintenta solo ni cuenta como pendiente', () async {
       await cola.agregar(informe(fallido: true, intentos: 8));
 
-      final r = await procesador.procesar();
+      final r = await procesador.procesar(usuarioPrueba);
 
       expect(gateway.llamadas, isEmpty);
       expect((r.pendientes, r.fallidos), (0, 1));
@@ -282,10 +283,10 @@ void main() {
     test('reintentar lo devuelve a la cola con intentos en cero y se envía', () async {
       await cola.agregar(informe(fallido: true, intentos: 8));
 
-      await procesador.reintentar('j1');
+      await procesador.reintentar('j1', usuarioPrueba);
       expect((cola.jobs.single.fallido, cola.jobs.single.intentos, cola.jobs.single.error), (false, 0, null));
 
-      final r = await procesador.procesar();
+      final r = await procesador.procesar(usuarioPrueba);
       expect(r.enviados, 1);
     });
 
@@ -299,7 +300,7 @@ void main() {
     });
 
     test('reintentar o descartar un id inexistente no hace nada', () async {
-      await procesador.reintentar('nada');
+      await procesador.reintentar('nada', usuarioPrueba);
       await procesador.descartar('nada');
       expect(cola.jobs, isEmpty);
     });

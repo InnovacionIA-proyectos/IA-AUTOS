@@ -10,6 +10,7 @@ import '../../../core/dispositivo/servicios.dart';
 import '../../../core/errores/error_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
+import '../../auth/presentation/auth_controller.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
 import '../../catalogos/domain/catalogos.dart';
@@ -140,13 +141,16 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 
   Future<void> _cerrar() async {
     final gps = _gps;
-    if (gps == null || _bloqueo != null) return;
+    // El job se marca con quién lo encoló: la cola sobrevive al cierre de sesión y nadie debe enviar lo de otro.
+    final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
+    if (gps == null || usuarioId == null || _bloqueo != null) return;
     setState(() => _cerrando = true);
     try {
       final ahora = DateTime.now();
       final job = construirInformeJob(
         id: const Uuid().v4(),
         creadoEn: ahora.millisecondsSinceEpoch,
+        usuarioId: usuarioId,
         vin: widget.vin,
         proceso: widget.proceso,
         etapaId: widget.etapaId,

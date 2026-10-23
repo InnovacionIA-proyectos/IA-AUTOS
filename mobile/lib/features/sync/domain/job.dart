@@ -11,6 +11,7 @@ sealed class Job {
     this.intentos = 0,
     this.error,
     this.fallido = false,
+    this.usuarioId,
   });
 
   final String id;
@@ -23,6 +24,19 @@ sealed class Job {
 
   /// Un job fallido deja de reintentarse por sí solo y queda visible hasta que se reintente a mano o se descarte.
   final bool fallido;
+
+  /// Quién lo encoló. La cola sobrevive al cierre de sesión y el servidor atribuye el informe al dueño del token,
+  /// así que sin esto, en un equipo compartido, lo de una persona salía a nombre de la siguiente.
+  ///
+  /// Es nulo en los jobs que encoló una versión anterior de la app: esos quedan huérfanos y no se envían solos.
+  final String? usuarioId;
+
+  bool get esHuerfano => usuarioId == null;
+
+  bool esDe(String usuario) => usuarioId == usuario;
+
+  /// Lo hace propio: al reintentar a mano un job huérfano, quien lo reintenta se hace cargo de él.
+  Job conUsuario(String usuario);
 
   String get tipo;
 
@@ -45,6 +59,7 @@ class InformeJob extends Job {
     super.intentos,
     super.error,
     super.fallido,
+    super.usuarioId,
     required this.etapaId,
     required this.momento,
     required this.fecha,
@@ -65,6 +80,7 @@ class InformeJob extends Job {
         intentos: json['intentos'] as int? ?? 0,
         error: json['error'] as String?,
         fallido: json['fallido'] as bool? ?? false,
+        usuarioId: json['usuario_id'] as String?,
         etapaId: json['etapa_id'] as String,
         momento: json['momento'] as String,
         fecha: json['fecha'] as String,
@@ -102,6 +118,7 @@ class InformeJob extends Job {
         intentos: intentos,
         error: error,
         fallido: fallido,
+        usuarioId: usuarioId,
         etapaId: etapaId,
         momento: momento,
         fecha: fecha,
@@ -123,6 +140,29 @@ class InformeJob extends Job {
         intentos: intentos,
         error: error,
         fallido: fallido,
+        usuarioId: usuarioId,
+        etapaId: etapaId,
+        momento: momento,
+        fecha: fecha,
+        lat: lat,
+        lng: lng,
+        notas: notas,
+        fotos: fotos,
+        hallazgos: hallazgos,
+        inspeccionId: inspeccionId,
+        hallazgosEnviados: hallazgosEnviados,
+        cerrada: cerrada,
+      );
+
+  @override
+  InformeJob conUsuario(String usuario) => InformeJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        intentos: intentos,
+        error: error,
+        fallido: fallido,
+        usuarioId: usuario,
         etapaId: etapaId,
         momento: momento,
         fecha: fecha,
@@ -145,6 +185,7 @@ class InformeJob extends Job {
         'intentos': intentos,
         'error': error,
         'fallido': fallido,
+        'usuario_id': usuarioId,
         'etapa_id': etapaId,
         'momento': momento,
         'fecha': fecha,
@@ -167,6 +208,7 @@ class FirmaJob extends Job {
     super.intentos,
     super.error,
     super.fallido,
+    super.usuarioId,
     required this.inspeccionId,
     required this.entregaId,
     required this.recibeId,
@@ -181,6 +223,7 @@ class FirmaJob extends Job {
         intentos: json['intentos'] as int? ?? 0,
         error: json['error'] as String?,
         fallido: json['fallido'] as bool? ?? false,
+        usuarioId: json['usuario_id'] as String?,
         inspeccionId: json['inspeccion_id'] as String,
         entregaId: json['entrega_id'] as String,
         recibeId: json['recibe_id'] as String,
@@ -207,6 +250,23 @@ class FirmaJob extends Job {
         intentos: intentos,
         error: error,
         fallido: fallido,
+        usuarioId: usuarioId,
+        inspeccionId: inspeccionId,
+        entregaId: entregaId,
+        recibeId: recibeId,
+        firmaEntrega: firmaEntrega,
+        firmaRecibe: firmaRecibe,
+      );
+
+  @override
+  FirmaJob conUsuario(String usuario) => FirmaJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        intentos: intentos,
+        error: error,
+        fallido: fallido,
+        usuarioId: usuario,
         inspeccionId: inspeccionId,
         entregaId: entregaId,
         recibeId: recibeId,
@@ -223,6 +283,7 @@ class FirmaJob extends Job {
         'intentos': intentos,
         'error': error,
         'fallido': fallido,
+        'usuario_id': usuarioId,
         'inspeccion_id': inspeccionId,
         'entrega_id': entregaId,
         'recibe_id': recibeId,

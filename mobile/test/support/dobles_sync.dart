@@ -141,8 +141,13 @@ class GatewayFalso implements GatewayInformes {
 
 ErrorApi errorHttp(int status, [String mensaje = 'error']) => ErrorApi(message: mensaje, code: 'X', status: status);
 
+/// El mismo id de usuario que `sesionPrueba`: lo normal es que el job sea de quien tiene la sesión. Se pasa otro,
+/// o null para un job huérfano (encolado por una versión anterior de la app), cuando eso es lo que se prueba.
+const usuarioPrueba = 'u1';
+
 InformeJob informe({
   String id = 'j1',
+  String? usuarioId = usuarioPrueba,
   List<FotoLocal>? fotos,
   List<HallazgoLocal>? hallazgos,
   int intentos = 0,
@@ -156,6 +161,7 @@ InformeJob informe({
   creadoEn: 1,
   intentos: intentos,
   fallido: fallido,
+  usuarioId: usuarioId,
   etapaId: 'etapa-1',
   momento: 'informe',
   fecha: '2026-01-02T10:00:00.000Z',

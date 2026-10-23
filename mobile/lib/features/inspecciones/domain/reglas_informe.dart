@@ -36,6 +36,7 @@ BloqueoCierre? bloqueoDeCierre({
 InformeJob construirInformeJob({
   required String id,
   required int creadoEn,
+  required String usuarioId,
   required String vin,
   required String proceso,
   required String etapaId,
@@ -51,6 +52,7 @@ InformeJob construirInformeJob({
     id: id,
     etiqueta: 'Informe $vin · $proceso',
     creadoEn: creadoEn,
+    usuarioId: usuarioId,
     etapaId: etapaId,
     momento: 'informe',
     fecha: fecha.toUtc().toIso8601String(),

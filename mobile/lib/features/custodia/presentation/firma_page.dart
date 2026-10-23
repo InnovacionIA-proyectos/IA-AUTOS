@@ -52,13 +52,15 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
   bool get _puede => firmaValida(entregaId: _entregaId, recibeId: _recibeId, hayFirma: _hayFirma) && !_guardando;
 
   Future<void> _registrar() async {
-    if (!_puede) return;
+    final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
+    if (!_puede || usuarioId == null) return;
     setState(() => _guardando = true);
     try {
       await ref.read(colaRepositorioProvider).agregar(FirmaJob(
             id: const Uuid().v4(),
             etiqueta: 'Firma ${widget.vin} · ${widget.proceso}',
             creadoEn: DateTime.now().millisecondsSinceEpoch,
+            usuarioId: usuarioId,
             inspeccionId: widget.inspeccionId,
             entregaId: _entregaId!,
             recibeId: _recibeId!,

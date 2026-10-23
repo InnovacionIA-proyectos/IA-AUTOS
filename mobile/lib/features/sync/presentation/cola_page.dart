@@ -4,14 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
+import '../../auth/presentation/auth_controller.dart';
 import '../domain/job.dart';
 import '../providers.dart';
 import 'sync_controller.dart';
 
-final _jobsProvider = FutureProvider.autoDispose<List<Job>>((ref) {
+/// Lo que esta persona tiene en la cola: lo suyo y lo que quedó sin dueño. Lo de otra persona no se muestra, igual
+/// que no se envía.
+final _jobsProvider = FutureProvider.autoDispose<List<Job>>((ref) async {
   // Se vuelve a leer cada vez que cambian los contadores de la cola.
   ref.watch(syncControllerProvider.select((s) => (s.pendientes, s.fallidos, s.sincronizando)));
-  return ref.watch(colaRepositorioProvider).listar();
+  final usuarioId = ref.watch(authControllerProvider).sesion?.usuario.id;
+  if (usuarioId == null) return const [];
+  return ref.watch(procesadorColaProvider).visibles(usuarioId);
 });
 
 /// Lista de lo que está en cola de envío. Los elementos con error no se pierden en silencio: se muestran aquí con su

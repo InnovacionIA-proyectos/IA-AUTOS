@@ -67,7 +67,7 @@ void main() {
 
   test('al cambiar el PIN arranca la cola sola, sin reiniciar la app', () async {
     final arnes = Arnes(sesion: sesionConPinTemporal);
-    await arnes.cola.agregar(informe());
+    await arnes.cola.agregar(informe(usuarioId: sesionConPinTemporal.usuario.id));
     final contenedor = await iniciar(arnes);
     expect(arnes.cola.jobs, hasLength(1));
 

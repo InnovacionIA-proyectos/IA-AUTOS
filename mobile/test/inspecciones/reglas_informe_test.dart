@@ -53,6 +53,7 @@ void main() {
     InformeJob construir({String notas = ''}) => construirInformeJob(
           id: 'id-1',
           creadoEn: 99,
+          usuarioId: 'u1',
           vin: 'VIN123',
           proceso: 'Cargue',
           etapaId: 'etapa-1',

@@ -26,6 +26,8 @@ class ResultadoSync {
 ///  - Un error no recuperable (400, 403, 404...) o agotar los intentos marca el job como FALLIDO:
 ///    no bloquea a los demás, pero se conserva y se muestra al usuario (a diferencia de descartarlo).
 ///  - 409 al cerrar una inspección significa "ya estaba cerrada" y cuenta como éxito.
+///  - Solo se procesa lo de [usuarioId]: la cola sobrevive al cierre de sesión y el servidor atribuye el informe
+///    al dueño del token, así que en un equipo compartido lo de una persona saldría a nombre de la siguiente.
 class ProcesadorCola {
   ProcesadorCola({
     required this.cola,
@@ -43,13 +45,32 @@ class ProcesadorCola {
 
   bool _procesando = false;
 
+  /// Lo que esta persona tiene en la cola. Lo de otras no se cuenta ni se envía; los huérfanos (encolados por una
+  /// versión anterior, sin dueño) se cuentan para que se vean, pero nunca se envían solos.
+  Future<List<Job>> _suyos(String usuarioId) async =>
+      (await cola.listar()).where((j) => j.esDe(usuarioId)).toList();
+
+  /// Jobs visibles para esta persona: los suyos y los huérfanos, que alguien tiene que resolver a mano.
+  Future<List<Job>> visibles(String usuarioId) async =>
+      (await cola.listar()).where((j) => j.esDe(usuarioId) || j.esHuerfano).toList();
+
   /// Cantidad de jobs que aún se reintentarán solos.
-  Future<int> contarPendientes() async => (await cola.listar()).where((j) => !j.fallido).length;
+  Future<int> contarPendientes(String usuarioId) async => (await visibles(usuarioId)).where((j) => !j.fallido).length;
 
-  Future<int> contarFallidos() async => (await cola.listar()).where((j) => j.fallido).length;
+  Future<int> contarFallidos(String usuarioId) async => (await visibles(usuarioId)).where((j) => j.fallido).length;
 
-  Future<ResultadoSync> _resultado(int enviados) async {
-    final jobs = await cola.listar();
+  /// Adopta los jobs sin dueño para [usuarioId]. Se llama al arrancar con una sesión guardada: esa es, casi con
+  /// certeza, quien los encoló, porque es la última que se usó antes de actualizar la app. Devuelve cuántos.
+  Future<int> adoptarHuerfanos(String usuarioId) async {
+    final huerfanos = (await cola.listar()).where((j) => j.esHuerfano).toList();
+    for (final job in huerfanos) {
+      await cola.guardar(job.conUsuario(usuarioId));
+    }
+    return huerfanos.length;
+  }
+
+  Future<ResultadoSync> _resultado(int enviados, String usuarioId) async {
+    final jobs = await visibles(usuarioId);
     return ResultadoSync(
       enviados: enviados,
       pendientes: jobs.where((j) => !j.fallido).length,
@@ -57,17 +78,17 @@ class ProcesadorCola {
     );
   }
 
-  Future<ResultadoSync> procesar() async {
-    if (_procesando) return _resultado(0);
+  Future<ResultadoSync> procesar(String usuarioId) async {
+    if (_procesando) return _resultado(0, usuarioId);
     _procesando = true;
     var enviados = 0;
     try {
       // No empezar a drenar si la señal no es estable o la API no responde.
-      if (!await red.redEstable() || !await red.apiAlcanzable()) return _resultado(0);
+      if (!await red.redEstable() || !await red.apiAlcanzable()) return _resultado(0, usuarioId);
 
       while (true) {
         if (!await red.redEstable()) break;
-        final job = (await cola.listar()).where((j) => !j.fallido).firstOrNull;
+        final job = (await _suyos(usuarioId)).where((j) => !j.fallido).firstOrNull;
         if (job == null) break;
 
         try {
@@ -98,14 +119,17 @@ class ProcesadorCola {
     } finally {
       _procesando = false;
     }
-    return _resultado(enviados);
+    return _resultado(enviados, usuarioId);
   }
 
   /// Devuelve un job fallido a la cola para que se reintente (acción manual del usuario).
-  Future<void> reintentar(String id) async {
+  ///
+  /// Quien reintenta se hace cargo: si estaba huérfano pasa a ser suyo, y saldrá con su token. Es un acto
+  /// explícito, que es la única forma aceptable de que un informe cambie de autor.
+  Future<void> reintentar(String id, String usuarioId) async {
     final job = (await cola.listar()).where((j) => j.id == id).firstOrNull;
     if (job == null) return;
-    await cola.guardar(job.conIntento(intentos: 0, error: null, fallido: false));
+    await cola.guardar(job.conUsuario(usuarioId).conIntento(intentos: 0, error: null, fallido: false));
   }
 
   /// Descarta un job (acción manual): lo quita de la cola y borra sus fotos locales.
