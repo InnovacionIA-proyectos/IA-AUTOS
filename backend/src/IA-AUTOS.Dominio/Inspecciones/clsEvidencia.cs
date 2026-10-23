@@ -53,6 +53,12 @@ public sealed partial class clsEvidencia : clsEntidadBase
     /// </summary>
     public bool EsConstancia { get; private set; }
 
+    /// <summary>
+    /// True en la foto del sello de quien valida un hallazgo (Sofasa en un V2): pertenece a la inspeccion pero no a una vista ni a un hallazgo, no cuenta para el cierre
+    /// y se puede registrar aunque la inspeccion ya este cerrada.
+    /// </summary>
+    public bool EsSello { get; private set; }
+
     public bool SinUbicacion => SelloLat == 0 && SelloLng == 0;
 
     public static clsEvidencia Crear(
@@ -68,7 +74,7 @@ public sealed partial class clsEvidencia : clsEntidadBase
         string? hashSha256,
         string? nota,
         DateTimeOffset ahora) =>
-        Construir(inspeccionId, hallazgoId, vistaId, esConstancia: false, storagePath, selloFecha, selloLat, selloLng, precision, dispositivoId, hashSha256, nota, ahora);
+        Construir(inspeccionId, hallazgoId, vistaId, esConstancia: false, esSello: false, storagePath, selloFecha, selloLat, selloLng, precision, dispositivoId, hashSha256, nota, ahora);
 
     /// <summary>La foto de una constancia de no firma: pertenece a la inspeccion de la transferencia pero no a una vista ni a un hallazgo.</summary>
     public static clsEvidencia CrearConstancia(
@@ -82,13 +88,28 @@ public sealed partial class clsEvidencia : clsEntidadBase
         string? hashSha256,
         string? nota,
         DateTimeOffset ahora) =>
-        Construir(inspeccionId, null, null, esConstancia: true, storagePath, selloFecha, selloLat, selloLng, precision, dispositivoId, hashSha256, nota, ahora);
+        Construir(inspeccionId, null, null, esConstancia: true, esSello: false, storagePath, selloFecha, selloLat, selloLng, precision, dispositivoId, hashSha256, nota, ahora);
+
+    /// <summary>La foto del sello de quien valida un hallazgo: pertenece a la inspeccion del hallazgo pero no a una vista ni a un hallazgo.</summary>
+    public static clsEvidencia CrearSello(
+        Guid inspeccionId,
+        string storagePath,
+        DateTimeOffset selloFecha,
+        double? selloLat,
+        double? selloLng,
+        double? precision,
+        string? dispositivoId,
+        string? hashSha256,
+        string? nota,
+        DateTimeOffset ahora) =>
+        Construir(inspeccionId, null, null, esConstancia: false, esSello: true, storagePath, selloFecha, selloLat, selloLng, precision, dispositivoId, hashSha256, nota, ahora);
 
     private static clsEvidencia Construir(
         Guid inspeccionId,
         Guid? hallazgoId,
         Guid? vistaId,
         bool esConstancia,
+        bool esSello,
         string storagePath,
         DateTimeOffset selloFecha,
         double? selloLat,
@@ -101,7 +122,7 @@ public sealed partial class clsEvidencia : clsEntidadBase
     {
         clsValidador.Latitud(selloLat, "sello_lat");
         clsValidador.Longitud(selloLng, "sello_lng");
-        if (!esConstancia && hallazgoId is null && vistaId is null)
+        if (!esConstancia && !esSello && hallazgoId is null && vistaId is null)
         {
             throw clsErroresCampos.De("vista_id", "Indique la vista de la foto o el hallazgo al que pertenece");
         }
@@ -131,6 +152,7 @@ public sealed partial class clsEvidencia : clsEntidadBase
             HallazgoId = hallazgoId,
             VistaId = vistaId,
             EsConstancia = esConstancia,
+            EsSello = esSello,
             StoragePath = clsValidador.Requerido(storagePath, "storage_path es requerido"),
             SelloFecha = selloFecha,
             SelloLat = conUbicacion ? selloLat!.Value : 0,

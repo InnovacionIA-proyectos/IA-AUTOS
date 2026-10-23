@@ -223,9 +223,45 @@ public sealed partial class clsViaje : clsEntidadBase
     private static partial Regex FormatoCodigo();
 }
 
-/// <summary>Un VIN dentro de un viaje.</summary>
+/// <summary>
+/// Como va una unidad en su recorrido de Transporte segun lo que registra el conductor: sin nada registrado, con novedades en ruta, llegada confirmada sin novedades o llegada
+/// confirmada con novedades.
+/// </summary>
+public static class clsEstadoTransporte
+{
+    public const string SIN_REGISTRO = "sin_registro";
+    public const string CON_NOVEDAD = "con_novedad";
+    public const string SIN_NOVEDAD = "sin_novedad";
+    public const string LLEGADA_CON_NOVEDAD = "llegada_con_novedad";
+
+    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { SIN_REGISTRO, CON_NOVEDAD, SIN_NOVEDAD, LLEGADA_CON_NOVEDAD };
+
+    public static string De(bool llegadaCerrada, int novedades) => (llegadaCerrada, novedades > 0) switch
+    {
+        (true, true) => LLEGADA_CON_NOVEDAD,
+        (true, false) => SIN_NOVEDAD,
+        (false, true) => CON_NOVEDAD,
+        _ => SIN_REGISTRO,
+    };
+}
+
+/// <summary>Estado de una unidad dentro de un viaje: activa, o que no sale (un hallazgo grave la retiro del viaje).</summary>
+public static class clsEstadoUnidad
+{
+    public const string ACTIVA = "activa";
+    public const string NO_SALE = "no_sale";
+
+    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { ACTIVA, NO_SALE };
+}
+
+/// <summary>
+/// Un VIN dentro de un viaje. Una unidad que no sale conserva este vinculo (con su motivo, el hallazgo que la causo, quien la marco y cuando) para no
+/// perder su trazabilidad cuando mas adelante vuelva a otro viaje.
+/// </summary>
 public sealed class clsViajeVehiculo : clsEntidadBase
 {
+    public const int NO_SALE_MOTIVO_MAX = 500;
+
     private clsViajeVehiculo()
     {
     }
@@ -233,6 +269,54 @@ public sealed class clsViajeVehiculo : clsEntidadBase
     public Guid ViajeId { get; private set; }
 
     public Guid VehiculoId { get; private set; }
+
+    /// <summary><see cref="clsEstadoUnidad"/>.</summary>
+    public string EstadoUnidad { get; private set; } = clsEstadoUnidad.ACTIVA;
+
+    public string? NoSaleMotivo { get; private set; }
+
+    public Guid? NoSaleHallazgoId { get; private set; }
+
+    public Guid? NoSaleMarcadoPor { get; private set; }
+
+    public DateTimeOffset? NoSaleAt { get; private set; }
+
+    /// <summary>El vehiculo que reemplaza a la unidad que no sale, si ya se asigno.</summary>
+    public Guid? ReemplazoVehiculoId { get; private set; }
+
+    public bool NoSale => EstadoUnidad == clsEstadoUnidad.NO_SALE;
+
+    /// <summary>
+    /// El VIN ya completo su ruta en este viaje (todas sus etapas con informe cerrado y la unidad no esta marcada <c>no_sale</c>): la misma regla de <c>vwViajesCompletos</c>. La mantienen los triggers
+    /// de la base al cambiar lo que la determina; la aplicacion solo la lee.
+    /// </summary>
+    public bool Completa { get; private set; }
+
+    /// <summary>
+    /// La unidad no sale de este viaje por el hallazgo indicado: queda con su motivo, el hallazgo, quien la marco y cuando. Conserva sus etapas e inspecciones y el
+    /// viaje sigue. 409 si ya estaba marcada.
+    /// </summary>
+    public void MarcarNoSale(string? motivo, Guid hallazgoId, Guid marcadoPor, Guid? reemplazoVehiculoId, DateTimeOffset ahora)
+    {
+        var texto = clsValidador.Requerido(motivo, "El motivo es requerido");
+        if (texto.Length > NO_SALE_MOTIVO_MAX)
+        {
+            throw clsErroresCampos.De("motivo", $"El motivo admite máximo {NO_SALE_MOTIVO_MAX} caracteres");
+        }
+
+        if (NoSale)
+        {
+            throw new clsConflictoException("La unidad ya está marcada como que no sale de este viaje");
+        }
+
+        EstadoUnidad = clsEstadoUnidad.NO_SALE;
+        NoSaleMotivo = texto;
+        NoSaleHallazgoId = hallazgoId;
+        NoSaleMarcadoPor = marcadoPor;
+        NoSaleAt = ahora;
+        ReemplazoVehiculoId = reemplazoVehiculoId;
+        Tocar(ahora);
+    }
 
     public static clsViajeVehiculo Crear(Guid viajeId, Guid vehiculoId, DateTimeOffset ahora)
     {

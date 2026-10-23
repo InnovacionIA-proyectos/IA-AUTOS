@@ -30,12 +30,22 @@ public sealed record FotoEvidenciaRequest(
     string? Nota,
     string? HashSha256);
 
-/// <summary>Un hallazgo exige su foto propia: <c>Evidencia</c> es obligatoria y se guarda junto con el hallazgo.</summary>
+/// <summary>
+/// Un hallazgo exige su foto propia: <c>Evidencia</c> es obligatoria y se guarda junto con el hallazgo. La zona es <c>CuadranteNumero</c> + <c>Lado</c>
+/// (lado obligatorio del 1 al 25 y prohibido del 26 en adelante) o <c>ZonaProvisional</c>: exactamente una de las dos formas. El nivel de severidad es
+/// obligatorio para el inspector y el administrador; el conductor no lo envia. <c>EsPreexistente</c> exige <c>HallazgoOrigenId</c>: un hallazgo del mismo
+/// vehiculo con la misma zona y clase.
+/// </summary>
 public sealed record CrearHallazgoRequest(
-    string? ParteVehiculo,
+    int? CuadranteNumero,
+    string? Lado,
+    string? ZonaProvisional,
     string? ClaseDano,
     string? TamanoDano,
-    CoordsDiagramaDto? CoordsDiagrama,
+    string? NivelSeveridad,
+    bool? EsPreexistente,
+    Guid? HallazgoOrigenId,
+    string? Nota,
     FotoEvidenciaRequest? Evidencia);
 
 /// <summary>
@@ -79,9 +89,29 @@ public sealed record RegistrarNoFirmaRequest(
 /// <summary>Un usuario del viaje que puede firmar una transferencia.</summary>
 public sealed record FirmanteDto(Guid Id, string Nombre, string Rol);
 
-/// <summary>Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio.</summary>
-public sealed record FiltrosInspeccionesRequest(string? Vin, string? UsuarioId, string? ViajeId, string? Momento, string? Estado, string? Proceso, string? Desde, string? Hasta);
+/// <summary>
+/// Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio. <c>Pagina</c>, <c>Tamano</c> y <c>Orden</c> son el formato comun de los listados; la exportacion a Excel
+/// los ignora.
+/// </summary>
+public sealed record FiltrosInspeccionesRequest(
+    string? Vin,
+    string? UsuarioId,
+    string? ViajeId,
+    string? Momento,
+    string? Estado,
+    string? Proceso,
+    string? Operacion,
+    string? Marca,
+    string? ClienteId,
+    string? OrigenId,
+    string? DestinoId,
+    string? Desde,
+    string? Hasta,
+    string? Pagina = null,
+    string? Tamano = null,
+    string? Orden = null);
 
+/// <summary>Los filtros ya validados. <c>OrigenId</c> y <c>DestinoId</c> son los del viaje de la inspeccion; <c>Operacion</c>, <c>Marca</c> y <c>ClienteId</c>, los de su vehiculo.</summary>
 public sealed record FiltrosInspecciones(
     string? Vin,
     Guid? UsuarioId,
@@ -89,6 +119,11 @@ public sealed record FiltrosInspecciones(
     string? Momento,
     string? Estado,
     string? Proceso,
+    string? Operacion,
+    string? Marca,
+    Guid? ClienteId,
+    Guid? OrigenId,
+    Guid? DestinoId,
     DateTimeOffset? Desde,
     DateTimeOffset? Hasta);
 
@@ -141,7 +176,8 @@ public sealed record TransferenciaDetalleDto(
     string? MotivoNoFirma,
     Guid? TestigoUsuarioId,
     string? TestigoNombre,
-    Guid? EvidenciaConstanciaId);
+    Guid? EvidenciaConstanciaId,
+    IReadOnlyList<NotaAclaratoriaDto> NotasAclaratorias);
 
 /// <summary>
 /// Informe completo para revision: inspeccion con su contexto (VIN, proceso, lugar, inspector), hallazgos, evidencias con URL
@@ -180,7 +216,8 @@ public sealed record InformeDetalleDto(
     DateTimeOffset? CerradaAt,
     int Version,
     Guid? CorrigeInspeccionId,
-    string MomentoNombre);
+    string MomentoNombre,
+    IReadOnlyList<NotaAclaratoriaDto> NotasAclaratorias);
 
 public sealed record ResumenCierreDto(int Evidencias, int Hallazgos);
 

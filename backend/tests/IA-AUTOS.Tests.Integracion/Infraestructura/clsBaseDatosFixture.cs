@@ -32,25 +32,63 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
 
     public async Task DisposeAsync() => await _contenedor.DisposeAsync();
 
-    /// <summary>Borra todos los datos de negocio (conserva los catalogos).</summary>
+    /// <summary>
+    /// Borra todos los datos de negocio (conserva los catalogos). La base protege la evidencia con triggers de no borrado: se apagan solo
+    /// mientras dura la limpieza y se vuelven a encender siempre, aunque falle.
+    /// </summary>
     public async Task LimpiarAsync()
     {
         const string SQL = """
+            BEGIN TRY
+            ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblEvidencias DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgos DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblInspecciones DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblAuditLog DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgoSeguimiento DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNotificaciones DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNotasAclaratorias DISABLE TRIGGER ALL;
+            DELETE FROM dbo.tblNotasAclaratorias;
+            DELETE FROM dbo.tblNotificaciones;
+            DELETE FROM dbo.tblDispositivos;
+            DELETE FROM dbo.tblHallazgoSeguimiento;
             DELETE FROM dbo.tblRefreshTokens;
             DELETE FROM dbo.tblAuditLog;
             DELETE FROM dbo.tblOrdenesSofasa;
             DELETE FROM dbo.tblTransferenciasCustodia;
             DELETE FROM dbo.tblEvidencias;
+            DELETE FROM dbo.tblViajeVehiculos;
             DELETE FROM dbo.tblHallazgos;
             DELETE FROM dbo.tblInspecciones;
             DELETE FROM dbo.tblEtapas;
-            DELETE FROM dbo.tblViajeVehiculos;
             DELETE FROM dbo.tblViajes;
             DELETE FROM dbo.tblVehiculos;
+            UPDATE dbo.tblParametros SET ActualizadoPor = NULL;
             DELETE FROM dbo.tblUsuarios;
+            ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblEvidencias ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblAuditLog ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNotasAclaratorias ENABLE TRIGGER ALL;
+            END TRY
+            BEGIN CATCH
+            ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblEvidencias ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblAuditLog ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNotasAclaratorias ENABLE TRIGGER ALL;
+            THROW;
+            END CATCH
 
             -- Catalogos: vuelven a su estado inicial (sin valores creados por las pruebas, todos activos y sin cambios de forma).
             DELETE FROM dbo.tblCuadrantes;
+            DELETE FROM dbo.tblEstadosSofasa;
             DELETE FROM dbo.tblEtapasCatalogo WHERE Codigo NOT IN ('cargue', 'transporte', 'descargue');
             DELETE FROM dbo.tblPuntosCustodia WHERE Codigo NOT IN ('cedi_1', 'origen', 'certificadora', 'destino', 'cedi_2', 'concesionario');
             DELETE FROM dbo.tblClientes WHERE Codigo <> 'sofasa';
@@ -65,7 +103,20 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             UPDATE dbo.tblClientes SET Activo = 1, Orden = 1;
             UPDATE dbo.tblClasesDano SET Activo = 1;
             UPDATE dbo.tblTamanosDano SET Activo = 1;
-            UPDATE dbo.tblNivelesSeveridad SET Activo = 1, Accion = NULL;
+            UPDATE dbo.tblNivelesSeveridad SET Activo = 1, Accion = CASE Codigo
+                WHEN 'v1_plus' THEN N'Se recupera antes del despacho'
+                WHEN 'v1' THEN N'Se rechaza el veh' + NCHAR(237) + N'culo'
+                WHEN 'v2' THEN N'Validaci' + NCHAR(243) + N'n por Sofasa'
+                ELSE N'Se deroga (se acepta el defecto)' END;
+            DELETE FROM dbo.tblParametros WHERE Clave LIKE 'zz%';
+            UPDATE dbo.tblParametros SET Valor = CASE Clave
+                WHEN 'objetivo_diario_novedad' THEN N'1.2' WHEN 'reporte_diario_hora' THEN N'06:00' WHEN 'horario_operacion_inicio' THEN N'08:00' WHEN 'horario_operacion_fin' THEN N'21:00'
+                WHEN 'gps_precision_minima_m' THEN N'30' WHEN 'url_firmada_minutos' THEN N'15' WHEN 'niveles_criticos' THEN N'v1_plus,v1' WHEN 'umbral_patron_cantidad' THEN N'10'
+                WHEN 'umbral_patron_ventana_dias' THEN N'30' WHEN 'captura_incompleta_minutos' THEN N'30' WHEN 'transferencia_pendiente_minutos' THEN N'240' ELSE NULL END,
+                ActualizadoPor = NULL;
+            DELETE FROM dbo.tblPanelesDano WHERE Codigo NOT IN ('superior', 'perfil_posterior_izquierdo', 'perfil_posterior_derecho', 'costado_izquierdo', 'costado_derecho');
+            UPDATE dbo.tblPanelesDano SET Activo = 1, ImagenPath = NULL;
+            UPDATE dbo.tblZonasDano SET Activo = 1 WHERE CuadranteId IS NULL;
             UPDATE dbo.tblVistasFoto SET Activo = 1, TipoVehiculo = NULL, Obligatoria = CASE WHEN Codigo IN ('piezas_baul', 'cojineria') THEN 0 ELSE 1 END;
             """;
         await using var conexion = new SqlConnection(CadenaConexion);

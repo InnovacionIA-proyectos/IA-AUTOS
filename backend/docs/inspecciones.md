@@ -22,7 +22,7 @@ El trigger de inmutabilidad sigue impidiendo modificar una cerrada y agregarle h
 | Cualquier otra etapa que agregue el catálogo | se trata como Transporte (no exige las vistas) |
 
 Las dos **vistas adicionales** (piezas en el baúl y cojinería) se toman solo cuando hay un faltante o daño, y su foto exige una **nota** con ese faltante o daño. Una inspección sin faltantes ni
-daños se cierra sin ellas. Si el cargue no tiene personal de apoyo, la inspección de salida la hace el conductor con exactamente las mismas reglas.
+daños se cierra sin ellas. Si el cargue no tiene personal de apoyo, la inspección de salida la hace el conductor con exactamente las mismas reglas. Si lo tiene, el servidor no deja que el conductor la cree (403: «Este cargue tiene personal de apoyo: el conductor solo firma el recibo»): ya no depende de que la app lo bloquee.
 
 Un cierre incompleto responde `400` con la lista de lo que falta, **una línea por cada vista, con su nombre** («Falta la foto de la vista «Frontal»»).
 
@@ -51,6 +51,11 @@ para el cierre (las anteriores quedan guardadas, son evidencia). Mientras la úl
 Para crear la **salida** de una etapa, la etapa anterior del mismo VIN en el viaje (la de mayor `orden` menor) debe tener su **llegada cerrada** y ninguna **transferencia sin tipo de cierre**. Si no, `409` con `code: "ETAPA_PREVIA_SIN_CIERRE"`
 y `details`: `motivo` (`etapa_previa_sin_cierre` si falta cerrar la llegada, `transferencia_sin_cierre` si falta cerrar la transferencia, ver [transferencias.md](transferencias.md)), `etapa_previa_id` y `etapa_previa` (el nombre de la etapa que falta terminar), para que la app muestre el bloqueo. La primera etapa y la llegada
 no tienen este bloqueo.
+
+## Lo que ve el conductor
+
+El conductor no ve los hallazgos que registraron otros: en `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` toda inspección que **no creó** llega con `hallazgos: []` y sin las fotos de hallazgos ni las del sello (`clsVisibilidadConductor`); las
+que sí creó (sus novedades) llegan completas. `GET /api/inspecciones/{id}/hallazgos-previos` y `GET /api/hallazgos` responden `403`. Las novedades que registra en ruta están en [notificaciones.md](notificaciones.md).
 
 ## Corrección sin modificar lo cerrado
 

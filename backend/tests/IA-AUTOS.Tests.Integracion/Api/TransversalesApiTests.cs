@@ -70,7 +70,7 @@ public sealed class TransversalesApiTests(clsBaseDatosFixture bd) : clsPruebaApi
         var permitido = new HttpRequestMessage(HttpMethod.Options, "/api/usuarios");
         permitido.Headers.Add("Origin", clsFabricaApi.ORIGEN_PERMITIDO);
         permitido.Headers.Add("Access-Control-Request-Method", "GET");
-        permitido.Headers.Add("Access-Control-Request-Headers", "authorization,content-type");
+        permitido.Headers.Add("Access-Control-Request-Headers", "authorization,content-type,x-dispositivo-id");
         var rp = await cliente.SendAsync(permitido);
 
         var ajeno = new HttpRequestMessage(HttpMethod.Options, "/api/usuarios");
@@ -81,6 +81,7 @@ public sealed class TransversalesApiTests(clsBaseDatosFixture bd) : clsPruebaApi
         Assert.Equal(HttpStatusCode.NoContent, rp.StatusCode);
         Assert.Equal(clsFabricaApi.ORIGEN_PERMITIDO, rp.Headers.GetValues("Access-Control-Allow-Origin").Single());
         Assert.Contains("Authorization", string.Join(",", rp.Headers.GetValues("Access-Control-Allow-Headers")), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("X-Dispositivo-Id", string.Join(",", rp.Headers.GetValues("Access-Control-Allow-Headers")), StringComparison.OrdinalIgnoreCase);
         Assert.Equal("86400", rp.Headers.GetValues("Access-Control-Max-Age").Single());
         Assert.False(ra.Headers.Contains("Access-Control-Allow-Origin"));
     }

@@ -14,8 +14,13 @@ public static class clsNombresCatalogo
     public const string NIVELES_SEVERIDAD = "niveles-severidad";
     public const string VISTAS_FOTO = "vistas-foto";
     public const string CUADRANTES = "cuadrantes";
+
+    /// <summary>Reemplazado por <see cref="CUADRANTE_REGIONES"/>: ya no es un catalogo y su ruta responde 404.</summary>
     public const string CUADRANTE_VISTAS = "cuadrante-vistas";
+    public const string PANELES_DANO = "paneles-dano";
+    public const string CUADRANTE_REGIONES = "cuadrante-regiones";
     public const string CLIENTES = "clientes";
+    public const string ESTADOS_SOFASA = "estados-sofasa";
 }
 
 /// <summary>Un valor de catalogo tal como lo ve el cliente: solo los campos propios de ese catalogo (snake_case), con id, codigo, nombre, orden y activo.</summary>
@@ -56,6 +61,19 @@ public interface ICatalogo
     Task EliminarAsync(Guid id, CancellationToken ct = default);
 }
 
+/// <summary>Cuerpo de cambiar la imagen de fondo de un panel de danos: el nombre del archivo que devolvio la subida de imagenes.</summary>
+public sealed record CambiarImagenPanelRequest(string? Archivo);
+
+/// <summary>Imagen de fondo de los paneles del dibujo de danos (el archivo vive en el almacen de imagenes).</summary>
+public interface IImagenesPanelDano
+{
+    /// <summary>Nombre del archivo de la imagen del panel; nulo si aun no tiene. 404 si el panel no existe.</summary>
+    Task<string?> ObtenerNombreAsync(string codigoPanel, CancellationToken ct = default);
+
+    /// <summary>Fija el archivo de la imagen del panel (no confirma). 404 si el panel no existe.</summary>
+    Task CambiarAsync(string codigoPanel, string archivo, CancellationToken ct = default);
+}
+
 /// <summary>Un catalogo con su version (huella de su contenido) para cache y validacion con ETag.</summary>
 public sealed record CatalogoDto(string Version, IReadOnlyList<ValorCatalogo> Items);
 
@@ -74,7 +92,9 @@ public sealed record CatalogoValorRequest(
     Guid? CuadranteId,
     Guid? VistaFotoId,
     int? Numero,
-    GeometriaCuadranteDto? Geometria);
+    GeometriaCuadranteDto? Geometria,
+    string? Panel,
+    string? Lado);
 
 /// <summary>Poligono normalizado de un cuadrante en una vista: cada punto es [x, y] con x e y entre 0 y 1 sobre la imagen de la vista.</summary>
 public sealed record GeometriaCuadranteDto(IReadOnlyList<IReadOnlyList<double>> Puntos);

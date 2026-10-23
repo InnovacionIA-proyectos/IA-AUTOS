@@ -27,8 +27,8 @@ public sealed class clsUsuariosService(
     IOptions<clsOpcionesSeguridad> opciones,
     IValidator<CrearUsuarioRequest> validadorCrear)
 {
-    public const int TAMANO_PAGINA_DEFECTO = 50;
-    public const int TAMANO_PAGINA_MAXIMO = 200;
+    /// <summary>Los campos por los que se puede ordenar el listado (<c>orden=campo:asc|desc</c>).</summary>
+    public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "nombre", "email", "rol", "cedula", "activo", "created_at", "ultimo_acceso" };
 
     private static readonly string[] CAMPOS_EDITABLES = ["nombre", "email", "rol", "subtipo_inspector", "password", "activo", "cedula", "cliente_id"];
     private static readonly string[] CAMPOS_SIN_NULO = ["nombre", "rol", "password", "activo"];
@@ -53,35 +53,23 @@ public sealed class clsUsuariosService(
 
     // ------------------------------------------------------------------------------------------------ lectura
 
-    /// <summary>Busqueda paginada (nombre, correo o cedula; rol; estado; cliente). Quien no es super administrador solo ve su cliente.</summary>
+    /// <summary>Busqueda paginada (nombre, correo o cedula; rol; estado; cliente). Quien no es super administrador solo ve su cliente: pedir otro responde 403.</summary>
     public async Task<ListadoUsuariosDto> ListarAsync(FiltrosUsuariosRequest filtros, CancellationToken ct = default)
     {
         var errores = new Dictionary<string, string[]>();
         var rol = clsParseoFiltros.Catalogo(filtros.Rol, clsRol.VALORES, "rol", errores);
         var clienteSolicitado = clsParseoFiltros.Uuid(filtros.ClienteId, "cliente_id", errores);
-        bool? activo = null;
-        if (!string.IsNullOrWhiteSpace(filtros.Activo))
-        {
-            if (bool.TryParse(filtros.Activo, out var valor))
-            {
-                activo = valor;
-            }
-            else
-            {
-                errores["activo"] = ["activo debe ser true o false"];
-            }
-        }
-
+        var activo = clsParseoFiltros.Booleano(filtros.Activo, "activo", errores);
+        var pagina = clsPaginacion.Pagina(filtros.Pagina, filtros.Tamano, errores);
+        var orden = clsPaginacion.Orden(filtros.Orden, CAMPOS_ORDEN, errores);
         if (errores.Count > 0)
         {
             throw clsErroresCampos.Varios(errores);
         }
 
-        var pagina = Math.Max(filtros.Pagina ?? 1, 1);
-        var tamano = Math.Clamp(filtros.Tamano ?? TAMANO_PAGINA_DEFECTO, 1, TAMANO_PAGINA_MAXIMO);
-        var filtro = new clsFiltroUsuarios(filtros.Q, rol, activo, VeTodosLosClientes ? clienteSolicitado : ClienteDelActor());
-        var (filas, total) = await usuarios.BuscarAsync(filtro, (pagina - 1) * tamano, tamano, ct);
-        return new ListadoUsuariosDto(filas.Select(u => clsMapeadorUsuarios.ADto(u)).ToList(), total, pagina, tamano);
+        var filtro = new clsFiltroUsuarios(filtros.Q, rol, activo, actual.ClienteDelFiltro(clienteSolicitado), orden?.Campo, orden?.Descendente ?? false);
+        var (filas, total) = await usuarios.BuscarAsync(filtro, pagina.Desplazamiento, pagina.Tamano, ct);
+        return new ListadoUsuariosDto(filas.Select(u => clsMapeadorUsuarios.ADto(u)).ToList(), total, pagina.Pagina, pagina.Tamano);
     }
 
     /// <summary>Lista reducida (id, nombre y rol) de los usuarios activos del cliente, para quien no administra usuarios.</summary>
@@ -117,7 +105,7 @@ public sealed class clsUsuariosService(
         }
 
         usuarios.Agregar(usuario);
-        auditor.Registrar("usuario.crear", "usuarios", usuario.Id);
+        auditor.Registrar("usuario.crear", "usuarios", usuario.Id, detalle: new DetalleAuditoria(null, clsInstantaneasAuditoria.De(usuario)), clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorUsuarios.ADto(usuario, pinTemporal);
     }
@@ -182,7 +170,7 @@ public sealed class clsUsuariosService(
         if (!await usuarios.TieneHistorialAsync(id, ct))
         {
             usuarios.Eliminar(usuario);
-            auditor.Registrar("usuario.eliminar", "usuarios", id);
+            auditor.Registrar("usuario.eliminar", "usuarios", id, detalle: new DetalleAuditoria(clsInstantaneasAuditoria.De(usuario), null), clienteId: usuario.ClienteId);
             try
             {
                 await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -196,8 +184,10 @@ public sealed class clsUsuariosService(
             }
         }
 
+        var antesDeRetirar = clsInstantaneasAuditoria.De(usuario);
         usuario.Retirar(reloj.Ahora);
-        auditor.Registrar("usuario.retirar", "usuarios", usuario.Id);
+        auditor.Registrar(
+            "usuario.retirar", "usuarios", usuario.Id, detalle: new DetalleAuditoria(antesDeRetirar, clsInstantaneasAuditoria.De(usuario)), clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return new EliminarUsuarioResponse("retirado");
     }
@@ -212,8 +202,10 @@ public sealed class clsUsuariosService(
     {
         var usuario = await ObtenerGestionableAsync(id, ct);
         var pin = solicitud.Pin is null ? clsPin.Generar() : clsPin.Validar(solicitud.Pin);
+        var antesDelPin = clsInstantaneasAuditoria.De(usuario);
         usuario.AsignarPin(contrasenas.Hashear(pin), debeCambiar: true, reloj.Ahora);
-        auditor.Registrar("usuario.pin_asignar", "usuarios", usuario.Id);
+        auditor.Registrar(
+            "usuario.pin_asignar", "usuarios", usuario.Id, detalle: new DetalleAuditoria(antesDelPin, clsInstantaneasAuditoria.De(usuario)), clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorUsuarios.ADto(usuario, solicitud.Pin is null ? pin : null);
     }
@@ -222,8 +214,10 @@ public sealed class clsUsuariosService(
     public async Task<UsuarioDto> ForzarCambioDePinAsync(Guid id, CancellationToken ct = default)
     {
         var usuario = await ObtenerGestionableAsync(id, ct);
+        var antesDeForzar = clsInstantaneasAuditoria.De(usuario);
         usuario.ForzarCambioDePin(reloj.Ahora);
-        auditor.Registrar("usuario.pin_forzar_cambio", "usuarios", usuario.Id);
+        auditor.Registrar(
+            "usuario.pin_forzar_cambio", "usuarios", usuario.Id, detalle: new DetalleAuditoria(antesDeForzar, clsInstantaneasAuditoria.De(usuario)), clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorUsuarios.ADto(usuario);
     }
@@ -233,7 +227,7 @@ public sealed class clsUsuariosService(
     {
         var usuario = await ObtenerGestionableAsync(id, ct);
         usuario.Desbloquear(reloj.Ahora);
-        auditor.Registrar("usuario.desbloquear", "usuarios", usuario.Id);
+        auditor.Registrar("usuario.desbloquear", "usuarios", usuario.Id, clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorUsuarios.ADto(usuario);
     }
@@ -279,6 +273,7 @@ public sealed class clsUsuariosService(
             }
         }
 
+        var antes = clsInstantaneasAuditoria.De(usuario);
         usuario.Modificar(
             cambios.Nombre,
             cambios.CambiaEmail, cambios.Email,
@@ -296,7 +291,8 @@ public sealed class clsUsuariosService(
             usuario.AsignarCliente(await ClienteDeAltaAsync(usuario.Rol, null, ct), reloj.Ahora);
         }
 
-        auditor.Registrar("usuario.actualizar", "usuarios", usuario.Id);
+        auditor.Registrar(
+            "usuario.actualizar", "usuarios", usuario.Id, detalle: new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(usuario)), clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorUsuarios.ADto(usuario);
     }

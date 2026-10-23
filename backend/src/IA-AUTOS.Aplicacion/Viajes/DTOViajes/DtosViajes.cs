@@ -34,7 +34,23 @@ public sealed record AgregarVinesRequest(IReadOnlyList<string>? Vines);
 
 public sealed record CambiarEstadoViajeRequest(string? Estado);
 
-/// <summary>Un VIN del viaje con el avance de sus etapas dentro de el.</summary>
+/// <summary>
+/// Una unidad que no sale del viaje: el motivo, el hallazgo que la causo, quien la marco (y su nombre), cuando y el VIN que la reemplaza (si ya se
+/// asigno).
+/// </summary>
+public sealed record NoSaleDto(
+    string Motivo,
+    Guid HallazgoId,
+    Guid MarcadoPor,
+    string? MarcadoPorNombre,
+    DateTimeOffset Fecha,
+    string? VinReemplazo);
+
+/// <summary>
+/// Un VIN del viaje con el avance de sus etapas dentro de el. <c>EstadoUnidad</c> es <c>activa</c> o <c>no_sale</c>; en ese caso <c>NoSale</c> trae
+/// el motivo y el hallazgo. <c>EstadoTransporte</c> dice como va la unidad en su recorrido (<c>sin_registro</c>, <c>con_novedad</c>, <c>sin_novedad</c> o <c>llegada_con_novedad</c>) y
+/// <c>Novedades</c> cuantas novedades registro el conductor.
+/// </summary>
 public sealed record ViajeVehiculoDto(
     Guid VehiculoId,
     string Vin,
@@ -43,7 +59,11 @@ public sealed record ViajeVehiculoDto(
     string? Color,
     string Operacion,
     int Etapas,
-    int Completas);
+    int Completas,
+    string EstadoUnidad,
+    NoSaleDto? NoSale,
+    string EstadoTransporte,
+    int Novedades);
 
 /// <summary>
 /// Viaje completo con sus VIN. <c>ConPersonalApoyo</c> es la marca de la etapa de Cargue. El viaje no tiene un cliente propio: <c>Clientes</c>
@@ -96,10 +116,37 @@ public sealed record ViajeResumenDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
-/// <summary>Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio.</summary>
-public sealed record FiltrosViajesRequest(string? Estado, string? CodigoMtrack, string? Vin, string? ConductorId, string? Desde, string? Hasta, string? ClienteId = null);
+/// <summary>
+/// Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio. <c>Pagina</c>, <c>Tamano</c> y <c>Orden</c> son el formato comun de los listados; la exportacion a Excel los
+/// ignora.
+/// </summary>
+public sealed record FiltrosViajesRequest(
+    string? Estado,
+    string? CodigoMtrack,
+    string? Vin,
+    string? ConductorId,
+    string? InspectorId,
+    string? ClienteId,
+    string? OrigenId,
+    string? DestinoId,
+    string? Desde,
+    string? Hasta,
+    string? Pagina = null,
+    string? Tamano = null,
+    string? Orden = null);
 
-public sealed record FiltrosViajes(string? Estado, string? CodigoMtrack, string? Vin, Guid? ConductorId, DateTimeOffset? Desde, DateTimeOffset? Hasta, Guid? ClienteId = null);
+/// <summary>Los filtros ya validados. <c>ClienteId</c> pide los viajes con algun VIN de ese cliente.</summary>
+public sealed record FiltrosViajes(
+    string? Estado,
+    string? CodigoMtrack,
+    string? Vin,
+    Guid? ConductorId,
+    Guid? InspectorId,
+    Guid? ClienteId,
+    Guid? OrigenId,
+    Guid? DestinoId,
+    DateTimeOffset? Desde,
+    DateTimeOffset? Hasta);
 
 /// <summary>
 /// Fila de la carga masiva de viajes (una por VIN). Las filas con el mismo codigo MTrack forman un viaje. <c>Fila</c> es el

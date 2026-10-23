@@ -25,7 +25,8 @@ Cambios intencionales que corrigen riesgos detectados en el diagnostico. Ninguno
 | Errores | mensajes crudos de la base en lotes | mensajes seguros; el detalle solo en el log del servidor |
 | `/health` | devolvia el texto del error de la base | solo conectado o no, sin detalle |
 | Inmutabilidad | solo en codigo | tambien en la base de datos (triggers) |
-| Auditoria | tabla sin escribir | toda accion relevante se registra |
+| Auditoria | tabla sin escribir | toda accion relevante se registra con usuario, IP, dispositivo, detalle antes y despues (sin contrasenas, PIN ni tokens), viaje y cliente; no se modifica ni se borra; la consulta el administrador de su cliente y el super administrador |
+| Vehiculos | un vehiculo no se podia dar de baja | baja logica (`DELETE /api/vehiculos/{vin}`): queda inactivo y conserva todo su historial |
 | Imagen Docker | root, con dependencias de desarrollo | usuario sin privilegios, solo el runtime |
 
 ## Controles vigentes
@@ -36,17 +37,18 @@ Cambios intencionales que corrigen riesgos detectados en el diagnostico. Ninguno
 - Todo el acceso a datos es parametrizado (EF Core).
 - La API se conecta con un usuario de base de datos de minimo privilegio (`database/01-crear-usuario-app.sql`), no con `sa`.
 - El secreto JWT se valida al arrancar (minimo 32 caracteres).
+- Las fotos no son publicas: solo se ven con una URL firmada por el servidor (HMAC-SHA256 del nombre del archivo y su vencimiento con `Storage__FirmaSecreto`, minimo 32 caracteres) y vigente (`url_firmada_minutos`). Una URL sin firma, con otra firma o vencida
+  responde `403 URL_FIRMADA_INVALIDA`; la firma se compara en tiempo constante y no hace falta enviar el token, asi que sirve en una etiqueta de imagen.
 - Los secretos solo llegan por variables de entorno; `.env` esta en `.gitignore` y fuera de la imagen (`.dockerignore`).
 
 ## Riesgos aceptados y recomendaciones
 
 | Riesgo | Estado | Recomendacion |
 |---|---|---|
-| Las imagenes se leen sin token (decision del sistema anterior: las etiquetas de imagen no envian cabeceras; el nombre es un UUID no adivinable) | se mantiene por compatibilidad | cuando web y app puedan enviar el token, active `Storage__LecturaPublica=false` |
 | El token dura 30 dias y no hay refresh | se mantiene por compatibilidad con la app instalada | la revocacion es inmediata por baja del usuario; evaluar tokens cortos con refresh al migrar la app a Flutter |
 | Una consulta a la base por solicitud para validar al usuario | costo bajo (clave primaria) | si el volumen lo exige, agregar un cache de pocos segundos |
 | El limite de intentos es por IP y en memoria de la instancia | basico | con varias instancias, mover el limite a un almacen compartido o al proxy |
-| Inspectores y conductores leen solo lo de sus viajes (VIN, viajes, informes, ordenes Sofasa); el resto de roles lee todo | la visibilidad sale del conductor o inspector del viaje | la visibilidad por cliente (unidades de un cliente y ningun otro) solo esta aplicada a la gestion de usuarios: usuarios y vehiculos ya llevan su cliente (`ClienteId`), pero los listados de vehiculos, viajes, informes y reportes todavia no filtran por el; los reportes son agregados |
+| Inspectores y conductores leen solo lo de sus viajes (VIN, viajes, informes, ordenes Sofasa); el resto de roles lee solo lo de su cliente | la visibilidad por viaje sale del conductor o inspector del viaje; la de por cliente, de `tblVehiculos.ClienteId` frente al cliente del usuario (el super administrador ve todos) | vehiculos, inventario, informes, viajes, ordenes Sofasa, reportes y usuarios filtran por el cliente de quien consulta y un recurso de otro cliente responde 403; los endpoints nuevos (hallazgos, alertas, auditoria, exportaciones) deben aplicar `clsAlcanceCliente`. Un usuario de un cliente sin cliente asignado no ve nada |
 | Los intentos de PIN se cuentan en la fila del usuario sin bloqueo de concurrencia | dos intentos simultaneos pueden contar uno solo | el limite por IP de `login-conductor` y el bloqueo por cuenta bastan para el uso previsto; si hiciera falta, pasar el contador a una actualizacion atomica |
 | Cola offline de la app: un 4xx distinto de 409 la marca como fallida y puede perder evidencia | del cliente, no del backend | corregirlo en la migracion de la app a Flutter |
 | El sello de fecha y ubicacion de las fotos lo envia el cliente y el servidor no puede verificarlo | igual que antes | para valor legal, considerar sellos del lado del servidor |

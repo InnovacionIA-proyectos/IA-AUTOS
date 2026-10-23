@@ -17,6 +17,7 @@ public sealed class clsFabricaApi(
 {
     public const string SECRETO_JWT = "secreto-de-pruebas-con-mas-de-32-caracteres-aleatorios";
     public const string TOKEN_ETL = "token-etl-de-pruebas";
+    public const string SECRETO_FIRMA = "secreto-de-firmas-de-pruebas-con-mas-de-32-caracteres";
     public const string ORIGEN_PERMITIDO = "https://web.ejemplo.com";
 
     protected override void ConfigureWebHost(IWebHostBuilder constructor)
@@ -29,6 +30,9 @@ public sealed class clsFabricaApi(
             ["Etl:IngestToken"] = TOKEN_ETL,
             ["Cors:Origins"] = ORIGEN_PERMITIDO,
             ["Contrasenas:Iteraciones"] = "1000",
+            ["Alertas:ProcesosActivos"] = "false",
+            ["ReporteDiario:ProcesoActivo"] = "false",
+            ["Storage:FirmaSecreto"] = SECRETO_FIRMA,
             ["Seguridad:LoginMaxIntentosPorMinuto"] = "1000",
             ["Storage:LocalPath"] = Path.Combine(Path.GetTempPath(), "iaautos-pruebas-" + Guid.NewGuid().ToString("N")),
         };

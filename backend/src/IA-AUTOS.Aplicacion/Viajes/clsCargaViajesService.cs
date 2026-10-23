@@ -84,7 +84,7 @@ public sealed class clsCargaViajesService(
                 }
             }
 
-            auditor.Registrar("viajes.cargar", "viajes");
+            auditor.Registrar("viajes.cargar", "viajes", detalle: new DetalleAuditoria(null, new { filas = filas.Count, viajes_creados = viajesCreados }));
             await unidadDeTrabajo.GuardarCambiosAsync(ct);
         }
 
@@ -324,7 +324,14 @@ public sealed class clsCargaViajesService(
                 actual.IdObligatorio(), reloj.Ahora);
             viajes.Agregar(viaje);
             await ensamblaje.AgregarVehiculosAsync(viaje, grupo.Select(f => f.Vehiculo!).ToList(), false, ruta, ct);
-            auditor.Registrar("viaje.crear", "viajes", viaje.Id);
+            await auditor.RegistrarDeViajeAsync(
+                "viaje.crear",
+                "viajes",
+                viaje.Id,
+                viaje.Id,
+                new DetalleAuditoria(null, new { viaje = clsInstantaneasAuditoria.De(viaje), vines = grupo.Select(f => f.Vin).ToList() }),
+                grupo[0].Vehiculo!.ClienteId,
+                ct);
             await unidadDeTrabajo.GuardarCambiosAsync(ct);
             foreach (var fila in grupo)
             {

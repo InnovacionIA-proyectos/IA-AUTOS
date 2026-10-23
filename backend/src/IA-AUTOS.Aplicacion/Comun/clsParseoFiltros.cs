@@ -1,4 +1,5 @@
 using System.Globalization;
+using IAAutos.Dominio.Vehiculos;
 
 namespace IAAutos.Aplicacion.Comun;
 
@@ -55,6 +56,43 @@ public static class clsParseoFiltros
         }
 
         errores[campo] = [$"{campo} debe ser UUID"];
+        return null;
+    }
+
+    /// <summary>
+    /// El VIN de un filtro, normalizado (mayusculas, sin espacios en los bordes); vacio = sin filtro. Aplica la regla unica del VIN: 17 caracteres ISO (sin I, O ni Q) o un chasis de 6 a 20 alfanumericos;
+    /// otro valor agrega el motivo al campo.
+    /// </summary>
+    public static string? Vin(string? texto, string campo, Dictionary<string, string[]> errores)
+    {
+        if (string.IsNullOrWhiteSpace(texto))
+        {
+            return null;
+        }
+
+        if (clsVin.Validar(texto) is { } motivo)
+        {
+            errores[campo] = [motivo];
+            return null;
+        }
+
+        return clsVin.Normalizar(texto);
+    }
+
+    /// <summary>true o false; vacio = sin filtro.</summary>
+    public static bool? Booleano(string? texto, string campo, Dictionary<string, string[]> errores)
+    {
+        if (string.IsNullOrWhiteSpace(texto))
+        {
+            return null;
+        }
+
+        if (bool.TryParse(texto.Trim(), out var valor))
+        {
+            return valor;
+        }
+
+        errores[campo] = [$"{campo} debe ser true o false"];
         return null;
     }
 }

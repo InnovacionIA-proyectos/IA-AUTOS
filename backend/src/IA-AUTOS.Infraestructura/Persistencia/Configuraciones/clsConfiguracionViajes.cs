@@ -1,4 +1,5 @@
 using IAAutos.Dominio.Catalogos;
+using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
@@ -41,12 +42,24 @@ internal sealed class clsConfiguracionViajeVehiculo : IEntityTypeConfiguration<c
 {
     public void Configure(EntityTypeBuilder<clsViajeVehiculo> builder)
     {
-        builder.ToTable("tblViajeVehiculos");
+        builder.ToTable("tblViajeVehiculos", t => t.HasTrigger("TR_tblViajeVehiculos_Completa"));
         clsConfiguracionBase.Base(builder);
         builder.HasOne<clsViaje>().WithMany().HasForeignKey(v => v.ViajeId)
             .HasConstraintName("FK_tblViajeVehiculos_Viaje").OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<clsVehiculo>().WithMany().HasForeignKey(v => v.VehiculoId)
-            .HasConstraintName("FK_tblViajeVehiculos_Vehiculo").OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("FK_tblViajeVehiculos_Vehiculo").OnDelete(DeleteBehavior.NoAction);
+        builder.Property(v => v.EstadoUnidad).HasMaxLength(10).HasDefaultValue(clsEstadoUnidad.ACTIVA);
+        // Completa la calculan los triggers de la base: la aplicacion nunca la escribe.
+        builder.Property(v => v.Completa).HasDefaultValue(false)
+            .Metadata.SetBeforeSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
+        builder.Property(v => v.Completa).Metadata.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
+        builder.Property(v => v.NoSaleMotivo).HasMaxLength(clsViajeVehiculo.NO_SALE_MOTIVO_MAX);
+        builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(v => v.NoSaleHallazgoId)
+            .HasConstraintName("FK_tblViajeVehiculos_NoSaleHallazgo").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(v => v.NoSaleMarcadoPor)
+            .HasConstraintName("FK_tblViajeVehiculos_NoSaleMarcadoPor").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsVehiculo>().WithMany().HasForeignKey(v => v.ReemplazoVehiculoId)
+            .HasConstraintName("FK_tblViajeVehiculos_Reemplazo").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(v => new { v.ViajeId, v.VehiculoId }).IsUnique().HasDatabaseName("UQ_tblViajeVehiculos_Viaje_Vehiculo");
         builder.HasIndex(v => v.VehiculoId).HasDatabaseName("IX_tblViajeVehiculos_Vehiculo");
     }

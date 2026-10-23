@@ -12,7 +12,11 @@ namespace IAAutos.API.Controllers.Comun;
 [ApiController]
 public abstract class clsControladorBase : ControllerBase
 {
-    protected async Task<T> LeerCuerpoAsync<T>(CancellationToken ct)
+    /// <summary>
+    /// Lee el cuerpo como <typeparamref name="T"/>. Con <paramref name="noAdmitidos"/>, un cuerpo que traiga alguno de esos campos responde 400 con
+    /// «Campo no admitido» en ese campo (son los campos de un modelo anterior que ya no se aceptan).
+    /// </summary>
+    protected async Task<T> LeerCuerpoAsync<T>(CancellationToken ct, params string[] noAdmitidos)
     {
         JsonDocument documento;
         try
@@ -29,6 +33,18 @@ public abstract class clsControladorBase : ControllerBase
             if (documento.RootElement.ValueKind != JsonValueKind.Object)
             {
                 throw new clsValidacionException("El cuerpo debe ser un objeto JSON");
+            }
+
+            var presentes = noAdmitidos.Where(c => documento.RootElement.TryGetProperty(c, out _)).ToList();
+            if (presentes.Count > 0)
+            {
+                throw new clsValidacionException(
+                    "Datos inválidos",
+                    new Dictionary<string, object>
+                    {
+                        ["formErrors"] = Array.Empty<string>(),
+                        ["fieldErrors"] = presentes.ToDictionary(c => c, _ => new[] { "Campo no admitido" }),
+                    });
             }
 
             try

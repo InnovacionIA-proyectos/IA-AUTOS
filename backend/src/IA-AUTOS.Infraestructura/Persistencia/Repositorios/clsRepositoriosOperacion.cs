@@ -1,4 +1,6 @@
 using IAAutos.Dominio.Auditoria;
+using IAAutos.Infraestructura.Persistencia.Consultas;
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Sofasa;
@@ -39,6 +41,9 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
         return resultado;
     }
 
+    public async Task<IReadOnlyList<clsUsuario>> ObtenerActivosPorRolesAsync(IReadOnlyCollection<string> roles, Guid clienteId, CancellationToken ct = default) =>
+        await contexto.Usuarios.AsNoTracking().Where(u => u.Activo && u.ClienteId == clienteId && roles.Contains(u.Rol)).OrderBy(u => u.Nombre).ToListAsync(ct);
+
     public async Task<IReadOnlyList<clsUsuario>> ListarAsync(Guid? clienteId = null, CancellationToken ct = default) =>
         await contexto.Usuarios.AsNoTracking()
             .Where(u => clienteId == null || u.ClienteId == clienteId)
@@ -70,7 +75,19 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
         }
 
         var total = await consulta.CountAsync(ct);
-        var filas = await consulta.OrderBy(u => u.Nombre).ThenBy(u => u.Id).Skip(saltar).Take(tomar).ToListAsync(ct);
+        var ordenada = clsOrdenamiento.De(consulta)
+            .Campo("nombre", u => u.Nombre)
+            .Campo("email", u => u.Email)
+            .Campo("rol", u => u.Rol)
+            .Campo("cedula", u => u.Cedula)
+            .Campo("activo", u => u.Activo)
+            .Campo("created_at", u => u.CreatedAt)
+            .Campo("ultimo_acceso", u => u.UltimoAccesoAt)
+            .Aplicar(
+                filtro.Orden is null ? null : new IAAutos.Aplicacion.Comun.OrdenSolicitado(filtro.Orden, filtro.Descendente),
+                q => q.OrderBy(u => u.Nombre),
+                q => q.ThenBy(u => u.Id));
+        var filas = await ordenada.Skip(saltar).Take(tomar).ToListAsync(ct);
         return (filas, total);
     }
 
@@ -115,7 +132,7 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
     public async Task<clsResumenCierre> ObtenerResumenCierreAsync(Guid inspeccionId, CancellationToken ct = default)
     {
         var evidencias = await contexto.Evidencias.AsNoTracking()
-            .Where(e => e.InspeccionId == inspeccionId && !e.EsConstancia)
+            .Where(e => e.InspeccionId == inspeccionId && !e.EsConstancia && !e.EsSello)
             .Select(e => new { e.Id, e.VistaId, e.HallazgoId, e.SelloLat, e.SelloLng, e.SelloServidorAt })
             .ToListAsync(ct);
         var hallazgos = await contexto.Hallazgos.AsNoTracking().Where(h => h.InspeccionId == inspeccionId).Select(h => h.Id).ToListAsync(ct);
@@ -141,6 +158,12 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
          where i.EtapaId == etapaId && t.TipoCierre == null
          select t.Id).AnyAsync(ct);
 
+    public Task<clsInspeccion?> ObtenerUltimaDeEtapaAsync(Guid etapaId, string momento, CancellationToken ct = default) =>
+        contexto.Inspecciones.Where(i => i.EtapaId == etapaId && i.Momento == momento).OrderByDescending(i => i.Version).FirstOrDefaultAsync(ct);
+
+    public Task<int> ContarNovedadesAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        contexto.Hallazgos.CountAsync(h => h.InspeccionId == inspeccionId && h.TipoNovedad != null, ct);
+
     public Task<clsEvidencia?> ObtenerEvidenciaAsync(Guid id, CancellationToken ct = default) =>
         contexto.Evidencias.AsNoTracking().FirstOrDefaultAsync(e => e.Id == id, ct);
 
@@ -150,11 +173,53 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
     public Task<bool> ExisteHallazgoEnInspeccionAsync(Guid hallazgoId, Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Hallazgos.AnyAsync(h => h.Id == hallazgoId && h.InspeccionId == inspeccionId, ct);
 
+    public async Task<clsZonaDano?> ObtenerZonaNumeradaAsync(int numero, string? lado, string? tipoVehiculo, CancellationToken ct = default)
+    {
+        var candidatas = await (from z in contexto.ZonasDano.AsNoTracking()
+                                join c in contexto.Cuadrantes.AsNoTracking() on z.CuadranteId equals c.Id
+                                where z.Activo && c.Activo && c.Numero == numero && z.Lado == lado
+                                    && (c.TipoVehiculo == null || c.TipoVehiculo == tipoVehiculo)
+                                select new { Zona = z, c.TipoVehiculo }).ToListAsync(ct);
+        // El cuadrante propio del tipo de vehiculo gana sobre el generico.
+        return candidatas.OrderBy(x => x.TipoVehiculo is null ? 1 : 0).Select(x => x.Zona).FirstOrDefault();
+    }
+
+    public Task<clsZonaDano?> ObtenerZonaProvisionalAsync(string codigo, CancellationToken ct = default) =>
+        contexto.ZonasDano.AsNoTracking().Where(z => z.CuadranteId == null && z.Activo && z.Codigo == codigo).FirstOrDefaultAsync(ct);
+
+    public Task<string?> ObtenerTipoVehiculoAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        (from i in contexto.Inspecciones.AsNoTracking()
+         join e in contexto.Etapas on i.EtapaId equals e.Id
+         join v in contexto.Vehiculos on e.VehiculoId equals v.Id
+         where i.Id == inspeccionId
+         select v.TipoVehiculo).FirstOrDefaultAsync(ct);
+
+    public Task<bool> EsHallazgoPrevioDelVehiculoAsync(Guid hallazgoOrigenId, Guid inspeccionId, Guid zonaId, string claseDano, CancellationToken ct = default) =>
+        (from actual in contexto.Inspecciones.AsNoTracking()
+         join ea in contexto.Etapas on actual.EtapaId equals ea.Id
+         join h in contexto.Hallazgos.AsNoTracking() on hallazgoOrigenId equals h.Id
+         join ip in contexto.Inspecciones on h.InspeccionId equals ip.Id
+         join ep in contexto.Etapas on ip.EtapaId equals ep.Id
+         where actual.Id == inspeccionId && ip.Id != inspeccionId && ip.Estado == clsEstadoInspeccion.CERRADA && ep.VehiculoId == ea.VehiculoId && h.ZonaId == zonaId && h.ClaseDano == claseDano
+         select h.Id).AnyAsync(ct);
+
+    public Task<clsHallazgo?> ObtenerHallazgoAsync(Guid id, CancellationToken ct = default) => contexto.Hallazgos.FirstOrDefaultAsync(h => h.Id == id, ct);
+
+    public async Task<IReadOnlyList<clsHallazgo>> ObtenerHallazgosDeInspeccionAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        await contexto.Hallazgos.Where(h => h.InspeccionId == inspeccionId).ToListAsync(ct);
+
+    public async Task<IReadOnlySet<Guid>> HallazgosConFotoAsync(IReadOnlyCollection<Guid> hallazgoIds, CancellationToken ct = default) =>
+        (await contexto.Evidencias.AsNoTracking()
+            .Where(e => e.HallazgoId != null && hallazgoIds.Contains(e.HallazgoId.Value) && !e.EsSello && !e.EsConstancia)
+            .Select(e => e.HallazgoId!.Value).Distinct().ToListAsync(ct)).ToHashSet();
+
     public void Agregar(clsInspeccion inspeccion) => contexto.Inspecciones.Add(inspeccion);
 
     public void Agregar(clsHallazgo hallazgo) => contexto.Hallazgos.Add(hallazgo);
 
     public void Agregar(clsEvidencia evidencia) => contexto.Evidencias.Add(evidencia);
+
+    public void Agregar(clsHallazgoSeguimiento seguimiento) => contexto.HallazgosSeguimiento.Add(seguimiento);
 }
 
 internal sealed class clsTransferenciaCustodiaRepository(clsAppDbContext contexto) : ITransferenciaCustodiaRepository

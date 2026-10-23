@@ -1,4 +1,5 @@
 using System.Text.Json;
+using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Dominio.Catalogos;
@@ -259,6 +260,8 @@ public sealed class CatalogosServiceTests
     private readonly CatalogoFalso _etapas = new(clsNombresCatalogo.ETAPAS);
     private readonly CatalogoFalso _clases = new(clsNombresCatalogo.CLASES_DANO);
     private readonly clsAuditoriaRepositoryFalso _auditoria;
+    private readonly clsImagenesPanelFalso _imagenes = new();
+    private readonly clsAlmacenArchivosFalso _almacen = new();
 
     public CatalogosServiceTests()
     {
@@ -273,10 +276,66 @@ public sealed class CatalogosServiceTests
         [_etapas, _clases],
         new MemoryCache(new MemoryCacheOptions()),
         _uow,
-        new clsAuditor(_auditoria, new clsUsuarioActualFalso(), new clsRelojFijo(AHORA)),
+        new clsAuditor(_auditoria, new clsUsuarioActualFalso(), new clsContextoSolicitudFalso(), new clsOrigenAuditoriaFalso(), new clsRelojFijo(AHORA)),
+        _imagenes,
+        new clsArchivosService(_almacen, new SubirArchivoRequestValidator(), Options.Create(new clsOpcionesAlmacenamiento())),
         Options.Create(new clsOpcionesCatalogos { CacheSegundos = cacheSegundos }));
 
     private static Dictionary<string, JsonElement> Cuerpo(string json) => JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json)!;
+
+    private static IReadOnlyCollection<string> CamposConError(clsValidacionException ex) =>
+        ((Dictionary<string, string[]>)((Dictionary<string, object>)ex.Detalles!)["fieldErrors"]).Keys;
+
+    [Fact]
+    public async Task Cuadrante_vistas_responde_no_encontrado_con_el_aviso_de_que_lo_reemplazo_cuadrante_regiones()
+    {
+        var servicio = Servicio();
+
+        var lectura = await Assert.ThrowsAsync<clsEntidadNoEncontradaException>(() => servicio.ObtenerAsync(clsNombresCatalogo.CUADRANTE_VISTAS));
+        var escritura = await Assert.ThrowsAsync<clsEntidadNoEncontradaException>(
+            () => servicio.CrearAsync(clsNombresCatalogo.CUADRANTE_VISTAS, Cuerpo("{\"cuadrante_id\":\"11111111-1111-1111-1111-111111111111\"}")));
+
+        Assert.Contains("reemplazado por cuadrante-regiones", lectura.Message);
+        Assert.Contains("reemplazado por cuadrante-regiones", escritura.Message);
+    }
+
+    [Fact]
+    public async Task La_imagen_de_un_panel_se_cambia_con_un_archivo_ya_subido_y_se_lee_igual()
+    {
+        var servicio = Servicio();
+        _imagenes.Paneles["superior"] = null;
+        var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3 };
+        var nombre = $"{Guid.NewGuid()}.png";
+        _almacen.Archivos[nombre] = png;
+
+        await Assert.ThrowsAsync<clsEntidadNoEncontradaException>(() => servicio.ObtenerImagenPanelAsync("superior"));
+        await servicio.CambiarImagenPanelAsync("superior", new CambiarImagenPanelRequest(nombre));
+        var leida = await servicio.ObtenerImagenPanelAsync("superior");
+
+        Assert.Equal(png, leida.Contenido);
+        Assert.Equal("image/png", leida.TipoContenido);
+        Assert.Equal(1, _uow.Confirmaciones);
+    }
+
+    [Fact]
+    public async Task Cambiar_la_imagen_de_un_panel_exige_un_archivo_que_exista()
+    {
+        var servicio = Servicio();
+        _imagenes.Paneles["superior"] = null;
+
+        var sinNombre = await Assert.ThrowsAsync<clsValidacionException>(() => servicio.CambiarImagenPanelAsync("superior", new CambiarImagenPanelRequest(" ")));
+        var inexistente = await Assert.ThrowsAsync<clsValidacionException>(
+            () => servicio.CambiarImagenPanelAsync("superior", new CambiarImagenPanelRequest($"{Guid.NewGuid()}.png")));
+
+        Assert.Contains("archivo", CamposConError(sinNombre));
+        Assert.Contains("archivo", CamposConError(inexistente));
+        Assert.Null(_imagenes.Paneles["superior"]);
+
+        // Con el archivo ya subido, un panel que no existe responde no encontrado.
+        var existente = $"{Guid.NewGuid()}.png";
+        _almacen.Archivos[existente] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        await Assert.ThrowsAsync<clsEntidadNoEncontradaException>(() => servicio.CambiarImagenPanelAsync("no_existe", new CambiarImagenPanelRequest(existente)));
+    }
 
     [Fact]
     public async Task Las_lecturas_se_sirven_del_cache_y_la_version_es_estable()

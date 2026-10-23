@@ -2,6 +2,8 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using IAAutos.Aplicacion.Archivos;
+using IAAutos.Aplicacion.Parametros;
 using IAAutos.Tests.Integracion.Infraestructura;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -58,6 +60,22 @@ public abstract class clsPruebaApiBase(clsBaseDatosFixture bd) : IAsyncLifetime
         using var doc = JsonDocument.Parse(await respuesta.Content.ReadAsStringAsync());
         return doc.RootElement.GetProperty("token").GetString()!;
     }
+
+    /// <summary>Cambia un parametro en la base y descarta lo que la aplicacion tiene guardado (la lectura se guarda un minuto), para que la prueba vea el valor nuevo de inmediato.</summary>
+    protected async Task CambiarParametroAsync(string clave, string? valor, clsFabricaApi? fabrica = null)
+    {
+        await new clsSembrador(BaseDatos.CadenaConexion).EjecutarAsync(
+            "UPDATE dbo.tblParametros SET Valor = @v WHERE Clave = @c", ("@v", (object?)valor ?? DBNull.Value), ("@c", clave));
+        using var alcance = (fabrica ?? Fabrica).Services.CreateScope();
+        alcance.ServiceProvider.GetRequiredService<IParametros>().Invalidar();
+    }
+
+    /// <summary>La URL firmada vigente que daria el servidor para un archivo (por ejemplo, uno sembrado directamente en la base).</summary>
+    protected string UrlFirmada(string archivo, clsFabricaApi? fabrica = null) =>
+        (fabrica ?? Fabrica).Services.GetRequiredService<IFirmadorUrls>().Firmar(archivo, "http://localhost", 15)!.Url;
+
+    /// <summary>Las filas de una pagina de un listado (<c>{items, total, pagina, tamano}</c>).</summary>
+    protected static JsonElement Items(JsonElement pagina) => pagina.GetProperty("items");
 
     protected static StringContent Json(string texto) => new(texto, Encoding.UTF8, "application/json");
 

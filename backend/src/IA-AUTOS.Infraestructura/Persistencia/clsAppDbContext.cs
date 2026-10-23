@@ -1,6 +1,8 @@
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Auditoria;
 using IAAutos.Dominio.Custodia;
+using IAAutos.Dominio.Notificaciones;
+using IAAutos.Dominio.Parametros;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Sofasa;
 using IAAutos.Dominio.Usuarios;
@@ -34,15 +36,26 @@ public sealed class clsAppDbContext : DbContext
     public DbSet<clsClaseDano> ClasesDano => Set<clsClaseDano>();
     public DbSet<clsTamanoDano> TamanosDano => Set<clsTamanoDano>();
     public DbSet<clsNivelSeveridad> NivelesSeveridad => Set<clsNivelSeveridad>();
+    public DbSet<clsEstadoSofasa> EstadosSofasa => Set<clsEstadoSofasa>();
     public DbSet<clsVistaFoto> VistasFoto => Set<clsVistaFoto>();
     public DbSet<clsCuadrante> Cuadrantes => Set<clsCuadrante>();
     public DbSet<clsCuadranteVista> CuadranteVistas => Set<clsCuadranteVista>();
+
+    public DbSet<clsPanelDano> PanelesDano => Set<clsPanelDano>();
+
+    public DbSet<clsZonaDano> ZonasDano => Set<clsZonaDano>();
+
+    public DbSet<clsRegionDano> RegionesDano => Set<clsRegionDano>();
 
     public DbSet<clsEtapa> Etapas => Set<clsEtapa>();
 
     public DbSet<clsInspeccion> Inspecciones => Set<clsInspeccion>();
 
     public DbSet<clsHallazgo> Hallazgos => Set<clsHallazgo>();
+
+    public DbSet<clsHallazgoSeguimiento> HallazgosSeguimiento => Set<clsHallazgoSeguimiento>();
+
+    public DbSet<clsNotaAclaratoria> NotasAclaratorias => Set<clsNotaAclaratoria>();
 
     public DbSet<clsEvidencia> Evidencias => Set<clsEvidencia>();
 
@@ -56,9 +69,21 @@ public sealed class clsAppDbContext : DbContext
 
     public DbSet<clsAuditLog> AuditLog => Set<clsAuditLog>();
 
+    public DbSet<clsNotificacion> Notificaciones => Set<clsNotificacion>();
+
+    public DbSet<clsDispositivo> Dispositivos => Set<clsDispositivo>();
+
+    public DbSet<clsParametro> Parametros => Set<clsParametro>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(clsAppDbContext).Assembly);
         modelBuilder.Entity<clsViajeCompleto>().HasNoKey().ToView("vwViajesCompletos");
+        modelBuilder.Entity<clsHallazgoVentana>().HasNoKey().ToView("vwHallazgosVentanaUmbral");
+        modelBuilder.Entity<clsFilaCobertura>().HasNoKey().ToView("vwCobertura");
+        modelBuilder.Entity<clsFilaAdopcion>().HasNoKey().ToView("vwAdopcion");
+        modelBuilder.Entity<clsFilaTiempoCaptura>().HasNoKey().ToView("vwTiempoCaptura");
+        modelBuilder.Entity<clsFilaAveria>().HasNoKey().ToView("vwAveriasPorConfiguracion");
+        modelBuilder.Entity<clsFilaIndicadorDiario>().HasNoKey().ToView("vwIndicadorDiario");
     }
 }

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using FluentValidation;
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
@@ -113,18 +114,46 @@ public sealed class FotoEvidenciaRequestValidator : AbstractValidator<FotoEviden
         clsReglasFoto.Aplicar(this, x => x.StoragePath, x => x.SelloFecha, x => x.SelloLat, x => x.SelloLng, x => x.Precision, x => x.DispositivoId, x => x.Nota, x => x.HashSha256);
 }
 
+/// <summary>La zona de un hallazgo: lado + numero de un cuadrante, o una zona provisional de la lista (exactamente una de las dos formas).</summary>
+internal static class clsReglasZona
+{
+    public static void Aplicar<T>(AbstractValidator<T> validador, Func<T, int?> cuadranteNumero, Func<T, string?> lado, Func<T, string?> zonaProvisional)
+    {
+        validador.RuleFor(x => cuadranteNumero(x)).Must((x, numero) => numero is not null ^ !string.IsNullOrWhiteSpace(zonaProvisional(x)))
+            .WithMessage("Indique el cuadrante (cuadrante_numero y lado) o una zona provisional (zona_provisional), no ambos ni ninguno").OverridePropertyName("CuadranteNumero");
+        validador.RuleFor(x => cuadranteNumero(x)).GreaterThanOrEqualTo(1).When(x => cuadranteNumero(x) is not null)
+            .WithMessage("El número del cuadrante debe ser un entero >= 1").OverridePropertyName("CuadranteNumero");
+        validador.RuleFor(x => lado(x)).Must(l => l is not null && clsLado.VALORES.Contains(l))
+            .When(x => cuadranteNumero(x) is { } n && n >= 1 && clsLado.LlevaLado(n))
+            .WithMessage("El lado es requerido del cuadrante 1 al 25 (izquierdo o derecho)").OverridePropertyName("Lado");
+        validador.RuleFor(x => lado(x)).Must(l => l is null)
+            .When(x => cuadranteNumero(x) is { } n && n > clsLado.ULTIMO_NUMERO_CON_LADO)
+            .WithMessage("Del cuadrante 26 en adelante no se envía el lado").OverridePropertyName("Lado");
+        validador.RuleFor(x => lado(x)).Must(l => l is null)
+            .When(x => cuadranteNumero(x) is null && !string.IsNullOrWhiteSpace(zonaProvisional(x)))
+            .WithMessage("Una zona provisional no lleva lado").OverridePropertyName("Lado");
+        validador.RuleFor(x => zonaProvisional(x)).Must(z => z is not null && clsZonaProvisional.VALORES.Contains(z))
+            .When(x => !string.IsNullOrWhiteSpace(zonaProvisional(x)))
+            .WithMessage("Zona provisional inválida").OverridePropertyName("ZonaProvisional");
+    }
+}
+
 public sealed class CrearHallazgoRequestValidator : AbstractValidator<CrearHallazgoRequest>
 {
     public CrearHallazgoRequestValidator()
     {
-        RuleFor(x => x.ParteVehiculo).Must(p => !string.IsNullOrWhiteSpace(p)).WithMessage("La parte del vehículo es requerida")
-            .Must(p => p is null || p.Trim().Length <= 80).WithMessage("La parte del vehículo admite máximo 80 caracteres");
+        clsReglasZona.Aplicar(this, x => x.CuadranteNumero, x => x.Lado, x => x.ZonaProvisional);
         RuleFor(x => x.ClaseDano).Must(c => !string.IsNullOrWhiteSpace(c)).WithMessage("Clase de daño inválida");
         RuleFor(x => x.TamanoDano).Must(t => !string.IsNullOrWhiteSpace(t)).WithMessage("Tamaño de daño inválido");
-        RuleFor(x => x.CoordsDiagrama)
-            .Must(c => c is { X: >= 0 and <= 1, Y: >= 0 and <= 1 })
-            .When(x => x.CoordsDiagrama is not null)
-            .WithMessage("Las coordenadas del diagrama deben estar entre 0 y 1");
+        RuleFor(x => x.Nota).Must(n => n is null || n.Trim().Length <= clsHallazgo.NOTA_MAX)
+            .WithMessage($"La nota admite máximo {clsHallazgo.NOTA_MAX} caracteres");
+        // Un hallazgo preexistente siempre apunta al hallazgo previo del vehiculo que ya lo tenia (y solo ese lleva origen).
+        RuleFor(x => x.HallazgoOrigenId).NotNull().When(x => x.EsPreexistente == true)
+            .WithMessage("Un hallazgo preexistente exige hallazgo_origen_id: el hallazgo previo del vehículo que ya tenía el daño");
+        RuleFor(x => x.HallazgoOrigenId).Must(id => id is null).When(x => x.EsPreexistente != true)
+            .WithMessage("hallazgo_origen_id solo se envía con es_preexistente verdadero");
+        RuleFor(x => x.HallazgoOrigenId).Must(id => id is null || clsReglasComunes.UuidValido(id))
+            .WithMessage(clsReglasComunes.MENSAJE_UUID);
         // Un hallazgo sin foto propia no se guarda.
         RuleFor(x => x.Evidencia).NotNull().WithMessage("Un hallazgo exige su foto: envíe la evidencia junto con el hallazgo");
         RuleFor(x => x.Evidencia!).SetValidator(new FotoEvidenciaRequestValidator()).When(x => x.Evidencia is not null);

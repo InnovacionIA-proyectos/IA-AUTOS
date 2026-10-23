@@ -19,6 +19,9 @@ public interface IUsuarioRepository
     /// <summary>Usuarios ordenados por nombre, con <paramref name="clienteId"/> solo los de ese cliente (selector de entrega y recibo).</summary>
     Task<IReadOnlyList<clsUsuario>> ListarAsync(Guid? clienteId = null, CancellationToken ct = default);
 
+    /// <summary>Los usuarios activos de ese cliente con alguno de esos roles (a quienes llegan las alertas del cliente), ordenados por nombre.</summary>
+    Task<IReadOnlyList<clsUsuario>> ObtenerActivosPorRolesAsync(IReadOnlyCollection<string> roles, Guid clienteId, CancellationToken ct = default);
+
     /// <summary>Busqueda paginada para la gestion web, ordenada por nombre.</summary>
     Task<(IReadOnlyList<clsUsuario> Filas, int Total)> BuscarAsync(clsFiltroUsuarios filtro, int saltar, int tomar, CancellationToken ct = default);
 
@@ -37,4 +40,5 @@ public interface IUsuarioRepository
 }
 
 /// <summary>Filtros de la busqueda de usuarios. <c>Texto</c> busca en nombre, correo y cedula.</summary>
-public sealed record clsFiltroUsuarios(string? Texto, string? Rol, bool? Activo, Guid? ClienteId);
+/// <summary>Los filtros de la busqueda de usuarios y su orden (<c>Orden</c> es uno de los campos que admite la API; sin el, por nombre).</summary>
+public sealed record clsFiltroUsuarios(string? Texto, string? Rol, bool? Activo, Guid? ClienteId, string? Orden = null, bool Descendente = false);

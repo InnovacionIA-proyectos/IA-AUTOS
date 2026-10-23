@@ -1,8 +1,10 @@
+using IAAutos.Aplicacion.Comun;
 using System.Linq.Expressions;
 using IAAutos.Aplicacion.Auth.DTOAuth;
 using IAAutos.Aplicacion.Viajes;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
 using Microsoft.EntityFrameworkCore;
 
@@ -82,8 +84,10 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
     public async Task<bool> ViajeEsDeClienteAsync(Guid viajeId, Guid clienteId, CancellationToken ct = default) =>
         await contexto.Viajes.AsNoTracking().Where(v => v.Id == viajeId).Where(DeCliente(clienteId)).AnyAsync(ct);
 
-    public async Task<IReadOnlyList<ViajeResumenDto>> ListarAsync(FiltrosViajes f, Guid? soloDeUsuario, Guid? soloDeCliente, int limite, CancellationToken ct = default)
+    public async Task<(IReadOnlyList<ViajeResumenDto> Filas, int Total)> ListarAsync(
+        FiltrosViajes f, Guid? soloDeUsuario, Guid? soloDeCliente, PaginaSolicitada pagina, OrdenSolicitado? orden, CancellationToken ct = default)
     {
+        var vinExacto = f.Vin?.Length == clsVin.LONGITUD_ISO;
         var consulta = contexto.Viajes.AsNoTracking().AsQueryable();
         if (soloDeUsuario is { } usuarioId)
         {
@@ -114,12 +118,27 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         if (f.Vin is not null)
         {
             consulta = consulta.Where(v => contexto.ViajeVehiculos.Any(vv => vv.ViajeId == v.Id
-                && contexto.Vehiculos.Any(h => h.Id == vv.VehiculoId && h.Vin.Contains(f.Vin))));
+                && contexto.Vehiculos.Any(h => h.Id == vv.VehiculoId && (vinExacto ? h.Vin == f.Vin : h.Vin.Contains(f.Vin)))));
         }
 
         if (f.ConductorId is not null)
         {
             consulta = consulta.Where(v => v.ConductorId == f.ConductorId);
+        }
+
+        if (f.InspectorId is not null)
+        {
+            consulta = consulta.Where(v => v.InspectorId == f.InspectorId);
+        }
+
+        if (f.OrigenId is not null)
+        {
+            consulta = consulta.Where(v => v.OrigenId == f.OrigenId);
+        }
+
+        if (f.DestinoId is not null)
+        {
+            consulta = consulta.Where(v => v.DestinoId == f.DestinoId);
         }
 
         if (f.Desde is not null)
@@ -132,9 +151,23 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
             consulta = consulta.Where(v => v.CreatedAt <= f.Hasta);
         }
 
-        var filas = await ProyectarAsync(consulta.OrderByDescending(v => v.CreatedAt).Take(limite), soloDeCliente, ct);
-        var clientes = await ClientesPorViajeAsync(filas.Select(x => x.Viaje.Id).ToList(), soloDeCliente, ct);
-        return filas.Select(x => AResumen(x, clientes[x.Viaje.Id])).ToList();
+        var total = await consulta.CountAsync(ct);
+        var ordenada = clsOrdenamiento.De(consulta)
+            .Campo("created_at", v => v.CreatedAt)
+            .Campo("updated_at", v => v.UpdatedAt)
+            .Campo("codigo_mtrack", v => v.CodigoMtrack)
+            .Campo("estado", v => v.Estado)
+            .Campo("placa", v => v.Placa)
+            .Campo("trailer", v => v.Trailer)
+            .Aplicar(orden, q => q.OrderByDescending(v => v.CreatedAt), q => q.ThenBy(v => v.Id));
+
+        // Primero se elige la pagina (solo los ids) y despues se arman sus filas: el orden de la pagina es el de los ids.
+        var ids = await ordenada.Skip(pagina.Desplazamiento).Take(pagina.Tamano).Select(v => v.Id).ToListAsync(ct);
+        var filas = (await ProyectarAsync(contexto.Viajes.AsNoTracking().Where(v => ids.Contains(v.Id)), soloDeCliente, ct))
+            .OrderBy(x => ids.IndexOf(x.Viaje.Id))
+            .ToList();
+        var clientes = await ClientesPorViajeAsync(ids, soloDeCliente, ct);
+        return (filas.Select(x => AResumen(x, clientes[x.Viaje.Id])).ToList(), total);
     }
 
     public async Task<IReadOnlyList<ViajeDto>> MiosAsync(Guid usuarioId, IReadOnlyCollection<string> estados, CancellationToken ct = default)
@@ -142,7 +175,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         var consulta = contexto.Viajes.AsNoTracking()
             .Where(v => (v.ConductorId == usuarioId || v.InspectorId == usuarioId) && estados.Contains(v.Estado))
             .OrderByDescending(v => v.CreatedAt);
-        return await ConVehiculosAsync(await ProyectarAsync(consulta, null, ct), null, ct);
+        return await ConVehiculosAsync((await ProyectarAsync(consulta, null, ct)).OrderByDescending(f => f.Viaje.CreatedAt).ToList(), null, ct);
     }
 
     public async Task<ViajeDto?> ObtenerAsync(Guid id, Guid? soloDeCliente = null, CancellationToken ct = default) =>
@@ -158,8 +191,9 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
     }
 
     /// <summary>Con <paramref name="soloDeCliente"/> los conteos de VIN solo cuentan los de ese cliente.</summary>
-    private async Task<List<FilaViaje>> ProyectarAsync(IQueryable<clsViaje> consulta, Guid? soloDeCliente, CancellationToken ct) =>
-        (await (from v in consulta
+    private async Task<List<FilaViaje>> ProyectarAsync(IQueryable<clsViaje> consulta, Guid? soloDeCliente, CancellationToken ct)
+    {
+        var filas = await (from v in consulta
                 join t in contexto.TiposUnidad on v.TipoUnidadId equals t.Id into tipos
                 from t in tipos.DefaultIfEmpty()
                 join c in contexto.Usuarios on v.ConductorId equals c.Id into conductores
@@ -178,15 +212,23 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                     Inspector = (string?)i.Nombre,
                     Origen = (string?)o.Nombre,
                     Destino = (string?)d.Nombre,
-                    ConPersonalApoyo = contexto.Etapas.Any(e => e.ViajeId == v.Id && e.ConPersonalApoyo),
-                    TotalVehiculos = contexto.ViajeVehiculos.Count(vv => vv.ViajeId == v.Id
-                        && (soloDeCliente == null || contexto.Vehiculos.Any(h => h.Id == vv.VehiculoId && h.ClienteId == soloDeCliente))),
-                    VehiculosCompletos = contexto.Set<clsViajeCompleto>().Count(x => x.ViajeId == v.Id
-                        && (soloDeCliente == null || contexto.Vehiculos.Any(h => h.Id == x.VehiculoId && h.ClienteId == soloDeCliente))),
-                }).ToListAsync(ct))
-        .Select(f => new FilaViaje(f.Viaje, f.Unidad, f.Conductor, f.Inspector, f.Origen, f.Destino, f.ConPersonalApoyo, f.TotalVehiculos, f.VehiculosCompletos))
-        .OrderByDescending(f => f.Viaje.CreatedAt)
-        .ToList();
+                }).ToListAsync(ct);
+
+        // Los conteos de los viajes se piden aparte, una consulta por tabla agrupada por viaje (y no una subconsulta por cada fila). Completa es la regla de vwViajesCompletos guardada en cada VIN.
+        var ids = filas.Select(f => f.Viaje.Id).ToList();
+        var conPersonalApoyo = (await contexto.Etapas.Where(e => ids.Contains(e.ViajeId) && e.ConPersonalApoyo).Select(e => e.ViajeId).Distinct().ToListAsync(ct)).ToHashSet();
+        var conteos = (await (from vv in contexto.ViajeVehiculos
+                              join h in contexto.Vehiculos on vv.VehiculoId equals h.Id
+                              where ids.Contains(vv.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente)
+                              group vv by vv.ViajeId into g
+                              select new { ViajeId = g.Key, Total = g.Count(), Completos = g.Count(x => x.Completa) }).ToListAsync(ct))
+            .ToDictionary(x => x.ViajeId);
+        return filas
+            .Select(f => new FilaViaje(
+                f.Viaje, f.Unidad, f.Conductor, f.Inspector, f.Origen, f.Destino, conPersonalApoyo.Contains(f.Viaje.Id),
+                conteos.GetValueOrDefault(f.Viaje.Id)?.Total ?? 0, conteos.GetValueOrDefault(f.Viaje.Id)?.Completos ?? 0))
+            .ToList();
+    }
 
     /// <summary>
     /// Los clientes de los VIN de cada viaje (sin repetir, por nombre), con el mismo objeto que <c>cliente</c> en el perfil. Con
@@ -208,23 +250,40 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         var ids = filas.Select(f => f.Viaje.Id).ToList();
         var vehiculos = await (from vv in contexto.ViajeVehiculos.AsNoTracking()
                                join h in contexto.Vehiculos on vv.VehiculoId equals h.Id
+                               join um in contexto.Usuarios on vv.NoSaleMarcadoPor equals um.Id into marcadores
+                               from um in marcadores.DefaultIfEmpty()
+                               join r in contexto.Vehiculos on vv.ReemplazoVehiculoId equals r.Id into reemplazos
+                               from r in reemplazos.DefaultIfEmpty()
                                where ids.Contains(vv.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente)
                                orderby h.Vin
                                select new
                                {
                                    vv.ViajeId,
-                                   Dto = new ViajeVehiculoDto(
-                                       h.Id,
-                                       h.Vin,
-                                       h.Marca,
-                                       h.Modelo,
-                                       h.Color,
-                                       h.Operacion,
-                                       contexto.Etapas.Count(e => e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id),
-                                       contexto.Etapas.Count(e => e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
-                                           && contexto.Inspecciones.Any(x => x.EtapaId == e.Id && x.Estado == clsEstadoInspeccion.CERRADA))),
+                                   Vehiculo = h,
+                                   Etapas = contexto.Etapas.Count(e => e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id),
+                                   Completas = contexto.Etapas.Count(e => e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
+                                       && contexto.Inspecciones.Any(x => x.EtapaId == e.Id && x.Estado == clsEstadoInspeccion.CERRADA)),
+                                   vv.EstadoUnidad,
+                                   vv.NoSaleMotivo,
+                                   vv.NoSaleHallazgoId,
+                                   vv.NoSaleMarcadoPor,
+                                   MarcadoPorNombre = (string?)um.Nombre,
+                                   vv.NoSaleAt,
+                                   VinReemplazo = (string?)r.Vin,
+                                   Novedades = contexto.Hallazgos.Count(x => x.TipoNovedad != null
+                                       && contexto.Inspecciones.Any(i => i.Id == x.InspeccionId
+                                           && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id))),
+                                   LlegadaCerrada = contexto.Inspecciones.Any(i => i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA
+                                       && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
+                                           && contexto.EtapasCatalogo.Any(p => p.Id == e.EtapaCatalogoId && p.Codigo == clsCodigosEtapa.TRANSPORTE))),
                                }).ToListAsync(ct);
-        var porViaje = vehiculos.ToLookup(v => v.ViajeId, v => v.Dto);
+        var porViaje = vehiculos.ToLookup(
+            v => v.ViajeId,
+            v => new ViajeVehiculoDto(
+                v.Vehiculo.Id, v.Vehiculo.Vin, v.Vehiculo.Marca, v.Vehiculo.Modelo, v.Vehiculo.Color, v.Vehiculo.Operacion, v.Etapas, v.Completas,
+                v.EstadoUnidad,
+                clsMapeadorViajes.ANoSale(v.EstadoUnidad, v.NoSaleMotivo, v.NoSaleHallazgoId, v.NoSaleMarcadoPor, v.MarcadoPorNombre, v.NoSaleAt, v.VinReemplazo),
+                clsEstadoTransporte.De(v.LlegadaCerrada, v.Novedades), v.Novedades));
         var clientes = await ClientesPorViajeAsync(ids, soloDeCliente, ct);
         return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id])).ToList();
     }

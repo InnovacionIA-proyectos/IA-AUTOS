@@ -1,3 +1,4 @@
+using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
 using Microsoft.EntityFrameworkCore;
@@ -41,6 +42,7 @@ internal sealed class clsViajeRepository(clsAppDbContext contexto) : IViajeRepos
                                where lote.Contains(vv.VehiculoId)
                                   && (v.Estado == clsEstadoViaje.PROGRAMADO || v.Estado == clsEstadoViaje.EN_CURSO)
                                   && (exceptoViajeId == null || v.Id != exceptoViajeId)
+                                  && vv.EstadoUnidad != clsEstadoUnidad.NO_SALE
                                select new { vv.VehiculoId, ViajeId = v.Id, v.CodigoMtrack }).ToListAsync(ct);
             foreach (var fila in filas)
             {
@@ -50,6 +52,12 @@ internal sealed class clsViajeRepository(clsAppDbContext contexto) : IViajeRepos
 
         return resultado;
     }
+
+    public async Task<IReadOnlyList<Guid>> HallazgosNoSaleSinRecuperarAsync(Guid vehiculoId, CancellationToken ct = default) =>
+        await (from vv in contexto.ViajeVehiculos.AsNoTracking()
+               join h in contexto.Hallazgos.AsNoTracking() on vv.NoSaleHallazgoId equals h.Id
+               where vv.VehiculoId == vehiculoId && vv.EstadoUnidad == clsEstadoUnidad.NO_SALE && h.EstadoSeguimiento != clsEstadoSeguimiento.RECUPERADO
+               select h.Id).ToListAsync(ct);
 
     public async Task<IReadOnlyList<clsViajeVehiculo>> ObtenerVehiculosAsync(Guid viajeId, CancellationToken ct = default) =>
         await contexto.ViajeVehiculos.Where(v => v.ViajeId == viajeId).ToListAsync(ct);

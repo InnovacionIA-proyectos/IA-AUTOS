@@ -20,6 +20,7 @@ internal sealed class clsConfiguracionVehiculo : IEntityTypeConfiguration<clsVeh
         builder.Property(v => v.Chasis).HasMaxLength(100);
         builder.Property(v => v.Color).HasMaxLength(100);
         builder.Property(v => v.Operacion).HasColumnType("varchar(20)").IsRequired();
+        builder.HasIndex(v => v.Activo).HasDatabaseName("IX_tblVehiculos_Activo");
         builder.HasIndex(v => v.Vin).IsUnique().HasDatabaseName("UQ_tblVehiculos_Vin");
         builder.HasOne<clsCliente>().WithMany().HasForeignKey(v => v.ClienteId)
             .HasConstraintName("FK_tblVehiculos_Cliente").OnDelete(DeleteBehavior.ClientNoAction);
@@ -31,10 +32,10 @@ internal sealed class clsConfiguracionEtapa : IEntityTypeConfiguration<clsEtapa>
 {
     public void Configure(EntityTypeBuilder<clsEtapa> builder)
     {
-        builder.ToTable("tblEtapas");
+        builder.ToTable("tblEtapas", t => t.HasTrigger("TR_tblEtapas_Completa"));
         clsConfiguracionBase.Base(builder);
         builder.HasOne<clsVehiculo>().WithMany().HasForeignKey(e => e.VehiculoId)
-            .HasConstraintName("FK_tblEtapas_Vehiculo").OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("FK_tblEtapas_Vehiculo").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsEtapaCatalogo>().WithMany().HasForeignKey(e => e.EtapaCatalogoId)
             .HasConstraintName("FK_tblEtapas_EtapaCatalogo").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsPuntoCustodia>().WithMany().HasForeignKey(e => e.PuntoCustodiaId)

@@ -26,7 +26,37 @@
     <Content Include="..\..\database\cambios-esquema\07-inspecciones-salida-llegada.sql" Link="database\cambios-esquema\07-inspecciones-salida-llegada.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\08-transferencias-custodia.sql" Link="database\cambios-esquema\08-transferencias-custodia.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-transferencias.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\09-evidencia-sin-borrado.sql" Link="database\cambios-esquema\09-evidencia-sin-borrado.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-evidencia.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\04-cargar-cuadrantes-ficha.sql" Link="database\cambios-esquema\04-cargar-cuadrantes-ficha.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\10-zona-dano-y-hallazgo.sql" Link="database\cambios-esquema\10-zona-dano-y-hallazgo.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-zona-dano.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\11-seguimiento-hallazgo.sql" Link="database\cambios-esquema\11-seguimiento-hallazgo.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-seguimiento.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\12-indices-hallazgo.sql" Link="database\cambios-esquema\12-indices-hallazgo.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-indices.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\13-acciones-niveles-severidad.sql" Link="database\cambios-esquema\13-acciones-niveles-severidad.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-acciones.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\14-sello-y-unidad-no-sale.sql" Link="database\cambios-esquema\14-sello-y-unidad-no-sale.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-sello.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\15-notificaciones-y-dispositivos.sql" Link="database\cambios-esquema\15-notificaciones-y-dispositivos.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-notificaciones.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\16-tabla-parametros.sql" Link="database\cambios-esquema\16-tabla-parametros.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-parametros.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\17-parametros-de-alertas.sql" Link="database\cambios-esquema\17-parametros-de-alertas.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-alertas.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\18-auditoria-completa.sql" Link="database\cambios-esquema\18-auditoria-completa.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\19-notas-aclaratorias.sql" Link="database\cambios-esquema\19-notas-aclaratorias.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-auditoria.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\20-vistas-de-indicadores.sql" Link="database\cambios-esquema\20-vistas-de-indicadores.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\21-indices-de-filtros-y-completa.sql" Link="database\cambios-esquema\21-indices-de-filtros-y-completa.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\22-catalogo-estados-sofasa.sql" Link="database\cambios-esquema\22-catalogo-estados-sofasa.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-indicadores.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-completa.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-estados-sofasa.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\docs\openapi-versiones.json" Link="docs\openapi-versiones.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\CONTRATO.md" Link="CONTRATO.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

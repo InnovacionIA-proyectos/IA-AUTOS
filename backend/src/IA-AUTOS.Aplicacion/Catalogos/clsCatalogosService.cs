@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using IAAutos.Aplicacion.Archivos;
+using IAAutos.Aplicacion.Archivos.DTOArchivos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Vehiculos;
@@ -33,6 +35,8 @@ public sealed class clsCatalogosService(
     IMemoryCache cache,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
+    IImagenesPanelDano imagenesPaneles,
+    clsArchivosService archivos,
     IOptions<clsOpcionesCatalogos> opciones) : ICatalogosLectura
 {
     private const string CLAVE_CACHE = "catalogos:instantanea";
@@ -81,7 +85,7 @@ public sealed class clsCatalogosService(
     public async Task<ValorCatalogo> CrearAsync(string nombre, IReadOnlyDictionary<string, JsonElement> campos, CancellationToken ct = default)
     {
         var valor = await Buscar(nombre).CrearAsync(campos, ct);
-        auditor.Registrar($"catalogo.{nombre}.crear", nombre, valor.Id);
+        auditor.Registrar($"catalogo.{nombre}.crear", nombre, valor.Id, detalle: new DetalleAuditoria(null, valor), clienteId: ClienteDelValor(nombre, valor.Id));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         Invalidar();
         return valor;
@@ -89,8 +93,10 @@ public sealed class clsCatalogosService(
 
     public async Task<ValorCatalogo> ActualizarAsync(string nombre, Guid id, IReadOnlyDictionary<string, JsonElement> campos, CancellationToken ct = default)
     {
-        var valor = await Buscar(nombre).ActualizarAsync(id, campos, ct);
-        auditor.Registrar($"catalogo.{nombre}.actualizar", nombre, id);
+        var catalogo = Buscar(nombre);
+        var antes = (await catalogo.ListarAsync(ct)).FirstOrDefault(v => v.Id == id);
+        var valor = await catalogo.ActualizarAsync(id, campos, ct);
+        auditor.Registrar($"catalogo.{nombre}.actualizar", nombre, id, detalle: new DetalleAuditoria(antes, valor), clienteId: ClienteDelValor(nombre, id));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         Invalidar();
         return valor;
@@ -98,18 +104,63 @@ public sealed class clsCatalogosService(
 
     public async Task EliminarAsync(string nombre, Guid id, CancellationToken ct = default)
     {
-        await Buscar(nombre).EliminarAsync(id, ct);
-        auditor.Registrar($"catalogo.{nombre}.eliminar", nombre, id);
+        var catalogo = Buscar(nombre);
+        var antes = (await catalogo.ListarAsync(ct)).FirstOrDefault(v => v.Id == id);
+        await catalogo.EliminarAsync(id, ct);
+        auditor.Registrar($"catalogo.{nombre}.eliminar", nombre, id, detalle: new DetalleAuditoria(antes, null), clienteId: ClienteDelValor(nombre, id));
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        Invalidar();
+    }
+
+    // ------------------------------------------------------------------------------------- imagen de los paneles
+
+    /// <summary>La imagen de fondo de un panel de danos (404 si el panel no existe o aun no tiene imagen).</summary>
+    public async Task<ArchivoLeidoDto> ObtenerImagenPanelAsync(string codigoPanel, CancellationToken ct = default)
+    {
+        var nombre = await imagenesPaneles.ObtenerNombreAsync(codigoPanel, ct)
+            ?? throw new clsEntidadNoEncontradaException($"El panel {codigoPanel} aún no tiene imagen");
+        return await archivos.LeerAsync(nombre, ct);
+    }
+
+    /// <summary>Fija la imagen del panel con un archivo ya subido (400 si no existe en el almacen).</summary>
+    public async Task CambiarImagenPanelAsync(string codigoPanel, CambiarImagenPanelRequest solicitud, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(solicitud.Archivo))
+        {
+            throw clsErroresCampos.De("archivo", "El nombre del archivo es requerido: es el que devolvió la subida de imágenes");
+        }
+
+        var archivo = solicitud.Archivo.Trim();
+        try
+        {
+            await archivos.LeerAsync(archivo, ct);
+        }
+        catch (clsEntidadNoEncontradaException)
+        {
+            throw clsErroresCampos.De("archivo", "El archivo no existe: súbalo primero con POST /api/uploads");
+        }
+
+        var anterior = await imagenesPaneles.ObtenerNombreAsync(codigoPanel, ct);
+        await imagenesPaneles.CambiarAsync(codigoPanel, archivo, ct);
+        auditor.Registrar(
+            $"catalogo.{clsNombresCatalogo.PANELES_DANO}.imagen",
+            clsNombresCatalogo.PANELES_DANO,
+            detalle: new DetalleAuditoria(new { panel = codigoPanel, archivo = anterior }, new { panel = codigoPanel, archivo }));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         Invalidar();
     }
 
     // ----------------------------------------------------------------------------------------------- internos
 
+    /// <summary>Un cliente del catalogo de clientes es su propio cliente en la auditoria; el resto de los catalogos no pertenece a uno.</summary>
+    private static Guid? ClienteDelValor(string catalogo, Guid id) => catalogo == clsNombresCatalogo.CLIENTES ? id : null;
+
     private ICatalogo Buscar(string nombre) =>
         _porNombre.TryGetValue(nombre, out var catalogo)
             ? catalogo
-            : throw new clsEntidadNoEncontradaException($"Catálogo desconocido: {nombre}. Disponibles: {string.Join(", ", _porNombre.Keys.Order())}");
+            : nombre == clsNombresCatalogo.CUADRANTE_VISTAS
+                ? throw new clsEntidadNoEncontradaException("El catálogo cuadrante-vistas fue reemplazado por cuadrante-regiones")
+                : throw new clsEntidadNoEncontradaException($"Catálogo desconocido: {nombre}. Disponibles: {string.Join(", ", _porNombre.Keys.Order())}");
 
     private void Invalidar() => cache.Remove(CLAVE_CACHE);
 

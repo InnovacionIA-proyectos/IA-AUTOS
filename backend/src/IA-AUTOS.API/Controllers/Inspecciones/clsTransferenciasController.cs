@@ -14,8 +14,23 @@ namespace IAAutos.API.Controllers.Inspecciones;
 /// reservas o con constancia de no firma, y una transferencia sin cierre bloquea la etapa siguiente.
 /// </summary>
 [Route("api/inspecciones/{id:guid}/transferencia")]
-public sealed class clsTransferenciasController(clsTransferenciasService servicio) : clsControladorBase
+public sealed class clsTransferenciasController(clsTransferenciasService servicio, clsNotasAclaratoriasService notas) : clsControladorBase
 {
+    /// <summary>
+    /// Agrega una nota aclaratoria a la transferencia (<c>texto</c> de hasta 1000 caracteres), tambien con la inspeccion cerrada y la transferencia ya cerrada. Solo quien la firmo, el administrador y el
+    /// coordinador de calidad de su cliente (403 los demas); 404 si la inspeccion aun no tiene transferencia.
+    /// </summary>
+    [HttpPost("notas")]
+    [ProducesResponseType<NotaAclaratoriaDto>(StatusCodes.Status201Created)]
+    [CuerpoSolicitud(typeof(AgregarNotaRequest))]
+    public async Task<IActionResult> AgregarNota(Guid id, CancellationToken ct) =>
+        Creado(await notas.AgregarATransferenciaAsync(id, await LeerCuerpoAsync<AgregarNotaRequest>(ct), ct));
+
+    /// <summary>Las notas aclaratorias de la transferencia, de la mas antigua a la mas reciente.</summary>
+    [HttpGet("notas")]
+    [ProducesResponseType<IReadOnlyList<NotaAclaratoriaDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListarNotas(Guid id, CancellationToken ct) => Ok(await notas.ListarDeTransferenciaAsync(id, ct));
+
     /// <summary>
     /// Firma la propia parte (quien entrega firma la entrega y quien recibe, el recibo). 403 si quien envia no es ninguna de las dos partes. La
     /// primera firma crea la transferencia y exige los dos ids, que deben ser usuarios del viaje. Cada firma guarda su fecha y su IP.

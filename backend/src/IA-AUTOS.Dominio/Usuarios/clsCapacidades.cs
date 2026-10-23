@@ -14,6 +14,10 @@ public static class clsCapacidades
     public const string ADMINISTRAR_CATALOGOS = "administrar_catalogos";
     public const string CARGAR_VEHICULOS = "cargar_vehiculos";
     public const string VER_REPORTES = "ver_reportes";
+    public const string GESTIONAR_SEGUIMIENTO = "gestionar_seguimiento";
+    public const string VER_ALERTAS = "ver_alertas";
+    public const string VER_AUDITORIA = "ver_auditoria";
+    public const string EXPORTAR_SOPORTES = "exportar_soportes";
 
     public static IReadOnlyList<string> De(string? rol)
     {
@@ -22,12 +26,17 @@ public static class clsCapacidades
             return [];
         }
 
-        var capacidades = new List<string> { VER_INSPECCIONES, VER_VIAJES, VER_REPORTES };
+        var capacidades = new List<string> { VER_INSPECCIONES, VER_VIAJES };
+        AgregarSi(capacidades, clsRol.VER_REPORTES, rol, VER_REPORTES);
         AgregarSi(capacidades, clsRol.ESCRITURA, rol, REGISTRAR_INSPECCIONES);
         AgregarSi(capacidades, clsRol.GESTION_VIAJES, rol, GESTIONAR_VIAJES);
         AgregarSi(capacidades, clsRol.GESTION_USUARIOS, rol, GESTIONAR_USUARIOS);
         AgregarSi(capacidades, clsRol.ADMINISTRACION_CATALOGOS, rol, ADMINISTRAR_CATALOGOS);
         AgregarSi(capacidades, clsRol.ADMINISTRACION, rol, CARGAR_VEHICULOS);
+        AgregarSi(capacidades, clsRol.GESTION_SEGUIMIENTO, rol, GESTIONAR_SEGUIMIENTO);
+        AgregarSi(capacidades, clsRol.VER_ALERTAS, rol, VER_ALERTAS);
+        AgregarSi(capacidades, clsRol.ADMINISTRACION, rol, VER_AUDITORIA);
+        AgregarSi(capacidades, clsRol.EXPORTAR_SOPORTES, rol, EXPORTAR_SOPORTES);
         return capacidades;
     }
 

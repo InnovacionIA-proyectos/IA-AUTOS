@@ -14,10 +14,11 @@ vistas de foto, cuadrantes, tipos de unidad) viven ahora en tablas y se administ
 | `tblClientes` | Clientes (empresas) a los que pertenecen los usuarios y los vehículos (ver [identidad.md](identidad.md)) | `sofasa` |
 | `tblClasesDano` | Clases de daño de un hallazgo | 10 (`deformacion`, `rotura`, `cortado`, `perforacion`, `golpe`, `mancha`, `raya_pintar`, `desconchado`, `particulas`, `faltante`) |
 | `tblTamanosDano` | Tamaños de daño de un hallazgo | 6 (`1_5cm`, `5_10cm`, `10_20cm`, `mas_20cm`, `requiere_reemplazo`, `mas_10_particulas`) |
-| `tblNivelesSeveridad` | Niveles V1+, V1, V2, V3 con su `Accion` | 4, **sin acción** (se carga desde el portal) |
+| `tblEstadosSofasa` | Estados de las órdenes Sofasa: `Codigo` es el `StatusCode` **real** de la orden (texto libre, con sus mayúsculas, hasta 100 caracteres, único sin distinguir mayúsculas) y `Nombre` su etiqueta. Sin llave foránea desde `tblOrdenesSofasa` (la ingesta del ETL no debe fallar por un estado nuevo): «en uso» se valida en la API | los `StatusCode` distintos de las órdenes existentes, con el código como etiqueta provisional; vacío si aún no hay órdenes |
+| `tblNivelesSeveridad` | Niveles V1+, V1, V2, V3 con su `Accion` | 4, con su acción: «Se recupera antes del despacho», «Se rechaza el vehículo», «Validación por Sofasa» y «Se deroga (se acepta el defecto)» (script 13) |
 | `tblVistasFoto` | Vistas de foto; `Obligatoria` = 1 se toma siempre, 0 solo con faltante o daño; `TipoVehiculo` opcional | 9: 7 obligatorias (`frontal`, `trasera`, `lateral_derecha`, `lateral_izquierda`, `diagonal_trasera_izquierda`, `diagonal_delantera_derecha`, `superior`) y 2 adicionales (`piezas_baul`, `cojineria`) |
 | `tblCuadrantes` | Las **zonas** numeradas de la carrocería, por tipo de vehículo (la puerta delantera es una zona aunque se vea desde varias vistas) | 36 de la ficha del vehículo genérico (script 04); los números 4 y 12 no existen en la ficha |
-| `tblCuadranteVistas` | El **polígono** de cada zona en cada vista donde aparece (JSON normalizado, una fila por aparición; una zona tiene a lo sumo un polígono por vista) | 97 polígonos en 5 vistas (script 04) |
+| `tblCuadranteVistas` | El polígono de cada zona por vista de foto, **del modelo anterior**: la API ya no lo publica (lo reemplazan `tblPanelesDano` y `tblRegionesDano`, ver [zonas-dano.md](zonas-dano.md)) y queda como respaldo | 97 polígonos en 5 vistas (script 04) |
 
 Todos comparten `Codigo` (clave estable, única, en minúsculas), `Nombre`, `Orden`, `Activo`, `CreatedAt` y `UpdatedAt`. Un valor **en uso no se
 borra** (la base lo impide con una llave foránea y la API responde `409`): se inactiva con `Activo = 0`.
@@ -72,6 +73,12 @@ Con un usuario que pueda crear tablas (no el de la aplicación), conectado a la 
 Una base nueva se crea con `ddl.sql`, que ya trae el esquema y las semillas. `tests/verificar-ddl.sql` comprueba las semillas, las llaves foráneas y que un
 valor en uso no se borra.
 
+## Estados de las órdenes Sofasa
+
+`tblEstadosSofasa` la crea [`22-catalogo-estados-sofasa.sql`](../database/cambios-esquema/22-catalogo-estados-sofasa.sql) (ajustando `@esquema`, en una sola ejecución, una transacción, repetible) y la llena con los `StatusCode` distintos que ya tienen las
+órdenes (sin distinguir mayúsculas ni espacios de los bordes), con el código como etiqueta provisional. **La etiqueta de cada estado la define Calidad/Operaciones (PAB-032)** y se cambia desde el portal (`PATCH /api/catalogos/estados-sofasa/{id}` con `nombre`). Mientras no haya
+órdenes el catálogo queda vacío; cuando lleguen, se vuelve a ejecutar el script para agregar los estados que falten (no cambia una etiqueta ya editada) o se agregan desde el portal. Resultado esperado: `Tabla = 1` y `SinEstado = 0`.
+
 ## Cargar los cuadrantes y las acciones de los niveles
 
 Los cuadrantes de la ficha del vehículo genérico (36 zonas y 97 polígonos) se cargan con
@@ -91,14 +98,15 @@ Pendiente de validar por calidad: los **nombres** de las zonas (la ficha solo tr
 de arriba de la vista superior es el **derecho** del vehículo, porque el frente apunta a la izquierda). Las vistas `frontal` y `trasera` no tienen
 cuadrantes dibujados: un golpe en el parachoques delantero no tiene zona a la cual asociarse hasta que se dibujen.
 
-Las acciones de los niveles de severidad se cargan con SQL o desde el portal:
+Las acciones de los niveles de severidad las carga [`13-acciones-niveles-severidad.sql`](../database/cambios-esquema/13-acciones-niveles-severidad.sql) (solo donde aún no hay una: no pisa lo editado); para
+cambiar una después, desde el portal (`PATCH /api/catalogos/niveles-severidad/{id}` con `accion`) o con SQL:
 
 ```sql
 UPDATE db_IA_AUTOS.tblNivelesSeveridad SET Accion = N'<qué hacer con una unidad V1+>', UpdatedAt = SYSDATETIMEOFFSET() WHERE Codigo = 'v1_plus';
 ```
 
-Para agregar una zona o su polígono en otra vista desde el portal: `POST /api/catalogos/cuadrantes` (la zona) y `POST /api/catalogos/cuadrante-vistas`
-(su polígono en una vista).
+Para agregar una zona o su región en otro panel desde el portal: `POST /api/catalogos/cuadrantes` (la zona) y `POST /api/catalogos/cuadrante-regiones`
+(su región en un panel: `panel`, `cuadrante_id`, `lado` si el panel es el superior y `geometria`). La imagen de fondo de un panel se cambia con `PUT /api/catalogos/paneles-dano/{codigo}/imagen`.
 
 La API guarda los catálogos en memoria hasta un minuto (`Catalogos__CacheSegundos`): los cambios hechos directamente en la base pueden tardar ese
 tiempo en verse; los hechos por la API se ven al instante.
