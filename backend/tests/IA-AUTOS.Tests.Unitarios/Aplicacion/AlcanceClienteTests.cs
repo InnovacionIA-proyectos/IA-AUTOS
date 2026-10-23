@@ -64,9 +64,9 @@ public class AlcanceClienteTests
     {
         var consultas = new clsConsultasReportesFalsas();
 
-        await new clsReportesService(consultas, Usuario(clsRol.COORDINADOR_CALIDAD, SOFASA)).ObtenerPatronesAsync();
+        await new clsReportesService(consultas, Usuario(clsRol.COORDINADOR_CALIDAD, SOFASA)).ObtenerTasaRechazoAsync();
         Assert.Equal(SOFASA, consultas.UltimoCliente);
-        await new clsReportesService(consultas, Usuario(clsRol.ADMIN, SOFASA)).ObtenerAnalisisAsync();
+        await new clsReportesService(consultas, Usuario(clsRol.ADMIN, SOFASA)).ObtenerTasaRechazoAsync();
         Assert.Equal(SOFASA, consultas.UltimoCliente);
         await new clsReportesService(consultas, Usuario(clsRol.SUPER_ADMIN, null)).ObtenerTasaRechazoAsync();
         Assert.Null(consultas.UltimoCliente);

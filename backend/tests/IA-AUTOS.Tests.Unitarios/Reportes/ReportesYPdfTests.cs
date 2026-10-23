@@ -14,27 +14,10 @@ namespace IAAutos.Tests.Unitarios.Reportes;
 
 internal sealed class clsConsultasReportesFalsas : IConsultasReportes
 {
-    public List<ConteoClaseDto> Clases { get; set; } = [];
-
-    public List<ConteoTamanoDto> Tamanos { get; set; } = [];
-
     public ConteosRechazo Rechazo { get; set; } = new(0, 0, 0, []);
 
     /// <summary>El cliente al que se limito la ultima consulta (nulo: sin restriccion).</summary>
     public Guid? UltimoCliente { get; private set; }
-
-    public Task<(IReadOnlyList<ConteoProcesoDto>, IReadOnlyList<ConteoZonaDto>, IReadOnlyList<ConteoZonaProcesoDto>)> ObtenerPatronesAsync(Guid? soloDeCliente, CancellationToken ct = default)
-    {
-        UltimoCliente = soloDeCliente;
-        return Task.FromResult<(IReadOnlyList<ConteoProcesoDto>, IReadOnlyList<ConteoZonaDto>, IReadOnlyList<ConteoZonaProcesoDto>)>(
-            ([new ConteoProcesoDto("cargue", 3), new ConteoProcesoDto("transporte", 2)], [], []));
-    }
-
-    public Task<(IReadOnlyList<ConteoClaseDto>, IReadOnlyList<ConteoTamanoDto>)> ObtenerAnalisisAsync(Guid? soloDeCliente, CancellationToken ct = default)
-    {
-        UltimoCliente = soloDeCliente;
-        return Task.FromResult<(IReadOnlyList<ConteoClaseDto>, IReadOnlyList<ConteoTamanoDto>)>((Clases, Tamanos));
-    }
 
     public Task<ConteosRechazo> ObtenerConteosRechazoAsync(Guid? soloDeCliente, CancellationToken ct = default)
     {
@@ -45,43 +28,6 @@ internal sealed class clsConsultasReportesFalsas : IConsultasReportes
 
 public class ReportesServiceTests
 {
-    [Fact]
-    public async Task El_total_de_patrones_es_la_suma_de_los_procesos()
-    {
-        var servicio = new clsReportesService(new clsConsultasReportesFalsas(), new clsUsuarioActualFalso());
-
-        var patrones = await servicio.ObtenerPatronesAsync();
-
-        Assert.Equal(5, patrones.Total);
-    }
-
-    [Fact]
-    public async Task Sin_hallazgos_la_unica_sugerencia_es_que_no_hay_suficientes_datos()
-    {
-        var analisis = await new clsReportesService(new clsConsultasReportesFalsas(), new clsUsuarioActualFalso()).ObtenerAnalisisAsync();
-
-        Assert.Equal(["Sin hallazgos suficientes para sugerir mejoras."], analisis.Sugerencias);
-    }
-
-    [Fact]
-    public async Task Sugiere_revisar_la_clase_mas_frecuente_y_el_reemplazo_solo_si_hay()
-    {
-        var consultas = new clsConsultasReportesFalsas
-        {
-            Clases = [new ConteoClaseDto("rotura", 7), new ConteoClaseDto("golpe", 2)],
-            Tamanos = [new ConteoTamanoDto("1_5cm", 6), new ConteoTamanoDto("requiere_reemplazo", 3)],
-        };
-        var sinReemplazo = new clsConsultasReportesFalsas { Clases = consultas.Clases, Tamanos = [new ConteoTamanoDto("1_5cm", 6)] };
-
-        var con = await new clsReportesService(consultas, new clsUsuarioActualFalso()).ObtenerAnalisisAsync();
-        var sin = await new clsReportesService(sinReemplazo, new clsUsuarioActualFalso()).ObtenerAnalisisAsync();
-
-        Assert.Equal(2, con.Sugerencias.Count);
-        Assert.Contains("\"rotura\" (7)", con.Sugerencias[0]);
-        Assert.Equal("3 hallazgo(s) requieren reemplazo de pieza: priorizar inspección reforzada en cargue.", con.Sugerencias[1]);
-        Assert.Single(sin.Sugerencias);
-    }
-
     [Fact]
     public async Task La_tasa_se_calcula_con_dos_decimales_frente_a_la_linea_base_y_ordena_las_operaciones()
     {

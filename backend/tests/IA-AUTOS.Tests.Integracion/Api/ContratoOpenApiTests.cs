@@ -307,7 +307,6 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     [
         "LoginPortalUsuarioDto",     // el cuerpo de login-portal lo fija el portal
         "ResultadoIngestaDto",       // la respuesta de la ingesta Sofasa
-        "PatronesDto", "AnalisisDto", // /api/patrones y /api/patrones/analisis: obsoletos
         "TasaRechazoDto", "TasaOperacionDto", // /api/metricas/rechazo: se retira con S6-HU-04.11
     ];
 
@@ -342,12 +341,15 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
-    public async Task Las_rutas_obsoletas_se_publican_como_deprecated_y_las_vigentes_no()
+    public async Task Las_rutas_retiradas_ya_no_estan_en_el_contrato_y_las_vigentes_no_son_obsoletas()
     {
         var contrato = await ObtenerContratoAsync();
 
-        Assert.True(contrato["paths"]!["/api/patrones"]!["get"]!["deprecated"]!.GetValue<bool>());
-        Assert.True(contrato["paths"]!["/api/patrones/analisis"]!["get"]!["deprecated"]!.GetValue<bool>());
+        Assert.Null(contrato["paths"]!["/api/patrones"]);
+        Assert.Null(contrato["paths"]!["/api/patrones/analisis"]);
+        Assert.Null(contrato["components"]!["schemas"]!["PatronesDto"]);
+        Assert.Null(contrato["components"]!["schemas"]!["AnalisisDto"]);
+        Assert.Null(contrato["paths"]!["/api/catalogos/cuadrante-vistas"]);
         Assert.Null(contrato["paths"]!["/api/reportes/patrones"]!["get"]!["deprecated"]);
         Assert.Null(contrato["paths"]!["/api/vehiculos/listado"]!["get"]!["deprecated"]);
     }
