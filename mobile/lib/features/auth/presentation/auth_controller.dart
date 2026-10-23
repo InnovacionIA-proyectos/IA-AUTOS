@@ -40,7 +40,7 @@ class AuthController extends Notifier<EstadoAuth> {
   /// Devuelve null si entró bien o el mensaje de error para mostrar.
   Future<String?> iniciarSesion(String email, String password) async {
     try {
-      final sesion = await ref.read(authRepositorioProvider).iniciarSesion(email.trim(), password);
+      final sesion = await _conCapacidades(await ref.read(authRepositorioProvider).iniciarSesion(email.trim(), password));
       await ref.read(almacenSesionProvider).guardar(sesion);
       state = EstadoAuth(FaseAuth.autenticado, sesion: sesion);
       return null;
@@ -59,7 +59,7 @@ class AuthController extends Notifier<EstadoAuth> {
   /// Ingreso del personal de campo con cédula y PIN. Devuelve null si entró bien o el mensaje de error.
   Future<String?> iniciarSesionConPin(String cedula, String pin) async {
     try {
-      final sesion = await ref.read(authRepositorioProvider).iniciarSesionConPin(cedula.trim(), pin);
+      final sesion = await _conCapacidades(await ref.read(authRepositorioProvider).iniciarSesionConPin(cedula.trim(), pin));
       await ref.read(almacenSesionProvider).guardar(sesion);
       state = EstadoAuth(FaseAuth.autenticado, sesion: sesion);
       return null;
@@ -95,7 +95,7 @@ class AuthController extends Notifier<EstadoAuth> {
     }
 
     // El token sigue sirviendo: solo deja de exigirse el cambio.
-    final actualizada = Sesion(token: sesion.token, usuario: sesion.usuario.conCambioDePin(false));
+    final actualizada = sesion.conUsuario(sesion.usuario.conCambioDePin(false));
     await _guardarTolerante(actualizada);
     state = EstadoAuth(FaseAuth.autenticado, sesion: actualizada);
     return null;
@@ -106,7 +106,7 @@ class AuthController extends Notifier<EstadoAuth> {
   void requiereCambioDePin() {
     final sesion = state.sesion;
     if (sesion == null || sesion.usuario.debeCambiarPin) return;
-    final actualizada = Sesion(token: sesion.token, usuario: sesion.usuario.conCambioDePin(true));
+    final actualizada = sesion.conUsuario(sesion.usuario.conCambioDePin(true));
     unawaited(_guardarTolerante(actualizada));
     state = EstadoAuth(FaseAuth.autenticado, sesion: actualizada);
   }
@@ -121,6 +121,22 @@ class AuthController extends Notifier<EstadoAuth> {
     } catch (_) {
       await almacen.borrar();
     }
+  }
+
+  /// El login dice quién entra; `GET /api/auth/me` dice qué puede hacer, y de ahí sale el menú. Se pide aquí —y no
+  /// al armar cada pantalla— para que quede guardado con la sesión y el menú exista también sin señal.
+  ///
+  /// Un fallo de `/me` no puede impedir entrar: se cae al respaldo por rol, que es lo que la app hacía antes de
+  /// que el servidor publicara capacidades. Con un PIN temporal sí responde: el endpoint está exento del 403.
+  Future<Sesion> _conCapacidades(Sesion sesion) async {
+    if (sesion.usuario.capacidades.isNotEmpty) return sesion;
+    try {
+      final capacidades = await ref.read(authRepositorioProvider).capacidades();
+      if (capacidades.isNotEmpty) return sesion.conUsuario(sesion.usuario.copiar(capacidades: capacidades));
+    } catch (_) {
+      // Sin señal o con el servidor caído: se entra igual y manda el respaldo por rol.
+    }
+    return sesion;
   }
 
   /// «Cuenta bloqueada hasta las 14:35» a partir de `details.bloqueado_hasta`.

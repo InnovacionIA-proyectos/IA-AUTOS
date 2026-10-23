@@ -21,4 +21,11 @@ class AuthRepositorioApi implements AuthRepositorio {
   @override
   Future<void> cambiarPin(String pinActual, String pinNuevo) =>
       _api.post('/api/auth/cambiar-pin', cuerpo: {'pin_actual': pinActual, 'pin_nuevo': pinNuevo});
+
+  @override
+  Future<List<String>> capacidades() async {
+    final r = await _api.get('/api/auth/me');
+    final lista = (r as Map<String, dynamic>)['capacidades'] as List<dynamic>?;
+    return [...?lista?.cast<String>()];
+  }
 }

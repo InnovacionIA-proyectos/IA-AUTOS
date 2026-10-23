@@ -89,6 +89,18 @@ class AuthRepositorioFalso implements AuthRepositorio {
     cambiosDePin.add((pinActual, pinNuevo));
     if (errorCambioPin != null) throw errorCambioPin!;
   }
+
+  /// Lo que responde `GET /api/auth/me`. Con `errorCapacidades` se simula que no se pudo pedir.
+  List<String> capacidadesDelPerfil = const [];
+  Object? errorCapacidades;
+  int consultasDePerfil = 0;
+
+  @override
+  Future<List<String>> capacidades() async {
+    consultasDePerfil++;
+    if (errorCapacidades != null) throw errorCapacidades!;
+    return capacidadesDelPerfil;
+  }
 }
 
 /// Red controlable sin plugins: se activa/desactiva y emite cambios a mano.

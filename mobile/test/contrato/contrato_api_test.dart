@@ -43,6 +43,8 @@ void main() {
   const lecturas = <String, List<String>>{
     'LoginResponse': ['token', 'usuario'],
     'UsuarioAutenticadoDto': ['id', 'nombre', 'email', 'rol', 'cedula', 'debe_cambiar_pin'],
+    // De `/me` la app solo lee las capacidades: de ahí sale el menú.
+    'PerfilDto': ['capacidades'],
     'UsuarioDto': ['id', 'nombre', 'rol'],
     'InventarioDto': ['id', 'vin', 'marca', 'modelo', 'operacion', 'etapas'],
     // `lugar` se pinta en la tarjeta de la etapa y `viaje_id` es lo que lleva a la captura los datos del
@@ -98,6 +100,7 @@ void main() {
       ('post', '/api/auth/login'),
       ('post', '/api/auth/login-conductor'),
       ('post', '/api/auth/cambiar-pin'),
+      ('get', '/api/auth/me'),
       ('get', '/api/usuarios'),
       ('get', '/api/catalogos'),
       ('get', '/api/viajes/mios'),
