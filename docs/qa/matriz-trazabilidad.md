@@ -131,6 +131,14 @@ para el flujo de «cada quien firma desde su sesión» es S5-HU-25.4 (#116), no 
 
 **Pendientes anotados de estas cuatro:**
 
+- **El juego de imágenes guía hay que rehacerlo con diseño.** Las cuatro que hay salieron del prototipo y no
+  sirven como guía de encuadre: tres son dibujos de línea de un **Renault Kwid concreto** (no de un vehículo
+  genérico) y la de la diagonal delantera derecha es una **fotografía de otro SUV blanco**. Además tienen fondo
+  opaco —por eso no se pueden superponer a la cámara y hoy se muestran como referencia en una esquina— y el
+  rótulo impreso dentro del PNG, que duplica el título y no se puede cambiar sin reeditar la imagen. Lo que hay
+  que pedir: **PNG con fondo transparente, sin rótulo, un juego por tipo de vehículo**, para las 7 vistas
+  obligatorias. El catálogo `vistas-foto` ya trae el campo `tipo_vehiculo`, así que el modelo de datos lo
+  soporta; lo que faltan son los archivos.
 - **Falta la imagen guía de la «Vista superior».** Las otras cuatro salieron del prototipo; la superior solo
   existe dentro de la ficha de daños, con la numeración de cuadrantes, que es el panel de daño de S6-HU-01 y no
   una guía de encuadre. Mientras tanto esa vista se toma sin guía, como frontal y trasera.
