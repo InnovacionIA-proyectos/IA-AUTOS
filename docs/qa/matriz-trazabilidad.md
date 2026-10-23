@@ -179,7 +179,15 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
    - **Las capacidades no se refrescan con la sesión ya abierta**: si a alguien le cambian el rol, su menú
      sigue igual hasta el siguiente ingreso. El daño está acotado —la API revalida el rol en cada petición, así
      que una pestaña de más termina en «sin permisos» o en 403—, pero conviene revisarlo si aparece el caso.
-   - **#100 no se ha probado en dispositivo** (sí #99).
+   - **Verificado en dispositivo (23-oct-2026):** la coordinadora ve Mis viajes, Inspecciones y Sofasa; la
+     inspectora y el conductor, solo las dos primeras. El menú se arma con lo que responde `/api/auth/me`.
+   - **Abierto, para revisar con el equipo: qué hace un coordinador en la app de campo.** Entra y ve tres
+     pestañas vacías, y es correcto: `GET /api/viajes/mios` devuelve los viajes donde se participa como
+     conductor o inspector, y un coordinador no participa en ninguno (comprobado: `/mios` responde `[]` y
+     `/api/viajes` sí trae el viaje). Ninguna HU dice qué hace ese rol en el móvil; los viajes se administran
+     desde el portal. Las salidas posibles son dejarlo así, pedirle `registrar_inspecciones` a la pestaña «Mis
+     viajes» para que no la vea, o mostrarle el listado completo con `GET /api/viajes`, que es funcionalidad
+     nueva. Es decisión de producto, no de la app.
 
 6. **Inspecciones: UI y pruebas de campo pendientes (#107–#112).** La lógica de dominio y las reglas de cierre
    tienen prueba automatizada tanto en backend como en `reglas_informe_test.dart`; falta la capa de pantallas y
