@@ -383,7 +383,7 @@ public sealed class IdentidadApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var super = Cliente(await TokenAsync(clsRol.SUPER_ADMIN));
         var todos = await JsonAsync(await super.GetAsync("/api/usuarios"));
         Assert.Contains(todos.GetProperty("items").EnumerateArray(), u => u.GetProperty("nombre").GetString() == "Ajeno");
-        var soloOtro = await JsonAsync(await super.GetAsync($"/api/usuarios?clienteId={otro}"));
+        var soloOtro = await JsonAsync(await super.GetAsync($"/api/usuarios?cliente_id={otro}"));
         Assert.Equal(["Ajeno"], soloOtro.GetProperty("items").EnumerateArray().Select(u => u.GetProperty("nombre").GetString()).ToList());
     }
 

@@ -18,9 +18,9 @@ public sealed class clsDispositivosController(clsDispositivosService servicio) :
         Ok(await servicio.RegistrarAsync(await LeerCuerpoAsync<RegistrarDispositivoRequest>(ct), ct));
 
     /// <summary>Retira el token del usuario al cerrar sesion: deja de recibir push. Siempre responde 204, tambien si el token no existe o ya estaba retirado.</summary>
-    [HttpDelete("{tokenFcm}")]
+    [HttpDelete("{token_fcm}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> Retirar(string tokenFcm, CancellationToken ct)
+    public async Task<IActionResult> Retirar([FromRoute(Name = "token_fcm")] string tokenFcm, CancellationToken ct)
     {
         await servicio.RetirarAsync(tokenFcm, ct);
         return NoContent();

@@ -124,6 +124,8 @@ public sealed class clsViajesController(
     /// </summary>
     [HttpPost("{id:guid}/vehiculos/{vin}/novedades")]
     [RolesPermitidos(clsRol.CONDUCTOR)]
+    [CodigoError("ETAPA_PREVIA_SIN_CIERRE", "El Cargue de la unidad aun no esta cerrado")]
+    [CodigoError("UNIDAD_NO_SALE", "La unidad se marco «no sale» del viaje: no admite novedades")]
     [ProducesResponseType<HallazgoCreadoDto>(StatusCodes.Status201Created)]
     [CuerpoSolicitud(typeof(RegistrarNovedadRequest))]
     public async Task<IActionResult> RegistrarNovedad(Guid id, string vin, CancellationToken ct)
@@ -139,6 +141,8 @@ public sealed class clsViajesController(
     /// </summary>
     [HttpPost("{id:guid}/vehiculos/{vin}/llegada")]
     [RolesPermitidos(clsRol.CONDUCTOR)]
+    [CodigoError("LLEGADA_YA_CERRADA", "La llegada ya estaba confirmada (un reintento del conductor es un exito)")]
+    [CodigoError("UNIDAD_NO_SALE", "La unidad se marco «no sale» del viaje: no admite llegada")]
     [ProducesResponseType<LlegadaDto>(StatusCodes.Status200OK)]
     [CuerpoSolicitud(typeof(RegistrarLlegadaRequest))]
     public async Task<IActionResult> RegistrarLlegada(Guid id, string vin, CancellationToken ct) =>

@@ -55,6 +55,8 @@
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-completa.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-estados-sofasa.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\docs\openapi-versiones.json" Link="docs\openapi-versiones.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\CONTRATO.md" Link="CONTRATO.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

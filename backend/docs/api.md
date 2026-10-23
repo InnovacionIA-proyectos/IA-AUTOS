@@ -2,7 +2,7 @@
 
 Todas las rutas, los metodos, los codigos HTTP y la forma de las respuestas conservan el contrato del sistema anterior, de modo que la app movil y el ETL ya desplegados siguen funcionando. Las diferencias intencionales estan en `docs/seguridad.md`.
 
-Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo van en `snake_case`, salvo los de Reportes y la respuesta de la ingesta, que van en `camelCase` como antes. Las fechas son ISO 8601 UTC con milisegundos (`2026-07-17T12:30:15.123Z`) y las de entrada exigen zona horaria. La especificacion OpenAPI se publica en `/openapi/v1.json` cuando `Documentacion__Habilitada=true` (siempre en Development).
+Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo van en `snake_case`; las unicas excepciones en `camelCase` son el cuerpo de `login-portal` (lo fija el portal), la respuesta de la ingesta Sofasa y los endpoints obsoletos (`/api/patrones`, `/api/patrones/analisis`, `/api/metricas/rechazo`). El contrato esta versionado (`info.version` 2.0.0, sin prefijo en la ruta) y la lista de cambios respecto a la v1 esta en `docs/migracion-v1-v2.md`. Las fechas son ISO 8601 UTC con milisegundos (`2026-07-17T12:30:15.123Z`) y las de entrada exigen zona horaria. La especificacion OpenAPI se publica en `/openapi/v1.json` cuando `Documentacion__Habilitada=true` (siempre en Development).
 
 ## Roles
 
@@ -24,7 +24,7 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | POST `/api/auth/refresh` | publico | recibe `{ refresh }`; devuelve `{ access, refresh }` y rota el refresh (el anterior queda revocado) |
 | POST `/api/auth/logout` | publico | recibe `{ refresh }`; revoca la sesion (refresh y access) y responde 204 |
 | GET `/api/auth/me` | autenticado (tambien con PIN temporal) | perfil del usuario actual: datos, cedula, cliente y `capacidades` para armar el menu segun el rol |
-| GET `/api/usuarios` | autenticado | quien gestiona usuarios: pagina de usuarios completos con filtros `q`, `rol`, `activo`, `clienteId`, `pagina`, `tamano` y `orden`; los demas roles: `id`, `nombre`, `rol` de los usuarios activos de su cliente |
+| GET `/api/usuarios` | autenticado | quien gestiona usuarios: pagina de usuarios completos con filtros `q`, `rol`, `activo`, `cliente_id`, `pagina`, `tamano` y `orden`; los demas roles: `id`, `nombre`, `rol` de los usuarios activos de su cliente |
 | POST `/api/usuarios` | gestion de usuarios | crea usuario: con `password` (y `email`) entra con correo; sin ella, con `cedula` y PIN (conductor o inspector; `pin` opcional, si no se envia se genera uno temporal) |
 | PATCH `/api/usuarios/{id}` | gestion de usuarios | cambia solo los campos enviados; `null` limpia `subtipo_inspector`, `email` y `cedula` |
 | DELETE `/api/usuarios/{id}` | gestion de usuarios | `{ modo: "eliminado" \| "retirado" }`; no permite auto-eliminacion |

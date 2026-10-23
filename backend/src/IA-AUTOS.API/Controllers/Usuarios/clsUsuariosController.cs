@@ -17,7 +17,7 @@ public sealed class clsUsuariosController(clsUsuariosService servicio, clsCargaC
 {
     /// <summary>
     /// Quien administra usuarios recibe una pagina de usuarios completos <c>{items, total, pagina, tamano}</c>, con filtros <c>q</c> (nombre, correo o cedula), <c>rol</c>,
-    /// <c>activo</c> y, solo el super administrador, <c>clienteId</c>; <c>pagina</c>, <c>tamano</c> (50, maximo 200) y <c>orden</c> (<c>campo:asc|desc</c>). Los demas roles reciben solo id, nombre y rol de los usuarios activos
+    /// <c>activo</c> y, solo el super administrador, <c>cliente_id</c>; <c>pagina</c>, <c>tamano</c> (50, maximo 200) y <c>orden</c> (<c>campo:asc|desc</c>). Los demas roles reciben solo id, nombre y rol de los usuarios activos
     /// de su cliente, que es lo que necesita el selector de entrega y recibo de la app (sin exponer correos).
     /// </summary>
     [HttpGet]
@@ -26,7 +26,7 @@ public sealed class clsUsuariosController(clsUsuariosService servicio, clsCargaC
         [FromQuery] string? q,
         [FromQuery] string? rol,
         [FromQuery] string? activo,
-        [FromQuery] string? clienteId,
+        [FromQuery(Name = "cliente_id")] string? clienteId,
         [FromQuery] string? pagina,
         [FromQuery] string? tamano,
         [FromQuery] string? orden,

@@ -10,7 +10,7 @@ OpenAPI ([docs/openapi.json](docs/openapi.json)), que la API genera y una prueba
 |---|---|
 | URL base | La del despliegue, sin barra final (por ejemplo `https://<dominio>`). Todas las rutas empiezan por `/api`, salvo `/health` |
 | Formato | JSON (`Content-Type: application/json`), codificación UTF-8 |
-| Nombres de campo | `snake_case` (`etapa_id`, `created_at`). **Excepciones en `camelCase`:** los reportes anteriores (`/api/patrones`, `/api/patrones/analisis`, `/api/metricas/rechazo`; los nuevos `/api/reportes/*` van en `snake_case`) y la respuesta de la ingesta Sofasa |
+| Nombres de campo | `snake_case` (`etapa_id`, `created_at`). **Excepciones en `camelCase`** (solo estas): el cuerpo de `login-portal` (lo fija el portal), la respuesta de la ingesta Sofasa y los endpoints obsoletos (`/api/patrones`, `/api/patrones/analisis` y `/api/metricas/rechazo`; los nuevos `/api/reportes/*` van en `snake_case`) |
 | Fechas | ISO 8601 UTC con milisegundos: `2026-07-17T12:30:15.123Z`. **Las fechas que se envían deben llevar zona horaria** (`Z` o `+hh:mm`) |
 | Identificadores | UUID (`string`), salvo el VIN (texto) y `source_id` de Sofasa (entero largo) |
 | Nulos | Los campos opcionales sin valor llegan como `null` (nunca se omiten) |
@@ -118,9 +118,9 @@ Un valor de `pagina` o `tamano` que no es un número entero, un filtro o un orde
 | `GET /api/inspecciones` | `vin`, `viaje_id`, `usuario_id`, `momento`, `estado`, `proceso`, `operacion`, `marca`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` | `fecha`, `vin`, `momento`, `estado`, `proceso`, `version`, `created_at`, `cerrada_at` | `fecha:desc` |
 | `GET /api/viajes` | `estado`, `codigo_mtrack`, `vin`, `conductor_id`, `inspector_id`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` | `created_at`, `updated_at`, `codigo_mtrack`, `estado`, `placa`, `trailer` | `created_at:desc` |
 | `GET /api/sofasa/ordenes` | `vin`, `estado` (el `status_code`), `ciudad`, `desde`, `hasta` | `fecha`, `vin`, `estado`, `ciudad`, `orden`, `marca`, `created_at` | `fecha:desc` (las sin fecha al final) |
-| `GET /api/usuarios` | `q`, `rol`, `activo`, `clienteId` (los de siempre) | `nombre`, `email`, `rol`, `cedula`, `activo`, `created_at`, `ultimo_acceso` | `nombre:asc` |
+| `GET /api/usuarios` | `q`, `rol`, `activo`, `cliente_id` | `nombre`, `email`, `rol`, `cedula`, `activo`, `created_at`, `ultimo_acceso` | `nombre:asc` |
 
-Los nombres `codigoMtrack`, `conductorId`, `usuarioId`, `viajeId` y `clienteId` de los listados de viajes e inspecciones **ya no se aceptan** (se ignoran como cualquier parámetro desconocido): use `codigo_mtrack`, `conductor_id`, `usuario_id`, `viaje_id` y `cliente_id`.
+Los nombres `codigoMtrack`, `conductorId`, `usuarioId`, `viajeId` y `clienteId` de los listados de viajes, inspecciones y usuarios **ya no se aceptan** (se ignoran como cualquier parámetro desconocido): use `codigo_mtrack`, `conductor_id`, `usuario_id`, `viaje_id` y `cliente_id`.
 `desde` y `hasta` son fechas ISO con zona y acotan, según el listado, la fecha de la inspección (inspecciones), la creación del viaje (viajes), el evento de la orden (Sofasa) o el alta del vehículo (vehículos). `cliente_id` lo elige solo el `super_admin`: quien se limita a su cliente
 recibe siempre el suyo y un `cliente_id` distinto responde `403`. `origen_id` y `destino_id` son los del viaje.
 
@@ -219,12 +219,17 @@ autorizan los endpoints), así que el menú nunca ofrece algo que la API rechace
 
 | Capacidad | Roles |
 |---|---|
-| `ver_inspecciones`, `ver_viajes`, `ver_reportes` | todos |
+| `ver_inspecciones`, `ver_viajes` | todos |
+| `ver_reportes` | `coordinador_calidad`, `comercial`, `admin`, `super_admin` |
 | `registrar_inspecciones` | `inspector`, `conductor`, `admin` |
 | `gestionar_viajes` | `admin`, `super_admin`, `coordinador_calidad` |
 | `gestionar_usuarios` | `admin`, `super_admin`, `coordinador_calidad` |
 | `administrar_catalogos` | `admin`, `super_admin`, `coordinador_calidad` |
 | `cargar_vehiculos` | `admin`, `super_admin` |
+| `gestionar_seguimiento` | `coordinador_calidad`, `comercial`, `admin`, `super_admin` |
+| `ver_alertas` | `coordinador_calidad`, `admin`, `super_admin` (alertas preventivas y avisos operativos) e `inspector` y `conductor` (los avisos operativos que les tocan) |
+| `ver_auditoria` | `admin`, `super_admin` |
+| `exportar_soportes` | `coordinador_calidad`, `comercial`, `admin`, `super_admin` |
 
 ### Sesión del portal (inicio de sesión único)
 
@@ -328,7 +333,7 @@ Un usuario entra de una de dos formas (`tipo_credencial`): con **correo y contra
 Autenticado. La respuesta depende del rol:
 
 - `admin`, `coordinador_calidad` y `super_admin`: **una página** de `UsuarioDto` completos, ordenados por nombre. Filtros opcionales: `q` (texto en nombre,
-  correo o cédula), `rol`, `activo` (`true` o `false`), `clienteId` (solo `super_admin`; los demás siempre ven su cliente), `pagina` (desde 1), `tamano`
+  correo o cédula), `rol`, `activo` (`true` o `false`), `cliente_id` (solo `super_admin`; los demás siempre ven su cliente), `pagina` (desde 1), `tamano`
   (50 por defecto, máximo 200) y `orden` (`campo:asc|desc`; ver «Paginación y filtros»). Un filtro mal formado es `400`.
 - Los demás roles: solo usuarios activos de su cliente con `{ id, nombre, rol }`, sin paginar (sirve para el selector de quién entrega y quién recibe).
 
@@ -1913,7 +1918,7 @@ Cada usuario de un cliente ve **solo las unidades de su cliente** y lo que cuelg
 | Rol | Qué ve |
 |---|---|
 | `coordinador_calidad`, `comercial`, `admin` | solo lo de **su cliente**; un recurso de otro cliente responde `403` |
-| `super_admin` | **todos** los clientes; es el único que puede pedir un cliente distinto del suyo (`clienteId`) |
+| `super_admin` | **todos** los clientes; es el único que puede pedir un cliente distinto del suyo (`cliente_id`) |
 | `inspector`, `conductor` | no se limitan por cliente sino por **viaje**: ven lo de los viajes en los que participan |
 
 Un usuario de un cliente **sin cliente asignado** no ve ninguna unidad.
@@ -1933,7 +1938,7 @@ Un usuario de un cliente **sin cliente asignado** no ve ninguna unidad.
 
 Los endpoints de hallazgos, alertas, auditoría y exportaciones que se agreguen después aplican la misma regla: filtran por el cliente de quien consulta y responden `403` con un recurso de otro.
 
-**El cliente se elige solo como super administrador.** `clienteId` en `GET /api/viajes` y `GET /api/usuarios` lo usa el super administrador para ver un cliente; quien se limita a su cliente puede enviar el suyo (no cambia nada) y enviar **otro responde `403`**
+**El cliente se elige solo como super administrador.** `cliente_id` en `GET /api/viajes` y `GET /api/usuarios` lo usa el super administrador para ver un cliente; quien se limita a su cliente puede enviar el suyo (no cambia nada) y enviar **otro responde `403`**
 (antes se ignoraba y se devolvía lo suyo).
 
 **Viaje con unidades de dos clientes.** El usuario de un cliente ve en el detalle solo los VIN de su cliente (`vehiculos`, `clientes`, `total_vehiculos` y `vehiculos_completos` se calculan sobre ellos). El **conductor y el inspector del viaje ven todos** los VIN: es una propuesta, pendiente de confirmar por el negocio.
