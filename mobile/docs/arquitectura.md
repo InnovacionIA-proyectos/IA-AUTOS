@@ -105,6 +105,18 @@ arrancan por la misma señal, sin reiniciar la app. Si el PIN se reinicia con la
 `403 PIN_CHANGE_REQUIRED` de cualquier petición marca la sesión y el router lleva a cambiarlo; ese 403 es el único
 que la cola trata como transitorio, para que el envío en curso se reanude después en lugar de perderse.
 
+**Qué ve cada quien.** El menú no sale de una tabla de roles escrita aquí, sino de las `capacidades` que devuelve
+`GET /api/auth/me`: salen de las mismas listas con que el backend autoriza los endpoints, así que no se desalinean. Se
+piden al entrar —`/me` responde incluso con un PIN temporal— y se guardan con la sesión, para que el menú exista también
+sin señal; si `/me` no responde se cae a `capacidadesDeRol`, una red de seguridad para no dejar a nadie sin menú.
+
+Las pestañas y la capacidad que exige cada una viven en una sola lista (`app/pestanas.dart`), de donde salen las tres
+cosas que deben concordar: la barra de abajo, el destino al entrar y qué rutas se dejan abrir. Esconder una pestaña no
+basta —una ruta se abre por enlace, o queda abierta cuando a alguien le cambian el rol con la sesión puesta—, así que
+cada pantalla va envuelta en `Permitido` y muestra «sin permisos» dentro del shell, con la barra a la vista. Capturar y
+firmar exigen `registrar_inspecciones`, no solo poder mirar. La autorización de verdad sigue siendo la de la API; esto
+solo evita ofrecer puertas que el servidor cierra.
+
 El token se restaura del almacén seguro al arrancar. Un 401 en una petición autenticada cierra la sesión con un aviso
 (el login no cuenta). `android:allowBackup` está desactivado para que una restauración de copia no deje datos cifrados
 sin su llave.
@@ -121,8 +133,8 @@ Los modelos son manuales (snake_case, igual que la API). `test/contrato/contrato
 - **Persistencia**: cola y caché sobre SQLite real (en memoria y en archivo, para comprobar que sobrevive a
   reabrir), incluida la descarga y revalidación de catálogos.
 - **Controladores**: sesión, sincronización, listado y catálogos, con dobles de red, API y almacén.
-- **Widgets**: login, captura (los datos del viaje y el desenlace que se anuncia al cerrar), lienzo de firma,
-  diagrama del vehículo, barra de sincronización y arranque de la app.
+- **Widgets**: login, menú por rol y rutas sin permiso, captura (los datos del viaje y el desenlace que se anuncia al
+  cerrar), lienzo de firma, diagrama del vehículo, barra de sincronización y arranque de la app.
 - **Contrato**: campos y rutas contra el OpenAPI del backend.
 
 Pendientes de ejecutar en dispositivo real (no se pueden validar en CI): cámara, GPS, permisos y memoria en gama baja.

@@ -114,7 +114,7 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
 | S5-HU-23.3 | `POST /api/auth/login-conductor` (cédula+PIN), scrypt, bloqueo | `IdentidadApiTests.Cedula_y_pin_correctos_dan_un_token_de_conductor_que_sirve_en_la_api` | Verificado con prueba real |
 | S5-HU-23.4 | Gestión de PIN por rol; `GET /api/auth/me` con capacidades | `IdentidadApiTests.El_administrador_asigna_reinicia_y_fuerza_el_cambio_de_pin` | Verificado con prueba real |
 | S5-HU-23.5 | Gestión de usuarios (admin/coordinador), carga masiva de conductores | `IdentidadApiTests.La_vista_previa_de_conductores_no_guarda_y_la_confirmacion_crea_los_validos_con_su_pin` | Verificado con prueba real |
-| S5-HU-23.8/23.9 | Mobile: login con dos modos y cambio de PIN forzado; router/menú por rol; cola etiquetada por usuario | `mobile/test/widgets/login_page_test.dart`, `mobile/test/auth/login_pin_test.dart` y `auth_controller_test.dart` cubren el login, el bloqueo, el cambio de PIN y el 403 a mitad de sesión; router y cola etiquetada aún no | 23.8 implementado en `S5-HU-21-23` y **verificado en dispositivo**; **abierta/pendiente** 23.9 (#100) |
+| S5-HU-23.8/23.9 | Mobile: login con dos modos y cambio de PIN forzado; router/menú por rol; cola etiquetada por usuario | `login_page_test.dart`, `login_pin_test.dart` y `auth_controller_test.dart` (login, bloqueo, cambio de PIN y 403 a mitad de sesión); `capacidades_test.dart` (capacidades y su respaldo por rol); `menu_por_rol_test.dart` (menú y rutas sin permiso); `cola_por_usuario_test.dart` (celular compartido y huérfanos) | 23.8 y 23.9 implementadas en `S5-HU-21-23`; 23.8 **verificada en dispositivo**, 23.9 pendiente de probar en dispositivo |
 
 ## S5-HU-24 — Inspección de salida y llegada con 7 fotos obligatorias y 2 adicionales
 
@@ -169,17 +169,17 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
      servidor toma el dato real del viaje al recibir el informe— y leer primero la copia es lo que hace que la
      captura funcione sin señal. El arreglo correcto es servir y refrescar después, como los catálogos.
 
-5. **Identidad en mobile: falta el reparto por rol (#100; #99 implementado en `S5-HU-21-23`).** El login con
-   cédula y PIN, el cambio de PIN forzado y el 403 `PIN_CHANGE_REQUIRED` a mitad de sesión ya están. Lo que
-   sigue abierto en #100, y conviene revisar junto:
-   - **Menú por rol.** La barra inferior es la misma para todos, así que un conductor ve la pestaña "Sofasa".
-     No es un agujero de seguridad —la API impone la autorización real revalidando el rol contra la base en
-     cada petición— pero el escenario de la HU pide "ve el menú de conductor" y hoy `usuario.rol` solo se usa
-     para un tooltip en la pantalla de firma.
-   - **Cola etiquetada por usuario.** La tabla `jobs` no tiene columna de usuario y el procesador manda con el
-     token de la sesión vigente: si Ana encola sin señal y cierra sesión, el informe sale a nombre de Luis. El
-     escenario "celular compartido" **no se cumple**. Se volvió más probable con #99: antes solo entraban
-     inspectores con correo, ahora el personal de campo entra con cédula y PIN y comparte equipo entre turnos.
+5. **Identidad en mobile: #99 y #100 implementadas en `S5-HU-21-23`.** Login con cédula y PIN, cambio forzado,
+   403 `PIN_CHANGE_REQUIRED` a mitad de sesión, menú y rutas por capacidades, y cola etiquetada por usuario. Lo
+   que queda anotado:
+   - **La pestaña Sofasa pide `gestionar_viajes` por decisión de la app**, no del servidor: el endpoint
+     `GET /api/sofasa/ordenes` no restringe por rol y ninguna capacidad habla de esa pantalla. Se eligió así
+     porque son las órdenes de carga de la planta, insumo de quien arma viajes. Si se define otra cosa, se
+     cambia en `mobile/lib/app/pestanas.dart`.
+   - **Las capacidades no se refrescan con la sesión ya abierta**: si a alguien le cambian el rol, su menú
+     sigue igual hasta el siguiente ingreso. El daño está acotado —la API revalida el rol en cada petición, así
+     que una pestaña de más termina en «sin permisos» o en 403—, pero conviene revisarlo si aparece el caso.
+   - **#100 no se ha probado en dispositivo** (sí #99).
    - Sin prueba de widget: `CambiarPinPage` y el redirect del router a `/cambiar-pin`.
 
 6. **Inspecciones: UI y pruebas de campo pendientes (#107–#112).** La lógica de dominio y las reglas de cierre

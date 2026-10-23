@@ -61,10 +61,14 @@ recién rechazado por el servidor se anunciaba como enviado y cerrado. Lo destap
 
 - La cola vive en el dispositivo hasta que se envía; si se desinstala la app o se borran sus datos, lo pendiente se pierde.
   Por eso la barra de sincronización siempre muestra cuánto falta enviar.
-- Cerrar sesión **conserva** la cola. Los trabajos se envían con la identidad de quien tenga la sesión iniciada cuando haya
-  señal (el servidor toma el usuario del token). En un dispositivo compartido conviene dejar la cola vacía antes de
-  cambiar de usuario; la app avisa al cerrar sesión si quedan elementos sin enviar. Etiquetar cada job con su usuario y
-  procesar solo los de la sesión actual queda como mejora pendiente.
+- Cerrar sesión **conserva** la cola, y **cada job lleva quién lo encoló**. Solo se procesa, se cuenta y se muestra lo del
+  usuario de la sesión: el servidor atribuye el informe al dueño del token, así que sin esto, en un celular compartido, lo
+  de una persona salía firmado por la siguiente. El dueño va dentro del `payload`, no en una columna, para no migrar la
+  base donde vive la cola.
+- Los jobs que encoló una versión anterior no tienen dueño y quedan **huérfanos**: se ven en la cola pero no se envían
+  solos. Se resuelven de dos formas, ambas deliberadas: al arrancar, la sesión guardada los adopta (es casi con certeza
+  quien los encoló, porque es la última que se usó); o alguien los reintenta a mano y se hace cargo. Un informe solo
+  cambia de autor si una persona lo decide.
 - Si el token vence (401 en una petición autenticada) se cierra la sesión con un aviso y la cola se conserva; se retoma al
   volver a entrar.
 - El servidor valida que quien firma sea el usuario autenticado; la app no lo impone en pantalla.

@@ -13,6 +13,7 @@ hay una conexión estable.
 |---|---|
 | Login | dos modos: cédula y PIN (personal de campo, que puede no tener correo) o correo y contraseña; el token se guarda en el Keystore de Android |
 | Cambiar PIN | obligatorio cuando el PIN lo asignó o reinició un administrador: hasta cambiarlo el resto de la API responde 403 |
+| Sin permisos | lo que se ve al abrir algo que el rol no alcanza, con la barra a la vista para irse a lo suyo |
 | Mis viajes | entrada principal: los viajes donde la persona es conductor o inspector, con sus unidades y caché local |
 | Buscar VIN | búsqueda dentro de mis viajes por VIN, marca, modelo o código del viaje |
 | Mis inspecciones | listado con caché local (se ve sin señal) y barra de sincronización |
