@@ -17,7 +17,7 @@ hay una conexión estable.
 | Buscar VIN | búsqueda dentro de mis viajes por VIN, marca, modelo o código del viaje |
 | Mis inspecciones | listado con caché local (se ve sin señal) y barra de sincronización |
 | VIN | inventario, último informe con fotos y diagrama, y el estado de cada etapa de la ruta de custodia |
-| Captura | datos del transporte, novedades sobre el diagrama, fotos selladas, notas y cierre del informe |
+| Captura | datos del transporte tomados del viaje, novedades sobre el diagrama, fotos selladas, notas y cierre del informe, que dice si quedó enviado, en cola o rechazado |
 | Firma | firma de quien entrega y de quien recibe (parcial o completa) |
 | Envíos pendientes | lo que espera señal; los envíos con error se ven aquí con su motivo, y se reintentan o descartan a mano |
 | Sofasa | órdenes de carga sincronizadas por el ETL (solo lectura) |

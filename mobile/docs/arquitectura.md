@@ -121,7 +121,11 @@ Los modelos son manuales (snake_case, igual que la API). `test/contrato/contrato
 - **Persistencia**: cola y caché sobre SQLite real (en memoria y en archivo, para comprobar que sobrevive a
   reabrir), incluida la descarga y revalidación de catálogos.
 - **Controladores**: sesión, sincronización, listado y catálogos, con dobles de red, API y almacén.
-- **Widgets**: login, lienzo de firma, diagrama del vehículo, barra de sincronización y arranque de la app.
+- **Widgets**: login, captura (los datos del viaje y el desenlace que se anuncia al cerrar), lienzo de firma,
+  diagrama del vehículo, barra de sincronización y arranque de la app.
 - **Contrato**: campos y rutas contra el OpenAPI del backend.
 
 Pendientes de ejecutar en dispositivo real (no se pueden validar en CI): cámara, GPS, permisos y memoria en gama baja.
+Lo que sí se validó en dispositivo con la API local: ingreso con cédula y PIN con cambio forzado, «Mis viajes» con su
+búsqueda, y la captura tomando los datos del viaje. El envío del informe todavía no se puede validar de punta a punta:
+la app manda `momento: 'informe'` y la API solo acepta salida o llegada (S5-HU-24).
