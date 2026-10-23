@@ -315,7 +315,7 @@ class _FilaMomento extends StatelessWidget {
           const Insignia('Borrador', tono: TonoInsignia.info)
         else
           // Deshabilitado, no escondido: que se vea que falta y por qué.
-          OutlinedButton(onPressed: momento.sePuedeCapturar ? alCapturar : null, child: const Text('Capturar')),
+          BotonEnFila(texto: 'Capturar', onPressed: momento.sePuedeCapturar ? alCapturar : null),
       ],
     );
   }
