@@ -48,12 +48,21 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
     _recibeId = usuarios.where((u) => u.id != _entregaId).firstOrNull?.id;
   }
 
-  bool get _hayFirma => _firmaEntrega != null || _firmaRecibe != null;
-  bool get _puede => firmaValida(entregaId: _entregaId, recibeId: _recibeId, hayFirma: _hayFirma) && !_guardando;
+  /// El trazo que viaja: el de quien tiene la sesión. Null mientras no se pueda firmar.
+  String? _miFirma(String? yoId) => firmaDeLaSesion(
+        yoId: yoId,
+        entregaId: _entregaId,
+        recibeId: _recibeId,
+        firmaEntrega: _firmaEntrega,
+        firmaRecibe: _firmaRecibe,
+      );
+
+  bool _puedeFirmar(String? yoId) => _miFirma(yoId) != null && !_guardando;
 
   Future<void> _registrar() async {
     final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
-    if (!_puede || usuarioId == null) return;
+    final firma = _miFirma(usuarioId);
+    if (firma == null || usuarioId == null) return;
     setState(() => _guardando = true);
     try {
       await ref.read(colaRepositorioProvider).agregar(FirmaJob(
@@ -64,8 +73,7 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
             inspeccionId: widget.inspeccionId,
             entregaId: _entregaId!,
             recibeId: _recibeId!,
-            firmaEntrega: _firmaEntrega,
-            firmaRecibe: _firmaRecibe,
+            firma: firma,
           ));
       final sync = ref.read(syncControllerProvider.notifier);
       await sync.refrescar();
@@ -115,15 +123,19 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
         ),
         data: (lista) {
           _elegirPorDefecto(lista, yoId);
-          return _formulario(context, lista);
+          return _formulario(context, lista, yoId);
         },
       ),
     );
   }
 
-  Widget _formulario(BuildContext context, List<Usuario> lista) {
+  Widget _formulario(BuildContext context, List<Usuario> lista, String? yoId) {
     final tema = Theme.of(context).textTheme;
     final distintos = _entregaId != null && _recibeId != null && _entregaId != _recibeId;
+    // Solo se firma la propia: el servidor atribuye la firma al usuario del token, así que la de la otra parte
+    // no viajaría. Se deja ver quién es y que su firma queda pendiente.
+    final yoEntrego = yoId != null && yoId == _entregaId;
+    final yoRecibo = yoId != null && yoId == _recibeId;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(Espacio.lg),
@@ -132,22 +144,33 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
           const SizedBox(height: Espacio.lg),
           _SelectorPersona(etiqueta: 'Quien entrega', usuarios: lista, valor: _entregaId, alElegir: (id) => setState(() => _entregaId = id)),
           const SizedBox(height: Espacio.sm),
-          LienzoFirma(etiqueta: 'Firma de quien entrega', onCambio: (p) => setState(() => _firmaEntrega = p)),
+          if (yoEntrego)
+            LienzoFirma(etiqueta: 'Tu firma', onCambio: (p) => setState(() => _firmaEntrega = p))
+          else
+            Text('Su firma se registra desde su propia sesión.', style: tema.bodySmall),
           const SizedBox(height: Espacio.lg),
           _SelectorPersona(etiqueta: 'Quien recibe', usuarios: lista, valor: _recibeId, alElegir: (id) => setState(() => _recibeId = id)),
           const SizedBox(height: Espacio.sm),
-          LienzoFirma(etiqueta: 'Firma de quien recibe', onCambio: (p) => setState(() => _firmaRecibe = p)),
+          if (yoRecibo)
+            LienzoFirma(etiqueta: 'Tu firma', onCambio: (p) => setState(() => _firmaRecibe = p))
+          else
+            Text('Su firma se registra desde su propia sesión.', style: tema.bodySmall),
           const SizedBox(height: Espacio.md),
           if (!distintos)
             Semantics(
               liveRegion: true,
               child: Text('Quien entrega y quien recibe deben ser distintos.', style: tema.bodySmall?.copyWith(color: Colores.peligro)),
+            )
+          else if (!yoEntrego && !yoRecibo)
+            Semantics(
+              liveRegion: true,
+              child: Text('Solo puedes firmar si eres quien entrega o quien recibe.', style: tema.bodySmall?.copyWith(color: Colores.peligro)),
             ),
-          Text('Puedes firmar solo una parte; la otra puede firmarse desde su dispositivo.', style: tema.bodySmall),
+          Text('Cada parte firma desde su sesión: la otra queda pendiente.', style: tema.bodySmall),
           const SizedBox(height: Espacio.lg),
           FilledButton(
-            onPressed: _puede ? _registrar : null,
-            child: _guardando ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)) : const Text('Registrar firma(s)'),
+            onPressed: _puedeFirmar(yoId) ? _registrar : null,
+            child: _guardando ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)) : const Text('Registrar mi firma'),
           ),
         ],
       ),

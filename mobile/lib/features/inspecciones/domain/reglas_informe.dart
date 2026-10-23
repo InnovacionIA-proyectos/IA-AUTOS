@@ -136,7 +136,25 @@ InformeJob construirInformeJob({
   );
 }
 
-/// Una firma válida exige que quien entrega y quien recibe sean personas distintas y que haya al menos un trazo.
-/// (El servidor valida además que quien firma sea el usuario autenticado.)
-bool firmaValida({required String? entregaId, required String? recibeId, required bool hayFirma}) =>
-    entregaId != null && recibeId != null && entregaId != recibeId && hayFirma;
+/// El trazo que se manda al firmar: el de **quien tiene la sesión**.
+///
+/// El servidor atribuye la firma al usuario del token (`transferencia.Firmar(usuarioAutenticado, firma)`), así
+/// que solo viaja una y tiene que ser la suya. Quien firma debe ser una de las dos partes, y entrega y recibe
+/// tienen que ser personas distintas.
+///
+/// Devuelve null cuando todavía no se puede firmar.
+String? firmaDeLaSesion({
+  required String? yoId,
+  required String? entregaId,
+  required String? recibeId,
+  String? firmaEntrega,
+  String? firmaRecibe,
+}) {
+  if (yoId == null || entregaId == null || recibeId == null || entregaId == recibeId) return null;
+  final mia = switch (yoId) {
+    _ when yoId == entregaId => firmaEntrega,
+    _ when yoId == recibeId => firmaRecibe,
+    _ => null,
+  };
+  return mia == null || mia.isEmpty ? null : mia;
+}

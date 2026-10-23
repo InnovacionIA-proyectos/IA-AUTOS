@@ -98,14 +98,12 @@ class GatewayInformesApi implements GatewayInformes {
     String inspeccionId, {
     required String entregaId,
     required String recibeId,
-    String? firmaEntrega,
-    String? firmaRecibe,
+    required String? firma,
   }) async {
     await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/transferencia', cuerpo: {
       'entrega_usuario_id': entregaId,
       'recibe_usuario_id': recibeId,
-      'firma_entrega': ?firmaEntrega,
-      'firma_recibe': ?firmaRecibe,
+      'firma': firma,
     });
   }
 }

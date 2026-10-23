@@ -75,11 +75,12 @@ abstract interface class GatewayInformes {
 
   Future<void> cerrarInspeccion(String inspeccionId);
 
+  /// Firma la transferencia. Solo viaja **una** firma, la de quien tiene la sesión: el servidor se la atribuye
+  /// al usuario del token.
   Future<void> firmarTransferencia(
     String inspeccionId, {
     required String entregaId,
     required String recibeId,
-    String? firmaEntrega,
-    String? firmaRecibe,
+    required String? firma,
   });
 }

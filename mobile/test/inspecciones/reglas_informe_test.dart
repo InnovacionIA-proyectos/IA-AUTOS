@@ -200,13 +200,45 @@ void main() {
     });
   });
 
-  group('firmaValida', () {
-    test('exige personas distintas y al menos una firma', () {
-      expect(firmaValida(entregaId: 'a', recibeId: 'b', hayFirma: true), isTrue);
-      expect(firmaValida(entregaId: 'a', recibeId: 'a', hayFirma: true), isFalse);
-      expect(firmaValida(entregaId: 'a', recibeId: 'b', hayFirma: false), isFalse);
-      expect(firmaValida(entregaId: null, recibeId: 'b', hayFirma: true), isFalse);
-      expect(firmaValida(entregaId: 'a', recibeId: null, hayFirma: true), isFalse);
+  // El servidor atribuye la firma al usuario del token, asi que solo viaja una y tiene que ser la suya.
+  group('firmaDeLaSesion', () {
+    String? firma({
+      String? yo = 'a',
+      String? entrega = 'a',
+      String? recibe = 'b',
+      String? deEntrega = 'M 0 0',
+      String? deRecibe = 'M 1 1',
+    }) =>
+        firmaDeLaSesion(
+          yoId: yo,
+          entregaId: entrega,
+          recibeId: recibe,
+          firmaEntrega: deEntrega,
+          firmaRecibe: deRecibe,
+        );
+
+    test('quien entrega manda la suya; quien recibe, la suya', () {
+      expect(firma(yo: 'a'), 'M 0 0');
+      expect(firma(yo: 'b'), 'M 1 1');
+    });
+
+    test('quien no es parte no puede firmar, aunque haya trazos en la pantalla', () {
+      expect(firma(yo: 'c'), isNull);
+    });
+
+    test('sin su propio trazo no se firma, aunque el otro si lo tenga', () {
+      expect(firma(yo: 'a', deEntrega: null), isNull);
+      expect(firma(yo: 'a', deEntrega: ''), isNull, reason: 'un trazo vacio no es una firma');
+    });
+
+    test('entrega y recibe tienen que ser distintos', () {
+      expect(firma(yo: 'a', entrega: 'a', recibe: 'a'), isNull);
+    });
+
+    test('sin sesion o sin las dos partes elegidas, no', () {
+      expect(firma(yo: null), isNull);
+      expect(firma(entrega: null), isNull);
+      expect(firma(recibe: null), isNull);
     });
   });
 }

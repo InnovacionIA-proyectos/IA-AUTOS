@@ -233,8 +233,7 @@ class ProcesadorCola {
         job.inspeccionId,
         entregaId: job.entregaId,
         recibeId: job.recibeId,
-        firmaEntrega: job.firmaEntrega,
-        firmaRecibe: job.firmaRecibe,
+        firma: job.firma,
       );
 
   Future<void> _borrarFotos(InformeJob job) async {

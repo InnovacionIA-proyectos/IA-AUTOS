@@ -153,9 +153,14 @@ class GatewayFalso implements GatewayInformes {
     String inspeccionId, {
     required String entregaId,
     required String recibeId,
-    String? firmaEntrega,
-    String? firmaRecibe,
-  }) => _paso('firmarTransferencia');
+    required String? firma,
+  }) {
+    firmasEnviadas.add(firma);
+    return _paso('firmarTransferencia');
+  }
+
+  /// Lo que viajó en cada firma, para comprobar que es una sola y la correcta.
+  final List<String?> firmasEnviadas = [];
 }
 
 ErrorApi errorHttp(int status, [String mensaje = 'error']) => ErrorApi(message: mensaje, code: 'X', status: status);

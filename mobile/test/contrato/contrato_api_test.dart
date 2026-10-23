@@ -89,7 +89,8 @@ void main() {
     ],
     // La evidencia va DENTRO: el servidor no acepta un hallazgo sin su foto.
     'CrearHallazgoRequest': ['parte_vehiculo', 'clase_dano', 'tamano_dano', 'coords_diagrama', 'evidencia'],
-    'FirmarTransferenciaRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma_entrega', 'firma_recibe'],
+    // Una sola firma: el servidor la atribuye al usuario del token.
+    'FirmarTransferenciaRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma'],
     // La app sube multipart, no base64: `SubirArchivoRequest` ya no se usa.
   };
 

@@ -123,7 +123,7 @@ void main() {
   });
 
   group('envío de una firma', () {
-    test('envía la transferencia con las firmas que haya', () async {
+    test('envía la transferencia con una sola firma: la de quien firmó', () async {
       await cola.agregar(const FirmaJob(
         id: 'f1',
         etiqueta: 'Firma',
@@ -132,12 +132,13 @@ void main() {
         inspeccionId: 'insp-9',
         entregaId: 'u1',
         recibeId: 'u2',
-        firmaEntrega: 'M 1 1 L 2 2',
+        firma: 'M 1 1 L 2 2',
       ));
 
       final r = await procesador.procesar(usuarioPrueba);
 
       expect(gateway.llamadas, ['firmarTransferencia']);
+      expect(gateway.firmasEnviadas, ['M 1 1 L 2 2']);
       expect(r.enviados, 1);
       expect(cola.jobs, isEmpty);
     });

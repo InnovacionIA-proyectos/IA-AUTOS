@@ -236,8 +236,7 @@ class FirmaJob extends Job {
     required this.inspeccionId,
     required this.entregaId,
     required this.recibeId,
-    this.firmaEntrega,
-    this.firmaRecibe,
+    required this.firma,
   });
 
   factory FirmaJob.fromJson(Map<String, dynamic> json) => FirmaJob(
@@ -252,17 +251,17 @@ class FirmaJob extends Job {
         inspeccionId: json['inspeccion_id'] as String,
         entregaId: json['entrega_id'] as String,
         recibeId: json['recibe_id'] as String,
-        firmaEntrega: json['firma_entrega'] as String?,
-        firmaRecibe: json['firma_recibe'] as String?,
+        // Los encolados antes de que la API pidiera una sola firma traen las dos; se manda la que haya.
+        firma: (json['firma'] ?? json['firma_entrega'] ?? json['firma_recibe']) as String?,
       );
 
   final String inspeccionId;
   final String entregaId;
   final String recibeId;
 
-  /// Trazo de la firma como path SVG (formato que la web sabe dibujar).
-  final String? firmaEntrega;
-  final String? firmaRecibe;
+  /// Trazo de la firma como path SVG (formato que la web sabe dibujar). Es la de quien firmó: el servidor la
+  /// atribuye al usuario del token.
+  final String? firma;
 
   @override
   String get tipo => 'firma';
@@ -280,8 +279,7 @@ class FirmaJob extends Job {
         inspeccionId: inspeccionId,
         entregaId: entregaId,
         recibeId: recibeId,
-        firmaEntrega: firmaEntrega,
-        firmaRecibe: firmaRecibe,
+        firma: firma,
       );
 
   @override
@@ -297,8 +295,7 @@ class FirmaJob extends Job {
         inspeccionId: inspeccionId,
         entregaId: entregaId,
         recibeId: recibeId,
-        firmaEntrega: firmaEntrega,
-        firmaRecibe: firmaRecibe,
+        firma: firma,
       );
 
   @override
@@ -315,7 +312,6 @@ class FirmaJob extends Job {
         'inspeccion_id': inspeccionId,
         'entrega_id': entregaId,
         'recibe_id': recibeId,
-        'firma_entrega': firmaEntrega,
-        'firma_recibe': firmaRecibe,
+        'firma': firma,
       };
 }

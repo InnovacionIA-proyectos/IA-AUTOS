@@ -67,10 +67,34 @@ void main() {
   });
 
   test('persiste una firma', () async {
-    const firma = FirmaJob(id: 'f', etiqueta: 'Firma', creadoEn: 5, inspeccionId: 'i', entregaId: 'u1', recibeId: 'u2', firmaRecibe: 'M 0 0 L 1 1');
+    const firma = FirmaJob(
+      id: 'f',
+      etiqueta: 'Firma',
+      creadoEn: 5,
+      inspeccionId: 'i',
+      entregaId: 'u1',
+      recibeId: 'u2',
+      firma: 'M 0 0 L 1 1',
+    );
     await cola.agregar(firma);
 
     expect(((await cola.listar()).single as FirmaJob).toJson(), firma.toJson());
+  });
+
+  // Una firma encolada antes de que la API pidiera un solo campo: se lee y se manda la que haya.
+  test('una firma del formato viejo se sigue leyendo', () {
+    final vieja = Job.fromJson({
+      'kind': 'firma',
+      'id': 'f',
+      'etiqueta': 'Firma',
+      'creado_en': 5,
+      'inspeccion_id': 'i',
+      'entrega_id': 'u1',
+      'recibe_id': 'u2',
+      'firma_entrega': 'M 0 0 L 1 1',
+    }) as FirmaJob;
+
+    expect(vieja.firma, 'M 0 0 L 1 1');
   });
 
   test('eliminar quita solo el job indicado y guardar de un id inexistente no crea nada', () async {

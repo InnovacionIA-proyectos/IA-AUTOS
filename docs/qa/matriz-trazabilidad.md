@@ -122,6 +122,13 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
 |---|---|---|---|
 | S5-HU-24.6/24.7/24.8/24.9 (Mobile) | Checklist de vistas desde el catálogo con guía de cámara; foto por hallazgo; reglas de cierre iguales a las del servidor; evidencia completa y multipart con hash; dos momentos por etapa con bloqueo del 409 | `mobile/test/inspecciones/checklist_vistas_test.dart`, `reglas_informe_test.dart`, `mobile/test/sync/gateway_informes_api_test.dart`, `procesador_cola_test.dart`, `mobile/test/vehiculos/inventario_test.dart`, `mobile/test/widgets/captura_page_test.dart` | Implementadas en `S5-HU-21-23`; **sin probar en dispositivo** |
 
+**#151 (firma de transferencia) cerrada** en `S5-HU-21-23`: la API pide un solo campo `firma` y la app mandaba
+`firma_entrega`/`firma_recibe`, así que toda firma respondía 400 «firma es obligatoria» (visto en dispositivo el
+23-oct-2026). El servidor atribuye la firma al usuario del token, de modo que solo viaja la propia y la otra
+queda pendiente; verificado contra la API: firmar deja `entrega_firmada_at` puesto, `recibe_firmada_at` nulo y la
+transferencia sin tipo de cierre. **La pantalla sigue mostrando las dos partes y sus selectores**: rediseñarla
+para el flujo de «cada quien firma desde su sesión» es S5-HU-25.4 (#116), no esta corrección.
+
 **Pendientes anotados de estas cuatro:**
 
 - **Falta la imagen guía de la «Vista superior».** Las otras cuatro salieron del prototipo; la superior solo
