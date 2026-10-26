@@ -154,6 +154,21 @@ al entrar el sistema, una etapa que solo se inspecciona al recibir). Si se confi
 de `momentosDeEtapa` en `inventario.dart`, para deshabilitar el botón antes de llamar, como ya se hace con la
 etapa previa.
 
+**Dos defectos vistos en dispositivo el 26-oct-2026, ya corregidos:**
+
+- **El transporte exigía las 7 fotos obligatorias.** La pantalla del VIN le pasaba a la captura la **etiqueta**
+  del catálogo («Transporte») y `pideChecklist` compara contra el **código** («transporte»), así que nunca
+  coincidían y el checklist salía en un proceso que no lo pide. Quedó una inspección de transporte con 7
+  evidencias antes de corregirlo. Ahora la ruta lleva el código y el nombre lo resuelve la captura con el mismo
+  catálogo. Prueba: `vin_page_test.dart`, «la captura recibe el código del proceso, no su etiqueta».
+- **Franjas negras en la cámara y guía desalineada.** La vista previa se dibujaba con su propia proporción
+  dentro de un área de otra proporción, y la guía se dibujaba sobre el área entera: ni llenaban la pantalla ni
+  coincidían entre sí, que es lo grave, porque una guía que no cae donde ve la cámara no sirve para encuadrar.
+  Ahora las dos van dentro del mismo marco 3:4 —el de las guías— y la vista previa se recorta para llenarlo.
+  La foto guardada conserva todo lo que ve el sensor, así que el recorte es solo de encuadre. **Sin prueba
+  automática**: es geometría de la vista previa de la cámara y no hay forma de montarla sin dispositivo; se
+  verifica en el celular.
+
 **Pendientes anotados de estas cuatro:**
 
 - **Las 7 imágenes guía quedaron rehechas** (23-oct-2026), reemplazando las del prototipo. Son plantillas de

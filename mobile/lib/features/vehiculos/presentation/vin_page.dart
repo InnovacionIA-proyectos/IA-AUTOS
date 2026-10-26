@@ -112,7 +112,9 @@ class _Detalle extends ConsumerWidget {
               // El bloqueo nombra la etapa anterior, y el nombre sale del catálogo: el dominio solo da su código.
               nombreDeEtapa: (codigo) => catalogos.etiqueta(Catalogo.etapas, codigo),
               alCapturar: (momento) => alIr(
-                '/inspecciones/vin/$vinRuta/captura/${etapa.id}?proceso=${Uri.encodeQueryComponent(catalogos.etiqueta(Catalogo.etapas, etapa.proceso))}'
+                // El **código** del proceso, no su etiqueta: con él se decide si la etapa pide checklist. El
+                // nombre para la persona lo resuelve la captura con el mismo catálogo.
+                '/inspecciones/vin/$vinRuta/captura/${etapa.id}?proceso=${Uri.encodeQueryComponent(etapa.proceso)}'
                 '&momento=$momento'
                 '${etapa.viajeId == null ? '' : '&viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}'}',
               ),

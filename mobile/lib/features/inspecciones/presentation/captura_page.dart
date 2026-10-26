@@ -207,7 +207,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         usuarioId: usuarioId,
         momento: widget.momento,
         vin: widget.vin,
-        proceso: widget.proceso,
+        proceso: ref.read(catalogosProvider).etiqueta(Catalogo.etapas, widget.proceso),
         etapaId: widget.etapaId,
         fecha: ahora,
         lat: gps.lat,
@@ -278,7 +278,11 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     final checklist = _checklist;
 
     return Scaffold(
-      appBar: AppBar(title: Text('${etiquetar(etiquetaMomento, widget.momento)} · ${widget.proceso}')),
+      // `proceso` es el código (con él se decide el checklist); lo que se lee sale del catálogo, y si todavía
+      // no está descargado cae al propio código.
+      appBar: AppBar(
+        title: Text('${etiquetar(etiquetaMomento, widget.momento)} · ${catalogos.etiqueta(Catalogo.etapas, widget.proceso)}'),
+      ),
       body: SafeArea(
         child: Stack(
           children: [

@@ -7,6 +7,8 @@ Catalogos catalogosCon(
   String usuarioId = 'u1',
   /// Vistas de foto del checklist. Vacío = la app no tiene de dónde armarlo, que es el caso del primer arranque.
   List<Map<String, dynamic>> vistas = const [],
+  /// Etapas con su nombre para mostrar. Importan donde se distingue el código de su etiqueta («cargue» / «Cargue»).
+  List<Map<String, dynamic>> etapas = const [],
 }) =>
     Catalogos.desdeRespuesta(
       {
@@ -19,10 +21,17 @@ Catalogos catalogosCon(
             {'id': 'i2', 'codigo': 'mas_20cm', 'nombre': 'Más de 20 cm', 'orden': 1, 'activo': true},
           ],
           Catalogo.vistasFoto: vistas,
+          Catalogo.etapas: etapas,
         },
       },
       usuarioId: usuarioId,
     );
+
+/// Las etapas como las sirve la API: el código en minúscula y el nombre capitalizado.
+const etapasDePrueba = [
+  {'id': 'e-cargue', 'codigo': 'cargue', 'nombre': 'Cargue', 'orden': 1, 'activo': true},
+  {'id': 'e-transporte', 'codigo': 'transporte', 'nombre': 'Transporte', 'orden': 2, 'activo': true},
+];
 
 /// Dos vistas del checklist: una obligatoria y una adicional, que es lo que distingue el comportamiento.
 const vistasDePrueba = [

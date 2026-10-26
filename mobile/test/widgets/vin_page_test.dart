@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:traza_autos/core/tema/tema.dart';
+import 'package:traza_autos/core/ui/widgets.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
 import 'package:traza_autos/features/vehiculos/data/vehiculos_repositorio.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
@@ -102,5 +104,49 @@ void main() {
     await abrir(tester);
 
     expect(find.textContaining('Falta cerrar la llegada de'), findsOneWidget);
+  });
+
+  // El defecto visto en el celular: la captura de un transporte pedía las 7 fotos obligatorias, que es lo que
+  // ese proceso NO pide. La ruta llevaba la etiqueta del catálogo («Transporte») y `pideChecklist` compara
+  // contra el código («transporte»), así que nunca coincidían.
+  testWidgets('la captura recibe el código del proceso, no su etiqueta', (tester) async {
+    final abiertas = <Uri>[];
+    final router = GoRouter(
+      initialLocation: '/vin',
+      routes: [
+        GoRoute(path: '/vin', builder: (_, _) => const VinPage(vin: 'VIN00000000000001')),
+        GoRoute(
+          path: '/inspecciones/vin/:vin/captura/:etapaId',
+          builder: (_, state) {
+            abiertas.add(state.uri);
+            return const Scaffold(body: Text('captura'));
+          },
+        ),
+      ],
+    );
+    await tester.binding.setSurfaceSize(const Size(600, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      ProviderScope(
+        retry: (_, _) => null,
+        overrides: [
+          ...Arnes().overrides,
+          catalogosRepositorioProvider.overrideWithValue(
+            CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe', etapas: etapasDePrueba),
+          ),
+          vehiculosRepositorioProvider.overrideWithValue(VehiculosRepositorioFalso(inventarioJson())),
+        ],
+        child: MaterialApp.router(theme: crearTema(), routerConfig: router),
+      ),
+    );
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    // La llegada del cargue: la única capturable de esa etapa, porque su salida ya está cerrada.
+    await tester.tap(find.widgetWithText(BotonEnFila, 'Capturar').first);
+    await tester.pumpAndSettle();
+
+    expect(abiertas.single.queryParameters['proceso'], 'cargue', reason: 'el código, no «Cargue»');
   });
 }

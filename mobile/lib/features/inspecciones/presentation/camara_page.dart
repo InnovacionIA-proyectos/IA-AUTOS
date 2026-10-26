@@ -102,25 +102,48 @@ class _EstadoCamaraPage extends State<CamaraPage> {
     }
     final controlador = _controlador;
     if (controlador == null) return const Center(child: CircularProgressIndicator(color: Colors.white));
+    final previa = controlador.value.previewSize;
     return Column(
       children: [
         Expanded(
-          child: Stack(
-            children: [
-              Positioned.fill(child: Center(child: CameraPreview(controlador))),
-              // Guía de encuadre encima de la vista previa, que es para lo que sirve: se alinea el contorno con
-              // el vehículo y se dispara. Son PNG con transparencia y trazo blanco, así que solo se ve la línea.
-              // Sin capturar toques: lo que se toca es el obturador.
-              if (widget.guia case final guia?)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Opacity(
-                      opacity: 0.55,
-                      child: Image.asset(guia, fit: BoxFit.contain, semanticLabel: 'Guía de encuadre: ${widget.titulo}'),
-                    ),
-                  ),
+          // Un marco 3:4, el de las guías. La vista previa se recorta para llenarlo en vez de dejar franjas
+          // negras, y así ocupa **exactamente** el mismo rectángulo que la guía: es lo único que permite
+          // alinear el contorno con el vehículo. La foto que se guarda conserva todo lo que ve el sensor, de
+          // modo que recortar aquí no pierde nada, solo deja algo de margen alrededor de lo encuadrado.
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: 3 / 4,
+              child: ClipRect(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (previa == null)
+                      const ColoredBox(color: Colors.black)
+                    else
+                      FittedBox(
+                        fit: BoxFit.cover,
+                        clipBehavior: Clip.hardEdge,
+                        // `previewSize` viene en la orientación del sensor (apaisada); en vertical van al revés.
+                        child: SizedBox(
+                          width: previa.height,
+                          height: previa.width,
+                          child: CameraPreview(controlador),
+                        ),
+                      ),
+                    // Guía de encuadre encima de la vista previa, que es para lo que sirve. Son PNG con
+                    // transparencia y trazo blanco, así que solo se ve la línea. Sin capturar toques: lo que se
+                    // toca es el obturador.
+                    if (widget.guia case final guia?)
+                      IgnorePointer(
+                        child: Opacity(
+                          opacity: 0.55,
+                          child: Image.asset(guia, fit: BoxFit.cover, semanticLabel: 'Guía de encuadre: ${widget.titulo}'),
+                        ),
+                      ),
+                  ],
                 ),
-            ],
+              ),
+            ),
           ),
         ),
         Container(
