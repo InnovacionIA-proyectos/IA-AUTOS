@@ -1,6 +1,6 @@
 # Indicadores del tablero
 
-Los reportes del tablero (`GET /api/reportes/*`, ver [CONTRATO.md](../CONTRATO.md) «Reportes») leen cinco vistas de la base de datos. Cada una calcula su formula sobre las **inspecciones cerradas**, toma el **cliente del vehiculo**
+Los reportes del tablero (`GET /api/reportes/*`, ver [CONTRATO.md](../CONTRATO.md) «Reportes») leen cinco vistas de la base de datos (salvo `novedades-proceso`, que cuenta directamente la tabla `tblNovedadesProceso`: no son hallazgos y no entran en estas fórmulas). Cada una calcula su formula sobre las **inspecciones cerradas**, toma el **cliente del vehiculo**
 (no el del viaje) y expresa los dias en **hora de Colombia** (UTC-5, sin horario de verano). Las crea `database/cambios-esquema/20-vistas-de-indicadores.sql` (y `ddl.sql`); solo crean vistas, no cambian ningun dato.
 
 ## Vistas

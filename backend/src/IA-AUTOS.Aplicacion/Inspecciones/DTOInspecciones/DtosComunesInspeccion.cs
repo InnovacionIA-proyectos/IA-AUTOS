@@ -147,12 +147,13 @@ public sealed record EvidenciaDto(
 
 /// <summary>
 /// Las firmas dibujadas no se exponen en los listados. <c>Firmada</c> es true cuando estan las dos firmas (tambien si fue con reservas);
-/// <c>TipoCierre</c> dice como se cerro (<c>firmada</c>, <c>con_reservas</c> o <c>no_firma</c>) y es nulo mientras la transferencia esta abierta.
+/// <c>TipoCierre</c> dice como se cerro (<c>firmada</c>, <c>con_reservas</c>, <c>no_firma</c> o <c>recibo_sin_entrega</c>) y es nulo mientras la transferencia esta abierta;
+/// en <c>recibo_sin_entrega</c> no hay <c>EntregaUsuarioId</c>.
 /// </summary>
 public sealed record TransferenciaDto(
     Guid Id,
     Guid InspeccionId,
-    Guid EntregaUsuarioId,
+    Guid? EntregaUsuarioId,
     Guid RecibeUsuarioId,
     bool Firmada,
     DateTimeOffset? FirmadaAt,

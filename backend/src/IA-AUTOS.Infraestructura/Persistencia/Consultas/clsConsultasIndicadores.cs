@@ -254,6 +254,56 @@ internal sealed class clsConsultasIndicadores(clsAppDbContext contexto) : IConsu
         return consulta;
     }
 
+    public async Task<IReadOnlyList<FilaNovedadProceso>> NovedadesDeProcesoAsync(FiltrosReporte filtros, CancellationToken ct = default)
+    {
+        // Los dias son de Colombia (UTC-5, sin horario de verano), con ambos extremos incluidos.
+        var colombia = TimeSpan.FromHours(-5);
+        var inicio = new DateTimeOffset(filtros.Desde.ToDateTime(TimeOnly.MinValue), colombia);
+        var fin = new DateTimeOffset(filtros.Hasta.AddDays(1).ToDateTime(TimeOnly.MinValue), colombia);
+        var consulta = from n in contexto.NovedadesProceso.AsNoTracking()
+                       join e in contexto.Etapas on n.EtapaId equals e.Id
+                       join ec in contexto.EtapasCatalogo on e.EtapaCatalogoId equals ec.Id
+                       join v in contexto.Vehiculos on n.VehiculoId equals v.Id
+                       join vj in contexto.Viajes on n.ViajeId equals vj.Id
+                       where n.Fecha >= inicio && n.Fecha < fin
+                       select new { n.Tipo, n.Fecha, e.PuntoCustodiaId, v.ClienteId, v.Operacion, v.Marca, vj.Trailer, vj.OrigenId, vj.DestinoId, Proceso = ec.Codigo };
+        if (filtros.Operacion is { } operacion)
+        {
+            consulta = consulta.Where(x => x.Operacion == operacion);
+        }
+
+        if (filtros.ClienteId is { } clienteId)
+        {
+            consulta = consulta.Where(x => x.ClienteId == clienteId);
+        }
+
+        if (filtros.PuntoId is { } puntoId)
+        {
+            consulta = consulta.Where(x => x.OrigenId == puntoId || x.DestinoId == puntoId);
+        }
+
+        if (filtros.Marca is { } marca)
+        {
+            consulta = consulta.Where(x => x.Marca == marca);
+        }
+
+        if (filtros.Trailer is { } trailer)
+        {
+            consulta = consulta.Where(x => x.Trailer == trailer);
+        }
+
+        if (filtros.Proceso is { } proceso)
+        {
+            consulta = consulta.Where(x => x.Proceso == proceso);
+        }
+
+        // Son pocas (una por cargue hecho sin inspector): el mes se arma en memoria con la hora de Colombia.
+        return (await consulta.Select(x => new { x.Tipo, x.PuntoCustodiaId, x.ClienteId, x.Fecha }).ToListAsync(ct))
+            .GroupBy(x => (x.Tipo, x.PuntoCustodiaId, x.ClienteId, Mes: x.Fecha.ToOffset(colombia).ToString("yyyy-MM", System.Globalization.CultureInfo.InvariantCulture)))
+            .Select(g => new FilaNovedadProceso(g.Key.Tipo, g.Key.PuntoCustodiaId, g.Key.ClienteId, g.Key.Mes, g.Count()))
+            .ToList();
+    }
+
     public async Task<IReadOnlyList<FilaUnidad>> UnidadesDespachadasAsync(FiltrosReporte filtros, CancellationToken ct = default) =>
         (await Filtrar(contexto.Set<clsFilaCobertura>().AsNoTracking(), filtros)
             .Select(x => new { x.ViajeId, x.VehiculoId, x.Placa, x.Trailer, x.ConductorId, x.TipoUnidadId, x.Marca })

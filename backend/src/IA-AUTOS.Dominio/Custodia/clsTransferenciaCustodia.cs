@@ -14,7 +14,10 @@ public static class clsTipoCierre
     /// <summary>Una parte se nego a firmar: queda la constancia (motivo, testigo y foto).</summary>
     public const string NO_FIRMA = "no_firma";
 
-    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { FIRMADA, CON_RESERVAS, NO_FIRMA };
+    /// <summary>Nadie de Botero Soto firma la entrega (el conductor hizo la salida del cargue): solo firma quien recibe.</summary>
+    public const string RECIBO_SIN_ENTREGA = "recibo_sin_entrega";
+
+    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { FIRMADA, CON_RESERVAS, NO_FIRMA, RECIBO_SIN_ENTREGA };
 }
 
 /// <summary>Las dos partes de una transferencia.</summary>
@@ -43,7 +46,8 @@ public sealed class clsTransferenciaCustodia : clsEntidadBase
 
     public Guid InspeccionId { get; private set; }
 
-    public Guid EntregaUsuarioId { get; private set; }
+    /// <summary>Quien entrega; nulo solo en el cierre «recibo sin entrega».</summary>
+    public Guid? EntregaUsuarioId { get; private set; }
 
     public Guid RecibeUsuarioId { get; private set; }
 
@@ -102,9 +106,50 @@ public sealed class clsTransferenciaCustodia : clsEntidadBase
         return transferencia;
     }
 
+    /// <summary>
+    /// Crea la transferencia ya cerrada como «recibo sin entrega»: nadie de Botero Soto firma la entrega porque el conductor hizo la salida del cargue, asi que solo queda la firma de quien
+    /// recibe, con su fecha e IP. No lleva usuario, firma, fecha ni IP de entrega y no se sella como firmada por ambas partes.
+    /// </summary>
+    public static clsTransferenciaCustodia CrearReciboSinEntrega(Guid inspeccionId, Guid recibeUsuarioId, string? firma, string? ip, DateTimeOffset ahora)
+    {
+        var transferencia = new clsTransferenciaCustodia { InspeccionId = inspeccionId, RecibeUsuarioId = recibeUsuarioId };
+        transferencia.PonerFirma(clsParteFirmante.RECIBE, FirmaValida(firma), ip, ahora);
+        transferencia.TipoCierre = clsTipoCierre.RECIBO_SIN_ENTREGA;
+        transferencia.Inicializar(ahora);
+        return transferencia;
+    }
+
+    /// <summary>
+    /// Cierra como «recibo sin entrega» una transferencia que sigue abierta: solo quien recibe puede (403) y solo si quien entrega aun no firmo (409). Quien entrega deja de figurar: el recibo sin
+    /// entrega no lleva usuario, firma, fecha ni IP de entrega, y las reservas que hubiera se descartan. Una transferencia ya cerrada no cambia (409).
+    /// </summary>
+    public void CerrarSinEntrega(Guid usuarioId, string? firma, string? ip, DateTimeOffset ahora)
+    {
+        if (EstaCerrada)
+        {
+            throw ConflictoPorCierre();
+        }
+
+        if (usuarioId != RecibeUsuarioId)
+        {
+            throw new clsProhibidoException("Solo quien recibe firma el recibo sin entrega");
+        }
+
+        if (!string.IsNullOrEmpty(FirmaEntrega))
+        {
+            throw new clsConflictoException("Quien entrega ya firmó: la transferencia no puede cerrarse como recibo sin entrega");
+        }
+
+        PonerFirma(clsParteFirmante.RECIBE, FirmaValida(firma), ip, ahora);
+        ReservasTexto = null;
+        EntregaUsuarioId = null;
+        TipoCierre = clsTipoCierre.RECIBO_SIN_ENTREGA;
+        Tocar(ahora);
+    }
+
     /// <summary><see cref="clsParteFirmante"/> del usuario en esta transferencia, o nulo si no es ninguna de las dos partes.</summary>
     public string? ParteDe(Guid usuarioId) =>
-        usuarioId == EntregaUsuarioId ? clsParteFirmante.ENTREGA : usuarioId == RecibeUsuarioId ? clsParteFirmante.RECIBE : null;
+        EntregaUsuarioId is not null && usuarioId == EntregaUsuarioId ? clsParteFirmante.ENTREGA : usuarioId == RecibeUsuarioId ? clsParteFirmante.RECIBE : null;
 
     /// <summary>
     /// El usuario firma su propia parte (entrega o recibe segun quien sea); nadie firma por otro (403). Mientras este abierta puede
@@ -264,6 +309,7 @@ public sealed class clsTransferenciaCustodia : clsEntidadBase
     {
         clsTipoCierre.FIRMADA => new("La transferencia ya está firmada por ambas partes y es inmutable"),
         clsTipoCierre.CON_RESERVAS => new("La transferencia ya está cerrada con reservas y es inmutable"),
+        clsTipoCierre.RECIBO_SIN_ENTREGA => new("La transferencia ya está cerrada como recibo sin entrega y es inmutable"),
         _ => new("La transferencia ya tiene constancia de no firma y es inmutable"),
     };
 }

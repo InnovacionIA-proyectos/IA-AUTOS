@@ -11,7 +11,7 @@ namespace IAAutos.API.Controllers.Inspecciones;
 
 /// <summary>
 /// Transferencia de custodia de una inspeccion. Cada firma la envia su titular (sale del token): nadie firma por otro. Se cierra firmada, con
-/// reservas o con constancia de no firma, y una transferencia sin cierre bloquea la etapa siguiente.
+/// reservas, con constancia de no firma o como recibo sin entrega, y una transferencia sin cierre bloquea la etapa siguiente.
 /// </summary>
 [Route("api/inspecciones/{id:guid}/transferencia")]
 public sealed class clsTransferenciasController(clsTransferenciasService servicio, clsNotasAclaratoriasService notas) : clsControladorBase
@@ -54,6 +54,20 @@ public sealed class clsTransferenciasController(clsTransferenciasService servici
     {
         var solicitud = await LeerCuerpoAsync<RecibirConReservasRequest>(ct);
         return Creado(await servicio.RecibirConReservasAsync(id, solicitud, Cliente(), ct));
+    }
+
+    /// <summary>
+    /// El recibo sin entrega: cuando el conductor hizo la salida del Cargue, nadie de Botero Soto firma la entrega y el conductor del viaje cierra la transferencia solo con su firma
+    /// (<c>firma</c>). 403 para cualquier otro; 409 si la etapa no es el Cargue, si la salida la hizo el inspector o si la transferencia ya tiene cierre (o quien entrega ya firmo). Cierra como <c>recibo_sin_entrega</c>.
+    /// </summary>
+    [HttpPost("sin-entrega")]
+    [RolesPermitidos(clsRol.CONDUCTOR)]
+    [ProducesResponseType<TransferenciaDto>(StatusCodes.Status201Created)]
+    [CuerpoSolicitud(typeof(ReciboSinEntregaRequest))]
+    public async Task<IActionResult> RegistrarReciboSinEntrega(Guid id, CancellationToken ct)
+    {
+        var solicitud = await LeerCuerpoAsync<ReciboSinEntregaRequest>(ct);
+        return Creado(await servicio.RegistrarReciboSinEntregaAsync(id, solicitud, Cliente(), ct));
     }
 
     /// <summary>

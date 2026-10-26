@@ -64,8 +64,14 @@ public sealed record UsuarioReporte(Guid Id, string Nombre, string? Cedula);
 /// Lectura de los indicadores del tablero sobre las vistas vwCobertura, vwAdopcion, vwTiempoCaptura, vwAveriasPorConfiguracion y vwIndicadorDiario. Todas aplican los filtros del reporte
 /// (dias, operacion, cliente, punto de origen o destino, marca y trailer); el proceso y el nivel solo a lo que tiene hallazgos o inspecciones por proceso.
 /// </summary>
+/// <summary>Las novedades de proceso de un tipo, en un punto de custodia, de un cliente y de un mes (AAAA-MM, hora de Colombia): cuantas son.</summary>
+public sealed record FilaNovedadProceso(string Tipo, Guid? PuntoId, Guid ClienteId, string Mes, int Total);
+
 public interface IConsultasIndicadores
 {
+    /// <summary>Las novedades de proceso del periodo (por su fecha), agrupadas por tipo, punto de custodia de la etapa, cliente del vehiculo y mes. Con los filtros comunes; el nivel no aplica.</summary>
+    Task<IReadOnlyList<FilaNovedadProceso>> NovedadesDeProcesoAsync(FiltrosReporte filtros, CancellationToken ct = default);
+
     Task<IReadOnlyList<FilaCobertura>> CoberturaAsync(FiltrosReporte filtros, CancellationToken ct = default);
 
     Task<IReadOnlyList<FilaAdopcion>> AdopcionAsync(FiltrosReporte filtros, CancellationToken ct = default);

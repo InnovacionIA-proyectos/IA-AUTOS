@@ -9,6 +9,25 @@ public sealed record CoberturaGrupoDto(int Despachadas, int Completas, decimal C
 
 public sealed record CoberturaOperacionDto(string Operacion, int Despachadas, int Completas, decimal Cobertura);
 
+public sealed record NovedadProcesoTipoDto(string Tipo, int Total);
+
+public sealed record NovedadProcesoPuntoDto(Guid? PuntoId, string? PuntoNombre, int Total);
+
+public sealed record NovedadProcesoClienteDto(Guid ClienteId, string? ClienteNombre, int Total);
+
+public sealed record NovedadProcesoMesDto(string Mes, int Total);
+
+/// <summary>
+/// Las novedades de proceso (cargue sin inspector y recibo sin entrega) del periodo, para el tablero: el total y su conteo por tipo, por punto de custodia (el de la etapa), por cliente (el del
+/// vehiculo) y por mes (AAAA-MM, hora de Colombia). No son hallazgos: no entran en los patrones ni en la tasa de rechazo.
+/// </summary>
+public sealed record NovedadesProcesoDto(
+    int Total,
+    IReadOnlyList<NovedadProcesoTipoDto> PorTipo,
+    IReadOnlyList<NovedadProcesoPuntoDto> PorPunto,
+    IReadOnlyList<NovedadProcesoClienteDto> PorCliente,
+    IReadOnlyList<NovedadProcesoMesDto> PorMes);
+
 public sealed record CoberturaClienteDto(Guid ClienteId, string? ClienteNombre, int Despachadas, int Completas, decimal Cobertura);
 
 public sealed record CoberturaPuntoDto(Guid PuntoId, string? PuntoNombre, int Despachadas, int Completas, decimal Cobertura);

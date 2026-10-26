@@ -21,7 +21,7 @@ no esté cerrada, no se puede crear la salida de la etapa siguiente. Los endpoin
 | `firmada` | ambas partes firman | las dos firmas |
 | `con_reservas` | quien recibe firma por `/transferencia/reservas` | las dos firmas y `ReservasTexto` (obligatorio, máximo 1 000 caracteres) |
 | `no_firma` | una parte se niega y la otra deja constancia por `/transferencia/no-firma` | `NoFirmaParte`, `MotivoNoFirma`, `TestigoUsuarioId` y `EvidenciaConstanciaId` |
-| `recibo_sin_entrega` | nadie de Botero Soto firma la entrega porque el conductor hizo la salida del Cargue | solo la firma de quien recibe con su fecha e IP; **sin** usuario, firma, fecha ni IP de entrega |
+| `recibo_sin_entrega` | nadie de Botero Soto firma la entrega porque el conductor hizo la salida del Cargue; lo cierra el conductor por `POST …/transferencia/sin-entrega` | solo la firma de quien recibe con su fecha e IP; **sin** usuario, firma, fecha ni IP de entrega |
 | sin valor | falta una firma | la transferencia está **abierta** |
 
 - Solo **quien recibe** firma con reservas. Si quien recibe firma después normalmente, las reservas se descartan.
@@ -33,6 +33,16 @@ no esté cerrada, no se puede crear la salida de la etapa siguiente. Los endpoin
 
 La base de datos refuerza lo mismo: `CK_tblTransferencias_Cierre` exige, según el tipo, las firmas, las reservas, la constancia completa o solo la firma de quien recibe, y `CK_tblTransferencias_Testigo` impide que el testigo sea
 una de las partes. `EntregaUsuarioId` admite nulo, pero solo en el cierre `recibo_sin_entrega` (`CK_tblTransferencias_Entrega`).
+
+## Recibo sin entrega
+
+Cuando el conductor hizo la salida del Cargue (sin personal de apoyo, o con la excepción «No hay inspector»; ver [conductor-en-ruta.md](conductor-en-ruta.md)) nadie de Botero Soto firma la entrega. El **conductor del viaje** (y nadie más: `403`) cierra la transferencia con `POST /api/inspecciones/{id}/transferencia/sin-entrega { firma }`.
+Solo vale en la salida del Cargue que él hizo (`409` si la hizo el inspector o la etapa es otra) y mientras la transferencia no tenga cierre ni la firma de quien entrega (`409`). Una transferencia abierta donde solo firmó quien recibe se cierra sin entrega: quien entrega deja de figurar.
+
+- **Desbloquea la etapa siguiente**, como cualquier cierre (el bloqueo solo mira si hay tipo de cierre).
+- **La evidencia de los hallazgos de esa inspección queda incompleta**: `evidencia_faltante` trae `transferencia_sin_entrega` (como `transferencia_no_firma`, solo firmó una parte), así que no cuentan en la tasa de rechazo.
+- **Novedad de proceso.** Si la salida se hizo con la excepción «No hay inspector» se crea además la novedad `recibo_sin_entrega` (con el motivo de la inspección, sin nueva notificación); en un cargue sin apoyo planeado no se crea ninguna. El conteo por tipo, punto, cliente y mes está en `GET /api/reportes/novedades-proceso`.
+- La constancia en PDF y el PDF del informe dicen «recibo sin entrega» y «Entrega: no hubo entrega». Es una decisión del equipo pendiente de confirmar por el negocio (P-080). En el descargue sin inspector sigue sin definir quién recibe.
 
 ## Qué bloquea
 

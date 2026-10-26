@@ -160,9 +160,9 @@ public sealed class clsNotasAclaratoriasService(
     private static List<Guid> Firmantes(clsTransferenciaCustodia transferencia)
     {
         var firmantes = new List<Guid>();
-        if (transferencia.FirmaEntrega is not null)
+        if (transferencia.FirmaEntrega is not null && transferencia.EntregaUsuarioId is { } entrega)
         {
-            firmantes.Add(transferencia.EntregaUsuarioId);
+            firmantes.Add(entrega);
         }
 
         if (transferencia.FirmaRecibe is not null)

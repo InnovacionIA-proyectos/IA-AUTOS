@@ -965,7 +965,7 @@ Campos del `HallazgoDto`:
 | `nota` | texto libre, máximo 500 |
 | `es_preexistente`, `hallazgo_origen_id`, `confirmado_por` | si el daño ya existía, el hallazgo previo del VIN que ya lo tenía y quién lo confirmó |
 | `estado_seguimiento` | `pendiente` (al crearse), `validado`, `rechazado`, `recuperado` o `derogado`; lo cambia `POST /api/hallazgos/{id}/seguimiento` |
-| `evidencia_completa`, `evidencia_faltante` | `evidencia_faltante` lista lo que impide la evidencia completa (`foto_hallazgo`, `transferencia_sin_cierre`, `transferencia_no_firma`); ver «Seguimiento del hallazgo» |
+| `evidencia_completa`, `evidencia_faltante` | `evidencia_faltante` lista lo que impide la evidencia completa (`foto_hallazgo`, `transferencia_sin_cierre`, `transferencia_no_firma`, `transferencia_sin_entrega`); ver «Seguimiento del hallazgo» |
 | `revisado_por`, `revisado_at` | quién revisó el hallazgo y cuándo; `null` mientras no se revise |
 | `parte_vehiculo`, `coords_diagrama` | **solo en los hallazgos históricos** (anteriores a este modelo): la parte en texto y el punto sobre la imagen anterior. En los nuevos son `null` |
 
@@ -1162,7 +1162,7 @@ informe de la inspección. `POST /api/uploads` admite a quien tiene `gestionar_s
 | Campo del `HallazgoDto` | Significado |
 |---|---|
 | `evidencia_completa` | `true` si el hallazgo tiene su **foto propia** (no cuenta la foto del sello) y la transferencia de su inspección se cerró **firmada** o **con reservas** (en las dos firman las dos partes). Una transferencia cerrada como «no firma» no cuenta (propuesta pendiente de confirmar por el negocio) |
-| `evidencia_faltante` | lo que falta: `foto_hallazgo`, `transferencia_sin_cierre` (la transferencia no existe o sigue abierta) y `transferencia_no_firma` |
+| `evidencia_faltante` | lo que falta: `foto_hallazgo`, `transferencia_sin_cierre` (la transferencia no existe o sigue abierta), `transferencia_no_firma` y `transferencia_sin_entrega` (solo firmó una parte, como en la no firma) |
 
 Se calcula al leer el hallazgo, se guarda al cambiar su seguimiento y se **recalcula cuando se cierra la transferencia** de su inspección. Un hallazgo rechazado sin evidencia completa no cuenta en la tasa de rechazo mientras no la tenga.
 
@@ -1447,7 +1447,7 @@ Toda acción de escritura (y el inicio de sesión) queda en un registro **que na
 
 Acciones registradas: inicio de sesión, PIN errado y bloqueo (`auth.*`); usuarios (`usuario.*`); catálogos (`catalogo.{nombre}.*`); vehículos (`vehiculos.cargar`, `vehiculo.baja`); viajes (`viaje.*`, `viajes.cargar`);
 inspecciones (`inspeccion.crear`, `inspeccion.cerrar`, `inspeccion.corregir`, `llegada.registrar`); hallazgos y novedades (`hallazgo.crear`, `novedad.crear`, `hallazgo.revision`, `hallazgo.seguimiento`); evidencias (`evidencia.crear`);
-transferencias (`transferencia.firmar`, `transferencia.reservas`, `transferencia.no_firma`); notas aclaratorias (`nota.crear`); notificaciones (`notificacion.leer`, `notificacion.responder`); dispositivos y la ingesta Sofasa.
+transferencias (`transferencia.firmar`, `transferencia.reservas`, `transferencia.no_firma`, `transferencia.sin_entrega`); notas aclaratorias (`nota.crear`); notificaciones (`notificacion.leer`, `notificacion.responder`); dispositivos y la ingesta Sofasa.
 
 ### `GET /api/auditoria`
 Capacidad `ver_auditoria` de `GET /api/auth/me`: la tienen `admin` (ve la de **su cliente**) y `super_admin` (ve la de todos); cualquier otro rol recibe `403`. Una página, de la más reciente a la más antigua.
@@ -1491,6 +1491,7 @@ identidad sale del token y **nadie firma por otro** (`403`). Cada firma guarda s
 | `firmada` | ambas partes firman |
 | `con_reservas` | ambas firman y quien recibe dejó sus observaciones (`reservas`) |
 | `no_firma` | una parte se negó a firmar: se deja la constancia (motivo, testigo con usuario y foto) |
+| `recibo_sin_entrega` | el conductor hizo la salida del Cargue y nadie de Botero Soto firma la entrega: solo firma quien recibe (ver `POST …/transferencia/sin-entrega`) |
 | `null` | abierta: falta una firma (o ninguna se ha enviado) |
 
 La primera llamada (sea cual sea la firma) crea la transferencia y exige `entrega_usuario_id` y `recibe_usuario_id`; en las siguientes pueden omitirse y, si se envían, deben ser los mismos
@@ -1544,6 +1545,30 @@ Campo. **Constancia de no firma**: una parte se negó a firmar y la **otra parte
 
 La foto se guarda como una evidencia marcada `es_constancia: true`, que **se admite aunque la inspección ya esté cerrada** y no cuenta como foto de una vista ni de un hallazgo.
 
+### `POST /api/inspecciones/{id}/transferencia/sin-entrega`
+Campo, **solo el conductor del viaje** (decisión del equipo, pendiente de confirmar por el negocio, P-080). Cuando el conductor hizo la salida del Cargue (sin personal de apoyo, o con la excepción «No hay inspector») nadie de Botero Soto firma la entrega: el conductor cierra la transferencia solo con su firma. `201`.
+
+```json
+{ "firma": "<trazo SVG o ruta>" }
+```
+
+| Caso | Respuesta |
+|---|---|
+| el conductor del viaje, en la salida del Cargue que él hizo | `201`: la transferencia queda `recibo_sin_entrega`, con la firma de quien recibe, su fecha e IP, **sin** `entrega_usuario_id`, firma, fecha ni IP de entrega |
+| cualquier otro usuario (otro conductor, un inspector, un administrador, el coordinador) | `403` |
+| sin `firma` | `400` |
+| la etapa no es el Cargue o no es su salida; la salida la hizo el inspector (u otro usuario) | `409` |
+| la transferencia ya tiene tipo de cierre, o quien entrega ya firmó | `409` |
+| la inspección no existe | `404` |
+
+Si la transferencia seguía **abierta** (por ejemplo, quien recibe ya había firmado su parte y quien entrega no), se cierra sin entrega: quien entrega deja de figurar y las reservas que hubiera se descartan. Al cerrarse:
+
+- **desbloquea** la salida de la etapa siguiente, como los demás cierres;
+- los hallazgos de esa inspección quedan con `evidencia_completa: false` y `evidencia_faltante: ["transferencia_sin_entrega"]` (solo firmó una parte, como en la no firma): se recalcula como en los otros cierres y no cuentan en la tasa de rechazo;
+- si la salida se hizo con la excepción «No hay inspector», se crea además la **novedad de proceso** `recibo_sin_entrega` (con el motivo de la inspección, sin nueva notificación); en un cargue sin apoyo planeado **no** se crea ninguna;
+- queda en la auditoría (`transferencia.sin_entrega` y, si hay novedad, `novedad_proceso.crear`);
+- la constancia en PDF y el PDF del informe muestran «recibo sin entrega» y «Entrega: no hubo entrega»; el informe y el inventario traen `tipo_cierre: "recibo_sin_entrega"` y `entrega_usuario_id: null`.
+
 ### `GET /api/inspecciones/{id}/transferencia/constancia/pdf`
 Autenticado. La **constancia de la transferencia en PDF** (`application/pdf`): datos de la unidad, tipo de cierre, las dos firmas con su fecha e IP, las reservas o el motivo de la no firma,
 el testigo y la foto de la constancia. Inspector y conductor solo la descargan de sus viajes (`403` si es de otro). `404` si la inspección no existe o no tiene transferencia.
@@ -1557,6 +1582,8 @@ el testigo y la foto de la constancia. Inspector y conductor solo la descargan d
   "tipo_cierre": null, "entrega_firmada_at": "…", "recibe_firmada_at": null,
   "reservas_texto": null, "no_firma_parte": null, "motivo_no_firma": null, "testigo_usuario_id": null, "evidencia_constancia_id": null }
 ```
+
+`entrega_usuario_id` es `null` solo en el cierre `recibo_sin_entrega`.
 
 `firmada` es `true` cuando están las dos firmas (también si fue con reservas); `firmada_at` se sella cuando está la segunda. En el detalle del informe (`GET /api/inspecciones/{id}`) la
 transferencia llega como `TransferenciaDetalleDto`: los mismos campos más `entrega_nombre`, `recibe_nombre`, `firma_entrega`, `firma_recibe`, `entrega_firma_ip`, `recibe_firma_ip` y `testigo_nombre`.
@@ -1882,6 +1909,20 @@ fila con la clave en `null` (unidades sin trailer, sin conductor o sin tipo de u
   "por_marca": [ { "marca": "Renault", "vines": 12, "con_novedad": 3, "hallazgos": 4 } ],
   "por_clase": [ { "clase": "golpe", "total": 6 } ],
   "por_nivel": [ { "nivel": "v1", "total": 2 } ]
+}
+```
+
+### `GET /api/reportes/novedades-proceso`
+Las **novedades de proceso** del periodo (cargue sin inspector y recibo sin entrega; no son hallazgos y no cuentan en los patrones ni en la tasa de rechazo): el total y su conteo por tipo, por punto de custodia (el de la etapa), por cliente (el del vehículo) y por mes (`AAAA-MM`, hora de Colombia). Usa los mismos filtros que los demás reportes
+(`desde` y `hasta` sobre la fecha de la novedad, `operacion`, `cliente_id`, `punto_id` —origen o destino del viaje—, `marca`, `trailer` y `proceso`); el filtro `nivel` no aplica. Ordenado de mayor a menor.
+
+```json
+{
+  "total": 6,
+  "por_tipo": [ { "tipo": "cargue_sin_inspector", "total": 5 }, { "tipo": "recibo_sin_entrega", "total": 1 } ],
+  "por_punto": [ { "punto_id": "uuid", "punto_nombre": "CEDI 1", "total": 6 } ],
+  "por_cliente": [ { "cliente_id": "uuid", "cliente_nombre": "Sofasa", "total": 6 } ],
+  "por_mes": [ { "mes": "2026-09", "total": 2 }, { "mes": "2026-10", "total": 4 } ]
 }
 ```
 
