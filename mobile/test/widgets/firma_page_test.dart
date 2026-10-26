@@ -62,6 +62,24 @@ void main() {
     expect(find.widgetWithText(ChoiceChip, 'Marta Ríos'), findsNothing, reason: 'no participa en el viaje');
   });
 
+  // Qué lado le toca a cada quien lo decide el proceso, no la app: en un cargue el patio entrega y el
+  // conductor recibe, y en un descargue es al revés. Pero siendo dos, elegir uno ya decide el otro.
+  testWidgets('elegir un lado pone a la otra persona en el contrario', (tester) async {
+    await abrir(tester);
+
+    // Por defecto firma quien está en sesión (Ana) como quien entrega.
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Luis Gómez').first);
+    await tester.pump();
+
+    final chips = tester.widgetList<ChoiceChip>(find.byType(ChoiceChip)).toList();
+    final seleccionados = [
+      for (final c in chips)
+        if (c.selected) ((c.label as Text).data, chips.indexOf(c) < 2 ? 'entrega' : 'recibe'),
+    ];
+    expect(seleccionados, [('Luis Gómez', 'entrega'), ('Ana Pérez', 'recibe')]);
+    expect(find.text('Quien entrega y quien recibe deben ser distintos.'), findsNothing);
+  });
+
   // Sin viaje no hay de dónde sacar los firmantes. Antes que caer en la lista completa —que es el defecto—,
   // se dice qué pasa.
   testWidgets('una etapa sin viaje lo dice y no pregunta por nadie', (tester) async {

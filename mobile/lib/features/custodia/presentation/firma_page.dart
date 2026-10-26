@@ -87,6 +87,31 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
     _recibeId = usuarios.where((u) => u.id != _entregaId).firstOrNull?.id;
   }
 
+  /// Elegir un lado decide el otro cuando los firmantes son dos, que es lo normal: el conductor y el
+  /// inspector del viaje. Con las dos listas sueltas se podía poner a la misma persona en los dos lados, que
+  /// no es una elección válida sino un paso en falso que luego hay que avisar.
+  ///
+  /// Qué lado le toca a cada quien no lo decide la app: en un cargue el patio entrega y el conductor recibe,
+  /// y en un descargue es al revés, así que quien firma tiene que poder decir de qué lado está.
+  void _elegirParte(List<Usuario> lista, {String? entrega, String? recibe}) => setState(() {
+        final otro = lista.length == 2 ? lista.firstWhere((u) => u.id != (entrega ?? recibe)).id : null;
+        if (entrega != null) {
+          _entregaId = entrega;
+          if (otro != null) {
+            _recibeId = otro;
+          } else if (_recibeId == entrega) {
+            _recibeId = null;
+          }
+        } else {
+          _recibeId = recibe;
+          if (otro != null) {
+            _entregaId = otro;
+          } else if (_entregaId == recibe) {
+            _entregaId = null;
+          }
+        }
+      });
+
   /// El trazo que viaja: el de quien tiene la sesión. Null mientras no se pueda firmar.
   String? _miFirma(String? yoId) => firmaDeLaSesion(
         yoId: yoId,
@@ -212,7 +237,7 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
             valor: _entregaId,
             nombreFijo: transferencia?.entregaNombre,
             yaFirmo: transferencia?.firmoEntrega,
-            alElegir: transferencia != null ? null : (id) => setState(() => _entregaId = id),
+            alElegir: transferencia != null ? null : (id) => _elegirParte(lista, entrega: id),
           ),
           const SizedBox(height: Espacio.sm),
           if (yoEntrego)
@@ -226,7 +251,7 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
             valor: _recibeId,
             nombreFijo: transferencia?.recibeNombre,
             yaFirmo: transferencia?.firmoRecibe,
-            alElegir: transferencia != null ? null : (id) => setState(() => _recibeId = id),
+            alElegir: transferencia != null ? null : (id) => _elegirParte(lista, recibe: id),
           ),
           const SizedBox(height: Espacio.sm),
           if (yoRecibo)
