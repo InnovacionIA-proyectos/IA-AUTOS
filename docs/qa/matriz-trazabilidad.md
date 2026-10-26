@@ -144,6 +144,12 @@ API ya sirve con los cuatro niveles (`v1_plus`, `v1`, `v2`, `v3`) y su campo `ac
 registra con clase y tamaño, sin nivel, así que no hay dato con el que decidir qué es crítico. El nivel V entra
 con **S6-HU-01**, que añade cuadrante, nivel y preexistente al hallazgo; pintar un rojo antes sería inventarlo.
 
+**La pestaña de Inspecciones no se refrescaba sola** (visto y corregido el 26-oct-2026): vive dentro del shell,
+así que una vez construida no se vuelve a construir al volver a ella y un informe recién cerrado seguía
+apareciendo como estaba; había que arrastrar la pantalla. Ahora se recarga también al terminar de trabajar la
+cola, que es cuando lo del servidor pudo cambiar por algo hecho desde la app. Prueba:
+`lista_inspecciones_page_test.dart`. **Verificado en dispositivo.**
+
 **Hallazgo en dispositivo (26-oct-2026): se puede cerrar una llegada sin haber capturado su salida.** Al
 probar el acuse en rojo se capturó una llegada de una etapa sin salida y el servidor la aceptó: quedó cerrada,
 en verde. La regla `ETAPA_PREVIA_SIN_CIERRE` solo mira la **etapa anterior** y solo se aplica al momento de
