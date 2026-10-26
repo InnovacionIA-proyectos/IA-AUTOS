@@ -38,6 +38,66 @@ abstract final class Momento {
   static const todos = [salida, llegada];
 }
 
+/// Cómo se cerró una transferencia. La diferencia importa: «firmada» no es el único cierre válido, y
+/// cualquiera de los tres la vuelve inmutable para el servidor.
+abstract final class TipoCierre {
+  static const firmada = 'firmada';
+  static const conReservas = 'con_reservas';
+  static const noFirma = 'no_firma';
+}
+
+/// La transferencia de un informe tal como la ve la pantalla. Lo que importa aquí es **quién falta por
+/// firmar**: cada parte firma desde su propia sesión, así que entre una firma y la otra pueden pasar horas y
+/// quien mira tiene que saber en cuál de los dos estados está.
+class TransferenciaVista {
+  const TransferenciaVista({
+    required this.entregaId,
+    required this.recibeId,
+    this.entregaNombre,
+    this.recibeNombre,
+    this.entregaFirmoEn,
+    this.recibeFirmoEn,
+    this.tipoCierre,
+  });
+
+  factory TransferenciaVista.fromJson(Map<String, dynamic> json) => TransferenciaVista(
+        entregaId: json['entrega_usuario_id'] as String? ?? '',
+        recibeId: json['recibe_usuario_id'] as String? ?? '',
+        // El inventario no los manda; el detalle del informe sí.
+        entregaNombre: json['entrega_nombre'] as String?,
+        recibeNombre: json['recibe_nombre'] as String?,
+        entregaFirmoEn: switch (json['entrega_firmada_at']) { final String f => DateTime.tryParse(f), _ => null },
+        recibeFirmoEn: switch (json['recibe_firmada_at']) { final String f => DateTime.tryParse(f), _ => null },
+        tipoCierre: json['tipo_cierre'] as String?,
+      );
+
+  final String entregaId;
+  final String recibeId;
+  final String? entregaNombre;
+  final String? recibeNombre;
+  final DateTime? entregaFirmoEn;
+  final DateTime? recibeFirmoEn;
+
+  /// Null = todavía abierta. Es lo que bloquea la salida de la etapa siguiente: «firmada» no alcanza, porque
+  /// una transferencia puede cerrarse de tres formas distintas.
+  final String? tipoCierre;
+
+  bool get cerrada => tipoCierre != null;
+  bool get firmoEntrega => entregaFirmoEn != null;
+  bool get firmoRecibe => recibeFirmoEn != null;
+  bool get completa => firmoEntrega && firmoRecibe;
+
+  /// Si ya firmó uno solo, falta el otro. Null cuando no ha firmado nadie o cuando ya firmaron los dos.
+  bool? get faltaRecibe => firmoEntrega == firmoRecibe ? null : !firmoRecibe;
+
+  /// ¿Ya firmó esta persona? Null si no es ninguna de las dos partes.
+  bool? firmo(String? usuarioId) => switch (usuarioId) {
+        final id? when id == entregaId => firmoEntrega,
+        final id? when id == recibeId => firmoRecibe,
+        _ => null,
+      };
+}
+
 class InspeccionVista {
   const InspeccionVista({
     required this.id,
@@ -49,8 +109,7 @@ class InspeccionVista {
     this.cerradaEn,
     this.hallazgos = const [],
     this.evidencias = const [],
-    this.transferenciaFirmada = false,
-    this.transferenciaTipoCierre,
+    this.transferencia,
   });
 
   factory InspeccionVista.fromJson(Map<String, dynamic> json) {
@@ -65,8 +124,7 @@ class InspeccionVista {
       cerradaEn: switch (json['cerrada_at']) { final String f => DateTime.tryParse(f), _ => null },
       hallazgos: [for (final h in (json['hallazgos'] as List<dynamic>? ?? [])) HallazgoVista.fromJson(h as Map<String, dynamic>)],
       evidencias: [for (final e in (json['evidencias'] as List<dynamic>? ?? [])) EvidenciaVista.fromJson(e as Map<String, dynamic>)],
-      transferenciaFirmada: (transferencia?['firmada'] as bool?) ?? false,
-      transferenciaTipoCierre: transferencia?['tipo_cierre'] as String?,
+      transferencia: transferencia == null ? null : TransferenciaVista.fromJson(transferencia),
     );
   }
 
@@ -86,12 +144,12 @@ class InspeccionVista {
 
   final List<HallazgoVista> hallazgos;
   final List<EvidenciaVista> evidencias;
-  final bool transferenciaFirmada;
 
-  /// Cómo se cerró la transferencia (firmada, con reservas, sin firma). Null = todavía abierta, que es lo que
-  /// bloquea la salida de la etapa siguiente; «firmada» no alcanza, porque una transferencia puede cerrarse de
-  /// tres formas distintas.
-  final String? transferenciaTipoCierre;
+  /// Null mientras nadie haya empezado la transferencia de este informe.
+  final TransferenciaVista? transferencia;
+
+  bool get transferenciaFirmada => transferencia?.completa ?? false;
+  String? get transferenciaTipoCierre => transferencia?.tipoCierre;
 
   bool get cerrada => estado == 'cerrada';
 }
@@ -263,11 +321,16 @@ sealed class AccionEtapa {
 /// Hay un informe sobre el que firmar la transferencia. [soloFirma] = la etapa no exige informe propio y se firma
 /// sobre el último informe del VIN.
 class FirmarTransferencia extends AccionEtapa {
-  const FirmarTransferencia({required this.inspeccionId, required this.soloFirma, required this.firmada});
+  const FirmarTransferencia({required this.inspeccionId, required this.soloFirma, required this.transferencia});
 
   final String inspeccionId;
   final bool soloFirma;
-  final bool firmada;
+
+  /// Null mientras no haya firmado nadie.
+  final TransferenciaVista? transferencia;
+
+  /// Cerrada de cualquiera de las tres formas: ya no admite firmas y el servidor rechazaría otra.
+  bool get cerrada => transferencia?.cerrada ?? false;
 }
 
 /// No hay nada sobre lo que firmar todavía.
@@ -282,9 +345,9 @@ AccionEtapa accionDeEtapa(EtapaVista etapa, Inventario inventario) {
   final referencia = inspecciones.where((i) => i.cerrada).firstOrNull ?? inspecciones.firstOrNull;
   if (etapa.requiereInspeccion) {
     if (referencia == null) return const SinInforme();
-    return FirmarTransferencia(inspeccionId: referencia.id, soloFirma: false, firmada: referencia.transferenciaFirmada);
+    return FirmarTransferencia(inspeccionId: referencia.id, soloFirma: false, transferencia: referencia.transferencia);
   }
   final base = referencia ?? inventario.ultimaInspeccion?.inspeccion;
   if (base == null) return const SinInforme();
-  return FirmarTransferencia(inspeccionId: base.id, soloFirma: true, firmada: base.transferenciaFirmada);
+  return FirmarTransferencia(inspeccionId: base.id, soloFirma: true, transferencia: base.transferencia);
 }

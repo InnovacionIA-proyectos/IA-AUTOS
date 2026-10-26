@@ -11,6 +11,8 @@ Map<String, dynamic> inspeccionJson(
   String momento = Momento.salida,
   String? cerradaEn,
   String? tipoCierre,
+  /// Solo firmó quien entrega: la otra firma queda pendiente, que es el estado normal entre una y otra.
+  bool soloEntrega = false,
   List<Map<String, dynamic>> hallazgos = const [],
 }) =>
     {
@@ -25,7 +27,16 @@ Map<String, dynamic> inspeccionJson(
       'evidencias': [
         {'id': 'ev-$id', 'url': '/api/uploads/$id.jpg'},
       ],
-      'transferencia': firmada || tipoCierre != null ? {'firmada': firmada, 'tipo_cierre': tipoCierre} : null,
+      // Como la sirve la API: una firma por parte, con su fecha. `firmada` del DTO es «ya firmaron las dos».
+      'transferencia': firmada || tipoCierre != null || soloEntrega
+          ? {
+              'entrega_usuario_id': 'u-entrega',
+              'recibe_usuario_id': 'u-recibe',
+              'entrega_firmada_at': firmada || soloEntrega ? '2026-01-01T12:00:00Z' : null,
+              'recibe_firmada_at': firmada ? '2026-01-01T12:30:00Z' : null,
+              'tipo_cierre': tipoCierre ?? (firmada ? 'firmada' : null),
+            }
+          : null,
     };
 
 Map<String, dynamic> etapaJson(
@@ -124,12 +135,28 @@ void main() {
     test('con informe cerrado sin firma: firmar sobre ese informe', () {
       final inv = inventario([etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('i1', '2026-01-01T10:00:00Z')])]);
       final accion = accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia;
-      expect((accion.inspeccionId, accion.soloFirma, accion.firmada), ('i1', false, false));
+      expect((accion.inspeccionId, accion.soloFirma, accion.cerrada), ('i1', false, false));
     });
 
     test('con transferencia ya firmada se informa y no se vuelve a firmar', () {
       final inv = inventario([etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('i1', '2026-01-01T10:00:00Z', firmada: true)])]);
-      expect((accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia).firmada, isTrue);
+      expect((accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia).cerrada, isTrue);
+    });
+
+    // Entre una firma y la otra pueden pasar horas, porque cada parte firma desde su sesión. Ese estado
+    // intermedio no es «sin firmar» ni «firmada», y la tarjeta tiene que poder distinguirlo.
+    test('con una sola firma la transferencia sigue abierta y se sabe quién falta', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('i1', '2026-01-01T10:00:00Z', soloEntrega: true)])]);
+      final accion = accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia;
+
+      expect(accion.cerrada, isFalse, reason: 'todavía admite la otra firma');
+      expect(accion.transferencia!.completa, isFalse);
+      expect(accion.transferencia!.faltaRecibe, isTrue);
+    });
+
+    test('sin ninguna firma no se dice que falte nadie en particular', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('i1', '2026-01-01T10:00:00Z')])]);
+      expect((accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia).transferencia, isNull);
     });
 
     test('prefiere el informe cerrado sobre un borrador', () {
@@ -286,16 +313,30 @@ void main() {
         expect(mensajeBloqueo(salida.bloqueo!.motivo, 'Cargue'), 'Falta cerrar la transferencia de Cargue');
       });
 
-      test('firmada no alcanza: lo que cuenta es el tipo de cierre', () {
+      test('una sola firma no alcanza: la transferencia sigue abierta', () {
         final inv = inventario([
           etapaJson('e1', 1, 'cargue', inspecciones: [
             inspeccionJson('ll', '2026-01-01T10:00:00Z',
-                momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z', firmada: true),
+                momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z', soloEntrega: true),
           ]),
           etapaJson('e2', 2, 'transporte'),
         ]);
 
         expect(momentosDeEtapa(inv.etapas[1], inv).first.bloqueo!.motivo, BloqueoMomento.transferenciaAbierta);
+      });
+
+      // Lo que cuenta es el tipo de cierre, no que haya firmas: una constancia de no firma cierra la
+      // transferencia sin que nadie haya firmado, y la etapa siguiente debe poder arrancar.
+      test('una constancia de no firma cierra la transferencia aunque no haya firmas', () {
+        final inv = inventario([
+          etapaJson('e1', 1, 'cargue', inspecciones: [
+            inspeccionJson('ll', '2026-01-01T10:00:00Z',
+                momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z', tipoCierre: 'no_firma'),
+          ]),
+          etapaJson('e2', 2, 'transporte'),
+        ]);
+
+        expect(momentosDeEtapa(inv.etapas[1], inv).first.bloqueo, isNull);
       });
 
       test('con la anterior cerrada de verdad, se puede', () {

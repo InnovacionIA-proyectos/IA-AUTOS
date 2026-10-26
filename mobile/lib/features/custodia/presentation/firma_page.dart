@@ -13,12 +13,18 @@ import '../../sync/domain/job.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
 import '../../vehiculos/domain/etiquetas.dart';
+import '../../vehiculos/domain/inventario.dart';
 import '../providers.dart';
 import 'lienzo_firma.dart';
 
 /// Los dos del viaje que pueden firmar: su conductor y su inspector. No la lista de usuarios: ofrecer a
 /// cualquiera como firmante lleva a elegir a quien el servidor va a rechazar, y además deja ver nombres de
 /// gente ajena al viaje.
+/// La transferencia que ya exista sobre este informe. Null mientras no haya firmado nadie.
+final _transferenciaProvider = FutureProvider.autoDispose.family<TransferenciaVista?, String>(
+  (ref, inspeccionId) => ref.watch(transferenciasRepositorioProvider).deInforme(inspeccionId),
+);
+
 final _firmantesProvider =
     FutureProvider.autoDispose.family<List<Usuario>, String>((ref, viajeId) => ref.watch(usuariosRepositorioProvider).firmantesDeViaje(viajeId));
 
@@ -54,8 +60,15 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
   bool _guardando = false;
   bool _seleccionInicial = false;
 
-  /// Por defecto firma entrega quien está en sesión y recibe la primera otra persona de la lista.
-  void _elegirPorDefecto(List<Usuario> usuarios, String? yoId) {
+  /// Quiénes son las partes. Si la transferencia ya existe **no se elige**: la primera firma las fijó y el
+  /// servidor rechaza con 409 cualquier intento de cambiarlas, así que quien firma de segundo hereda. Solo
+  /// cuando no hay nada se propone lo razonable: entrega quien está en sesión, recibe la otra persona.
+  void _elegirPorDefecto(List<Usuario> usuarios, String? yoId, TransferenciaVista? transferencia) {
+    if (transferencia != null) {
+      _entregaId = transferencia.entregaId;
+      _recibeId = transferencia.recibeId;
+      return;
+    }
     if (_seleccionInicial || usuarios.isEmpty) return;
     _seleccionInicial = true;
     _entregaId = usuarios.any((u) => u.id == yoId) ? yoId : usuarios.first.id;
@@ -134,27 +147,35 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
       );
     }
     final usuarios = ref.watch(_firmantesProvider(viajeId));
+    final transferencia = ref.watch(_transferenciaProvider(widget.inspeccionId));
+
+    void recargar() {
+      ref.invalidate(_firmantesProvider(viajeId));
+      ref.invalidate(_transferenciaProvider(widget.inspeccionId));
+    }
 
     return Scaffold(
       appBar: AppBar(title: Text('Firma · ${widget.proceso}')),
-      body: usuarios.when(
-        loading: () => const EstadoCargando(),
-        error: (error, _) => EstadoMensaje(
-          icono: Icons.warning_amber_rounded,
-          colorIcono: Colores.peligro,
-          titulo: 'No se pudieron cargar los firmantes del viaje',
-          descripcion: mensajeDeError(error),
-          accion: FilledButton(onPressed: () => ref.invalidate(_firmantesProvider(viajeId)), child: const Text('Reintentar')),
-        ),
-        data: (lista) {
-          _elegirPorDefecto(lista, yoId);
-          return _formulario(context, lista, yoId);
-        },
-      ),
+      body: switch ((usuarios, transferencia)) {
+        (AsyncError(:final error), _) || (_, AsyncError(:final error)) => EstadoMensaje(
+            icono: Icons.warning_amber_rounded,
+            colorIcono: Colores.peligro,
+            titulo: 'No se pudo cargar la transferencia',
+            descripcion: mensajeDeError(error),
+            accion: FilledButton(onPressed: recargar, child: const Text('Reintentar')),
+          ),
+        (AsyncData(value: final lista), AsyncData(value: final t)) => Builder(
+            builder: (context) {
+              _elegirPorDefecto(lista, yoId, t);
+              return _formulario(context, lista, yoId, t);
+            },
+          ),
+        _ => const EstadoCargando(),
+      },
     );
   }
 
-  Widget _formulario(BuildContext context, List<Usuario> lista, String? yoId) {
+  Widget _formulario(BuildContext context, List<Usuario> lista, String? yoId, TransferenciaVista? transferencia) {
     final tema = Theme.of(context).textTheme;
     final distintos = _entregaId != null && _recibeId != null && _entregaId != _recibeId;
     // Solo se firma la propia: el servidor atribuye la firma al usuario del token, así que la de la otra parte
@@ -167,14 +188,28 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
         children: [
           Text('${widget.vin} · ${widget.proceso}${widget.soloFirma ? ' · firma sobre el último informe' : ''}', style: tema.bodySmall),
           const SizedBox(height: Espacio.lg),
-          _SelectorPersona(etiqueta: 'Quien entrega', usuarios: lista, valor: _entregaId, alElegir: (id) => setState(() => _entregaId = id)),
+          _Parte(
+            etiqueta: 'Quien entrega',
+            usuarios: lista,
+            valor: _entregaId,
+            nombreFijo: transferencia?.entregaNombre,
+            yaFirmo: transferencia?.firmoEntrega,
+            alElegir: transferencia != null ? null : (id) => setState(() => _entregaId = id),
+          ),
           const SizedBox(height: Espacio.sm),
           if (yoEntrego)
             LienzoFirma(etiqueta: 'Tu firma', onCambio: (p) => setState(() => _firmaEntrega = p))
           else
             Text('Su firma se registra desde su propia sesión.', style: tema.bodySmall),
           const SizedBox(height: Espacio.lg),
-          _SelectorPersona(etiqueta: 'Quien recibe', usuarios: lista, valor: _recibeId, alElegir: (id) => setState(() => _recibeId = id)),
+          _Parte(
+            etiqueta: 'Quien recibe',
+            usuarios: lista,
+            valor: _recibeId,
+            nombreFijo: transferencia?.recibeNombre,
+            yaFirmo: transferencia?.firmoRecibe,
+            alElegir: transferencia != null ? null : (id) => setState(() => _recibeId = id),
+          ),
           const SizedBox(height: Espacio.sm),
           if (yoRecibo)
             LienzoFirma(etiqueta: 'Tu firma', onCambio: (p) => setState(() => _firmaRecibe = p))
@@ -191,7 +226,12 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
               liveRegion: true,
               child: Text('Solo puedes firmar si eres quien entrega o quien recibe.', style: tema.bodySmall?.copyWith(color: Colores.peligro)),
             ),
-          Text('Cada parte firma desde su sesión: la otra queda pendiente.', style: tema.bodySmall),
+          Text(
+            transferencia == null
+                ? 'Cada parte firma desde su sesión: la otra queda pendiente. Quien firma primero fija los dos nombres.'
+                : 'Los firmantes los fijó la primera firma y ya no se cambian.',
+            style: tema.bodySmall,
+          ),
           const SizedBox(height: Espacio.lg),
           FilledButton(
             onPressed: _puedeFirmar(yoId) ? _registrar : null,
@@ -203,20 +243,54 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
   }
 }
 
-class _SelectorPersona extends StatelessWidget {
-  const _SelectorPersona({required this.etiqueta, required this.usuarios, required this.valor, required this.alElegir});
+/// Una de las dos partes. Se elige mientras la transferencia no exista; después es un nombre fijo con el
+/// estado de su firma, que es lo que hay que ver cuando entre una firma y la otra pasan horas.
+class _Parte extends StatelessWidget {
+  const _Parte({
+    required this.etiqueta,
+    required this.usuarios,
+    required this.valor,
+    required this.nombreFijo,
+    required this.yaFirmo,
+    required this.alElegir,
+  });
 
   final String etiqueta;
   final List<Usuario> usuarios;
   final String? valor;
-  final ValueChanged<String> alElegir;
+  final String? nombreFijo;
+  final bool? yaFirmo;
+
+  /// Null = ya no se puede elegir.
+  final ValueChanged<String>? alElegir;
 
   @override
   Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    final elegir = alElegir;
+    if (elegir == null) {
+      final nombre = nombreFijo ?? usuarios.where((u) => u.id == valor).firstOrNull?.nombre ?? '—';
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(etiqueta, style: tema.titleMedium?.copyWith(fontSize: 15)),
+          const SizedBox(height: Espacio.xs),
+          Row(
+            children: [
+              Expanded(child: Text(nombre, style: tema.bodyMedium?.copyWith(color: Colores.textoPrimario))),
+              if (yaFirmo == true)
+                const Insignia('Ya firmó', tono: TonoInsignia.exito)
+              else
+                const Insignia('Falta su firma', tono: TonoInsignia.advertencia),
+            ],
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(etiqueta, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontSize: 15)),
+        Text(etiqueta, style: tema.titleMedium?.copyWith(fontSize: 15)),
         const SizedBox(height: Espacio.sm),
         Wrap(
           spacing: Espacio.sm,
@@ -230,7 +304,7 @@ class _SelectorPersona extends StatelessWidget {
                   tooltip: etiquetar(etiquetaRol, u.rol),
                   selected: valor == u.id,
                   materialTapTargetSize: MaterialTapTargetSize.padded,
-                  onSelected: (_) => alElegir(u.id),
+                  onSelected: (_) => elegir(u.id),
                 ),
               ),
           ],

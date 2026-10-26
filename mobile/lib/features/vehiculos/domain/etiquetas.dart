@@ -26,6 +26,14 @@ const etiquetaMomento = <String, String>{
   'llegada': 'Inspección de llegada',
 };
 
+/// Las tres maneras de cerrar una transferencia. Cualquiera de ellas la vuelve inmutable, así que la pantalla
+/// no debe ofrecer firmar sobre ninguna.
+const etiquetaTipoCierre = <String, String>{
+  'firmada': 'Transferencia firmada',
+  'con_reservas': 'Recibida con reservas',
+  'no_firma': 'Constancia de no firma',
+};
+
 const etiquetaEstadoViaje = <String, String>{
   'programado': 'Programado',
   'en_curso': 'En curso',

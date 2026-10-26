@@ -272,10 +272,29 @@ class _TarjetaEtapa extends StatelessWidget {
             ],
           const SizedBox(height: Espacio.sm),
           switch (accion) {
-            FirmarTransferencia(firmada: true) => const Insignia('Transferencia firmada', tono: TonoInsignia.exito),
-            final FirmarTransferencia a => FilledButton(
-                onPressed: () => alFirmar(a),
-                child: Text(a.soloFirma ? 'Revisar y firmar' : 'Firmar transferencia'),
+            // Cerrada de cualquiera de las tres formas: ya no admite firmas, y ofrecerlas solo llevaría al 409
+            // del servidor.
+            FirmarTransferencia(cerrada: true, transferencia: final t?) => Insignia(
+                etiquetar(etiquetaTipoCierre, t.tipoCierre!),
+                tono: t.tipoCierre == TipoCierre.noFirma ? TonoInsignia.advertencia : TonoInsignia.exito,
+              ),
+            final FirmarTransferencia a => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Entre una firma y la otra pueden pasar horas, porque cada parte firma desde su sesión. Sin
+                  // esto la tarjeta se ve igual antes y después de firmar.
+                  if (a.transferencia?.faltaRecibe case final falta?) ...[
+                    Text(
+                      falta ? 'Firmó quien entrega; falta quien recibe.' : 'Firmó quien recibe; falta quien entrega.',
+                      style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+                    ),
+                    const SizedBox(height: Espacio.sm),
+                  ],
+                  FilledButton(
+                    onPressed: () => alFirmar(a),
+                    child: Text(a.soloFirma ? 'Revisar y firmar' : 'Firmar transferencia'),
+                  ),
+                ],
               ),
             SinInforme() => Text('No hay informe previo para firmar en esta etapa.', style: tema.bodySmall),
           },
