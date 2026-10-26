@@ -239,6 +239,20 @@ Y los dos flujos de la #117, que la API servía desde la S5-HU-25.3 y la app no 
 motivo, un testigo que es una tercera persona y una foto sellada, que se sube antes de registrar y es
 reanudable como la de un hallazgo).
 
+**Probado en dispositivo el 26-oct-2026.** La firma a dos manos quedó confirmada de punta a punta (la segunda
+ya no choca con el 409). Salieron dos cosas más:
+
+- **El bloqueo local no era el del servidor, y bloqueaba de más.** El servidor pregunta «¿queda alguna
+  transferencia de esta etapa sin cerrar?»; la app preguntaba «¿la transferencia **del informe de llegada**
+  está cerrada?». Como la transferencia cuelga del **primer informe que se cierra** —el de salida—, una etapa
+  con su constancia ya registrada quedaba bloqueada para siempre aunque la API la dejara pasar. Corregido: la
+  app hace ahora la misma pregunta. Ojo al efecto: una etapa **sin ninguna transferencia** tampoco bloquea,
+  que es lo que hace la API.
+- **Pregunta abierta: sobre qué informe va la transferencia.** Hoy va sobre el primero que se cierra, lo que
+  en la práctica significa el de salida, y por eso se puede firmar el cambio de responsabilidad antes de que
+  exista la llegada. La API no exige ninguno en particular. Si debe ir sobre la llegada —que es cuando el
+  vehículo cambia de manos— hay que decidirlo con Calidad y cambiarlo en los dos lados.
+
 | S5-HU-25.4/25.5/25.7 | Firmantes del viaje, firma por otro bloqueada (403), reservas sin texto rechazadas, no firma sin testigo rechazada, bloqueo de la etapa siguiente sin cierre | `CustodiaYUsuariosTests.Mientras_esta_abierta_cada_uno_puede_repetir_su_propia_firma`, `El_testigo_es_una_tercera_persona`; `InspeccionesApiTests.Una_transferencia_sin_cierre_bloquea_la_salida_de_la_etapa_siguiente_hasta_que_se_cierra` | Verificado con prueba real (dominio y API); falta la capa de UI en mobile (**Abierta/pendiente** #116, #117, #118) |
 | #151 | Mobile sigue enviando `firma_entrega`/`firma_recibe` (contrato anterior a S5-HU-25.2) | Sin prueba — contrato roto, issue abierta para el equipo móvil | **Abierta/pendiente** |
 

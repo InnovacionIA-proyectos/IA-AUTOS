@@ -293,7 +293,12 @@ List<MomentoEtapa> momentosDeEtapa(EtapaVista etapa, Inventario inventario) {
   ];
 }
 
-/// La etapa anterior del mismo viaje debe tener cerrada su llegada y cerrada su transferencia.
+/// La etapa anterior del mismo viaje debe tener cerrada su llegada y ninguna transferencia suya abierta.
+///
+/// Las dos condiciones son **las mismas que comprueba el servidor**, y eso importa más que su redacción: la
+/// app solo deshabilita el botón antes de llamar, así que una regla propia más estricta bloquearía trabajo que
+/// la API aceptaría. En particular, la transferencia se mira en **toda la etapa**, no en el informe de llegada:
+/// cuelga del primer informe que se cierre, que normalmente es el de salida.
 BloqueoMomento? _bloqueoDeLaPrevia(EtapaVista etapa, Inventario inventario) {
   EtapaVista? previa;
   for (final otra in inventario.etapas) {
@@ -302,11 +307,10 @@ BloqueoMomento? _bloqueoDeLaPrevia(EtapaVista etapa, Inventario inventario) {
   }
   if (previa == null) return null; // la primera etapa no tiene anterior
 
-  final llegada = previa.inspecciones.where((i) => i.momento == Momento.llegada).lastOrNull;
-  if (llegada == null || !llegada.cerrada) {
+  if (!previa.inspecciones.any((i) => i.momento == Momento.llegada && i.cerrada)) {
     return BloqueoMomento(motivo: BloqueoMomento.sinLlegada, procesoPrevio: previa.proceso);
   }
-  if (llegada.transferenciaTipoCierre == null) {
+  if (previa.inspecciones.any((i) => i.transferencia?.cerrada == false)) {
     return BloqueoMomento(motivo: BloqueoMomento.transferenciaAbierta, procesoPrevio: previa.proceso);
   }
   return null;

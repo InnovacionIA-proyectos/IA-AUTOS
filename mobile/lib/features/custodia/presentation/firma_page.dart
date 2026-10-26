@@ -196,6 +196,10 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
     // no viajaría. Se deja ver quién es y que su firma queda pendiente.
     final yoEntrego = yoId != null && yoId == _entregaId;
     final yoRecibo = yoId != null && yoId == _recibeId;
+    // Repetir la propia firma lo permite el servidor mientras la transferencia siga abierta, y sirve para
+    // corregir un trazo que salió mal. Pero decir «Registrar mi firma» a quien ya firmó se lee como que la
+    // anterior no quedó.
+    final yaFirme = transferencia?.firmo(yoId) ?? false;
     return SafeArea(
       child: ListView(
         padding: const EdgeInsets.all(Espacio.lg),
@@ -271,9 +275,13 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
               child: Text('Solo puedes firmar si eres quien entrega o quien recibe.', style: tema.bodySmall?.copyWith(color: Colores.peligro)),
             ),
           Text(
-            transferencia == null
-                ? 'Cada parte firma desde su sesión: la otra queda pendiente. Quien firma primero fija los dos nombres.'
-                : 'Los firmantes los fijó la primera firma y ya no se cambian.',
+            switch ((transferencia, yaFirme)) {
+              (null, _) => 'Cada parte firma desde su sesión: la otra queda pendiente. Quien firma primero fija '
+                  'los dos nombres.',
+              (_, true) => 'Tu firma ya quedó registrada. Puedes volver a firmar si el trazo salió mal; la '
+                  'última es la que cuenta.',
+              _ => 'Los firmantes los fijó la primera firma y ya no se cambian.',
+            },
             style: tema.bodySmall,
           ),
           const SizedBox(height: Espacio.lg),
@@ -281,7 +289,11 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
             onPressed: _puedeFirmar(yoId) ? _registrar : null,
             child: _guardando
                 ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                : Text(_conReservas ? 'Registrar recibo con reservas' : 'Registrar mi firma'),
+                : Text(switch ((_conReservas, yaFirme)) {
+                    (true, _) => 'Registrar recibo con reservas',
+                    (_, true) => 'Volver a firmar',
+                    _ => 'Registrar mi firma',
+                  }),
           ),
           // La salida cuando la otra parte se niega. Solo la ve quien sí está: la constancia la levanta el
           // otro, nunca quien no firma.

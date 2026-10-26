@@ -92,6 +92,26 @@ void main() {
     });
 
     // La sesión de la prueba es Ana, que aquí es quien recibe: su lienzo sale, el de Luis no.
+    // Repetir la propia firma lo permite el servidor y sirve para corregir un trazo malo, pero el botón no
+    // puede decir «Registrar mi firma» a quien ya firmó: se lee como que la anterior no quedó.
+    testWidgets('a quien ya firmó el botón le dice que va a volver a firmar', (tester) async {
+      // Ana firmó como quien recibe; la sesión de la prueba es Ana.
+      await abrir(
+        tester,
+        transferencia: TransferenciaVista(
+          entregaId: luis.id,
+          recibeId: ana.id,
+          entregaNombre: luis.nombre,
+          recibeNombre: ana.nombre,
+          recibeFirmoEn: DateTime(2026, 10, 26, 9),
+        ),
+      );
+
+      expect(find.text('Volver a firmar'), findsOneWidget);
+      expect(find.text('Registrar mi firma'), findsNothing);
+      expect(find.textContaining('ya quedó registrada'), findsOneWidget);
+    });
+
     testWidgets('solo se dibuja el lienzo de quien tiene la sesión', (tester) async {
       await abrir(tester, transferencia: mediaFirmada());
 

@@ -302,7 +302,8 @@ void main() {
       test('con la llegada cerrada pero la transferencia abierta, tambien', () {
         final inv = inventario([
           etapaJson('e1', 1, 'cargue', inspecciones: [
-            inspeccionJson('ll', '2026-01-01T10:00:00Z', momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z'),
+            inspeccionJson('ll', '2026-01-01T10:00:00Z',
+                momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z', soloEntrega: true),
           ]),
           etapaJson('e2', 2, 'transporte'),
         ]);
@@ -311,6 +312,35 @@ void main() {
 
         expect(salida.bloqueo!.motivo, BloqueoMomento.transferenciaAbierta);
         expect(mensajeBloqueo(salida.bloqueo!.motivo, 'Cargue'), 'Falta cerrar la transferencia de Cargue');
+      });
+
+      // El defecto visto en el celular: la transferencia cuelga del primer informe que se cierra, que es el de
+      // salida, y la app la buscaba en el de llegada. Con la constancia ya registrada sobre la salida, la
+      // etapa siguiente quedaba bloqueada para siempre aunque el servidor la dejara pasar.
+      test('la transferencia cuenta venga del informe que venga, no solo del de llegada', () {
+        final inv = inventario([
+          etapaJson('e1', 1, 'cargue', inspecciones: [
+            inspeccionJson('s', '2026-01-01T08:00:00Z', cerradaEn: '2026-01-01T09:00:00Z', tipoCierre: 'no_firma'),
+            inspeccionJson('ll', '2026-01-01T10:00:00Z', momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z'),
+          ]),
+          etapaJson('e2', 2, 'transporte'),
+        ]);
+
+        expect(momentosDeEtapa(inv.etapas[1], inv).first.bloqueo, isNull);
+      });
+
+      // La misma pregunta que hace el servidor: bloquea una transferencia **abierta**, no la ausencia de una.
+      // Si Calidad quiere exigir que toda etapa tenga su transferencia, la regla tiene que cambiar en la API
+      // primero: una regla propia más estricta aquí bloquea trabajo que la API aceptaría.
+      test('sin ninguna transferencia no se bloquea, como en el servidor', () {
+        final inv = inventario([
+          etapaJson('e1', 1, 'cargue', inspecciones: [
+            inspeccionJson('ll', '2026-01-01T10:00:00Z', momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z'),
+          ]),
+          etapaJson('e2', 2, 'transporte'),
+        ]);
+
+        expect(momentosDeEtapa(inv.etapas[1], inv).first.bloqueo, isNull);
       });
 
       test('una sola firma no alcanza: la transferencia sigue abierta', () {
