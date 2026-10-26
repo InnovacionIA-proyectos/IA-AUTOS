@@ -18,7 +18,7 @@ Infraestructura  ->  Aplicacion y Dominio      (la API enlaza la infraestructura
 
 ## Modulos
 
-Auth, Usuarios, Vehiculos (carga masiva, listados, inventario, PDF), Viajes (alta, asignacion de VIN, estados, carga por Excel, visibilidad), Inspecciones (informes, hallazgos, evidencias, cierre, custodia), Archivos, Sofasa (ingesta y consulta), Reportes (patrones, analisis, tasa de rechazo) y Auditoria (transversal).
+Auth, Usuarios, Vehiculos (carga masiva, listados, inventario, PDF), Viajes (alta, asignacion de VIN, estados, carga por Excel, visibilidad), Inspecciones (informes, hallazgos, evidencias, cierre, custodia), Conductor (novedades y llegada en ruta), Notificaciones (bandeja, dispositivos y envio push por FCM), Alertas (alertas preventivas y avisos operativos, con su proceso periodico) y Parametros (valores que el negocio ajusta), Archivos, Sofasa (ingesta y consulta), Reportes (patrones, analisis, tasa de rechazo) y Auditoria (transversal).
 
 Cada capa se organiza por grupo funcional (por ejemplo `Aplicacion/Inspecciones/{DTOInspecciones, Validators}`), no por tipo tecnico.
 
@@ -36,15 +36,16 @@ Clases con prefijo `cls`, variables en camelCase, constantes en MAYUSCULAS_SOSTE
 - La carga masiva de VIN y la ingesta de Sofasa son idempotentes: re-procesar no duplica vehiculos, y un error en una fila no detiene el lote. Las etapas no se crean ahi: nacen al agregar el VIN a un viaje. La ingesta vincula cada orden al viaje del VIN (y del codigo MTrack, si lo trae).
 - Baja de usuario: se elimina si no tiene historial; si lo tiene, se marca como retirado.
 - Inspecciones: por etapa hay una inspeccion de salida y una de llegada, y cada foto lleva su sello (el del dispositivo y el del servidor) y su hash. Detalle en [inspecciones.md](inspecciones.md) y, para la transferencia de custodia, en [transferencias.md](transferencias.md).
+- Hallazgos: cada hallazgo se atribuye a una zona del vehiculo (cuadrante + lado, o una zona provisional) con su clase, tamano y nivel de severidad; una unidad con un hallazgo grave puede no salir del viaje sin bloquearlo. Modelo y mapeo en [zonas-dano.md](zonas-dano.md); su historial de seguimiento (que nunca se modifica) y la vista de patrones por zona, en [seguimiento-hallazgos.md](seguimiento-hallazgos.md).
 - Identidad: un usuario entra con correo y contrasena o con cedula y PIN (conductor e inspector, el correo es opcional). Cada usuario y cada vehiculo pertenecen a un cliente (catalogo `clientes`); el super administrador no tiene cliente. Detalle en [identidad.md](identidad.md).
 
 ## Base de datos
 
-El esquema lo crea `database/ddl.sql` (no se usan migraciones de EF). Ademas de las tablas incluye la vista de viajes completos y tres triggers de ultima defensa: no se puede modificar una inspeccion cerrada ni agregarle hallazgos o evidencias. SQL Server no admite en este modelo `SET NULL` junto a la cascada desde inspecciones, por eso `tblEvidencias.HallazgoId` usa `NO ACTION` (la aplicacion no elimina hallazgos).
+El esquema lo crea `database/ddl.sql` (no se usan migraciones de EF). Ademas de las tablas incluye la vista de viajes completos y triggers de ultima defensa: no se puede modificar una inspeccion cerrada ni agregarle hallazgos o evidencias, y la evidencia no se puede borrar (ver [evidencia-inmutable.md](evidencia-inmutable.md)). Las relaciones entre vehiculo, etapa, inspeccion y sus registros no borran en cascada. `tblEvidencias.HallazgoId` usa `NO ACTION` (la aplicacion no elimina hallazgos).
 
 ## Auditoria
 
-Toda accion relevante se registra en `tblAuditLog` dentro de la misma transaccion del caso de uso (login, altas y cambios de usuarios, carga de VIN, viajes y su carga por Excel, inspecciones, hallazgos, evidencias, firmas, cierres). La ingesta del ETL se registra como accion del sistema (usuario nulo). Los logs estructurados con correlacion de solicitudes no se implementan por defecto (solo si el requerimiento lo solicita).
+Toda accion relevante se registra en `tblAuditLog` dentro de la misma transaccion del caso de uso (login, PIN errado, altas y cambios de usuarios, catalogos, carga de VIN, baja de vehiculos, viajes y su carga por Excel, inspecciones, hallazgos, evidencias, firmas, notas aclaratorias, cierres). Cada registro guarda quien actuo, la IP y el dispositivo de la solicitud (`X-Dispositivo-Id` o el User-Agent), el detalle `{antes, despues}` en JSON (nunca contrasenas, PIN ni tokens: `DetalleAuditoria` descarta esos campos aunque se pasen por descuido) y el viaje y el cliente de lo auditado (el cliente de los vehiculos del viaje, para que el administrador de ese cliente vea tambien lo que hizo el super administrador). El registro no se modifica ni se borra (triggers, error 51005 y 51003) y se consulta con `GET /api/auditoria` (administrador de su cliente y super administrador). La ingesta del ETL se registra como accion del sistema (usuario, IP y dispositivo nulos). El esquema esta en `database/cambios-esquema/18-auditoria-completa.sql`. Los logs estructurados con correlacion de solicitudes no se implementan por defecto (solo si el requerimiento lo solicita).
 
 ## Decisiones respecto al plan inicial
 

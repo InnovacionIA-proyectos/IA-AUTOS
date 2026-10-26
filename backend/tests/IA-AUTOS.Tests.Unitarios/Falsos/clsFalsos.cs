@@ -1,3 +1,4 @@
+using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Auth.DTOAuth;
 using IAAutos.Aplicacion.Auth.Services;
 using IAAutos.Aplicacion.Catalogos;
@@ -8,6 +9,41 @@ using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 
 namespace IAAutos.Tests.Unitarios.Falsos;
+
+/// <summary>Almacen de imagenes en memoria: lo guardado se lee por nombre.</summary>
+public sealed class clsAlmacenArchivosFalso : IAlmacenArchivos
+{
+    public Dictionary<string, byte[]> Archivos { get; } = [];
+
+    public Task GuardarAsync(string nombreArchivo, byte[] contenido, string tipoContenido, CancellationToken ct = default)
+    {
+        Archivos[nombreArchivo] = contenido;
+        return Task.CompletedTask;
+    }
+
+    public Task<byte[]?> LeerAsync(string nombreArchivo, CancellationToken ct = default) =>
+        Task.FromResult(Archivos.TryGetValue(nombreArchivo, out var contenido) ? contenido : null);
+}
+
+/// <summary>Imagen de los paneles de danos en memoria: un panel por codigo, con su archivo (o sin imagen).</summary>
+public sealed class clsImagenesPanelFalso : IImagenesPanelDano
+{
+    public Dictionary<string, string?> Paneles { get; } = [];
+
+    public Task<string?> ObtenerNombreAsync(string codigoPanel, CancellationToken ct = default) =>
+        Paneles.TryGetValue(codigoPanel, out var nombre) ? Task.FromResult(nombre) : throw new clsEntidadNoEncontradaException($"No existe el panel {codigoPanel}");
+
+    public Task CambiarAsync(string codigoPanel, string archivo, CancellationToken ct = default)
+    {
+        if (!Paneles.ContainsKey(codigoPanel))
+        {
+            throw new clsEntidadNoEncontradaException($"No existe el panel {codigoPanel}");
+        }
+
+        Paneles[codigoPanel] = archivo;
+        return Task.CompletedTask;
+    }
+}
 
 public sealed class clsRelojFijo(DateTimeOffset ahora) : IReloj
 {
@@ -120,6 +156,23 @@ public sealed class clsAuditoriaRepositoryFalso : IAuditoriaRepository
     public void Agregar(clsAuditLog registro) => _pendientes.Add(registro);
 }
 
+/// <summary>La IP y el dispositivo de una solicitud fija (nulos por defecto, como fuera de una solicitud HTTP).</summary>
+public sealed class clsContextoSolicitudFalso : IContextoSolicitud
+{
+    public string? Ip { get; set; }
+
+    public string? Dispositivo { get; set; }
+}
+
+/// <summary>El cliente de cada viaje, el que se haya registrado (nulo si no se registro).</summary>
+public sealed class clsOrigenAuditoriaFalso : IOrigenAuditoria
+{
+    public Dictionary<Guid, Guid> ClientesPorViaje { get; } = [];
+
+    public Task<Guid?> ClienteDelViajeAsync(Guid viajeId, CancellationToken ct = default) =>
+        Task.FromResult<Guid?>(ClientesPorViaje.TryGetValue(viajeId, out var cliente) ? cliente : null);
+}
+
 public sealed class clsUsuarioRepositoryFalso : IUsuarioRepository
 {
     private readonly List<clsUsuario> _pendientesDeEliminar = [];
@@ -156,6 +209,9 @@ public sealed class clsUsuarioRepositoryFalso : IUsuarioRepository
 
     public Task<clsUsuario?> ObtenerPorCedulaAsync(string cedula, CancellationToken ct = default) =>
         Task.FromResult(Usuarios.FirstOrDefault(u => u.Cedula == cedula));
+
+    public Task<IReadOnlyList<clsUsuario>> ObtenerActivosPorRolesAsync(IReadOnlyCollection<string> roles, Guid clienteId, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<clsUsuario>>(Usuarios.Where(u => u.Activo && u.ClienteId == clienteId && roles.Contains(u.Rol)).OrderBy(u => u.Nombre).ToList());
 
     public Task<IReadOnlyList<clsUsuario>> ListarAsync(Guid? clienteId = null, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<clsUsuario>>(Usuarios.Where(u => clienteId == null || u.ClienteId == clienteId).OrderBy(u => u.Nombre).ToList());

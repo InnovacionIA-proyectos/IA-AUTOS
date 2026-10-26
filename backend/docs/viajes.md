@@ -29,10 +29,32 @@ programado lo pasa a `en_curso`. Un viaje cancelado deja de ser visible para ins
 - **Inspección.** Toma del viaje de su etapa la placa, el tráiler y el conductor (ya no se piden). No se crea en un viaje finalizado o cancelado ni en uno ajeno.
 - **Sofasa.** La ingesta vincula la orden al viaje del VIN (y del `codigo_mtrack`, si la orden lo trae). Si el VIN entra a un viaje después, la orden se vincula al
   agregarlo o en la siguiente ingesta.
-- **Clientes del viaje.** El viaje no tiene un cliente propio (puede llevar VIN de varias marcas): su cliente se toma de sus VIN. `GET /api/viajes?clienteId=` trae los viajes con
+- **Clientes del viaje.** El viaje no tiene un cliente propio (puede llevar VIN de varias marcas): su cliente se toma de sus VIN. `GET /api/viajes?cliente_id=` trae los viajes con
   al menos un VIN de ese cliente, y el listado y el detalle traen `clientes`. Quien no es super administrador, conductor ni inspector del viaje ve solo los viajes y los VIN de su
   cliente; el conductor y el inspector del viaje ven todos sus VIN. No se agregó `ClienteId` a `tblViajes`: los indicadores por cliente o marca se cuentan por vehículo.
+- **Conductor en ruta.** El conductor del viaje registra las novedades de cada unidad (`POST /api/viajes/{id}/vehiculos/{vin}/novedades`) y confirma su llegada (`.../llegada`) sobre la etapa de Transporte del VIN; cada VIN del viaje trae su
+  `estado_transporte` (`sin_registro`, `con_novedad`, `sin_novedad` o `llegada_con_novedad`) y sus `novedades`. Una unidad marcada «no sale» no admite ninguna de las dos (`409 UNIDAD_NO_SALE`). Ver [CONTRATO.md](../CONTRATO.md) («Conductor en ruta») y
+  [notificaciones.md](notificaciones.md).
 - **Fuera de este servicio:** la integración con MTrack (el código se digita o llega en el Excel) y la visibilidad por cliente del resto de recursos (vehículos, inspecciones, órdenes).
+
+## `Completa` e indices de los listados
+
+`tblViajeVehiculos.Completa` (bit, 0 por defecto) guarda si el VIN ya completo su ruta en ese viaje, con **la misma regla de `vwViajesCompletos`** (que sigue siendo la definicion de referencia): todas las etapas del VIN en el viaje, y al menos una, con
+informe cerrado, y la unidad no esta marcada `no_sale`. Asi un listado de miles de unidades lee una columna en lugar de calcular la vista. No es una columna calculada de SQL Server (no admite consultas a otras tablas): la mantienen tres triggers.
+
+| Cambia | Trigger que recalcula la fila |
+|---|---|
+| un informe se crea, se cierra o se borra | `TR_tblInspecciones_Completa` |
+| una etapa se agrega o se quita | `TR_tblEtapas_Completa` |
+| un VIN entra al viaje o cambia el estado de su unidad (`activa` / `no_sale`) | `TR_tblViajeVehiculos_Completa` |
+
+`EXEC dbo.usp_RecalcularCompleta` recalcula todas las filas con la regla de la vista (solo toca las que difieren). **Hay que ejecutarlo despues de cualquier carga o limpieza que apague los triggers** (`DISABLE TRIGGER`).
+
+Indices para los filtros de los listados paginados: `tblVehiculos (ClienteId, Operacion, Marca, CreatedAt)` y `(Activo)`, `tblOrdenesSofasa (StatusCode, DestinationCity, DatetimeEvent)`, `tblInspecciones (ViajeId, Momento, Estado, Fecha)` y
+`tblViajeVehiculos (EstadoUnidad)`.
+
+Los crea [`database/cambios-esquema/21-indices-de-filtros-y-completa.sql`](../database/cambios-esquema/21-indices-de-filtros-y-completa.sql) (ajustando `@esquema`, en una sola ejecucion, una sola transaccion, repetible; exige `14-sello-y-unidad-no-sale.sql`).
+Resultado esperado: 5 indices, 1 columna, 1 procedimiento, 3 triggers y 0 filas distintas de la vista.
 
 ## Mapeo del modelo anterior
 
@@ -63,4 +85,4 @@ Con un usuario que pueda crear tablas y vistas y desactivar triggers (no el de l
 El trigger de inmutabilidad de las inspecciones se desactiva **solo** mientras se llena `tblInspecciones.ViajeId` (ningún otro dato de un informe cerrado cambia) y se
 vuelve a activar dentro de la misma transacción.
 
-Una base nueva se crea con `ddl.sql`, que ya trae el esquema. `tests/verificar-ddl.sql` comprueba las restricciones de los viajes, la vista y la cascada.
+Una base nueva se crea con `ddl.sql`, que ya trae el esquema. `tests/verificar-ddl.sql` comprueba las restricciones de los viajes y la vista. Un viaje sin inspecciones se borra junto con la lista de sus VIN (esa cascada se conserva); el vehiculo, las etapas y las inspecciones no se borran en cascada (ver [evidencia-inmutable.md](evidencia-inmutable.md)).

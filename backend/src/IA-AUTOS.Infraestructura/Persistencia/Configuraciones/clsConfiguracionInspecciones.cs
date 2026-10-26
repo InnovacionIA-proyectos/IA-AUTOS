@@ -16,7 +16,11 @@ internal sealed class clsConfiguracionInspeccion : IEntityTypeConfiguration<clsI
     public void Configure(EntityTypeBuilder<clsInspeccion> builder)
     {
         // El trigger de inmutabilidad se declara para que EF no use OUTPUT directo en las actualizaciones.
-        builder.ToTable("tblInspecciones", t => t.HasTrigger("TR_tblInspecciones_Inmutable"));
+        builder.ToTable("tblInspecciones", t =>
+        {
+            t.HasTrigger("TR_tblInspecciones_Inmutable");
+            t.HasTrigger("TR_tblInspecciones_Completa");
+        });
         clsConfiguracionBase.Base(builder);
         builder.Property(i => i.Momento).HasColumnType("varchar(20)").IsRequired();
         builder.Property(i => i.Fecha).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
@@ -30,7 +34,7 @@ internal sealed class clsConfiguracionInspeccion : IEntityTypeConfiguration<clsI
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(i => i.CorrigeInspeccionId)
             .HasConstraintName("FK_tblInspecciones_Corrige").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsEtapa>().WithMany().HasForeignKey(i => i.EtapaId)
-            .HasConstraintName("FK_tblInspecciones_Etapa").OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("FK_tblInspecciones_Etapa").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsViaje>().WithMany().HasForeignKey(i => i.ViajeId)
             .HasConstraintName("FK_tblInspecciones_Viaje").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(i => i.UsuarioId)
@@ -61,12 +65,29 @@ internal sealed class clsConfiguracionHallazgo : IEntityTypeConfiguration<clsHal
         builder.HasOne<clsTamanoDano>().WithMany().HasForeignKey(h => h.TamanoDano).HasPrincipalKey(c => c.Codigo)
             .HasConstraintName("FK_tblHallazgos_TamanoDano").OnDelete(DeleteBehavior.NoAction);
         clsConfiguracionBase.Base(builder);
-        builder.Property(h => h.ParteVehiculo).HasMaxLength(200).IsRequired();
-        builder.Property(h => h.ClaseDano).HasColumnType("varchar(30)").IsRequired();
+        builder.Property(h => h.ParteVehiculo).HasMaxLength(200);
+        builder.Property(h => h.ClaseDano).HasColumnType("varchar(30)");
         builder.Property(h => h.TamanoDano).HasColumnType("varchar(30)").IsRequired();
         builder.Property(h => h.CoordsDiagrama).HasConversion(CONVERSOR_COORDS).HasMaxLength(200);
+        builder.Property(h => h.TipoNovedad).HasColumnType("varchar(20)");
+        builder.Property(h => h.NivelSeveridad).HasColumnType("varchar(30)");
+        builder.Property(h => h.Origen).HasColumnType("varchar(10)").IsRequired();
+        builder.Property(h => h.Nota).HasMaxLength(clsHallazgo.NOTA_MAX);
+        builder.Property(h => h.EstadoSeguimiento).HasColumnType("varchar(15)").IsRequired();
+        // La revision solo se hace una vez: si dos usuarios revisan a la vez, el cambio del segundo no encuentra el hallazgo sin revisar y se rechaza.
+        builder.Property(h => h.RevisadoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA).IsConcurrencyToken();
+        builder.HasOne<clsZonaDano>().WithMany().HasForeignKey(h => h.ZonaId)
+            .HasConstraintName("FK_tblHallazgos_Zona").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsNivelSeveridad>().WithMany().HasForeignKey(h => h.NivelSeveridad).HasPrincipalKey(n => n.Codigo)
+            .HasConstraintName("FK_tblHallazgos_Nivel").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(h => h.HallazgoOrigenId)
+            .HasConstraintName("FK_tblHallazgos_Origen").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(h => h.ConfirmadoPor)
+            .HasConstraintName("FK_tblHallazgos_ConfirmadoPor").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(h => h.RevisadoPor)
+            .HasConstraintName("FK_tblHallazgos_RevisadoPor").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(h => h.InspeccionId)
-            .HasConstraintName("FK_tblHallazgos_Inspeccion").OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("FK_tblHallazgos_Inspeccion").OnDelete(DeleteBehavior.NoAction);
     }
 
     private static clsCoordsDiagrama? LeerCoords(string? json)
@@ -100,10 +121,37 @@ internal sealed class clsConfiguracionEvidencia : IEntityTypeConfiguration<clsEv
             .HasConstraintName("FK_tblEvidencias_Vista").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(e => e.VistaId).HasDatabaseName("IX_tblEvidencias_Vista");
         builder.Property(e => e.EsConstancia).HasDefaultValue(false);
+        builder.Property(e => e.EsSello).HasDefaultValue(false);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(e => e.InspeccionId)
-            .HasConstraintName("FK_tblEvidencias_Inspeccion").OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("FK_tblEvidencias_Inspeccion").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(e => e.HallazgoId)
             .HasConstraintName("FK_tblEvidencias_Hallazgo").OnDelete(DeleteBehavior.NoAction);
+    }
+}
+
+internal sealed class clsConfiguracionHallazgoSeguimiento : IEntityTypeConfiguration<clsHallazgoSeguimiento>
+{
+    public void Configure(EntityTypeBuilder<clsHallazgoSeguimiento> builder)
+    {
+        // El historial no se modifica ni se borra y un trigger sincroniza el estado del hallazgo: EF no puede leer valores generados con OUTPUT.
+        builder.ToTable("tblHallazgoSeguimiento", t =>
+        {
+            t.HasTrigger("TR_tblHallazgoSeguimiento_NoModificar");
+            t.HasTrigger("TR_tblHallazgoSeguimiento_Sincronizar");
+            t.HasTrigger("TR_tblHallazgoSeguimiento_NoBorrar");
+        });
+        clsConfiguracionBase.Base(builder);
+        builder.Property(s => s.Accion).HasMaxLength(15).IsRequired();
+        builder.Property(s => s.EstadoAnterior).HasMaxLength(15);
+        builder.Property(s => s.EstadoNuevo).HasMaxLength(15);
+        builder.Property(s => s.Nota).HasMaxLength(clsHallazgoSeguimiento.NOTA_MAX);
+        builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(s => s.HallazgoId)
+            .HasConstraintName("FK_tblHallazgoSeguimiento_Hallazgo").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(s => s.UsuarioId)
+            .HasConstraintName("FK_tblHallazgoSeguimiento_Usuario").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsEvidencia>().WithMany().HasForeignKey(s => s.EvidenciaSelloId)
+            .HasConstraintName("FK_tblHallazgoSeguimiento_Sello").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(s => new { s.HallazgoId, s.CreatedAt }).HasDatabaseName("IX_tblHallazgoSeguimiento_Hallazgo");
     }
 }
 
@@ -128,7 +176,7 @@ internal sealed class clsConfiguracionTransferencia : IEntityTypeConfiguration<c
         builder.HasOne<clsEvidencia>().WithMany().HasForeignKey(t => t.EvidenciaConstanciaId)
             .HasConstraintName("FK_tblTransferencias_Constancia").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(t => t.InspeccionId)
-            .HasConstraintName("FK_tblTransferencias_Inspeccion").OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("FK_tblTransferencias_Inspeccion").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.EntregaUsuarioId)
             .HasConstraintName("FK_tblTransferencias_Entrega").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.RecibeUsuarioId)

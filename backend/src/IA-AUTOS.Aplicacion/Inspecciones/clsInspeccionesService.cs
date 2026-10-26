@@ -2,12 +2,14 @@ using FluentValidation;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
+using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace IAAutos.Aplicacion.Inspecciones;
@@ -15,10 +17,35 @@ namespace IAAutos.Aplicacion.Inspecciones;
 /// <summary>Consultas de solo lectura de inspecciones (listado e informe detallado).</summary>
 public interface IConsultasInspecciones
 {
-    /// <summary>Listado; con <paramref name="soloDeUsuario"/>, solo informes de los viajes de ese usuario.</summary>
-    Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspecciones filtros, Guid? soloDeUsuario, int limite, CancellationToken ct = default);
+    /// <summary>
+    /// Una pagina del listado y el total que cumple los filtros; con <paramref name="soloDeUsuario"/>, solo informes de los viajes de ese usuario y, con <paramref name="soloDeCliente"/>, solo los de VIN
+    /// de ese cliente. Sin <paramref name="orden"/>, las mas recientes primero.
+    /// </summary>
+    Task<(IReadOnlyList<InspeccionListadoDto> Filas, int Total)> ListarAsync(
+        FiltrosInspecciones filtros, Guid? soloDeUsuario, Guid? soloDeCliente, PaginaSolicitada pagina, OrdenSolicitado? orden, CancellationToken ct = default);
+
+    /// <summary>El hallazgo tal como esta guardado (con su zona, nivel y evidencia), o nulo si no existe.</summary>
+    Task<HallazgoDto?> ObtenerHallazgoAsync(Guid hallazgoId, CancellationToken ct = default);
+
+    /// <summary>El historial de seguimiento del hallazgo, del mas antiguo al mas reciente.</summary>
+    Task<IReadOnlyList<SeguimientoDto>> ObtenerHistorialAsync(Guid hallazgoId, CancellationToken ct = default);
+
+    /// <summary>True si la inspeccion es de un VIN de ese cliente.</summary>
+    Task<bool> EsDeClienteAsync(Guid inspeccionId, Guid clienteId, CancellationToken ct = default);
 
     Task<InformeDetalleDto?> ObtenerInformeAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Los hallazgos de las inspecciones cerradas anteriores del mismo VIN (de cualquier viaje, incluido uno del que la unidad no salio), del cierre mas reciente
+    /// al mas antiguo. Una inspeccion corregida cuenta con su ultima version cerrada y no con la que reemplazo.
+    /// </summary>
+    Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosAsync(Guid inspeccionId, CancellationToken ct = default);
+}
+
+/// <summary>Arma el DTO de los hallazgos con lo que solo referencian: su zona, su nivel de severidad y si ya tienen su foto.</summary>
+public interface IDescriptorHallazgos
+{
+    Task<IReadOnlyList<HallazgoDto>> DescribirAsync(IReadOnlyCollection<clsHallazgo> hallazgos, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -31,20 +58,27 @@ public sealed class clsInspeccionesService(
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
     clsFabricaEvidencias fabricaEvidencias,
+    clsVerificadorEtapaPrevia etapaPrevia,
+    clsResolutorZona resolutorZona,
+    clsCalculadoraVistas calculadoraVistas,
+    clsAlertaHallazgoCritico alertaCritica,
     IUsuarioRepository usuarios,
     IConsultasInspecciones consultas,
+    IDescriptorHallazgos descriptorHallazgos,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
     IReloj reloj,
     ICatalogosLectura catalogos,
     IOptions<clsOpcionesSeguridad> seguridad,
+    ILogger<clsInspeccionesService> registro,
     IValidator<CrearInspeccionRequest> validadorInspeccion,
     IValidator<CorregirInspeccionRequest> validadorCorreccion,
     IValidator<CrearHallazgoRequest> validadorHallazgo,
     IValidator<CrearEvidenciaRequest> validadorEvidencia)
 {
-    public const int LIMITE_LISTADO = 200;
+    /// <summary>Los campos por los que se puede ordenar el listado (<c>orden=campo:asc|desc</c>).</summary>
+    public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "fecha", "vin", "momento", "estado", "proceso", "version", "created_at", "cerrada_at" };
 
     public async Task<InspeccionDto> CrearAsync(CrearInspeccionRequest solicitud, CancellationToken ct = default)
     {
@@ -65,10 +99,16 @@ public sealed class clsInspeccionesService(
             throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite inspecciones nuevas");
         }
 
+        // En un Cargue con personal de apoyo la salida la hace el inspector: el conductor solo firma el recibo.
+        if (actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && etapa.ConPersonalApoyo && await EsCargueAsync(etapa, ct))
+        {
+            throw new clsProhibidoException("Este cargue tiene personal de apoyo: el conductor solo firma el recibo");
+        }
+
         // La salida de una etapa solo se crea cuando la etapa anterior del VIN ya termino (su llegada esta cerrada).
         if (solicitud.Momento == clsMomento.SALIDA)
         {
-            await AsegurarEtapaPreviaCerradaAsync(etapa, ct);
+            await etapaPrevia.AsegurarCerradaAsync(etapa, ct);
         }
 
         // El usuario siempre sale del token: el cliente no puede crear informes a nombre de otro.
@@ -85,7 +125,8 @@ public sealed class clsInspeccionesService(
             reloj.Ahora);
         viaje.RegistrarActividad(reloj.Ahora);
         inspecciones.Agregar(inspeccion);
-        auditor.Registrar("inspeccion.crear", "inspecciones", inspeccion.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "inspeccion.crear", "inspecciones", inspeccion.Id, viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(inspeccion)), ct: ct);
 
         // Un usuario inexistente (404) y una segunda inspeccion original del mismo momento en la etapa (409) se traducen al confirmar.
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -124,20 +165,59 @@ public sealed class clsInspeccionesService(
         var nueva = original.Corregir(actual.IdObligatorio(), solicitud.Fecha ?? ahora, solicitud.Lat, solicitud.Lng, solicitud.Notas, ahora);
         viaje.RegistrarActividad(ahora);
         inspecciones.Agregar(nueva);
-        auditor.Registrar("inspeccion.corregir", "inspecciones", nueva.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "inspeccion.corregir", "inspecciones", nueva.Id, viaje.Id, new DetalleAuditoria(clsInstantaneasAuditoria.De(original), clsInstantaneasAuditoria.De(nueva)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         var conductor = viaje.ConductorId is { } conductorId ? (await usuarios.ObtenerPorIdAsync(conductorId, ct))?.Nombre : null;
         return clsMapeadorInspecciones.AInspeccion(nueva, viaje.Placa, viaje.Trailer, conductor);
     }
 
-    public async Task<IReadOnlyList<InspeccionListadoDto>> ListarAsync(FiltrosInspeccionesRequest solicitud, CancellationToken ct = default) =>
-        await consultas.ListarAsync(await ParsearFiltrosAsync(solicitud, ct), actual.SoloSusViajes(), LIMITE_LISTADO, ct);
+    /// <summary>Una pagina de informes: <c>{items, total, pagina, tamano}</c>. Quien se limita a su cliente solo ve el suyo (pedir otro responde 403); el resto puede elegir uno con <c>cliente_id</c>.</summary>
+    public async Task<PaginaDto<InspeccionListadoDto>> ListarAsync(FiltrosInspeccionesRequest solicitud, CancellationToken ct = default)
+    {
+        var errores = new Dictionary<string, string[]>();
+        var filtros = await LeerFiltrosAsync(solicitud, catalogos, errores, ct);
+        var pagina = clsPaginacion.Pagina(solicitud.Pagina, solicitud.Tamano, errores);
+        var orden = clsPaginacion.Orden(solicitud.Orden, CAMPOS_ORDEN, errores);
+        if (errores.Count > 0)
+        {
+            throw clsErroresCampos.Varios(errores);
+        }
 
-    /// <summary>Informe completo. Inspectores y conductores solo abren los informes de sus viajes (403 si es de otro).</summary>
+        var (filas, total) = await consultas.ListarAsync(filtros, actual.SoloSusViajes(), actual.ClienteDelFiltro(filtros.ClienteId), pagina, orden, ct);
+        return new PaginaDto<InspeccionListadoDto>(filas, total, pagina.Pagina, pagina.Tamano);
+    }
+
+    /// <summary>
+    /// Los hallazgos previos del VIN de la inspeccion, para que el cliente proponga un hallazgo nuevo como preexistente. Solo inspector y administrador; el inspector
+    /// solo los pide de inspecciones de sus viajes (403 si es de otro).
+    /// </summary>
+    public async Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosAsync(Guid inspeccionId, CancellationToken ct = default)
+    {
+        var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct)
+            ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
+        if (actual.SoloSusViajes() is { } usuarioViaje)
+        {
+            var viaje = await viajes.ObtenerPorIdAsync(inspeccion.ViajeId, ct);
+            if (viaje is null || !viaje.Participa(usuarioViaje))
+            {
+                throw new clsProhibidoException("La inspección pertenece a un viaje que no está asignado a su usuario");
+            }
+        }
+
+        await AsegurarClienteAsync(inspeccionId, ct);
+        return await consultas.ObtenerHallazgosPreviosAsync(inspeccionId, ct);
+    }
+
+    /// <summary>
+    /// Informe completo. Inspectores y conductores solo abren los informes de sus viajes y quien se limita a su cliente, los de VIN de su cliente (403 si es de otro). El conductor
+    /// recibe sin hallazgos ni fotos de hallazgos los informes que no creo.
+    /// </summary>
     public async Task<InformeDetalleDto> ObtenerInformeAsync(Guid id, CancellationToken ct = default)
     {
         var informe = await consultas.ObtenerInformeAsync(id, ct)
             ?? throw new clsEntidadNoEncontradaException($"Inspección {id} no encontrada");
+        await AsegurarClienteAsync(id, ct);
         if (actual.SoloSusViajes() is { } usuarioViaje)
         {
             var viaje = await viajes.ObtenerPorIdAsync(informe.ViajeId, ct);
@@ -147,10 +227,13 @@ public sealed class clsInspeccionesService(
             }
         }
 
-        return informe;
+        return informe.ParaConductor(actual);
     }
 
-    /// <summary>Guarda el hallazgo junto con su foto propia (un hallazgo sin foto no se guarda: 400).</summary>
+    /// <summary>
+    /// Guarda el hallazgo con su zona, su clase, su tamano y su nivel de severidad, junto con su foto propia (un hallazgo sin foto no se guarda: 400). El
+    /// origen sale del rol: el conductor registra novedades sin nivel; el inspector y el administrador siempre asignan el nivel.
+    /// </summary>
     public async Task<HallazgoCreadoDto> AgregarHallazgoAsync(Guid inspeccionId, CrearHallazgoRequest solicitud, CancellationToken ct = default)
     {
         await ValidarHallazgoAsync(solicitud, ct);
@@ -158,22 +241,37 @@ public sealed class clsInspeccionesService(
         inspeccion.AsegurarEditable();
         var foto = solicitud.Evidencia!;
 
+        var zona = await resolutorZona.ResolverAsync(inspeccionId, solicitud.CuadranteNumero, solicitud.Lado, solicitud.ZonaProvisional, ct);
+        var clase = solicitud.ClaseDano!.Trim();
+        if (solicitud.HallazgoOrigenId is { } origenId
+            && !await inspecciones.EsHallazgoPrevioDelVehiculoAsync(origenId, inspeccionId, zona.Id, clase, ct))
+        {
+            throw clsErroresCampos.De(
+                "hallazgo_origen_id", "El hallazgo de origen debe ser de una inspección cerrada anterior del mismo vehículo, con la misma zona y la misma clase de daño");
+        }
+
         var hallazgo = clsHallazgo.Crear(
             inspeccionId,
-            solicitud.ParteVehiculo!,
-            solicitud.ClaseDano!,
+            zona.Id,
+            clase,
             solicitud.TamanoDano!,
-            solicitud.CoordsDiagrama is null ? null : new clsCoordsDiagrama(solicitud.CoordsDiagrama.X, solicitud.CoordsDiagrama.Y),
+            solicitud.NivelSeveridad,
+            actual.Rol == clsRol.CONDUCTOR ? clsOrigenHallazgo.CONDUCTOR : clsOrigenHallazgo.INSPECTOR,
+            solicitud.Nota,
+            solicitud.HallazgoOrigenId,
+            actual.IdObligatorio(),
             reloj.Ahora);
         var evidencia = await fabricaEvidencias.CrearAsync(
             inspeccionId, hallazgo.Id, null, esConstancia: false, foto.StoragePath!, foto.SelloFecha!.Value, foto.SelloLat, foto.SelloLng, foto.Precision,
             foto.DispositivoId, foto.Nota, foto.HashSha256, ct);
         inspecciones.Agregar(hallazgo);
         inspecciones.Agregar(evidencia);
-        auditor.Registrar("hallazgo.crear", "hallazgos", hallazgo.Id);
-        auditor.Registrar("evidencia.crear", "evidencias", evidencia.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "hallazgo.crear", "hallazgos", hallazgo.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(hallazgo)), ct: ct);
+        await auditor.RegistrarDeViajeAsync(
+            "evidencia.crear", "evidencias", evidencia.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(evidencia)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        return clsMapeadorInspecciones.AHallazgoCreado(hallazgo, evidencia);
+        return clsMapeadorInspecciones.AHallazgoCreado((await descriptorHallazgos.DescribirAsync([hallazgo], ct))[0], evidencia);
     }
 
     public async Task<EvidenciaDto> AgregarEvidenciaAsync(Guid inspeccionId, CrearEvidenciaRequest solicitud, CancellationToken ct = default)
@@ -203,7 +301,8 @@ public sealed class clsInspeccionesService(
             inspeccionId, solicitud.HallazgoId, solicitud.VistaId, esConstancia: false, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat,
             solicitud.SelloLng, solicitud.Precision, solicitud.DispositivoId, solicitud.Nota, solicitud.HashSha256, ct);
         inspecciones.Agregar(evidencia);
-        auditor.Registrar("evidencia.crear", "evidencias", evidencia.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "evidencia.crear", "evidencias", evidencia.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(evidencia)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.AEvidencia(evidencia);
     }
@@ -221,51 +320,41 @@ public sealed class clsInspeccionesService(
             ?? throw new clsEntidadNoEncontradaException("La etapa de la inspección no existe");
         var codigoEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
         var exigeVistas = clsEtapaCatalogo.ExigeVistas(codigoEtapa);
-        var faltantes = exigeVistas && !inspeccion.EstaCerrada ? await VistasFaltantesAsync(etapa, resumen, ct) : [];
+        var faltantes = exigeVistas && !inspeccion.EstaCerrada ? await calculadoraVistas.FaltantesAsync(etapa, resumen, ct) : [];
+        var antes = clsInstantaneasAuditoria.De(inspeccion);
         inspeccion.Cerrar(resumen, faltantes, exigeUbicacionPropia: !exigeVistas, reloj.Ahora);
-        auditor.Registrar("inspeccion.cerrar", "inspecciones", inspeccion.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "inspeccion.cerrar", "inspecciones", inspeccion.Id, inspeccion.ViajeId, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(inspeccion)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        await AvisarHallazgosCriticosAsync(inspeccion, etapa, codigoEtapa, ct);
         return new CerrarInspeccionResponse(
             clsMapeadorInspecciones.AInspeccion(inspeccion),
             new ResumenCierreDto(resumen.TotalEvidencias, resumen.TotalHallazgos));
     }
 
+    /// <summary>True si la etapa es el Cargue (la etapa del catalogo con ese codigo).</summary>
+    private async Task<bool> EsCargueAsync(clsEtapa etapa, CancellationToken ct) =>
+        (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo == clsCodigosEtapa.CARGUE;
+
     /// <summary>
-    /// La salida de una etapa exige que la etapa anterior del mismo VIN en el viaje este terminada: su inspeccion de llegada cerrada y ninguna
-    /// transferencia suya sin tipo de cierre (409 ETAPA_PREVIA_SIN_CIERRE con la etapa que falta cerrar y el motivo). La primera etapa no tiene anterior.
+    /// Al cerrarse la inspeccion, si tiene un hallazgo de nivel critico alerta al coordinador de calidad y a los administradores del cliente (una alerta por inspeccion). Un fallo al avisar no deshace el cierre.
     /// </summary>
-    private async Task AsegurarEtapaPreviaCerradaAsync(clsEtapa etapa, CancellationToken ct)
+    private async Task AvisarHallazgosCriticosAsync(clsInspeccion inspeccion, clsEtapa etapa, string? proceso, CancellationToken ct)
     {
-        var previa = await etapas.ObtenerPreviaAsync(etapa.ViajeId, etapa.VehiculoId, etapa.Orden, ct);
-        if (previa is null)
+        try
         {
-            return;
+            var vehiculo = await vehiculos.ObtenerPorIdAsync(etapa.VehiculoId, ct);
+            if (vehiculo is not null)
+            {
+                await alertaCritica.EmitirSiHayCriticosAsync(
+                    await inspecciones.ObtenerHallazgosDeInspeccionAsync(inspeccion.Id, ct), vehiculo, inspeccion.ViajeId, proceso ?? "la etapa", ct);
+            }
         }
-
-        var motivo = !await inspecciones.TieneLlegadaCerradaAsync(previa.Id, ct)
-            ? clsEtapaPreviaSinCierreException.MOTIVO_SIN_LLEGADA
-            : await inspecciones.TieneTransferenciaSinCierreAsync(previa.Id, ct) ? clsEtapaPreviaSinCierreException.MOTIVO_TRANSFERENCIA_ABIERTA : null;
-        if (motivo is null)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return;
+            // La inspeccion ya quedo cerrada: el aviso es un efecto secundario y no puede responder error por ella.
+            registro.LogError(ex, "No se pudo avisar del hallazgo critico de la inspeccion {Inspeccion}", inspeccion.Id);
         }
-
-        var nombre = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == previa.EtapaCatalogoId);
-        throw new clsEtapaPreviaSinCierreException(previa.Id, nombre?["nombre"] as string ?? nombre?.Codigo ?? "anterior", motivo);
-    }
-
-    /// <summary>Nombres de las vistas obligatorias (activas, del tipo del vehiculo o de cualquier tipo) que aun no tienen foto, en el orden del catalogo.</summary>
-    private async Task<IReadOnlyList<string>> VistasFaltantesAsync(clsEtapa etapa, clsResumenCierre resumen, CancellationToken ct)
-    {
-        var vehiculo = await vehiculos.ObtenerPorIdAsync(etapa.VehiculoId, ct)
-            ?? throw new clsEntidadNoEncontradaException("El vehículo de la etapa no existe");
-        return (await catalogos.ValoresAsync(clsNombresCatalogo.VISTAS_FOTO, ct))
-            .Where(v => v.Activo && v["obligatoria"] is true
-                && (v["tipo_vehiculo"] is not string tipo || string.Equals(tipo, vehiculo.TipoVehiculo, StringComparison.OrdinalIgnoreCase))
-                && !resumen.VistasFotografiadas.Contains(v.Id))
-            .OrderBy(v => v["orden"] as int? ?? 0)
-            .Select(v => v["nombre"] as string ?? v.Codigo ?? v.Id.ToString())
-            .ToList();
     }
 
     /// <summary>La vista debe existir y estar activa; la foto de una vista adicional (baul, cojineria) exige la nota del faltante o dano.</summary>
@@ -318,6 +407,12 @@ public sealed class clsInspeccionesService(
             deCatalogo["tamano_dano"] = ["Tamaño de daño inválido"];
         }
 
+        if (!string.IsNullOrWhiteSpace(solicitud.NivelSeveridad)
+            && !(await catalogos.CodigosAsync(clsNombresCatalogo.NIVELES_SEVERIDAD, soloActivos: true, ct)).Contains(solicitud.NivelSeveridad))
+        {
+            deCatalogo["nivel_severidad"] = ["Nivel de severidad inválido"];
+        }
+
         try
         {
             await validadorHallazgo.ValidarOLanzarAsync(solicitud, ct);
@@ -341,36 +436,44 @@ public sealed class clsInspeccionesService(
         }
     }
 
-    private async Task<FiltrosInspecciones> ParsearFiltrosAsync(FiltrosInspeccionesRequest s, CancellationToken ct)
+    /// <summary>Quien se limita a su cliente solo abre inspecciones de VIN de su cliente (403 si es de otro).</summary>
+    private async Task AsegurarClienteAsync(Guid inspeccionId, CancellationToken ct)
+    {
+        if (actual.ClienteRestringido() is { } cliente && !await consultas.EsDeClienteAsync(inspeccionId, cliente, ct))
+        {
+            throw new clsProhibidoException("La inspección es de un VIN de otro cliente");
+        }
+    }
+
+    /// <summary>Los filtros del listado validados (la exportacion a Excel los usa tambien): todos los errores juntos, con 400.</summary>
+    internal static async Task<FiltrosInspecciones> ParsearFiltrosAsync(FiltrosInspeccionesRequest s, ICatalogosLectura catalogos, CancellationToken ct)
     {
         var errores = new Dictionary<string, string[]>();
-
-        string? vin = null;
-        if (!string.IsNullOrWhiteSpace(s.Vin))
+        var filtros = await LeerFiltrosAsync(s, catalogos, errores, ct);
+        if (errores.Count > 0)
         {
-            vin = clsVin.Normalizar(s.Vin);
-            if (!clsVin.EsFormatoIso(vin))
-            {
-                errores["vin"] = ["VIN inválido: 17 caracteres alfanuméricos, sin las letras I, O ni Q"];
-            }
+            throw clsErroresCampos.Varios(errores);
         }
 
-        var usuarioId = clsParseoFiltros.Uuid(s.UsuarioId, "usuarioId", errores);
-        var viajeId = clsParseoFiltros.Uuid(s.ViajeId, "viajeId", errores);
+        return filtros;
+    }
+
+    /// <summary>Lee los filtros acumulando los errores por campo (la validacion unica del VIN incluida) para responder todos juntos.</summary>
+    private static async Task<FiltrosInspecciones> LeerFiltrosAsync(FiltrosInspeccionesRequest s, ICatalogosLectura catalogos, Dictionary<string, string[]> errores, CancellationToken ct)
+    {
+        var vin = clsParseoFiltros.Vin(s.Vin, "vin", errores);
+        var usuarioId = clsParseoFiltros.Uuid(s.UsuarioId, "usuario_id", errores);
+        var viajeId = clsParseoFiltros.Uuid(s.ViajeId, "viaje_id", errores);
         var momento = clsParseoFiltros.Catalogo(s.Momento, clsMomento.VALORES, "momento", errores);
         var estado = clsParseoFiltros.Catalogo(s.Estado, clsEstadoInspeccion.VALORES, "estado", errores);
         // El proceso es una etapa del catalogo; se aceptan tambien las inactivas porque hay informes historicos de ellas.
         var proceso = clsParseoFiltros.Catalogo(s.Proceso, await catalogos.CodigosAsync(clsNombresCatalogo.ETAPAS, soloActivos: false, ct), "proceso", errores);
+        var operacion = clsParseoFiltros.Catalogo(s.Operacion, clsOperacion.VALORES, "operacion", errores);
+        var clienteId = clsParseoFiltros.Uuid(s.ClienteId, "cliente_id", errores);
+        var origenId = clsParseoFiltros.Uuid(s.OrigenId, "origen_id", errores);
+        var destinoId = clsParseoFiltros.Uuid(s.DestinoId, "destino_id", errores);
         var desde = clsParseoFiltros.Fecha(s.Desde, "desde", errores);
         var hasta = clsParseoFiltros.Fecha(s.Hasta, "hasta", errores);
-
-        if (errores.Count > 0)
-        {
-            throw new clsValidacionException(
-                "Datos inválidos",
-                new Dictionary<string, object> { ["formErrors"] = Array.Empty<string>(), ["fieldErrors"] = errores });
-        }
-
-        return new FiltrosInspecciones(vin, usuarioId, viajeId, momento, estado, proceso, desde, hasta);
+        return new FiltrosInspecciones(vin, usuarioId, viajeId, momento, estado, proceso, operacion, clsValidador.Opcional(s.Marca), clienteId, origenId, destinoId, desde, hasta);
     }
 }

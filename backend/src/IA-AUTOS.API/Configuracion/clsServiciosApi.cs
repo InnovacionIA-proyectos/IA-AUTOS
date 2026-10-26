@@ -3,10 +3,12 @@ using IAAutos.API.Controllers.Auth;
 using IAAutos.API.Controllers.Sofasa;
 using IAAutos.API.Errores;
 using IAAutos.API.Seguridad;
+using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Dominio.Comun;
 using IAAutos.Infraestructura.Seguridad;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
@@ -25,6 +27,7 @@ public static class clsServiciosApi
         servicios.AddHttpContextAccessor();
         servicios.Configure<clsOpcionesEtl>(configuracion.GetSection(clsOpcionesEtl.SECCION));
         servicios.AddScoped<IUsuarioActual, clsUsuarioActualHttp>();
+        servicios.AddScoped<IContextoSolicitud, clsContextoSolicitudHttp>();
 
         servicios
             // Todo controlador exige autenticacion salvo [AllowAnonymous] (login y health). Un filtro global, a diferencia de una
@@ -33,9 +36,18 @@ public static class clsServiciosApi
             {
                 o.Filters.Add(new AuthorizeFilter());
                 o.Filters.Add(new clsFiltroCambioPin());
+                o.Filters.Add<clsFiltroVigenciaUrls>();
             })
             .AddJsonOptions(o => clsJsonApi.Configurar(o.JsonSerializerOptions))
             .ConfigureApiBehaviorOptions(o => o.SuppressModelStateInvalidFilter = true);
+
+        // Las fotos salen con URL firmada: se agrega a la serializacion del JSON (no al contrato OpenAPI, que no cambia).
+        servicios.AddSingleton<IConfigureOptions<JsonOptions>, clsConfiguracionJsonUrls>();
+        servicios.AddOptions<clsOpcionesAlmacenamiento>()
+            .Validate(
+                o => string.IsNullOrWhiteSpace(o.FirmaSecreto) || o.FirmaSecreto.Length >= 32,
+                "Storage:FirmaSecreto debe tener al menos 32 caracteres (variable Storage__FirmaSecreto).")
+            .ValidateOnStart();
 
         servicios.AddProblemDetails();
         servicios.AddExceptionHandler<clsManejadorExcepciones>();
@@ -83,7 +95,7 @@ public static class clsServiciosApi
             o.AddPolicy(POLITICA_CORS, politica => politica
                 .WithOrigins(origenes)
                 .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                .WithHeaders("Content-Type", "Authorization")
+                .WithHeaders("Content-Type", "Authorization", clsContextoSolicitudHttp.CABECERA_DISPOSITIVO)
                 .WithExposedHeaders("Content-Disposition")
                 .SetPreflightMaxAge(TimeSpan.FromSeconds(86400)));
         });

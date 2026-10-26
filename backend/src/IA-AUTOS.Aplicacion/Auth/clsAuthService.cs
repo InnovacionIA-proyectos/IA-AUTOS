@@ -54,7 +54,7 @@ public sealed class clsAuthService(
         }
 
         usuario.RegistrarAcceso(reloj.Ahora);
-        auditor.Registrar("auth.login", "usuarios", usuario.Id, usuario.Id);
+        auditor.Registrar("auth.login", "usuarios", usuario.Id, usuario.Id, clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
 
         var dto = ADto(usuario);
@@ -103,7 +103,7 @@ public sealed class clsAuthService(
         }
 
         usuario.RegistrarAcceso(ahora);
-        auditor.Registrar("auth.login_conductor", "usuarios", usuario.Id, usuario.Id);
+        auditor.Registrar("auth.login_conductor", "usuarios", usuario.Id, usuario.Id, clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
 
         var dto = ADto(usuario);
@@ -140,7 +140,7 @@ public sealed class clsAuthService(
         }
 
         usuario.CambiarPin(contrasenas.Hashear(nuevo), ahora);
-        auditor.Registrar("auth.cambiar_pin", "usuarios", usuario.Id, usuario.Id);
+        auditor.Registrar("auth.cambiar_pin", "usuarios", usuario.Id, usuario.Id, clienteId: usuario.ClienteId);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
     }
 
@@ -183,10 +183,10 @@ public sealed class clsAuthService(
         var seguridad = opciones.Value;
         var ahora = reloj.Ahora;
         var bloqueada = usuario.RegistrarFalloDePin(ahora, seguridad.PinMaxIntentos, seguridad.PinBloqueoMinutos);
-        auditor.Registrar(accion, "usuarios", usuario.Id, usuario.Id);
+        auditor.Registrar(accion, "usuarios", usuario.Id, usuario.Id, clienteId: usuario.ClienteId);
         if (bloqueada)
         {
-            auditor.Registrar("auth.cuenta_bloqueada", "usuarios", usuario.Id, usuario.Id);
+            auditor.Registrar("auth.cuenta_bloqueada", "usuarios", usuario.Id, usuario.Id, clienteId: usuario.ClienteId);
         }
 
         await unidadDeTrabajo.GuardarCambiosAsync(ct);

@@ -20,6 +20,18 @@ public static class clsCodigosError
     /// <summary>La etapa anterior del VIN no tiene su inspeccion de llegada cerrada: no se puede crear la salida de la siguiente (409).</summary>
     public const string ETAPA_PREVIA_SIN_CIERRE = "ETAPA_PREVIA_SIN_CIERRE";
 
+    /// <summary>La llegada de Transporte de esa unidad ya estaba cerrada (409): un reintento del conductor es un exito, el servidor no la repite.</summary>
+    public const string LLEGADA_YA_CERRADA = "LLEGADA_YA_CERRADA";
+
+    /// <summary>La URL de la foto no tiene firma, la firma no coincide o ya vencio (403): hay que pedir una URL nueva al sistema.</summary>
+    public const string URL_FIRMADA_INVALIDA = "URL_FIRMADA_INVALIDA";
+
+    /// <summary>La novedad del conductor ya fue revisada por un inspector (409): su zona, clase y nivel ya no se cambian.</summary>
+    public const string HALLAZGO_YA_REVISADO = "HALLAZGO_YA_REVISADO";
+
+    /// <summary>La unidad se marco «no sale» del viaje y ya no se transporta (409): no admite novedades ni llegada.</summary>
+    public const string UNIDAD_NO_SALE = "UNIDAD_NO_SALE";
+
     /// <summary>El PIN fue asignado o reiniciado y hay que cambiarlo antes de usar el resto de la API (403).</summary>
     public const string PIN_CHANGE_REQUIRED = "PIN_CHANGE_REQUIRED";
 

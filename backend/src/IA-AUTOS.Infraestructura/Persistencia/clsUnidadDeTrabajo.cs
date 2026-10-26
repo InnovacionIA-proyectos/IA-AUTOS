@@ -1,4 +1,5 @@
 using IAAutos.Dominio.Comun;
+using IAAutos.Dominio.Inspecciones;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,6 +17,9 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
     private const int ERROR_TRIGGER_INSPECCION_CERRADA = 51000;
     private const int ERROR_TRIGGER_HALLAZGO_EN_CERRADA = 51001;
     private const int ERROR_TRIGGER_EVIDENCIA_EN_CERRADA = 51002;
+    private const int ERROR_TRIGGER_EVIDENCIA_NO_SE_BORRA = 51003;
+    private const int ERROR_TRIGGER_NOTIFICACION_SOLO_LECTURA = 51006;
+    private const int ERROR_TRIGGER_NOVEDAD_DE_TRANSPORTE = 51007;
 
     // Mensajes por restriccion: coinciden con los de la API original.
     private static readonly (string Restriccion, string Mensaje)[] CONFLICTOS_UNICOS =
@@ -34,6 +38,8 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         ("_Codigo", "Ya existe un valor con ese código en el catálogo"),
         ("UQ_tblCuadrantes_Tipo_Numero", "Ya existe un cuadrante con ese número para ese tipo de vehículo"),
         ("UQ_tblCuadranteVistas_Cuadrante_Vista", "El cuadrante ya tiene un polígono en esa vista"),
+        ("UQ_tblNotificaciones_ClaveDedupe", "Esa notificación ya existe"),
+        ("UQ_tblDispositivos_TokenFcm", "Ese dispositivo ya está registrado"),
     ];
 
     // Borrar un valor de catalogo que algo todavia referencia: se responde que esta en uso y que solo puede inactivarse.
@@ -78,6 +84,8 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         ("FK_tblHallazgos_ClaseDano", "La clase de daño no existe en el catálogo"),
         ("FK_tblHallazgos_TamanoDano", "El tamaño de daño no existe en el catálogo"),
         ("FK_tblHallazgos_", "La inspección indicada no existe"),
+        ("FK_tblNotificaciones_", "El destinatario, el viaje, el vehículo, el hallazgo o la inspección de la notificación no existen"),
+        ("FK_tblDispositivos_", "El usuario del dispositivo no existe"),
         ("FK_tblCuadranteVistas_Cuadrante", "El cuadrante no existe"),
         ("FK_tblCuadranteVistas_Vista", "La vista no existe"),
     ];
@@ -87,6 +95,10 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         try
         {
             return await contexto.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException ex) when (ex.Entries.Any(e => e.Entity is clsHallazgo { RevisadoAt: not null }))
+        {
+            throw new clsHallazgoYaRevisadoException();
         }
         catch (DbUpdateException ex) when (ex.InnerException is SqlException sql)
         {
@@ -139,6 +151,15 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
 
             case ERROR_TRIGGER_INSPECCION_CERRADA or ERROR_TRIGGER_HALLAZGO_EN_CERRADA or ERROR_TRIGGER_EVIDENCIA_EN_CERRADA:
                 return new clsConflictoException("La inspección está cerrada y es inmutable; no admite cambios");
+
+            case ERROR_TRIGGER_EVIDENCIA_NO_SE_BORRA:
+                return new clsConflictoException("El registro es evidencia y no se puede borrar");
+
+            case ERROR_TRIGGER_NOTIFICACION_SOLO_LECTURA:
+                return new clsConflictoException("Una notificación solo admite cambiar su lectura y su respuesta");
+
+            case ERROR_TRIGGER_NOVEDAD_DE_TRANSPORTE:
+                return new clsConflictoException("Una novedad del conductor es de la inspección de salida de Transporte");
 
             default:
                 return null;

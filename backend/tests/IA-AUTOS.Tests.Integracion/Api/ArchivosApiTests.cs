@@ -49,7 +49,7 @@ public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
     private static async Task<JsonElement> ClonarAsync(HttpResponseMessage r) => (await r.Content.ReadFromJsonAsync<JsonElement>()).Clone();
 
     [Fact]
-    public async Task Sube_una_foto_jpeg_y_se_lee_sin_token_con_cache_publica()
+    public async Task Sube_una_foto_jpeg_y_se_lee_sin_token_con_su_url_firmada()
     {
         var token = await TokenAsync();
 
@@ -57,16 +57,17 @@ public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var subida = await ClonarAsync(r);
-        Assert.Equal(["storage_path", "url", "hash_sha256"], subida.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["storage_path", "url", "url_expira_at", "hash_sha256"], subida.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(JPEG)).ToLowerInvariant(), subida.GetProperty("hash_sha256").GetString());
         var nombre = subida.GetProperty("storage_path").GetString()!;
         Assert.Matches(@"^[0-9a-f-]{36}\.jpg$", nombre);
-        Assert.Equal("/api/uploads/" + nombre, subida.GetProperty("url").GetString());
+        // La URL es absoluta y esta firmada; se lee sin token.
+        Assert.Matches($@"^http://localhost/api/uploads/{nombre.Replace(".", "\\.")}\?exp=\d+&firma=[0-9a-f]{{64}}$", subida.GetProperty("url").GetString());
 
         var lectura = await Cliente().GetAsync(subida.GetProperty("url").GetString());
         Assert.Equal(HttpStatusCode.OK, lectura.StatusCode);
         Assert.Equal("image/jpeg", lectura.Content.Headers.ContentType!.MediaType);
-        Assert.Equal("public, max-age=31536000", lectura.Headers.CacheControl!.ToString());
+        Assert.Matches(@"^max-age=\d+, private$", lectura.Headers.CacheControl!.ToString());
         Assert.Equal(JPEG, await lectura.Content.ReadAsByteArrayAsync());
     }
 
@@ -87,7 +88,7 @@ public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
 
         Assert.Equal(HttpStatusCode.Created, jpeg.StatusCode);
         var subida = await ClonarAsync(jpeg);
-        Assert.Equal(["storage_path", "url", "hash_sha256"], subida.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["storage_path", "url", "url_expira_at", "hash_sha256"], subida.EnumerateObject().Select(p => p.Name).ToList());
         Assert.EndsWith(".jpg", subida.GetProperty("storage_path").GetString());
         Assert.Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(JPEG)).ToLowerInvariant(), subida.GetProperty("hash_sha256").GetString());
         var lectura = await Cliente().GetAsync(subida.GetProperty("url").GetString());
@@ -128,9 +129,10 @@ public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         var sinExt = await Cliente(token).PostAsJsonAsync("/api/uploads", new { data = Convert.ToBase64String(JPEG) });
 
         Assert.Equal(HttpStatusCode.Created, png.StatusCode);
-        var nombrePng = (await ClonarAsync(png)).GetProperty("storage_path").GetString()!;
+        var subidaPng = await ClonarAsync(png);
+        var nombrePng = subidaPng.GetProperty("storage_path").GetString()!;
         Assert.EndsWith(".png", nombrePng);
-        var lectura = await Cliente().GetAsync("/api/uploads/" + nombrePng);
+        var lectura = await Cliente().GetAsync(subidaPng.GetProperty("url").GetString());
         Assert.Equal("image/png", lectura.Content.Headers.ContentType!.MediaType);
         Assert.EndsWith(".jpg", (await ClonarAsync(sinExt)).GetProperty("storage_path").GetString());
     }
@@ -185,7 +187,7 @@ public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
     [InlineData("3f2b6c1e-0000-4000-8000-123456789abc")]
     public async Task Los_nombres_invalidos_responden_404_archivo_invalido(string nombre)
     {
-        var r = await Cliente().GetAsync("/api/uploads/" + nombre);
+        var r = await Cliente().GetAsync(UrlFirmada(nombre));
 
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
         Assert.Equal("Archivo inválido", (await ClonarAsync(r)).GetProperty("message").GetString());
@@ -194,7 +196,7 @@ public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
     [Fact]
     public async Task Un_archivo_inexistente_responde_404()
     {
-        var r = await Cliente().GetAsync("/api/uploads/3f2b6c1e-0000-4000-8000-123456789abc.jpg");
+        var r = await Cliente().GetAsync(UrlFirmada("3f2b6c1e-0000-4000-8000-123456789abc.jpg"));
 
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
         Assert.Equal("Archivo no encontrado", (await ClonarAsync(r)).GetProperty("message").GetString());
@@ -207,15 +209,17 @@ public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
     {
         var r = await Cliente().GetAsync("/api/uploads/" + nombre);
 
-        Assert.True(r.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest);
+        Assert.True(r.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.BadRequest or HttpStatusCode.Forbidden);
     }
 
     [Theory]
-    [InlineData(clsRol.SUPER_ADMIN, HttpStatusCode.Forbidden)]
     [InlineData(clsRol.INSPECTOR, HttpStatusCode.Created)]
     [InlineData(clsRol.CONDUCTOR, HttpStatusCode.Created)]
     [InlineData(clsRol.ADMIN, HttpStatusCode.Created)]
-    public async Task La_subida_es_de_los_roles_de_campo(string rol, HttpStatusCode esperado)
+    [InlineData(clsRol.COORDINADOR_CALIDAD, HttpStatusCode.Created)]
+    [InlineData(clsRol.COMERCIAL, HttpStatusCode.Created)]
+    [InlineData(clsRol.SUPER_ADMIN, HttpStatusCode.Created)]
+    public async Task La_subida_es_de_los_roles_de_campo_y_de_quien_da_seguimiento_a_los_hallazgos(string rol, HttpStatusCode esperado)
     {
         var token = await TokenAsync(rol, "rol@ejemplo.com");
 
@@ -223,22 +227,6 @@ public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
 
         Assert.Equal(esperado, r.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await Cliente().PostAsJsonAsync("/api/uploads", new { data = "x" })).StatusCode);
-    }
-
-    [Fact]
-    public async Task Con_lectura_privada_las_imagenes_exigen_token()
-    {
-        var privada = CrearFabrica(new Dictionary<string, string?> { ["Storage:LecturaPublica"] = "false" });
-        await privada.SembrarUsuarioAsync("foto@ejemplo.com", "Clave-Segura-1");
-        var token = await LoginAsync("foto@ejemplo.com", "Clave-Segura-1", privada);
-        var url = (await ClonarAsync(await Cliente(token, privada).PostAsJsonAsync("/api/uploads", new { data = Convert.ToBase64String(JPEG) }))).GetProperty("url").GetString()!;
-
-        var sinToken = await Cliente(fabrica: privada).GetAsync(url);
-        var conToken = await Cliente(token, privada).GetAsync(url);
-
-        Assert.Equal(HttpStatusCode.Unauthorized, sinToken.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, conToken.StatusCode);
-        Assert.Contains("private", conToken.Headers.CacheControl!.ToString());
     }
 
     [Fact]
@@ -294,7 +282,8 @@ public sealed class ArchivosS3ApiTests(clsBaseDatosFixture bd) : clsPruebaApiBas
         var subida = await Cliente(token, s3).PostAsJsonAsync("/api/uploads", new { data = Convert.ToBase64String(JPEG) });
 
         Assert.Equal(HttpStatusCode.Created, subida.StatusCode);
-        var nombre = (await subida.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("storage_path").GetString()!;
+        var cuerpoSubida = await subida.Content.ReadFromJsonAsync<JsonElement>();
+        var nombre = cuerpoSubida.GetProperty("storage_path").GetString()!;
 
         using var cliente = new AmazonS3Client(
             new BasicAWSCredentials(_almacen.AccessKey, _almacen.SecretKey),
@@ -305,11 +294,11 @@ public sealed class ArchivosS3ApiTests(clsBaseDatosFixture bd) : clsPruebaApiBas
         Assert.Equal(JPEG, memoria.ToArray());
         Assert.Equal("image/jpeg", objeto.Headers.ContentType);
 
-        var lectura = await Cliente(fabrica: s3).GetAsync("/api/uploads/" + nombre);
+        var lectura = await Cliente(fabrica: s3).GetAsync(cuerpoSubida.GetProperty("url").GetString());
         Assert.Equal(HttpStatusCode.OK, lectura.StatusCode);
         Assert.Equal(JPEG, await lectura.Content.ReadAsByteArrayAsync());
 
-        var inexistente = await Cliente(fabrica: s3).GetAsync("/api/uploads/3f2b6c1e-0000-4000-8000-123456789abc.jpg");
+        var inexistente = await Cliente(fabrica: s3).GetAsync(UrlFirmada("3f2b6c1e-0000-4000-8000-123456789abc.jpg", s3));
         Assert.Equal(HttpStatusCode.NotFound, inexistente.StatusCode);
     }
 }

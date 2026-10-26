@@ -29,7 +29,8 @@ public sealed class clsViajesService(
     IValidator<AgregarVinesRequest> validadorVines,
     IValidator<CambiarEstadoViajeRequest> validadorEstado)
 {
-    public const int LIMITE_LISTADO = 200;
+    /// <summary>Los campos por los que se puede ordenar el listado (<c>orden=campo:asc|desc</c>).</summary>
+    public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "created_at", "updated_at", "codigo_mtrack", "estado", "placa", "trailer" };
 
     private static readonly string[] CAMPOS_EDITABLES =
         ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "inspector_id", "origen_id", "destino_id", "con_personal_apoyo"];
@@ -52,7 +53,14 @@ public sealed class clsViajesService(
         var vehiculosAAgregar = await ResolverVehiculosAsync(viaje, solicitud.Vines ?? [], new HashSet<Guid>(), ct);
         viajes.Agregar(viaje);
         await ensamblaje.AgregarVehiculosAsync(viaje, vehiculosAAgregar, solicitud.ConPersonalApoyo ?? false, await catalogos.RutaEstandarAsync(ct), ct);
-        auditor.Registrar("viaje.crear", "viajes", viaje.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "viaje.crear",
+            "viajes",
+            viaje.Id,
+            viaje.Id,
+            new DetalleAuditoria(null, new { viaje = clsInstantaneasAuditoria.De(viaje), vines = vehiculosAAgregar.Select(v => v.Vin).ToList() }),
+            vehiculosAAgregar.Select(v => (Guid?)v.ClienteId).FirstOrDefault(),
+            ct);
 
         // Un codigo MTrack repetido que se coló entre la consulta y el guardado se traduce a 409 al confirmar.
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -61,8 +69,21 @@ public sealed class clsViajesService(
 
     // ---------------------------------------------------------------------------------------------- consulta
 
-    public async Task<IReadOnlyList<ViajeResumenDto>> ListarAsync(FiltrosViajesRequest solicitud, CancellationToken ct = default) =>
-        await consultas.ListarAsync(ParsearFiltros(solicitud, ClienteRestringido), actual.SoloSusViajes(), ClienteRestringido, LIMITE_LISTADO, ct);
+    /// <summary>Una pagina de viajes: <c>{items, total, pagina, tamano}</c>, con los filtros, la pagina y el orden validados juntos (400 con todos los errores).</summary>
+    public async Task<PaginaDto<ViajeResumenDto>> ListarAsync(FiltrosViajesRequest solicitud, CancellationToken ct = default)
+    {
+        var errores = new Dictionary<string, string[]>();
+        var filtros = LeerFiltros(solicitud, errores);
+        var pagina = clsPaginacion.Pagina(solicitud.Pagina, solicitud.Tamano, errores);
+        var orden = clsPaginacion.Orden(solicitud.Orden, CAMPOS_ORDEN, errores);
+        if (errores.Count > 0)
+        {
+            throw clsErroresCampos.Varios(errores);
+        }
+
+        var (filas, total) = await consultas.ListarAsync(AlcanzarCliente(filtros, ClienteRestringido), actual.SoloSusViajes(), ClienteRestringido, pagina, orden, ct);
+        return new PaginaDto<ViajeResumenDto>(filas, total, pagina.Pagina, pagina.Tamano);
+    }
 
     /// <summary>Los viajes del usuario (como conductor o inspector). Sin estado: los programados y en curso.</summary>
     public async Task<IReadOnlyList<ViajeDto>> MiosAsync(string? estado, CancellationToken ct = default)
@@ -116,6 +137,7 @@ public sealed class clsViajesService(
         var destinoId = lector.Identificador("destino_id");
         await ValidarReferenciasAsync(tipoUnidadId, conductorId, inspectorId, origenId, destinoId, ct);
 
+        var antes = clsInstantaneasAuditoria.De(viaje);
         viaje.Actualizar(
             codigo,
             tipoUnidadId,
@@ -133,7 +155,8 @@ public sealed class clsViajesService(
             await PropagarAEtapasAsync(viaje, lector.Tiene("origen_id"), lector.Tiene("destino_id"), personalApoyo, ct);
         }
 
-        auditor.Registrar("viaje.actualizar", "viajes", viaje.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "viaje.actualizar", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(viaje)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ObtenerDtoAsync(id, ct);
     }
@@ -142,8 +165,10 @@ public sealed class clsViajesService(
     {
         await validadorEstado.ValidarOLanzarAsync(solicitud, ct);
         var viaje = await ObtenerViajeAsync(id, ct);
+        var estadoAnterior = viaje.Estado;
         viaje.CambiarEstado(solicitud.Estado!, reloj.Ahora);
-        auditor.Registrar($"viaje.estado.{viaje.Estado}", "viajes", viaje.Id);
+        await auditor.RegistrarDeViajeAsync(
+            $"viaje.estado.{viaje.Estado}", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(new { estado = estadoAnterior }, new { estado = viaje.Estado }), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ObtenerDtoAsync(id, ct);
     }
@@ -159,7 +184,8 @@ public sealed class clsViajesService(
         var conPersonalApoyo = (await viajes.ObtenerEtapasAsync(id, null, ct)).Any(e => e.ConPersonalApoyo);
         var vehiculosAAgregar = await ResolverVehiculosAsync(viaje, solicitud.Vines!, yaEnElViaje, ct);
         await ensamblaje.AgregarVehiculosAsync(viaje, vehiculosAAgregar, conPersonalApoyo, await catalogos.RutaEstandarAsync(ct), ct);
-        auditor.Registrar("viaje.agregar_vin", "viajes", viaje.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "viaje.agregar_vin", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(null, new { vines = vehiculosAAgregar.Select(v => v.Vin).ToList() }), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ObtenerDtoAsync(id, ct);
     }
@@ -180,7 +206,8 @@ public sealed class clsViajesService(
 
         viajes.Eliminar(await viajes.ObtenerEtapasAsync(id, vehiculo.Id, ct));
         viajes.Eliminar(enlace);
-        auditor.Registrar("viaje.quitar_vin", "viajes", viaje.Id);
+        await auditor.RegistrarDeViajeAsync(
+            "viaje.quitar_vin", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(new { vines = new[] { vehiculo.Vin } }, null), vehiculo.ClienteId, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ObtenerDtoAsync(id, ct);
     }
@@ -201,7 +228,7 @@ public sealed class clsViajesService(
         }
 
         viajes.Eliminar(viaje);
-        auditor.Registrar("viaje.eliminar", "viajes", id);
+        await auditor.RegistrarDeViajeAsync("viaje.eliminar", "viajes", id, id, new DetalleAuditoria(clsInstantaneasAuditoria.De(viaje), null), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
     }
 
@@ -218,8 +245,7 @@ public sealed class clsViajesService(
     /// comercial...) solo ve los VIN de su cliente y los viajes que los tienen; el conductor y el inspector, que ven lo asignado a ellos, y el
     /// super administrador ven todo. Nulo si no hay restriccion; sin cliente asignado, <see cref="Guid.Empty"/> (no ve nada).
     /// </summary>
-    private Guid? ClienteRestringido =>
-        actual.Rol is null or clsRol.SUPER_ADMIN || clsRol.VeSoloSusViajes(actual.Rol) ? null : actual.ClienteId ?? Guid.Empty;
+    private Guid? ClienteRestringido => actual.ClienteRestringido();
 
     /// <summary>Inspectores y conductores solo abren los viajes en los que participan; el resto, los de su cliente (el super administrador, todos).</summary>
     private async Task AsegurarAccesoAsync(clsViaje viaje, CancellationToken ct)
@@ -316,6 +342,12 @@ public sealed class clsViajesService(
         }
 
         var encontrados = normalizados.Select(v => existentes[v]).ToList();
+        var inactivos = encontrados.Where(v => !v.Activo).Select(v => v.Vin).ToList();
+        if (inactivos.Count > 0)
+        {
+            throw clsErroresCampos.De("vines", $"Están dados de baja y no se asignan a un viaje: {string.Join(", ", inactivos)}");
+        }
+
         var repetidos = encontrados.Where(v => yaEnElViaje.Contains(v.Id)).Select(v => v.Vin).ToList();
         if (repetidos.Count > 0)
         {
@@ -362,29 +394,42 @@ public sealed class clsViajesService(
     }
 
     /// <summary>
-    /// <c>clienteId</c> solo lo elige el super administrador; quien tiene su alcance limitado a un cliente (<paramref name="clienteRestringido"/>) siempre
-    /// recibe el suyo, venga o no el filtro (igual que en el listado de usuarios).
+    /// <c>cliente_id</c> solo lo elige el super administrador; quien tiene su alcance limitado a un cliente (<paramref name="clienteRestringido"/>) siempre
+    /// recibe el suyo y pedir otro cliente responde 403 (igual que en el listado de usuarios). El VIN sigue la regla unica del VIN.
     /// </summary>
-    private static FiltrosViajes ParsearFiltros(FiltrosViajesRequest s, Guid? clienteRestringido)
+    internal static FiltrosViajes ParsearFiltros(FiltrosViajesRequest s, Guid? clienteRestringido)
     {
         var errores = new Dictionary<string, string[]>();
-        var estado = clsParseoFiltros.Catalogo(s.Estado, clsEstadoViaje.VALORES, "estado", errores);
-        var conductorId = clsParseoFiltros.Uuid(s.ConductorId, "conductorId", errores);
-        var desde = clsParseoFiltros.Fecha(s.Desde, "desde", errores);
-        var hasta = clsParseoFiltros.Fecha(s.Hasta, "hasta", errores);
-        var clienteId = clsParseoFiltros.Uuid(s.ClienteId, "clienteId", errores);
+        var filtros = LeerFiltros(s, errores);
         if (errores.Count > 0)
         {
             throw clsErroresCampos.Varios(errores);
         }
 
-        return new FiltrosViajes(
-            estado,
-            clsValidador.Opcional(s.CodigoMtrack),
-            string.IsNullOrWhiteSpace(s.Vin) ? null : clsVin.Normalizar(s.Vin),
-            conductorId,
-            desde,
-            hasta,
-            clienteRestringido is null ? clienteId : null);
+        return AlcanzarCliente(filtros, clienteRestringido);
+    }
+
+    /// <summary>Lee los filtros acumulando los errores por campo para responder todos juntos.</summary>
+    private static FiltrosViajes LeerFiltros(FiltrosViajesRequest s, Dictionary<string, string[]> errores) => new(
+        clsParseoFiltros.Catalogo(s.Estado, clsEstadoViaje.VALORES, "estado", errores),
+        clsValidador.Opcional(s.CodigoMtrack),
+        clsParseoFiltros.Vin(s.Vin, "vin", errores),
+        clsParseoFiltros.Uuid(s.ConductorId, "conductor_id", errores),
+        clsParseoFiltros.Uuid(s.InspectorId, "inspector_id", errores),
+        clsParseoFiltros.Uuid(s.ClienteId, "cliente_id", errores),
+        clsParseoFiltros.Uuid(s.OrigenId, "origen_id", errores),
+        clsParseoFiltros.Uuid(s.DestinoId, "destino_id", errores),
+        clsParseoFiltros.Fecha(s.Desde, "desde", errores),
+        clsParseoFiltros.Fecha(s.Hasta, "hasta", errores));
+
+    /// <summary>Quien se limita a su cliente no elige otro (403) y su cliente ya se aplica como alcance: el filtro solo lo usa quien ve todos los clientes.</summary>
+    private static FiltrosViajes AlcanzarCliente(FiltrosViajes filtros, Guid? clienteRestringido)
+    {
+        if (clienteRestringido is { } propio && filtros.ClienteId is { } otro && otro != propio)
+        {
+            throw new clsProhibidoException("Solo puede consultar lo de su propio cliente");
+        }
+
+        return clienteRestringido is null ? filtros : filtros with { ClienteId = null };
     }
 }

@@ -41,7 +41,7 @@ de contrato.
 | [mobile](mobile) | Login, VIN, captura de informes con fotos selladas, firma y cola offline | [README](mobile/README.md), [cola offline](mobile/docs/cola-offline.md), [configuración](mobile/docs/configuracion.md), [release](mobile/docs/release.md) |
 
 Los planes que originaron la migración están en [docs/planes](docs/planes) y el diagrama en
-[docs/arquitectura](docs/arquitectura).
+[docs/arquitectura](docs/arquitectura). La especificación de negocio, las historias de usuario (Sprint 5 y 6), dónde vive cada pieza (la web es un módulo del portal de administración) y el índice de la documentación del backend están en [docs/README.md](docs/README.md).
 
 ## Puesta en marcha local
 

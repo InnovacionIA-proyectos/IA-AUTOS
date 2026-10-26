@@ -3,6 +3,12 @@ using IAAutos.Dominio.Comun;
 
 namespace IAAutos.Dominio.Catalogos;
 
+/// <summary>Un valor de catalogo con un codigo estable que se define al crearlo y no cambia despues.</summary>
+public interface IConCodigo
+{
+    string Codigo { get; }
+}
+
 /// <summary>
 /// Base de los catalogos maestros: nombre visible, orden de presentacion y estado. Un valor nunca se borra si esta en uso: se
 /// inactiva (Activo = false) y deja de ofrecerse, pero lo ya guardado que lo referencia sigue siendo valido.
@@ -71,7 +77,7 @@ public abstract class clsCatalogoBase : clsEntidadBase
 /// Catalogo con codigo: la clave estable en minusculas que usan la API, las apps y las tablas que lo referencian (por ejemplo
 /// tblHallazgos guarda el codigo de la clase de dano). Se define al crear el valor y no cambia despues.
 /// </summary>
-public abstract partial class clsCatalogoCodificado : clsCatalogoBase
+public abstract partial class clsCatalogoCodificado : clsCatalogoBase, IConCodigo
 {
     public const int CODIGO_MAX = 30;
 

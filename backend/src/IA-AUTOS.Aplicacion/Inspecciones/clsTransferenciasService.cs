@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using FluentValidation;
 using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Auth;
@@ -17,13 +16,14 @@ namespace IAAutos.Aplicacion.Inspecciones;
 /// recibe puede hacerlo con reservas, y si una parte se niega a firmar se deja constancia (motivo, testigo y foto). Los firmantes son usuarios
 /// del viaje. Una transferencia sin tipo de cierre bloquea la etapa siguiente. Cada firma guarda su fecha y la IP desde la que se envio.
 /// </summary>
-public sealed partial class clsTransferenciasService(
+public sealed class clsTransferenciasService(
     IInspeccionRepository inspecciones,
     ITransferenciaCustodiaRepository transferencias,
     IViajeRepository viajes,
     IUsuarioRepository usuarios,
     IConsultasInspecciones consultas,
     clsFabricaEvidencias fabricaEvidencias,
+    clsEvidenciaDeHallazgos evidenciaDeHallazgos,
     IAlmacenArchivos almacen,
     IGeneradorPdfConstancia generadorPdf,
     IUnidadDeTrabajo unidadDeTrabajo,
@@ -39,8 +39,10 @@ public sealed partial class clsTransferenciasService(
     {
         await validadorFirma.ValidarOLanzarAsync(solicitud, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
+        var antes = clsInstantaneasAuditoria.De(transferencia);
         transferencia.Firmar(actual.IdObligatorio(), solicitud.Firma!, cliente.Ip, reloj.Ahora);
-        auditor.Registrar("transferencia.firmar", "transferencias_custodia", transferencia.Id);
+        await evidenciaDeHallazgos.RecalcularAsync(inspeccionId, transferencia.TipoCierre, ct);
+        await RegistrarAsync("transferencia.firmar", inspeccionId, transferencia, antes, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.ATransferencia(transferencia);
     }
@@ -50,8 +52,10 @@ public sealed partial class clsTransferenciasService(
     {
         await validadorReservas.ValidarOLanzarAsync(solicitud, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
+        var antes = clsInstantaneasAuditoria.De(transferencia);
         transferencia.FirmarConReservas(actual.IdObligatorio(), solicitud.Firma!, solicitud.Reservas, cliente.Ip, reloj.Ahora);
-        auditor.Registrar("transferencia.reservas", "transferencias_custodia", transferencia.Id);
+        await evidenciaDeHallazgos.RecalcularAsync(inspeccionId, transferencia.TipoCierre, ct);
+        await RegistrarAsync("transferencia.reservas", inspeccionId, transferencia, antes, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.ATransferencia(transferencia);
     }
@@ -64,6 +68,7 @@ public sealed partial class clsTransferenciasService(
     {
         await validadorNoFirma.ValidarOLanzarAsync(solicitud, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
+        var antes = clsInstantaneasAuditoria.De(transferencia);
         var actorId = actual.IdObligatorio();
         if (transferencia.ParteDe(actorId) is null)
         {
@@ -83,20 +88,34 @@ public sealed partial class clsTransferenciasService(
             foto.DispositivoId, foto.Nota, foto.HashSha256, ct);
         transferencia.RegistrarNoFirma(actorId, solicitud.Parte, solicitud.Motivo, testigoId, evidencia.Id, reloj.Ahora);
         inspecciones.Agregar(evidencia);
-        auditor.Registrar("transferencia.no_firma", "transferencias_custodia", transferencia.Id);
+        await evidenciaDeHallazgos.RecalcularAsync(inspeccionId, transferencia.TipoCierre, ct);
+        await RegistrarAsync("transferencia.no_firma", inspeccionId, transferencia, antes, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return clsMapeadorInspecciones.ATransferencia(transferencia);
     }
 
+    /// <summary>Audita la accion sobre la transferencia con su estado antes y despues, en el viaje y el cliente de la inspeccion.</summary>
+    private async Task RegistrarAsync(string accion, Guid inspeccionId, clsTransferenciaCustodia transferencia, object antes, CancellationToken ct)
+    {
+        var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct) ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
+        await auditor.RegistrarDeViajeAsync(
+            accion, "transferencias_custodia", transferencia.Id, inspeccion.ViajeId, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(transferencia)), ct: ct);
+    }
+
     /// <summary>
     /// La constancia de la transferencia en PDF: firmas con su fecha e IP, reservas o motivo de la no firma, testigo y fotos. Inspector y
-    /// conductor solo la descargan de sus viajes (403 si es de otro).
+    /// conductor solo la descargan de sus viajes y quien se limita a su cliente, la de VIN de su cliente (403 si es de otro).
     /// </summary>
     public async Task<byte[]> ObtenerConstanciaPdfAsync(Guid inspeccionId, CancellationToken ct = default)
     {
         var informe = await consultas.ObtenerInformeAsync(inspeccionId, ct)
             ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
         await AsegurarVisibleAsync(informe.ViajeId, ct);
+        if (actual.ClienteRestringido() is { } cliente && !await consultas.EsDeClienteAsync(inspeccionId, cliente, ct))
+        {
+            throw new clsProhibidoException("La inspección es de un VIN de otro cliente");
+        }
+
         var transferencia = await transferencias.ObtenerPorInspeccionAsync(inspeccionId, ct)
             ?? throw new clsEntidadNoEncontradaException("La inspección no tiene transferencia de custodia");
 
@@ -243,23 +262,6 @@ public sealed partial class clsTransferenciasService(
     }
 
     /// <summary>La firma de una parte para el PDF: si se guardo como archivo se incrusta la imagen; si no, se dibuja el trazo.</summary>
-    private async Task<FirmaConstancia> ArmarFirmaAsync(Guid usuarioId, string? firma, DateTimeOffset? fecha, string? ip, CancellationToken ct)
-    {
-        var nombre = (await usuarios.ObtenerPorIdAsync(usuarioId, ct))?.Nombre ?? "—";
-        if (string.IsNullOrEmpty(firma))
-        {
-            return new FirmaConstancia(nombre, fecha, ip, null, null);
-        }
-
-        if (ArchivoSubido().IsMatch(firma))
-        {
-            var imagen = await almacen.LeerAsync(firma, ct);
-            return new FirmaConstancia(nombre, fecha, ip, imagen is null ? firma : null, imagen);
-        }
-
-        return new FirmaConstancia(nombre, fecha, ip, firma, null);
-    }
-
-    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.(jpg|jpeg|png)$", RegexOptions.IgnoreCase)]
-    private static partial Regex ArchivoSubido();
+    private async Task<FirmaConstancia> ArmarFirmaAsync(Guid usuarioId, string? firma, DateTimeOffset? fecha, string? ip, CancellationToken ct) =>
+        await clsArmadorFirmas.ArmarAsync(almacen, (await usuarios.ObtenerPorIdAsync(usuarioId, ct))?.Nombre ?? "—", firma, fecha, ip, ct);
 }

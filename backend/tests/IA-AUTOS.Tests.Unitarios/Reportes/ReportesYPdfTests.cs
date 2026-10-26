@@ -1,3 +1,5 @@
+using IAAutos.Aplicacion.Vehiculos;
+using IAAutos.Aplicacion.Inspecciones;
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -6,66 +8,26 @@ using IAAutos.Aplicacion.Reportes;
 using IAAutos.Aplicacion.Reportes.DTOReportes;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
 using IAAutos.Infraestructura.Reportes;
+using IAAutos.Tests.Unitarios.Falsos;
 
 namespace IAAutos.Tests.Unitarios.Reportes;
 
 internal sealed class clsConsultasReportesFalsas : IConsultasReportes
 {
-    public List<ConteoClaseDto> Clases { get; set; } = [];
-
-    public List<ConteoTamanoDto> Tamanos { get; set; } = [];
-
     public ConteosRechazo Rechazo { get; set; } = new(0, 0, 0, []);
 
-    public Task<(IReadOnlyList<ConteoProcesoDto>, IReadOnlyList<ConteoZonaDto>, IReadOnlyList<ConteoZonaProcesoDto>)> ObtenerPatronesAsync(CancellationToken ct = default) =>
-        Task.FromResult<(IReadOnlyList<ConteoProcesoDto>, IReadOnlyList<ConteoZonaDto>, IReadOnlyList<ConteoZonaProcesoDto>)>(
-            ([new ConteoProcesoDto("cargue", 3), new ConteoProcesoDto("transporte", 2)], [], []));
+    /// <summary>El cliente al que se limito la ultima consulta (nulo: sin restriccion).</summary>
+    public Guid? UltimoCliente { get; private set; }
 
-    public Task<(IReadOnlyList<ConteoClaseDto>, IReadOnlyList<ConteoTamanoDto>)> ObtenerAnalisisAsync(CancellationToken ct = default) =>
-        Task.FromResult<(IReadOnlyList<ConteoClaseDto>, IReadOnlyList<ConteoTamanoDto>)>((Clases, Tamanos));
-
-    public Task<ConteosRechazo> ObtenerConteosRechazoAsync(CancellationToken ct = default) => Task.FromResult(Rechazo);
+    public Task<ConteosRechazo> ObtenerConteosRechazoAsync(Guid? soloDeCliente, CancellationToken ct = default)
+    {
+        UltimoCliente = soloDeCliente;
+        return Task.FromResult(Rechazo);
+    }
 }
 
 public class ReportesServiceTests
 {
-    [Fact]
-    public async Task El_total_de_patrones_es_la_suma_de_los_procesos()
-    {
-        var servicio = new clsReportesService(new clsConsultasReportesFalsas());
-
-        var patrones = await servicio.ObtenerPatronesAsync();
-
-        Assert.Equal(5, patrones.Total);
-    }
-
-    [Fact]
-    public async Task Sin_hallazgos_la_unica_sugerencia_es_que_no_hay_suficientes_datos()
-    {
-        var analisis = await new clsReportesService(new clsConsultasReportesFalsas()).ObtenerAnalisisAsync();
-
-        Assert.Equal(["Sin hallazgos suficientes para sugerir mejoras."], analisis.Sugerencias);
-    }
-
-    [Fact]
-    public async Task Sugiere_revisar_la_clase_mas_frecuente_y_el_reemplazo_solo_si_hay()
-    {
-        var consultas = new clsConsultasReportesFalsas
-        {
-            Clases = [new ConteoClaseDto("rotura", 7), new ConteoClaseDto("golpe", 2)],
-            Tamanos = [new ConteoTamanoDto("1_5cm", 6), new ConteoTamanoDto("requiere_reemplazo", 3)],
-        };
-        var sinReemplazo = new clsConsultasReportesFalsas { Clases = consultas.Clases, Tamanos = [new ConteoTamanoDto("1_5cm", 6)] };
-
-        var con = await new clsReportesService(consultas).ObtenerAnalisisAsync();
-        var sin = await new clsReportesService(sinReemplazo).ObtenerAnalisisAsync();
-
-        Assert.Equal(2, con.Sugerencias.Count);
-        Assert.Contains("\"rotura\" (7)", con.Sugerencias[0]);
-        Assert.Equal("3 hallazgo(s) requieren reemplazo de pieza: priorizar inspección reforzada en cargue.", con.Sugerencias[1]);
-        Assert.Single(sin.Sugerencias);
-    }
-
     [Fact]
     public async Task La_tasa_se_calcula_con_dos_decimales_frente_a_la_linea_base_y_ordena_las_operaciones()
     {
@@ -74,7 +36,7 @@ public class ReportesServiceTests
             Rechazo = new ConteosRechazo(10, 7, 4, [new ConteoOperacion("nacional", 3, 1), new ConteoOperacion("importacion", 4, 3)]),
         };
 
-        var tasa = await new clsReportesService(consultas).ObtenerTasaRechazoAsync();
+        var tasa = await new clsReportesService(consultas, new clsUsuarioActualFalso()).ObtenerTasaRechazoAsync();
 
         Assert.Equal(["importacion", "nacional"], tasa.PorOperacion.Select(o => o.Operacion));
         Assert.Equal(75m, tasa.PorOperacion[0].TasaActual);
@@ -93,7 +55,7 @@ public class ReportesServiceTests
     {
         var consultas = new clsConsultasReportesFalsas { Rechazo = new ConteosRechazo(1, 1, 0, [new ConteoOperacion("rara", 1, 0)]) };
 
-        var tasa = await new clsReportesService(consultas).ObtenerTasaRechazoAsync();
+        var tasa = await new clsReportesService(consultas, new clsUsuarioActualFalso()).ObtenerTasaRechazoAsync();
 
         Assert.Equal(0m, tasa.PorOperacion[0].LineaBase);
     }
@@ -114,22 +76,30 @@ public class GeneradorPdfInventarioTests
             Guid.NewGuid(),
             "MTK-1",
             false,
+            "activa",
+            null,
             [
                 new InventarioInspeccionDto(
                     Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "salida", FECHA, null, null, "cerrada", null, null, null, null, FECHA, FECHA, FECHA, FECHA, 1, null, "Inspección de salida",
-                    Enumerable.Range(0, hallazgos).Select(_ => new HallazgoDto(Guid.NewGuid(), Guid.NewGuid(), parte, "golpe", "5_10cm", null, FECHA, FECHA)).ToList(),
+                    Enumerable.Range(0, hallazgos).Select(_ => new HallazgoDto(
+                        Guid.NewGuid(), Guid.NewGuid(), null, "golpe", "5_10cm", null, null, null, "frente", null, parte, null, "v2", "V2", null, "inspector", null, false, null, null,
+                        "pendiente", false, [], null, null, FECHA, FECHA)).ToList(),
                     [],
-                    null),
+                    null,
+                    []),
             ])).ToList();
-        return new InventarioDto(Guid.NewGuid(), vin, "Renault", null, null, null, null, "nacional", FECHA, FECHA, etapasDto);
+        return new InventarioDto(Guid.NewGuid(), vin, "Renault", null, null, null, null, "nacional", true, FECHA, FECHA, etapasDto);
     }
 
     private static string Texto(byte[] pdf) => Encoding.Latin1.GetString(pdf);
 
+    private static byte[] GenerarPdf(InventarioDto inventario) =>
+        new clsGeneradorPdfInventario().Generar(new DatosInventarioPdf(inventario, new Dictionary<Guid, FotoInforme>(), [], [], 0));
+
     [Fact]
     public void Genera_un_pdf_con_estructura_valida_y_tabla_xref_coherente()
     {
-        var pdf = new clsGeneradorPdfInventario().Generar(Inventario());
+        var pdf = GenerarPdf(Inventario());
         var texto = Texto(pdf);
 
         Assert.StartsWith("%PDF-1.4", texto);
@@ -155,7 +125,7 @@ public class GeneradorPdfInventarioTests
     [Fact]
     public void Incluye_el_contenido_del_inventario()
     {
-        var texto = Texto(new clsGeneradorPdfInventario().Generar(Inventario("9FBHSR4E8PM000123", hallazgos: 2)));
+        var texto = Texto(GenerarPdf(Inventario("9FBHSR4E8PM000123", hallazgos: 2)));
 
         Assert.Contains("VIN: 9FBHSR4E8PM000123", texto);
         Assert.Contains("Marca: Renault   Operaci\\363n: nacional", texto);
@@ -169,7 +139,7 @@ public class GeneradorPdfInventarioTests
     [Fact]
     public void Escapa_parentesis_y_barras_para_no_romper_la_cadena_del_pdf()
     {
-        var texto = Texto(new clsGeneradorPdfInventario().Generar(Inventario(parte: @"Panel (izq.) \ der.")));
+        var texto = Texto(GenerarPdf(Inventario(parte: @"Panel (izq.) \ der.")));
 
         Assert.Contains(@"Panel \(izq.\) \\ der.", texto);
     }
@@ -177,7 +147,7 @@ public class GeneradorPdfInventarioTests
     [Fact]
     public void Los_caracteres_fuera_de_winansi_se_reemplazan_sin_fallar()
     {
-        var texto = Texto(new clsGeneradorPdfInventario().Generar(Inventario(parte: "Capot 日本 ✓")));
+        var texto = Texto(GenerarPdf(Inventario(parte: "Capot 日本 ✓")));
 
         Assert.Contains("Capot ", texto);
         Assert.StartsWith("%PDF-1.4", texto);
@@ -186,7 +156,7 @@ public class GeneradorPdfInventarioTests
     [Fact]
     public void Un_inventario_largo_se_reparte_en_varias_paginas_con_conteo_consistente()
     {
-        var pdf = new clsGeneradorPdfInventario().Generar(Inventario(hallazgos: 60, etapas: 3));
+        var pdf = GenerarPdf(Inventario(hallazgos: 60, etapas: 3));
         var texto = Texto(pdf);
 
         var paginas = Regex.Matches(texto, @"/Type /Page /Parent").Count;
@@ -201,7 +171,7 @@ public class GeneradorPdfInventarioTests
     {
         var parte = string.Join(' ', Enumerable.Repeat("palabra", 40));
 
-        var texto = Texto(new clsGeneradorPdfInventario().Generar(Inventario(parte: parte, etapas: 1)));
+        var texto = Texto(GenerarPdf(Inventario(parte: parte, etapas: 1)));
 
         var tramos = Regex.Matches(texto, @"\(\s*\\225 palabra|\(\s+palabra").Count + Regex.Matches(texto, @"\(\s{6,}palabra").Count;
         Assert.True(tramos >= 1);
@@ -215,7 +185,7 @@ public class GeneradorPdfInventarioTests
     [Fact]
     public void Sin_etapas_genera_solo_el_encabezado()
     {
-        var texto = Texto(new clsGeneradorPdfInventario().Generar(Inventario(etapas: 0)));
+        var texto = Texto(GenerarPdf(Inventario(etapas: 0)));
 
         Assert.Contains("VIN: VIN123", texto);
         Assert.DoesNotContain("Proceso:", texto);

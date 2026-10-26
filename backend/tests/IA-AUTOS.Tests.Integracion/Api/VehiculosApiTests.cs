@@ -46,19 +46,19 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
     public async Task Recargar_el_mismo_archivo_es_idempotente_y_conserva_modelo_y_color()
     {
         var token = await TokenAsync(clsRol.ADMIN, "admin@ejemplo.com");
-        await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new { items = new[] { Item("VIN-UNO", modelo: "Sandero", color: "Rojo"), Item("VIN-DOS") } });
+        await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new { items = new[] { Item("VINUNO01", modelo: "Sandero", color: "Rojo"), Item("VINDOS01") } });
 
-        var r = await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new { items = new[] { Item("vin-uno", "Toyota", "importacion"), Item("VIN-DOS") } });
+        var r = await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new { items = new[] { Item("vinuno01", "Toyota", "importacion"), Item("VINDOS01") } });
 
         var cuerpo = await ClonarAsync(r);
         Assert.Equal(0, cuerpo.GetProperty("creados").GetInt32());
         Assert.Equal(2, cuerpo.GetProperty("actualizados").GetInt32());
         Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblVehiculos"));
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas"));
-        Assert.Equal("Toyota", await Sembrador.EscalarAsync("SELECT Marca FROM dbo.tblVehiculos WHERE Vin = 'VIN-UNO'"));
-        Assert.Equal("importacion", await Sembrador.EscalarAsync("SELECT Operacion FROM dbo.tblVehiculos WHERE Vin = 'VIN-UNO'"));
-        Assert.Equal("Sandero", await Sembrador.EscalarAsync("SELECT Modelo FROM dbo.tblVehiculos WHERE Vin = 'VIN-UNO'"));
-        Assert.Equal("Rojo", await Sembrador.EscalarAsync("SELECT Color FROM dbo.tblVehiculos WHERE Vin = 'VIN-UNO'"));
+        Assert.Equal("Toyota", await Sembrador.EscalarAsync("SELECT Marca FROM dbo.tblVehiculos WHERE Vin = 'VINUNO01'"));
+        Assert.Equal("importacion", await Sembrador.EscalarAsync("SELECT Operacion FROM dbo.tblVehiculos WHERE Vin = 'VINUNO01'"));
+        Assert.Equal("Sandero", await Sembrador.EscalarAsync("SELECT Modelo FROM dbo.tblVehiculos WHERE Vin = 'VINUNO01'"));
+        Assert.Equal("Rojo", await Sembrador.EscalarAsync("SELECT Color FROM dbo.tblVehiculos WHERE Vin = 'VINUNO01'"));
     }
 
     [Fact]
@@ -66,12 +66,12 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
     {
         var token = await TokenAsync(clsRol.ADMIN, "admin@ejemplo.com");
 
-        var r = await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new { items = new[] { Item("VIN-REP", "Renault"), Item("vin-rep", "Nissan") } });
+        var r = await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new { items = new[] { Item("VINREP01", "Renault"), Item("vinrep01", "Nissan") } });
 
         var cuerpo = await ClonarAsync(r);
         Assert.Equal(1, cuerpo.GetProperty("creados").GetInt32());
         Assert.Equal(1, cuerpo.GetProperty("actualizados").GetInt32());
-        Assert.Equal("Nissan", await Sembrador.EscalarAsync("SELECT Marca FROM dbo.tblVehiculos WHERE Vin = 'VIN-REP'"));
+        Assert.Equal("Nissan", await Sembrador.EscalarAsync("SELECT Marca FROM dbo.tblVehiculos WHERE Vin = 'VINREP01'"));
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas"));
     }
 
@@ -79,12 +79,13 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
     public async Task Una_fila_que_falla_se_reporta_y_el_resto_del_lote_se_procesa_incluso_las_actualizaciones()
     {
         var token = await TokenAsync(clsRol.ADMIN, "admin@ejemplo.com");
-        await Sembrador.VehiculoConRutaAsync("VIN-EXISTENTE", "Renault");
-        var vinDemasiadoLargo = new string('X', 80);
+        await Sembrador.VehiculoConRutaAsync("VINEXIST1", "Renault");
+        // La fila que falla en la base: una marca mas larga de lo que cabe en su columna (el VIN en si es valido).
+        var marcaDemasiadoLarga = new string('M', 300);
 
         var r = await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new
         {
-            items = new[] { Item("VIN-A"), Item(vinDemasiadoLargo), Item("VIN-EXISTENTE", "Mazda"), Item("VIN-B") },
+            items = new[] { Item("VINA0001"), Item("VINFALLA1", marcaDemasiadoLarga), Item("VINEXIST1", "Mazda"), Item("VINB0001") },
         });
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
@@ -94,21 +95,21 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal(1, cuerpo.GetProperty("actualizados").GetInt32());
         Assert.Equal(1, cuerpo.GetProperty("fallidos").GetInt32());
         var error = cuerpo.GetProperty("errores")[0];
-        Assert.Equal(vinDemasiadoLargo, error.GetProperty("vin").GetString());
+        Assert.Equal("VINFALLA1", error.GetProperty("vin").GetString());
         Assert.Equal("No se pudo procesar el VIN", error.GetProperty("error").GetString());
         // La actualizacion posterior al fallo se guardo (el contexto se recupero correctamente).
-        Assert.Equal("Mazda", await Sembrador.EscalarAsync("SELECT Marca FROM dbo.tblVehiculos WHERE Vin = 'VIN-EXISTENTE'"));
-        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblVehiculos WHERE Vin = 'VIN-B'"));
-        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblVehiculos WHERE LEN(Vin) > 64"));
+        Assert.Equal("Mazda", await Sembrador.EscalarAsync("SELECT Marca FROM dbo.tblVehiculos WHERE Vin = 'VINEXIST1'"));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblVehiculos WHERE Vin = 'VINB0001'"));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblVehiculos WHERE Vin = 'VINFALLA1'"));
     }
 
     [Fact]
     public async Task Recargar_un_vin_que_ya_tiene_viaje_no_toca_sus_etapas()
     {
         var token = await TokenAsync(clsRol.ADMIN, "admin@ejemplo.com");
-        await Sembrador.VehiculoConRutaAsync("VIN-MEDIO", cantidadEtapas: 1);
+        await Sembrador.VehiculoConRutaAsync("VINMEDIO", cantidadEtapas: 1);
 
-        await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new { items = new[] { Item("VIN-MEDIO") } });
+        await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new { items = new[] { Item("VINMEDIO") } });
 
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas"));
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajeVehiculos"));
@@ -149,7 +150,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
     {
         var token = await TokenAsync(rol, "u@ejemplo.com");
 
-        var r = await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new { items = new[] { Item("VIN-ROL") } });
+        var r = await Cliente(token).PostAsJsonAsync("/api/vehiculos/cargar", new { items = new[] { Item("VINROL01") } });
 
         Assert.Equal(esperado, r.StatusCode);
     }
@@ -172,7 +173,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
 
         Assert.Equal(8, porVin.GetArrayLength());
         Assert.Equal("ABC00XYZ", porVin[0].GetProperty("vin").GetString());
-        Assert.Equal(["vin", "marca", "modelo", "color", "operacion"], porVin[0].EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["vin", "marca", "modelo", "color", "operacion", "activo"], porVin[0].EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("OTRO-VIN", porMarca[0].GetProperty("vin").GetString());
         Assert.Equal(0, vacio.GetArrayLength());
         Assert.Equal(0, comodin.GetArrayLength()); // el comodin % se trata como texto literal
@@ -198,17 +199,17 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var pendientes = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/listado?tipo=pendientes"));
         var novedad = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/listado?tipo=novedad"));
 
-        Assert.Equal(["VIN-A-MOVILIZADO"], movilizados.GetProperty("rows").EnumerateArray().Select(r => r.GetProperty("vin").GetString()).ToList());
+        Assert.Equal(["VIN-A-MOVILIZADO"], movilizados.GetProperty("items").EnumerateArray().Select(r => r.GetProperty("vin").GetString()).ToList());
         Assert.Equal(1, movilizados.GetProperty("total").GetInt32());
-        Assert.Equal(1, movilizados.GetProperty("page").GetInt32());
-        Assert.Equal(500, movilizados.GetProperty("pageSize").GetInt32());
-        var a = movilizados.GetProperty("rows")[0];
+        Assert.Equal(1, movilizados.GetProperty("pagina").GetInt32());
+        Assert.Equal(50, movilizados.GetProperty("tamano").GetInt32());
+        var a = movilizados.GetProperty("items")[0];
         Assert.Equal(3, a.GetProperty("etapas").GetInt32());
         Assert.Equal(3, a.GetProperty("completas").GetInt32());
         Assert.Equal(0, a.GetProperty("novedades").GetInt32());
 
-        Assert.Equal(["VIN-B-PENDIENTE", "VIN-C-NOVEDAD", "VIN-D-SIN-RUTA"], pendientes.GetProperty("rows").EnumerateArray().Select(r => r.GetProperty("vin").GetString()).ToList());
-        var c = novedad.GetProperty("rows")[0];
+        Assert.Equal(["VIN-B-PENDIENTE", "VIN-C-NOVEDAD", "VIN-D-SIN-RUTA"], pendientes.GetProperty("items").EnumerateArray().Select(r => r.GetProperty("vin").GetString()).ToList());
+        var c = novedad.GetProperty("items")[0];
         Assert.Equal("VIN-C-NOVEDAD", c.GetProperty("vin").GetString());
         Assert.Equal(1, c.GetProperty("completas").GetInt32());
         Assert.Equal(2, c.GetProperty("novedades").GetInt32());
@@ -222,15 +223,16 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         await Sembrador.VehiculoConRutaAsync("OTRO-2");
 
         var filtrado = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/listado?tipo=pendientes&vin=filtro"));
-        var paginaDos = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/listado?tipo=pendientes&page=2"));
-        var paginaRara = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/listado?tipo=pendientes&page=abc"));
+        var paginaDos = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/listado?tipo=pendientes&pagina=2"));
+        var paginaRara = await Cliente(token).GetAsync("/api/vehiculos/listado?tipo=pendientes&pagina=abc");
         var invalido = await Cliente(token).GetAsync("/api/vehiculos/listado?tipo=otro");
 
         Assert.Equal(1, filtrado.GetProperty("total").GetInt32());
-        Assert.Equal(0, paginaDos.GetProperty("rows").GetArrayLength());
+        Assert.Equal(0, paginaDos.GetProperty("items").GetArrayLength());
         Assert.Equal(2, paginaDos.GetProperty("total").GetInt32());
-        Assert.Equal(2, paginaDos.GetProperty("page").GetInt32());
-        Assert.Equal(1, paginaRara.GetProperty("page").GetInt32());
+        Assert.Equal(2, paginaDos.GetProperty("pagina").GetInt32());
+        Assert.Equal(HttpStatusCode.BadRequest, paginaRara.StatusCode);
+        Assert.True((await ClonarAsync(paginaRara)).GetProperty("details").GetProperty("fieldErrors").TryGetProperty("pagina", out _));
         Assert.Equal(HttpStatusCode.BadRequest, invalido.StatusCode);
         var detalle = (await ClonarAsync(invalido)).GetProperty("details").GetProperty("fieldErrors");
         Assert.True(detalle.TryGetProperty("tipo", out _));
@@ -256,7 +258,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal(vehiculoId, inv.GetProperty("id").GetGuid());
         Assert.Equal("INV-VIN-0001", inv.GetProperty("vin").GetString());
         Assert.Equal(
-            ["id", "vin", "marca", "tipo_vehiculo", "modelo", "chasis", "color", "operacion", "created_at", "updated_at", "etapas"],
+            ["id", "vin", "marca", "tipo_vehiculo", "modelo", "chasis", "color", "operacion", "activo", "created_at", "updated_at", "etapas"],
             inv.EnumerateObject().Select(p => p.Name).ToList());
         var listaEtapas = inv.GetProperty("etapas");
         Assert.Equal(["cargue", "transporte", "descargue"], listaEtapas.EnumerateArray().Select(e => e.GetProperty("proceso").GetString()).ToList());
@@ -271,15 +273,72 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var insp = listaEtapas[0].GetProperty("inspecciones")[0];
         Assert.Equal("cerrada", insp.GetProperty("estado").GetString());
         var hallazgo = insp.GetProperty("hallazgos")[0];
+        // Un hallazgo historico conserva su parte y sus coordenadas, y aun no tiene zona ni nivel.
         Assert.Equal(0.5, hallazgo.GetProperty("coords_diagrama").GetProperty("x").GetDouble());
+        Assert.Equal("Capot", hallazgo.GetProperty("parte_vehiculo").GetString());
+        Assert.Equal("Capot", hallazgo.GetProperty("zona").GetString());
+        Assert.Equal(JsonValueKind.Null, hallazgo.GetProperty("cuadrante_numero").ValueKind);
+        Assert.Equal(JsonValueKind.Null, hallazgo.GetProperty("nivel_severidad").ValueKind);
+        Assert.Equal("pendiente", hallazgo.GetProperty("estado_seguimiento").GetString());
+        Assert.All(listaEtapas.EnumerateArray(), e =>
+        {
+            Assert.Equal("activa", e.GetProperty("estado_unidad").GetString());
+            Assert.Equal(JsonValueKind.Null, e.GetProperty("no_sale").ValueKind);
+        });
         var evidencias = insp.GetProperty("evidencias");
         Assert.Equal(2, evidencias.GetArrayLength());
-        Assert.Equal("/api/uploads/foto-0.jpg", evidencias[0].GetProperty("url").GetString());
+        Assert.StartsWith("http://localhost/api/uploads/foto-0.jpg?exp=", evidencias[0].GetProperty("url").GetString());
         Assert.False(evidencias[0].TryGetProperty("storage_path", out _));
         var transferencia = insp.GetProperty("transferencia");
         Assert.True(transferencia.GetProperty("firmada").GetBoolean());
         Assert.Equal("firmada", transferencia.GetProperty("tipo_cierre").GetString());
         Assert.False(transferencia.TryGetProperty("firma_entrega", out _));
+    }
+
+    [Fact]
+    public async Task El_inventario_devuelve_el_viaje_del_que_la_unidad_no_salio_igual_que_los_demas_con_su_motivo_y_su_hallazgo()
+    {
+        var token = await TokenAsync(clsRol.COORDINADOR_CALIDAD, "i@ejemplo.com");
+        var usuarioId = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblUsuarios WHERE Email = 'i@ejemplo.com'"))!;
+        var (vehiculoId, etapas) = await Sembrador.VehiculoConRutaAsync("NOSALE-VIN-0001");
+        var (reemplazoId, _) = await Sembrador.VehiculoConRutaAsync("NOSALE-VIN-0002");
+        var viajeNoSale = await Sembrador.ViajeDeEtapaAsync(etapas[0]);
+        var informe = await Sembrador.InformeAsync(etapas[0], usuarioId, cerrada: false);
+        var hallazgo = await Sembrador.HallazgoEnFrenteAsync(informe);
+        await Sembrador.UnidadNoSaleAsync(viajeNoSale, vehiculoId, hallazgo, usuarioId, "Golpe estructural en el frente", reemplazoId);
+        // Mas adelante la misma unidad se asigna a otro viaje y vuelve a estar activa.
+        var otroViaje = await Sembrador.ViajeAsync();
+        await Sembrador.EjecutarAsync("INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @v, @veh)", ("@v", otroViaje), ("@veh", vehiculoId));
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (NEWID(), @veh, @v, @p, 1)",
+            ("@veh", vehiculoId), ("@v", otroViaje), ("@p", (await Sembrador.EtapasRutaAsync())[0]));
+
+        var inv = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/nosale-vin-0001/inventario"));
+
+        var lista = inv.GetProperty("etapas").EnumerateArray().ToList();
+        Assert.Equal(4, lista.Count);
+        Assert.All(lista.Take(3), e =>
+        {
+            Assert.Equal("no_sale", e.GetProperty("estado_unidad").GetString());
+            var noSale = e.GetProperty("no_sale");
+            Assert.Equal(
+                ["motivo", "hallazgo_id", "marcado_por", "marcado_por_nombre", "fecha", "vin_reemplazo"],
+                noSale.EnumerateObject().Select(p => p.Name).ToList());
+            Assert.Equal("Golpe estructural en el frente", noSale.GetProperty("motivo").GetString());
+            Assert.Equal(hallazgo, noSale.GetProperty("hallazgo_id").GetGuid());
+            Assert.Equal(usuarioId, noSale.GetProperty("marcado_por").GetGuid());
+            Assert.Equal("Usuario de prueba", noSale.GetProperty("marcado_por_nombre").GetString());
+            Assert.Equal("NOSALE-VIN-0002", noSale.GetProperty("vin_reemplazo").GetString());
+            Assert.Equal(JsonValueKind.String, noSale.GetProperty("fecha").ValueKind);
+        });
+        Assert.Equal("activa", lista[3].GetProperty("estado_unidad").GetString());
+        Assert.Equal(JsonValueKind.Null, lista[3].GetProperty("no_sale").ValueKind);
+        // El hallazgo grave que la saco del viaje sigue en el historial de la unidad, con su zona y su nivel.
+        var h = lista[0].GetProperty("inspecciones")[0].GetProperty("hallazgos")[0];
+        Assert.Equal("Frente", h.GetProperty("zona").GetString());
+        Assert.Equal("v1_plus", h.GetProperty("nivel_severidad").GetString());
+        Assert.Equal("Se recupera antes del despacho", h.GetProperty("nivel_accion").GetString());
+        Assert.Equal(["foto_hallazgo", "transferencia_sin_cierre"], h.GetProperty("evidencia_faltante").EnumerateArray().Select(x => x.GetString()).ToList());
     }
 
     [Fact]
@@ -300,5 +359,134 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         {
             Assert.Equal(HttpStatusCode.Unauthorized, (await Cliente().GetAsync(ruta)).StatusCode);
         }
+    }
+
+    // ---------------------------------------------------------------------------------------- baja logica
+
+    [Theory]
+    [InlineData(clsRol.ADMIN)]
+    [InlineData(clsRol.SUPER_ADMIN)]
+    [InlineData(clsRol.COORDINADOR_CALIDAD)]
+    public async Task Dar_de_baja_un_vehiculo_lo_inactiva_y_responde_modo_inactivado(string rol)
+    {
+        var token = await TokenAsync(rol, $"{rol}@ejemplo.com");
+        await Sembrador.VehiculoAsync("VIN-BAJA-0001");
+
+        var r = await Cliente(token).DeleteAsync("/api/vehiculos/vin-baja-0001");
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var cuerpo = await ClonarAsync(r);
+        Assert.Equal(["modo"], cuerpo.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal("inactivado", cuerpo.GetProperty("modo").GetString());
+        Assert.Equal(false, await Sembrador.EscalarAsync("SELECT Activo FROM dbo.tblVehiculos WHERE Vin = 'VIN-BAJA-0001'"));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblVehiculos WHERE Vin = 'VIN-BAJA-0001'"));
+    }
+
+    [Fact]
+    public async Task La_baja_queda_en_la_auditoria_con_el_antes_y_el_despues_y_repetirla_no_cambia_nada()
+    {
+        var token = await TokenAsync(clsRol.ADMIN, "admin@ejemplo.com");
+        await Sembrador.VehiculoAsync("VIN-BAJA-0002");
+
+        var primera = await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0002");
+        var segunda = await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0002");
+
+        Assert.Equal(HttpStatusCode.OK, primera.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, segunda.StatusCode);
+        Assert.Equal("inactivado", (await ClonarAsync(segunda)).GetProperty("modo").GetString());
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'vehiculo.baja'"));
+        var detalle = (string)(await Sembrador.EscalarAsync("SELECT Detalle FROM dbo.tblAuditLog WHERE Accion = 'vehiculo.baja'"))!;
+        using var doc = JsonDocument.Parse(detalle);
+        Assert.True(doc.RootElement.GetProperty("antes").GetProperty("activo").GetBoolean());
+        Assert.False(doc.RootElement.GetProperty("despues").GetProperty("activo").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Un_vehiculo_dado_de_baja_no_aparece_en_la_busqueda_pero_si_en_el_listado_y_el_inventario_con_activo_false()
+    {
+        var token = await TokenAsync(clsRol.ADMIN, "admin@ejemplo.com");
+        await Sembrador.VehiculoAsync("VIN-BUSCA-0001");
+        await Sembrador.VehiculoAsync("VIN-BUSCA-0002");
+        await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BUSCA-0001");
+
+        var busqueda = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos?vin=VIN-BUSCA"));
+        var listado = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/listado?tipo=pendientes"));
+        var inventario = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/VIN-BUSCA-0001/inventario"));
+
+        Assert.Equal(["VIN-BUSCA-0002"], busqueda.EnumerateArray().Select(v => v.GetProperty("vin").GetString()).ToList());
+        Assert.True(busqueda[0].GetProperty("activo").GetBoolean());
+        var filas = listado.GetProperty("items").EnumerateArray().ToDictionary(v => v.GetProperty("vin").GetString()!, v => v.GetProperty("activo").GetBoolean());
+        Assert.False(filas["VIN-BUSCA-0001"]);
+        Assert.True(filas["VIN-BUSCA-0002"]);
+        Assert.False(inventario.GetProperty("activo").GetBoolean());
+    }
+
+    [Fact]
+    public async Task La_baja_conserva_etapas_inspecciones_y_hallazgos_del_vehiculo()
+    {
+        var token = await TokenAsync(clsRol.ADMIN, "admin@ejemplo.com");
+        var inspector = await Fabrica.SembrarUsuarioAsync("insp@ejemplo.com", "Clave-Segura-1", clsRol.INSPECTOR);
+        var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-BAJA-0003", inspectorId: inspector.Id);
+        await Sembrador.InformeAsync(etapas[0], inspector.Id, cerrada: true, hallazgos: 1);
+
+        var r = await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0003");
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal(3, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas"));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones"));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
+        var inventario = await ClonarAsync(await Cliente(token).GetAsync("/api/vehiculos/VIN-BAJA-0003/inventario"));
+        Assert.Equal(3, inventario.GetProperty("etapas").GetArrayLength());
+        Assert.Equal(1, inventario.GetProperty("etapas")[0].GetProperty("inspecciones").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Un_vehiculo_dado_de_baja_no_se_agrega_a_un_viaje()
+    {
+        var token = await TokenAsync(clsRol.COORDINADOR_CALIDAD, "coord@ejemplo.com");
+        await Sembrador.VehiculoAsync("VIN-BAJA-0004");
+        var viaje = await Sembrador.ViajeAsync();
+        await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0004");
+
+        var agregado = await Cliente(token).PostAsJsonAsync($"/api/viajes/{viaje}/vehiculos", new { vines = new[] { "VIN-BAJA-0004" } });
+
+        Assert.Equal(HttpStatusCode.BadRequest, agregado.StatusCode);
+        Assert.Contains("VIN-BAJA-0004", (await ClonarAsync(agregado)).GetProperty("details").GetProperty("fieldErrors").GetProperty("vines")[0].GetString());
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajeVehiculos WHERE ViajeId = @v", ("@v", viaje)));
+    }
+
+    [Fact]
+    public async Task Dar_de_baja_un_vin_inexistente_responde_404_y_los_demas_roles_403()
+    {
+        var admin = await TokenAsync(clsRol.ADMIN, "admin@ejemplo.com");
+        await Sembrador.VehiculoAsync("VIN-BAJA-0005");
+
+        Assert.Equal(HttpStatusCode.NotFound, (await Cliente(admin).DeleteAsync("/api/vehiculos/NO-EXISTE")).StatusCode);
+        foreach (var rol in new[] { clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.COMERCIAL })
+        {
+            var token = await TokenAsync(rol, $"{rol}@ejemplo.com");
+            Assert.Equal(HttpStatusCode.Forbidden, (await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0005")).StatusCode);
+        }
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Cliente().DeleteAsync("/api/vehiculos/VIN-BAJA-0005")).StatusCode);
+        Assert.Equal(true, await Sembrador.EscalarAsync("SELECT Activo FROM dbo.tblVehiculos WHERE Vin = 'VIN-BAJA-0005'"));
+    }
+
+    [Fact]
+    public async Task Quien_se_limita_a_su_cliente_no_da_de_baja_un_vehiculo_de_otro_cliente()
+    {
+        var otro = Guid.NewGuid();
+        await Sembrador.EjecutarAsync("INSERT dbo.tblClientes (Id, Codigo, Nombre, Orden) VALUES (@id, 'otro', N'Otro cliente', 2)", ("@id", otro));
+        await Sembrador.VehiculoAsync("VIN-BAJA-0006");
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblVehiculos SET ClienteId = @c WHERE Vin = 'VIN-BAJA-0006'", ("@c", otro));
+        var coordinador = await TokenAsync(clsRol.COORDINADOR_CALIDAD, "coord@ejemplo.com");
+        var super = await TokenAsync(clsRol.SUPER_ADMIN, "super@ejemplo.com");
+
+        var ajeno = await Cliente(coordinador).DeleteAsync("/api/vehiculos/VIN-BAJA-0006");
+        var deTodos = await Cliente(super).DeleteAsync("/api/vehiculos/VIN-BAJA-0006");
+
+        Assert.Equal(HttpStatusCode.Forbidden, ajeno.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, deTodos.StatusCode);
+        Assert.Equal(false, await Sembrador.EscalarAsync("SELECT Activo FROM dbo.tblVehiculos WHERE Vin = 'VIN-BAJA-0006'"));
     }
 }

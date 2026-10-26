@@ -346,6 +346,329 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_evidencia_no_se_borra_y_las_relaciones_ya_no_borran_en_cascada()
+    {
+        // Sin esta migracion la evidencia se podria borrar de la base (en cascada o a mano): este chequeo (solo lectura) avisa antes de
+        // desplegar si falta ejecutar database/cambios-esquema/09-evidencia-sin-borrado.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/09-evidencia-sin-borrado.sql.";
+
+        var activo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblVehiculos', N'U') AND name = N'Activo' AND is_nullable = 0");
+        var indice = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'IX_tblVehiculos_Activo' AND object_id = OBJECT_ID(N'tblVehiculos', N'U')");
+        var triggers = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.triggers
+             WHERE is_instead_of_trigger = 1 AND is_disabled = 0
+               AND name IN (N'TR_tblEvidencias_NoBorrar', N'TR_tblHallazgos_NoBorrar', N'TR_tblTransferenciasCustodia_NoBorrar',
+                            N'TR_tblAuditLog_NoBorrar', N'TR_tblInspecciones_NoBorrar')
+            """);
+        var cascadasQuitadas = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.foreign_keys
+             WHERE delete_referential_action = 1
+               AND name IN (N'FK_tblViajeVehiculos_Vehiculo', N'FK_tblEtapas_Vehiculo', N'FK_tblInspecciones_Etapa', N'FK_tblHallazgos_Inspeccion',
+                            N'FK_tblEvidencias_Inspeccion', N'FK_tblTransferencias_Inspeccion')
+            """);
+        var cascadasConservadas = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.foreign_keys
+             WHERE delete_referential_action = 1 AND name IN (N'FK_tblViajeVehiculos_Viaje', N'FK_tblCuadranteVistas_Cuadrante')
+            """);
+
+        Assert.True(activo == 1 && indice == 1, $"Falta tblVehiculos.Activo (obligatoria) o su indice. {ayuda}");
+        Assert.True(triggers == 5, $"Faltan triggers que impiden borrar la evidencia (o estan deshabilitados). {ayuda}");
+        Assert.True(cascadasQuitadas == 0, $"Siguen existiendo relaciones que borran en cascada lo que es evidencia. {ayuda}");
+        Assert.True(cascadasConservadas == 2, $"Se perdio una cascada que debia conservarse (viaje a sus vehiculos o cuadrante a sus regiones). {ayuda}");
+    }
+
+    [FactEntornoReal]
+    public async Task La_zona_del_dano_el_hallazgo_con_nivel_y_el_estado_de_la_unidad_estan_migrados()
+    {
+        // Sin esta migracion la API no puede leer ni guardar hallazgos con zona: este chequeo (solo lectura) avisa antes de desplegar si falta
+        // ejecutar database/cambios-esquema/10-zona-dano-y-hallazgo.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/10-zona-dano-y-hallazgo.sql.";
+
+        async Task<int> Columnas(string tabla, string columna) => await EscalarAsync<int>(
+            conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(@t, N'U') AND name = @c", ("@t", tabla), ("@c", columna));
+
+        foreach (var tabla in new[] { "tblPanelesDano", "tblZonasDano", "tblRegionesDano" })
+        {
+            Assert.True(await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = @t", ("@t", tabla)) == 1, $"Falta la tabla {tabla}. {ayuda}");
+        }
+
+        foreach (var columna in new[]
+        {
+            "ZonaId", "TipoNovedad", "NivelSeveridad", "Origen", "Nota", "EsPreexistente", "HallazgoOrigenId", "ConfirmadoPor", "EstadoSeguimiento",
+            "EvidenciaCompleta", "RevisadoPor", "RevisadoAt", "MigracionPendiente",
+        })
+        {
+            Assert.True(await Columnas("tblHallazgos", columna) == 1, $"Falta tblHallazgos.{columna}. {ayuda}");
+        }
+
+        foreach (var columna in new[] { "EstadoUnidad", "NoSaleMotivo", "NoSaleHallazgoId", "NoSaleMarcadoPor", "NoSaleAt", "ReemplazoVehiculoId" })
+        {
+            Assert.True(await Columnas("tblViajeVehiculos", columna) == 1, $"Falta tblViajeVehiculos.{columna}. {ayuda}");
+        }
+
+        var paneles = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblPanelesDano WHERE Codigo IN ('superior','perfil_posterior_izquierdo','perfil_posterior_derecho','costado_izquierdo','costado_derecho')");
+        var provisionales = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano WHERE CuadranteId IS NULL AND Codigo IN ('frente','llanta_delantera_izquierda','llanta_delantera_derecha','llanta_trasera_izquierda','llanta_trasera_derecha')");
+        var zonasEsperadas = await EscalarAsync<int>(conexion, "SELECT ISNULL(SUM(CASE WHEN Numero <= 25 THEN 2 ELSE 1 END), 0) FROM tblCuadrantes");
+        var zonas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano WHERE CuadranteId IS NOT NULL");
+        var restricciones = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.objects
+             WHERE name IN (N'FK_tblZonasDano_Cuadrante', N'CK_tblZonasDano_Forma', N'FK_tblRegionesDano_Zona', N'FK_tblHallazgos_Zona', N'FK_tblHallazgos_Nivel',
+                            N'FK_tblHallazgos_Origen', N'CK_tblHallazgos_Origen', N'CK_tblHallazgos_Clase', N'CK_tblHallazgos_TipoNovedad',
+                            N'CK_tblHallazgos_Seguimiento', N'CK_tblHallazgos_Preexistente', N'FK_tblViajeVehiculos_NoSaleHallazgo', N'CK_tblViajeVehiculos_NoSale')
+            """);
+        var disparador = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE name = N'TR_tblCuadrantes_CrearZonas' AND is_disabled = 0");
+        var hallazgosSinUbicarSinMarca = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblHallazgos WHERE ZonaId IS NULL AND Origen = 'inspector' AND MigracionPendiente = 0");
+
+        Assert.True(paneles == 5, $"Faltan paneles del dibujo de danos. {ayuda}");
+        Assert.True(provisionales == 5, $"Faltan zonas provisionales. {ayuda}");
+        Assert.True(zonas == zonasEsperadas, $"Hay {zonas} zonas numeradas y los cuadrantes esperan {zonasEsperadas} (dos por lado del 1 al 25 y una del 26 en adelante). {ayuda}");
+        Assert.True(restricciones == 13, $"Faltan relaciones o restricciones de zonas, hallazgos o unidades del viaje. {ayuda}");
+        Assert.True(disparador == 1, $"Falta el trigger que crea las zonas de un cuadrante nuevo. {ayuda}");
+        Assert.Equal(0, hallazgosSinUbicarSinMarca);
+    }
+
+    [FactEntornoReal]
+    public async Task El_historial_de_seguimiento_del_hallazgo_y_la_vista_de_patrones_estan_migrados()
+    {
+        // Sin esta migracion la API no puede registrar el seguimiento de un hallazgo ni calcular los patrones por zona: este chequeo (solo lectura)
+        // avisa antes de desplegar si falta ejecutar database/cambios-esquema/11-seguimiento-hallazgo.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/11-seguimiento-hallazgo.sql.";
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblHallazgoSeguimiento'");
+        var vista = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE name = N'vwPatronesPorCuadrante'");
+        var triggers = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.triggers
+             WHERE is_disabled = 0 AND parent_id = OBJECT_ID(N'tblHallazgoSeguimiento', N'U')
+               AND name IN (N'TR_tblHallazgoSeguimiento_NoModificar', N'TR_tblHallazgoSeguimiento_NoBorrar', N'TR_tblHallazgoSeguimiento_Sincronizar')
+            """);
+        var restricciones = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.objects
+             WHERE name IN (N'FK_tblHallazgoSeguimiento_Hallazgo', N'FK_tblHallazgoSeguimiento_Usuario', N'FK_tblHallazgoSeguimiento_Sello',
+                            N'CK_tblHallazgoSeguimiento_Accion', N'CK_tblHallazgoSeguimiento_Estados', N'CK_tblHallazgoSeguimiento_Cambio', N'CK_tblHallazgoSeguimiento_Detalle')
+            """);
+
+        Assert.True(tabla == 1, $"Falta la tabla tblHallazgoSeguimiento. {ayuda}");
+        Assert.True(triggers == 3, $"Faltan triggers del historial de seguimiento (o estan deshabilitados). {ayuda}");
+        Assert.True(restricciones == 7, $"Faltan relaciones o restricciones del historial de seguimiento. {ayuda}");
+        Assert.True(vista == 1, $"Falta la vista vwPatronesPorCuadrante. {ayuda}");
+
+        // La vista se puede consultar (es solo lectura) y no cuenta hallazgos sin zona.
+        var sinZona = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwPatronesPorCuadrante WHERE ZonaId IS NULL");
+        Assert.Equal(0, sinZona);
+    }
+
+    [FactEntornoReal]
+    public async Task Los_indices_de_consulta_de_los_hallazgos_estan_migrados()
+    {
+        // Sin esta migracion las consultas por zona y la bandeja de seguimiento recorren toda la tabla: este chequeo (solo lectura) avisa si falta
+        // ejecutar database/cambios-esquema/12-indices-hallazgo.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/12-indices-hallazgo.sql.";
+
+        async Task<string?> Columnas(string indice, bool incluidas) => await EscalarAsync<string>(conexion, """
+            SELECT STRING_AGG(c.name, ',') WITHIN GROUP (ORDER BY ic.key_ordinal, ic.index_column_id)
+              FROM sys.indexes i
+              JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+              JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+             WHERE i.object_id = OBJECT_ID(N'tblHallazgos', N'U') AND i.name = @i AND ic.is_included_column = @inc
+            """, ("@i", indice), ("@inc", incluidas));
+
+        Assert.True(await Columnas("IX_tblHallazgos_Zona_Clase", false) == "ZonaId,ClaseDano", $"Falta el indice por zona y clase. {ayuda}");
+        Assert.True(await Columnas("IX_tblHallazgos_Zona_Clase", true) == "InspeccionId", $"El indice por zona y clase debe incluir la inspeccion. {ayuda}");
+        Assert.True(await Columnas("IX_tblHallazgos_Seguimiento", false) == "EstadoSeguimiento,Origen,RevisadoAt", $"Falta el indice por estado de seguimiento, origen y fecha de revision. {ayuda}");
+        Assert.True(await Columnas("IX_tblHallazgos_Parte_Clase", false) is null, $"Sigue existiendo el indice por parte del vehiculo y clase, que reemplaza el de zona. {ayuda}");
+    }
+
+    [FactEntornoReal]
+    public async Task Los_niveles_de_severidad_tienen_su_accion()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/13-acciones-niveles-severidad.sql.
+        await using var conexion = await AbrirAsync();
+
+        var sinAccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblNivelesSeveridad WHERE Codigo IN ('v1_plus','v1','v2','v3') AND Accion IS NULL");
+
+        Assert.True(sinAccion == 0, $"Hay {sinAccion} nivel(es) de severidad sin accion. Ejecute database/cambios-esquema/13-acciones-niveles-severidad.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task La_foto_del_sello_y_la_unidad_que_no_sale_estan_migradas()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/14-sello-y-unidad-no-sale.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/14-sello-y-unidad-no-sale.sql.";
+
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblEvidencias', N'U') AND name = N'EsSello'");
+        var restriccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblEvidencias_Sello' AND parent_object_id = OBJECT_ID(N'tblEvidencias', N'U')");
+        var trigger = await EscalarAsync<int>(conexion, "SELECT CASE WHEN OBJECT_DEFINITION(OBJECT_ID(N'TR_tblEvidencias_NoEnCerrada')) LIKE N'%EsSello%' THEN 1 ELSE 0 END");
+        var vista = await EscalarAsync<int>(conexion, "SELECT CASE WHEN OBJECT_DEFINITION(OBJECT_ID(N'vwViajesCompletos')) LIKE N'%no_sale%' THEN 1 ELSE 0 END");
+
+        Assert.True(columna == 1, $"Falta la marca de la foto del sello en las evidencias. {ayuda}");
+        Assert.True(restriccion == 1, $"Falta la restriccion de la foto del sello. {ayuda}");
+        Assert.True(trigger == 1, $"El trigger de evidencias no admite la foto del sello en una inspeccion cerrada. {ayuda}");
+        Assert.True(vista == 1, $"La vista de viajes completos aun cuenta las unidades que no salen. {ayuda}");
+    }
+
+    [FactEntornoReal]
+    public async Task Las_notificaciones_los_dispositivos_y_la_novedad_del_conductor_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/15-notificaciones-y-dispositivos.sql.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/15-notificaciones-y-dispositivos.sql.";
+
+        var tablas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'tblNotificaciones', N'tblDispositivos') AND schema_id = SCHEMA_ID()");
+        var restricciones = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.check_constraints
+             WHERE name IN (N'CK_tblHallazgos_NovedadSinRevisar', N'CK_tblHallazgos_NovedadRevisada', N'CK_tblHallazgos_NivelDelConductor')
+               AND parent_object_id = OBJECT_ID(N'tblHallazgos', N'U')
+            """);
+        var triggers = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.triggers
+             WHERE name IN (N'TR_tblNotificaciones_SoloLecturaYRespuesta', N'TR_tblNotificaciones_NoBorrar', N'TR_tblHallazgos_NovedadDeTransporte')
+            """);
+
+        Assert.True(tablas == 2, $"Faltan tblNotificaciones o tblDispositivos. {ayuda}");
+        Assert.True(restricciones == 3, $"Faltan restricciones de la novedad del conductor en el hallazgo. {ayuda}");
+        Assert.True(triggers == 3, $"Faltan triggers de las notificaciones o de la novedad del conductor. {ayuda}");
+    }
+
+    [FactEntornoReal]
+    public async Task La_tabla_de_parametros_esta_migrada_con_sus_parametros_iniciales()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/16-tabla-parametros.sql. Los valores no se comparan: el negocio los puede haber cambiado.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/16-tabla-parametros.sql.";
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblParametros' AND schema_id = SCHEMA_ID()");
+        Assert.True(tabla == 1, $"Falta tblParametros. {ayuda}");
+        var iniciales = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM tblParametros
+             WHERE Clave IN ('objetivo_diario_novedad', 'reporte_diario_destinatarios', 'reporte_diario_hora', 'horario_operacion_inicio', 'horario_operacion_fin',
+                             'retencion_dias', 'gps_precision_minima_m', 'url_firmada_minutos')
+            """);
+        var invalidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Tipo NOT IN ('numero', 'porcentaje', 'texto', 'lista', 'hora', 'correos')");
+        var lineaBase = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR Clave LIKE '%fotos_minimas%'");
+
+        Assert.True(iniciales == 8, $"Faltan parametros iniciales (hay {iniciales} de 8). {ayuda}");
+        Assert.Equal(0, invalidos);
+        Assert.Equal(0, lineaBase);
+    }
+
+    [FactEntornoReal]
+    public async Task Los_parametros_de_las_alertas_y_la_vista_de_la_ventana_de_umbral_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/17-parametros-de-alertas.sql. Los valores no se comparan: el negocio los puede haber cambiado.
+        await using var conexion = await AbrirAsync();
+        var ayuda = "Ejecute database/cambios-esquema/17-parametros-de-alertas.sql.";
+
+        var parametros = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM tblParametros
+             WHERE Clave IN ('niveles_criticos', 'umbral_patron_cantidad', 'umbral_patron_ventana_dias', 'captura_incompleta_minutos', 'transferencia_pendiente_minutos')
+            """);
+        var vista = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE name = N'vwHallazgosVentanaUmbral' AND schema_id = SCHEMA_ID()");
+        var tipoDeLaLista = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave = 'niveles_criticos' AND Tipo = 'lista'");
+        Assert.True(parametros == 5, $"Faltan parametros de alertas (hay {parametros} de 5). {ayuda}");
+        Assert.True(vista == 1, $"Falta vwHallazgosVentanaUmbral. {ayuda}");
+        Assert.Equal(1, tipoDeLaLista);
+
+        // La vista se puede leer con las columnas que usan los procesos de alertas.
+        var filas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwHallazgosVentanaUmbral WHERE Fecha IS NOT NULL AND ClienteId IS NOT NULL AND Proceso IS NOT NULL");
+        Assert.True(filas >= 0);
+    }
+
+    [FactEntornoReal]
+    public async Task La_auditoria_completa_y_las_notas_aclaratorias_estan_migradas()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/18-auditoria-completa.sql o 19-notas-aclaratorias.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columnas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblAuditLog', N'U') AND name IN (N'Ip', N'Dispositivo', N'Detalle', N'ViajeId', N'ClienteId')");
+        var indices = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'tblAuditLog', N'U') AND name IN (N'IX_tblAuditLog_Entidad', N'IX_tblAuditLog_Viaje', N'IX_tblAuditLog_Cliente')");
+        var triggerAuditoria = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE name = N'TR_tblAuditLog_NoModificar'");
+        var tablaNotas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblNotasAclaratorias' AND schema_id = SCHEMA_ID()");
+        var triggersNotas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE name IN (N'TR_tblNotasAclaratorias_NoModificar', N'TR_tblNotasAclaratorias_NoBorrar')");
+
+        Assert.True(columnas == 5, "Faltan columnas de tblAuditLog. Ejecute database/cambios-esquema/18-auditoria-completa.sql.");
+        Assert.True(indices == 3, "Faltan indices de tblAuditLog. Ejecute database/cambios-esquema/18-auditoria-completa.sql.");
+        Assert.True(triggerAuditoria == 1, "Falta TR_tblAuditLog_NoModificar. Ejecute database/cambios-esquema/18-auditoria-completa.sql.");
+        Assert.True(tablaNotas == 1, "Falta tblNotasAclaratorias. Ejecute database/cambios-esquema/19-notas-aclaratorias.sql.");
+        Assert.True(triggersNotas == 2, "Faltan los triggers de tblNotasAclaratorias. Ejecute database/cambios-esquema/19-notas-aclaratorias.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task Las_vistas_de_los_indicadores_estan_migradas_y_se_consultan_con_los_datos_reales()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/20-vistas-de-indicadores.sql y comprueba que cada vista se consulta con los datos reales.
+        await using var conexion = await AbrirAsync();
+
+        var vistas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE schema_id = SCHEMA_ID() AND name IN (N'vwCobertura', N'vwAdopcion', N'vwTiempoCaptura', N'vwAveriasPorConfiguracion', N'vwIndicadorDiario')");
+        Assert.True(vistas == 5, $"Faltan vistas de indicadores (hay {vistas} de 5). Ejecute database/cambios-esquema/20-vistas-de-indicadores.sql.");
+
+        var cobertura = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura WHERE RegistrosCerrados BETWEEN 1 AND 6 AND Fecha IS NOT NULL AND ClienteId IS NOT NULL");
+        var completasMalContadas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura WHERE (Completa = 1 AND RegistrosCerrados <> 6) OR (Completa = 0 AND RegistrosCerrados = 6)");
+        var sinNoSale = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura c JOIN tblViajeVehiculos vv ON vv.ViajeId = c.ViajeId AND vv.VehiculoId = c.VehiculoId WHERE vv.EstadoUnidad = 'no_sale'");
+        var tiempos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwTiempoCaptura WHERE Proceso NOT IN ('cargue', 'descargue') OR Minutos < 0");
+        var adopcion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwAdopcion WHERE ConSalidaDigital > Programados");
+        var indicador = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwIndicadorDiario WHERE ConNovedad > Despachados");
+        var averias = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwAveriasPorConfiguracion WHERE ClienteId IS NULL OR Fecha IS NULL");
+
+        Assert.True(cobertura >= 0);
+        Assert.Equal(0, completasMalContadas);
+        Assert.Equal(0, sinNoSale);
+        Assert.Equal(0, tiempos);
+        Assert.Equal(0, adopcion);
+        Assert.Equal(0, indicador);
+        Assert.Equal(0, averias);
+    }
+
+    [FactEntornoReal]
+    public async Task Los_indices_de_filtros_y_la_columna_Completa_estan_migrados_y_coinciden_con_la_vista()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/21-indices-de-filtros-y-completa.sql y comprueba que Completa coincide con vwViajesCompletos en los datos reales.
+        await using var conexion = await AbrirAsync();
+
+        var indices = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM sys.indexes
+             WHERE name IN (N'IX_tblVehiculos_Filtros', N'IX_tblVehiculos_Activo', N'IX_tblOrdenesSofasa_Filtros', N'IX_tblInspecciones_Filtros', N'IX_tblViajeVehiculos_EstadoUnidad')
+               AND object_id IN (OBJECT_ID(N'tblVehiculos'), OBJECT_ID(N'tblOrdenesSofasa'), OBJECT_ID(N'tblInspecciones'), OBJECT_ID(N'tblViajeVehiculos'))
+            """);
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajeVehiculos') AND name = N'Completa'");
+        var procedimiento = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.procedures WHERE name = N'usp_RecalcularCompleta' AND schema_id = SCHEMA_ID()");
+        var triggers = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE is_disabled = 0 AND name IN (N'TR_tblInspecciones_Completa', N'TR_tblEtapas_Completa', N'TR_tblViajeVehiculos_Completa')");
+        Assert.True(indices == 5, $"Faltan indices de filtros (hay {indices} de 5). Ejecute database/cambios-esquema/21-indices-de-filtros-y-completa.sql.");
+        Assert.True(columna == 1, "Falta tblViajeVehiculos.Completa. Ejecute database/cambios-esquema/21-indices-de-filtros-y-completa.sql.");
+        Assert.True(procedimiento == 1, "Falta usp_RecalcularCompleta. Ejecute database/cambios-esquema/21-indices-de-filtros-y-completa.sql.");
+        Assert.True(triggers == 3, $"Faltan triggers de Completa activos (hay {triggers} de 3). Ejecute database/cambios-esquema/21-indices-de-filtros-y-completa.sql.");
+
+        var diferentes = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(*) FROM tblViajeVehiculos vv
+             WHERE vv.Completa <> CASE WHEN EXISTS (SELECT 1 FROM vwViajesCompletos c WHERE c.ViajeId = vv.ViajeId AND c.VehiculoId = vv.VehiculoId) THEN 1 ELSE 0 END
+            """);
+        Assert.True(diferentes == 0, $"{diferentes} filas de tblViajeVehiculos tienen Completa distinta de vwViajesCompletos: ejecute EXEC usp_RecalcularCompleta.");
+    }
+
+    [FactEntornoReal]
+    public async Task El_catalogo_de_estados_sofasa_esta_migrado_y_cubre_los_statuscode_de_las_ordenes()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/22-catalogo-estados-sofasa.sql y comprueba que cada StatusCode de las ordenes reales tiene su estado en el catalogo.
+        await using var conexion = await AbrirAsync();
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblEstadosSofasa' AND schema_id = SCHEMA_ID()");
+        Assert.True(tabla == 1, "Falta tblEstadosSofasa. Ejecute database/cambios-esquema/22-catalogo-estados-sofasa.sql.");
+
+        var sinEstado = await EscalarAsync<int>(conexion, """
+            SELECT COUNT(DISTINCT LTRIM(RTRIM(o.StatusCode))) FROM tblOrdenesSofasa o
+             WHERE o.StatusCode IS NOT NULL AND LEN(LTRIM(RTRIM(o.StatusCode))) > 0
+               AND NOT EXISTS (SELECT 1 FROM tblEstadosSofasa e WHERE e.Codigo = LTRIM(RTRIM(o.StatusCode)))
+            """);
+        var invalidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblEstadosSofasa WHERE LEN(Codigo) = 0 OR Codigo <> LTRIM(RTRIM(Codigo)) OR LEN(LTRIM(RTRIM(Nombre))) = 0 OR Orden < 0");
+        Assert.True(sinEstado == 0, $"{sinEstado} StatusCode de las ordenes no estan en el catalogo: ejecute de nuevo 22-catalogo-estados-sofasa.sql o agreguelos desde el portal.");
+        Assert.Equal(0, invalidos);
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

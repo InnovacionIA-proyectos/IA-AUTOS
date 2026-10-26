@@ -97,6 +97,42 @@ public sealed class clsEtapaPreviaSinCierreException : clsExcepcionDominio
     }
 }
 
+/// <summary>La llegada de Transporte de la unidad ya estaba cerrada: 409 LLEGADA_YA_CERRADA.</summary>
+public sealed class clsLlegadaYaCerradaException : clsExcepcionDominio
+{
+    public clsLlegadaYaCerradaException(string vin)
+        : base(clsCodigosError.LLEGADA_YA_CERRADA, $"La llegada de la unidad {vin} ya estaba confirmada")
+    {
+    }
+}
+
+/// <summary>La URL de una foto no tiene firma, la firma no coincide o ya vencio: 403 URL_FIRMADA_INVALIDA.</summary>
+public sealed class clsUrlFirmadaInvalidaException : clsExcepcionDominio
+{
+    public clsUrlFirmadaInvalidaException()
+        : base(clsCodigosError.URL_FIRMADA_INVALIDA, "La URL de la foto no es valida o ya vencio: pida una nueva")
+    {
+    }
+}
+
+/// <summary>La novedad del conductor ya fue revisada: 409 HALLAZGO_YA_REVISADO.</summary>
+public sealed class clsHallazgoYaRevisadoException : clsExcepcionDominio
+{
+    public clsHallazgoYaRevisadoException()
+        : base(clsCodigosError.HALLAZGO_YA_REVISADO, "El hallazgo ya fue revisado: su zona, clase y nivel ya no se cambian")
+    {
+    }
+}
+
+/// <summary>La unidad no sale del viaje, asi que no se transporta: 409 UNIDAD_NO_SALE.</summary>
+public sealed class clsUnidadNoSaleException : clsExcepcionDominio
+{
+    public clsUnidadNoSaleException(string vin)
+        : base(clsCodigosError.UNIDAD_NO_SALE, $"La unidad {vin} no sale de este viaje: no admite novedades ni llegada")
+    {
+    }
+}
+
 /// <summary>La cuenta esta bloqueada por demasiados PIN errados: 423 ACCOUNT_LOCKED con la hora en que se levanta.</summary>
 public sealed class clsCuentaBloqueadaException : clsExcepcionDominio
 {

@@ -26,6 +26,11 @@ public sealed class clsVehiculo : clsEntidadBase
     /// <summary>Cliente (empresa) dueno del vehiculo.</summary>
     public Guid ClienteId { get; private set; }
 
+    /// <summary>
+    /// Falso si el vehiculo se dio de baja: ya no se busca ni se agrega a un viaje, pero conserva sus etapas, inspecciones y evidencias (nada se borra).
+    /// </summary>
+    public bool Activo { get; private set; } = true;
+
     /// <summary>Alta desde carga masiva. El VIN es laxo (acepta numeros de chasis de longitud variable).</summary>
     public static clsVehiculo Crear(string vin, string marca, string? modelo, string? color, string operacion, Guid clienteId, DateTimeOffset ahora)
     {
@@ -46,6 +51,18 @@ public sealed class clsVehiculo : clsEntidadBase
         };
         vehiculo.Inicializar(ahora);
         return vehiculo;
+    }
+
+    /// <summary>Baja logica: el vehiculo queda inactivo y todo su historial se conserva. Darlo de baja otra vez no cambia nada.</summary>
+    public void DarDeBaja(DateTimeOffset ahora)
+    {
+        if (!Activo)
+        {
+            return;
+        }
+
+        Activo = false;
+        Tocar(ahora);
     }
 
     /// <summary>Alta desde una orden Sofasa: operacion fija "nacional".</summary>

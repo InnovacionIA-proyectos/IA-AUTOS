@@ -2,28 +2,6 @@ using System.Text.Json.Serialization;
 
 namespace IAAutos.Aplicacion.Reportes.DTOReportes;
 
-public sealed record ConteoProcesoDto(string Proceso, int Total);
-
-public sealed record ConteoZonaDto(string ParteVehiculo, int Total);
-
-public sealed record ConteoZonaProcesoDto(string Proceso, string ParteVehiculo, int Total);
-
-/// <summary>Mapa de calor: hallazgos de unidades movilizadas por proceso y por zona del vehiculo.</summary>
-public sealed record PatronesDto(
-    [property: JsonPropertyName("total")] int Total,
-    [property: JsonPropertyName("porProceso")] IReadOnlyList<ConteoProcesoDto> PorProceso,
-    [property: JsonPropertyName("porZona")] IReadOnlyList<ConteoZonaDto> PorZona,
-    [property: JsonPropertyName("porZonaProceso")] IReadOnlyList<ConteoZonaProcesoDto> PorZonaProceso);
-
-public sealed record ConteoClaseDto(string ClaseDano, int Total);
-
-public sealed record ConteoTamanoDto(string TamanoDano, int Total);
-
-public sealed record AnalisisDto(
-    [property: JsonPropertyName("porClase")] IReadOnlyList<ConteoClaseDto> PorClase,
-    [property: JsonPropertyName("porTamano")] IReadOnlyList<ConteoTamanoDto> PorTamano,
-    [property: JsonPropertyName("sugerencias")] IReadOnlyList<string> Sugerencias);
-
 public sealed record TasaOperacionDto(
     [property: JsonPropertyName("operacion")] string Operacion,
     [property: JsonPropertyName("total")] int Total,

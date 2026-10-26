@@ -1,8 +1,13 @@
+using IAAutos.Aplicacion.Alertas;
 using IAAutos.Aplicacion.Archivos;
+using IAAutos.Aplicacion.Auditoria;
 using IAAutos.Aplicacion.Auth.Services;
 using IAAutos.Aplicacion.Catalogos;
+using IAAutos.Aplicacion.Exportaciones;
 using IAAutos.Aplicacion.Inspecciones;
+using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Aplicacion.Reportes;
+using IAAutos.Aplicacion.ReporteDiario;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Sofasa;
 using IAAutos.Aplicacion.Vehiculos;
@@ -11,13 +16,18 @@ using IAAutos.Dominio.Auditoria;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Notificaciones;
+using IAAutos.Dominio.Parametros;
 using IAAutos.Dominio.Sofasa;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
 using IAAutos.Aplicacion.Viajes;
+using IAAutos.Infraestructura.Alertas;
 using IAAutos.Infraestructura.Almacenamiento;
 using IAAutos.Infraestructura.Catalogos;
+using IAAutos.Infraestructura.Correo;
+using IAAutos.Infraestructura.Notificaciones;
 using IAAutos.Infraestructura.Persistencia;
 using IAAutos.Infraestructura.Portal;
 using IAAutos.Infraestructura.Reportes;
@@ -27,6 +37,8 @@ using IAAutos.Infraestructura.Seguridad;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace IAAutos.Infraestructura;
 
@@ -63,9 +75,30 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IConsultasSofasa, clsConsultasSofasa>();
         servicios.AddScoped<IConsultasViajes, clsConsultasViajes>();
         servicios.AddScoped<IConsultasInspecciones, clsConsultasInspecciones>();
+        servicios.AddScoped<IDescriptorHallazgos, clsDescriptorHallazgos>();
+        servicios.AddScoped<IConsultasHallazgos, clsConsultasHallazgos>();
+        servicios.AddScoped<IConsultasNotificaciones, clsConsultasNotificaciones>();
+        servicios.AddScoped<IConsultasAlertas, clsConsultasAlertas>();
+        servicios.AddScoped<IConsultasNotas, clsConsultasNotas>();
+        servicios.AddScoped<IOrigenAuditoria, clsOrigenAuditoria>();
+        servicios.AddScoped<IConsultasAuditoria, clsConsultasAuditoria>();
+        servicios.AddScoped<IConsultasIndicadores, clsConsultasIndicadores>();
+        servicios.AddScoped<IConsultasExportaciones, clsConsultasExportaciones>();
+        servicios.AddSingleton<IGeneradorExcel, clsGeneradorExcel>();
+        servicios.AddScoped<INotaAclaratoriaRepository, clsNotaAclaratoriaRepository>();
+        servicios.AddScoped<IParametroRepository, clsParametroRepository>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();
         servicios.AddSingleton<IGeneradorPdfInventario, clsGeneradorPdfInventario>();
         servicios.AddSingleton<IGeneradorPdfConstancia, clsGeneradorPdfConstancia>();
+        servicios.AddSingleton<IGeneradorPdfInforme, clsGeneradorPdfInforme>();
+
+        servicios.Configure<clsOpcionesNotificaciones>(configuracion.GetSection(clsOpcionesNotificaciones.SECCION));
+        servicios.AddSingleton<IFirmadorUrls, clsFirmadorUrls>();
+        servicios.AddSingleton<IEnviadorPush>(p => new clsEnviadorFcm(
+            p.GetRequiredService<IOptions<clsOpcionesNotificaciones>>(),
+            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = TimeSpan.FromSeconds(10) },
+            p.GetRequiredService<IReloj>(),
+            p.GetRequiredService<ILogger<clsEnviadorFcm>>()));
 
         servicios.Configure<clsOpcionesAlmacenamiento>(configuracion.GetSection(clsOpcionesAlmacenamiento.SECCION));
         servicios.Configure<clsOpcionesS3>(configuracion.GetSection(clsOpcionesS3.SECCION));
@@ -91,6 +124,15 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IViajeRepository, clsViajeRepository>();
         servicios.AddScoped<IOrdenSofasaRepository, clsOrdenSofasaRepository>();
         servicios.AddScoped<IAuditoriaRepository, clsAuditoriaRepository>();
+        servicios.AddScoped<INotificacionRepository, clsNotificacionRepository>();
+        servicios.AddScoped<IDispositivoRepository, clsDispositivoRepository>();
+        servicios.AddHostedService<clsProcesoAlertas>();
+        servicios.Configure<clsOpcionesCorreo>(configuracion.GetSection(clsOpcionesCorreo.SECCION));
+        servicios.AddSingleton<IEnviadorCorreo>(p => new clsEnviadorMailSender(
+            p.GetRequiredService<IOptions<clsOpcionesCorreo>>(),
+            new HttpClient(new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) }) { Timeout = TimeSpan.FromSeconds(30) },
+            p.GetRequiredService<ILogger<clsEnviadorMailSender>>()));
+        servicios.AddHostedService<clsProcesoReporteDiario>();
         return servicios;
     }
 
@@ -111,8 +153,11 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsTamanoDano>(
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.TAMANOS_DANO, clsTamanoDano.Crear));
         servicios.AddScoped<ICatalogo, clsCatalogoNiveles>();
+        servicios.AddScoped<ICatalogo, clsCatalogoEstadosSofasa>();
         servicios.AddScoped<ICatalogo, clsCatalogoVistas>();
         servicios.AddScoped<ICatalogo, clsCatalogoCuadrantes>();
-        servicios.AddScoped<ICatalogo, clsCatalogoCuadranteVistas>();
+        servicios.AddScoped<ICatalogo, clsCatalogoPanelesDano>();
+        servicios.AddScoped<ICatalogo, clsCatalogoCuadranteRegiones>();
+        servicios.AddScoped<IImagenesPanelDano, clsImagenesPanelDano>();
     }
 }

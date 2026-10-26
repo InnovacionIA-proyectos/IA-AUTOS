@@ -61,3 +61,6 @@ public sealed record OrdenSofasaDto(
     DateTimeOffset UpdatedAt);
 
 public sealed record FiltrosOrdenesSofasa(string? Vin, string? Estado, string? Ciudad, DateTimeOffset? Desde, DateTimeOffset? Hasta);
+
+/// <summary>Los filtros del listado tal como llegan en la consulta (texto) y su pagina y orden: el servicio los valida juntos.</summary>
+public sealed record FiltrosOrdenesSofasaRequest(string? Vin, string? Estado, string? Ciudad, string? Desde, string? Hasta, string? Pagina = null, string? Tamano = null, string? Orden = null);
