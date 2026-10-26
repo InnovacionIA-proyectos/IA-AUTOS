@@ -144,9 +144,15 @@ probar el acuse en rojo se capturó una llegada de una etapa sin salida y el ser
 en verde. La regla `ETAPA_PREVIA_SIN_CIERRE` solo mira la **etapa anterior** y solo se aplica al momento de
 salida (`clsInspeccionesService.CrearAsync`); el orden salida→llegada **dentro** de una misma etapa no lo exige
 nadie, ni la app ni la API, y tampoco aparece escrito en ningún requisito. Como la siguiente etapa solo pide que
-la llegada de la previa esté cerrada, la cadena entera avanza sin que exista registro de la salida. Está por
-decidir si es una regla que falta o si hay casos en que la llegada va sola; mientras tanto, el comentario de
-`inventario.dart` que afirmaba que «el servidor lo impone» quedó corregido, porque era falso.
+la llegada de la previa esté cerrada, la cadena entera avanza sin que exista registro de la salida. El comentario
+de `inventario.dart` que afirmaba que «el servidor lo impone» quedó corregido, porque era falso.
+
+**Pendiente de consultar con Calidad antes de implementar nada** (26-oct-2026): si la salida debe ser obligatoria
+antes de la llegada de su misma etapa, o si hay operaciones en que la llegada va sola (un vehículo ya en tránsito
+al entrar el sistema, una etapa que solo se inspecciona al recibir). Si se confirma la regla, toca en dos sitios:
+`AsegurarEtapaPreviaCerradaAsync` en `clsInspeccionesService` —hoy solo se invoca para `salida`— y el `bloqueo`
+de `momentosDeEtapa` en `inventario.dart`, para deshabilitar el botón antes de llamar, como ya se hace con la
+etapa previa.
 
 **Pendientes anotados de estas cuatro:**
 
@@ -157,6 +163,8 @@ decidir si es una regla que falta o si hay casos en que la llegada va sola; mien
   esquina. Las dos vistas adicionales no llevan guía: son fotos de un daño concreto, sin encuadre estándar.
   Queda por confirmar con quien inspecciona cómo se toma en la práctica la vista superior, porque nadie se sube
   encima del vehículo y una guía cenital imposible de cumplir se ignora.
+- **Si la llegada exige su salida** es la otra pregunta abierta para Calidad; el hallazgo y lo que tocaría
+  cambiar están descritos arriba, en el bloque del 26-oct-2026.
 - **El umbral de precisión baja (30 m) es valor inicial**, pendiente de confirmar con Calidad. Está en un solo
   sitio: `precisionBajaMetros` en `reglas_informe.dart`.
 - **Falta la compresión de las fotos** que pide el título de S5-HU-24.8: necesita una dependencia nueva y hoy no
