@@ -134,6 +134,11 @@ grande, las zonas táctiles de 48 px, el modo claro (`ThemeMode.light` fijo, la 
 teléfono), las listas de selección en vez de texto libre, el VIN y la placa en monoespaciada, el acuse visual al
 tomar, marcar o firmar, y el acuse en color al cerrar (verde enviado, ámbar en cola, rojo rechazado).
 
+**Los tres colores del cierre quedaron verificados en dispositivo** (26-oct-2026). El rojo costó llegar porque
+la app bloquea localmente casi todo lo que el servidor rechazaría: se provocó creando desde la API la
+inspección del mismo momento que el celular estaba a punto de cerrar, con lo que el cierre recibió el 409
+`Esta etapa ya tiene una inspección de ese momento` y el diálogo lo mostró en rojo con el motivo del servidor.
+
 **Falta el rojo de hallazgo crítico, y no por el color:** la app no usa el catálogo `niveles-severidad`, que la
 API ya sirve con los cuatro niveles (`v1_plus`, `v1`, `v2`, `v3`) y su campo `accion`. Hoy un hallazgo se
 registra con clase y tamaño, sin nivel, así que no hay dato con el que decidir qué es crítico. El nivel V entra
