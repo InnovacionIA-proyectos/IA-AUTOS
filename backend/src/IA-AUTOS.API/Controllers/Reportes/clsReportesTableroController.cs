@@ -37,6 +37,22 @@ public sealed class clsReportesTableroController(clsReportesTableroService servi
         CancellationToken ct) =>
         Ok(await servicio.CoberturaAsync(Filtros(desde, hasta, operacion, clienteId, puntoId, marca, trailer, proceso, nivel), ct));
 
+    /// <summary>Novedades de proceso (cargue sin inspector y recibo sin entrega) del periodo: el total y su conteo por tipo, punto de custodia, cliente y mes. No son hallazgos: no cuentan en los patrones ni en la tasa de rechazo. El filtro <c>nivel</c> no aplica.</summary>
+    [HttpGet("novedades-proceso")]
+    [ProducesResponseType<NovedadesProcesoDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> NovedadesDeProceso(
+        [FromQuery] string? desde,
+        [FromQuery] string? hasta,
+        [FromQuery] string? operacion,
+        [FromQuery(Name = "cliente_id")] string? clienteId,
+        [FromQuery(Name = "punto_id")] string? puntoId,
+        [FromQuery] string? marca,
+        [FromQuery] string? trailer,
+        [FromQuery] string? proceso,
+        [FromQuery] string? nivel,
+        CancellationToken ct) =>
+        Ok(await servicio.NovedadesDeProcesoAsync(Filtros(desde, hasta, operacion, clienteId, puntoId, marca, trailer, proceso, nivel), ct));
+
     /// <summary>Adopcion (formula propuesta, pendiente de confirmar por Calidad): de los VIN de los viajes programados cada dia, cuantos tienen una inspeccion de salida en el sistema. Meta 95 %. Por dia, operacion y cliente.</summary>
     [HttpGet("adopcion")]
     [ProducesResponseType<AdopcionDto>(StatusCodes.Status200OK)]

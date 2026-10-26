@@ -74,6 +74,11 @@ public sealed record CrearEvidenciaRequest(
 /// </summary>
 public sealed record FirmarTransferenciaRequest(Guid? EntregaUsuarioId, Guid? RecibeUsuarioId, string? Firma);
 
+/// <summary>
+/// El recibo sin entrega: la firma de quien recibe (el conductor del viaje) cuando el conductor hizo la salida del cargue y nadie de Botero Soto firma la entrega. La identidad sale del token.
+/// </summary>
+public sealed record ReciboSinEntregaRequest(string? Firma);
+
 /// <summary>Quien recibe firma «con reservas»: su firma mas las observaciones, que son obligatorias.</summary>
 public sealed record RecibirConReservasRequest(Guid? EntregaUsuarioId, Guid? RecibeUsuarioId, string? Firma, string? Reservas);
 
@@ -159,7 +164,7 @@ public sealed record InspeccionListadoDto(
 public sealed record TransferenciaDetalleDto(
     Guid Id,
     Guid InspeccionId,
-    Guid EntregaUsuarioId,
+    Guid? EntregaUsuarioId,
     Guid RecibeUsuarioId,
     bool Firmada,
     DateTimeOffset? FirmadaAt,

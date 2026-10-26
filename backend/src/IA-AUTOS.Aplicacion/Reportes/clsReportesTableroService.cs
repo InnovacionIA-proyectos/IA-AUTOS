@@ -72,6 +72,26 @@ public sealed class clsReportesTableroService(
                 .ToList());
     }
 
+    // ------------------------------------------------------------------------------------ novedades de proceso
+
+    /// <summary>El conteo de las novedades de proceso del periodo por tipo, punto de custodia, cliente y mes, con los mismos filtros de los demas reportes (el nivel no aplica).</summary>
+    public async Task<NovedadesProcesoDto> NovedadesDeProcesoAsync(FiltrosReporteRequest solicitud, CancellationToken ct = default)
+    {
+        var filas = await consultas.NovedadesDeProcesoAsync(Parsear(solicitud), ct);
+        var clientes = await NombresAsync(clsNombresCatalogo.CLIENTES, ct);
+        var puntos = await NombresAsync(clsNombresCatalogo.PUNTOS_CUSTODIA, ct);
+        return new NovedadesProcesoDto(
+            filas.Sum(f => f.Total),
+            filas.GroupBy(f => f.Tipo).OrderByDescending(g => g.Sum(f => f.Total)).ThenBy(g => g.Key, StringComparer.Ordinal)
+                .Select(g => new NovedadProcesoTipoDto(g.Key, g.Sum(f => f.Total))).ToList(),
+            filas.GroupBy(f => f.PuntoId).OrderByDescending(g => g.Sum(f => f.Total)).ThenBy(g => g.Key is { } p ? puntos.GetValueOrDefault(p) : null, StringComparer.Ordinal)
+                .Select(g => new NovedadProcesoPuntoDto(g.Key, g.Key is { } p ? puntos.GetValueOrDefault(p) : null, g.Sum(f => f.Total))).ToList(),
+            filas.GroupBy(f => f.ClienteId).OrderByDescending(g => g.Sum(f => f.Total)).ThenBy(g => clientes.GetValueOrDefault(g.Key), StringComparer.Ordinal)
+                .Select(g => new NovedadProcesoClienteDto(g.Key, clientes.GetValueOrDefault(g.Key), g.Sum(f => f.Total))).ToList(),
+            filas.GroupBy(f => f.Mes).OrderBy(g => g.Key, StringComparer.Ordinal)
+                .Select(g => new NovedadProcesoMesDto(g.Key, g.Sum(f => f.Total))).ToList());
+    }
+
     // --------------------------------------------------------------------------------------------- adopcion
 
     public async Task<AdopcionDto> AdopcionAsync(FiltrosReporteRequest solicitud, CancellationToken ct = default)

@@ -34,6 +34,14 @@ public class SeguimientoYNoSaleTests
         Assert.Equal([clsEvidenciaHallazgo.FOTO_HALLAZGO, clsEvidenciaHallazgo.TRANSFERENCIA_NO_FIRMA], clsEvidenciaHallazgo.Faltante(false, clsTipoCierre.NO_FIRMA));
     }
 
+    [Fact]
+    public void Un_recibo_sin_entrega_deja_la_evidencia_incompleta_porque_solo_firma_una_parte()
+    {
+        Assert.Equal([clsEvidenciaHallazgo.TRANSFERENCIA_SIN_ENTREGA], clsEvidenciaHallazgo.Faltante(true, clsTipoCierre.RECIBO_SIN_ENTREGA));
+        Assert.Equal([clsEvidenciaHallazgo.FOTO_HALLAZGO, clsEvidenciaHallazgo.TRANSFERENCIA_SIN_ENTREGA], clsEvidenciaHallazgo.Faltante(false, clsTipoCierre.RECIBO_SIN_ENTREGA));
+        Assert.False(clsEvidenciaHallazgo.EstaCompleta(true, clsTipoCierre.RECIBO_SIN_ENTREGA));
+    }
+
     // ------------------------------------------------------------------------------------- historial
 
     [Theory]

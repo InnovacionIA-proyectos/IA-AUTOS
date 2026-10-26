@@ -4,7 +4,7 @@ La especificación de negocio, las historias de usuario y el índice de toda la 
 
 Todas las rutas, los metodos, los codigos HTTP y la forma de las respuestas conservan el contrato del sistema anterior, de modo que la app movil y el ETL ya desplegados siguen funcionando. Las diferencias intencionales estan en `docs/seguridad.md`.
 
-Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo van en `snake_case`; las unicas excepciones en `camelCase` son el cuerpo de `login-portal` (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint `/api/metricas/rechazo`. El contrato esta versionado (`info.version` 2.2.0, sin prefijo en la ruta) y la lista de cambios respecto a la v1 esta en `docs/migracion-v1-v2.md`. Las fechas son ISO 8601 UTC con milisegundos (`2026-07-17T12:30:15.123Z`) y las de entrada exigen zona horaria. La especificacion OpenAPI se publica en `/openapi/v1.json` cuando `Documentacion__Habilitada=true` (siempre en Development).
+Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo van en `snake_case`; las unicas excepciones en `camelCase` son el cuerpo de `login-portal` (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint `/api/metricas/rechazo`. El contrato esta versionado (`info.version` 2.3.0, sin prefijo en la ruta) y la lista de cambios respecto a la v1 esta en `docs/migracion-v1-v2.md`. Las fechas son ISO 8601 UTC con milisegundos (`2026-07-17T12:30:15.123Z`) y las de entrada exigen zona horaria. La especificacion OpenAPI se publica en `/openapi/v1.json` cuando `Documentacion__Habilitada=true` (siempre en Development).
 
 ## Roles
 
@@ -95,7 +95,7 @@ Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo
 | GET `/api/catalogos/paneles-dano/{codigo}/imagen` | publico | la imagen de fondo de un panel de dano, con cache larga; `404` si aun no tiene |
 | PUT `/api/catalogos/paneles-dano/{codigo}/imagen` | admin, super_admin | cambia la imagen del panel con un archivo ya subido (`{ "archivo": "…png" }`) |
 | POST `/api/catalogos/{nombre}`, PATCH `/api/catalogos/{nombre}/{id}`, DELETE `/api/catalogos/{nombre}/{id}` | admin, super_admin, coordinador_calidad | crea, edita o borra un valor; uno en uso no se borra (`409`), se inactiva |
-| GET `/api/reportes/cobertura`, `/adopcion`, `/tiempo-captura`, `/averias`, `/patrones`, `/indicador-diario` | ver_reportes (coordinador_calidad, comercial, admin, super_admin; `403` inspector y conductor) | los reportes del tablero, en snake_case, con los filtros `desde`, `hasta` (ultimos 30 dias por defecto), `operacion`, `cliente_id` (solo super_admin), `punto_id`, `marca`, `trailer`, `proceso` y `nivel`; cuentan hallazgos de inspecciones cerradas aunque la unidad no haya terminado el viaje y el cliente del vehiculo |
+| GET `/api/reportes/cobertura`, `/adopcion`, `/tiempo-captura`, `/averias`, `/novedades-proceso`, `/patrones`, `/indicador-diario` | ver_reportes (coordinador_calidad, comercial, admin, super_admin; `403` inspector y conductor) | los reportes del tablero, en snake_case, con los filtros `desde`, `hasta` (ultimos 30 dias por defecto), `operacion`, `cliente_id` (solo super_admin), `punto_id`, `marca`, `trailer`, `proceso` y `nivel`; cuentan hallazgos de inspecciones cerradas aunque la unidad no haya terminado el viaje y el cliente del vehiculo |
 | GET `/api/metricas/rechazo` | autenticado | tasa de rechazo frente a la linea base |
 | GET `/health` | publico | `200` si la base responde, `503` si no |
 

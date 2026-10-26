@@ -15,6 +15,76 @@ public class TransferenciaCustodiaTests
     private clsTransferenciaCustodia Nueva() => clsTransferenciaCustodia.Crear(Guid.NewGuid(), _entrega, _recibe, AHORA);
 
     [Fact]
+    public void El_recibo_sin_entrega_nace_cerrado_con_solo_la_firma_y_la_ip_de_quien_recibe()
+    {
+        var inspeccion = Guid.NewGuid();
+
+        var t = clsTransferenciaCustodia.CrearReciboSinEntrega(inspeccion, _recibe, "trazo", "10.0.0.5", AHORA);
+
+        Assert.Equal(clsTipoCierre.RECIBO_SIN_ENTREGA, t.TipoCierre);
+        Assert.True(t.EstaCerrada);
+        Assert.False(t.EstaCompleta);
+        Assert.Null(t.EntregaUsuarioId);
+        Assert.Null(t.FirmaEntrega);
+        Assert.Null(t.FirmaEntregaAt);
+        Assert.Null(t.FirmaEntregaIp);
+        Assert.Null(t.FirmadaAt);
+        Assert.Equal((inspeccion, _recibe, "trazo", "10.0.0.5", (DateTimeOffset?)AHORA), (t.InspeccionId, t.RecibeUsuarioId, t.FirmaRecibe, t.FirmaRecibeIp, t.FirmaRecibeAt));
+        Assert.Equal(clsParteFirmante.RECIBE, t.ParteDe(_recibe));
+        Assert.Null(t.ParteDe(_entrega));
+        Assert.Throws<clsValidacionException>(() => clsTransferenciaCustodia.CrearReciboSinEntrega(inspeccion, _recibe, null, null, AHORA));
+        Assert.Throws<clsValidacionException>(() => clsTransferenciaCustodia.CrearReciboSinEntrega(inspeccion, _recibe, "", null, AHORA));
+    }
+
+    [Fact]
+    public void Un_recibo_sin_entrega_no_admite_mas_cambios()
+    {
+        var t = clsTransferenciaCustodia.CrearReciboSinEntrega(Guid.NewGuid(), _recibe, "trazo", null, AHORA);
+
+        var otraFirma = Assert.Throws<clsConflictoException>(() => t.Firmar(_recibe, "otra", null, AHORA));
+        var reservas = Assert.Throws<clsConflictoException>(() => t.FirmarConReservas(_recibe, "otra", "Con reservas", null, AHORA));
+        var cierre = Assert.Throws<clsConflictoException>(() => t.CerrarSinEntrega(_recibe, "otra", null, AHORA));
+
+        Assert.Contains("recibo sin entrega", otraFirma.Message);
+        Assert.Contains("recibo sin entrega", reservas.Message);
+        Assert.Contains("recibo sin entrega", cierre.Message);
+        Assert.Equal("trazo", t.FirmaRecibe);
+    }
+
+    [Fact]
+    public void Una_transferencia_abierta_se_cierra_sin_entrega_solo_por_quien_recibe_y_si_quien_entrega_no_firmo()
+    {
+        var t = Nueva();
+        t.Firmar(_recibe, "recibe", null, AHORA);
+        t.FirmarConReservas(_recibe, "recibe", "Con reservas", null, AHORA);
+
+        Assert.Throws<clsProhibidoException>(() => t.CerrarSinEntrega(_entrega, "x", null, AHORA));
+        Assert.Throws<clsProhibidoException>(() => t.CerrarSinEntrega(Guid.NewGuid(), "x", null, AHORA));
+        Assert.Throws<clsValidacionException>(() => t.CerrarSinEntrega(_recibe, null, null, AHORA));
+
+        t.CerrarSinEntrega(_recibe, "firma final", "10.0.0.9", AHORA.AddMinutes(1));
+
+        Assert.Equal(clsTipoCierre.RECIBO_SIN_ENTREGA, t.TipoCierre);
+        Assert.Null(t.EntregaUsuarioId);
+        Assert.Null(t.ReservasTexto);
+        Assert.Equal(("firma final", "10.0.0.9"), (t.FirmaRecibe, t.FirmaRecibeIp));
+        Assert.Null(t.FirmadaAt);
+    }
+
+    [Fact]
+    public void Si_quien_entrega_ya_firmo_no_se_cierra_sin_entrega()
+    {
+        var t = Nueva();
+        t.Firmar(_entrega, "entrega", null, AHORA);
+
+        var ex = Assert.Throws<clsConflictoException>(() => t.CerrarSinEntrega(_recibe, "x", null, AHORA));
+
+        Assert.Contains("Quien entrega ya firmó", ex.Message);
+        Assert.Null(t.TipoCierre);
+        Assert.Equal(_entrega, t.EntregaUsuarioId);
+    }
+
+    [Fact]
     public void Crear_exige_usuarios_distintos_y_nace_abierta_sin_firmas()
     {
         Assert.Throws<clsValidacionException>(() => clsTransferenciaCustodia.Crear(Guid.NewGuid(), _entrega, _entrega, AHORA));
@@ -235,7 +305,7 @@ public class TransferenciaCustodiaTests
     [Fact]
     public void Los_tipos_de_cierre_y_las_partes_son_los_del_contrato()
     {
-        Assert.Equal(["con_reservas", "firmada", "no_firma"], clsTipoCierre.VALORES.Order(StringComparer.Ordinal));
+        Assert.Equal(["con_reservas", "firmada", "no_firma", "recibo_sin_entrega"], clsTipoCierre.VALORES.Order(StringComparer.Ordinal));
         Assert.Equal(["entrega", "recibe"], clsParteFirmante.VALORES.Order(StringComparer.Ordinal));
     }
 }

@@ -177,7 +177,7 @@ public sealed class clsInformePdfService(
             return null;
         }
 
-        var entrega = await clsArmadorFirmas.ArmarAsync(almacen, t.EntregaNombre ?? "—", t.FirmaEntrega, t.EntregaFirmadaAt, t.EntregaFirmaIp, ct);
+        var entrega = await clsArmadorFirmas.ArmarAsync(almacen, t.TipoCierre == IAAutos.Dominio.Custodia.clsTipoCierre.RECIBO_SIN_ENTREGA ? "Sin entrega" : t.EntregaNombre ?? "—", t.FirmaEntrega, t.EntregaFirmadaAt, t.EntregaFirmaIp, ct);
         var recibe = await clsArmadorFirmas.ArmarAsync(almacen, t.RecibeNombre ?? "—", t.FirmaRecibe, t.RecibeFirmadaAt, t.RecibeFirmaIp, ct);
         FotoInforme? constancia = null;
         if (informe.Evidencias.FirstOrDefault(e => e.Id == t.EvidenciaConstanciaId) is { } foto)

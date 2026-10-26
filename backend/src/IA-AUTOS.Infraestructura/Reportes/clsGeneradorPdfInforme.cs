@@ -157,7 +157,16 @@ internal sealed class clsGeneradorPdfInforme : IGeneradorPdfInforme
             doc.Escribir($"Firmada por ambas partes el {clsPieFecha.Fecha(firmada)}", 11);
         }
 
-        Firma(doc, "Entrega", t.Entrega, t.NoFirmaParte == clsParteFirmante.ENTREGA);
+        if (t.TipoCierre == clsTipoCierre.RECIBO_SIN_ENTREGA)
+        {
+            doc.Espaciar(4);
+            doc.Escribir("Entrega: no hubo entrega", 12, true);
+            doc.Escribir("El conductor hizo la salida del cargue: nadie de Botero Soto firma la entrega.", 11);
+        }
+        else
+        {
+            Firma(doc, "Entrega", t.Entrega, t.NoFirmaParte == clsParteFirmante.ENTREGA);
+        }
         Firma(doc, "Recibe", t.Recibe, t.NoFirmaParte == clsParteFirmante.RECIBE);
         if (t.Reservas is not null)
         {
@@ -253,6 +262,7 @@ internal sealed class clsGeneradorPdfInforme : IGeneradorPdfInforme
         clsTipoCierre.FIRMADA => "firmada",
         clsTipoCierre.CON_RESERVAS => "firmada con reservas",
         clsTipoCierre.NO_FIRMA => "no firma",
+        clsTipoCierre.RECIBO_SIN_ENTREGA => "recibo sin entrega",
         _ => "abierta (sin tipo de cierre)",
     };
 }

@@ -178,7 +178,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
         var hallazgosDto = await new clsDescriptorHallazgos(contexto).DescribirAsync(hallazgos, ct);
         var evidencias = await contexto.Evidencias.AsNoTracking().Where(e => e.InspeccionId == id).OrderBy(e => e.CreatedAt).ToListAsync(ct);
         var transferencia = await (from t in contexto.Transferencias.AsNoTracking()
-                                   join ue in contexto.Usuarios on t.EntregaUsuarioId equals ue.Id into entregas
+                                   join ue in contexto.Usuarios on t.EntregaUsuarioId equals (Guid?)ue.Id into entregas
                                    from ue in entregas.DefaultIfEmpty()
                                    join ur in contexto.Usuarios on t.RecibeUsuarioId equals ur.Id into recibes
                                    from ur in recibes.DefaultIfEmpty()

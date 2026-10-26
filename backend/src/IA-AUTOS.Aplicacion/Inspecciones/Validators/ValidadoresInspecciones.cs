@@ -201,6 +201,11 @@ public sealed class FirmarTransferenciaRequestValidator : AbstractValidator<Firm
     }
 }
 
+public sealed class ReciboSinEntregaRequestValidator : AbstractValidator<ReciboSinEntregaRequest>
+{
+    public ReciboSinEntregaRequestValidator() => clsReglasTransferencia.Firma(this, x => x.Firma);
+}
+
 public sealed class RecibirConReservasRequestValidator : AbstractValidator<RecibirConReservasRequest>
 {
     public RecibirConReservasRequestValidator()

@@ -187,7 +187,7 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                        from u in inspectores.DefaultIfEmpty()
                        join tr in contexto.Transferencias on i.Id equals tr.InspeccionId into transferencias
                        from tr in transferencias.DefaultIfEmpty()
-                       join en in contexto.Usuarios on tr.EntregaUsuarioId equals en.Id into entregas
+                       join en in contexto.Usuarios on tr.EntregaUsuarioId equals (Guid?)en.Id into entregas
                        from en in entregas.DefaultIfEmpty()
                        join re in contexto.Usuarios on tr.RecibeUsuarioId equals re.Id into recibos
                        from re in recibos.DefaultIfEmpty()
