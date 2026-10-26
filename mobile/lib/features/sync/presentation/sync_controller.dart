@@ -38,34 +38,50 @@ class SyncController extends Notifier<EstadoSync> {
     });
     ref.onDispose(suscripcion.cancel);
 
-    ref.listen(authControllerProvider, (anterior, actual) {
-      if (actual.fase == FaseAuth.autenticado && anterior?.fase != FaseAuth.autenticado) {
-        unawaited(sincronizar());
-      }
+    // Por `puedeOperar` y no por la fase: quien entra con un PIN temporal tiene sesión pero todavía no puede
+    // enviar nada, y al cambiarlo esta misma escucha es la que arranca la cola.
+    ref.listen(authControllerProvider.select((e) => e.puedeOperar), (anterior, actual) {
+      if (actual && anterior != true) unawaited(sincronizar());
     });
 
     Future.microtask(() async {
       state = state.copiar(online: await red.redEstable());
+      // Los jobs que encoló una versión anterior no tienen dueño. La sesión guardada es la última que se usó, así
+      // que es casi con certeza quien los encoló: se los adopta antes de contar nada.
+      final usuario = _usuario;
+      if (usuario != null) await ref.read(procesadorColaProvider).adoptarHuerfanos(usuario);
       await refrescar();
-      if (ref.read(authControllerProvider).fase == FaseAuth.autenticado) await sincronizar();
+      if (ref.read(authControllerProvider).puedeOperar) await sincronizar();
     });
     return const EstadoSync();
   }
 
+  /// Quién tiene la sesión: de él son los envíos que se cuentan y se mandan.
+  String? get _usuario => ref.read(authControllerProvider).sesion?.usuario.id;
+
   /// Vuelve a contar lo pendiente y lo fallido (tras encolar, reintentar o descartar).
   Future<void> refrescar() async {
+    final usuario = _usuario;
+    if (usuario == null) {
+      // Sin sesión no se cuenta lo de nadie: la cola de quien salió no es asunto de la pantalla de ingreso.
+      state = state.copiar(pendientes: 0, fallidos: 0);
+      return;
+    }
     final procesador = ref.read(procesadorColaProvider);
-    final pendientes = await procesador.contarPendientes();
-    final fallidos = await procesador.contarFallidos();
+    final pendientes = await procesador.contarPendientes(usuario);
+    final fallidos = await procesador.contarFallidos(usuario);
     state = state.copiar(pendientes: pendientes, fallidos: fallidos);
   }
 
   Future<void> sincronizar() async {
     if (state.sincronizando) return;
-    if (ref.read(authControllerProvider).fase != FaseAuth.autenticado) return;
+    // Única guarda de los cuatro disparadores (señal, ingreso, arranque y reintento manual): sin sesión todo
+    // daría 401 y con un PIN temporal todo daría 403, y en ambos casos se gastarían intentos de la cola.
+    final usuario = _usuario;
+    if (!ref.read(authControllerProvider).puedeOperar || usuario == null) return;
     state = state.copiar(sincronizando: true);
     try {
-      final r = await ref.read(procesadorColaProvider).procesar();
+      final r = await ref.read(procesadorColaProvider).procesar(usuario);
       state = state.copiar(pendientes: r.pendientes, fallidos: r.fallidos);
     } finally {
       state = state.copiar(sincronizando: false);
@@ -73,7 +89,9 @@ class SyncController extends Notifier<EstadoSync> {
   }
 
   Future<void> reintentar(String id) async {
-    await ref.read(procesadorColaProvider).reintentar(id);
+    final usuario = _usuario;
+    if (usuario == null) return;
+    await ref.read(procesadorColaProvider).reintentar(id, usuario);
     await refrescar();
     unawaited(sincronizar());
   }

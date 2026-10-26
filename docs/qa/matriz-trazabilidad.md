@@ -102,7 +102,7 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
 | S5-HU-22.3 | CRUD de viajes, asignación de VIN, carga masiva por Excel | `ViajesApiTests.La_carga_por_excel_muestra_el_error_de_cada_fila_antes_de_confirmar_y_solo_guarda_las_validas` | Verificado con prueba real |
 | S5-HU-22.4 | Creación automática de las 3 etapas por VIN con origen/destino | `ViajesApiTests.Crear_un_viaje_crea_las_tres_etapas_de_cada_vin_con_origen_y_destino` | Verificado con prueba real |
 | S5-HU-22.5/22.10 | Visibilidad por asignación; 403 en viaje/VIN ajeno; vínculo Sofasa↔viaje | `ViajesApiTests.El_detalle_de_un_viaje_ajeno_es_403_el_propio_se_ve_y_uno_inexistente_es_404`; `SofasaApiTests.Una_orden_de_un_vin_que_ya_esta_en_un_viaje_queda_vinculada_a_ese_viaje` | Verificado con prueba real |
-| S5-HU-22.8/22.9 | "Mis viajes" como pantalla principal en mobile; captura toma datos del viaje | Cobertura parcial en `mobile/test/vehiculos/inventario_test.dart` | **Abierta/pendiente** (#91, #92) |
+| S5-HU-22.8/22.9 | "Mis viajes" como pantalla principal en mobile; captura toma datos del viaje | `mobile/test/widgets/captura_page_test.dart` (los cuatro datos salen del viaje y no quedan campos escribibles), `mobile/test/viajes/` (repositorio y búsqueda), `mobile/test/vehiculos/inventario_test.dart` (`lugar` y `viaje_id`), contrato atado a `/api/viajes/*` | Implementado en `S5-HU-21-23` y **verificado en dispositivo** con la API local; falta prueba de widget de `MisViajesPage`/`BuscarVinPage` (#91) |
 | S5-HU-22.5b (#148) | Filtro por cliente en `GET /api/viajes` y lista de clientes por viaje | — | **Abierta/pendiente** (#148, rol Backend) |
 
 ## S5-HU-23 — Identidad: cédula y PIN, clientes y permisos por rol
@@ -114,9 +114,103 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
 | S5-HU-23.3 | `POST /api/auth/login-conductor` (cédula+PIN), scrypt, bloqueo | `IdentidadApiTests.Cedula_y_pin_correctos_dan_un_token_de_conductor_que_sirve_en_la_api` | Verificado con prueba real |
 | S5-HU-23.4 | Gestión de PIN por rol; `GET /api/auth/me` con capacidades | `IdentidadApiTests.El_administrador_asigna_reinicia_y_fuerza_el_cambio_de_pin` | Verificado con prueba real |
 | S5-HU-23.5 | Gestión de usuarios (admin/coordinador), carga masiva de conductores | `IdentidadApiTests.La_vista_previa_de_conductores_no_guarda_y_la_confirmacion_crea_los_validos_con_su_pin` | Verificado con prueba real |
-| S5-HU-23.8/23.9 | Mobile: login con dos modos y cambio de PIN forzado; router/menú por rol; cola etiquetada por usuario | `mobile/test/widgets/login_page_test.dart`, `mobile/test/auth/auth_controller_test.dart` cubren el login; router y cola etiquetada aún no | **Abierta/pendiente** (#99, #100) |
+| S5-HU-23.8/23.9 | Mobile: login con dos modos y cambio de PIN forzado; router/menú por rol; cola etiquetada por usuario | `login_page_test.dart`, `login_pin_test.dart` y `auth_controller_test.dart` (login, bloqueo, cambio de PIN y 403 a mitad de sesión); `capacidades_test.dart` (capacidades y su respaldo por rol); `menu_por_rol_test.dart` (menú y rutas sin permiso); `cola_por_usuario_test.dart` (celular compartido y huérfanos); `cambiar_pin_page_test.dart` (la pantalla y el redirect del router) | 23.8 y 23.9 implementadas en `S5-HU-21-23`, ambas **verificadas en dispositivo** |
 
 ## S5-HU-24 — Inspección de salida y llegada con 7 fotos obligatorias y 2 adicionales
+
+| ID | Decisión/regla | Prueba | Estado |
+|---|---|---|---|
+| S5-HU-24.6/24.7/24.8/24.9 (Mobile) | Checklist de vistas desde el catálogo con guía de cámara; foto por hallazgo; reglas de cierre iguales a las del servidor; evidencia completa y multipart con hash; dos momentos por etapa con bloqueo del 409 | `mobile/test/inspecciones/checklist_vistas_test.dart`, `reglas_informe_test.dart`, `mobile/test/sync/gateway_informes_api_test.dart`, `procesador_cola_test.dart`, `mobile/test/vehiculos/inventario_test.dart`, `mobile/test/widgets/captura_page_test.dart` | Implementadas en `S5-HU-21-23`; **sin probar en dispositivo** |
+
+**#151 revisada de nuevo el 26-oct-2026, después de la #116 y la #117, y se sigue cumpliendo:** el gateway
+manda `firma` y no queda ningún rastro del contrato viejo en lo que se envía (las dos menciones que quedan de
+`firma_entrega` leen los jobs que encoló una versión anterior, y tienen su prueba). Las dos firmas del Logan
+salieron en dispositivo, que es la comprobación de verdad.
+
+Lo que sí faltaba era **la red que habría atrapado la #151 en su momento**: los endpoints y campos que la app
+empezó a usar con la #116 y la #117 no estaban en `contrato_api_test.dart`. Ya están los tres endpoints nuevos
+(`firmantes`, `reservas`, `no-firma`), el `GET /api/inspecciones/{id}`, los dos cuerpos nuevos y los campos
+que se leen de `TransferenciaDto`, `TransferenciaDetalleDto`, `FirmanteDto` y el `usuario_id` del informe.
+
+**#151 (firma de transferencia) cerrada** en `S5-HU-21-23`: la API pide un solo campo `firma` y la app mandaba
+`firma_entrega`/`firma_recibe`, así que toda firma respondía 400 «firma es obligatoria» (visto en dispositivo el
+23-oct-2026). El servidor atribuye la firma al usuario del token, de modo que solo viaja la propia y la otra
+queda pendiente; verificado contra la API: firmar deja `entrega_firmada_at` puesto, `recibe_firmada_at` nulo y la
+transferencia sin tipo de cierre. **La pantalla sigue mostrando las dos partes y sus selectores**: rediseñarla
+para el flujo de «cada quien firma desde su sesión» es S5-HU-25.4 (#116), no esta corrección.
+
+**S5-HU-24.12 (#112), pautas del Entendimiento §6 y §7:** cumplidas la acción primaria por pantalla con botón
+grande, las zonas táctiles de 48 px, el modo claro (`ThemeMode.light` fijo, la app no sigue el modo oscuro del
+teléfono), las listas de selección en vez de texto libre, el VIN y la placa en monoespaciada, el acuse visual al
+tomar, marcar o firmar, y el acuse en color al cerrar (verde enviado, ámbar en cola, rojo rechazado).
+
+**Los tres colores del cierre quedaron verificados en dispositivo** (26-oct-2026). El rojo costó llegar porque
+la app bloquea localmente casi todo lo que el servidor rechazaría: se provocó creando desde la API la
+inspección del mismo momento que el celular estaba a punto de cerrar, con lo que el cierre recibió el 409
+`Esta etapa ya tiene una inspección de ese momento` y el diálogo lo mostró en rojo con el motivo del servidor.
+
+**Falta el rojo de hallazgo crítico, y no por el color:** la app no usa el catálogo `niveles-severidad`, que la
+API ya sirve con los cuatro niveles (`v1_plus`, `v1`, `v2`, `v3`) y su campo `accion`. Hoy un hallazgo se
+registra con clase y tamaño, sin nivel, así que no hay dato con el que decidir qué es crítico. El nivel V entra
+con **S6-HU-01**, que añade cuadrante, nivel y preexistente al hallazgo; pintar un rojo antes sería inventarlo.
+
+**La pestaña de Inspecciones no se refrescaba sola** (visto y corregido el 26-oct-2026): vive dentro del shell,
+así que una vez construida no se vuelve a construir al volver a ella y un informe recién cerrado seguía
+apareciendo como estaba; había que arrastrar la pantalla. Ahora se recarga también al terminar de trabajar la
+cola, que es cuando lo del servidor pudo cambiar por algo hecho desde la app. Prueba:
+`lista_inspecciones_page_test.dart`. **Verificado en dispositivo.**
+
+**Hallazgo en dispositivo (26-oct-2026): se puede cerrar una llegada sin haber capturado su salida.** Al
+probar el acuse en rojo se capturó una llegada de una etapa sin salida y el servidor la aceptó: quedó cerrada,
+en verde. La regla `ETAPA_PREVIA_SIN_CIERRE` solo mira la **etapa anterior** y solo se aplica al momento de
+salida (`clsInspeccionesService.CrearAsync`); el orden salida→llegada **dentro** de una misma etapa no lo exige
+nadie, ni la app ni la API, y tampoco aparece escrito en ningún requisito. Como la siguiente etapa solo pide que
+la llegada de la previa esté cerrada, la cadena entera avanza sin que exista registro de la salida. El comentario
+de `inventario.dart` que afirmaba que «el servidor lo impone» quedó corregido, porque era falso.
+
+**Pendiente de consultar con Calidad antes de implementar nada** (26-oct-2026): si la salida debe ser obligatoria
+antes de la llegada de su misma etapa, o si hay operaciones en que la llegada va sola (un vehículo ya en tránsito
+al entrar el sistema, una etapa que solo se inspecciona al recibir). Si se confirma la regla, toca en dos sitios:
+`AsegurarEtapaPreviaCerradaAsync` en `clsInspeccionesService` —hoy solo se invoca para `salida`— y el `bloqueo`
+de `momentosDeEtapa` en `inventario.dart`, para deshabilitar el botón antes de llamar, como ya se hace con la
+etapa previa.
+
+**Dos defectos vistos en dispositivo el 26-oct-2026, ya corregidos:**
+
+- **El transporte exigía las 7 fotos obligatorias.** La pantalla del VIN le pasaba a la captura la **etiqueta**
+  del catálogo («Transporte») y `pideChecklist` compara contra el **código** («transporte»), así que nunca
+  coincidían y el checklist salía en un proceso que no lo pide. Quedó una inspección de transporte con 7
+  evidencias antes de corregirlo. Ahora la ruta lleva el código y el nombre lo resuelve la captura con el mismo
+  catálogo. Prueba: `vin_page_test.dart`, «la captura recibe el código del proceso, no su etiqueta».
+  **Verificado en dispositivo**: un transporte ya no pide fotos y conserva lo que sí le toca,
+  marcar novedades y escribir observaciones.
+- **Franjas negras en la cámara y guía desalineada.** La vista previa se dibujaba con su propia proporción
+  dentro de un área de otra proporción, y la guía se dibujaba sobre el área entera: ni llenaban la pantalla ni
+  coincidían entre sí, que es lo grave, porque una guía que no cae donde ve la cámara no sirve para encuadrar.
+  Ahora las dos van dentro del mismo marco 3:4 —el de las guías— y la vista previa se recorta para llenarlo.
+  La foto guardada conserva todo lo que ve el sensor, así que el recorte es solo de encuadre. **Sin prueba
+  automática**: es geometría de la vista previa de la cámara y no hay forma de montarla sin dispositivo.
+  **Verificado en dispositivo**: la vista previa llena el marco y la guía cae donde ve la cámara.
+
+**Pendientes anotados de estas cuatro:**
+
+- **Las 7 imágenes guía quedaron rehechas** (23-oct-2026), reemplazando las del prototipo. Son plantillas de
+  encuadre en la proporción de la vista previa (3:4), trazo blanco sobre transparencia, sin texto y sin nada
+  visible a través del vidrio, del mismo vehículo genérico en las siete. Por eso la guía volvió a mostrarse
+  **superpuesta** a la cámara, que es su sitio: las del prototipo tenían fondo opaco y hubo que dejarlas en una
+  esquina. Las dos vistas adicionales no llevan guía: son fotos de un daño concreto, sin encuadre estándar.
+  Queda por confirmar con quien inspecciona cómo se toma en la práctica la vista superior, porque nadie se sube
+  encima del vehículo y una guía cenital imposible de cumplir se ignora.
+- **Si la llegada exige su salida** es la otra pregunta abierta para Calidad; el hallazgo y lo que tocaría
+  cambiar están descritos arriba, en el bloque del 26-oct-2026.
+- **El umbral de precisión baja (30 m) es valor inicial**, pendiente de confirmar con Calidad. Está en un solo
+  sitio: `precisionBajaMetros` en `reglas_informe.dart`.
+- **Falta la compresión de las fotos** que pide el título de S5-HU-24.8: necesita una dependencia nueva y hoy no
+  urge, porque la cámara captura a 720p, muy por debajo del límite de 10 MB.
+- **El filtro de vistas por tipo de vehículo admite dos lecturas** y se tomó la prudente (las sin tipo valen para
+  cualquiera y se suman a las del tipo); con la estricta, un VIN con tipo se quedaría sin vistas y el checklist
+  saldría vacío. Hoy es teórico: el inventario no trae el tipo del VIN.
+
 
 | ID | Decisión/regla | Prueba | Estado |
 |---|---|---|---|
@@ -134,10 +228,68 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
 | S5-HU-25.1 | `tblTransferenciasCustodia`: tipo de cierre, reservas, motivo de no firma, testigo, fecha e IP por firma | `MigracionTransferenciasTests.cs`; `CustodiaYUsuariosTests.Crear_exige_usuarios_distintos_y_nace_abierta_sin_firmas` | Verificado con prueba real (PR #147) |
 | **S5-HU-25.2** | **Cada firma la envía su titular** — corrige el bug de la issue #121 (el servidor aceptaba cualquier id de usuario que mandara el cliente, sin validar contra el token) | Dominio: `CustodiaYUsuariosTests.Nadie_firma_por_otro`. Integración (QA, verificado en vivo contra SQL Server real el 2026-10-16): `InspeccionesApiTests.Nadie_firma_por_otro_ni_crea_una_transferencia_ajena`, `InspeccionesApiTests.Cada_uno_firma_su_parte_aunque_envie_los_dos_ids_y_los_firmantes_no_se_pueden_cambiar` | **Verificado con prueba real — issue #121 cerrada** |
 | S5-HU-25.3 | Recibo con reservas (observaciones obligatorias) y constancia de no firma (motivo, testigo, foto); PDF de constancia | `CustodiaYUsuariosTests.Recibir_con_reservas_exige_las_observaciones`, `La_no_firma_exige_motivo_testigo_y_foto_y_cierra_la_transferencia`; `GeneradorPdfConstanciaTests.cs` | Verificado con prueba real |
-| S5-HU-25.4/25.5/25.7 | Firmantes del viaje, firma por otro bloqueada (403), reservas sin texto rechazadas, no firma sin testigo rechazada, bloqueo de la etapa siguiente sin cierre | `CustodiaYUsuariosTests.Mientras_esta_abierta_cada_uno_puede_repetir_su_propia_firma`, `El_testigo_es_una_tercera_persona`; `InspeccionesApiTests.Una_transferencia_sin_cierre_bloquea_la_salida_de_la_etapa_siguiente_hasta_que_se_cierra` | Verificado con prueba real (dominio y API); falta la capa de UI en mobile (**Abierta/pendiente** #116, #117, #118) |
+**La capa de UI de la transferencia en mobile (#116 y #117), hecha el 26-oct-2026.** Cuatro cosas que no
+estaban, todas con prueba y ninguna probada todavía en dispositivo:
+
+- **Los firmantes salían de `GET /api/usuarios`**, o sea de todo el mundo: la coordinadora de calidad y el
+  super_admin aparecían como posibles firmantes de un viaje en el que no participan. Ahora salen de
+  `GET /api/viajes/{id}/firmantes`, que devuelve solo al conductor y al inspector del viaje.
+- **La segunda firma iba condenada al 409.** La pantalla proponía las partes desde la sesión de quien la
+  abría (yo entrego, el otro recibe), así que al segundo se le proponían al revés y el servidor contesta
+  «Los firmantes de la transferencia no se pueden cambiar». Ahora, si ya existe, se heredan.
+- **El estado intermedio no se veía.** Entre una firma y la otra pueden pasar horas; la tarjeta decidía con el
+  `firmada` del DTO, que es «ya firmaron las dos», y con una sola firma se veía igual que sin ninguna. Ahora
+  dice quién firmó y quién falta, y el cierre lo decide el tipo de cierre: una constancia de no firma cierra
+  sin que nadie haya firmado.
+- **El conductor veía los hallazgos del inspector** camino de la firma, de modo que su recibo confirmaba lo
+  del otro en vez de decir lo que él encontró. Su propio informe lo sigue viendo entero.
+
+Y los dos flujos de la #117, que la API servía desde la S5-HU-25.3 y la app no usaba: **recibo con reservas**
+(solo quien recibe, observaciones obligatorias) y **constancia de no firma** (la levanta la otra parte, con
+motivo, un testigo que es una tercera persona y una foto sellada, que se sube antes de registrar y es
+reanudable como la de un hallazgo).
+
+**Todo verificado en dispositivo el 26-oct-2026**, un VIN por desenlace, y comprobado contra la base: el
+Logan cerró `firmada` con sus dos fechas de firma, el Kwid `con_reservas` con el texto, y el Duster `no_firma`
+con Marta Ríos de testigo y su evidencia. La firma a dos manos funciona de punta a punta —el segundo firmante
+hereda las partes y ya no choca con el 409—, el conductor no ve los hallazgos del inspector, y la etapa
+siguiente del Duster quedó habilitada con la constancia, que era el bloqueo sin salida.
+
+**Probado en dispositivo el 26-oct-2026.** La firma a dos manos quedó confirmada de punta a punta (la segunda
+ya no choca con el 409). Salieron dos cosas más:
+
+- **El bloqueo local no era el del servidor, y bloqueaba de más.** El servidor pregunta «¿queda alguna
+  transferencia de esta etapa sin cerrar?»; la app preguntaba «¿la transferencia **del informe de llegada**
+  está cerrada?». Como la transferencia cuelga del **primer informe que se cierra** —el de salida—, una etapa
+  con su constancia ya registrada quedaba bloqueada para siempre aunque la API la dejara pasar. Corregido: la
+  app hace ahora la misma pregunta. Ojo al efecto: una etapa **sin ninguna transferencia** tampoco bloquea,
+  que es lo que hace la API.
+- **Pregunta abierta: sobre qué informe va la transferencia.** Hoy va sobre el primero que se cierra, lo que
+  en la práctica significa el de salida, y por eso se puede firmar el cambio de responsabilidad antes de que
+  exista la llegada. La API no exige ninguno en particular. Si debe ir sobre la llegada —que es cuando el
+  vehículo cambia de manos— hay que decidirlo con Calidad y cambiarlo en los dos lados.
+
+| S5-HU-25.4/25.5/25.7 | Firmantes del viaje, firma por otro bloqueada (403), reservas sin texto rechazadas, no firma sin testigo rechazada, bloqueo de la etapa siguiente sin cierre | `CustodiaYUsuariosTests.Mientras_esta_abierta_cada_uno_puede_repetir_su_propia_firma`, `El_testigo_es_una_tercera_persona`; `InspeccionesApiTests.Una_transferencia_sin_cierre_bloquea_la_salida_de_la_etapa_siguiente_hasta_que_se_cierra`; mobile: `firma_page_test.dart`, `no_firma_page_test.dart`, `inventario_test.dart`, `procesador_cola_test.dart` | Verificado con prueba real (dominio y API); la capa de UI de mobile (#116, #117) implementada en `S5-HU-21-23` y **verificada en dispositivo** |
 | #151 | Mobile sigue enviando `firma_entrega`/`firma_recibe` (contrato anterior a S5-HU-25.2) | Sin prueba — contrato roto, issue abierta para el equipo móvil | **Abierta/pendiente** |
 
 ---
+
+## Al día con QA (26-oct-2026)
+
+La rama `S5-HU-21-23` trajo `origin/QA`, que llega con el **contrato v2** (de 49 rutas a 79 y de 77 esquemas a
+134). La mezcla salió limpia y de las 428 pruebas solo se rompieron dos cosas:
+
+- **El filtro del listado de inspecciones se renombró** de `usuarioId` a `usuario_id`. Con el nombre viejo el
+  servidor lo ignora, así que cada quien vería los informes de todos. **Corregido.**
+- **`CrearHallazgoRequest` cambió de raíz** y la app no puede registrar novedades contra el v2. Salieron
+  `parte_vehiculo` y `coords_diagrama`; entraron `cuadrante_numero`, `lado`, `zona_provisional`,
+  `nivel_severidad`, `es_preexistente`, `hallazgo_origen_id` y `nota`. Es el lado móvil de **S6-HU-01**, con su
+  UI: cuadrante, lado, nivel de severidad y preexistente. **Sin corregir, y la prueba de contrato queda en rojo
+  a propósito**: es un trabajo con su propia issue, no un ajuste, y taparlo con un `skip` escondería que la app
+  de campo no puede registrar una novedad.
+
+Leer hallazgos ya registrados **sí sigue funcionando**: `HallazgoDto` no cambió, solo el cuerpo con que se
+crean. Lo que se rompe es registrar novedades nuevas.
 
 ## Brechas detectadas
 
@@ -158,13 +310,49 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
    versionado, la geometría de cuadrantes y los códigos Sofasa, pero mobile mantiene listas hardcodeadas en
    paralelo (`selector_dano.dart`, `etiquetas.dart`) en vez de consumir la API.
 
-4. **UX de viajes pendiente en mobile (#91, #92, #148).** El modelo de viaje como eje ya está completo en
-   backend; "Mis viajes" como pantalla principal, la captura tomando datos del viaje (no texto libre) y el
-   filtro por cliente siguen sin resolver.
+4. **UX de viajes pendiente en mobile (#148; #91 y #92 implementados en `S5-HU-21-23`).** El modelo de viaje
+   como eje está completo en backend, y mobile ya entra por "Mis viajes" y toma los datos del viaje en la
+   captura. Queda el filtro por cliente (#148). Dos puntos a revisar al retomar #91:
+   - `MisViajesPage` y `BuscarVinPage` no tienen prueba de widget: los cuatro estados (cargando, error, sin
+     conexión, sin viajes), el contenido de la tarjeta y que tocar un VIN navegue solo se han comprobado a mano.
+     La captura sí quedó cubierta (`captura_page_test.dart`).
+   - `ViajesRepositorio.deLaEtapa` sirve la copia guardada y **no la revalida** aunque haya señal: si el
+     coordinador corrige la placa después de la descarga, la captura muestra la vieja. Es informativo —el
+     servidor toma el dato real del viaje al recibir el informe— y leer primero la copia es lo que hace que la
+     captura funcione sin señal. El arreglo correcto es servir y refrescar después, como los catálogos.
 
-5. **Identidad en mobile incompleta (#99, #100).** El backend ya expone login por cédula+PIN y capacidades por
-   rol; el cliente móvil aún no implementa el selector de modo de login ni el router/menú por rol con cola
-   etiquetada por usuario.
+5. **Identidad en mobile: #99 y #100 implementadas en `S5-HU-21-23`.** Login con cédula y PIN, cambio forzado,
+   403 `PIN_CHANGE_REQUIRED` a mitad de sesión, menú y rutas por capacidades, y cola etiquetada por usuario. Lo
+   que queda anotado:
+   - **La pestaña Sofasa pide `gestionar_viajes` por decisión de la app**, no del servidor: el endpoint
+     `GET /api/sofasa/ordenes` no restringe por rol y ninguna capacidad habla de esa pantalla. Se eligió así
+     porque son las órdenes de carga de la planta, insumo de quien arma viajes. Si se define otra cosa, se
+     cambia en `mobile/lib/app/pestanas.dart`.
+   - **Las capacidades no se refrescan con la sesión ya abierta**: si a alguien le cambian el rol, su menú
+     sigue igual hasta el siguiente ingreso. El daño está acotado —la API revalida el rol en cada petición, así
+     que una pestaña de más termina en «sin permisos» o en 403—, pero conviene revisarlo si aparece el caso.
+   - **Verificado en dispositivo (23-oct-2026):** la coordinadora ve Mis viajes, Inspecciones y Sofasa; la
+     inspectora y el conductor, solo las dos primeras. El menú se arma con lo que responde `/api/auth/me`.
+     El conductor con PIN reiniciado entra, se le exige el cambio, y al hacerlo llega a sus viajes con el mismo
+     token: se ve el viaje en curso con su código MTrack, su lugar y su tráiler, y la búsqueda filtra bien.
+     La captura que se abre después del cambio trae los datos del viaje y la ubicación, sin el aviso de
+     catálogos: es el único camino que ejercita la descarga tras la transición `autenticado→autenticado`.
+     Sin cubrir en dispositivo: que la cola no se marque fallida al entrar con PIN temporal (haría falta dejar
+     un informe encolado antes de que se lo reinicien).
+   - **La pantalla «Sin permisos» de la ruta de captura no se puede alcanzar en campo, por diseño.** Queda
+     cubierta por `mobile/test/widgets/menu_por_rol_test.dart`. La razón: ningún rol ve viajes y a la vez tiene
+     prohibido capturar. `GET /api/viajes/mios` solo devuelve los viajes donde se participa como conductor o
+     inspector, y esos dos roles son justo los que pueden capturar (`clsRol.ESCRITURA` = inspector, conductor,
+     admin). Comprobado también con el super administrador, que **no** tiene `registrar_inspecciones` y recibe
+     cero viajes. La guarda protege el enlace directo y el caso de que a alguien le cambien el rol con la sesión
+     abierta; para verla en campo habría que cambiarle el rol a un inspector con viajes y hacerlo reingresar.
+   - **Abierto, para revisar con el equipo: qué hace un coordinador en la app de campo.** Entra y ve tres
+     pestañas vacías, y es correcto: `GET /api/viajes/mios` devuelve los viajes donde se participa como
+     conductor o inspector, y un coordinador no participa en ninguno (comprobado: `/mios` responde `[]` y
+     `/api/viajes` sí trae el viaje). Ninguna HU dice qué hace ese rol en el móvil; los viajes se administran
+     desde el portal. Las salidas posibles son dejarlo así, pedirle `registrar_inspecciones` a la pestaña «Mis
+     viajes» para que no la vea, o mostrarle el listado completo con `GET /api/viajes`, que es funcionalidad
+     nueva. Es decisión de producto, no de la app.
 
 6. **Inspecciones: UI y pruebas de campo pendientes (#107–#112).** La lógica de dominio y las reglas de cierre
    tienen prueba automatizada tanto en backend como en `reglas_informe_test.dart`; falta la capa de pantallas y

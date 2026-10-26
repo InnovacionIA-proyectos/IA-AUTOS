@@ -26,7 +26,7 @@ class ServicioUbicacionGeolocator implements ServicioUbicacion {
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 20)),
       );
-      return Posicion(pos.latitude, pos.longitude);
+      return Posicion(pos.latitude, pos.longitude, precision: pos.accuracy);
     } catch (_) {
       throw const UbicacionNoDisponible('No se pudo obtener la ubicación. Verifica la señal del GPS e inténtalo de nuevo.');
     }
@@ -38,10 +38,10 @@ class ServicioUbicacionGeolocator implements ServicioUbicacion {
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium, timeLimit: Duration(seconds: 4)),
       );
-      return Posicion(pos.latitude, pos.longitude);
+      return Posicion(pos.latitude, pos.longitude, precision: pos.accuracy);
     } catch (_) {
       final ultima = await Geolocator.getLastKnownPosition();
-      return ultima == null ? null : Posicion(ultima.latitude, ultima.longitude);
+      return ultima == null ? null : Posicion(ultima.latitude, ultima.longitude, precision: ultima.accuracy);
     }
   }
 

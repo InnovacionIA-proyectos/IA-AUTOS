@@ -1,3 +1,4 @@
+import '../../inspecciones/domain/foto_local.dart';
 import '../../inspecciones/domain/hallazgo_local.dart';
 import 'job.dart';
 
@@ -24,8 +25,20 @@ abstract interface class EstadoRed {
 
 /// Acceso a los archivos de las fotos guardadas en el dispositivo.
 abstract interface class ArchivosLocales {
-  Future<String> leerBase64(String ruta);
+  /// Contenido del archivo para subirlo como multipart.
+  Future<List<int>> leerBytes(String ruta);
+
   Future<void> borrar(String ruta);
+}
+
+/// Lo que devuelve la API al subir un archivo: dónde quedó y su huella.
+class ArchivoSubido {
+  const ArchivoSubido({required this.storagePath, this.hash});
+
+  final String storagePath;
+
+  /// La calcula el servidor. La app la guarda y la reenvía con la evidencia.
+  final String? hash;
 }
 
 /// Operaciones de la API que usa la cola, ya con los nombres y formas del contrato.
@@ -37,32 +50,59 @@ abstract interface class GatewayInformes {
     required String fecha,
     required double lat,
     required double lng,
-    String? conductorNombre,
-    String? placa,
-    String? trailer,
     String? notas,
   });
 
-  /// Sube la imagen en base64 y devuelve su `storage_path`.
-  Future<String> subirImagen(String base64, {String ext = 'jpg'});
+  /// Sube la imagen como multipart y devuelve dónde quedó y su huella.
+  Future<ArchivoSubido> subirImagen(List<int> bytes, {String nombre = 'foto.jpg'});
 
+  /// Registra una evidencia. [vistaId] es la vista del checklist que cubre; [hallazgoId], el hallazgo al que
+  /// pertenece. La API exige todos los campos presentes, aunque algunos puedan ir nulos.
   Future<void> agregarEvidencia(
     String inspeccionId, {
     required String storagePath,
     required String selloFecha,
     double? selloLat,
     double? selloLng,
+    String? vistaId,
+    String? hallazgoId,
+    double? precision,
+    String? dispositivoId,
+    String? nota,
+    String? hash,
   });
 
   Future<void> agregarHallazgo(String inspeccionId, HallazgoLocal hallazgo);
 
   Future<void> cerrarInspeccion(String inspeccionId);
 
+  /// Firma la transferencia. Solo viaja **una** firma, la de quien tiene la sesión: el servidor se la atribuye
+  /// al usuario del token.
   Future<void> firmarTransferencia(
     String inspeccionId, {
     required String entregaId,
     required String recibeId,
-    String? firmaEntrega,
-    String? firmaRecibe,
+    required String? firma,
+  });
+
+  /// Quien recibe firma dejando sus observaciones: la transferencia queda cerrada como `con_reservas`. Es otro
+  /// endpoint, no un campo más de la firma, porque solo quien recibe puede y el texto es obligatorio.
+  Future<void> recibirConReservas(
+    String inspeccionId, {
+    required String entregaId,
+    required String recibeId,
+    required String? firma,
+    required String reservas,
+  });
+
+  /// Constancia de que una parte no firmó. La registra la otra, con motivo, testigo y la foto ya subida.
+  Future<void> registrarNoFirma(
+    String inspeccionId, {
+    required String entregaId,
+    required String recibeId,
+    required String parte,
+    required String motivo,
+    required String testigoId,
+    required FotoLocal foto,
   });
 }

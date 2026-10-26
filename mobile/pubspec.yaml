@@ -50,3 +50,6 @@ flutter:
   assets:
     - assets/logo.png
     - assets/diagrama-novedades.png
+    # Guias de encuadre de la camara, una por codigo de vista del catalogo `vistas-foto`. Frontal, trasera y
+    # superior no tienen: se toman con la etiqueta sola.
+    - assets/guias/

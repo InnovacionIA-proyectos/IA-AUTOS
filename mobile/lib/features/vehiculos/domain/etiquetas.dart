@@ -1,42 +1,12 @@
-// Textos en español de los valores de catálogo de la API (que viajan como identificadores en minúsculas).
-
-const etiquetaPuntoCustodia = <String, String>{
-  'cargue': 'Cargue',
-  'punto_origen': 'Punto Origen',
-  'certificadora': 'Certificadora',
-  'punto_destino': 'Punto Destino',
-  'transporte': 'Transporte',
-  'descargue': 'Descargue',
-  'concesionario': 'Concesionario',
-};
-
-const etiquetaClaseDano = <String, String>{
-  'deformacion': 'Deformación',
-  'rotura': 'Rotura',
-  'cortado': 'Cortado',
-  'perforacion': 'Perforación',
-  'golpe': 'Golpe',
-  'mancha': 'Mancha',
-  'raya_pintar': 'Raya para pintar',
-  'desconchado': 'Desconchado',
-  'particulas': 'Partículas',
-  'faltante': 'Faltante',
-};
-
-const etiquetaTamanoDano = <String, String>{
-  '1_5cm': 'De 1 a 5 cm',
-  '5_10cm': 'De 5 a 10 cm',
-  '10_20cm': 'De 10 a 20 cm',
-  'mas_20cm': 'Más de 20 cm',
-  'requiere_reemplazo': 'Requiere reemplazo',
-  'mas_10_particulas': 'Más de 10 partículas por pieza',
-};
-
-const etiquetaMomento = <String, String>{
-  'check_in': 'Check-in',
-  'check_out': 'Check-out',
-  'informe': 'Informe',
-};
+// Textos en español de los valores que la API acepta como identificadores en minúsculas.
+//
+// Aquí SOLO quedan los valores fijos del contrato (CONTRATO.md, «Catálogos (valores permitidos)»): no están en
+// `GET /api/catalogos`, no los administra nadie desde el portal y la API no manda su nombre, así que la app es
+// quien los traduce.
+//
+// Lo administrable —etapas, lugares, clases y tamaños de daño, niveles de severidad, vistas y cuadrantes— se
+// descarga y se guarda en el dispositivo: ver `features/catalogos`. El momento de una inspección tampoco está
+// aquí porque la API ya manda `momento_nombre` («Inspección de salida») listo para mostrar.
 
 const etiquetaOperacion = <String, String>{
   'importacion': 'Importación',
@@ -49,6 +19,28 @@ const etiquetaEstadoInspeccion = <String, String>{
   'cerrada': 'Cerrada',
 };
 
+/// Solo para el momento que **todavía no existe**: en cuanto hay inspección, la API manda `momento_nombre` y ese
+/// manda. La app necesita el texto antes, para ofrecer «Capturar» en una fila que aún no tiene nada detrás.
+const etiquetaMomento = <String, String>{
+  'salida': 'Inspección de salida',
+  'llegada': 'Inspección de llegada',
+};
+
+/// Las tres maneras de cerrar una transferencia. Cualquiera de ellas la vuelve inmutable, así que la pantalla
+/// no debe ofrecer firmar sobre ninguna.
+const etiquetaTipoCierre = <String, String>{
+  'firmada': 'Transferencia firmada',
+  'con_reservas': 'Recibida con reservas',
+  'no_firma': 'Constancia de no firma',
+};
+
+const etiquetaEstadoViaje = <String, String>{
+  'programado': 'Programado',
+  'en_curso': 'En curso',
+  'finalizado': 'Finalizado',
+  'cancelado': 'Cancelado',
+};
+
 const etiquetaRol = <String, String>{
   'inspector': 'Inspector',
   'conductor': 'Conductor',
@@ -58,5 +50,5 @@ const etiquetaRol = <String, String>{
   'super_admin': 'Super administrador',
 };
 
-/// Devuelve la etiqueta del catálogo o, si el valor es nuevo, el valor tal cual.
+/// Devuelve la etiqueta del valor o, si es uno nuevo, el valor tal cual.
 String etiquetar(Map<String, String> catalogo, String valor) => catalogo[valor] ?? valor;

@@ -55,6 +55,11 @@ class _EstadoListaInspeccionesPage extends ConsumerState<ListaInspeccionesPage> 
     ref.listen(syncControllerProvider.select((s) => s.online), (anterior, actual) {
       if (actual && anterior == false) ref.read(listaInspeccionesControllerProvider.notifier).cargar();
     });
+    // Y al terminar de trabajar la cola: el informe que se acaba de cerrar ya no es un borrador, pero esta
+    // pantalla no se reconstruye al volver a su pestaña, así que sin esto hay que arrastrarla para enterarse.
+    ref.listen(syncControllerProvider.select((s) => s.sincronizando), (anterior, actual) {
+      if (!actual && anterior == true) ref.read(listaInspeccionesControllerProvider.notifier).cargar();
+    });
 
     final tema = Theme.of(context).textTheme;
     final estado = ref.watch(listaInspeccionesControllerProvider);
@@ -84,11 +89,6 @@ class _EstadoListaInspeccionesPage extends ConsumerState<ListaInspeccionesPage> 
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        tooltip: 'Nueva inspección',
-        onPressed: () => context.push('/inspecciones/abrir'),
-        child: const Icon(Icons.add, size: 28),
-      ),
     );
   }
 
@@ -112,8 +112,8 @@ class _EstadoListaInspeccionesPage extends ConsumerState<ListaInspeccionesPage> 
       FaseLista.listo when estado.items.isEmpty => EstadoMensaje(
           icono: Icons.assignment_outlined,
           titulo: 'Aún no tienes inspecciones',
-          descripcion: 'Cuando se te asigne un VIN aparecerá aquí. También puedes iniciar una inspección nueva digitando el VIN.',
-          accion: FilledButton(onPressed: () => context.push('/inspecciones/abrir'), child: const Text('Nueva inspección')),
+          descripcion: 'Cuando captures un informe aparecerá aquí. Para empezar uno, abre una unidad desde Mis viajes.',
+          accion: FilledButton(onPressed: () => context.go('/viajes'), child: const Text('Ir a Mis viajes')),
         ),
       FaseLista.listo => RefreshIndicator(
           onRefresh: cargar,
@@ -145,7 +145,7 @@ class _FilaInspeccion extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (item.vin != null) TextoMono(item.vin!),
-                Text('${etiquetar(etiquetaMomento, item.momento)} · ${formatearFechaIso(item.fecha)}', style: tema.bodySmall),
+                Text('${item.momentoNombre} · ${formatearFechaIso(item.fecha)}', style: tema.bodySmall),
               ],
             ),
           ),

@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import '../../../core/http/cliente_api.dart';
 import '../domain/inspeccion_resumen.dart';
-import 'cache_lecturas.dart';
+import '../../../core/db/cache_lecturas.dart';
 
 /// Listado de inspecciones con caché local: sin señal se muestra lo último sincronizado.
 class InspeccionesRepositorio {
@@ -25,7 +25,9 @@ class InspeccionesRepositorio {
   }
 
   Future<List<InspeccionResumen>> listarRemoto(String usuarioId) async {
-    final r = await _api.get('/api/inspecciones', query: {'usuarioId': usuarioId});
+    // `usuario_id`, en snake_case como el resto del contrato: el v2 renombró el filtro y con el nombre viejo
+    // el servidor lo ignora, de modo que cada quien vería los informes de todos.
+    final r = await _api.get('/api/inspecciones', query: {'usuario_id': usuarioId});
     final lista = [for (final i in r as List<dynamic>) InspeccionResumen.fromJson(i as Map<String, dynamic>)];
     await _cache.escribir(_clave(usuarioId), jsonEncode([for (final i in lista) i.toJson()]));
     return lista;

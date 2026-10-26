@@ -54,9 +54,9 @@ class ArchivosFalsos implements ArchivosLocales {
   final List<String> borrados = [];
 
   @override
-  Future<String> leerBase64(String ruta) async {
+  Future<List<int>> leerBytes(String ruta) async {
     if (!existentes.contains(ruta)) throw StateError('No existe $ruta');
-    return 'base64:$ruta';
+    return ruta.codeUnits;
   }
 
   @override
@@ -106,9 +106,10 @@ class GatewayFalso implements GatewayInformes {
   }
 
   @override
-  Future<String> subirImagen(String base64, {String ext = 'jpg'}) async {
+  Future<ArchivoSubido> subirImagen(List<int> bytes, {String nombre = 'foto.jpg'}) async {
     await _paso('subirImagen');
-    return 'ruta/${++_imagenes}.$ext';
+    final n = ++_imagenes;
+    return ArchivoSubido(storagePath: 'ruta/$n.jpg', hash: 'hash-$n');
   }
 
   @override
@@ -118,9 +119,27 @@ class GatewayFalso implements GatewayInformes {
     required String selloFecha,
     double? selloLat,
     double? selloLng,
+    String? vistaId,
+    String? hallazgoId,
+    double? precision,
+    String? dispositivoId,
+    String? nota,
+    String? hash,
   }) async {
     await _paso('agregarEvidencia');
-    evidencias.add({'inspeccion': inspeccionId, 'path': storagePath, 'fecha': selloFecha, 'lat': selloLat, 'lng': selloLng});
+    evidencias.add({
+      'inspeccion': inspeccionId,
+      'path': storagePath,
+      'fecha': selloFecha,
+      'lat': selloLat,
+      'lng': selloLng,
+      'vista_id': vistaId,
+      'hallazgo_id': hallazgoId,
+      'precision': precision,
+      'dispositivo_id': dispositivoId,
+      'nota': nota,
+      'hash_sha256': hash,
+    });
   }
 
   @override
@@ -134,15 +153,58 @@ class GatewayFalso implements GatewayInformes {
     String inspeccionId, {
     required String entregaId,
     required String recibeId,
-    String? firmaEntrega,
-    String? firmaRecibe,
-  }) => _paso('firmarTransferencia');
+    required String? firma,
+  }) {
+    firmasEnviadas.add(firma);
+    return _paso('firmarTransferencia');
+  }
+
+  @override
+  Future<void> recibirConReservas(
+    String inspeccionId, {
+    required String entregaId,
+    required String recibeId,
+    required String? firma,
+    required String reservas,
+  }) {
+    firmasEnviadas.add(firma);
+    reservasEnviadas.add(reservas);
+    return _paso('recibirConReservas');
+  }
+
+  /// Lo que viajó en cada firma, para comprobar que es una sola y la correcta.
+  final List<String?> firmasEnviadas = [];
+
+  @override
+  Future<void> registrarNoFirma(
+    String inspeccionId, {
+    required String entregaId,
+    required String recibeId,
+    required String parte,
+    required String motivo,
+    required String testigoId,
+    required FotoLocal foto,
+  }) {
+    constanciasEnviadas.add((parte: parte, motivo: motivo, testigoId: testigoId, foto: foto));
+    return _paso('registrarNoFirma');
+  }
+
+  /// Las observaciones de cada recibo con reservas.
+  final List<String> reservasEnviadas = [];
+
+  /// Lo que viajó en cada constancia de no firma.
+  final List<({String parte, String motivo, String testigoId, FotoLocal foto})> constanciasEnviadas = [];
 }
 
 ErrorApi errorHttp(int status, [String mensaje = 'error']) => ErrorApi(message: mensaje, code: 'X', status: status);
 
+/// El mismo id de usuario que `sesionPrueba`: lo normal es que el job sea de quien tiene la sesión. Se pasa otro,
+/// o null para un job huérfano (encolado por una versión anterior de la app), cuando eso es lo que se prueba.
+const usuarioPrueba = 'u1';
+
 InformeJob informe({
   String id = 'j1',
+  String? usuarioId = usuarioPrueba,
   List<FotoLocal>? fotos,
   List<HallazgoLocal>? hallazgos,
   int intentos = 0,
@@ -156,13 +218,12 @@ InformeJob informe({
   creadoEn: 1,
   intentos: intentos,
   fallido: fallido,
+  usuarioId: usuarioId,
   etapaId: 'etapa-1',
   momento: 'informe',
   fecha: '2026-01-02T10:00:00.000Z',
   lat: 6.2,
   lng: -75.5,
-  conductorNombre: 'Ana',
-  placa: 'ABC123',
   fotos: fotos ?? const [],
   hallazgos: hallazgos ?? const [],
   inspeccionId: inspeccionId,

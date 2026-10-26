@@ -4,14 +4,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
+import '../../auth/presentation/auth_controller.dart';
 import '../domain/job.dart';
 import '../providers.dart';
 import 'sync_controller.dart';
 
-final _jobsProvider = FutureProvider.autoDispose<List<Job>>((ref) {
+/// Todo lo que hay en el dispositivo. Lo de otra persona también se ve: solo se envía lo propio, y si lo ajeno no
+/// apareciera, quien usa el equipo no tendría cómo saber por qué hay trabajo que nunca sale.
+final _jobsProvider = FutureProvider.autoDispose<List<Job>>((ref) async {
   // Se vuelve a leer cada vez que cambian los contadores de la cola.
   ref.watch(syncControllerProvider.select((s) => (s.pendientes, s.fallidos, s.sincronizando)));
-  return ref.watch(colaRepositorioProvider).listar();
+  return ref.watch(procesadorColaProvider).enElDispositivo();
 });
 
 /// Lista de lo que está en cola de envío. Los elementos con error no se pierden en silencio: se muestran aquí con su
@@ -41,6 +44,7 @@ class ColaPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final jobs = ref.watch(_jobsProvider);
     final sync = ref.watch(syncControllerProvider);
+    final usuarioId = ref.watch(authControllerProvider).sesion?.usuario.id;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Envíos pendientes')),
@@ -59,6 +63,9 @@ class ColaPage extends ConsumerWidget {
                 separatorBuilder: (_, _) => const SizedBox(height: Espacio.sm),
                 itemBuilder: (_, i) => _FilaJob(
                   job: lista[i],
+                  // Lo de otra persona se muestra pero no se toca: borrarlo seria tirar su evidencia, y
+                  // reintentarlo lo mandaria con el token equivocado.
+                  ajeno: usuarioId != null && !lista[i].esDe(usuarioId) && !lista[i].esHuerfano,
                   sincronizando: sync.sincronizando,
                   onReintentar: () => ref.read(syncControllerProvider.notifier).reintentar(lista[i].id),
                   onDescartar: () => _descartar(context, ref, lista[i]),
@@ -70,9 +77,18 @@ class ColaPage extends ConsumerWidget {
 }
 
 class _FilaJob extends StatelessWidget {
-  const _FilaJob({required this.job, required this.sincronizando, required this.onReintentar, required this.onDescartar});
+  const _FilaJob({
+    required this.job,
+    required this.ajeno,
+    required this.sincronizando,
+    required this.onReintentar,
+    required this.onDescartar,
+  });
 
   final Job job;
+
+  /// Lo encoló otra persona: se ve, pero no se envía con esta sesión ni se puede descartar.
+  final bool ajeno;
   final bool sincronizando;
   final VoidCallback onReintentar;
   final VoidCallback onDescartar;
@@ -88,7 +104,12 @@ class _FilaJob extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text(job.etiqueta, style: tema.titleMedium?.copyWith(fontSize: 15))),
-              if (job.fallido)
+              if (ajeno || job.esProhibido)
+                const Insignia('De otro usuario', tono: TonoInsignia.neutro)
+              else if (job.codigoError == 'VALIDATION_ERROR')
+                // No es un fallo de envío: al informe le falta algo, y el detalle de abajo dice qué.
+                const Insignia('Captura incompleta', tono: TonoInsignia.advertencia)
+              else if (job.fallido)
                 const Insignia('Con error', tono: TonoInsignia.peligro)
               else
                 Insignia(sincronizando ? 'Enviando' : 'En cola', tono: TonoInsignia.info),
@@ -97,7 +118,22 @@ class _FilaJob extends StatelessWidget {
           Text(formatearFecha(creado), style: tema.bodySmall),
           if (job.intentos > 0) Text('Intentos: ${job.intentos}', style: tema.bodySmall),
           if (job.error != null) Padding(padding: const EdgeInsets.only(top: Espacio.xs), child: Text(job.error!, style: tema.bodySmall?.copyWith(color: Colores.peligro))),
-          if (job.fallido) ...[
+          if (ajeno)
+            Padding(
+              padding: const EdgeInsets.only(top: Espacio.xs),
+              child: Text('Lo dejó otra persona en este equipo. Se enviará cuando entre con su usuario.', style: tema.bodySmall),
+            )
+          // El servidor lo rechazó por permisos: este informe lo empezó otra persona y solo ella puede
+          // terminarlo. No se ofrece descartarlo, que seria borrar fotos que no son de quien está mirando.
+          else if (job.esProhibido)
+            Padding(
+              padding: const EdgeInsets.only(top: Espacio.xs),
+              child: Text(
+                'Este informe lo empezó otra persona; solo ella puede terminarlo desde su usuario.',
+                style: tema.bodySmall,
+              ),
+            ),
+          if (job.fallido && !ajeno && !job.esProhibido) ...[
             const SizedBox(height: Espacio.md),
             Row(
               children: [

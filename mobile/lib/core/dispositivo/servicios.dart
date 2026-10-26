@@ -1,9 +1,13 @@
 /// Coordenadas de un momento (la foto o el informe).
 class Posicion {
-  const Posicion(this.lat, this.lng);
+  const Posicion(this.lat, this.lng, {this.precision});
 
   final double lat;
   final double lng;
+
+  /// Radio de error en metros que reporta el GPS. La API lo guarda con la evidencia y la app avisa cuando es
+  /// grande: una foto sellada con 200 metros de margen no prueba dónde se tomó.
+  final double? precision;
 }
 
 /// El usuario negó el permiso de ubicación (definitivamente o esta vez) o el GPS está apagado.
@@ -28,6 +32,14 @@ abstract interface class ServicioUbicacion {
   Future<Posicion?> obtenerRapida();
 
   Future<void> abrirAjustes();
+}
+
+/// Identidad del equipo, para saber desde qué celular se registró cada evidencia.
+///
+/// Es un identificador propio que la app genera una vez y conserva, no un número de serie ni nada del hardware:
+/// sirve para rastrear un equipo que manda evidencia dudosa, sin leer datos del dispositivo.
+abstract interface class ServicioDispositivo {
+  Future<String> id();
 }
 
 abstract interface class ServicioFotos {
