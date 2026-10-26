@@ -21,6 +21,7 @@ no esté cerrada, no se puede crear la salida de la etapa siguiente. Los endpoin
 | `firmada` | ambas partes firman | las dos firmas |
 | `con_reservas` | quien recibe firma por `/transferencia/reservas` | las dos firmas y `ReservasTexto` (obligatorio, máximo 1 000 caracteres) |
 | `no_firma` | una parte se niega y la otra deja constancia por `/transferencia/no-firma` | `NoFirmaParte`, `MotivoNoFirma`, `TestigoUsuarioId` y `EvidenciaConstanciaId` |
+| `recibo_sin_entrega` | nadie de Botero Soto firma la entrega porque el conductor hizo la salida del Cargue | solo la firma de quien recibe con su fecha e IP; **sin** usuario, firma, fecha ni IP de entrega |
 | sin valor | falta una firma | la transferencia está **abierta** |
 
 - Solo **quien recibe** firma con reservas. Si quien recibe firma después normalmente, las reservas se descartan.
@@ -30,8 +31,8 @@ no esté cerrada, no se puede crear la salida de la etapa siguiente. Los endpoin
   vista ni de un hallazgo (no entra en el resumen del cierre).
 - Cerrada, la transferencia es **inmutable**; solo se acepta repetir exactamente la misma firma (reintento idempotente).
 
-La base de datos refuerza lo mismo: `CK_tblTransferencias_Cierre` exige, según el tipo, las firmas, las reservas o la constancia completa, y `CK_tblTransferencias_Testigo` impide que el testigo sea
-una de las partes.
+La base de datos refuerza lo mismo: `CK_tblTransferencias_Cierre` exige, según el tipo, las firmas, las reservas, la constancia completa o solo la firma de quien recibe, y `CK_tblTransferencias_Testigo` impide que el testigo sea
+una de las partes. `EntregaUsuarioId` admite nulo, pero solo en el cierre `recibo_sin_entrega` (`CK_tblTransferencias_Entrega`).
 
 ## Qué bloquea
 

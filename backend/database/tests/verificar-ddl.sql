@@ -33,7 +33,9 @@ BEGIN
     ALTER TABLE dbo.tblInspecciones DISABLE TRIGGER ALL;
     ALTER TABLE dbo.tblHallazgoSeguimiento DISABLE TRIGGER ALL;
     ALTER TABLE dbo.tblNotificaciones DISABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblNovedadesProceso DISABLE TRIGGER ALL;
     BEGIN TRY
+        DELETE FROM dbo.tblNovedadesProceso WHERE VehiculoId = @v OR InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblNotificaciones WHERE VehiculoId = @v OR InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblHallazgoSeguimiento WHERE HallazgoId IN (SELECT h.Id FROM dbo.tblHallazgos h WHERE h.InspeccionId IN (SELECT Id FROM @insp));
         DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId IN (SELECT Id FROM @insp);
@@ -57,6 +59,7 @@ BEGIN
         ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
         ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
         ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
+        ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
         THROW;
     END CATCH
     ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
@@ -65,6 +68,7 @@ BEGIN
     ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
     ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
     ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
 END
 GO
 
@@ -875,6 +879,108 @@ INSERT #r SELECT N'Estados Sofasa: la tabla guarda el codigo con sus mayusculas 
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424244;
 DELETE FROM dbo.tblEstadosSofasa WHERE Codigo LIKE N'ZZ_TEST%';
 INSERT #r SELECT N'Estados Sofasa: lo de prueba se limpio', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblEstadosSofasa WHERE Codigo LIKE N'ZZ_TEST%') THEN 1 ELSE 0 END, NULL;
+
+-- 7l) Novedad de proceso, catalogo de motivos, motivo en la inspeccion y cierre "recibo sin entrega" de la transferencia
+INSERT #r SELECT N'Motivos sin inspector: los tres valores iniciales y solo "otro" requiere texto',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblMotivosSinInspector WHERE Codigo IN ('inspector_no_llego', 'inspector_no_disponible', 'otro') AND Activo = 1) = 3
+          AND (SELECT COUNT(*) FROM dbo.tblMotivosSinInspector WHERE Codigo = 'otro' AND RequiereTexto = 1) = 1
+          AND (SELECT COUNT(*) FROM dbo.tblMotivosSinInspector WHERE Codigo IN ('inspector_no_llego', 'inspector_no_disponible') AND RequiereTexto = 0) = 2 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Novedades de proceso: la tabla, sus 3 triggers y sus indices',
+    CASE WHEN OBJECT_ID(N'dbo.tblNovedadesProceso', N'U') IS NOT NULL
+          AND (SELECT COUNT(*) FROM sys.triggers WHERE name IN (N'TR_tblNovedadesProceso_NoModificar', N'TR_tblNovedadesProceso_NoBorrar', N'TR_tblNovedadesProceso_TextoDelMotivo') AND is_disabled = 0) = 3
+          AND (SELECT COUNT(*) FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.tblNovedadesProceso') AND name IN (N'UX_tblNovedadesProceso_Inspeccion_Tipo', N'IX_tblNovedadesProceso_Viaje', N'IX_tblNovedadesProceso_Vehiculo', N'IX_tblNovedadesProceso_Tipo_Fecha')) = 4 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Inspecciones: MotivoSinInspector y MotivoSinInspectorTexto existen y son nulos por defecto',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblInspecciones') AND name = N'MotivoSinInspector' AND is_nullable = 1)
+          AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblInspecciones') AND name = N'MotivoSinInspectorTexto' AND is_nullable = 1)
+          AND NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id IN (@i1, @i2) AND (MotivoSinInspector IS NOT NULL OR MotivoSinInspectorTexto IS NOT NULL)) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Transferencias: EntregaUsuarioId admite nulo y el cierre recibo_sin_entrega esta en las restricciones',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND name = N'EntregaUsuarioId' AND is_nullable = 1)
+          AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_TipoCierre' AND definition LIKE N'%recibo_sin_entrega%')
+          AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Cierre' AND definition LIKE N'%recibo_sin_entrega%') THEN 1 ELSE 0 END, NULL;
+
+DECLARE @uNov nvarchar(36) = CAST(@u2 AS nvarchar(36)), @vjNov nvarchar(36) = CAST(@vj AS nvarchar(36)), @vNov nvarchar(36) = CAST(@v AS nvarchar(36)),
+        @e1Nov nvarchar(36) = CAST(@e1 AS nvarchar(36)), @e2Nov nvarchar(36) = CAST(@e2 AS nvarchar(36)), @i1Nov nvarchar(36) = CAST(@i1 AS nvarchar(36)), @i2Nov nvarchar(36) = CAST(@i2 AS nvarchar(36));
+DECLARE @e4nov uniqueidentifier = NEWID(), @i4nov uniqueidentifier = NEWID();
+INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@e4nov, @v, @vj, (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'descargue'), 3);
+DECLARE @e4Txt nvarchar(36) = CAST(@e4nov AS nvarchar(36));
+-- Cada sentencia arma una novedad; las que deben fallar van primero para que ninguna choque con la restriccion de una novedad por tipo e inspeccion.
+DECLARE @casosNov TABLE (Orden int IDENTITY(1, 1) PRIMARY KEY, Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+DECLARE @baseNov nvarchar(max) = N'INSERT dbo.tblNovedadesProceso (Id, Tipo, ViajeId, VehiculoId, EtapaId, InspeccionId, MotivoCodigo, MotivoTexto, UsuarioId, Fecha, Lat, Lng) VALUES (NEWID(), ';
+INSERT @casosNov (Prueba, Sentencia, Esperado) VALUES
+ (N'CHECK novedad de proceso: el cargue sin inspector exige motivo', @baseNov + N'''cargue_sin_inspector'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e1Nov + N''', ''' + @i1Nov + N''', NULL, NULL, ''' + @uNov + N''', SYSDATETIMEOFFSET(), 4.6, -74.1)', 547),
+ (N'CHECK novedad de proceso: el texto sin motivo', @baseNov + N'''recibo_sin_entrega'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e1Nov + N''', ''' + @i1Nov + N''', NULL, N''zz texto'', ''' + @uNov + N''', SYSDATETIMEOFFSET(), NULL, NULL)', 547),
+ (N'CHECK novedad de proceso: el texto en blanco', @baseNov + N'''cargue_sin_inspector'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e1Nov + N''', ''' + @i1Nov + N''', ''otro'', N''   '', ''' + @uNov + N''', SYSDATETIMEOFFSET(), NULL, NULL)', 547),
+ (N'CHECK novedad de proceso: tipo invalido', @baseNov + N'''otra'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e1Nov + N''', ''' + @i1Nov + N''', NULL, NULL, ''' + @uNov + N''', SYSDATETIMEOFFSET(), NULL, NULL)', 547),
+ (N'CHECK novedad de proceso: latitud fuera de rango', @baseNov + N'''recibo_sin_entrega'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e1Nov + N''', ''' + @i1Nov + N''', NULL, NULL, ''' + @uNov + N''', SYSDATETIMEOFFSET(), 91, NULL)', 547),
+ (N'CHECK novedad de proceso: longitud fuera de rango', @baseNov + N'''recibo_sin_entrega'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e1Nov + N''', ''' + @i1Nov + N''', NULL, NULL, ''' + @uNov + N''', SYSDATETIMEOFFSET(), NULL, 181)', 547),
+ (N'FK novedad de proceso: motivo inexistente', @baseNov + N'''cargue_sin_inspector'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e1Nov + N''', ''' + @i1Nov + N''', ''zz_no_existe'', NULL, ''' + @uNov + N''', SYSDATETIMEOFFSET(), NULL, NULL)', 547),
+ (N'Trigger: el motivo "otro" exige el texto', @baseNov + N'''cargue_sin_inspector'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e1Nov + N''', ''' + @i1Nov + N''', ''otro'', NULL, ''' + @uNov + N''', SYSDATETIMEOFFSET(), NULL, NULL)', 51008),
+ (N'Trigger: un motivo de la lista no admite texto', @baseNov + N'''cargue_sin_inspector'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e1Nov + N''', ''' + @i1Nov + N''', ''inspector_no_llego'', N''zz texto'', ''' + @uNov + N''', SYSDATETIMEOFFSET(), NULL, NULL)', 51008),
+ (N'Novedad de proceso: un cargue sin inspector con motivo de la lista se guarda', @baseNov + N'''cargue_sin_inspector'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e1Nov + N''', ''' + @i1Nov + N''', ''inspector_no_llego'', NULL, ''' + @uNov + N''', SYSDATETIMEOFFSET(), 4.6, -74.1)', 0),
+ (N'Novedad de proceso: un cargue sin inspector con "otro" y su texto se guarda', @baseNov + N'''cargue_sin_inspector'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e2Nov + N''', ''' + @i2Nov + N''', ''otro'', N''zz el inspector se enfermo'', ''' + @uNov + N''', SYSDATETIMEOFFSET(), NULL, NULL)', 0),
+ (N'Novedad de proceso: el recibo sin entrega no necesita motivo y comparte inspeccion con el cargue sin inspector', @baseNov + N'''recibo_sin_entrega'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e1Nov + N''', ''' + @i1Nov + N''', NULL, NULL, ''' + @uNov + N''', SYSDATETIMEOFFSET(), NULL, NULL)', 0),
+ (N'UNIQUE novedad de proceso: una por tipo e inspeccion', @baseNov + N'''cargue_sin_inspector'', ''' + @vjNov + N''', ''' + @vNov + N''', ''' + @e1Nov + N''', ''' + @i1Nov + N''', ''inspector_no_disponible'', NULL, ''' + @uNov + N''', SYSDATETIMEOFFSET(), NULL, NULL)', 2601),
+ (N'Trigger: la novedad de proceso no se modifica', N'UPDATE dbo.tblNovedadesProceso SET Lat = 1 WHERE InspeccionId = ''' + @i1Nov + N'''', 51005),
+ (N'Trigger: la novedad de proceso no se borra', N'DELETE FROM dbo.tblNovedadesProceso WHERE InspeccionId = ''' + @i1Nov + N'''', 51003),
+ (N'UNIQUE motivo sin inspector por codigo', N'INSERT dbo.tblMotivosSinInspector (Id, Codigo, Nombre) VALUES (NEWID(), ''otro'', N''Otro de nuevo'')', 2627),
+ (N'CHECK motivo sin inspector: nombre vacio', N'INSERT dbo.tblMotivosSinInspector (Id, Codigo, Nombre) VALUES (NEWID(), ''zz_test_motivo'', N''  '')', 547),
+ (N'CHECK inspeccion: el motivo sin inspector solo es de una salida', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector) VALUES (NEWID(), ''' + @e1Nov + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''llegada'', SYSDATETIMEOFFSET(), ''otro'')', 547),
+ (N'CHECK inspeccion: el texto del motivo sin motivo', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspectorTexto) VALUES (NEWID(), ''' + @e1Nov + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''llegada'', SYSDATETIMEOFFSET(), N''zz texto'')', 547),
+ (N'CHECK inspeccion: el texto del motivo en blanco', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector, MotivoSinInspectorTexto) VALUES (NEWID(), ''' + @e4Txt + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''salida'', SYSDATETIMEOFFSET(), ''otro'', N''  '')', 547),
+ (N'FK inspeccion: motivo sin inspector inexistente', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector) VALUES (NEWID(), ''' + @e1Nov + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''llegada'', SYSDATETIMEOFFSET(), ''zz_no_existe'')', 547),
+ (N'Notificacion: el tipo novedad_proceso se guarda', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''novedad_proceso'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-1'')', 0),
+ (N'CHECK notificacion: un tipo que no existe', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''zz_tipo'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-2'')', 547);
+-- La transferencia (@i2 aun no tiene ninguna): primero lo que debe fallar y al final el recibo sin entrega valido.
+DECLARE @baseTr nvarchar(max) = N'INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId, FirmaEntrega, FirmaRecibe, FirmaEntregaAt, FirmaRecibeAt, FirmaRecibeIp, TipoCierre) VALUES (NEWID(), ''' + @i2Nov + N''', ';
+INSERT @casosNov (Prueba, Sentencia, Esperado) VALUES
+ (N'CHECK transferencia: el recibo sin entrega no tiene usuario de entrega', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'')', 547),
+ (N'CHECK transferencia: el recibo sin entrega no tiene firma de entrega', @baseTr + N'NULL, ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'')', 547),
+ (N'CHECK transferencia: el recibo sin entrega exige la firma de quien recibe', @baseTr + N'NULL, ''' + @uNov + N''', NULL, NULL, NULL, NULL, NULL, ''recibo_sin_entrega'')', 547),
+ (N'CHECK transferencia: sin quien entrega solo vale el recibo sin entrega (abierta)', @baseTr + N'NULL, ''' + @uNov + N''', NULL, NULL, NULL, NULL, NULL, NULL)', 547),
+ (N'CHECK transferencia: sin quien entrega no vale una firmada', @baseTr + N'NULL, ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), ''10.0.0.1'', ''firmada'')', 547),
+ (N'CHECK transferencia: tipo de cierre desconocido', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), ''10.0.0.1'', ''zz_cierre'')', 547),
+ (N'Transferencia: el recibo sin entrega con la firma de quien recibe se guarda', @baseTr + N'NULL, ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'')', 0),
+ (N'Trigger: el recibo sin entrega es evidencia y no se borra', N'DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = ''' + @i2Nov + N'''', 51003);
+DECLARE @pruebaNP nvarchar(200), @sentenciaNP nvarchar(max), @esperadoNP int, @obtenidoNP int, @mensajeNP nvarchar(4000);
+DECLARE cNovP CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosNov ORDER BY Orden;
+OPEN cNovP;
+FETCH NEXT FROM cNovP INTO @pruebaNP, @sentenciaNP, @esperadoNP;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoNP = 0; SET @mensajeNP = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaNP);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoNP = ERROR_NUMBER(); SET @mensajeNP = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaNP, CASE WHEN @obtenidoNP = @esperadoNP THEN 1 ELSE 0 END, CASE WHEN @obtenidoNP = @esperadoNP THEN NULL ELSE CONCAT(N'esperaba ', @esperadoNP, N' y fue ', @obtenidoNP, N': ', @mensajeNP) END);
+    FETCH NEXT FROM cNovP INTO @pruebaNP, @sentenciaNP, @esperadoNP;
+END
+CLOSE cNovP;
+DEALLOCATE cNovP;
+INSERT #r SELECT N'Transferencia: el recibo sin entrega quedo guardado sin usuario ni firma de entrega',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @i2 AND TipoCierre = 'recibo_sin_entrega' AND EntregaUsuarioId IS NULL AND FirmaEntrega IS NULL AND RecibeUsuarioId = @u2) THEN 1 ELSE 0 END, NULL;
+
+-- Una inspeccion de salida con motivo se guarda (en la etapa nueva, para no chocar con la salida original de las demas) y el motivo queda con su texto.
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector, MotivoSinInspectorTexto) VALUES (@i4nov, @e4nov, @vj, @u2, 'salida', SYSDATETIMEOFFSET(), 'otro', N'zz el inspector se enfermo');
+INSERT #r SELECT N'Inspecciones: una salida con el motivo "otro" y su texto se guarda',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id = @i4nov AND MotivoSinInspector = 'otro' AND MotivoSinInspectorTexto = N'zz el inspector se enfermo') THEN 1 ELSE 0 END, NULL;
+
+-- Limpieza de esta seccion (las novedades, las notificaciones y las transferencias son evidencia: solo se borran con sus triggers apagados).
+DELETE FROM dbo.tblInspecciones WHERE Id = @i4nov;
+DELETE FROM dbo.tblEtapas WHERE Id = @e4nov;
+ALTER TABLE dbo.tblNovedadesProceso DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblNovedadesProceso WHERE ViajeId = @vj;
+ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
+ALTER TABLE dbo.tblNotificaciones DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblNotificaciones WHERE ClaveDedupe LIKE N'zz-novedad-proceso-%';
+ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
+ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @i2;
+ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
+INSERT #r SELECT N'Novedad de proceso: lo de prueba se limpio', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblNovedadesProceso WHERE ViajeId = @vj) AND NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id = @i4nov)
+    AND NOT EXISTS (SELECT 1 FROM dbo.tblNotificaciones WHERE ClaveDedupe LIKE N'zz-novedad-proceso-%') AND NOT EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @i2) THEN 1 ELSE 0 END, NULL;
 
 -- 7g) Parametros: la tabla, sus filas iniciales y sus restricciones
 INSERT #r SELECT N'Parametros: la tabla existe con sus 8 filas iniciales (6 con valor y 2 sin valor) y sin linea base de rechazo',
