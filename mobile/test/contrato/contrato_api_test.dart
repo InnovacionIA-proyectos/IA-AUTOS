@@ -57,11 +57,22 @@ void main() {
       'origen', 'destino', 'vehiculos',
     ],
     'ViajeVehiculoDto': ['vin', 'marca', 'modelo', 'color', 'operacion'],
+    // `usuario_id` distingue el informe propio del ajeno: es lo que decide si al conductor se le muestra el
+    // detalle de lo que marcó el inspector.
     'InventarioInspeccionDto': [
       'id', 'momento', 'momento_nombre', 'fecha', 'cerrada_at', 'estado', 'notas', 'hallazgos', 'evidencias',
-      'transferencia',
+      'transferencia', 'usuario_id',
     ],
-    'TransferenciaDto': ['firmada', 'tipo_cierre'],
+    // Las dos fechas de firma son lo que permite decir quién firmó y quién falta: entre una y otra pueden
+    // pasar horas, porque cada parte firma desde su sesión.
+    'TransferenciaDto': [
+      'firmada', 'tipo_cierre', 'entrega_usuario_id', 'recibe_usuario_id', 'entrega_firmada_at', 'recibe_firmada_at',
+    ],
+    // Del detalle del informe salen además los nombres, para no mostrar un id a quien va a firmar.
+    'TransferenciaDetalleDto': ['entrega_nombre', 'recibe_nombre'],
+    'InformeDetalleDto': ['transferencia'],
+    // Quiénes pueden firmar este viaje: su conductor y su inspector, y nadie más.
+    'FirmanteDto': ['id', 'nombre', 'rol'],
     'HallazgoDto': ['id', 'parte_vehiculo', 'clase_dano', 'tamano_dano', 'coords_diagrama'],
     'CoordsDiagramaDto': ['x', 'y'],
     'EvidenciaDto': ['id', 'url'],
@@ -91,6 +102,12 @@ void main() {
     'CrearHallazgoRequest': ['parte_vehiculo', 'clase_dano', 'tamano_dano', 'coords_diagrama', 'evidencia'],
     // Una sola firma: el servidor la atribuye al usuario del token.
     'FirmarTransferenciaRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma'],
+    // Quien recibe firma dejando sus observaciones: cierra la transferencia como `con_reservas`.
+    'RecibirConReservasRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma', 'reservas'],
+    // La constancia de no firma, con su evidencia dentro, igual que un hallazgo.
+    'RegistrarNoFirmaRequest': [
+      'entrega_usuario_id', 'recibe_usuario_id', 'parte', 'motivo', 'testigo_usuario_id', 'evidencia',
+    ],
     // La app sube multipart, no base64: `SubirArchivoRequest` ya no se usa.
   };
 
@@ -117,12 +134,16 @@ void main() {
       ('get', '/api/viajes/mios'),
       ('get', '/api/viajes/{}'),
       ('get', '/api/vehiculos/{}/inventario'),
+      ('get', '/api/viajes/{}/firmantes'),
       ('get', '/api/inspecciones'),
       ('post', '/api/inspecciones'),
+      ('get', '/api/inspecciones/{}'),
       ('post', '/api/inspecciones/{}/evidencias'),
       ('post', '/api/inspecciones/{}/hallazgos'),
       ('post', '/api/inspecciones/{}/cerrar'),
       ('post', '/api/inspecciones/{}/transferencia'),
+      ('post', '/api/inspecciones/{}/transferencia/reservas'),
+      ('post', '/api/inspecciones/{}/transferencia/no-firma'),
       ('post', '/api/uploads'),
       ('get', '/api/sofasa/ordenes'),
     ];

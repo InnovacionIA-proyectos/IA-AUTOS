@@ -122,6 +122,16 @@ reabrir un bug sobre algo ya marcado "Verificado", corregir su estado y anotar l
 |---|---|---|---|
 | S5-HU-24.6/24.7/24.8/24.9 (Mobile) | Checklist de vistas desde el catálogo con guía de cámara; foto por hallazgo; reglas de cierre iguales a las del servidor; evidencia completa y multipart con hash; dos momentos por etapa con bloqueo del 409 | `mobile/test/inspecciones/checklist_vistas_test.dart`, `reglas_informe_test.dart`, `mobile/test/sync/gateway_informes_api_test.dart`, `procesador_cola_test.dart`, `mobile/test/vehiculos/inventario_test.dart`, `mobile/test/widgets/captura_page_test.dart` | Implementadas en `S5-HU-21-23`; **sin probar en dispositivo** |
 
+**#151 revisada de nuevo el 26-oct-2026, después de la #116 y la #117, y se sigue cumpliendo:** el gateway
+manda `firma` y no queda ningún rastro del contrato viejo en lo que se envía (las dos menciones que quedan de
+`firma_entrega` leen los jobs que encoló una versión anterior, y tienen su prueba). Las dos firmas del Logan
+salieron en dispositivo, que es la comprobación de verdad.
+
+Lo que sí faltaba era **la red que habría atrapado la #151 en su momento**: los endpoints y campos que la app
+empezó a usar con la #116 y la #117 no estaban en `contrato_api_test.dart`. Ya están los tres endpoints nuevos
+(`firmantes`, `reservas`, `no-firma`), el `GET /api/inspecciones/{id}`, los dos cuerpos nuevos y los campos
+que se leen de `TransferenciaDto`, `TransferenciaDetalleDto`, `FirmanteDto` y el `usuario_id` del informe.
+
 **#151 (firma de transferencia) cerrada** en `S5-HU-21-23`: la API pide un solo campo `firma` y la app mandaba
 `firma_entrega`/`firma_recibe`, así que toda firma respondía 400 «firma es obligatoria» (visto en dispositivo el
 23-oct-2026). El servidor atribuye la firma al usuario del token, de modo que solo viaja la propia y la otra
