@@ -277,6 +277,25 @@ BEGIN
 END
 GO
 
+-- Motivos por los que el inspector previsto no esta en un cargue con personal de apoyo. RequiereTexto = 1 (el motivo "otro"): quien lo elige debe escribir cual es.
+IF OBJECT_ID(N'dbo.tblMotivosSinInspector', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblMotivosSinInspector
+    (
+        Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblMotivosSinInspector PRIMARY KEY,
+        Codigo        varchar(30)       NOT NULL,
+        Nombre        nvarchar(100)     NOT NULL,
+        RequiereTexto bit               NOT NULL CONSTRAINT DF_tblMotivosSinInspector_RequiereTexto DEFAULT (0),
+        Orden         int               NOT NULL CONSTRAINT DF_tblMotivosSinInspector_Orden DEFAULT (0),
+        Activo        bit               NOT NULL CONSTRAINT DF_tblMotivosSinInspector_Activo DEFAULT (1),
+        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblMotivosSinInspector_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblMotivosSinInspector_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblMotivosSinInspector_Codigo UNIQUE (Codigo),
+        CONSTRAINT CK_tblMotivosSinInspector_Nombre CHECK (LEN(LTRIM(RTRIM(Nombre))) > 0)
+    );
+END
+GO
+
 -- Niveles de severidad (V1+, V1, V2, V3) con la accion que corresponde a cada uno.
 IF OBJECT_ID(N'dbo.tblNivelesSeveridad', N'U') IS NULL
 BEGIN
@@ -616,12 +635,15 @@ BEGIN
         CerradaAt        datetimeoffset(3) NULL,
         Version          int              NOT NULL CONSTRAINT DF_tblInspecciones_Version DEFAULT (1),
         CorrigeInspeccionId uniqueidentifier NULL,
+        MotivoSinInspector varchar(30)    NULL,
+        MotivoSinInspectorTexto nvarchar(300) NULL,
         CreatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspecciones_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspecciones_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblInspecciones_Etapa FOREIGN KEY (EtapaId) REFERENCES dbo.tblEtapas (Id),
         CONSTRAINT FK_tblInspecciones_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT FK_tblInspecciones_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
         CONSTRAINT FK_tblInspecciones_Corrige FOREIGN KEY (CorrigeInspeccionId) REFERENCES dbo.tblInspecciones (Id),
+        CONSTRAINT FK_tblInspecciones_MotivoSinInspector FOREIGN KEY (MotivoSinInspector) REFERENCES dbo.tblMotivosSinInspector (Codigo),
         CONSTRAINT CK_tblInspecciones_Momento CHECK (Momento IN ('salida', 'llegada')),
         CONSTRAINT CK_tblInspecciones_Estado CHECK (Estado IN ('borrador', 'cerrada')),
         -- Una inspeccion cerrada tiene hora de cierre y una en borrador no.
@@ -629,7 +651,10 @@ BEGIN
         -- La version 1 es la original; las siguientes son correcciones y referencian a la version que corrigen.
         CONSTRAINT CK_tblInspecciones_Version CHECK ((Version = 1 AND CorrigeInspeccionId IS NULL) OR (Version > 1 AND CorrigeInspeccionId IS NOT NULL)),
         CONSTRAINT CK_tblInspecciones_Lat CHECK (Lat IS NULL OR (Lat BETWEEN -90 AND 90)),
-        CONSTRAINT CK_tblInspecciones_Lng CHECK (Lng IS NULL OR (Lng BETWEEN -180 AND 180))
+        CONSTRAINT CK_tblInspecciones_Lng CHECK (Lng IS NULL OR (Lng BETWEEN -180 AND 180)),
+        -- El motivo por el que no estaba el inspector es de una inspeccion de salida; su texto acompana a un motivo y no queda en blanco.
+        CONSTRAINT CK_tblInspecciones_MotivoSinInspector CHECK (MotivoSinInspector IS NULL OR Momento = 'salida'),
+        CONSTRAINT CK_tblInspecciones_MotivoTexto CHECK (MotivoSinInspectorTexto IS NULL OR (MotivoSinInspector IS NOT NULL AND LEN(LTRIM(RTRIM(MotivoSinInspectorTexto))) > 0))
     );
     -- A lo sumo una inspeccion ORIGINAL por etapa y momento; las correcciones (con CorrigeInspeccionId) no cuentan.
     -- Los indices se crean con SQL dinamico para que este script se pueda ejecutar tambien sobre una base que aun tiene la tabla anterior.
@@ -869,7 +894,7 @@ BEGIN
         CONSTRAINT FK_tblNotificaciones_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
         CONSTRAINT FK_tblNotificaciones_RespondidaPor FOREIGN KEY (RespondidaPor) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT UQ_tblNotificaciones_ClaveDedupe UNIQUE (ClaveDedupe),
-        CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario')),
+        CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario', 'novedad_proceso')),
         CONSTRAINT CK_tblNotificaciones_Urgencia CHECK (Urgencia IN ('alta', 'media')),
         CONSTRAINT CK_tblNotificaciones_Canal CHECK (Canal IN ('bandeja', 'push', 'correo')),
         CONSTRAINT CK_tblNotificaciones_RespuestaMedio CHECK (RespuestaMedio IS NULL OR RespuestaMedio IN ('app', 'llamada')),
@@ -985,7 +1010,8 @@ GO
    Cada firma la envia su titular (quien entrega o quien recibe) y guarda su fecha e IP. La transferencia se cierra con un TipoCierre:
      firmada      ambas partes firmaron;
      con_reservas ambas firmaron y quien recibe dejo sus observaciones (ReservasTexto);
-     no_firma     una parte (NoFirmaParte) se nego a firmar: queda el motivo, un testigo con usuario y la foto de la constancia.
+     no_firma     una parte (NoFirmaParte) se nego a firmar: queda el motivo, un testigo con usuario y la foto de la constancia;
+     recibo_sin_entrega  nadie de Botero Soto firma la entrega (el conductor hizo la salida del cargue): solo firma quien recibe y no hay usuario, firma, fecha ni IP de entrega.
    Mientras TipoCierre es NULL la transferencia esta abierta; con un tipo de cierre es inmutable y la etapa siguiente puede iniciarse.
    FirmaEntrega / FirmaRecibe: ruta de la imagen de la firma o trazo de la firma dibujada.
    ----------------------------------------------------------------------------- */
@@ -995,7 +1021,7 @@ BEGIN
     (
         Id                uniqueidentifier NOT NULL CONSTRAINT PK_tblTransferenciasCustodia PRIMARY KEY,
         InspeccionId      uniqueidentifier NOT NULL,
-        EntregaUsuarioId  uniqueidentifier NOT NULL,
+        EntregaUsuarioId  uniqueidentifier NULL,
         RecibeUsuarioId   uniqueidentifier NOT NULL,
         FirmaEntrega      nvarchar(max)    NULL,
         FirmaRecibe       nvarchar(max)    NULL,
@@ -1018,16 +1044,20 @@ BEGIN
         CONSTRAINT FK_tblTransferencias_Testigo FOREIGN KEY (TestigoUsuarioId) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT FK_tblTransferencias_Constancia FOREIGN KEY (EvidenciaConstanciaId) REFERENCES dbo.tblEvidencias (Id),
         CONSTRAINT UQ_tblTransferencias_Inspeccion UNIQUE (InspeccionId),
-        CONSTRAINT CK_tblTransferencias_TipoCierre CHECK (TipoCierre IS NULL OR TipoCierre IN ('firmada', 'con_reservas', 'no_firma')),
+        CONSTRAINT CK_tblTransferencias_TipoCierre CHECK (TipoCierre IS NULL OR TipoCierre IN ('firmada', 'con_reservas', 'no_firma', 'recibo_sin_entrega')),
         CONSTRAINT CK_tblTransferencias_Parte CHECK (NoFirmaParte IS NULL OR NoFirmaParte IN ('entrega', 'recibe')),
         -- El testigo es una tercera persona: ni quien entrega ni quien recibe.
         CONSTRAINT CK_tblTransferencias_Testigo CHECK (TestigoUsuarioId IS NULL OR (TestigoUsuarioId <> EntregaUsuarioId AND TestigoUsuarioId <> RecibeUsuarioId)),
-        -- Cada tipo de cierre exige lo suyo: las dos firmas (con o sin reservas) o el motivo, el testigo y la foto de la constancia.
+        -- Quien entrega solo puede faltar en un recibo sin entrega.
+        CONSTRAINT CK_tblTransferencias_Entrega CHECK (EntregaUsuarioId IS NOT NULL OR ISNULL(TipoCierre, '') = 'recibo_sin_entrega'),
+        -- Cada tipo de cierre exige lo suyo: las dos firmas (con o sin reservas), el motivo, el testigo y la foto de la constancia, o solo la firma de quien recibe.
         CONSTRAINT CK_tblTransferencias_Cierre CHECK (
             TipoCierre IS NULL
             OR (TipoCierre = 'firmada' AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> '' AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '' AND ReservasTexto IS NULL)
             OR (TipoCierre = 'con_reservas' AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> '' AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '' AND ReservasTexto IS NOT NULL AND ReservasTexto <> '')
-            OR (TipoCierre = 'no_firma' AND NoFirmaParte IS NOT NULL AND MotivoNoFirma IS NOT NULL AND MotivoNoFirma <> '' AND TestigoUsuarioId IS NOT NULL AND EvidenciaConstanciaId IS NOT NULL))
+            OR (TipoCierre = 'no_firma' AND NoFirmaParte IS NOT NULL AND MotivoNoFirma IS NOT NULL AND MotivoNoFirma <> '' AND TestigoUsuarioId IS NOT NULL AND EvidenciaConstanciaId IS NOT NULL)
+            OR (TipoCierre = 'recibo_sin_entrega' AND EntregaUsuarioId IS NULL AND FirmaEntrega IS NULL AND FirmaEntregaAt IS NULL AND FirmaEntregaIp IS NULL
+                AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '' AND ReservasTexto IS NULL))
     );
     CREATE INDEX IX_tblTransferencias_Entrega ON dbo.tblTransferenciasCustodia (EntregaUsuarioId);
     CREATE INDEX IX_tblTransferencias_Recibe ON dbo.tblTransferenciasCustodia (RecibeUsuarioId);
@@ -1188,6 +1218,15 @@ FROM (VALUES
     ('requiere_reemplazo', N'Requiere reemplazo',                             5),
     ('mas_10_particulas', N'M' + NCHAR(225) + N's de 10 part' + NCHAR(237) + N'culas', 6)) AS v (Codigo, Nombre, Orden)
 WHERE NOT EXISTS (SELECT 1 FROM dbo.tblTamanosDano c WHERE c.Codigo = v.Codigo);
+GO
+
+INSERT INTO dbo.tblMotivosSinInspector (Id, Codigo, Nombre, RequiereTexto, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.RequiereTexto, v.Orden
+FROM (VALUES
+    ('inspector_no_llego',      N'El inspector no lleg' + NCHAR(243),                    0, 1),
+    ('inspector_no_disponible', N'El inspector no est' + NCHAR(225) + N' disponible',    0, 2),
+    ('otro',                    N'Otro',                                                 1, 3)) AS v (Codigo, Nombre, RequiereTexto, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblMotivosSinInspector m WHERE m.Codigo = v.Codigo);
 GO
 
 -- La accion de cada nivel: que se hace con una unidad que lo tiene. Solo se completa donde aun no hay una (no pisa lo que se haya editado).
@@ -1474,6 +1513,72 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
+   tblNovedadesProceso: lo que pasa en el proceso y no es un dano (no tiene zona, clase ni nivel y no entra en patrones ni en el mapa de calor). Tipo: cargue_sin_inspector (el
+   conductor hizo la salida del cargue porque el inspector previsto no estaba) o recibo_sin_entrega (la transferencia se cerro sin firma de entrega). MotivoCodigo es el del catalogo
+   tblMotivosSinInspector (obligatorio en cargue_sin_inspector); MotivoTexto (hasta 300) es obligatorio si el motivo requiere texto y nulo si no (error 51008). Fecha, Lat y Lng son los del
+   momento en que se registro. Es append-only: UPDATE falla con 51005 y DELETE con 51003. A lo sumo una novedad de cada tipo por inspeccion.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblNovedadesProceso', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblNovedadesProceso
+    (
+        Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblNovedadesProceso PRIMARY KEY,
+        Tipo          varchar(30)       NOT NULL,
+        ViajeId       uniqueidentifier  NOT NULL,
+        VehiculoId    uniqueidentifier  NOT NULL,
+        EtapaId       uniqueidentifier  NOT NULL,
+        InspeccionId  uniqueidentifier  NOT NULL,
+        MotivoCodigo  varchar(30)       NULL,
+        MotivoTexto   nvarchar(300)     NULL,
+        UsuarioId     uniqueidentifier  NOT NULL,
+        Fecha         datetimeoffset(3) NOT NULL,
+        Lat           float             NULL,
+        Lng           float             NULL,
+        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblNovedadesProceso_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblNovedadesProceso_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
+        CONSTRAINT FK_tblNovedadesProceso_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id),
+        CONSTRAINT FK_tblNovedadesProceso_Etapa FOREIGN KEY (EtapaId) REFERENCES dbo.tblEtapas (Id),
+        CONSTRAINT FK_tblNovedadesProceso_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
+        CONSTRAINT FK_tblNovedadesProceso_Motivo FOREIGN KEY (MotivoCodigo) REFERENCES dbo.tblMotivosSinInspector (Codigo),
+        CONSTRAINT FK_tblNovedadesProceso_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT CK_tblNovedadesProceso_Tipo CHECK (Tipo IN ('cargue_sin_inspector', 'recibo_sin_entrega')),
+        -- El cargue sin inspector siempre dice por que; el texto solo acompana a un motivo y no puede quedar en blanco.
+        CONSTRAINT CK_tblNovedadesProceso_Motivo CHECK (Tipo <> 'cargue_sin_inspector' OR MotivoCodigo IS NOT NULL),
+        CONSTRAINT CK_tblNovedadesProceso_Texto CHECK (MotivoTexto IS NULL OR (MotivoCodigo IS NOT NULL AND LEN(LTRIM(RTRIM(MotivoTexto))) > 0)),
+        CONSTRAINT CK_tblNovedadesProceso_Lat CHECK (Lat IS NULL OR (Lat BETWEEN -90 AND 90)),
+        CONSTRAINT CK_tblNovedadesProceso_Lng CHECK (Lng IS NULL OR (Lng BETWEEN -180 AND 180))
+    );
+    CREATE UNIQUE INDEX UX_tblNovedadesProceso_Inspeccion_Tipo ON dbo.tblNovedadesProceso (InspeccionId, Tipo);
+    CREATE INDEX IX_tblNovedadesProceso_Viaje ON dbo.tblNovedadesProceso (ViajeId);
+    CREATE INDEX IX_tblNovedadesProceso_Vehiculo ON dbo.tblNovedadesProceso (VehiculoId);
+    CREATE INDEX IX_tblNovedadesProceso_Tipo_Fecha ON dbo.tblNovedadesProceso (Tipo, Fecha DESC);
+END
+GO
+
+CREATE OR ALTER TRIGGER dbo.TR_tblNovedadesProceso_NoModificar
+ON dbo.tblNovedadesProceso
+INSTEAD OF UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    THROW 51005, 'Una novedad de proceso no se modifica', 1;
+END
+GO
+
+-- El motivo "otro" (RequiereTexto = 1) exige escribir el motivo; un motivo de la lista no admite texto.
+CREATE OR ALTER TRIGGER dbo.TR_tblNovedadesProceso_TextoDelMotivo
+ON dbo.tblNovedadesProceso
+AFTER INSERT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM inserted i JOIN dbo.tblMotivosSinInspector m ON m.Codigo = i.MotivoCodigo
+               WHERE (m.RequiereTexto = 1 AND i.MotivoTexto IS NULL) OR (m.RequiereTexto = 0 AND i.MotivoTexto IS NOT NULL))
+        THROW 51008, 'El texto del motivo es obligatorio solo cuando el motivo lo requiere', 1;
+END
+GO
+
+/* -----------------------------------------------------------------------------
    La evidencia no se borra (ultima defensa en la base, ademas de la aplicacion):
    ningun usuario ni proceso puede borrar evidencias, hallazgos, transferencias ni el registro de auditoria, y una inspeccion
    solo se borra si es un borrador vacio (sin fotos, hallazgos ni transferencia). El error es 51003. Por eso las relaciones
@@ -1483,7 +1588,7 @@ GO
    ----------------------------------------------------------------------------- */
 DECLARE @tablaProtegida sysname, @sqlProtegida nvarchar(max);
 DECLARE cProtegidas CURSOR LOCAL FAST_FORWARD FOR
-    SELECT v FROM (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblTransferenciasCustodia'), (N'tblAuditLog'), (N'tblHallazgoSeguimiento'), (N'tblNotificaciones'), (N'tblNotasAclaratorias')) AS t (v);
+    SELECT v FROM (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblTransferenciasCustodia'), (N'tblAuditLog'), (N'tblHallazgoSeguimiento'), (N'tblNotificaciones'), (N'tblNotasAclaratorias'), (N'tblNovedadesProceso')) AS t (v);
 OPEN cProtegidas;
 FETCH NEXT FROM cProtegidas INTO @tablaProtegida;
 WHILE @@FETCH_STATUS = 0

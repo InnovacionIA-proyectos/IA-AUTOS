@@ -669,6 +669,32 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_novedad_de_proceso_y_el_recibo_sin_entrega_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/23-novedad-de-proceso.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tablas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'tblMotivosSinInspector', N'tblNovedadesProceso') AND schema_id = SCHEMA_ID()");
+        Assert.True(tablas == 2, $"Faltan tablas de la novedad de proceso (hay {tablas} de 2). Ejecute database/cambios-esquema/23-novedad-de-proceso.sql.");
+
+        var motivos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblMotivosSinInspector WHERE Codigo IN ('inspector_no_llego', 'inspector_no_disponible', 'otro')");
+        var otro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblMotivosSinInspector WHERE Codigo = 'otro' AND RequiereTexto = 1");
+        var triggers = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE name IN (N'TR_tblNovedadesProceso_NoModificar', N'TR_tblNovedadesProceso_NoBorrar', N'TR_tblNovedadesProceso_TextoDelMotivo') AND is_disabled = 0");
+        var columnas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblInspecciones') AND name IN (N'MotivoSinInspector', N'MotivoSinInspectorTexto')");
+        var cierre = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Cierre' AND definition LIKE N'%recibo_sin_entrega%'");
+        var entregaNula = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND name = N'EntregaUsuarioId' AND is_nullable = 1");
+        var notificacion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND definition LIKE N'%novedad_proceso%'");
+
+        Assert.True(motivos == 3, $"Faltan motivos sin inspector iniciales (hay {motivos} de 3). Ejecute database/cambios-esquema/23-novedad-de-proceso.sql.");
+        Assert.True(otro == 1, "El motivo 'otro' debe requerir texto.");
+        Assert.True(triggers == 3, $"Faltan triggers activos de tblNovedadesProceso (hay {triggers} de 3). Ejecute database/cambios-esquema/23-novedad-de-proceso.sql.");
+        Assert.True(columnas == 2, "Faltan MotivoSinInspector y MotivoSinInspectorTexto en tblInspecciones. Ejecute database/cambios-esquema/23-novedad-de-proceso.sql.");
+        Assert.True(cierre == 1, "tblTransferenciasCustodia no admite el cierre recibo_sin_entrega. Ejecute database/cambios-esquema/23-novedad-de-proceso.sql.");
+        Assert.True(entregaNula == 1, "EntregaUsuarioId debe admitir nulo. Ejecute database/cambios-esquema/23-novedad-de-proceso.sql.");
+        Assert.True(notificacion == 1, "tblNotificaciones no admite el tipo novedad_proceso. Ejecute database/cambios-esquema/23-novedad-de-proceso.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

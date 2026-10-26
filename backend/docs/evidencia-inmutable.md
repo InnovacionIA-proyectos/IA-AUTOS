@@ -57,6 +57,8 @@ No borra ni cambia ningun dato: solo cambia relaciones, crea los triggers y agre
   Tiene indices por `(Entidad, EntidadId)`, `ViajeId`, `ClienteId` y `CreatedAt`. **Un UPDATE falla con el error 51005** y un DELETE con el 51003. Script: `database/cambios-esquema/18-auditoria-completa.sql`.
 - **`tblNotasAclaratorias`**: la aclaracion de un registro ya guardado es un registro NUEVO (`Entidad`: `inspeccion`, `hallazgo` o `transferencia`; `EntidadId`, `AutorId`, `Texto` de hasta 1000 y `CreatedAt`) con indice por `(Entidad, EntidadId)`.
   El original no cambia y la nota no se edita (51005) ni se borra (51003). Script: `database/cambios-esquema/19-notas-aclaratorias.sql`.
+- **`tblNovedadesProceso`**: lo que pasa en el proceso y no es un daño (`Tipo`: `cargue_sin_inspector` o `recibo_sin_entrega`), con el viaje, el vehículo, la etapa, la inspección, el motivo (`MotivoCodigo` y `MotivoTexto`), quién la registró y la fecha, lat y lng del momento.
+  Es append-only: **un UPDATE falla con el error 51005**, un DELETE con el 51003 y un texto que no corresponde al motivo con el 51008. Hay a lo sumo una novedad de cada tipo por inspección. Script: `database/cambios-esquema/23-novedad-de-proceso.sql`.
 
 La API de las notas esta en [CONTRATO.md](../CONTRATO.md) («Notas aclaratorias»): las agrega el autor del registro, el administrador o el coordinador de calidad, tambien con la inspeccion cerrada, y quedan en la auditoria.
 
