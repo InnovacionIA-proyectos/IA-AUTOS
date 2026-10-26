@@ -106,4 +106,20 @@ class GatewayInformesApi implements GatewayInformes {
       'firma': firma,
     });
   }
+
+  @override
+  Future<void> recibirConReservas(
+    String inspeccionId, {
+    required String entregaId,
+    required String recibeId,
+    required String? firma,
+    required String reservas,
+  }) async {
+    await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/transferencia/reservas', cuerpo: {
+      'entrega_usuario_id': entregaId,
+      'recibe_usuario_id': recibeId,
+      'firma': firma,
+      'reservas': reservas,
+    });
+  }
 }

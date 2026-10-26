@@ -229,12 +229,25 @@ class ProcesadorCola {
     await _borrarFotos(job);
   }
 
-  Future<void> _ejecutarFirma(FirmaJob job) => gateway.firmarTransferencia(
+  /// Un recibo con reservas no es una firma con un campo extra: va por su propio endpoint y cierra la
+  /// transferencia de otra manera.
+  Future<void> _ejecutarFirma(FirmaJob job) {
+    if (job.reservas case final reservas?) {
+      return gateway.recibirConReservas(
         job.inspeccionId,
         entregaId: job.entregaId,
         recibeId: job.recibeId,
         firma: job.firma,
+        reservas: reservas,
       );
+    }
+    return gateway.firmarTransferencia(
+      job.inspeccionId,
+      entregaId: job.entregaId,
+      recibeId: job.recibeId,
+      firma: job.firma,
+    );
+  }
 
   Future<void> _borrarFotos(InformeJob job) async {
     for (final foto in job.fotos) {

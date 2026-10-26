@@ -237,6 +237,7 @@ class FirmaJob extends Job {
     required this.entregaId,
     required this.recibeId,
     required this.firma,
+    this.reservas,
   });
 
   factory FirmaJob.fromJson(Map<String, dynamic> json) => FirmaJob(
@@ -253,6 +254,7 @@ class FirmaJob extends Job {
         recibeId: json['recibe_id'] as String,
         // Los encolados antes de que la API pidiera una sola firma traen las dos; se manda la que haya.
         firma: (json['firma'] ?? json['firma_entrega'] ?? json['firma_recibe']) as String?,
+        reservas: json['reservas'] as String?,
       );
 
   final String inspeccionId;
@@ -262,6 +264,12 @@ class FirmaJob extends Job {
   /// Trazo de la firma como path SVG (formato que la web sabe dibujar). Es la de quien firmó: el servidor la
   /// atribuye al usuario del token.
   final String? firma;
+
+  /// Observaciones de quien recibe. Si van, esto es un **recibo con reservas** y sale por otro endpoint: la
+  /// transferencia queda cerrada como `con_reservas` y no como `firmada`. Solo quien recibe puede.
+  final String? reservas;
+
+  bool get conReservas => reservas != null;
 
   @override
   String get tipo => 'firma';
@@ -280,6 +288,7 @@ class FirmaJob extends Job {
         entregaId: entregaId,
         recibeId: recibeId,
         firma: firma,
+        reservas: reservas,
       );
 
   @override
@@ -296,6 +305,7 @@ class FirmaJob extends Job {
         entregaId: entregaId,
         recibeId: recibeId,
         firma: firma,
+        reservas: reservas,
       );
 
   @override
@@ -313,5 +323,6 @@ class FirmaJob extends Job {
         'entrega_id': entregaId,
         'recibe_id': recibeId,
         'firma': firma,
+        'reservas': reservas,
       };
 }

@@ -60,6 +60,17 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
   bool _guardando = false;
   bool _seleccionInicial = false;
 
+  /// Quien recibe puede firmar dejando constancia de lo que no está conforme. Entonces la transferencia cierra
+  /// como `con_reservas` y el texto es obligatorio: unas reservas en blanco no dicen nada.
+  bool _conReservas = false;
+  final _reservas = TextEditingController();
+
+  @override
+  void dispose() {
+    _reservas.dispose();
+    super.dispose();
+  }
+
   /// Quiénes son las partes. Si la transferencia ya existe **no se elige**: la primera firma las fijó y el
   /// servidor rechaza con 409 cualquier intento de cambiarlas, así que quien firma de segundo hereda. Solo
   /// cuando no hay nada se propone lo razonable: entrega quien está en sesión, recibe la otra persona.
@@ -84,7 +95,8 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
         firmaRecibe: _firmaRecibe,
       );
 
-  bool _puedeFirmar(String? yoId) => _miFirma(yoId) != null && !_guardando;
+  bool _puedeFirmar(String? yoId) =>
+      _miFirma(yoId) != null && !_guardando && (!_conReservas || _reservas.text.trim().isNotEmpty);
 
   Future<void> _registrar() async {
     final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
@@ -101,6 +113,7 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
             entregaId: _entregaId!,
             recibeId: _recibeId!,
             firma: firma,
+            reservas: _conReservas ? _reservas.text.trim() : null,
           ));
       final sync = ref.read(syncControllerProvider.notifier);
       await sync.refrescar();
@@ -215,6 +228,36 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
             LienzoFirma(etiqueta: 'Tu firma', onCambio: (p) => setState(() => _firmaRecibe = p))
           else
             Text('Su firma se registra desde su propia sesión.', style: tema.bodySmall),
+          // Solo quien recibe: el servidor responde 403 a cualquier otro, y además no tendría sentido que
+          // quien entrega pusiera reservas sobre lo que él mismo está entregando.
+          if (yoRecibo) ...[
+            const SizedBox(height: Espacio.md),
+            SwitchListTile(
+              value: _conReservas,
+              onChanged: (v) => setState(() => _conReservas = v),
+              title: const Text('Recibo con reservas'),
+              subtitle: Text('Firmas, y queda escrito con qué no estás conforme.', style: tema.bodySmall),
+              contentPadding: EdgeInsets.zero,
+            ),
+            if (_conReservas)
+              TextField(
+                controller: _reservas,
+                onChanged: (_) => setState(() {}),
+                minLines: 2,
+                maxLines: 4,
+                textCapitalization: TextCapitalization.sentences,
+                decoration: const InputDecoration(
+                  labelText: 'Observaciones',
+                  hintText: 'Qué llega distinto de lo que dice el informe',
+                ),
+              ),
+            if (_conReservas && _reservas.text.trim().isEmpty)
+              Semantics(
+                liveRegion: true,
+                child: Text('Escribe tus observaciones: sin ellas no es un recibo con reservas.',
+                    style: tema.bodySmall?.copyWith(color: Colores.peligro)),
+              ),
+          ],
           const SizedBox(height: Espacio.md),
           if (!distintos)
             Semantics(
@@ -235,7 +278,9 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
           const SizedBox(height: Espacio.lg),
           FilledButton(
             onPressed: _puedeFirmar(yoId) ? _registrar : null,
-            child: _guardando ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)) : const Text('Registrar mi firma'),
+            child: _guardando
+                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                : Text(_conReservas ? 'Registrar recibo con reservas' : 'Registrar mi firma'),
           ),
         ],
       ),

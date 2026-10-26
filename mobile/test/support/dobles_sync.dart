@@ -159,8 +159,24 @@ class GatewayFalso implements GatewayInformes {
     return _paso('firmarTransferencia');
   }
 
+  @override
+  Future<void> recibirConReservas(
+    String inspeccionId, {
+    required String entregaId,
+    required String recibeId,
+    required String? firma,
+    required String reservas,
+  }) {
+    firmasEnviadas.add(firma);
+    reservasEnviadas.add(reservas);
+    return _paso('recibirConReservas');
+  }
+
   /// Lo que viajó en cada firma, para comprobar que es una sola y la correcta.
   final List<String?> firmasEnviadas = [];
+
+  /// Las observaciones de cada recibo con reservas.
+  final List<String> reservasEnviadas = [];
 }
 
 ErrorApi errorHttp(int status, [String mensaje = 'error']) => ErrorApi(message: mensaje, code: 'X', status: status);

@@ -142,6 +142,46 @@ void main() {
       expect(r.enviados, 1);
       expect(cola.jobs, isEmpty);
     });
+
+    // Un recibo con reservas no es una firma con un campo de más: cierra la transferencia como `con_reservas`
+    // y por eso sale por otro endpoint. Mandarlo por el de siempre perdería las observaciones.
+    test('con observaciones sale por el endpoint de reservas, no por el de firma', () async {
+      await cola.agregar(const FirmaJob(
+        id: 'f2',
+        etiqueta: 'Firma',
+        creadoEn: 1,
+        usuarioId: usuarioPrueba,
+        inspeccionId: 'insp-9',
+        entregaId: 'u1',
+        recibeId: 'u2',
+        firma: 'M 1 1 L 2 2',
+        reservas: 'Llega con un golpe en el capot que no venía en la salida',
+      ));
+
+      final r = await procesador.procesar(usuarioPrueba);
+
+      expect(gateway.llamadas, ['recibirConReservas']);
+      expect(gateway.reservasEnviadas, ['Llega con un golpe en el capot que no venía en la salida']);
+      expect(r.enviados, 1);
+    });
+
+    // La cola sobrevive a un cierre de la app, así que lo que se guardó tiene que volver igual.
+    test('las observaciones sobreviven al guardado de la cola', () {
+      const job = FirmaJob(
+        id: 'f3',
+        etiqueta: 'Firma',
+        creadoEn: 1,
+        inspeccionId: 'insp-9',
+        entregaId: 'u1',
+        recibeId: 'u2',
+        firma: 'M 1 1',
+        reservas: 'Faltan dos tapas',
+      );
+
+      final vuelto = FirmaJob.fromJson(job.toJson());
+
+      expect((vuelto.reservas, vuelto.conReservas), ('Faltan dos tapas', true));
+    });
   });
 
   group('orden y señal', () {

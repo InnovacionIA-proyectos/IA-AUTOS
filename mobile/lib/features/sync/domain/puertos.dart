@@ -83,4 +83,14 @@ abstract interface class GatewayInformes {
     required String recibeId,
     required String? firma,
   });
+
+  /// Quien recibe firma dejando sus observaciones: la transferencia queda cerrada como `con_reservas`. Es otro
+  /// endpoint, no un campo más de la firma, porque solo quien recibe puede y el texto es obligatorio.
+  Future<void> recibirConReservas(
+    String inspeccionId, {
+    required String entregaId,
+    required String recibeId,
+    required String? firma,
+    required String reservas,
+  });
 }
