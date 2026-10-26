@@ -54,8 +54,8 @@ no tienen este bloqueo.
 
 ## Lo que ve el conductor
 
-El conductor no ve los hallazgos que registraron otros: en `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` toda inspección que **no creó** llega con `hallazgos: []` y sin las fotos de hallazgos ni las del sello (`clsVisibilidadConductor`); las
-que sí creó (sus novedades) llegan completas. `GET /api/inspecciones/{id}/hallazgos-previos` y `GET /api/hallazgos` responden `403`. Las novedades que registra en ruta están en [notificaciones.md](notificaciones.md).
+El conductor ve en lectura los hallazgos de las inspecciones de sus viajes: en `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` llegan con su zona, clase, tamaño, tipo de novedad, origen, si es preexistente, fecha y foto, pero con el nivel V, el seguimiento, la evidencia, la revisión, la nota y
+la foto del sello en `null` o ausentes (`clsVisibilidadConductor`). `GET /api/inspecciones/{id}/hallazgos-previos` y `GET /api/hallazgos` responden `403`. Las novedades que registra en ruta están en [notificaciones.md](notificaciones.md).
 
 ## Corrección sin modificar lo cerrado
 

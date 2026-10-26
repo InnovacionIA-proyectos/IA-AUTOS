@@ -549,7 +549,7 @@ use `fetch` con el token y descargue el `blob` (un enlace directo no lo envía).
 
 El PDF trae el inventario (cada proceso con sus inspecciones, hallazgos y evidencias) **más las fotos de cada inspección con su sello** (fecha y hora, ubicación, sello del servidor y hash SHA-256) y, al final, los **paneles del dibujo de daños**
 con la imagen del panel y cada zona con hallazgos resaltada y marcada con **cuántos hallazgos tiene**; las zonas sin dibujo en los paneles (el frente, las llantas) se listan aparte. Un vehículo dado de baja lo dice. Un PDF lleva hasta **60 fotos**
-(primero las de los hallazgos): si hay más, el PDF avisa cuántas dejó fuera. Lo ve quien ve el inventario (el conductor, sin los hallazgos que no registró).
+(primero las de los hallazgos): si hay más, el PDF avisa cuántas dejó fuera. Lo ve quien ve el inventario.
 
 ---
 
@@ -888,7 +888,7 @@ Autenticado. El **informe de la inspección en PDF** (`Content-Type: application
 - las **notas aclaratorias** de la inspección y el **historial de seguimiento** de cada hallazgo (con la foto del sello de quien valida).
 
 Las imágenes salen del almacén; una foto cuyo archivo ya no está se indica en su lugar. Lleva hasta **60 fotos** (primero las de los hallazgos): si hay más, el PDF avisa cuántas dejó fuera y se ven en el informe. Lo ve quien puede ver el informe:
-`403` si es de otro cliente o de un viaje ajeno (inspector y conductor), y el conductor lo recibe sin los hallazgos que no registró; `404` si no existe. Reemplaza al PDF de texto plano.
+`403` si es de otro cliente o de un viaje ajeno (inspector y conductor), y el conductor lo recibe con los hallazgos en lectura (sin nivel, seguimiento ni historial); `404` si no existe. Reemplaza al PDF de texto plano.
 
 ### `GET /api/inspecciones/{id}`
 Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de la inspección más el contexto y sus partes. Inspector y conductor reciben `403` si el informe es de un viaje que no es suyo.
@@ -1274,13 +1274,15 @@ Cada VIN de `ViajeDto.vehiculos` agrega `estado_transporte` y `novedades`:
 
 `novedades` es el número de novedades de la unidad. La llegada de Transporte cerrada cuenta como etapa completa de la unidad.
 
-### Lo que el conductor no ve
+### Lo que el conductor ve y lo que no ve
 
-El conductor no ve los hallazgos que registraron otros (el inspector, por ejemplo):
+El conductor ve, **en modo lectura**, los hallazgos de las inspecciones de **sus viajes** (también los que registró el inspector), para revisar lo registrado y, en el cargue con apoyo, firmar que recibe las unidades en ese estado (decisión del equipo a partir de la validación del conductor, secciones 2.1 y 2.2).
+Nada de otros viajes del mismo VIN: el inventario solo trae las etapas de sus viajes y el informe de un viaje ajeno responde `403`.
 
 | Endpoint | Para el conductor |
 |---|---|
-| `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` | en toda inspección que **no creó** llegan `hallazgos: []` y sin las fotos de hallazgos ni las del sello de quien los valida; las inspecciones que sí creó (sus novedades) llegan completas |
+| `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` | los hallazgos de las inspecciones de **sus viajes**, con `zona` (texto y `cuadrante_numero` + `lado`, o `zona_provisional`), `clase_dano`, `tamano_dano`, `tipo_novedad`, `origen`, `es_preexistente` y `created_at`, y su foto (`evidencias` con `hallazgo_id` y su URL firmada). Llegan en `null`: `nivel_severidad`, `nivel_nombre`, `nivel_accion`, `estado_seguimiento`, `evidencia_completa`, `evidencia_faltante`, `revisado_por`, `revisado_at`, `nota`, `hallazgo_origen_id` y `confirmado_por`; y sin la foto del sello de quien valida (`es_sello: true`) |
+| `GET /api/inspecciones/{id}/pdf` | el PDF lleva esos hallazgos sin nivel, sin seguimiento, sin historial y sin notas aclaratorias de hallazgos |
 | `GET /api/inspecciones` | el listado no trae hallazgos |
 | `GET /api/inspecciones/{id}/hallazgos-previos`, `GET /api/hallazgos` y `GET /api/hallazgos/{id}` | `403` |
 
