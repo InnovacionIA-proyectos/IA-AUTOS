@@ -16,6 +16,7 @@ import '../../vehiculos/domain/etiquetas.dart';
 import '../../vehiculos/domain/inventario.dart';
 import '../providers.dart';
 import 'lienzo_firma.dart';
+import 'no_firma_page.dart';
 
 /// Los dos del viaje que pueden firmar: su conductor y su inspector. No la lista de usuarios: ofrecer a
 /// cualquiera como firmante lleva a elegir a quien el servidor va a rechazar, y además deja ver nombres de
@@ -282,9 +283,41 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
                 ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
                 : Text(_conReservas ? 'Registrar recibo con reservas' : 'Registrar mi firma'),
           ),
+          // La salida cuando la otra parte se niega. Solo la ve quien sí está: la constancia la levanta el
+          // otro, nunca quien no firma.
+          if ((yoEntrego || yoRecibo) && distintos) ...[
+            const SizedBox(height: Espacio.md),
+            TextButton(
+              onPressed: _guardando ? null : () => _abrirNoFirma(lista, yoId, transferencia),
+              child: Text('${_nombreDeLaOtraParte(lista, yoId, transferencia)} no firma'),
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  /// Cómo se llama la otra parte. Sale de la transferencia si ya existe, y si no de los firmantes del viaje.
+  String _nombreDeLaOtraParte(List<Usuario> lista, String? yoId, TransferenciaVista? transferencia) {
+    final otroId = yoId == _entregaId ? _recibeId : _entregaId;
+    final deLaTransferencia = yoId == _entregaId ? transferencia?.recibeNombre : transferencia?.entregaNombre;
+    return deLaTransferencia ?? lista.where((u) => u.id == otroId).firstOrNull?.nombre ?? 'La otra parte';
+  }
+
+  Future<void> _abrirNoFirma(List<Usuario> lista, String? yoId, TransferenciaVista? transferencia) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => NoFirmaPage(
+          vin: widget.vin,
+          inspeccionId: widget.inspeccionId,
+          proceso: widget.proceso,
+          entregaId: _entregaId!,
+          recibeId: _recibeId!,
+          nombreQueNoFirma: _nombreDeLaOtraParte(lista, yoId, transferencia),
+        ),
+      ),
+    );
+    if (mounted) context.pop();
   }
 }
 

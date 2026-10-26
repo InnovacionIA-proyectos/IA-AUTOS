@@ -175,8 +175,25 @@ class GatewayFalso implements GatewayInformes {
   /// Lo que viajó en cada firma, para comprobar que es una sola y la correcta.
   final List<String?> firmasEnviadas = [];
 
+  @override
+  Future<void> registrarNoFirma(
+    String inspeccionId, {
+    required String entregaId,
+    required String recibeId,
+    required String parte,
+    required String motivo,
+    required String testigoId,
+    required FotoLocal foto,
+  }) {
+    constanciasEnviadas.add((parte: parte, motivo: motivo, testigoId: testigoId, foto: foto));
+    return _paso('registrarNoFirma');
+  }
+
   /// Las observaciones de cada recibo con reservas.
   final List<String> reservasEnviadas = [];
+
+  /// Lo que viajó en cada constancia de no firma.
+  final List<({String parte, String motivo, String testigoId, FotoLocal foto})> constanciasEnviadas = [];
 }
 
 ErrorApi errorHttp(int status, [String mensaje = 'error']) => ErrorApi(message: mensaje, code: 'X', status: status);

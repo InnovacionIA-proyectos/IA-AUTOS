@@ -24,6 +24,7 @@ import '../domain/reglas_informe.dart';
 import 'camara_page.dart';
 import 'filas_captura.dart';
 import 'nota_foto.dart';
+import 'sellado.dart';
 import 'selector_dano.dart';
 
 /// Captura de un informe: datos del transporte, novedades sobre el diagrama, fotos selladas y notas.
@@ -121,22 +122,11 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   Future<FotoLocal?> _sellar(String temporal, {String? vistaId, String? nota}) async {
     setState(() => _guardandoFoto = true);
     try {
-      final ruta = await ref.read(servicioFotosProvider).guardar(temporal);
-      final pos = await ref.read(servicioUbicacionProvider).obtenerRapida();
-      final dispositivo = await ref.read(servicioDispositivoProvider).id();
-      return FotoLocal(
-        ruta: ruta,
-        selloFecha: DateTime.now().toUtc().toIso8601String(),
-        selloLat: pos?.lat,
-        selloLng: pos?.lng,
-        vistaId: vistaId,
-        nota: nota,
-        precision: pos?.precision,
-        dispositivoId: dispositivo,
-      );
-    } catch (_) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo guardar la foto. Inténtalo de nuevo.')));
-      return null;
+      final foto = await sellarFoto(ref, temporal, vistaId: vistaId, nota: nota);
+      if (foto == null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo guardar la foto. Inténtalo de nuevo.')));
+      }
+      return foto;
     } finally {
       if (mounted) setState(() => _guardandoFoto = false);
     }

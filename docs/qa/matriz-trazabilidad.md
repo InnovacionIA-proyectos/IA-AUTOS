@@ -218,6 +218,27 @@ etapa previa.
 | S5-HU-25.1 | `tblTransferenciasCustodia`: tipo de cierre, reservas, motivo de no firma, testigo, fecha e IP por firma | `MigracionTransferenciasTests.cs`; `CustodiaYUsuariosTests.Crear_exige_usuarios_distintos_y_nace_abierta_sin_firmas` | Verificado con prueba real (PR #147) |
 | **S5-HU-25.2** | **Cada firma la envía su titular** — corrige el bug de la issue #121 (el servidor aceptaba cualquier id de usuario que mandara el cliente, sin validar contra el token) | Dominio: `CustodiaYUsuariosTests.Nadie_firma_por_otro`. Integración (QA, verificado en vivo contra SQL Server real el 2026-10-16): `InspeccionesApiTests.Nadie_firma_por_otro_ni_crea_una_transferencia_ajena`, `InspeccionesApiTests.Cada_uno_firma_su_parte_aunque_envie_los_dos_ids_y_los_firmantes_no_se_pueden_cambiar` | **Verificado con prueba real — issue #121 cerrada** |
 | S5-HU-25.3 | Recibo con reservas (observaciones obligatorias) y constancia de no firma (motivo, testigo, foto); PDF de constancia | `CustodiaYUsuariosTests.Recibir_con_reservas_exige_las_observaciones`, `La_no_firma_exige_motivo_testigo_y_foto_y_cierra_la_transferencia`; `GeneradorPdfConstanciaTests.cs` | Verificado con prueba real |
+**La capa de UI de la transferencia en mobile (#116 y #117), hecha el 26-oct-2026.** Cuatro cosas que no
+estaban, todas con prueba y ninguna probada todavía en dispositivo:
+
+- **Los firmantes salían de `GET /api/usuarios`**, o sea de todo el mundo: la coordinadora de calidad y el
+  super_admin aparecían como posibles firmantes de un viaje en el que no participan. Ahora salen de
+  `GET /api/viajes/{id}/firmantes`, que devuelve solo al conductor y al inspector del viaje.
+- **La segunda firma iba condenada al 409.** La pantalla proponía las partes desde la sesión de quien la
+  abría (yo entrego, el otro recibe), así que al segundo se le proponían al revés y el servidor contesta
+  «Los firmantes de la transferencia no se pueden cambiar». Ahora, si ya existe, se heredan.
+- **El estado intermedio no se veía.** Entre una firma y la otra pueden pasar horas; la tarjeta decidía con el
+  `firmada` del DTO, que es «ya firmaron las dos», y con una sola firma se veía igual que sin ninguna. Ahora
+  dice quién firmó y quién falta, y el cierre lo decide el tipo de cierre: una constancia de no firma cierra
+  sin que nadie haya firmado.
+- **El conductor veía los hallazgos del inspector** camino de la firma, de modo que su recibo confirmaba lo
+  del otro en vez de decir lo que él encontró. Su propio informe lo sigue viendo entero.
+
+Y los dos flujos de la #117, que la API servía desde la S5-HU-25.3 y la app no usaba: **recibo con reservas**
+(solo quien recibe, observaciones obligatorias) y **constancia de no firma** (la levanta la otra parte, con
+motivo, un testigo que es una tercera persona y una foto sellada, que se sube antes de registrar y es
+reanudable como la de un hallazgo).
+
 | S5-HU-25.4/25.5/25.7 | Firmantes del viaje, firma por otro bloqueada (403), reservas sin texto rechazadas, no firma sin testigo rechazada, bloqueo de la etapa siguiente sin cierre | `CustodiaYUsuariosTests.Mientras_esta_abierta_cada_uno_puede_repetir_su_propia_firma`, `El_testigo_es_una_tercera_persona`; `InspeccionesApiTests.Una_transferencia_sin_cierre_bloquea_la_salida_de_la_etapa_siguiente_hasta_que_se_cierra` | Verificado con prueba real (dominio y API); falta la capa de UI en mobile (**Abierta/pendiente** #116, #117, #118) |
 | #151 | Mobile sigue enviando `firma_entrega`/`firma_recibe` (contrato anterior a S5-HU-25.2) | Sin prueba — contrato roto, issue abierta para el equipo móvil | **Abierta/pendiente** |
 

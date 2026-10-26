@@ -102,6 +102,8 @@ class ProcesadorCola {
               await _ejecutarInforme(job);
             case FirmaJob():
               await _ejecutarFirma(job);
+            case NoFirmaJob():
+              await _ejecutarNoFirma(job);
           }
           await cola.eliminar(job.id);
           enviados++;
@@ -227,6 +229,31 @@ class ProcesadorCola {
 
     // 5) Limpiar los archivos locales.
     await _borrarFotos(job);
+  }
+
+  /// La constancia va en dos pasos, como un hallazgo: primero el archivo, y el progreso se guarda, de modo
+  /// que un corte entre la subida y el registro no vuelve a subir la foto.
+  Future<void> _ejecutarNoFirma(NoFirmaJob job) async {
+    var actual = job;
+    if (actual.foto.storagePath == null) {
+      final subido = await gateway.subirImagen(await archivos.leerBytes(actual.foto.ruta), nombre: 'no-firma.jpg');
+      actual = actual.conFoto(actual.foto.copyWith(storagePath: subido.storagePath, hash: subido.hash));
+      await cola.guardar(actual);
+    }
+    await gateway.registrarNoFirma(
+      actual.inspeccionId,
+      entregaId: actual.entregaId,
+      recibeId: actual.recibeId,
+      parte: actual.parte,
+      motivo: actual.motivo,
+      testigoId: actual.testigoId,
+      foto: actual.foto,
+    );
+    try {
+      await archivos.borrar(actual.foto.ruta);
+    } catch (_) {
+      // Un archivo que no se pudo borrar no invalida una constancia ya registrada.
+    }
   }
 
   /// Un recibo con reservas no es una firma con un campo extra: va por su propio endpoint y cierra la

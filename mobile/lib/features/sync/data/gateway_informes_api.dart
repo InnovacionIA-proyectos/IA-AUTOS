@@ -1,4 +1,5 @@
 import '../../../core/http/cliente_api.dart';
+import '../../inspecciones/domain/foto_local.dart';
 import '../../inspecciones/domain/hallazgo_local.dart';
 import '../domain/puertos.dart';
 
@@ -120,6 +121,36 @@ class GatewayInformesApi implements GatewayInformes {
       'recibe_usuario_id': recibeId,
       'firma': firma,
       'reservas': reservas,
+    });
+  }
+
+  @override
+  Future<void> registrarNoFirma(
+    String inspeccionId, {
+    required String entregaId,
+    required String recibeId,
+    required String parte,
+    required String motivo,
+    required String testigoId,
+    required FotoLocal foto,
+  }) async {
+    await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/transferencia/no-firma', cuerpo: {
+      'entrega_usuario_id': entregaId,
+      'recibe_usuario_id': recibeId,
+      'parte': parte,
+      'motivo': motivo,
+      'testigo_usuario_id': testigoId,
+      // La foto va dentro, con la misma forma que la de un hallazgo: el servidor la guarda como constancia.
+      'evidencia': {
+        'storage_path': foto.storagePath,
+        'sello_fecha': foto.selloFecha,
+        'sello_lat': foto.selloLat,
+        'sello_lng': foto.selloLng,
+        'precision': foto.precision,
+        'dispositivo_id': foto.dispositivoId,
+        'nota': foto.nota,
+        'hash_sha256': foto.hash,
+      },
     });
   }
 }

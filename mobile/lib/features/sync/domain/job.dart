@@ -57,6 +57,7 @@ sealed class Job {
   static Job fromJson(Map<String, dynamic> json) => switch (json['kind']) {
         'informe' => InformeJob.fromJson(json),
         'firma' => FirmaJob.fromJson(json),
+        'no_firma' => NoFirmaJob.fromJson(json),
         final otro => throw FormatException('Tipo de job desconocido: $otro'),
       };
 }
@@ -325,4 +326,124 @@ class FirmaJob extends Job {
         'firma': firma,
         'reservas': reservas,
       };
+}
+
+/// Constancia de que una de las partes se negó a firmar. La registra **la otra**, con el motivo, un testigo
+/// que es una tercera persona y una foto sellada: sin esas tres cosas no es una constancia, es un dicho.
+///
+/// Cierra la transferencia como `no_firma`, que es un cierre válido: la etapa siguiente puede arrancar.
+class NoFirmaJob extends Job {
+  const NoFirmaJob({
+    required super.id,
+    required super.etiqueta,
+    required super.creadoEn,
+    super.intentos,
+    super.error,
+    super.codigoError,
+    super.fallido,
+    super.usuarioId,
+    required this.inspeccionId,
+    required this.entregaId,
+    required this.recibeId,
+    required this.parte,
+    required this.motivo,
+    required this.testigoId,
+    required this.foto,
+  });
+
+  factory NoFirmaJob.fromJson(Map<String, dynamic> json) => NoFirmaJob(
+        id: json['id'] as String,
+        etiqueta: json['etiqueta'] as String,
+        creadoEn: json['creado_en'] as int,
+        intentos: json['intentos'] as int? ?? 0,
+        error: json['error'] as String?,
+        codigoError: json['codigo_error'] as String?,
+        fallido: json['fallido'] as bool? ?? false,
+        usuarioId: json['usuario_id'] as String?,
+        inspeccionId: json['inspeccion_id'] as String,
+        entregaId: json['entrega_id'] as String,
+        recibeId: json['recibe_id'] as String,
+        parte: json['parte'] as String,
+        motivo: json['motivo'] as String,
+        testigoId: json['testigo_id'] as String,
+        foto: FotoLocal.fromJson(json['foto'] as Map<String, dynamic>),
+      );
+
+  final String inspeccionId;
+  final String entregaId;
+  final String recibeId;
+
+  /// Quién se negó: `entrega` o `recibe`.
+  final String parte;
+  final String motivo;
+
+  /// Una tercera persona, ni quien entrega ni quien recibe: el servidor lo exige así.
+  final String testigoId;
+
+  /// La foto de la constancia, con su sello. Se sube antes de registrar, como la de un hallazgo.
+  final FotoLocal foto;
+
+  @override
+  String get tipo => 'no_firma';
+
+  NoFirmaJob conFoto(FotoLocal nueva) => _copiar(foto: nueva);
+
+  @override
+  NoFirmaJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) =>
+      _copiar(intentos: intentos, error: error, codigoError: codigo, fallido: fallido);
+
+  @override
+  NoFirmaJob conUsuario(String usuario) => _copiar(usuarioId: usuario);
+
+  NoFirmaJob _copiar({
+    int? intentos,
+    String? error,
+    String? codigoError,
+    bool? fallido,
+    String? usuarioId,
+    FotoLocal? foto,
+  }) =>
+      NoFirmaJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        intentos: intentos ?? this.intentos,
+        error: error,
+        codigoError: codigoError ?? this.codigoError,
+        fallido: fallido ?? this.fallido,
+        usuarioId: usuarioId ?? this.usuarioId,
+        inspeccionId: inspeccionId,
+        entregaId: entregaId,
+        recibeId: recibeId,
+        parte: parte,
+        motivo: motivo,
+        testigoId: testigoId,
+        foto: foto ?? this.foto,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'no_firma',
+        'id': id,
+        'etiqueta': etiqueta,
+        'creado_en': creadoEn,
+        'intentos': intentos,
+        'error': error,
+        'codigo_error': codigoError,
+        'fallido': fallido,
+        'usuario_id': usuarioId,
+        'inspeccion_id': inspeccionId,
+        'entrega_id': entregaId,
+        'recibe_id': recibeId,
+        'parte': parte,
+        'motivo': motivo,
+        'testigo_id': testigoId,
+        'foto': foto.toJson(),
+      };
+}
+
+/// Las dos partes de una transferencia, tal como las nombra la API.
+abstract final class ParteTransferencia {
+  static const entrega = 'entrega';
+  static const recibe = 'recibe';
 }

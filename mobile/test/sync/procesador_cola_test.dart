@@ -165,6 +165,62 @@ void main() {
       expect(r.enviados, 1);
     });
 
+    // La constancia va en dos pasos, como un hallazgo: primero el archivo y luego el registro, con el
+    // progreso guardado en medio. Si se corta ahí, al reanudar no se vuelve a subir la foto.
+    group('constancia de no firma', () {
+      NoFirmaJob constancia({FotoLocal? foto}) => NoFirmaJob(
+            id: 'nf1',
+            etiqueta: 'No firma',
+            creadoEn: 1,
+            usuarioId: usuarioPrueba,
+            inspeccionId: 'insp-9',
+            entregaId: 'u1',
+            recibeId: 'u2',
+            parte: ParteTransferencia.recibe,
+            motivo: 'Dijo que no firmaba sin su supervisor',
+            testigoId: 'u3',
+            foto: foto ?? const FotoLocal(ruta: '/tmp/constancia.jpg', selloFecha: '2026-10-26T09:00:00Z'),
+          );
+
+      test('primero sube la foto y luego registra, con el hash del servidor', () async {
+        archivos.existentes.add('/tmp/constancia.jpg');
+        await cola.agregar(constancia());
+
+        final r = await procesador.procesar(usuarioPrueba);
+
+        expect(gateway.llamadas, ['subirImagen', 'registrarNoFirma']);
+        final enviada = gateway.constanciasEnviadas.single;
+        expect((enviada.parte, enviada.testigoId), (ParteTransferencia.recibe, 'u3'));
+        expect(enviada.motivo, 'Dijo que no firmaba sin su supervisor');
+        expect(enviada.foto.storagePath, isNotNull, reason: 'se registra con el archivo ya subido');
+        expect(enviada.foto.hash, isNotNull, reason: 'el hash lo calcula el servidor y vuelve con la evidencia');
+        expect(r.enviados, 1);
+        expect(archivos.borrados, ['/tmp/constancia.jpg'], reason: 'ya está en el servidor');
+      });
+
+      test('al reanudar no se vuelve a subir la foto', () async {
+        await cola.agregar(constancia(
+          foto: const FotoLocal(
+            ruta: '/tmp/constancia.jpg',
+            selloFecha: '2026-10-26T09:00:00Z',
+            storagePath: 'ya/subida.jpg',
+            hash: 'abc',
+          ),
+        ));
+
+        await procesador.procesar(usuarioPrueba);
+
+        expect(gateway.llamadas, ['registrarNoFirma']);
+      });
+
+      test('sobrevive al guardado de la cola', () {
+        final vuelto = NoFirmaJob.fromJson(constancia().toJson());
+
+        expect((vuelto.parte, vuelto.motivo, vuelto.testigoId), (ParteTransferencia.recibe, 'Dijo que no firmaba sin su supervisor', 'u3'));
+        expect(vuelto.foto.ruta, '/tmp/constancia.jpg');
+      });
+    });
+
     // La cola sobrevive a un cierre de la app, así que lo que se guardó tiene que volver igual.
     test('las observaciones sobreviven al guardado de la cola', () {
       const job = FirmaJob(

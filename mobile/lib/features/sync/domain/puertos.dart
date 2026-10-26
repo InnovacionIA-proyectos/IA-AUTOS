@@ -1,3 +1,4 @@
+import '../../inspecciones/domain/foto_local.dart';
 import '../../inspecciones/domain/hallazgo_local.dart';
 import 'job.dart';
 
@@ -92,5 +93,16 @@ abstract interface class GatewayInformes {
     required String recibeId,
     required String? firma,
     required String reservas,
+  });
+
+  /// Constancia de que una parte no firmó. La registra la otra, con motivo, testigo y la foto ya subida.
+  Future<void> registrarNoFirma(
+    String inspeccionId, {
+    required String entregaId,
+    required String recibeId,
+    required String parte,
+    required String motivo,
+    required String testigoId,
+    required FotoLocal foto,
   });
 }
