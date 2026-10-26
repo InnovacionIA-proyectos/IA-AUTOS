@@ -144,7 +144,11 @@ class _UltimoInforme extends ConsumerWidget {
     final catalogos = ref.watch(catalogosProvider);
     final apiUrl = ref.watch(entornoProvider).apiUrl;
     final token = ref.watch(authControllerProvider.select((e) => e.sesion?.token));
+    final yo = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario));
     final fotos = [for (final e in inspeccion.evidencias) if (resolverUrlImagen(apiUrl, e.url) != null) resolverUrlImagen(apiUrl, e.url)!];
+    // El conductor recibe el vehículo y firma su recibo. Si antes ve lo que marcó el inspector, su recibo ya
+    // no dice lo que él encontró, sino que confirma lo del otro. Su propio informe sí lo ve entero.
+    final ajeno = yo?.rol == 'conductor' && inspeccion.usuarioId != null && inspeccion.usuarioId != yo?.id;
 
     return Tarjeta(
       child: Column(
@@ -162,7 +166,14 @@ class _UltimoInforme extends ConsumerWidget {
             ],
           ),
           Text(formatearFecha(inspeccion.fecha), style: tema.bodySmall),
-          if (fotos.isNotEmpty) ...[
+          if (ajeno) ...[
+            const SizedBox(height: Espacio.md),
+            Text(
+              'El detalle lo registra quien inspecciona. Al recibir, lo que tú encuentres queda en tu firma.',
+              style: tema.bodySmall,
+            ),
+          ],
+          if (!ajeno && fotos.isNotEmpty) ...[
             const SizedBox(height: Espacio.md),
             SizedBox(
               height: 88,
@@ -193,15 +204,17 @@ class _UltimoInforme extends ConsumerWidget {
               ),
             ),
           ],
-          const SizedBox(height: Espacio.md),
-          Center(child: DiagramaVehiculo(marcas: [for (final h in inspeccion.hallazgos) if (h.coords != null) h.coords!])),
-          const SizedBox(height: Espacio.md),
-          if (inspeccion.hallazgos.isEmpty)
-            Text('Sin hallazgos registrados.', style: tema.bodySmall)
-          else
-            for (final h in inspeccion.hallazgos)
-              Text('• ${h.parte}: ${catalogos.etiqueta(Catalogo.clasesDano, h.clase)} (${catalogos.etiqueta(Catalogo.tamanosDano, h.tamano)})', style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
-          if (inspeccion.notas?.trim().isNotEmpty ?? false) ...[
+          if (!ajeno) ...[
+            const SizedBox(height: Espacio.md),
+            Center(child: DiagramaVehiculo(marcas: [for (final h in inspeccion.hallazgos) if (h.coords != null) h.coords!])),
+            const SizedBox(height: Espacio.md),
+            if (inspeccion.hallazgos.isEmpty)
+              Text('Sin hallazgos registrados.', style: tema.bodySmall)
+            else
+              for (final h in inspeccion.hallazgos)
+                Text('• ${h.parte}: ${catalogos.etiqueta(Catalogo.clasesDano, h.clase)} (${catalogos.etiqueta(Catalogo.tamanosDano, h.tamano)})', style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
+          ],
+          if (!ajeno && (inspeccion.notas?.trim().isNotEmpty ?? false)) ...[
             const SizedBox(height: Espacio.md),
             Text('Notas adicionales', style: tema.bodySmall),
             Text(inspeccion.notas!, style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),

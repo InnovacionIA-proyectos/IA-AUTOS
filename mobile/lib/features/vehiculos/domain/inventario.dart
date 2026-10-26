@@ -105,6 +105,7 @@ class InspeccionVista {
     required this.momentoNombre,
     required this.fecha,
     required this.estado,
+    this.usuarioId,
     this.notas,
     this.cerradaEn,
     this.hallazgos = const [],
@@ -118,6 +119,7 @@ class InspeccionVista {
       id: json['id'] as String,
       momento: json['momento'] as String,
       momentoNombre: json['momento_nombre'] as String? ?? json['momento'] as String,
+      usuarioId: json['usuario_id'] as String?,
       fecha: DateTime.parse(json['fecha'] as String),
       estado: json['estado'] as String,
       notas: json['notas'] as String?,
@@ -138,6 +140,9 @@ class InspeccionVista {
 
   final DateTime fecha;
   final String estado;
+
+  /// Quién lo registró. Sirve para distinguir el informe propio del ajeno.
+  final String? usuarioId;
   final String? notas;
   /// Cuándo se cerró; null si sigue en borrador.
   final DateTime? cerradaEn;

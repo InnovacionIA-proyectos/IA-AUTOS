@@ -5,9 +5,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/core/ui/widgets.dart';
+import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
 import 'package:traza_autos/features/vehiculos/data/vehiculos_repositorio.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
+import 'package:traza_autos/features/vehiculos/presentation/diagrama_vehiculo.dart';
 import 'package:traza_autos/features/vehiculos/presentation/vin_page.dart';
 import 'package:traza_autos/features/vehiculos/providers.dart';
 
@@ -50,8 +52,12 @@ Map<String, dynamic> inventarioJson() => {
               'fecha': '2026-01-02T10:00:00Z',
               'cerrada_at': '2026-01-02T11:00:00Z',
               'estado': 'cerrada',
-              'notas': null,
-              'hallazgos': [],
+              // Lo registró el inspector del viaje, no quien mira.
+              'usuario_id': 'inspector-1',
+              'notas': 'Llovía al cargar',
+              'hallazgos': [
+                {'id': 'h1', 'parte_vehiculo': 'Capot', 'clase_dano': 'golpe', 'tamano_dano': 'mas_20cm'},
+              ],
               'evidencias': [],
               'transferencia': null,
             },
@@ -70,14 +76,20 @@ Map<String, dynamic> inventarioJson() => {
       ],
     };
 
-Future<void> abrir(WidgetTester tester, {Map<String, dynamic>? inventario}) async {
+/// Quien está en sesión. Por defecto la inspectora del arnés; las pruebas del recibo entran como conductor.
+const conductor = Sesion(
+  token: 'jwt',
+  usuario: Usuario(id: 'conductor-1', nombre: 'Luis Gómez', email: '', rol: 'conductor'),
+);
+
+Future<void> abrir(WidgetTester tester, {Map<String, dynamic>? inventario, Sesion? sesion}) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     ProviderScope(
       retry: (_, _) => null,
       overrides: [
-        ...Arnes().overrides,
+        ...Arnes(sesion: sesion ?? sesionPrueba).overrides,
         catalogosRepositorioProvider.overrideWithValue(CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe')),
         vehiculosRepositorioProvider.overrideWithValue(VehiculosRepositorioFalso(inventario ?? inventarioJson())),
       ],
@@ -104,6 +116,38 @@ void main() {
     await abrir(tester);
 
     expect(find.textContaining('Falta cerrar la llegada de'), findsOneWidget);
+  });
+
+  // S5-HU-25.4: el conductor recibe el vehículo y firma su recibo. Si antes ve lo que marcó el inspector, su
+  // recibo deja de decir lo que él encontró y pasa a confirmar lo del otro.
+  group('la tarjeta del informe cuando mira un conductor', () {
+    testWidgets('no muestra los hallazgos del inspector ni su diagrama', (tester) async {
+      await abrir(tester, sesion: conductor);
+
+      expect(find.textContaining('Capot'), findsNothing);
+      expect(find.byType(DiagramaVehiculo), findsNothing);
+      expect(find.text('Llovía al cargar'), findsNothing);
+      expect(find.textContaining('queda en tu firma'), findsOneWidget, reason: 'se dice por qué, no se calla');
+    });
+
+    testWidgets('sí muestra el informe que registró él mismo', (tester) async {
+      final mio = inventarioJson();
+      (((mio['etapas'] as List<dynamic>).first as Map<String, dynamic>)['inspecciones'] as List<dynamic>)
+          .cast<Map<String, dynamic>>()
+          .first['usuario_id'] = conductor.usuario.id;
+
+      await abrir(tester, inventario: mio, sesion: conductor);
+
+      expect(find.textContaining('Capot'), findsOneWidget);
+      expect(find.text('Llovía al cargar'), findsOneWidget);
+    });
+
+    testWidgets('quien inspecciona lo sigue viendo entero', (tester) async {
+      await abrir(tester);
+
+      expect(find.textContaining('Capot'), findsOneWidget);
+      expect(find.byType(DiagramaVehiculo), findsOneWidget);
+    });
   });
 
   // El defecto visto en el celular: la captura de un transporte pedía las 7 fotos obligatorias, que es lo que
