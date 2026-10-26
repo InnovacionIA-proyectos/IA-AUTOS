@@ -17,9 +17,12 @@ public static class clsTipoNotificacion
     public const string TRANSFERENCIA_PENDIENTE = "transferencia_pendiente";
     public const string REPORTE_DIARIO = "reporte_diario";
 
+    /// <summary>Algo paso en el proceso y no es un dano (por ejemplo, un cargue sin inspector).</summary>
+    public const string NOVEDAD_PROCESO = "novedad_proceso";
+
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string>
     {
-        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO,
+        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO,
     };
 }
 

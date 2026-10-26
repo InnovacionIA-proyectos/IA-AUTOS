@@ -9,14 +9,18 @@ namespace IAAutos.Aplicacion.Inspecciones;
 /// <summary>Conversiones de entidades de dominio a DTO de lectura, compartidas por inventario, informe y escritura.</summary>
 public static class clsMapeadorInspecciones
 {
-    public static InspeccionDto AInspeccion(clsInspeccion i) => AInspeccion(i, null, null, null);
+    public static InspeccionDto AInspeccion(clsInspeccion i, NovedadesDeInspeccionDto novedades) => AInspeccion(i, null, null, null, novedades);
 
-    /// <summary>Con los datos del viaje de respaldo: lo capturado antes de los viajes (si lo hay) tiene prioridad sobre ellos.</summary>
-    public static InspeccionDto AInspeccion(clsInspeccion i, string? placaViaje, string? trailerViaje, string? conductorViaje) => new(
+    /// <summary>
+    /// Con los datos del viaje de respaldo (lo capturado antes de los viajes, si lo hay, tiene prioridad sobre ellos) y el motivo y las novedades de proceso de la inspeccion
+    /// (<see cref="NovedadesDeInspeccionDto.VACIAS"/> si no tiene).
+    /// </summary>
+    public static InspeccionDto AInspeccion(clsInspeccion i, string? placaViaje, string? trailerViaje, string? conductorViaje, NovedadesDeInspeccionDto novedades) => new(
         i.Id, i.EtapaId, i.ViajeId, i.UsuarioId, i.Momento, i.Fecha, i.Lat, i.Lng, i.Estado,
         i.ConductorNombre ?? conductorViaje, i.Placa ?? placaViaje, i.Trailer ?? trailerViaje, i.Notas,
         i.CreatedAt, i.UpdatedAt,
-        i.IniciadaAt, i.CerradaAt, i.Version, i.CorrigeInspeccionId, clsMomento.Nombre(i.Momento));
+        i.IniciadaAt, i.CerradaAt, i.Version, i.CorrigeInspeccionId, clsMomento.Nombre(i.Momento),
+        novedades.Motivo, novedades.Novedades);
 
     /// <summary>
     /// El hallazgo con lo que se lee de otras tablas: su zona (y el nombre de su cuadrante), su nivel de severidad y lo que le falta a su evidencia. Sin zona

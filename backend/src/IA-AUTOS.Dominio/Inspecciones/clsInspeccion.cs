@@ -9,6 +9,7 @@ namespace IAAutos.Dominio.Inspecciones;
 public sealed class clsInspeccion : clsEntidadBase
 {
     private const int NOTAS_MAX = 1000;
+    private const int MOTIVO_TEXTO_MAX = 300;
 
     private clsInspeccion()
     {
@@ -53,6 +54,15 @@ public sealed class clsInspeccion : clsEntidadBase
     /// <summary>La version que esta corrige. Nulo en la original.</summary>
     public Guid? CorrigeInspeccionId { get; private set; }
 
+    /// <summary>
+    /// El motivo (codigo del catalogo <c>motivos-sin-inspector</c>) por el que el conductor hizo la salida del cargue con personal de apoyo porque el inspector previsto no estaba. Nulo en
+    /// cualquier otra inspeccion.
+    /// </summary>
+    public string? MotivoSinInspector { get; private set; }
+
+    /// <summary>El texto del motivo, obligatorio solo cuando el motivo lo requiere.</summary>
+    public string? MotivoSinInspectorTexto { get; private set; }
+
     public bool EstaCerrada => Estado == clsEstadoInspeccion.CERRADA;
 
     public static clsInspeccion Crear(
@@ -65,8 +75,10 @@ public sealed class clsInspeccion : clsEntidadBase
         double? lng,
         string? estado,
         string? notas,
-        DateTimeOffset ahora) =>
-        Nueva(etapaId, viajeId, usuarioId, momento, fecha, lat, lng, estado, notas, version: 1, corrigeInspeccionId: null, ahora);
+        DateTimeOffset ahora,
+        string? motivoSinInspector = null,
+        string? motivoSinInspectorTexto = null) =>
+        Nueva(etapaId, viajeId, usuarioId, momento, fecha, lat, lng, estado, notas, version: 1, corrigeInspeccionId: null, ahora, motivoSinInspector, motivoSinInspectorTexto);
 
     /// <summary>
     /// Crea la version siguiente de una inspeccion CERRADA para corregirla: misma etapa, viaje y momento, en borrador y vacia (se vuelven a
@@ -79,7 +91,8 @@ public sealed class clsInspeccion : clsEntidadBase
             throw new clsConflictoException("Solo se puede corregir una inspección cerrada: la que está en borrador se sigue editando");
         }
 
-        return Nueva(EtapaId, ViajeId, usuarioId, Momento, fecha, lat, lng, null, notas, Version + 1, Id, ahora);
+        // La correccion conserva el motivo: sigue siendo una salida hecha por el conductor porque el inspector no estaba.
+        return Nueva(EtapaId, ViajeId, usuarioId, Momento, fecha, lat, lng, null, notas, Version + 1, Id, ahora, MotivoSinInspector, MotivoSinInspectorTexto);
     }
 
     private static clsInspeccion Nueva(
@@ -94,7 +107,9 @@ public sealed class clsInspeccion : clsEntidadBase
         string? notas,
         int version,
         Guid? corrigeInspeccionId,
-        DateTimeOffset ahora)
+        DateTimeOffset ahora,
+        string? motivoSinInspector,
+        string? motivoSinInspectorTexto)
     {
         clsValidador.EnCatalogo(momento, clsMomento.VALORES, "momento");
         var estadoFinal = estado ?? clsEstadoInspeccion.BORRADOR;
@@ -105,6 +120,23 @@ public sealed class clsInspeccion : clsEntidadBase
         if (notasLimpias is { Length: > NOTAS_MAX })
         {
             throw new clsValidacionException($"Las notas admiten máximo {NOTAS_MAX} caracteres");
+        }
+
+        var motivo = clsValidador.Opcional(motivoSinInspector);
+        var motivoTexto = clsValidador.Opcional(motivoSinInspectorTexto);
+        if (motivo is not null && momento != clsMomento.SALIDA)
+        {
+            throw clsErroresCampos.De("motivo_sin_inspector", "Campo no admitido");
+        }
+
+        if (motivoTexto is not null && motivo is null)
+        {
+            throw clsErroresCampos.De("motivo_sin_inspector_texto", "El texto del motivo exige un motivo");
+        }
+
+        if (motivoTexto is { Length: > MOTIVO_TEXTO_MAX })
+        {
+            throw clsErroresCampos.De("motivo_sin_inspector_texto", $"El texto del motivo admite máximo {MOTIVO_TEXTO_MAX} caracteres");
         }
 
         var inspeccion = new clsInspeccion
@@ -122,6 +154,8 @@ public sealed class clsInspeccion : clsEntidadBase
             CerradaAt = estadoFinal == clsEstadoInspeccion.CERRADA ? ahora : null,
             Version = version,
             CorrigeInspeccionId = corrigeInspeccionId,
+            MotivoSinInspector = motivo,
+            MotivoSinInspectorTexto = motivoTexto,
         };
         inspeccion.Inicializar(ahora);
         return inspeccion;

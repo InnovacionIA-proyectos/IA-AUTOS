@@ -112,7 +112,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(
             [
                 "id", "etapa_id", "viaje_id", "usuario_id", "momento", "fecha", "lat", "lng", "estado", "conductor_nombre", "placa", "trailer", "notas",
-                "created_at", "updated_at", "iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre",
+                "created_at", "updated_at", "iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre", "motivo_sin_inspector", "novedades_proceso",
             ],
             i.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal(sesion.UsuarioId, i.GetProperty("usuario_id").GetGuid());

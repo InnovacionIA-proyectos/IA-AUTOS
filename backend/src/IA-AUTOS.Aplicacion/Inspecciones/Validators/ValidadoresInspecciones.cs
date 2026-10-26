@@ -30,6 +30,8 @@ internal static partial class clsReglasComunes
 public sealed class CrearInspeccionRequestValidator : AbstractValidator<CrearInspeccionRequest>
 {
     private const int NOTAS_MAX = 1000;
+    private const int MOTIVO_MAX = 30;
+    private const int MOTIVO_TEXTO_MAX = 300;
 
     public CrearInspeccionRequestValidator()
     {
@@ -45,6 +47,11 @@ public sealed class CrearInspeccionRequestValidator : AbstractValidator<CrearIns
             .WithMessage("Una inspección nueva debe iniciar en borrador; se cierra con /cerrar");
         RuleFor(x => x.Notas).Must(n => n is null || n.Trim().Length <= NOTAS_MAX)
             .WithMessage($"Las notas admiten máximo {NOTAS_MAX} caracteres");
+        // El motivo y su texto solo los admite el servicio (conductor, salida del Cargue con apoyo); aqui solo la forma: sin espacios vacios y de 1 a 300 caracteres.
+        RuleFor(x => x.MotivoSinInspector).Must(m => m is null || m.Trim().Length is > 0 and <= MOTIVO_MAX)
+            .WithMessage("El motivo no puede estar vacío");
+        RuleFor(x => x.MotivoSinInspectorTexto).Must(t => t is null || t.Trim().Length is > 0 and <= MOTIVO_TEXTO_MAX)
+            .WithMessage($"El texto del motivo debe tener de 1 a {MOTIVO_TEXTO_MAX} caracteres");
     }
 }
 

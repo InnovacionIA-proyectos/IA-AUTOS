@@ -5,7 +5,8 @@ public sealed record CoordsDiagramaDto(double X, double Y);
 
 /// <summary>
 /// Una inspeccion de salida o de llegada de una etapa. <c>Version</c> es 1 en la original y 2, 3... en las correcciones, que referencian
-/// en <c>CorrigeInspeccionId</c> a la version anterior. <c>MomentoNombre</c> es el texto para pantalla («Inspección de salida»).
+/// en <c>CorrigeInspeccionId</c> a la version anterior. <c>MomentoNombre</c> es el texto para pantalla («Inspección de salida»). <c>MotivoSinInspector</c> solo viene si el conductor hizo la salida
+/// del cargue porque el inspector previsto no estaba, y <c>NovedadesProceso</c> trae lo que paso en el proceso con esa inspeccion (vacio en la gran mayoria).
 /// </summary>
 public sealed record InspeccionDto(
     Guid Id,
@@ -27,7 +28,9 @@ public sealed record InspeccionDto(
     DateTimeOffset? CerradaAt,
     int Version,
     Guid? CorrigeInspeccionId,
-    string MomentoNombre);
+    string MomentoNombre,
+    MotivoSinInspectorDto? MotivoSinInspector,
+    IReadOnlyList<NovedadProcesoDto> NovedadesProceso);
 
 /// <summary>
 /// Un hallazgo con su zona: <c>CuadranteNumero</c> y <c>Lado</c> (o <c>ZonaProvisional</c>), <c>CuadranteNombre</c> y <c>Zona</c> ya armada para mostrar

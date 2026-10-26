@@ -19,6 +19,7 @@ public static class clsNombresCatalogo
     public const string CUADRANTE_REGIONES = "cuadrante-regiones";
     public const string CLIENTES = "clientes";
     public const string ESTADOS_SOFASA = "estados-sofasa";
+    public const string MOTIVOS_SIN_INSPECTOR = "motivos-sin-inspector";
 }
 
 /// <summary>Un valor de catalogo tal como lo ve el cliente: solo los campos propios de ese catalogo (snake_case), con id, codigo, nombre, orden y activo.</summary>
