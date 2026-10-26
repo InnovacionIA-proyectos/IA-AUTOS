@@ -239,6 +239,12 @@ Y los dos flujos de la #117, que la API servía desde la S5-HU-25.3 y la app no 
 motivo, un testigo que es una tercera persona y una foto sellada, que se sube antes de registrar y es
 reanudable como la de un hallazgo).
 
+**Todo verificado en dispositivo el 26-oct-2026**, un VIN por desenlace, y comprobado contra la base: el
+Logan cerró `firmada` con sus dos fechas de firma, el Kwid `con_reservas` con el texto, y el Duster `no_firma`
+con Marta Ríos de testigo y su evidencia. La firma a dos manos funciona de punta a punta —el segundo firmante
+hereda las partes y ya no choca con el 409—, el conductor no ve los hallazgos del inspector, y la etapa
+siguiente del Duster quedó habilitada con la constancia, que era el bloqueo sin salida.
+
 **Probado en dispositivo el 26-oct-2026.** La firma a dos manos quedó confirmada de punta a punta (la segunda
 ya no choca con el 409). Salieron dos cosas más:
 
@@ -253,7 +259,7 @@ ya no choca con el 409). Salieron dos cosas más:
   exista la llegada. La API no exige ninguno en particular. Si debe ir sobre la llegada —que es cuando el
   vehículo cambia de manos— hay que decidirlo con Calidad y cambiarlo en los dos lados.
 
-| S5-HU-25.4/25.5/25.7 | Firmantes del viaje, firma por otro bloqueada (403), reservas sin texto rechazadas, no firma sin testigo rechazada, bloqueo de la etapa siguiente sin cierre | `CustodiaYUsuariosTests.Mientras_esta_abierta_cada_uno_puede_repetir_su_propia_firma`, `El_testigo_es_una_tercera_persona`; `InspeccionesApiTests.Una_transferencia_sin_cierre_bloquea_la_salida_de_la_etapa_siguiente_hasta_que_se_cierra` | Verificado con prueba real (dominio y API); falta la capa de UI en mobile (**Abierta/pendiente** #116, #117, #118) |
+| S5-HU-25.4/25.5/25.7 | Firmantes del viaje, firma por otro bloqueada (403), reservas sin texto rechazadas, no firma sin testigo rechazada, bloqueo de la etapa siguiente sin cierre | `CustodiaYUsuariosTests.Mientras_esta_abierta_cada_uno_puede_repetir_su_propia_firma`, `El_testigo_es_una_tercera_persona`; `InspeccionesApiTests.Una_transferencia_sin_cierre_bloquea_la_salida_de_la_etapa_siguiente_hasta_que_se_cierra`; mobile: `firma_page_test.dart`, `no_firma_page_test.dart`, `inventario_test.dart`, `procesador_cola_test.dart` | Verificado con prueba real (dominio y API); la capa de UI de mobile (#116, #117) implementada en `S5-HU-21-23` y **verificada en dispositivo** |
 | #151 | Mobile sigue enviando `firma_entrega`/`firma_recibe` (contrato anterior a S5-HU-25.2) | Sin prueba — contrato roto, issue abierta para el equipo móvil | **Abierta/pendiente** |
 
 ---
