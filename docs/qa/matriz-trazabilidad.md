@@ -274,6 +274,23 @@ ya no choca con el 409). Salieron dos cosas más:
 
 ---
 
+## Al día con QA (26-oct-2026)
+
+La rama `S5-HU-21-23` trajo `origin/QA`, que llega con el **contrato v2** (de 49 rutas a 79 y de 77 esquemas a
+134). La mezcla salió limpia y de las 428 pruebas solo se rompieron dos cosas:
+
+- **El filtro del listado de inspecciones se renombró** de `usuarioId` a `usuario_id`. Con el nombre viejo el
+  servidor lo ignora, así que cada quien vería los informes de todos. **Corregido.**
+- **`CrearHallazgoRequest` cambió de raíz** y la app no puede registrar novedades contra el v2. Salieron
+  `parte_vehiculo` y `coords_diagrama`; entraron `cuadrante_numero`, `lado`, `zona_provisional`,
+  `nivel_severidad`, `es_preexistente`, `hallazgo_origen_id` y `nota`. Es el lado móvil de **S6-HU-01**, con su
+  UI: cuadrante, lado, nivel de severidad y preexistente. **Sin corregir, y la prueba de contrato queda en rojo
+  a propósito**: es un trabajo con su propia issue, no un ajuste, y taparlo con un `skip` escondería que la app
+  de campo no puede registrar una novedad.
+
+Leer hallazgos ya registrados **sí sigue funcionando**: `HallazgoDto` no cambió, solo el cuerpo con que se
+crean. Lo que se rompe es registrar novedades nuevas.
+
 ## Brechas detectadas
 
 1. **S5-HU-13.3 (firma de transferencia) — la más seria.** Se había cerrado como corregida en el sistema

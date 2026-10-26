@@ -160,9 +160,9 @@ void main() {
       expect((contenido['content'] as Map<String, dynamic>).keys, contains('multipart/form-data'));
     });
 
-    test('el listado de inspecciones admite filtrar por usuarioId', () {
+    test('el listado de inspecciones admite filtrar por usuario_id', () {
       final parametros = ((rutas['/api/inspecciones'] as Map<String, dynamic>)['get'] as Map<String, dynamic>)['parameters'] as List<dynamic>;
-      expect(parametros.map((p) => (p as Map<String, dynamic>)['name']), contains('usuarioId'));
+      expect(parametros.map((p) => (p as Map<String, dynamic>)['name']), contains('usuario_id'));
     });
   });
 }
