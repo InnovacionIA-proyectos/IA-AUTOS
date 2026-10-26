@@ -55,6 +55,11 @@ class _EstadoListaInspeccionesPage extends ConsumerState<ListaInspeccionesPage> 
     ref.listen(syncControllerProvider.select((s) => s.online), (anterior, actual) {
       if (actual && anterior == false) ref.read(listaInspeccionesControllerProvider.notifier).cargar();
     });
+    // Y al terminar de trabajar la cola: el informe que se acaba de cerrar ya no es un borrador, pero esta
+    // pantalla no se reconstruye al volver a su pestaña, así que sin esto hay que arrastrarla para enterarse.
+    ref.listen(syncControllerProvider.select((s) => s.sincronizando), (anterior, actual) {
+      if (!actual && anterior == true) ref.read(listaInspeccionesControllerProvider.notifier).cargar();
+    });
 
     final tema = Theme.of(context).textTheme;
     final estado = ref.watch(listaInspeccionesControllerProvider);

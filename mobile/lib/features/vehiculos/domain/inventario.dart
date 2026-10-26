@@ -223,8 +223,8 @@ List<MomentoEtapa> momentosDeEtapa(EtapaVista etapa, Inventario inventario) {
       MomentoEtapa(
         momento: momento,
         inspeccion: etapa.inspecciones.where((i) => i.momento == momento).lastOrNull,
-        // Solo la salida espera a la etapa anterior; la llegada depende de su propia salida, que impone el
-        // servidor.
+        // Solo la salida espera a la etapa anterior. La llegada no espera a nada: ni la app ni la API exigen
+        // que la salida de esta misma etapa esté capturada antes (comprobado contra la API el 26-oct-2026).
         bloqueo: momento == Momento.salida ? bloqueoSalida : null,
       ),
   ];

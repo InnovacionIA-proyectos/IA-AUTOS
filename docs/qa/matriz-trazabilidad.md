@@ -139,6 +139,15 @@ API ya sirve con los cuatro niveles (`v1_plus`, `v1`, `v2`, `v3`) y su campo `ac
 registra con clase y tamaño, sin nivel, así que no hay dato con el que decidir qué es crítico. El nivel V entra
 con **S6-HU-01**, que añade cuadrante, nivel y preexistente al hallazgo; pintar un rojo antes sería inventarlo.
 
+**Hallazgo en dispositivo (26-oct-2026): se puede cerrar una llegada sin haber capturado su salida.** Al
+probar el acuse en rojo se capturó una llegada de una etapa sin salida y el servidor la aceptó: quedó cerrada,
+en verde. La regla `ETAPA_PREVIA_SIN_CIERRE` solo mira la **etapa anterior** y solo se aplica al momento de
+salida (`clsInspeccionesService.CrearAsync`); el orden salida→llegada **dentro** de una misma etapa no lo exige
+nadie, ni la app ni la API, y tampoco aparece escrito en ningún requisito. Como la siguiente etapa solo pide que
+la llegada de la previa esté cerrada, la cadena entera avanza sin que exista registro de la salida. Está por
+decidir si es una regla que falta o si hay casos en que la llegada va sola; mientras tanto, el comentario de
+`inventario.dart` que afirmaba que «el servidor lo impone» quedó corregido, porque era falso.
+
 **Pendientes anotados de estas cuatro:**
 
 - **Las 7 imágenes guía quedaron rehechas** (23-oct-2026), reemplazando las del prototipo. Son plantillas de
