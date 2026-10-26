@@ -43,7 +43,7 @@ public sealed class RevisarHallazgoRequestValidator : AbstractValidator<RevisarH
 /// <summary>
 /// Un inspector (de un viaje de la unidad) o un administrador revisa el hallazgo que registro el conductor: lo ubica en su zona, le da su clase y le asigna el nivel V, que el conductor nunca
 /// asigna, y desde ahi el hallazgo entra al seguimiento y a los patrones. El coordinador de calidad tambien revisa, a distancia, los que el conductor registra en la salida de un Cargue sin personal
-/// de apoyo. La revision queda en el historial del hallazgo y, si el nivel es critico, alerta al coordinador y al administrador del cliente.
+/// de apoyo o con la excepcion «No hay inspector». La revision queda en el historial del hallazgo y, si el nivel es critico, alerta al coordinador y al administrador del cliente.
 /// </summary>
 public sealed class clsRevisionService(
     IInspeccionRepository inspecciones,
@@ -65,7 +65,7 @@ public sealed class clsRevisionService(
 
     /// <summary>
     /// Revisa la novedad y responde con el hallazgo ya completo. 400 sin zona, clase o nivel validos; 403 si no es de su viaje o de su cliente (o, para el coordinador, si no es de un Cargue sin
-    /// personal de apoyo); 409 si el hallazgo no es del conductor y 409 HALLAZGO_YA_REVISADO si ya se reviso.
+    /// personal de apoyo o con la excepcion «No hay inspector»); 409 si el hallazgo no es del conductor y 409 HALLAZGO_YA_REVISADO si ya se reviso.
     /// </summary>
     public async Task<HallazgoDto> RevisarAsync(Guid hallazgoId, RevisarHallazgoRequest solicitud, CancellationToken ct = default)
     {
@@ -110,7 +110,7 @@ public sealed class clsRevisionService(
             case clsRol.INSPECTOR when !await consultasViajes.UsuarioVeVinAsync(vehiculo.Vin, actual.IdObligatorio(), ct):
                 throw new clsProhibidoException("El VIN del hallazgo no pertenece a ninguno de sus viajes");
             case clsRol.COORDINADOR_CALIDAD when !await EsSalidaDeCargueSinApoyoAsync(inspeccion, etapa, ct):
-                throw new clsProhibidoException("El coordinador de calidad solo revisa los hallazgos del conductor en la salida de un Cargue sin personal de apoyo");
+                throw new clsProhibidoException("El coordinador de calidad solo revisa los hallazgos del conductor en la salida de un Cargue sin personal de apoyo o con la excepción «No hay inspector»");
             case clsRol.INSPECTOR or clsRol.COORDINADOR_CALIDAD or clsRol.ADMIN or clsRol.SUPER_ADMIN:
                 return;
             default:
@@ -118,8 +118,12 @@ public sealed class clsRevisionService(
         }
     }
 
+    /// <summary>
+    /// La salida de un Cargue sin personal de apoyo o la de un Cargue con apoyo que el conductor hizo porque el inspector previsto no estaba (la inspeccion guarda el motivo): en las dos
+    /// no hay inspector que revise lo que el conductor registro.
+    /// </summary>
     private async Task<bool> EsSalidaDeCargueSinApoyoAsync(clsInspeccion inspeccion, clsEtapa etapa, CancellationToken ct) =>
-        inspeccion.Momento == clsMomento.SALIDA && !etapa.ConPersonalApoyo
+        inspeccion.Momento == clsMomento.SALIDA && (!etapa.ConPersonalApoyo || inspeccion.MotivoSinInspector is not null)
         && (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo == clsCodigosEtapa.CARGUE;
 
     /// <summary>Valida el cuerpo y que la clase, el nivel y el tamano (si llega) existan en el catalogo y esten activos; los errores de ambas validaciones salen juntos.</summary>

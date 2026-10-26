@@ -24,10 +24,17 @@ Las dos son **solo del `conductor` del viaje**: cualquier otro usuario (también
 - **Aviso inmediato.** Cada novedad crea una notificación `novedad_conductor` de urgencia alta para los `coordinador_calidad` y `admin` activos del cliente del vehículo, por bandeja y push (ver [notificaciones.md](notificaciones.md)); el coordinador responde desde la bandeja y el conductor recibe la
   `respuesta_conductor`.
 
+## El cargue sin inspector
+
+En un Cargue con personal de apoyo la salida la hace el inspector y el conductor solo firma el recibo (`403` si intenta crearla). Si el inspector previsto **no está**, el conductor del viaje la crea con el motivo (`motivo_sin_inspector`, un código activo de `motivos-sin-inspector` y, para `otro`, su texto):
+`POST /api/inspecciones` responde `201`. La etapa conserva `con_personal_apoyo: true`; la inspección guarda el motivo; se crea la **novedad de proceso** `cargue_sin_inspector` con la fecha, lat y lng del momento en que el conductor eligió el motivo; los `coordinador_calidad` y `admin` activos del cliente del vehículo reciben
+la notificación `novedad_proceso` (alta, por bandeja y push); y todo queda en la auditoría. Sin motivo sigue el `403`; en cualquier otro caso (otra salida, una llegada, un Cargue sin apoyo, otro rol) el campo responde `400` «Campo no admitido». La inspección sigue las reglas de la salida sin apoyo y el coordinador
+de calidad revisa a distancia los hallazgos del conductor de esa salida. Una novedad de proceso no es un hallazgo y no cuenta en los patrones ni en la tasa de rechazo. Es una decisión del equipo pendiente de confirmar por el negocio (P-073). El detalle está en [CONTRATO.md](../CONTRATO.md) («Excepción «No hay inspector» y novedades de proceso»).
+
 ## Lo que el conductor no ve
 
 El conductor no ve los hallazgos que registraron otros: en una inspección que **no creó** llegan `hallazgos: []` y sin las fotos de hallazgos; `GET /api/hallazgos` y `GET /api/inspecciones/{id}/hallazgos-previos` responden `403`; y de las notas aclaratorias solo ve las de los hallazgos que él registró.
 
 ## Código
 
-`clsConductorService` (novedades y llegada), `clsRevisionService` (revisión por el inspector) y `clsEmisorNotificaciones` (avisos). Las pruebas están en `ConductorApiTests` y `RevisionHallazgosApiTests`.
+`clsConductorService` (novedades y llegada), `clsRevisionService` (revisión por el inspector), `clsEmisorNotificaciones` (avisos) y, para el cargue sin inspector, `clsInspeccionesService.CrearAsync` con `clsNovedadProceso`. Las pruebas están en `ConductorApiTests`, `RevisionHallazgosApiTests` y `ExcepcionSinInspectorApiTests`.

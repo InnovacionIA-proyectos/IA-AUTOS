@@ -140,6 +140,37 @@ internal sealed class clsCatalogoEstadosSofasa(clsAppDbContext contexto, IReloj 
     }
 }
 
+/// <summary>
+/// Los motivos por los que no esta el inspector previsto: codigo, nombre, orden, activo y <c>requiere_texto</c> (el motivo «otro» exige escribir cual es). Un motivo que una inspeccion o una
+/// novedad de proceso usa no se borra (409): se inactiva.
+/// </summary>
+internal sealed class clsCatalogoMotivosSinInspector(clsAppDbContext contexto, IReloj reloj)
+    : clsCatalogoEf<clsMotivoSinInspector>(contexto, reloj, clsNombresCatalogo.MOTIVOS_SIN_INSPECTOR)
+{
+    protected override IReadOnlyList<string> CamposPermitidos { get; } = [.. clsCamposCatalogo.COMUNES, "requiere_texto"];
+
+    protected override ValorCatalogo Mapear(clsMotivoSinInspector m)
+    {
+        var valor = Comunes(m);
+        valor["requiere_texto"] = m.RequiereTexto;
+        return valor;
+    }
+
+    protected override Task<clsMotivoSinInspector> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct) =>
+        Task.FromResult(clsMotivoSinInspector.Crear(
+            campos.Texto("codigo"), campos.Texto("nombre"), campos.Booleano("requiere_texto"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora));
+
+    protected override Task AplicarAsync(clsMotivoSinInspector entidad, clsCamposCatalogo campos, CancellationToken ct)
+    {
+        if (campos.Tiene("requiere_texto"))
+        {
+            entidad.CambiarRequiereTexto(campos.Booleano("requiere_texto"), Reloj.Ahora);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
 internal sealed class clsCatalogoNiveles(clsAppDbContext contexto, IReloj reloj)
     : clsCatalogoEf<clsNivelSeveridad>(contexto, reloj, clsNombresCatalogo.NIVELES_SEVERIDAD)
 {

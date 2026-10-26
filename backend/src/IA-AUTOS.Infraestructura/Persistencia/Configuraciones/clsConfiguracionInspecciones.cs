@@ -29,6 +29,8 @@ internal sealed class clsConfiguracionInspeccion : IEntityTypeConfiguration<clsI
         builder.Property(i => i.Placa).HasMaxLength(50);
         builder.Property(i => i.Trailer).HasMaxLength(50);
         builder.Property(i => i.Notas).HasMaxLength(1000);
+        builder.Property(i => i.MotivoSinInspector).HasColumnType("varchar(30)");
+        builder.Property(i => i.MotivoSinInspectorTexto).HasMaxLength(300);
         builder.Property(i => i.IniciadaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
         builder.Property(i => i.CerradaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(i => i.CorrigeInspeccionId)

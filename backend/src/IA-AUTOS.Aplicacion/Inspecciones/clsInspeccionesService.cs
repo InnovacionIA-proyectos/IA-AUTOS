@@ -6,6 +6,7 @@ using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Notificaciones;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
@@ -64,6 +65,9 @@ public sealed class clsInspeccionesService(
     clsAlertaHallazgoCritico alertaCritica,
     IUsuarioRepository usuarios,
     IConsultasInspecciones consultas,
+    IConsultasNovedadesProceso consultasNovedades,
+    INovedadProcesoRepository novedades,
+    clsEmisorNotificaciones emisor,
     IDescriptorHallazgos descriptorHallazgos,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
@@ -99,11 +103,10 @@ public sealed class clsInspeccionesService(
             throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite inspecciones nuevas");
         }
 
-        // En un Cargue con personal de apoyo la salida la hace el inspector: el conductor solo firma el recibo.
-        if (actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && etapa.ConPersonalApoyo && await EsCargueAsync(etapa, ct))
-        {
-            throw new clsProhibidoException("Este cargue tiene personal de apoyo: el conductor solo firma el recibo");
-        }
+        // En un Cargue con personal de apoyo la salida la hace el inspector: el conductor solo firma el recibo. Si el inspector previsto no esta, el conductor del viaje la hace con el motivo
+        // (la excepcion «No hay inspector»); sin motivo sigue siendo 403 y en cualquier otro caso el motivo no se admite (400).
+        var porExcepcion = actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && etapa.ConPersonalApoyo && await EsCargueAsync(etapa, ct);
+        var motivo = await ResolverMotivoAsync(solicitud, porExcepcion, ct);
 
         // La salida de una etapa solo se crea cuando la etapa anterior del VIN ya termino (su llegada esta cerrada).
         if (solicitud.Momento == clsMomento.SALIDA)
@@ -122,16 +125,115 @@ public sealed class clsInspeccionesService(
             solicitud.Lng,
             null,
             solicitud.Notas,
-            reloj.Ahora);
+            reloj.Ahora,
+            motivo?.Codigo,
+            motivo is null ? null : clsValidador.Opcional(solicitud.MotivoSinInspectorTexto));
         viaje.RegistrarActividad(reloj.Ahora);
         inspecciones.Agregar(inspeccion);
         await auditor.RegistrarDeViajeAsync(
             "inspeccion.crear", "inspecciones", inspeccion.Id, viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(inspeccion)), ct: ct);
 
+        // La excepcion deja una novedad de proceso (con la fecha, lat y lng del momento en que el conductor eligio el motivo) y su registro en la auditoria, en la misma confirmacion.
+        clsNovedadProceso? novedad = null;
+        clsVehiculo? vehiculo = null;
+        if (motivo is not null)
+        {
+            vehiculo = await vehiculos.ObtenerPorIdAsync(etapa.VehiculoId, ct) ?? throw new clsEntidadNoEncontradaException("El vehículo de la etapa no existe");
+            novedad = clsNovedadProceso.Crear(
+                clsTipoNovedadProceso.CARGUE_SIN_INSPECTOR,
+                viaje.Id,
+                vehiculo.Id,
+                etapa.Id,
+                inspeccion.Id,
+                inspeccion.MotivoSinInspector,
+                inspeccion.MotivoSinInspectorTexto,
+                actual.IdObligatorio(),
+                solicitud.Fecha!.Value,
+                solicitud.Lat,
+                solicitud.Lng,
+                reloj.Ahora);
+            novedades.Agregar(novedad);
+            await auditor.RegistrarDeViajeAsync(
+                "novedad_proceso.crear", "novedades_proceso", novedad.Id, viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(novedad)), vehiculo.ClienteId, ct);
+        }
+
         // Un usuario inexistente (404) y una segunda inspeccion original del mismo momento en la etapa (409) se traducen al confirmar.
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        if (novedad is not null && vehiculo is not null)
+        {
+            await AvisarCargueSinInspectorAsync(novedad, vehiculo, viaje, motivo!, ct);
+        }
+
         var conductor = viaje.ConductorId is { } conductorId ? (await usuarios.ObtenerPorIdAsync(conductorId, ct))?.Nombre : null;
-        return clsMapeadorInspecciones.AInspeccion(inspeccion, viaje.Placa, viaje.Trailer, conductor);
+        return clsMapeadorInspecciones.AInspeccion(inspeccion, viaje.Placa, viaje.Trailer, conductor, await consultasNovedades.DeInspeccionAsync(inspeccion.Id, ct));
+    }
+
+    /// <summary>
+    /// El motivo del conductor que hace la salida de un Cargue con personal de apoyo porque el inspector previsto no esta. Sin motivo, 403 (el conductor solo firma el recibo); un motivo que no
+    /// existe o esta inactivo, o un texto que falta o que el motivo no admite, 400 con <c>fieldErrors</c>. Fuera de esa salida el motivo y su texto no se admiten (400 «Campo no admitido»).
+    /// </summary>
+    private async Task<ValorCatalogo?> ResolverMotivoAsync(CrearInspeccionRequest solicitud, bool porExcepcion, CancellationToken ct)
+    {
+        if (!porExcepcion)
+        {
+            var errores = new Dictionary<string, string[]>();
+            if (solicitud.MotivoSinInspector is not null)
+            {
+                errores["motivo_sin_inspector"] = ["Campo no admitido"];
+            }
+
+            if (solicitud.MotivoSinInspectorTexto is not null)
+            {
+                errores["motivo_sin_inspector_texto"] = ["Campo no admitido"];
+            }
+
+            return errores.Count > 0 ? throw clsErroresCampos.Varios(errores) : null;
+        }
+
+        var codigo = clsValidador.Opcional(solicitud.MotivoSinInspector);
+        if (codigo is null)
+        {
+            throw new clsProhibidoException("Este cargue tiene personal de apoyo: el conductor solo firma el recibo");
+        }
+
+        var motivo = (await catalogos.ValoresAsync(clsNombresCatalogo.MOTIVOS_SIN_INSPECTOR, ct)).FirstOrDefault(m => m.Codigo == codigo && m.Activo)
+            ?? throw clsErroresCampos.De("motivo_sin_inspector", "Motivo inválido: use el código de un motivo activo de motivos-sin-inspector");
+        var texto = clsValidador.Opcional(solicitud.MotivoSinInspectorTexto);
+        var requiereTexto = motivo.TryGetValue("requiere_texto", out var requiere) && requiere is true;
+        if (requiereTexto && texto is null)
+        {
+            throw clsErroresCampos.De("motivo_sin_inspector_texto", "El motivo elegido exige escribir cuál es");
+        }
+
+        return !requiereTexto && texto is not null
+            ? throw clsErroresCampos.De("motivo_sin_inspector_texto", "El motivo elegido no admite texto")
+            : motivo;
+    }
+
+    /// <summary>
+    /// El aviso de urgencia alta (bandeja y push) a los coordinadores de calidad y administradores activos del cliente del vehiculo, nunca de otro cliente. Un fallo al avisar no deshace la
+    /// inspeccion ni la novedad, que ya quedaron guardadas.
+    /// </summary>
+    private async Task AvisarCargueSinInspectorAsync(clsNovedadProceso novedad, clsVehiculo vehiculo, clsViaje viaje, ValorCatalogo motivo, CancellationToken ct)
+    {
+        var destinatarios = await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN], vehiculo.ClienteId, ct);
+        var autor = (await usuarios.ObtenerPorIdAsync(novedad.UsuarioId, ct))?.Nombre ?? "El conductor";
+        var detalle = novedad.MotivoTexto is null ? string.Empty : $": {novedad.MotivoTexto}";
+        var codigoViaje = viaje.CodigoMtrack is { } codigo ? $" (viaje {codigo})" : string.Empty;
+        await emisor.EmitirAsync(
+            new clsAlerta(
+                clsTipoNotificacion.NOVEDAD_PROCESO,
+                clsUrgenciaNotificacion.ALTA,
+                destinatarios.Select(d => d.Id).ToList(),
+                vehiculo.ClienteId,
+                viaje.Id,
+                vehiculo.Id,
+                null,
+                novedad.InspeccionId,
+                $"Cargue sin inspector: {vehiculo.Vin}",
+                $"{autor} hizo el cargue de la unidad {vehiculo.Vin}{codigoViaje} sin inspector. Motivo: {motivo["nombre"]}{detalle}.",
+                $"{clsTipoNotificacion.NOVEDAD_PROCESO}:{novedad.Id}"),
+            ct);
     }
 
     /// <summary>
@@ -169,7 +271,7 @@ public sealed class clsInspeccionesService(
             "inspeccion.corregir", "inspecciones", nueva.Id, viaje.Id, new DetalleAuditoria(clsInstantaneasAuditoria.De(original), clsInstantaneasAuditoria.De(nueva)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         var conductor = viaje.ConductorId is { } conductorId ? (await usuarios.ObtenerPorIdAsync(conductorId, ct))?.Nombre : null;
-        return clsMapeadorInspecciones.AInspeccion(nueva, viaje.Placa, viaje.Trailer, conductor);
+        return clsMapeadorInspecciones.AInspeccion(nueva, viaje.Placa, viaje.Trailer, conductor, await consultasNovedades.DeInspeccionAsync(nueva.Id, ct));
     }
 
     /// <summary>Una pagina de informes: <c>{items, total, pagina, tamano}</c>. Quien se limita a su cliente solo ve el suyo (pedir otro responde 403); el resto puede elegir uno con <c>cliente_id</c>.</summary>
@@ -328,7 +430,7 @@ public sealed class clsInspeccionesService(
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         await AvisarHallazgosCriticosAsync(inspeccion, etapa, codigoEtapa, ct);
         return new CerrarInspeccionResponse(
-            clsMapeadorInspecciones.AInspeccion(inspeccion),
+            clsMapeadorInspecciones.AInspeccion(inspeccion, await consultasNovedades.DeInspeccionAsync(inspeccion.Id, ct)),
             new ResumenCierreDto(resumen.TotalEvidencias, resumen.TotalHallazgos));
     }
 

@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "2.1.0"
+    "version": "2.2.0"
   },
   "paths": {
     "/api/viajes": {
@@ -18568,7 +18568,22 @@
               "cerrada_at": "2026-10-22T14:30:00.000Z",
               "version": 1,
               "corrige_inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-              "momento_nombre": "texto"
+              "momento_nombre": "texto",
+              "motivo_sin_inspector": {
+                "codigo": "codigo_de_ejemplo",
+                "nombre": "Nombre de ejemplo",
+                "texto": "texto"
+              },
+              "novedades_proceso": [
+                {
+                  "tipo": "texto",
+                  "motivo_codigo": "texto",
+                  "motivo": "Mensaje de ejemplo",
+                  "texto": "texto",
+                  "usuario_nombre": "texto",
+                  "fecha": "2026-10-22T14:30:00.000Z"
+                }
+              ]
             },
             "resumen": {
               "evidencias": 1,
@@ -19207,7 +19222,9 @@
             "lat": 4.6097,
             "lng": -74.0817,
             "estado": "borrador",
-            "notas": "texto"
+            "notas": "texto",
+            "motivo_sin_inspector": "texto",
+            "motivo_sin_inspector_texto": "texto"
           }
         ],
         "required": [
@@ -19258,6 +19275,18 @@
             ]
           },
           "notas": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_sin_inspector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_sin_inspector_texto": {
             "type": [
               "null",
               "string"
@@ -21531,6 +21560,21 @@
                 "texto": "texto",
                 "created_at": "2026-10-22T14:30:00.000Z"
               }
+            ],
+            "motivo_sin_inspector": {
+              "codigo": "codigo_de_ejemplo",
+              "nombre": "Nombre de ejemplo",
+              "texto": "texto"
+            },
+            "novedades_proceso": [
+              {
+                "tipo": "texto",
+                "motivo_codigo": "texto",
+                "motivo": "Mensaje de ejemplo",
+                "texto": "texto",
+                "usuario_nombre": "texto",
+                "fecha": "2026-10-22T14:30:00.000Z"
+              }
             ]
           }
         ],
@@ -21568,7 +21612,9 @@
           "version",
           "corrige_inspeccion_id",
           "momento_nombre",
-          "notas_aclaratorias"
+          "notas_aclaratorias",
+          "motivo_sin_inspector",
+          "novedades_proceso"
         ],
         "type": "object",
         "properties": {
@@ -21735,6 +21781,22 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NotaAclaratoriaDto"
+            }
+          },
+          "motivo_sin_inspector": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MotivoSinInspectorDto"
+              }
+            ]
+          },
+          "novedades_proceso": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NovedadProcesoDto"
             }
           }
         }
@@ -21940,7 +22002,22 @@
             "cerrada_at": "2026-10-22T14:30:00.000Z",
             "version": 1,
             "corrige_inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "momento_nombre": "texto"
+            "momento_nombre": "texto",
+            "motivo_sin_inspector": {
+              "codigo": "codigo_de_ejemplo",
+              "nombre": "Nombre de ejemplo",
+              "texto": "texto"
+            },
+            "novedades_proceso": [
+              {
+                "tipo": "texto",
+                "motivo_codigo": "texto",
+                "motivo": "Mensaje de ejemplo",
+                "texto": "texto",
+                "usuario_nombre": "texto",
+                "fecha": "2026-10-22T14:30:00.000Z"
+              }
+            ]
           }
         ],
         "required": [
@@ -21963,7 +22040,9 @@
           "cerrada_at",
           "version",
           "corrige_inspeccion_id",
-          "momento_nombre"
+          "momento_nombre",
+          "motivo_sin_inspector",
+          "novedades_proceso"
         ],
         "type": "object",
         "properties": {
@@ -22055,6 +22134,22 @@
           },
           "momento_nombre": {
             "type": "string"
+          },
+          "motivo_sin_inspector": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MotivoSinInspectorDto"
+              }
+            ]
+          },
+          "novedades_proceso": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NovedadProcesoDto"
+            }
           }
         }
       },
@@ -22378,7 +22473,13 @@
                   "testigo_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                   "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                 },
-                "notas_aclaratorias": []
+                "notas_aclaratorias": [],
+                "motivo_sin_inspector": {
+                  "codigo": "codigo_de_ejemplo",
+                  "nombre": "Nombre de ejemplo",
+                  "texto": "texto"
+                },
+                "novedades_proceso": []
               }
             ]
           }
@@ -22564,6 +22665,21 @@
                 "texto": "texto",
                 "created_at": "2026-10-22T14:30:00.000Z"
               }
+            ],
+            "motivo_sin_inspector": {
+              "codigo": "codigo_de_ejemplo",
+              "nombre": "Nombre de ejemplo",
+              "texto": "texto"
+            },
+            "novedades_proceso": [
+              {
+                "tipo": "texto",
+                "motivo_codigo": "texto",
+                "motivo": "Mensaje de ejemplo",
+                "texto": "texto",
+                "usuario_nombre": "texto",
+                "fecha": "2026-10-22T14:30:00.000Z"
+              }
             ]
           }
         ],
@@ -22591,7 +22707,9 @@
           "hallazgos",
           "evidencias",
           "transferencia",
-          "notas_aclaratorias"
+          "notas_aclaratorias",
+          "motivo_sin_inspector",
+          "novedades_proceso"
         ],
         "type": "object",
         "properties": {
@@ -22710,6 +22828,22 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/NotaAclaratoriaDto"
+            }
+          },
+          "motivo_sin_inspector": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MotivoSinInspectorDto"
+              }
+            ]
+          },
+          "novedades_proceso": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NovedadProcesoDto"
             }
           }
         }
@@ -23086,7 +23220,22 @@
               "cerrada_at": "2026-10-22T14:30:00.000Z",
               "version": 1,
               "corrige_inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-              "momento_nombre": "texto"
+              "momento_nombre": "texto",
+              "motivo_sin_inspector": {
+                "codigo": "codigo_de_ejemplo",
+                "nombre": "Nombre de ejemplo",
+                "texto": "texto"
+              },
+              "novedades_proceso": [
+                {
+                  "tipo": "texto",
+                  "motivo_codigo": "texto",
+                  "motivo": "Mensaje de ejemplo",
+                  "texto": "texto",
+                  "usuario_nombre": "texto",
+                  "fecha": "2026-10-22T14:30:00.000Z"
+                }
+              ]
             },
             "novedades": 1,
             "sin_novedad": true
@@ -23348,6 +23497,35 @@
           }
         }
       },
+      "MotivoSinInspectorDto": {
+        "examples": [
+          {
+            "codigo": "codigo_de_ejemplo",
+            "nombre": "Nombre de ejemplo",
+            "texto": "texto"
+          }
+        ],
+        "required": [
+          "codigo",
+          "nombre",
+          "texto"
+        ],
+        "type": "object",
+        "properties": {
+          "codigo": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "texto": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "NoSaleDto": {
         "examples": [
           {
@@ -23560,6 +23738,59 @@
             ]
           },
           "created_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "NovedadProcesoDto": {
+        "examples": [
+          {
+            "tipo": "texto",
+            "motivo_codigo": "texto",
+            "motivo": "Mensaje de ejemplo",
+            "texto": "texto",
+            "usuario_nombre": "texto",
+            "fecha": "2026-10-22T14:30:00.000Z"
+          }
+        ],
+        "required": [
+          "tipo",
+          "motivo_codigo",
+          "motivo",
+          "texto",
+          "usuario_nombre",
+          "fecha"
+        ],
+        "type": "object",
+        "properties": {
+          "tipo": {
+            "type": "string"
+          },
+          "motivo_codigo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "texto": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "usuario_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fecha": {
             "format": "date-time"
           }
         }

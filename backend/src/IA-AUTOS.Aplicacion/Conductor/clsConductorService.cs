@@ -134,7 +134,7 @@ public sealed class clsConductorService(
 
         var novedades = salida is null ? 0 : await inspecciones.ContarNovedadesAsync(salida.Id, ct);
         var conductor = (await usuarios.ObtenerPorIdAsync(actual.IdObligatorio(), ct))?.Nombre;
-        return new LlegadaDto(clsMapeadorInspecciones.AInspeccion(llegada, unidad.Viaje.Placa, unidad.Viaje.Trailer, conductor), novedades, novedades == 0);
+        return new LlegadaDto(clsMapeadorInspecciones.AInspeccion(llegada, unidad.Viaje.Placa, unidad.Viaje.Trailer, conductor, NovedadesDeInspeccionDto.VACIAS), novedades, novedades == 0);
     }
 
     /// <summary>

@@ -83,7 +83,9 @@ public sealed record InventarioInspeccionDto(
     IReadOnlyList<HallazgoDto> Hallazgos,
     IReadOnlyList<EvidenciaDto> Evidencias,
     TransferenciaDto? Transferencia,
-    IReadOnlyList<IAAutos.Aplicacion.Inspecciones.NotaAclaratoriaDto> NotasAclaratorias);
+    IReadOnlyList<IAAutos.Aplicacion.Inspecciones.NotaAclaratoriaDto> NotasAclaratorias,
+    IAAutos.Aplicacion.Inspecciones.DTOInspecciones.MotivoSinInspectorDto? MotivoSinInspector,
+    IReadOnlyList<IAAutos.Aplicacion.Inspecciones.DTOInspecciones.NovedadProcesoDto> NovedadesProceso);
 
 public sealed record InventarioEtapaDto(
     Guid Id,
