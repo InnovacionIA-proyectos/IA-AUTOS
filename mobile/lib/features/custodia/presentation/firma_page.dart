@@ -16,17 +16,31 @@ import '../../vehiculos/domain/etiquetas.dart';
 import '../providers.dart';
 import 'lienzo_firma.dart';
 
-final _usuariosProvider = FutureProvider.autoDispose<List<Usuario>>((ref) => ref.watch(usuariosRepositorioProvider).listar());
+/// Los dos del viaje que pueden firmar: su conductor y su inspector. No la lista de usuarios: ofrecer a
+/// cualquiera como firmante lleva a elegir a quien el servidor va a rechazar, y además deja ver nombres de
+/// gente ajena al viaje.
+final _firmantesProvider =
+    FutureProvider.autoDispose.family<List<Usuario>, String>((ref, viajeId) => ref.watch(usuariosRepositorioProvider).firmantesDeViaje(viajeId));
 
 /// Firma de la transferencia: quien entrega y quien recibe, cada uno con su trazo. Se puede firmar solo una parte;
 /// la otra firma desde su dispositivo. El servidor valida que quien firma sea el usuario autenticado.
 class FirmaPage extends ConsumerStatefulWidget {
-  const FirmaPage({super.key, required this.vin, required this.inspeccionId, required this.proceso, required this.soloFirma});
+  const FirmaPage({
+    super.key,
+    required this.vin,
+    required this.inspeccionId,
+    required this.proceso,
+    required this.soloFirma,
+    required this.viajeId,
+  });
 
   final String vin;
   final String inspeccionId;
   final String proceso;
   final bool soloFirma;
+
+  /// El viaje de la etapa, de donde salen los firmantes.
+  final String? viajeId;
 
   @override
   ConsumerState<FirmaPage> createState() => _EstadoFirmaPage();
@@ -107,8 +121,19 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
 
   @override
   Widget build(BuildContext context) {
-    final usuarios = ref.watch(_usuariosProvider);
     final yoId = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.id));
+    final viajeId = widget.viajeId;
+    if (viajeId == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text('Firma · ${widget.proceso}')),
+        body: const EstadoMensaje(
+          icono: Icons.link_off,
+          titulo: 'Esta etapa no tiene viaje asociado',
+          descripcion: 'Los firmantes salen del viaje, así que no hay a quién ofrecer. Avisa al administrador.',
+        ),
+      );
+    }
+    final usuarios = ref.watch(_firmantesProvider(viajeId));
 
     return Scaffold(
       appBar: AppBar(title: Text('Firma · ${widget.proceso}')),
@@ -117,9 +142,9 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
         error: (error, _) => EstadoMensaje(
           icono: Icons.warning_amber_rounded,
           colorIcono: Colores.peligro,
-          titulo: 'No se pudo cargar la lista de usuarios',
+          titulo: 'No se pudieron cargar los firmantes del viaje',
           descripcion: mensajeDeError(error),
-          accion: FilledButton(onPressed: () => ref.invalidate(_usuariosProvider), child: const Text('Reintentar')),
+          accion: FilledButton(onPressed: () => ref.invalidate(_firmantesProvider(viajeId)), child: const Text('Reintentar')),
         ),
         data: (lista) {
           _elegirPorDefecto(lista, yoId);

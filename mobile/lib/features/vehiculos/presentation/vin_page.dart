@@ -119,7 +119,10 @@ class _Detalle extends ConsumerWidget {
                 '${etapa.viajeId == null ? '' : '&viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}'}',
               ),
               alFirmar: (accion) => alIr(
-                '/inspecciones/vin/$vinRuta/firma/${accion.inspeccionId}?proceso=${Uri.encodeQueryComponent(catalogos.etiqueta(Catalogo.etapas, etapa.proceso))}&soloFirma=${accion.soloFirma ? 1 : 0}',
+                '/inspecciones/vin/$vinRuta/firma/${accion.inspeccionId}?proceso=${Uri.encodeQueryComponent(catalogos.etiqueta(Catalogo.etapas, etapa.proceso))}'
+                '&soloFirma=${accion.soloFirma ? 1 : 0}'
+                // El viaje decide quiénes pueden firmar: sin él la pantalla no tiene a quién ofrecer.
+                '${etapa.viajeId == null ? '' : '&viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}'}',
               ),
             ),
             const SizedBox(height: Espacio.sm),

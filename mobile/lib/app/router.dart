@@ -108,6 +108,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                           inspeccionId: state.pathParameters['inspeccionId']!,
                           proceso: state.uri.queryParameters['proceso'] ?? '',
                           soloFirma: state.uri.queryParameters['soloFirma'] == '1',
+                          viajeId: state.uri.queryParameters['viajeId'],
                         ),
                       ),
                     ),
