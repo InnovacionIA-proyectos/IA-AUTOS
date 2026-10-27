@@ -264,7 +264,7 @@ public sealed partial class PdfsApiTests(clsBaseDatosFixture bd) : clsPruebaTabl
     }
 
     [Fact]
-    public async Task El_conductor_del_viaje_ve_el_pdf_sin_los_hallazgos_que_no_registro_el()
+    public async Task El_conductor_del_viaje_ve_el_pdf_con_los_hallazgos_en_lectura_sin_nivel_seguimiento_ni_historial()
     {
         var e = await EscenarioAsync();
         var coordinador = await SesionAsync(clsRol.COORDINADOR_CALIDAD);
@@ -278,8 +278,14 @@ public sealed partial class PdfsApiTests(clsBaseDatosFixture bd) : clsPruebaTabl
         Assert.Equal(HttpStatusCode.OK, rc.StatusCode);
         Assert.Equal(HttpStatusCode.OK, rd.StatusCode);
         Assert.Contains("Hallazgo 1", Plano(Texto(completo)));
-        Assert.Contains("Sin hallazgos.", Plano(Texto(delConductor)));
-        Assert.DoesNotContain("Hallazgo 1", Plano(Texto(delConductor)));
+        Assert.Contains("Seguimiento:", Plano(Texto(completo)));
+        // El conductor lee el hallazgo (su zona, clase y tamano) pero no su nivel, su seguimiento ni su historial.
+        var plano = Plano(Texto(delConductor));
+        Assert.Contains("Hallazgo 1", plano);
+        Assert.Contains("Clase:", plano);
+        Assert.DoesNotContain("Nivel:", plano);
+        Assert.DoesNotContain("Seguimiento:", plano);
+        Assert.DoesNotContain("Sin hallazgos.", plano);
     }
 
     // ------------------------------------------------------------------------------------ inventario

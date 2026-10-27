@@ -105,8 +105,11 @@ internal sealed class clsGeneradorPdfInforme : IGeneradorPdfInforme
         {
             doc.Espaciar(4);
             doc.Escribir($"Hallazgo {h.Numero} — {h.Zona}", 12, true);
-            doc.Escribir($"Clase: {h.Clase ?? "—"}   Tamaño: {h.Tamano}   Nivel: {h.Nivel ?? "sin nivel"}{(h.NivelAccion is null ? string.Empty : $" ({h.NivelAccion})")}", 11, false, 10);
-            doc.Escribir($"Origen: {h.Origen}   Preexistente: {(h.EsPreexistente ? "sí" : "no")}   Seguimiento: {h.EstadoSeguimiento}", 11, false, 10);
+            // Sin estado de seguimiento es la vista en lectura del conductor: no lleva el nivel.
+            var nivel = h.EstadoSeguimiento is null ? string.Empty : $"   Nivel: {h.Nivel ?? "sin nivel"}{(h.NivelAccion is null ? string.Empty : $" ({h.NivelAccion})")}";
+            doc.Escribir($"Clase: {h.Clase ?? "—"}   Tamaño: {h.Tamano}{nivel}", 11, false, 10);
+            // Al conductor no se le muestra el seguimiento (llega sin estado).
+            doc.Escribir($"Origen: {h.Origen}   Preexistente: {(h.EsPreexistente ? "sí" : "no")}{(h.EstadoSeguimiento is null ? string.Empty : $"   Seguimiento: {h.EstadoSeguimiento}")}", 11, false, 10);
             if (!string.IsNullOrWhiteSpace(h.Nota))
             {
                 doc.Escribir($"Nota: {h.Nota}", 11, false, 10);

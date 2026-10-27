@@ -31,9 +31,11 @@ En un Cargue con personal de apoyo la salida la hace el inspector y el conductor
 la notificación `novedad_proceso` (alta, por bandeja y push); y todo queda en la auditoría. Sin motivo sigue el `403`; en cualquier otro caso (otra salida, una llegada, un Cargue sin apoyo, otro rol) el campo responde `400` «Campo no admitido». La inspección sigue las reglas de la salida sin apoyo y el coordinador
 de calidad revisa a distancia los hallazgos del conductor de esa salida. Una novedad de proceso no es un hallazgo y no cuenta en los patrones ni en la tasa de rechazo. Como nadie de Botero Soto firma la entrega, el conductor cierra la transferencia con el **recibo sin entrega** (ver [transferencias.md](transferencias.md)). Es una decisión del equipo pendiente de confirmar por el negocio (P-073 y P-080). El detalle está en [CONTRATO.md](../CONTRATO.md) («Excepción «No hay inspector» y novedades de proceso»).
 
-## Lo que el conductor no ve
+## Lo que el conductor ve y no ve
 
-El conductor no ve los hallazgos que registraron otros: en una inspección que **no creó** llegan `hallazgos: []` y sin las fotos de hallazgos; `GET /api/hallazgos` y `GET /api/inspecciones/{id}/hallazgos-previos` responden `403`; y de las notas aclaratorias solo ve las de los hallazgos que él registró.
+El conductor ve en lectura los hallazgos de las inspecciones de **sus viajes** (también los del inspector): la zona (texto y lado + número), la clase, el tamaño, el tipo de novedad, el origen, si es preexistente, la fecha y su foto. Llegan en `null` el nivel V, el estado de seguimiento, la evidencia completa y faltante, los datos de la revisión,
+la nota y el hallazgo previo al que se unió, y no ve la foto del sello de quien valida; nada de otros viajes del mismo VIN. El PDF del informe sale con esos hallazgos sin nivel, seguimiento, historial ni notas. `GET /api/hallazgos` y `GET /api/inspecciones/{id}/hallazgos-previos` siguen respondiendo `403` y no se le crea ninguna notificación por lo que lee.
+Reemplaza la regla anterior, que le entregaba `hallazgos: []` en toda inspección que él no creó.
 
 ## Código
 

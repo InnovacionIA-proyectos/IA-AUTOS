@@ -571,26 +571,76 @@ public sealed class ConductorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         inventario.GetProperty("etapas").EnumerateArray().SelectMany(et => et.GetProperty("inspecciones").EnumerateArray()).Sum(i => i.GetProperty("hallazgos").GetArrayLength());
 
     [Fact]
-    public async Task El_conductor_recibe_el_informe_y_el_inventario_sin_los_hallazgos_del_inspector_ni_sus_fotos()
+    public async Task El_conductor_ve_en_lectura_los_hallazgos_del_inspector_de_su_viaje_sin_nivel_seguimiento_evidencia_revision_ni_la_foto_del_sello()
     {
         var e = await EscenarioAsync();
         var inspector = await SesionAsync("inspector@ejemplo.com", clsRol.INSPECTOR);
         var (inspeccion, hallazgo) = await HallazgoDelInspectorAsync(e, inspector);
         await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET InspectorId = @i WHERE Id = @v", ("@i", inspector.UsuarioId), ("@v", e.Viaje));
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblHallazgos SET Nota = N'Nota interna del inspector', RevisadoPor = @u, RevisadoAt = SYSDATETIMEOFFSET() WHERE Id = @h", ("@u", inspector.UsuarioId), ("@h", hallazgo));
 
         var informeConductor = await ComoJsonAsync(await Como(e.Conductor).GetAsync($"/api/inspecciones/{inspeccion}"));
         var informeCoordinador = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/inspecciones/{inspeccion}"));
         var inventarioConductor = await ComoJsonAsync(await Como(e.Conductor).GetAsync($"/api/vehiculos/{e.Vin}/inventario"));
         var inventarioInspector = await ComoJsonAsync(await Como(inspector).GetAsync($"/api/vehiculos/{e.Vin}/inventario"));
 
-        Assert.Equal(0, informeConductor.GetProperty("hallazgos").GetArrayLength());
-        Assert.Empty(informeConductor.GetProperty("evidencias").EnumerateArray());
-        Assert.Equal(0, HallazgosDelInventario(inventarioConductor));
-        Assert.DoesNotContain(EvidenciasDelInventario(inventarioConductor), f => f.GetProperty("hallazgo_id").ValueKind != JsonValueKind.Null || f.GetProperty("es_sello").GetBoolean());
-        // Quien si debe verlos, los ve: el coordinador y el inspector.
-        Assert.Equal(hallazgo, informeCoordinador.GetProperty("hallazgos").EnumerateArray().Single().GetProperty("id").GetGuid());
+        var h = informeConductor.GetProperty("hallazgos").EnumerateArray().Single();
+        Assert.Equal(hallazgo, h.GetProperty("id").GetGuid());
+        // Lo que ve en lectura: zona, clase, tamano, origen, si es preexistente y la fecha.
+        Assert.Equal("Frente", h.GetProperty("zona").GetString());
+        Assert.Equal("golpe", h.GetProperty("clase_dano").GetString());
+        Assert.Equal("inspector", h.GetProperty("origen").GetString());
+        Assert.False(h.GetProperty("es_preexistente").GetBoolean());
+        Assert.NotEqual(JsonValueKind.Null, h.GetProperty("created_at").ValueKind);
+        Assert.NotEqual(JsonValueKind.Null, h.GetProperty("tamano_dano").ValueKind);
+        // Lo que no: el nivel, el seguimiento, la evidencia, la revision, la nota y el hallazgo previo.
+        foreach (var campo in new[] { "nivel_severidad", "nivel_nombre", "nivel_accion", "nota", "hallazgo_origen_id", "confirmado_por", "estado_seguimiento", "evidencia_completa", "evidencia_faltante", "revisado_por", "revisado_at" })
+        {
+            Assert.Equal(JsonValueKind.Null, h.GetProperty(campo).ValueKind);
+        }
+
+        // Su foto si (con su URL firmada) y la del sello de quien valida no.
+        var fotos = informeConductor.GetProperty("evidencias").EnumerateArray().ToList();
+        Assert.Single(fotos, f => f.GetProperty("hallazgo_id").ValueKind != JsonValueKind.Null);
+        Assert.DoesNotContain(fotos, f => f.GetProperty("es_sello").GetBoolean());
+        Assert.Equal(1, HallazgosDelInventario(inventarioConductor));
+        Assert.Single(EvidenciasDelInventario(inventarioConductor), f => f.GetProperty("hallazgo_id").ValueKind != JsonValueKind.Null);
+        Assert.DoesNotContain(EvidenciasDelInventario(inventarioConductor), f => f.GetProperty("es_sello").GetBoolean());
+        // Los demas roles no cambian: el coordinador y el inspector lo ven todo.
+        var completo = informeCoordinador.GetProperty("hallazgos").EnumerateArray().Single();
+        Assert.Equal(hallazgo, completo.GetProperty("id").GetGuid());
+        Assert.Equal("v2", completo.GetProperty("nivel_severidad").GetString());
+        Assert.Equal("pendiente", completo.GetProperty("estado_seguimiento").GetString());
+        Assert.NotEqual(JsonValueKind.Null, completo.GetProperty("evidencia_faltante").ValueKind);
+        Assert.Equal("Nota interna del inspector", completo.GetProperty("nota").GetString());
         Assert.Equal(2, informeCoordinador.GetProperty("evidencias").GetArrayLength());
         Assert.Equal(1, HallazgosDelInventario(inventarioInspector));
+        Assert.Contains(EvidenciasDelInventario(inventarioInspector), f => f.GetProperty("es_sello").GetBoolean());
+    }
+
+    [Fact]
+    public async Task El_inventario_del_conductor_no_trae_los_hallazgos_de_otros_viajes_del_mismo_vin()
+    {
+        var e = await EscenarioAsync();
+        var inspector = await SesionAsync("inspector@ejemplo.com", clsRol.INSPECTOR);
+        var otroConductor = await SesionAsync("otro-conductor@ejemplo.com", clsRol.CONDUCTOR);
+        await HallazgoDelInspectorAsync(e, inspector);
+        // El mismo VIN en otro viaje, de otro conductor, con su propio hallazgo.
+        var otroViaje = await Sembrador.ViajeAsync(conductorId: otroConductor.UsuarioId, inspectorId: inspector.UsuarioId);
+        var otraEtapa = Guid.NewGuid();
+        await Sembrador.EjecutarAsync("INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @v, @ve)", ("@v", otroViaje), ("@ve", e.Vehiculo));
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@e, @ve, @v, (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'cargue'), 1)",
+            ("@e", otraEtapa), ("@ve", e.Vehiculo), ("@v", otroViaje));
+        var (_, ajeno) = await Sembrador.InformeCerradoConHallazgoAsync(otraEtapa, inspector.UsuarioId, await ZonaFrenteAsync(), nivel: "v1", conFoto: true);
+
+        var inventario = await ComoJsonAsync(await Como(e.Conductor).GetAsync($"/api/vehiculos/{e.Vin}/inventario"));
+        var deOtro = await ComoJsonAsync(await Como(otroConductor).GetAsync($"/api/vehiculos/{e.Vin}/inventario"));
+
+        Assert.Equal(1, HallazgosDelInventario(inventario));
+        Assert.DoesNotContain(inventario.GetProperty("etapas").EnumerateArray(), et => et.GetProperty("viaje_id").GetGuid() == otroViaje);
+        Assert.Equal(1, HallazgosDelInventario(deOtro));
+        Assert.Equal(ajeno, deOtro.GetProperty("etapas").EnumerateArray().SelectMany(et => et.GetProperty("inspecciones").EnumerateArray()).Single().GetProperty("hallazgos")[0].GetProperty("id").GetGuid());
     }
 
     [Fact]
