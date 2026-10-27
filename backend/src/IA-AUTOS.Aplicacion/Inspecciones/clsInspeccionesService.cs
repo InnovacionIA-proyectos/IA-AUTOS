@@ -291,8 +291,8 @@ public sealed class clsInspeccionesService(
     }
 
     /// <summary>
-    /// Los hallazgos previos del VIN de la inspeccion, para que el cliente proponga un hallazgo nuevo como preexistente. Solo inspector y administrador; el inspector
-    /// solo los pide de inspecciones de sus viajes (403 si es de otro).
+    /// Los hallazgos previos del VIN de la inspeccion, para que el cliente proponga un hallazgo nuevo como preexistente. Inspector, coordinador de calidad y administrador; el inspector
+    /// solo los pide de inspecciones de sus viajes y quien se limita a su cliente, de VIN de su cliente (403 si es de otro).
     /// </summary>
     public async Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosAsync(Guid inspeccionId, CancellationToken ct = default)
     {

@@ -107,10 +107,11 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
 
     /// <summary>
     /// Los hallazgos de las inspecciones cerradas anteriores del mismo VIN, del mas reciente al mas antiguo, con su viaje, proceso, momento, cierre y fotos. El cliente
-    /// los descarga para proponer un hallazgo nuevo como preexistente (misma zona y clase) aun sin senal. No es para el conductor (403).
+    /// los descarga para proponer un hallazgo nuevo como preexistente (misma zona y clase) aun sin senal. Tambien el coordinador de calidad del cliente del vehiculo, para
+    /// proponer el preexistente al revisar a distancia. No es para el conductor (403).
     /// </summary>
     [HttpGet("{id:guid}/hallazgos-previos")]
-    [RolesPermitidos(clsRol.INSPECTOR, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
     [ProducesResponseType<IReadOnlyList<HallazgoPrevioDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> HallazgosPrevios(Guid id, CancellationToken ct) => Ok(await servicio.ObtenerHallazgosPreviosAsync(id, ct));
 

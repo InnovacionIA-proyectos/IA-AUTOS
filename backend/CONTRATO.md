@@ -972,7 +972,7 @@ Campos del `HallazgoDto`:
 Los hallazgos anteriores se ubicaron por el texto de su parte solo cuando la equivalencia era segura (`Fachada delantera`, `Parachoque delantero` y las llantas); los demás tienen `zona` con la parte escrita y `cuadrante_numero`, `lado` y `zona_provisional` en `null` hasta que se ubiquen a mano.
 
 ### `GET /api/inspecciones/{id}/hallazgos-previos`
-Solo `inspector`, `admin` y `super_admin` (`403` al conductor). El inspector solo la pide de inspecciones de **sus viajes** (`403` si es de otro); `404` si la inspección no existe.
+`inspector`, `coordinador_calidad`, `admin` y `super_admin` (`403` al conductor y al comercial). El inspector solo la pide de inspecciones de **sus viajes** y quien se limita a su cliente (el `coordinador_calidad` y el `admin`), de VIN de **su cliente** (`403` si es de otro); `404` si la inspección no existe. El coordinador la usa para proponer el preexistente al revisar a distancia.
 
 Devuelve los hallazgos de todas las **inspecciones cerradas anteriores del mismo VIN**: las etapas anteriores del mismo viaje y los viajes anteriores, **incluido uno del que la unidad «no salió»**. Es una lista de `HallazgoDto`
 (sin `evidencia`) ordenada del cierre más reciente al más antiguo, y cada elemento agrega el contexto de dónde salió:
@@ -989,7 +989,7 @@ No cuenta lo que aún no se cerró, ni las inspecciones de otro VIN, ni la inspe
 (la URL firmada llegará con la tarea de las fotos privadas). Sin hallazgos previos, `[]`.
 
 **La propuesta de preexistente la hace el cliente.** La app descarga esta lista y, al registrar un hallazgo, la compara por **zona (lado + número, o zona provisional) y clase**: si hay uno igual, lo propone como preexistente y el inspector lo confirma
-(`es_preexistente: true` con `hallazgo_origen_id` de esa lista) o lo corrige (queda nuevo). Funciona sin señal con la lista ya descargada; un hallazgo en `derecho 7` no se propone como preexistente de uno en `izquierdo 7`.
+(`es_preexistente: true` con `hallazgo_origen_id` de esa lista) o lo corrige (queda nuevo). En una revisión de un hallazgo del conductor, `POST /api/hallazgos/{id}/revision` admite además `es_preexistente` y `hallazgo_origen_id` con la misma regla. Funciona sin señal con la lista ya descargada; un hallazgo en `derecho 7` no se propone como preexistente de uno en `izquierdo 7`.
 Al crear el hallazgo el servidor valida que el origen sea de esa lista, con la misma zona y clase.
 
 ### `POST /api/inspecciones/{id}/evidencias`
@@ -1085,13 +1085,16 @@ La misma fila más `seguimiento` (el historial, como en `GET /api/hallazgos/{id}
 ## Revisión de la novedad
 
 La novedad que registra el conductor nace sin zona, clase ni nivel V: un inspector la revisa, la ubica y le asigna el nivel, que el conductor nunca asigna. A partir de la revisión el hallazgo entra al seguimiento y a los patrones. También se revisan
-así los hallazgos que el conductor registra en la salida de un Cargue sin personal de apoyo y en la de un Cargue con apoyo que él hizo con la excepción «No hay inspector» (que tampoco traen nivel).
+así los hallazgos que el conductor registra en la salida de un Cargue sin personal de apoyo, en la de un Cargue con apoyo que él hizo con la excepción «No hay inspector» y en la **llegada del Descargue que hace él** sin inspector en destino (que tampoco traen nivel).
+Al revisar se puede confirmar que el daño **ya estaba registrado** (`es_preexistente` y `hallazgo_origen_id`); si el conductor lo anotó otra vez en la llegada, no queda como un daño del transporte.
 
 ### `POST /api/hallazgos/{id}/revision`
 
 ```json
 { "cuadrante_numero": 7, "lado": "izquierdo", "clase_dano": "golpe", "nivel_severidad": "v1", "tamano_dano": "5_10cm", "nota": "Abolladura sobre la puerta" }
 ```
+
+Con «ya estaba registrado»: `{ …, "es_preexistente": true, "hallazgo_origen_id": "uuid" }`.
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
@@ -1100,9 +1103,10 @@ así los hallazgos que el conductor registra en la salida de un Cargue sin perso
 | `nivel_severidad` | sí | un código **activo** de `niveles-severidad` (`v1_plus`, `v1`, `v2`, `v3`) |
 | `tamano_dano` | no | corrige el que eligió el conductor (un código activo de `tamanos-dano`); sin él se conserva el del conductor |
 | `nota` | no | máximo 500 caracteres |
+| `es_preexistente` + `hallazgo_origen_id` | no | la misma validación de cuando se crea un hallazgo (S6-HU-01.3): `es_preexistente: true` exige `hallazgo_origen_id`, y `hallazgo_origen_id` solo se envía con `es_preexistente: true` (`400` si no). El origen debe ser un hallazgo de una **inspección cerrada anterior del mismo VIN** (cerrada antes de que empezara la que se revisa) con **la misma zona (lado + número, o zona provisional) y la misma clase** que se asignan en esa revisión; si no, `400` con `details.fieldErrors.hallazgo_origen_id` |
 
 Responde `200` con el `HallazgoDto` ya completo: `revisado_por` y `revisado_at` quedan guardados y `estado_seguimiento` sigue `pendiente`. Queda una fila `revision` en el historial del hallazgo (`GET /api/hallazgos/{id}/seguimiento`) con quién la hizo, su `nota` y en
-`detalle` lo asignado: `zona_id`, `cuadrante_numero`, `lado`, `zona_provisional`, `clase_dano`, `nivel_severidad`, `tamano_dano` y `tamano_dano_anterior` (solo si se corrigió el tamaño). Queda en la auditoría (`hallazgo.revision`). Sin la revisión, el seguimiento del hallazgo responde `409`.
+`detalle` lo asignado: `zona_id`, `cuadrante_numero`, `lado`, `zona_provisional`, `clase_dano`, `nivel_severidad`, `tamano_dano` y `tamano_dano_anterior` (solo si se corrigió el tamaño); si se confirmó como ya registrado, también `es_preexistente: true`, `hallazgo_origen_id` y `confirmado_por`. El hallazgo queda con `es_preexistente: true`, su `hallazgo_origen_id` y `confirmado_por` (quien revisó) y **no cuenta como daño del transporte**. Queda en la auditoría (`hallazgo.revision`). Sin la revisión, el seguimiento del hallazgo responde `409`.
 
 **Quién revisa.**
 
@@ -1110,7 +1114,7 @@ Responde `200` con el `HallazgoDto` ya completo: `revisado_por` y `revisado_at` 
 |---|---|
 | `inspector` | hallazgos de un VIN que está en alguno de sus viajes (`403` si no) |
 | `admin` y `super_admin` | los de su cliente (el `super_admin`, los de cualquiera) |
-| `coordinador_calidad` | **solo** los hallazgos del conductor de la salida de un Cargue **sin personal de apoyo** o de la salida de un Cargue con apoyo que el conductor hizo con la excepción «No hay inspector» (`403` en cualquier otro caso): los revisa a distancia con las fotos y les asigna el nivel V antes de que salga el viaje, de modo que un V1+ todavía se puede recuperar o marcar «no sale». Propuesta pendiente de confirmar por el negocio |
+| `coordinador_calidad` | **solo** los hallazgos del conductor de la salida de un Cargue **sin personal de apoyo**, de la salida de un Cargue con apoyo que el conductor hizo con la excepción «No hay inspector» o de la **llegada del Descargue que hizo el conductor** (`403` en cualquier otro caso): los revisa a distancia con las fotos y les asigna el nivel V antes de que salga el viaje, de modo que un V1+ todavía se puede recuperar o marcar «no sale». Propuesta pendiente de confirmar por el negocio |
 | los demás roles | `403` |
 
 Quien se limita a su cliente recibe `403` con un hallazgo de otro cliente.

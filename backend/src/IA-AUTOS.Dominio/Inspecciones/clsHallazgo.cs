@@ -170,7 +170,15 @@ public sealed class clsHallazgo : clsEntidadBase
     /// Un inspector revisa el hallazgo que registro el conductor: lo ubica en su zona, le da su clase y le asigna el nivel V (que el conductor nunca asigna) y, si hace falta, corrige el tamano que
     /// eligio el conductor. Solo se revisa una vez: 409 si el hallazgo no es del conductor y 409 HALLAZGO_YA_REVISADO si ya se reviso.
     /// </summary>
-    public void Revisar(Guid zonaId, string claseDano, string nivelSeveridad, string? tamanoDano, string? nota, Guid revisadoPor, DateTimeOffset ahora)
+    public void Revisar(
+        Guid zonaId,
+        string claseDano,
+        string nivelSeveridad,
+        string? tamanoDano,
+        string? nota,
+        Guid revisadoPor,
+        DateTimeOffset ahora,
+        Guid? hallazgoOrigenId = null)
     {
         AsegurarRevisable();
         var texto = clsValidador.Opcional(nota);
@@ -190,6 +198,14 @@ public sealed class clsHallazgo : clsEntidadBase
         Nota = texto;
         RevisadoPor = revisadoPor;
         RevisadoAt = ahora;
+        // Quien revisa puede confirmar que el dano ya estaba registrado: queda preexistente, unido al hallazgo previo del mismo VIN, y quien lo confirmo es quien reviso.
+        if (hallazgoOrigenId is { } origen)
+        {
+            EsPreexistente = true;
+            HallazgoOrigenId = origen;
+            ConfirmadoPor = revisadoPor;
+        }
+
         Tocar(ahora);
     }
 

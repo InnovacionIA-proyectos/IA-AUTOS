@@ -55,6 +55,33 @@ public class NovedadesYNotificacionesTests
     }
 
     [Fact]
+    public void Revisar_con_un_origen_deja_el_hallazgo_preexistente_unido_al_previo_y_confirmado_por_quien_reviso()
+    {
+        var novedad = clsHallazgo.CrearNovedad(Guid.NewGuid(), "golpe", "1_5cm", AHORA);
+        var origen = Guid.NewGuid();
+        var coordinador = Guid.NewGuid();
+
+        novedad.Revisar(Guid.NewGuid(), "golpe", "v2", null, null, coordinador, AHORA.AddHours(1), origen);
+
+        Assert.True(novedad.EsPreexistente);
+        Assert.Equal(origen, novedad.HallazgoOrigenId);
+        Assert.Equal(coordinador, novedad.ConfirmadoPor);
+        Assert.Equal(coordinador, novedad.RevisadoPor);
+    }
+
+    [Fact]
+    public void Revisar_sin_origen_no_lo_marca_como_preexistente()
+    {
+        var novedad = clsHallazgo.CrearNovedad(Guid.NewGuid(), "golpe", "1_5cm", AHORA);
+
+        novedad.Revisar(Guid.NewGuid(), "golpe", "v2", null, null, Guid.NewGuid(), AHORA.AddHours(1));
+
+        Assert.False(novedad.EsPreexistente);
+        Assert.Null(novedad.HallazgoOrigenId);
+        Assert.Null(novedad.ConfirmadoPor);
+    }
+
+    [Fact]
     public void Revisar_la_novedad_la_completa_con_zona_clase_nivel_y_quien_la_reviso()
     {
         var novedad = clsHallazgo.CrearNovedad(Guid.NewGuid(), "golpe", "1_5cm", AHORA);
