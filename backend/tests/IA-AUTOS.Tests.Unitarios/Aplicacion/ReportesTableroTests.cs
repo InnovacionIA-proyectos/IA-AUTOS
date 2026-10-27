@@ -26,6 +26,14 @@ public sealed class ReportesTableroTests
 
         public List<FilaTiempo> Tiempos { get; } = [];
 
+        public List<FilaNovedadProceso> Novedades { get; } = [];
+
+        public Task<IReadOnlyList<FilaNovedadProceso>> NovedadesDeProcesoAsync(FiltrosReporte filtros, CancellationToken ct = default)
+        {
+            Recibidos.Add(filtros);
+            return Task.FromResult<IReadOnlyList<FilaNovedadProceso>>(Novedades);
+        }
+
         public Task<IReadOnlyList<FilaCobertura>> CoberturaAsync(FiltrosReporte filtros, CancellationToken ct = default)
         {
             Recibidos.Add(filtros);
@@ -90,6 +98,44 @@ public sealed class ReportesTableroTests
 
     private static string? CampoConError(clsValidacionException ex, string campo) =>
         ((Dictionary<string, string[]>)((Dictionary<string, object>)ex.Detalles!)["fieldErrors"]).GetValueOrDefault(campo)?.FirstOrDefault();
+
+    // ------------------------------------------------------------------------------------ novedades de proceso
+
+    [Fact]
+    public async Task Las_novedades_de_proceso_se_cuentan_por_tipo_punto_cliente_y_mes()
+    {
+        var (servicio, consultas) = Crear();
+        var cedi = Guid.NewGuid();
+        var cliente = clsCatalogosLecturaFalso.SOFASA;
+        consultas.Novedades.AddRange(
+        [
+            new FilaNovedadProceso("cargue_sin_inspector", cedi, cliente, "2026-09", 2),
+            new FilaNovedadProceso("cargue_sin_inspector", cedi, cliente, "2026-10", 3),
+            new FilaNovedadProceso("recibo_sin_entrega", null, cliente, "2026-10", 1),
+        ]);
+
+        var r = await servicio.NovedadesDeProcesoAsync(new FiltrosReporteRequest("2026-09-01", "2026-10-21", null, null, null, null, null, null, null));
+
+        Assert.Equal(6, r.Total);
+        Assert.Equal(["cargue_sin_inspector=5", "recibo_sin_entrega=1"], r.PorTipo.Select(x => $"{x.Tipo}={x.Total}").ToList());
+        Assert.Equal([5, 1], r.PorPunto.Select(x => x.Total).ToList());
+        Assert.Equal(cedi, r.PorPunto[0].PuntoId);
+        Assert.Null(r.PorPunto[1].PuntoId);
+        Assert.Equal([6], r.PorCliente.Select(x => x.Total).ToList());
+        Assert.Equal(["2026-09=2", "2026-10=4"], r.PorMes.Select(x => $"{x.Mes}={x.Total}").ToList());
+    }
+
+    [Fact]
+    public async Task Sin_novedades_de_proceso_el_reporte_responde_en_cero_y_usa_los_mismos_filtros_que_los_demas()
+    {
+        var (servicio, consultas) = Crear(clsRol.COORDINADOR_CALIDAD);
+
+        var r = await servicio.NovedadesDeProcesoAsync(new FiltrosReporteRequest(null, null, null, null, null, null, null, null, null));
+
+        Assert.Equal(0, r.Total);
+        Assert.Empty(r.PorTipo);
+        Assert.Equal(clsCatalogosLecturaFalso.SOFASA, Assert.Single(consultas.Recibidos).ClienteId);
+    }
 
     // ------------------------------------------------------------------------------------ mediana
 

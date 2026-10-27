@@ -7,11 +7,13 @@ ver `test/sync/procesador_cola_test.dart`) y añade dos mejoras.
 
 Al cerrar un informe o registrar una firma NO se llama a la API directamente: se guarda un *job* en SQLite (Drift,
 tabla `jobs`) y, si hay señal estable, se sincroniza de inmediato. Las fotos se guardan como archivos en el almacenamiento
-privado de la app (no en base64 dentro de la base de datos).
+privado de la app (no en base64 dentro de la base de datos) y se suben como **multipart**: base64 infla el cuerpo un
+tercio y obliga a tener la foto entera en memoria dos veces. El servidor devuelve el **hash** de cada archivo; la app lo
+guarda y lo reenvía con la evidencia, que es como se detecta que llegó dañado.
 
 | Job | Pasos al enviarlo |
 |---|---|
-| Informe | crear inspección, subir cada foto y crear su evidencia, crear cada hallazgo, cerrar |
+| Informe | crear inspección, subir cada foto y crear su evidencia, subir la foto de cada hallazgo y crear el hallazgo con ella, cerrar |
 | Firma | firmar la transferencia (entrega y/o recibe) |
 
 ## Reglas de procesamiento
@@ -25,10 +27,15 @@ privado de la app (no en base64 dentro de la base de datos).
   para no romper el orden.
 - **Errores no recuperables** (400, 403, 404, 409 en pasos distintos del cierre, 422...): el job pasa a *fallido* y se
   continúa con el siguiente.
+- **403 `PIN_CHANGE_REQUIRED` es la excepción**: es el único 403 transitorio. El envío es correcto y vuelve a servir en
+  cuanto la persona cambia su PIN, así que se reanuda en vez de morir, y **no gasta uno de los ocho intentos**: la cola
+  queda en pausa, no está fallando.
 - **409 al cerrar** significa "ya estaba cerrada": cuenta como éxito.
 - **Máximo 8 intentos**; al octavo el job pasa a *fallido*.
 - **Cuándo se dispara**: al recuperar una señal estable, al iniciar sesión, al abrir la app y a demanda ("Sincronizar").
-  Sin sesión iniciada no se procesa (todo fallaría con 401 y gastaría intentos).
+  Sin sesión iniciada no se procesa (todo fallaría con 401 y gastaría intentos), y **con un PIN temporal tampoco**
+  (`EstadoAuth.puedeOperar`): el servidor responde 403 a todo salvo cambiarlo, y como ese 403 no se arregla
+  reintentando, una pasada a destiempo marcaría como fallido lo que solo llegó temprano.
 
 ## Mejoras sobre la app original
 
@@ -38,14 +45,41 @@ privado de la app (no en base64 dentro de la base de datos).
    motivo; el usuario puede **reintentar** (vuelve a la cola con los intentos en cero) o **descartar** (con confirmación;
    borra también sus fotos locales). La barra de sincronización avisa cuántos hay con error.
 
+## Lo que se le dice a quien cierra un informe
+
+Al cerrar, la app encola, intenta enviar y **mira ese job** para anunciar uno de tres desenlaces. Es la única señal que
+tiene en el patio de si su trabajo quedó hecho, así que tiene que ser verdad:
+
+| Estado del job | Mensaje |
+|---|---|
+| Ya no está en la cola | «Informe enviado» |
+| Está y quedó *fallido* | «No se pudo enviar», con el motivo que dio el servidor y dónde recuperarlo |
+| Está y sigue vivo | «Informe guardado»; se enviará solo cuando haya señal |
+
+Se mira ese job y no el contador de pendientes de la cola: ese contador excluye los fallidos, así que un informe
+recién rechazado por el servidor se anunciaba como enviado y cerrado. Lo destapó una prueba en dispositivo con el
+400 de `momento` de la S5-HU-24.
+
 ## Datos y límites conocidos
 
 - La cola vive en el dispositivo hasta que se envía; si se desinstala la app o se borran sus datos, lo pendiente se pierde.
   Por eso la barra de sincronización siempre muestra cuánto falta enviar.
-- Cerrar sesión **conserva** la cola. Los trabajos se envían con la identidad de quien tenga la sesión iniciada cuando haya
-  señal (el servidor toma el usuario del token). En un dispositivo compartido conviene dejar la cola vacía antes de
-  cambiar de usuario; la app avisa al cerrar sesión si quedan elementos sin enviar. Etiquetar cada job con su usuario y
-  procesar solo los de la sesión actual queda como mejora pendiente.
+- Cerrar sesión **conserva** la cola, y **cada job lleva quién lo encoló**. Solo se procesa, se cuenta y se muestra lo del
+  usuario de la sesión: el servidor atribuye el informe al dueño del token, así que sin esto, en un celular compartido, lo
+  de una persona salía firmado por la siguiente. El dueño va dentro del `payload`, no en una columna, para no migrar la
+  base donde vive la cola.
+- Cada job guarda el **código** del último error, no solo su mensaje: la pantalla decide qué ofrecer según el fallo, y
+  comparar textos se rompe en cuanto el servidor los reescribe. Un `FORBIDDEN` significa que el informe lo empezó otra
+  persona (solo su autor o un administrador lo continúan): se muestra sin botones, porque descartarlo sería borrar
+  fotos ajenas y reintentarlo volvería a fallar. Cualquier otro fallo conserva «Reintentar» y «Descartar», que es la
+  única salida de la cola para un envío que nunca va a salir.
+- Lo que dejó otra persona en el equipo **se ve** en «Envíos pendientes», marcado «De otro usuario» y sin botones: no
+  se envía con esta sesión, no se cuenta en la insignia y no se puede descartar (sería tirar su evidencia). Si no
+  apareciera, quien usa el equipo no tendría cómo saber por qué hay trabajo que nunca sale.
+- Los jobs que encoló una versión anterior no tienen dueño y quedan **huérfanos**: se ven en la cola pero no se envían
+  solos. Se resuelven de dos formas, ambas deliberadas: al arrancar, la sesión guardada los adopta (es casi con certeza
+  quien los encoló, porque es la última que se usó); o alguien los reintenta a mano y se hace cargo. Un informe solo
+  cambia de autor si una persona lo decide.
 - Si el token vence (401 en una petición autenticada) se cierra la sesión con un aviso y la cola se conserva; se retoma al
   volver a entrar.
 - El servidor valida que quien firma sea el usuario autenticado; la app no lo impone en pantalla.

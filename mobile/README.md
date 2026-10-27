@@ -1,8 +1,8 @@
 # Traza Autos 360 - App móvil (Flutter)
 
-App de campo para inspectores y conductores: abre un VIN, revisa su último informe, captura informes con novedades sobre
-el diagrama del vehículo, fotos selladas con fecha y ubicación, y firma el cambio de responsabilidad. Reemplaza a la app
-Expo (React Native) y consume la API .NET de [../backend](../backend).
+App de campo para inspectores y conductores: entra por sus viajes, abre una de sus unidades, revisa el último informe,
+captura informes con novedades sobre el diagrama del vehículo, fotos selladas con fecha y ubicación, y firma el cambio
+de responsabilidad. Reemplaza a la app Expo (React Native) y consume la API .NET de [../backend](../backend).
 
 Funciona **sin señal**: los informes y las firmas se guardan en una cola persistente (SQLite) y se envían solos cuando
 hay una conexión estable.
@@ -11,10 +11,14 @@ hay una conexión estable.
 
 | Pantalla | Qué hace |
 |---|---|
-| Login | correo y contraseña contra la API; el token se guarda en el Keystore de Android |
-| Mis inspecciones | listado con caché local (se ve sin señal), barra de sincronización y botón de nueva inspección |
-| Abrir VIN / VIN | inventario, último informe con fotos y diagrama, y el estado de cada etapa de la ruta de custodia |
-| Captura | datos del transporte, novedades sobre el diagrama, fotos selladas, notas y cierre del informe |
+| Login | dos modos: cédula y PIN (personal de campo, que puede no tener correo) o correo y contraseña; el token se guarda en el Keystore de Android |
+| Cambiar PIN | obligatorio cuando el PIN lo asignó o reinició un administrador: hasta cambiarlo el resto de la API responde 403 |
+| Sin permisos | lo que se ve al abrir algo que el rol no alcanza, con la barra a la vista para irse a lo suyo |
+| Mis viajes | entrada principal: los viajes donde la persona es conductor o inspector, con sus unidades y caché local |
+| Buscar VIN | búsqueda dentro de mis viajes por VIN, marca, modelo o código del viaje |
+| Mis inspecciones | listado con caché local (se ve sin señal) y barra de sincronización |
+| VIN | inventario, último informe con fotos y diagrama, y el estado de cada etapa de la ruta de custodia |
+| Captura | por momento (salida o llegada): datos del transporte tomados del viaje, checklist de fotos por vista con guía de cámara, novedades sobre el diagrama con su foto, notas y cierre del informe, que dice si quedó enviado, en cola o rechazado |
 | Firma | firma de quien entrega y de quien recibe (parcial o completa) |
 | Envíos pendientes | lo que espera señal; los envíos con error se ven aquí con su motivo, y se reintentan o descartan a mano |
 | Sofasa | órdenes de carga sincronizadas por el ETL (solo lectura) |
@@ -30,6 +34,7 @@ lib/
   core/       config (entornos), http (Dio), db (Drift), dispositivo, errores, tema, ui, util
   features/
     auth/         sesión, login y almacén seguro del token
+    viajes/       mis viajes con caché, búsqueda de VIN y datos del transporte para la captura
     vehiculos/    inventario, catálogo de partes del diagrama, etiquetas
     inspecciones/ listado con caché, captura, reglas de cierre, fotos y hallazgos
     custodia/     firma

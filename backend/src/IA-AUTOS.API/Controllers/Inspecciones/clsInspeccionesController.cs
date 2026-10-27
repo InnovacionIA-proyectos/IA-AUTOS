@@ -15,7 +15,9 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
     /// <summary>
     /// Crea la inspeccion de salida o de llegada de una etapa. El usuario sale del token, el estado inicial es siempre borrador y la placa, el
     /// trailer y el conductor salen del viaje de la etapa. La salida exige que la etapa anterior del VIN tenga cerrada su llegada (409
-    /// ETAPA_PREVIA_SIN_CIERRE).
+    /// ETAPA_PREVIA_SIN_CIERRE). Si el inspector previsto no esta en un Cargue con personal de apoyo, el conductor del viaje crea la salida con
+    /// <c>motivo_sin_inspector</c> (codigo activo de <c>motivos-sin-inspector</c>) y, si el motivo lo requiere, <c>motivo_sin_inspector_texto</c> (1 a 300 caracteres): queda una novedad de proceso
+    /// y se avisa a los coordinadores de calidad y administradores del cliente. Sin motivo el conductor recibe 403; en cualquier otro caso el campo responde 400 «Campo no admitido».
     /// </summary>
     [HttpPost]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
@@ -105,10 +107,11 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
 
     /// <summary>
     /// Los hallazgos de las inspecciones cerradas anteriores del mismo VIN, del mas reciente al mas antiguo, con su viaje, proceso, momento, cierre y fotos. El cliente
-    /// los descarga para proponer un hallazgo nuevo como preexistente (misma zona y clase) aun sin senal. No es para el conductor (403).
+    /// los descarga para proponer un hallazgo nuevo como preexistente (misma zona y clase) aun sin senal. Tambien el coordinador de calidad del cliente del vehiculo, para
+    /// proponer el preexistente al revisar a distancia. No es para el conductor (403).
     /// </summary>
     [HttpGet("{id:guid}/hallazgos-previos")]
-    [RolesPermitidos(clsRol.INSPECTOR, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
     [ProducesResponseType<IReadOnlyList<HallazgoPrevioDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> HallazgosPrevios(Guid id, CancellationToken ct) => Ok(await servicio.ObtenerHallazgosPreviosAsync(id, ct));
 

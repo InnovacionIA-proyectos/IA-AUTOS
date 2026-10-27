@@ -27,7 +27,7 @@ public static class clsCodigosNivel
 
 /// <summary>
 /// Cuanta evidencia tiene un hallazgo. Esta completa cuando tiene su foto propia y la transferencia de su inspeccion se cerro firmada o con reservas (en las dos
-/// firman las dos partes); una transferencia sin cerrar, o cerrada como «no firma», no cuenta. Marcar un hallazgo como rechazado nunca se bloquea por esto: un V1 se
+/// firman las dos partes); una transferencia sin cerrar, o cerrada como «no firma» o como «recibo sin entrega» (en las dos firma una sola parte), no cuenta. Marcar un hallazgo como rechazado nunca se bloquea por esto: un V1 se
 /// rechaza en preembarque, antes de que exista una transferencia firmada; lo que falta se informa y el hallazgo no cuenta en la tasa de rechazo mientras no este completo.
 /// </summary>
 public static class clsEvidenciaHallazgo
@@ -35,6 +35,9 @@ public static class clsEvidenciaHallazgo
     public const string FOTO_HALLAZGO = "foto_hallazgo";
     public const string TRANSFERENCIA_SIN_CIERRE = "transferencia_sin_cierre";
     public const string TRANSFERENCIA_NO_FIRMA = "transferencia_no_firma";
+
+    /// <summary>La transferencia se cerro como «recibo sin entrega»: solo firmo una parte, igual que en la no firma.</summary>
+    public const string TRANSFERENCIA_SIN_ENTREGA = "transferencia_sin_entrega";
 
     /// <summary>
     /// Lo que le falta al hallazgo: su foto propia (que no sea la del sello de quien valida) y el cierre de la transferencia de su inspeccion
@@ -55,6 +58,10 @@ public static class clsEvidenciaHallazgo
         else if (tipoCierre == clsTipoCierre.NO_FIRMA)
         {
             faltante.Add(TRANSFERENCIA_NO_FIRMA);
+        }
+        else if (tipoCierre == clsTipoCierre.RECIBO_SIN_ENTREGA)
+        {
+            faltante.Add(TRANSFERENCIA_SIN_ENTREGA);
         }
 
         return faltante;

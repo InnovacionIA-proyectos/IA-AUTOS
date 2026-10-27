@@ -48,6 +48,8 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblHallazgoSeguimiento DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNotificaciones DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNotasAclaratorias DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNovedadesProceso DISABLE TRIGGER ALL;
+            DELETE FROM dbo.tblNovedadesProceso;
             DELETE FROM dbo.tblNotasAclaratorias;
             DELETE FROM dbo.tblNotificaciones;
             DELETE FROM dbo.tblDispositivos;
@@ -73,6 +75,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNotasAclaratorias ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
             END TRY
             BEGIN CATCH
             ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
@@ -83,12 +86,14 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNotasAclaratorias ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
             THROW;
             END CATCH
 
             -- Catalogos: vuelven a su estado inicial (sin valores creados por las pruebas, todos activos y sin cambios de forma).
             DELETE FROM dbo.tblCuadrantes;
             DELETE FROM dbo.tblEstadosSofasa;
+            DELETE FROM dbo.tblMotivosSinInspector WHERE Codigo NOT IN ('inspector_no_llego', 'inspector_no_disponible', 'otro');
             DELETE FROM dbo.tblEtapasCatalogo WHERE Codigo NOT IN ('cargue', 'transporte', 'descargue');
             DELETE FROM dbo.tblPuntosCustodia WHERE Codigo NOT IN ('cedi_1', 'origen', 'certificadora', 'destino', 'cedi_2', 'concesionario');
             DELETE FROM dbo.tblClientes WHERE Codigo <> 'sofasa';
@@ -101,6 +106,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             UPDATE dbo.tblPuntosCustodia SET Activo = 1;
             UPDATE dbo.tblTiposUnidadTransportadora SET Activo = 1;
             UPDATE dbo.tblClientes SET Activo = 1, Orden = 1;
+            UPDATE dbo.tblMotivosSinInspector SET Activo = 1;
             UPDATE dbo.tblClasesDano SET Activo = 1;
             UPDATE dbo.tblTamanosDano SET Activo = 1;
             UPDATE dbo.tblNivelesSeveridad SET Activo = 1, Accion = CASE Codigo

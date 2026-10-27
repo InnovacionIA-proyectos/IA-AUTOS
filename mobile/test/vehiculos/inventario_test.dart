@@ -3,21 +3,67 @@ import 'package:traza_autos/features/vehiculos/domain/etiquetas.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
 import 'package:traza_autos/features/vehiculos/domain/partes.dart';
 
-Map<String, dynamic> inspeccionJson(String id, String fecha, {String estado = 'cerrada', bool firmada = false, List<Map<String, dynamic>> hallazgos = const []}) => {
+Map<String, dynamic> inspeccionJson(
+  String id,
+  String fecha, {
+  String estado = 'cerrada',
+  bool firmada = false,
+  String momento = Momento.salida,
+  String? cerradaEn,
+  String? tipoCierre,
+  /// Solo firmó quien entrega: la otra firma queda pendiente, que es el estado normal entre una y otra.
+  bool soloEntrega = false,
+  List<Map<String, dynamic>> hallazgos = const [],
+}) =>
+    {
       'id': id,
-      'momento': 'informe',
+      'momento': momento,
+      'momento_nombre': momento == Momento.salida ? 'Inspeccion de salida' : 'Inspeccion de llegada',
       'fecha': fecha,
       'estado': estado,
+      'cerrada_at': cerradaEn,
       'notas': null,
       'hallazgos': hallazgos,
       'evidencias': [
         {'id': 'ev-$id', 'url': '/api/uploads/$id.jpg'},
       ],
-      'transferencia': firmada ? {'firmada': true} : null,
+      // Como la sirve la API: una firma por parte, con su fecha. `firmada` del DTO es «ya firmaron las dos».
+      'transferencia': firmada || tipoCierre != null || soloEntrega
+          ? {
+              'entrega_usuario_id': 'u-entrega',
+              'recibe_usuario_id': 'u-recibe',
+              'entrega_firmada_at': firmada || soloEntrega ? '2026-01-01T12:00:00Z' : null,
+              'recibe_firmada_at': firmada ? '2026-01-01T12:30:00Z' : null,
+              'tipo_cierre': tipoCierre ?? (firmada ? 'firmada' : null),
+            }
+          : null,
     };
 
-Map<String, dynamic> etapaJson(String id, int orden, String proceso, {bool requiere = true, List<Map<String, dynamic>> inspecciones = const []}) =>
-    {'id': id, 'orden': orden, 'proceso': proceso, 'requiere_inspeccion': requiere, 'inspecciones': inspecciones};
+Map<String, dynamic> etapaJson(
+  String id,
+  int orden,
+  String proceso, {
+  bool requiere = true,
+  String? viajeId,
+  bool conApoyo = false,
+  List<Map<String, dynamic>> inspecciones = const [],
+}) =>
+    {
+      'id': id,
+      'orden': orden,
+      'proceso': proceso,
+      'requiere_inspeccion': requiere,
+      'viaje_id': viajeId,
+      'con_personal_apoyo': conApoyo,
+      'inspecciones': inspecciones,
+    };
+
+/// Una etapa con su llegada cerrada y su transferencia cerrada: la que no bloquea a la siguiente.
+Map<String, dynamic> etapaCompleta(String id, int orden, String proceso) => etapaJson(id, orden, proceso, inspecciones: [
+      inspeccionJson('$id-s', '2026-01-01T08:00:00Z', cerradaEn: '2026-01-01T09:00:00Z'),
+      inspeccionJson('$id-ll', '2026-01-01T10:00:00Z',
+          momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z', tipoCierre: 'firmada'),
+    ]);
 
 Inventario inventario(List<Map<String, dynamic>> etapas) =>
     Inventario.fromJson({'id': 'v1', 'vin': 'VIN00000000000001', 'marca': 'Renault', 'modelo': 'Duster', 'operacion': 'importacion', 'etapas': etapas});
@@ -38,6 +84,24 @@ void main() {
       expect(insp.cerrada, isTrue);
       expect(insp.hallazgos.single.coords!.y, 0.66);
       expect(insp.evidencias.single.url, '/api/uploads/i1.jpg');
+    });
+
+    test('la etapa trae su lugar y su viaje, que la API ya resuelve', () {
+      final inv = inventario([
+        {'id': 'e1', 'orden': 1, 'proceso': 'cargue', 'lugar': 'CEDI 1', 'viaje_id': 'via-1', 'requiere_inspeccion': true},
+      ]);
+
+      final etapa = inv.etapas.single;
+      expect(etapa.lugar, 'CEDI 1', reason: 'el lugar llega como nombre, no como código');
+      expect(etapa.viajeId, 'via-1', reason: 'de ahí salen la placa, el tráiler, la unidad y el conductor');
+    });
+
+    test('una etapa sin lugar ni viaje no rompe', () {
+      final etapa = inventario([
+        {'id': 'e1', 'orden': 1, 'proceso': 'cargue', 'requiere_inspeccion': true},
+      ]).etapas.single;
+
+      expect((etapa.lugar, etapa.viajeId), (null, null));
     });
 
     test('tolera campos opcionales ausentes', () {
@@ -62,20 +126,37 @@ void main() {
   });
 
   group('accionDeEtapa', () {
-    test('etapa que requiere informe y aún no lo tiene: capturar', () {
+    // Capturar ya no sale de aquí: son dos momentos por etapa y los decide `momentosDeEtapa`.
+    test('etapa que requiere informe y aún no lo tiene: no hay sobre qué firmar', () {
       final inv = inventario([etapaJson('e1', 1, 'cargue')]);
-      expect(accionDeEtapa(inv.etapas.single, inv), isA<CapturarInforme>());
+      expect(accionDeEtapa(inv.etapas.single, inv), isA<SinInforme>());
     });
 
     test('con informe cerrado sin firma: firmar sobre ese informe', () {
       final inv = inventario([etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('i1', '2026-01-01T10:00:00Z')])]);
       final accion = accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia;
-      expect((accion.inspeccionId, accion.soloFirma, accion.firmada), ('i1', false, false));
+      expect((accion.inspeccionId, accion.soloFirma, accion.cerrada), ('i1', false, false));
     });
 
     test('con transferencia ya firmada se informa y no se vuelve a firmar', () {
       final inv = inventario([etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('i1', '2026-01-01T10:00:00Z', firmada: true)])]);
-      expect((accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia).firmada, isTrue);
+      expect((accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia).cerrada, isTrue);
+    });
+
+    // Entre una firma y la otra pueden pasar horas, porque cada parte firma desde su sesión. Ese estado
+    // intermedio no es «sin firmar» ni «firmada», y la tarjeta tiene que poder distinguirlo.
+    test('con una sola firma la transferencia sigue abierta y se sabe quién falta', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('i1', '2026-01-01T10:00:00Z', soloEntrega: true)])]);
+      final accion = accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia;
+
+      expect(accion.cerrada, isFalse, reason: 'todavía admite la otra firma');
+      expect(accion.transferencia!.completa, isFalse);
+      expect(accion.transferencia!.faltaRecibe, isTrue);
+    });
+
+    test('sin ninguna firma no se dice que falte nadie en particular', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('i1', '2026-01-01T10:00:00Z')])]);
+      expect((accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia).transferencia, isNull);
     });
 
     test('prefiere el informe cerrado sobre un borrador', () {
@@ -132,19 +213,206 @@ void main() {
     });
   });
 
-  group('etiquetas', () {
-    test('devuelven el valor tal cual si es un catálogo nuevo', () {
-      expect(etiquetar(etiquetaPuntoCustodia, 'cargue'), 'Cargue');
-      expect(etiquetar(etiquetaPuntoCustodia, 'nuevo_punto'), 'nuevo_punto');
+  group('etiquetas fijas del contrato', () {
+    test('devuelven el valor tal cual si no lo conocen', () {
+      expect(etiquetar(etiquetaOperacion, 'importacion'), 'Importación');
+      expect(etiquetar(etiquetaOperacion, 'operacion_nueva'), 'operacion_nueva');
     });
 
-    test('cubren los valores que acepta la API', () {
-      for (final c in ['deformacion', 'rotura', 'cortado', 'perforacion', 'golpe', 'mancha', 'raya_pintar', 'desconchado', 'particulas', 'faltante']) {
-        expect(etiquetaClaseDano.containsKey(c), isTrue, reason: c);
+    test('cubren los valores permitidos del contrato', () {
+      for (final o in ['importacion', 'exportacion', 'nacional']) {
+        expect(etiquetaOperacion.containsKey(o), isTrue, reason: o);
       }
-      for (final t in ['1_5cm', '5_10cm', '10_20cm', 'mas_20cm', 'requiere_reemplazo', 'mas_10_particulas']) {
-        expect(etiquetaTamanoDano.containsKey(t), isTrue, reason: t);
+      for (final e in ['borrador', 'cerrada']) {
+        expect(etiquetaEstadoInspeccion.containsKey(e), isTrue, reason: e);
       }
+      for (final r in ['inspector', 'conductor', 'coordinador_calidad', 'comercial', 'admin', 'super_admin']) {
+        expect(etiquetaRol.containsKey(r), isTrue, reason: r);
+      }
+    });
+  });
+
+  group('momentosDeEtapa', () {
+    test('una etapa que exige inspeccion tiene salida y llegada, en ese orden', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue')]);
+
+      final momentos = momentosDeEtapa(inv.etapas.single, inv);
+
+      expect(momentos.map((m) => m.momento), [Momento.salida, Momento.llegada]);
+      expect(momentos.every((m) => m.inspeccion == null), isTrue);
+    });
+
+    test('una etapa que no la exige no tiene momentos: ahi solo se firma', () {
+      final inv = inventario([etapaJson('e1', 1, 'transporte', requiere: false)]);
+
+      expect(momentosDeEtapa(inv.etapas.single, inv), isEmpty);
+    });
+
+    test('cada momento toma su propia inspeccion', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [
+          inspeccionJson('i-salida', '2026-01-01T08:00:00Z', cerradaEn: '2026-01-01T09:00:00Z'),
+          inspeccionJson('i-llegada', '2026-01-01T10:00:00Z', momento: Momento.llegada, estado: 'borrador'),
+        ]),
+      ]);
+
+      final momentos = momentosDeEtapa(inv.etapas.single, inv);
+
+      expect(momentos[0].inspeccion!.id, 'i-salida');
+      expect(momentos[0].cerrada, isTrue);
+      expect(momentos[0].inspeccion!.cerradaEn, DateTime.parse('2026-01-01T09:00:00Z'));
+      expect(momentos[1].inspeccion!.id, 'i-llegada');
+      expect(momentos[1].enBorrador, isTrue);
+      expect(momentos[1].sePuedeCapturar, isFalse, reason: 'ya esta empezada');
+    });
+
+    test('con varias versiones del mismo momento manda la ultima', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [
+          inspeccionJson('v1', '2026-01-01T08:00:00Z'),
+          inspeccionJson('v2', '2026-01-01T09:00:00Z'),
+        ]),
+      ]);
+
+      expect(momentosDeEtapa(inv.etapas.single, inv).first.inspeccion!.id, 'v2');
+    });
+
+    // El servidor responde 409 ETAPA_PREVIA_SIN_CIERRE; la app lo sabe antes de llamar y lo dice.
+    group('la salida espera a la etapa anterior', () {
+      test('la primera etapa no espera a nadie', () {
+        final inv = inventario([etapaJson('e1', 1, 'cargue')]);
+
+        expect(momentosDeEtapa(inv.etapas.single, inv).first.sePuedeCapturar, isTrue);
+      });
+
+      test('si la anterior no tiene la llegada cerrada, se bloquea y se dice cual falta', () {
+        final inv = inventario([
+          etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('s', '2026-01-01T08:00:00Z')]),
+          etapaJson('e2', 2, 'transporte'),
+        ]);
+
+        final salida = momentosDeEtapa(inv.etapas[1], inv).first;
+
+        expect(salida.sePuedeCapturar, isFalse);
+        expect(salida.bloqueo!.motivo, BloqueoMomento.sinLlegada);
+        expect(salida.bloqueo!.procesoPrevio, 'cargue');
+        expect(mensajeBloqueo(salida.bloqueo!.motivo, 'Cargue'), 'Falta cerrar la llegada de Cargue');
+      });
+
+      test('con la llegada cerrada pero la transferencia abierta, tambien', () {
+        final inv = inventario([
+          etapaJson('e1', 1, 'cargue', inspecciones: [
+            inspeccionJson('ll', '2026-01-01T10:00:00Z',
+                momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z', soloEntrega: true),
+          ]),
+          etapaJson('e2', 2, 'transporte'),
+        ]);
+
+        final salida = momentosDeEtapa(inv.etapas[1], inv).first;
+
+        expect(salida.bloqueo!.motivo, BloqueoMomento.transferenciaAbierta);
+        expect(mensajeBloqueo(salida.bloqueo!.motivo, 'Cargue'), 'Falta cerrar la transferencia de Cargue');
+      });
+
+      // El defecto visto en el celular: la transferencia cuelga del primer informe que se cierra, que es el de
+      // salida, y la app la buscaba en el de llegada. Con la constancia ya registrada sobre la salida, la
+      // etapa siguiente quedaba bloqueada para siempre aunque el servidor la dejara pasar.
+      test('la transferencia cuenta venga del informe que venga, no solo del de llegada', () {
+        final inv = inventario([
+          etapaJson('e1', 1, 'cargue', inspecciones: [
+            inspeccionJson('s', '2026-01-01T08:00:00Z', cerradaEn: '2026-01-01T09:00:00Z', tipoCierre: 'no_firma'),
+            inspeccionJson('ll', '2026-01-01T10:00:00Z', momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z'),
+          ]),
+          etapaJson('e2', 2, 'transporte'),
+        ]);
+
+        expect(momentosDeEtapa(inv.etapas[1], inv).first.bloqueo, isNull);
+      });
+
+      // La misma pregunta que hace el servidor: bloquea una transferencia **abierta**, no la ausencia de una.
+      // Si Calidad quiere exigir que toda etapa tenga su transferencia, la regla tiene que cambiar en la API
+      // primero: una regla propia más estricta aquí bloquea trabajo que la API aceptaría.
+      test('sin ninguna transferencia no se bloquea, como en el servidor', () {
+        final inv = inventario([
+          etapaJson('e1', 1, 'cargue', inspecciones: [
+            inspeccionJson('ll', '2026-01-01T10:00:00Z', momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z'),
+          ]),
+          etapaJson('e2', 2, 'transporte'),
+        ]);
+
+        expect(momentosDeEtapa(inv.etapas[1], inv).first.bloqueo, isNull);
+      });
+
+      test('una sola firma no alcanza: la transferencia sigue abierta', () {
+        final inv = inventario([
+          etapaJson('e1', 1, 'cargue', inspecciones: [
+            inspeccionJson('ll', '2026-01-01T10:00:00Z',
+                momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z', soloEntrega: true),
+          ]),
+          etapaJson('e2', 2, 'transporte'),
+        ]);
+
+        expect(momentosDeEtapa(inv.etapas[1], inv).first.bloqueo!.motivo, BloqueoMomento.transferenciaAbierta);
+      });
+
+      // Lo que cuenta es el tipo de cierre, no que haya firmas: una constancia de no firma cierra la
+      // transferencia sin que nadie haya firmado, y la etapa siguiente debe poder arrancar.
+      test('una constancia de no firma cierra la transferencia aunque no haya firmas', () {
+        final inv = inventario([
+          etapaJson('e1', 1, 'cargue', inspecciones: [
+            inspeccionJson('ll', '2026-01-01T10:00:00Z',
+                momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z', tipoCierre: 'no_firma'),
+          ]),
+          etapaJson('e2', 2, 'transporte'),
+        ]);
+
+        expect(momentosDeEtapa(inv.etapas[1], inv).first.bloqueo, isNull);
+      });
+
+      test('con la anterior cerrada de verdad, se puede', () {
+        final inv = inventario([etapaCompleta('e1', 1, 'cargue'), etapaJson('e2', 2, 'transporte')]);
+
+        expect(momentosDeEtapa(inv.etapas[1], inv).first.sePuedeCapturar, isTrue);
+      });
+
+      test('la llegada no espera a la etapa anterior: eso lo impone su propia salida', () {
+        final inv = inventario([etapaJson('e1', 1, 'cargue'), etapaJson('e2', 2, 'transporte')]);
+
+        expect(momentosDeEtapa(inv.etapas[1], inv)[1].bloqueo, isNull);
+      });
+
+      // El inventario de un VIN puede traer etapas de varios viajes; la anterior es la del mismo viaje.
+      test('no se mira la etapa de otro viaje', () {
+        final inv = inventario([
+          etapaJson('ajena', 1, 'cargue', viajeId: 'otro-viaje'),
+          etapaJson('mia', 2, 'transporte', viajeId: 'mi-viaje'),
+        ]);
+
+        expect(momentosDeEtapa(inv.etapas[1], inv).first.sePuedeCapturar, isTrue);
+      });
+    });
+  });
+
+  group('quien captura la etapa', () {
+    // La API se lo permitiria igual; es la app la que no se lo ofrece, porque ese cargue lo inspecciona el
+    // personal de apoyo y el conductor solo firma lo que recibe.
+    test('el conductor no captura un cargue con personal de apoyo', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue', conApoyo: true)]);
+
+      expect(puedeCapturar(inv.etapas.single, rol: 'conductor'), isFalse);
+      expect(puedeCapturar(inv.etapas.single, rol: 'inspector'), isTrue, reason: 'a el si le toca');
+    });
+
+    test('sin personal de apoyo el conductor si captura: no hay quien lo haga por el', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue')]);
+
+      expect(puedeCapturar(inv.etapas.single, rol: 'conductor'), isTrue);
+    });
+
+    test('solo aplica al cargue: en descargue el conductor captura igual', () {
+      final inv = inventario([etapaJson('e1', 1, 'descargue', conApoyo: true)]);
+
+      expect(puedeCapturar(inv.etapas.single, rol: 'conductor'), isTrue);
     });
   });
 }

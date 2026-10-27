@@ -5,7 +5,8 @@ public sealed record CoordsDiagramaDto(double X, double Y);
 
 /// <summary>
 /// Una inspeccion de salida o de llegada de una etapa. <c>Version</c> es 1 en la original y 2, 3... en las correcciones, que referencian
-/// en <c>CorrigeInspeccionId</c> a la version anterior. <c>MomentoNombre</c> es el texto para pantalla («Inspección de salida»).
+/// en <c>CorrigeInspeccionId</c> a la version anterior. <c>MomentoNombre</c> es el texto para pantalla («Inspección de salida»). <c>MotivoSinInspector</c> solo viene si el conductor hizo la salida
+/// del cargue porque el inspector previsto no estaba, y <c>NovedadesProceso</c> trae lo que paso en el proceso con esa inspeccion (vacio en la gran mayoria).
 /// </summary>
 public sealed record InspeccionDto(
     Guid Id,
@@ -27,13 +28,16 @@ public sealed record InspeccionDto(
     DateTimeOffset? CerradaAt,
     int Version,
     Guid? CorrigeInspeccionId,
-    string MomentoNombre);
+    string MomentoNombre,
+    MotivoSinInspectorDto? MotivoSinInspector,
+    IReadOnlyList<NovedadProcesoDto> NovedadesProceso);
 
 /// <summary>
 /// Un hallazgo con su zona: <c>CuadranteNumero</c> y <c>Lado</c> (o <c>ZonaProvisional</c>), <c>CuadranteNombre</c> y <c>Zona</c> ya armada para mostrar
 /// («Izquierdo 7 · Puerta delantera», «Frente»). <c>NivelNombre</c> y <c>NivelAccion</c> salen del catalogo de niveles. <c>EvidenciaFaltante</c> dice que
 /// le falta para tener la evidencia completa (<c>foto_hallazgo</c>, <c>transferencia_sin_cierre</c> o <c>transferencia_no_firma</c>) y
-/// <c>EvidenciaCompleta</c> es verdadera cuando no falta nada. <c>ParteVehiculo</c> y <c>CoordsDiagrama</c> solo vienen en los hallazgos historicos.
+/// <c>EvidenciaCompleta</c> es verdadera cuando no falta nada. <c>ParteVehiculo</c> y <c>CoordsDiagrama</c> solo vienen en los hallazgos historicos. Al conductor solo se le muestra lo que ve en lectura (zona, clase, tamano, tipo de
+/// novedad, origen, si es preexistente, fecha y foto): <c>EstadoSeguimiento</c>, <c>EvidenciaCompleta</c> y <c>EvidenciaFaltante</c> llegan nulos, y tambien el nivel, la nota, la revision y el origen.
 /// </summary>
 public record HallazgoDto(
     Guid Id,
@@ -56,9 +60,9 @@ public record HallazgoDto(
     bool EsPreexistente,
     Guid? HallazgoOrigenId,
     Guid? ConfirmadoPor,
-    string EstadoSeguimiento,
-    bool EvidenciaCompleta,
-    IReadOnlyList<string> EvidenciaFaltante,
+    string? EstadoSeguimiento,
+    bool? EvidenciaCompleta,
+    IReadOnlyList<string>? EvidenciaFaltante,
     Guid? RevisadoPor,
     DateTimeOffset? RevisadoAt,
     DateTimeOffset CreatedAt,
@@ -144,12 +148,13 @@ public sealed record EvidenciaDto(
 
 /// <summary>
 /// Las firmas dibujadas no se exponen en los listados. <c>Firmada</c> es true cuando estan las dos firmas (tambien si fue con reservas);
-/// <c>TipoCierre</c> dice como se cerro (<c>firmada</c>, <c>con_reservas</c> o <c>no_firma</c>) y es nulo mientras la transferencia esta abierta.
+/// <c>TipoCierre</c> dice como se cerro (<c>firmada</c>, <c>con_reservas</c>, <c>no_firma</c> o <c>recibo_sin_entrega</c>) y es nulo mientras la transferencia esta abierta;
+/// en <c>recibo_sin_entrega</c> no hay <c>EntregaUsuarioId</c>.
 /// </summary>
 public sealed record TransferenciaDto(
     Guid Id,
     Guid InspeccionId,
-    Guid EntregaUsuarioId,
+    Guid? EntregaUsuarioId,
     Guid RecibeUsuarioId,
     bool Firmada,
     DateTimeOffset? FirmadaAt,

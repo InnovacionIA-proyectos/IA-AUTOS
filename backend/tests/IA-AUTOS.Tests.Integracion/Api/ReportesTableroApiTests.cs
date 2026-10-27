@@ -323,12 +323,10 @@ public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaT
         await EscenarioAsync();
         var coordinador = await SesionAsync(clsRol.COORDINADOR_CALIDAD);
 
-        // V2 y V3 aun no terminan su ruta (les falta el Transporte), pero sus hallazgos ya cuentan; el endpoint anterior solo cuenta las movilizadas.
-        var nuevo = await ConsultarAsync(coordinador, "/api/reportes/patrones");
-        var anterior = await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/patrones"));
+        // V2 y V3 aun no terminan su ruta (les falta el Transporte), pero sus hallazgos ya cuentan.
+        var patrones = await ConsultarAsync(coordinador, "/api/reportes/patrones");
 
-        Assert.Equal(2, nuevo.GetProperty("total").GetInt32());
-        Assert.Equal(0, anterior.GetProperty("total").GetInt32());
+        Assert.Equal(2, patrones.GetProperty("total").GetInt32());
     }
 
     // ------------------------------------------------------------------------------------ indicador diario
@@ -413,21 +411,18 @@ public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaT
         Assert.True((await ComoJsonAsync(r)).GetProperty("details").GetProperty("fieldErrors").TryGetProperty("fecha", out _));
     }
 
-    // ------------------------------------------------------------------------------------ rutas obsoletas
+    // ------------------------------------------------------------------------------------ rutas retiradas
 
     [Theory]
     [InlineData("/api/patrones")]
     [InlineData("/api/patrones/analisis")]
-    public async Task Las_rutas_anteriores_de_patrones_responden_con_el_encabezado_deprecation(string ruta)
+    public async Task Las_rutas_anteriores_de_patrones_se_retiraron_y_responden_404(string ruta)
     {
         var admin = await SesionAsync(clsRol.ADMIN);
 
         var r = await Cliente(admin.Token).GetAsync(ruta);
 
-        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
-        Assert.Equal("true", r.Headers.GetValues("Deprecation").Single());
-        Assert.Contains("/api/reportes/patrones", r.Headers.GetValues("Link").Single());
-        Assert.Contains("successor-version", r.Headers.GetValues("Link").Single());
+        Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
     }
 
     [Fact]

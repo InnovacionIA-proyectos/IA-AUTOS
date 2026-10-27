@@ -1,3 +1,11 @@
+/// Código con el que la API responde 403 a todo mientras el PIN sea temporal (lo asignó o lo reinició un
+/// administrador). Lo único que lo levanta es cambiar el PIN.
+const codigoCambioPinRequerido = 'PIN_CHANGE_REQUIRED';
+
+/// Código con el que la API rechaza una acción que no le corresponde a quien la pide: rol insuficiente, o un
+/// informe que empezó otra persona (solo su autor o un administrador lo continúan).
+const codigoProhibido = 'FORBIDDEN';
+
 /// Error devuelto por la API (cuerpo uniforme `{error, code, message, timestamp, details}`) o de red.
 ///
 /// `status == 0` significa que la petición no llegó al servidor (sin red, tiempo agotado, DNS...).
@@ -18,9 +26,34 @@ class ErrorApi implements Exception {
   final int status;
   final Object? details;
 
-  /// Los errores que merecen reintento: red, 401, 408, 429 y 5xx.
-  /// El resto (400, 403, 404, 409, 422...) no se arregla reintentando.
-  bool get esTransitorio => status == 0 || status == 401 || status == 408 || status == 429 || status >= 500;
+  /// El PIN pasó a ser temporal: la petición es correcta y volverá a servir en cuanto se cambie.
+  bool get esCambioPinRequerido => status == 403 && code == codigoCambioPinRequerido;
+
+  /// Los errores que merecen reintento: red, 401, 408, 429, 5xx y el 403 por PIN temporal.
+  /// El resto (400, los demás 403, 404, 409, 422...) no se arregla reintentando.
+  bool get esTransitorio =>
+      status == 0 || status == 401 || status == 408 || status == 429 || status >= 500 || esCambioPinRequerido;
+
+  /// Lo que el servidor detalla, una línea por cosa que falta. Un «Datos inválidos» a secas no le dice nada a
+  /// quien está en el patio; «Falta la foto de la vista Superior» sí.
+  ///
+  /// `details` llega de dos formas y las dos importan: una **lista** de textos (el cierre de una inspección) o
+  /// un mapa `fieldErrors` de campo a textos (la validación de un cuerpo).
+  List<String> get detalles => switch (details) {
+        final List lista => [for (final linea in lista) linea.toString()],
+        final Map mapa => [
+            for (final valores in (mapa['fieldErrors'] as Map?)?.values ?? const [])
+              if (valores is List)
+                for (final linea in valores) linea.toString(),
+          ],
+        _ => const [],
+      };
+
+  /// El mensaje con su detalle, una línea por cosa que falta, para guardarlo en la cola y mostrarlo tal cual.
+  String get mensajeDetallado {
+    if (detalles.isEmpty) return message;
+    return [message, ...detalles.map((d) => '· $d')].join('\n');
+  }
 
   @override
   String toString() => 'ErrorApi($status $code: $message)';

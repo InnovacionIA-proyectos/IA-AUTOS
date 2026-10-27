@@ -18,7 +18,7 @@ Toda acción de escritura (y el inicio de sesión) queda en `tblAuditLog`, un re
 
 ## Qué se audita
 
-Inicio de sesión, PIN errado y bloqueo (`auth.*`); usuarios (`usuario.*`); catálogos (`catalogo.{nombre}.*`); parámetros (`parametro.actualizar`, con el valor antes y después); vehículos (`vehiculos.cargar`, `vehiculo.baja`); viajes (`viaje.*`, `viajes.cargar`); inspecciones (`inspeccion.crear`,
+Inicio de sesión, PIN errado y bloqueo (`auth.*`); usuarios (`usuario.*`); catálogos (`catalogo.{nombre}.*`); parámetros (`parametro.actualizar`, con el valor antes y después); vehículos (`vehiculos.cargar`, `vehiculo.baja`); viajes (`viaje.*`, `viajes.cargar`); inspecciones (`inspeccion.crear`, `novedad_proceso.crear`, `transferencia.sin_entrega`,
 `inspeccion.cerrar`, `inspeccion.corregir`, `llegada.registrar`); hallazgos y novedades (`hallazgo.crear`, `novedad.crear`, `hallazgo.revision`, `hallazgo.seguimiento`); evidencias; transferencias; notas aclaratorias (`nota.crear`); notificaciones; dispositivos y la ingesta Sofasa. La acción se registra
 **en la misma transacción** que el cambio: si el cambio no se guarda, tampoco queda su registro, y viceversa.
 

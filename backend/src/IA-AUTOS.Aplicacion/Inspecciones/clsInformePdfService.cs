@@ -65,6 +65,7 @@ public sealed class clsInformePdfService(
     clsPanelesDeDano paneles,
     IAlmacenArchivos almacen,
     IGeneradorPdfInforme generador,
+    IUsuarioActual actual,
     IReloj reloj)
 {
     public const int MAXIMO_FOTOS = 60;
@@ -80,7 +81,11 @@ public sealed class clsInformePdfService(
         var presupuesto = new Presupuesto(MAXIMO_FOTOS);
 
         // Los hallazgos primero: sus fotos son las que mas importan; despues las de las vistas.
-        var notasDeHallazgos = await notas.ListarPorEntidadesAsync(clsEntidadNota.HALLAZGO, informe.Hallazgos.Select(h => h.Id).ToList(), ct);
+        // El conductor ve los hallazgos en lectura: sin su seguimiento ni sus notas aclaratorias.
+        var esConductor = actual.EsConductor();
+        var notasDeHallazgos = esConductor
+            ? new Dictionary<Guid, IReadOnlyList<NotaAclaratoriaDto>>()
+            : await notas.ListarPorEntidadesAsync(clsEntidadNota.HALLAZGO, informe.Hallazgos.Select(h => h.Id).ToList(), ct);
         var hallazgos = new List<HallazgoInforme>();
         var numero = 0;
         foreach (var h in informe.Hallazgos)
@@ -96,7 +101,7 @@ public sealed class clsInformePdfService(
             }
 
             var seguimiento = new List<SeguimientoInforme>();
-            foreach (var paso in await consultas.ObtenerHistorialAsync(h.Id, ct))
+            foreach (var paso in esConductor ? [] : await consultas.ObtenerHistorialAsync(h.Id, ct))
             {
                 var sello = paso.EvidenciaSello is { } e ? await CargarAsync(e, "Foto del sello de quien valida", presupuesto, ct) : null;
                 seguimiento.Add(new SeguimientoInforme(paso.CreatedAt, paso.Accion, paso.EstadoAnterior, paso.EstadoNuevo, paso.UsuarioNombre, paso.Nota, sello));
@@ -177,7 +182,7 @@ public sealed class clsInformePdfService(
             return null;
         }
 
-        var entrega = await clsArmadorFirmas.ArmarAsync(almacen, t.EntregaNombre ?? "—", t.FirmaEntrega, t.EntregaFirmadaAt, t.EntregaFirmaIp, ct);
+        var entrega = await clsArmadorFirmas.ArmarAsync(almacen, t.TipoCierre == IAAutos.Dominio.Custodia.clsTipoCierre.RECIBO_SIN_ENTREGA ? "Sin entrega" : t.EntregaNombre ?? "—", t.FirmaEntrega, t.EntregaFirmadaAt, t.EntregaFirmaIp, ct);
         var recibe = await clsArmadorFirmas.ArmarAsync(almacen, t.RecibeNombre ?? "—", t.FirmaRecibe, t.RecibeFirmadaAt, t.RecibeFirmaIp, ct);
         FotoInforme? constancia = null;
         if (informe.Evidencias.FirstOrDefault(e => e.Id == t.EvidenciaConstanciaId) is { } foto)

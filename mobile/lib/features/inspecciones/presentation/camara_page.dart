@@ -5,9 +5,13 @@ import '../../../core/tema/tema.dart';
 
 /// Cámara a pantalla completa. Devuelve la ruta temporal de la foto tomada o null si se cancela.
 class CamaraPage extends StatefulWidget {
-  const CamaraPage({super.key, this.titulo = 'Nueva foto'});
+  const CamaraPage({super.key, this.titulo = 'Nueva foto', this.guia});
 
   final String titulo;
+
+  /// Imagen de encuadre de la vista que se va a tomar (`assets/guias/...`). Null en las vistas que no tienen:
+  /// entonces queda solo la etiqueta, que ya dice qué fotografiar.
+  final String? guia;
 
   @override
   State<CamaraPage> createState() => _EstadoCamaraPage();
@@ -98,9 +102,50 @@ class _EstadoCamaraPage extends State<CamaraPage> {
     }
     final controlador = _controlador;
     if (controlador == null) return const Center(child: CircularProgressIndicator(color: Colors.white));
+    final previa = controlador.value.previewSize;
     return Column(
       children: [
-        Expanded(child: Center(child: CameraPreview(controlador))),
+        Expanded(
+          // Un marco 3:4, el de las guías. La vista previa se recorta para llenarlo en vez de dejar franjas
+          // negras, y así ocupa **exactamente** el mismo rectángulo que la guía: es lo único que permite
+          // alinear el contorno con el vehículo. La foto que se guarda conserva todo lo que ve el sensor, de
+          // modo que recortar aquí no pierde nada, solo deja algo de margen alrededor de lo encuadrado.
+          child: Center(
+            child: AspectRatio(
+              aspectRatio: 3 / 4,
+              child: ClipRect(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (previa == null)
+                      const ColoredBox(color: Colors.black)
+                    else
+                      FittedBox(
+                        fit: BoxFit.cover,
+                        clipBehavior: Clip.hardEdge,
+                        // `previewSize` viene en la orientación del sensor (apaisada); en vertical van al revés.
+                        child: SizedBox(
+                          width: previa.height,
+                          height: previa.width,
+                          child: CameraPreview(controlador),
+                        ),
+                      ),
+                    // Guía de encuadre encima de la vista previa, que es para lo que sirve. Son PNG con
+                    // transparencia y trazo blanco, así que solo se ve la línea. Sin capturar toques: lo que se
+                    // toca es el obturador.
+                    if (widget.guia case final guia?)
+                      IgnorePointer(
+                        child: Opacity(
+                          opacity: 0.55,
+                          child: Image.asset(guia, fit: BoxFit.cover, semanticLabel: 'Guía de encuadre: ${widget.titulo}'),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
         Container(
           color: Colors.black,
           padding: const EdgeInsets.symmetric(vertical: Espacio.xl),

@@ -79,6 +79,10 @@ valor en uso no se borra.
 órdenes (sin distinguir mayúsculas ni espacios de los bordes), con el código como etiqueta provisional. **La etiqueta de cada estado la define Calidad/Operaciones (PAB-032)** y se cambia desde el portal (`PATCH /api/catalogos/estados-sofasa/{id}` con `nombre`). Mientras no haya
 órdenes el catálogo queda vacío; cuando lleguen, se vuelve a ejecutar el script para agregar los estados que falten (no cambia una etiqueta ya editada) o se agregan desde el portal. Resultado esperado: `Tabla = 1` y `SinEstado = 0`.
 
+## Motivos por los que no está el inspector
+
+`tblMotivosSinInspector` (`Codigo`, `Nombre`, `RequiereTexto`, `Orden`, `Activo`) la crea [`23-novedad-de-proceso.sql`](../database/cambios-esquema/23-novedad-de-proceso.sql) con tres valores iniciales: `inspector_no_llego` «El inspector no llegó», `inspector_no_disponible` «El inspector no está disponible» y `otro` «Otro» (`RequiereTexto = 1`: quien lo elige escribe cuál es). **Calidad confirma los valores** y se editan como los demás catálogos. Repetir el script no toca los que ya existen. El script también agrega `MotivoSinInspector` y `MotivoSinInspectorTexto` a `tblInspecciones`, la tabla `tblNovedadesProceso` (ver [evidencia-inmutable.md](evidencia-inmutable.md)), el tipo de notificación `novedad_proceso` y el cierre `recibo_sin_entrega` de la transferencia (ver [transferencias.md](transferencias.md)). La API lo publica como el catálogo `motivos-sin-inspector` (`codigo`, `nombre`, `requiere_texto`, `orden` y `activo`, con su `ETag`) y lo administran `admin`, `super_admin` y `coordinador_calidad`. Resultado esperado: `Tablas = 2`, `Motivos = 3`, `Triggers = 3`, `ColumnasInspeccion = 2`, `CierreNuevo = 1`, `EntregaNula = 1`, `TipoNotificacion = 1` y `NovedadesProceso = 0`.
+
 ## Cargar los cuadrantes y las acciones de los niveles
 
 Los cuadrantes de la ficha del vehículo genérico (36 zonas y 97 polígonos) se cargan con

@@ -7,8 +7,8 @@ import 'package:traza_autos/features/inspecciones/presentation/lista_inspeccione
 
 import '../support/arnes.dart';
 
-const _a = InspeccionResumen(id: '1', vin: 'VIN1', momento: 'informe', fecha: '2026-01-01T10:00:00Z', estado: 'cerrada');
-const _b = InspeccionResumen(id: '2', vin: 'VIN2', momento: 'informe', fecha: '2026-01-02T10:00:00Z', estado: 'borrador');
+const _a = InspeccionResumen(id: '1', vin: 'VIN1', momento: 'salida', momentoNombre: 'Inspeccion de salida', fecha: '2026-01-01T10:00:00Z', estado: 'cerrada');
+const _b = InspeccionResumen(id: '2', vin: 'VIN2', momento: 'salida', momentoNombre: 'Inspeccion de salida', fecha: '2026-01-02T10:00:00Z', estado: 'borrador');
 
 Future<ProviderContainer> preparar(Arnes arnes) async {
   final contenedor = arnes.contenedor();

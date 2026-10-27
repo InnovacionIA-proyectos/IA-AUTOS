@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/proveedores.dart';
-import 'data/cache_lecturas.dart';
+import '../../core/db/cache_lecturas.dart';
 import 'data/inspecciones_repositorio.dart';
 
 final cacheLecturasProvider = Provider<CacheLecturasRepo>((ref) => CacheLecturasRepo(ref.watch(appDatabaseProvider)));

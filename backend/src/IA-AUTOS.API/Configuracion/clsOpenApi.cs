@@ -45,12 +45,12 @@ public sealed record ErrorApiDto(string Error, string Code, string Message, stri
 internal static class clsOpenApi
 {
     public const string ESQUEMA_BEARER = "bearerAuth";
-    public const string VERSION = "2.0.0";
+    public const string VERSION = "2.5.0";
 
     /// <summary>Lo que se publica en <c>info.description</c>: la regla de nombres y sus excepciones.</summary>
     public const string DESCRIPCION =
         "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), "
-        + "la respuesta de la ingesta Sofasa y los endpoints obsoletos (/api/patrones, /api/patrones/analisis y /api/metricas/rechazo). La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.";
+        + "la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.";
 
     public static void Configurar(OpenApiOptions opciones)
     {

@@ -12,7 +12,7 @@ OpenAPI ([docs/openapi.json](docs/openapi.json)), que la API genera y una prueba
 |---|---|
 | URL base | La del despliegue, sin barra final (por ejemplo `https://<dominio>`). Todas las rutas empiezan por `/api`, salvo `/health` |
 | Formato | JSON (`Content-Type: application/json`), codificación UTF-8 |
-| Nombres de campo | `snake_case` (`etapa_id`, `created_at`). **Excepciones en `camelCase`** (solo estas): el cuerpo de `login-portal` (lo fija el portal), la respuesta de la ingesta Sofasa y los endpoints obsoletos (`/api/patrones`, `/api/patrones/analisis` y `/api/metricas/rechazo`; los nuevos `/api/reportes/*` van en `snake_case`) |
+| Nombres de campo | `snake_case` (`etapa_id`, `created_at`). **Excepciones en `camelCase`** (solo estas): el cuerpo de `login-portal` (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint `/api/metricas/rechazo` (los `/api/reportes/*` van en `snake_case`) |
 | Fechas | ISO 8601 UTC con milisegundos: `2026-07-17T12:30:15.123Z`. **Las fechas que se envían deben llevar zona horaria** (`Z` o `+hh:mm`) |
 | Identificadores | UUID (`string`), salvo el VIN (texto) y `source_id` de Sofasa (entero largo) |
 | Nulos | Los campos opcionales sin valor llegan como `null` (nunca se omiten) |
@@ -549,7 +549,7 @@ use `fetch` con el token y descargue el `blob` (un enlace directo no lo envía).
 
 El PDF trae el inventario (cada proceso con sus inspecciones, hallazgos y evidencias) **más las fotos de cada inspección con su sello** (fecha y hora, ubicación, sello del servidor y hash SHA-256) y, al final, los **paneles del dibujo de daños**
 con la imagen del panel y cada zona con hallazgos resaltada y marcada con **cuántos hallazgos tiene**; las zonas sin dibujo en los paneles (el frente, las llantas) se listan aparte. Un vehículo dado de baja lo dice. Un PDF lleva hasta **60 fotos**
-(primero las de los hallazgos): si hay más, el PDF avisa cuántas dejó fuera. Lo ve quien ve el inventario (el conductor, sin los hallazgos que no registró).
+(primero las de los hallazgos): si hay más, el PDF avisa cuántas dejó fuera. Lo ve quien ve el inventario.
 
 ---
 
@@ -742,7 +742,7 @@ Se aplica a:
 | `POST /api/inspecciones` | `403` si la etapa es de otro viaje |
 | `GET /api/sofasa/ordenes` | solo las órdenes vinculadas a sus viajes |
 
-Los reportes (`/api/patrones`, `/api/metricas/rechazo`) son agregados y no se filtran. La visibilidad por **cliente** está hoy en los **viajes**: el listado y el detalle
+Los reportes (`/api/reportes/*`, `/api/metricas/rechazo`) son agregados y no se filtran. La visibilidad por **cliente** está hoy en los **viajes**: el listado y el detalle
 (`GET /api/viajes`, `GET /api/viajes/{id}`) muestran a quien no es super administrador solo los viajes y los VIN de su cliente (ver «Clientes del viaje»). El resto de recursos
 (vehículos, inspecciones, órdenes) aún no se filtra por cliente.
 
@@ -771,8 +771,8 @@ Las mismas reglas valen para quien haga la inspección: cuando el cargue no tien
 Campo. `201` con la inspección. El usuario sale del token (no se envía) y **la placa, el tráiler y el conductor salen del viaje de la etapa**: ya no se piden como texto.
 Inspector y conductor reciben `403` si la etapa es de un viaje que no es suyo; un viaje finalizado o cancelado responde `409`; una etapa inexistente, `404`.
 
-**El conductor no crea la salida de un Cargue con personal de apoyo.** Si la etapa es el Cargue y tiene `con_personal_apoyo: true`, la salida solo la crea el inspector: el conductor recibe `403` con «Este cargue tiene personal de apoyo: el conductor solo firma el recibo».
-Con `con_personal_apoyo: false`, y en Transporte y Descargue, el conductor sí la crea. La regla es de la salida del Cargue; la llegada y el resto no cambian.
+**El conductor no crea la salida de un Cargue con personal de apoyo… salvo que el inspector no esté.** Si la etapa es el Cargue y tiene `con_personal_apoyo: true`, la salida la crea el inspector: el conductor recibe `403` con «Este cargue tiene personal de apoyo: el conductor solo firma el recibo».
+Con `con_personal_apoyo: false`, y en Transporte y Descargue, el conductor sí la crea. La regla es de la salida del Cargue; la llegada y el resto no cambian. La excepción «No hay inspector» está en [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso) (decisión del equipo, pendiente de confirmar por el negocio, P-073).
 
 **La salida exige la etapa anterior terminada.** Si el VIN tiene una etapa anterior en el viaje (por su `orden`) y esa etapa no tiene su **llegada cerrada**, o tiene una
 **transferencia sin tipo de cierre**, la salida responde `409` con `code: "ETAPA_PREVIA_SIN_CIERRE"` y `details` con `motivo` (`etapa_previa_sin_cierre` si falta cerrar la llegada,
@@ -795,19 +795,61 @@ cambiarla, se corrige).
 | `lat` / `lng` | no (sí para cerrar en Transporte) | −90 a 90 / −180 a 180 |
 | `estado` | no | si se envía, solo `borrador`; **no puede crearse cerrada** |
 | `notas` | no | máximo 1000 caracteres |
+| `motivo_sin_inspector` | solo en la excepción «No hay inspector» | un código **activo** de `motivos-sin-inspector`; en cualquier otro caso `400` «Campo no admitido» |
+| `motivo_sin_inspector_texto` | solo si el motivo lo pide (`requiere_texto`) | de 1 a 300 caracteres; con un motivo que no lo pide, `400` |
 
 ```json
 {
   "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "salida", "fecha": "…", "lat": 6.2442, "lng": -75.5812,
   "estado": "borrador", "conductor_nombre": "Juan", "placa": "ABC123", "trailer": "T-01", "notas": "…",
   "created_at": "…", "updated_at": "…",
-  "iniciada_at": "…", "cerrada_at": null, "version": 1, "corrige_inspeccion_id": null, "momento_nombre": "Inspección de salida"
+  "iniciada_at": "…", "cerrada_at": null, "version": 1, "corrige_inspeccion_id": null, "momento_nombre": "Inspección de salida",
+  "motivo_sin_inspector": null, "novedades_proceso": []
 }
 ```
 
 `conductor_nombre`, `placa` y `trailer` de la respuesta son los del viaje (en los informes anteriores a los viajes, lo que se capturó a mano). `iniciada_at` y `cerrada_at`
 son la hora del servidor al crear y al cerrar (`cerrada_at` es `null` en borrador). `version` es 1 en la original y 2, 3… en las correcciones, que traen en
-`corrige_inspeccion_id` la versión que corrigen.
+`corrige_inspeccion_id` la versión que corrigen. `motivo_sin_inspector` y `novedades_proceso` son los de la excepción «No hay inspector» (`null` y `[]` en el resto).
+
+### Excepción «No hay inspector» y novedades de proceso
+
+Si el inspector previsto no está en el Cargue de una unidad con `con_personal_apoyo: true`, el **conductor del viaje** crea la salida con `motivo_sin_inspector`:
+
+```json
+{ "etapa_id": "uuid", "momento": "salida", "fecha": "2026-10-23T08:30:00-05:00", "lat": 6.2442, "lng": -75.5812, "motivo_sin_inspector": "otro", "motivo_sin_inspector_texto": "El inspector se enfermó" }
+```
+
+| Caso | Respuesta |
+|---|---|
+| conductor del viaje, salida del Cargue con apoyo, motivo válido (y su texto si lo pide) | `201` con la inspección en borrador |
+| el mismo caso **sin motivo** | `403` con el mensaje de siempre |
+| motivo inexistente o inactivo; texto que falta cuando el motivo lo pide, o que sobra cuando no lo pide; texto de más de 300 caracteres | `400` con `details.fieldErrors` (`motivo_sin_inspector` o `motivo_sin_inspector_texto`) |
+| motivo en cualquier otra salida, en una llegada, en otra etapa, en un Cargue sin apoyo o de un inspector o administrador | `400` «Campo no admitido» |
+| conductor de otro viaje | `403` |
+| el inspector ya creó esa salida | `409`, como hoy |
+
+La etapa **conserva** `con_personal_apoyo: true` y la inspección sigue las reglas de la salida sin apoyo (las 7 vistas con sello, hallazgos del conductor sin nivel V). Al crearla, en la misma confirmación:
+
+- la inspección guarda `motivo_sin_inspector` y su texto (los conserva también la versión que la corrija);
+- se crea la **novedad de proceso** `cargue_sin_inspector` con el motivo, quién la registró y la `fecha`, `lat` y `lng` **del cuerpo** (los del momento en que el conductor eligió el motivo, aunque la envíe después por falta de señal);
+- se crea la notificación `novedad_proceso` (urgencia `alta`, por bandeja y push) para los `coordinador_calidad` y `admin` activos del **cliente del vehículo**, nunca de otro cliente; un fallo del push no deshace nada;
+- queda en la auditoría: `inspeccion.crear` (con el motivo) y `novedad_proceso.crear` (entidad `novedades_proceso`).
+
+Una novedad de proceso **no es un hallazgo**: no tiene zona, clase ni nivel y no cuenta en los patrones, el mapa de calor ni la tasa de rechazo.
+
+`InspeccionDto`, el informe (`GET /api/inspecciones/{id}`) y cada inspección del inventario traen:
+
+```json
+{
+  "motivo_sin_inspector": { "codigo": "otro", "nombre": "Otro", "texto": "El inspector se enfermó" },
+  "novedades_proceso": [
+    { "tipo": "cargue_sin_inspector", "motivo_codigo": "otro", "motivo": "Otro", "texto": "El inspector se enfermó", "usuario_nombre": "Carlos Gómez", "fecha": "2026-10-23T08:30:00-05:00" }
+  ]
+}
+```
+
+`motivo_sin_inspector` es `null` y `novedades_proceso` es `[]` en las demás inspecciones. `motivo` es el nombre del motivo y `motivo_codigo` su código. Las novedades se listan de la más antigua a la más reciente.
 
 ### `POST /api/inspecciones/{id}/corregir`
 Campo (quien participa en el viaje, o un administrador). Corrige una inspección **cerrada**: crea la **versión siguiente** (en `borrador` y vacía: se vuelven a tomar las fotos)
@@ -846,7 +888,7 @@ Autenticado. El **informe de la inspección en PDF** (`Content-Type: application
 - las **notas aclaratorias** de la inspección y el **historial de seguimiento** de cada hallazgo (con la foto del sello de quien valida).
 
 Las imágenes salen del almacén; una foto cuyo archivo ya no está se indica en su lugar. Lleva hasta **60 fotos** (primero las de los hallazgos): si hay más, el PDF avisa cuántas dejó fuera y se ven en el informe. Lo ve quien puede ver el informe:
-`403` si es de otro cliente o de un viaje ajeno (inspector y conductor), y el conductor lo recibe sin los hallazgos que no registró; `404` si no existe. Reemplaza al PDF de texto plano.
+`403` si es de otro cliente o de un viaje ajeno (inspector y conductor), y el conductor lo recibe con los hallazgos en lectura (sin nivel, seguimiento ni historial); `404` si no existe. Reemplaza al PDF de texto plano.
 
 ### `GET /api/inspecciones/{id}`
 Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de la inspección más el contexto y sus partes. Inspector y conductor reciben `403` si el informe es de un viaje que no es suyo.
@@ -860,7 +902,8 @@ Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de
   "hallazgos": [ /* HallazgoDto */ ],
   "evidencias": [ /* EvidenciaDto, cada una con su propio sello */ ],
   "transferencia": { /* TransferenciaDetalleDto o null */ },
-  "iniciada_at": "…", "cerrada_at": "…", "version": 1, "corrige_inspeccion_id": null, "momento_nombre": "Inspección de salida"
+  "iniciada_at": "…", "cerrada_at": "…", "version": 1, "corrige_inspeccion_id": null, "momento_nombre": "Inspección de salida",
+  "notas_aclaratorias": [], "motivo_sin_inspector": null, "novedades_proceso": []
 }
 ```
 
@@ -922,14 +965,14 @@ Campos del `HallazgoDto`:
 | `nota` | texto libre, máximo 500 |
 | `es_preexistente`, `hallazgo_origen_id`, `confirmado_por` | si el daño ya existía, el hallazgo previo del VIN que ya lo tenía y quién lo confirmó |
 | `estado_seguimiento` | `pendiente` (al crearse), `validado`, `rechazado`, `recuperado` o `derogado`; lo cambia `POST /api/hallazgos/{id}/seguimiento` |
-| `evidencia_completa`, `evidencia_faltante` | `evidencia_faltante` lista lo que impide la evidencia completa (`foto_hallazgo`, `transferencia_sin_cierre`, `transferencia_no_firma`); ver «Seguimiento del hallazgo» |
+| `evidencia_completa`, `evidencia_faltante` | `evidencia_faltante` lista lo que impide la evidencia completa (`foto_hallazgo`, `transferencia_sin_cierre`, `transferencia_no_firma`, `transferencia_sin_entrega`); ver «Seguimiento del hallazgo» |
 | `revisado_por`, `revisado_at` | quién revisó el hallazgo y cuándo; `null` mientras no se revise |
 | `parte_vehiculo`, `coords_diagrama` | **solo en los hallazgos históricos** (anteriores a este modelo): la parte en texto y el punto sobre la imagen anterior. En los nuevos son `null` |
 
 Los hallazgos anteriores se ubicaron por el texto de su parte solo cuando la equivalencia era segura (`Fachada delantera`, `Parachoque delantero` y las llantas); los demás tienen `zona` con la parte escrita y `cuadrante_numero`, `lado` y `zona_provisional` en `null` hasta que se ubiquen a mano.
 
 ### `GET /api/inspecciones/{id}/hallazgos-previos`
-Solo `inspector`, `admin` y `super_admin` (`403` al conductor). El inspector solo la pide de inspecciones de **sus viajes** (`403` si es de otro); `404` si la inspección no existe.
+`inspector`, `coordinador_calidad`, `admin` y `super_admin` (`403` al conductor y al comercial). El inspector solo la pide de inspecciones de **sus viajes** y quien se limita a su cliente (el `coordinador_calidad` y el `admin`), de VIN de **su cliente** (`403` si es de otro); `404` si la inspección no existe. El coordinador la usa para proponer el preexistente al revisar a distancia.
 
 Devuelve los hallazgos de todas las **inspecciones cerradas anteriores del mismo VIN**: las etapas anteriores del mismo viaje y los viajes anteriores, **incluido uno del que la unidad «no salió»**. Es una lista de `HallazgoDto`
 (sin `evidencia`) ordenada del cierre más reciente al más antiguo, y cada elemento agrega el contexto de dónde salió:
@@ -946,7 +989,7 @@ No cuenta lo que aún no se cerró, ni las inspecciones de otro VIN, ni la inspe
 (la URL firmada llegará con la tarea de las fotos privadas). Sin hallazgos previos, `[]`.
 
 **La propuesta de preexistente la hace el cliente.** La app descarga esta lista y, al registrar un hallazgo, la compara por **zona (lado + número, o zona provisional) y clase**: si hay uno igual, lo propone como preexistente y el inspector lo confirma
-(`es_preexistente: true` con `hallazgo_origen_id` de esa lista) o lo corrige (queda nuevo). Funciona sin señal con la lista ya descargada; un hallazgo en `derecho 7` no se propone como preexistente de uno en `izquierdo 7`.
+(`es_preexistente: true` con `hallazgo_origen_id` de esa lista) o lo corrige (queda nuevo). En una revisión de un hallazgo del conductor, `POST /api/hallazgos/{id}/revision` admite además `es_preexistente` y `hallazgo_origen_id` con la misma regla. Funciona sin señal con la lista ya descargada; un hallazgo en `derecho 7` no se propone como preexistente de uno en `izquierdo 7`.
 Al crear el hallazgo el servidor valida que el origen sea de esa lista, con la misma zona y clase.
 
 ### `POST /api/inspecciones/{id}/evidencias`
@@ -1042,13 +1085,16 @@ La misma fila más `seguimiento` (el historial, como en `GET /api/hallazgos/{id}
 ## Revisión de la novedad
 
 La novedad que registra el conductor nace sin zona, clase ni nivel V: un inspector la revisa, la ubica y le asigna el nivel, que el conductor nunca asigna. A partir de la revisión el hallazgo entra al seguimiento y a los patrones. También se revisan
-así los hallazgos que el conductor registra en la salida de un Cargue sin personal de apoyo (que tampoco traen nivel).
+así los hallazgos que el conductor registra en la salida de un Cargue sin personal de apoyo, en la de un Cargue con apoyo que él hizo con la excepción «No hay inspector» y en la **llegada del Descargue que hace él** sin inspector en destino (que tampoco traen nivel).
+Al revisar se puede confirmar que el daño **ya estaba registrado** (`es_preexistente` y `hallazgo_origen_id`); si el conductor lo anotó otra vez en la llegada, no queda como un daño del transporte.
 
 ### `POST /api/hallazgos/{id}/revision`
 
 ```json
 { "cuadrante_numero": 7, "lado": "izquierdo", "clase_dano": "golpe", "nivel_severidad": "v1", "tamano_dano": "5_10cm", "nota": "Abolladura sobre la puerta" }
 ```
+
+Con «ya estaba registrado»: `{ …, "es_preexistente": true, "hallazgo_origen_id": "uuid" }`.
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
@@ -1057,9 +1103,10 @@ así los hallazgos que el conductor registra en la salida de un Cargue sin perso
 | `nivel_severidad` | sí | un código **activo** de `niveles-severidad` (`v1_plus`, `v1`, `v2`, `v3`) |
 | `tamano_dano` | no | corrige el que eligió el conductor (un código activo de `tamanos-dano`); sin él se conserva el del conductor |
 | `nota` | no | máximo 500 caracteres |
+| `es_preexistente` + `hallazgo_origen_id` | no | la misma validación de cuando se crea un hallazgo (S6-HU-01.3): `es_preexistente: true` exige `hallazgo_origen_id`, y `hallazgo_origen_id` solo se envía con `es_preexistente: true` (`400` si no). El origen debe ser un hallazgo de una **inspección cerrada anterior del mismo VIN** (cerrada antes de que empezara la que se revisa) con **la misma zona (lado + número, o zona provisional) y la misma clase** que se asignan en esa revisión; si no, `400` con `details.fieldErrors.hallazgo_origen_id` |
 
 Responde `200` con el `HallazgoDto` ya completo: `revisado_por` y `revisado_at` quedan guardados y `estado_seguimiento` sigue `pendiente`. Queda una fila `revision` en el historial del hallazgo (`GET /api/hallazgos/{id}/seguimiento`) con quién la hizo, su `nota` y en
-`detalle` lo asignado: `zona_id`, `cuadrante_numero`, `lado`, `zona_provisional`, `clase_dano`, `nivel_severidad`, `tamano_dano` y `tamano_dano_anterior` (solo si se corrigió el tamaño). Queda en la auditoría (`hallazgo.revision`). Sin la revisión, el seguimiento del hallazgo responde `409`.
+`detalle` lo asignado: `zona_id`, `cuadrante_numero`, `lado`, `zona_provisional`, `clase_dano`, `nivel_severidad`, `tamano_dano` y `tamano_dano_anterior` (solo si se corrigió el tamaño); si se confirmó como ya registrado, también `es_preexistente: true`, `hallazgo_origen_id` y `confirmado_por`. El hallazgo queda con `es_preexistente: true`, su `hallazgo_origen_id` y `confirmado_por` (quien revisó) y **no cuenta como daño del transporte**. Queda en la auditoría (`hallazgo.revision`). Sin la revisión, el seguimiento del hallazgo responde `409`.
 
 **Quién revisa.**
 
@@ -1067,7 +1114,7 @@ Responde `200` con el `HallazgoDto` ya completo: `revisado_por` y `revisado_at` 
 |---|---|
 | `inspector` | hallazgos de un VIN que está en alguno de sus viajes (`403` si no) |
 | `admin` y `super_admin` | los de su cliente (el `super_admin`, los de cualquiera) |
-| `coordinador_calidad` | **solo** los hallazgos del conductor de la salida de un Cargue **sin personal de apoyo** (`403` en cualquier otro caso): los revisa a distancia con las fotos y les asigna el nivel V antes de que salga el viaje, de modo que un V1+ todavía se puede recuperar o marcar «no sale». Propuesta pendiente de confirmar por el negocio |
+| `coordinador_calidad` | **solo** los hallazgos del conductor de la salida de un Cargue **sin personal de apoyo**, de la salida de un Cargue con apoyo que el conductor hizo con la excepción «No hay inspector» o de la **llegada del Descargue que hizo el conductor** (`403` en cualquier otro caso): los revisa a distancia con las fotos y les asigna el nivel V antes de que salga el viaje, de modo que un V1+ todavía se puede recuperar o marcar «no sale». Propuesta pendiente de confirmar por el negocio |
 | los demás roles | `403` |
 
 Quien se limita a su cliente recibe `403` con un hallazgo de otro cliente.
@@ -1119,7 +1166,7 @@ informe de la inspección. `POST /api/uploads` admite a quien tiene `gestionar_s
 | Campo del `HallazgoDto` | Significado |
 |---|---|
 | `evidencia_completa` | `true` si el hallazgo tiene su **foto propia** (no cuenta la foto del sello) y la transferencia de su inspección se cerró **firmada** o **con reservas** (en las dos firman las dos partes). Una transferencia cerrada como «no firma» no cuenta (propuesta pendiente de confirmar por el negocio) |
-| `evidencia_faltante` | lo que falta: `foto_hallazgo`, `transferencia_sin_cierre` (la transferencia no existe o sigue abierta) y `transferencia_no_firma` |
+| `evidencia_faltante` | lo que falta: `foto_hallazgo`, `transferencia_sin_cierre` (la transferencia no existe o sigue abierta), `transferencia_no_firma` y `transferencia_sin_entrega` (solo firmó una parte, como en la no firma) |
 
 Se calcula al leer el hallazgo, se guarda al cambiar su seguimiento y se **recalcula cuando se cierra la transferencia** de su inspección. Un hallazgo rechazado sin evidencia completa no cuenta en la tasa de rechazo mientras no la tenga.
 
@@ -1231,13 +1278,15 @@ Cada VIN de `ViajeDto.vehiculos` agrega `estado_transporte` y `novedades`:
 
 `novedades` es el número de novedades de la unidad. La llegada de Transporte cerrada cuenta como etapa completa de la unidad.
 
-### Lo que el conductor no ve
+### Lo que el conductor ve y lo que no ve
 
-El conductor no ve los hallazgos que registraron otros (el inspector, por ejemplo):
+El conductor ve, **en modo lectura**, los hallazgos de las inspecciones de **sus viajes** (también los que registró el inspector), para revisar lo registrado y, en el cargue con apoyo, firmar que recibe las unidades en ese estado (decisión del equipo a partir de la validación del conductor, secciones 2.1 y 2.2).
+Nada de otros viajes del mismo VIN: el inventario solo trae las etapas de sus viajes y el informe de un viaje ajeno responde `403`.
 
 | Endpoint | Para el conductor |
 |---|---|
-| `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` | en toda inspección que **no creó** llegan `hallazgos: []` y sin las fotos de hallazgos ni las del sello de quien los valida; las inspecciones que sí creó (sus novedades) llegan completas |
+| `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` | los hallazgos de las inspecciones de **sus viajes**, con `zona` (texto y `cuadrante_numero` + `lado`, o `zona_provisional`), `clase_dano`, `tamano_dano`, `tipo_novedad`, `origen`, `es_preexistente` y `created_at`, y su foto (`evidencias` con `hallazgo_id` y su URL firmada). Llegan en `null`: `nivel_severidad`, `nivel_nombre`, `nivel_accion`, `estado_seguimiento`, `evidencia_completa`, `evidencia_faltante`, `revisado_por`, `revisado_at`, `nota`, `hallazgo_origen_id` y `confirmado_por`; y sin la foto del sello de quien valida (`es_sello: true`) |
+| `GET /api/inspecciones/{id}/pdf` | el PDF lleva esos hallazgos sin nivel, sin seguimiento, sin historial y sin notas aclaratorias de hallazgos |
 | `GET /api/inspecciones` | el listado no trae hallazgos |
 | `GET /api/inspecciones/{id}/hallazgos-previos`, `GET /api/hallazgos` y `GET /api/hallazgos/{id}` | `403` |
 
@@ -1245,7 +1294,7 @@ El conductor no ve los hallazgos que registraron otros (el inspector, por ejempl
 
 Las alertas y los avisos llegan a una **bandeja** (el portal y la app) y, las urgentes, también por **push** al celular. La capacidad `ver_alertas` de `GET /api/auth/me` la tienen `coordinador_calidad`, `admin` y `super_admin` (las alertas preventivas
 de su cliente), `inspector` (solo los avisos operativos dirigidos a él: `captura_incompleta` de una inspección que inició y `transferencia_pendiente` de su firma) y `conductor` (solo `respuesta_conductor`, `captura_incompleta` de una inspección que
-él inició en un cargue sin personal de apoyo y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
+él inició en un cargue sin personal de apoyo y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
 Todo lo que se hace aquí queda en la auditoría.
 
 `NotificacionDto`:
@@ -1404,7 +1453,7 @@ Toda acción de escritura (y el inicio de sesión) queda en un registro **que na
 
 Acciones registradas: inicio de sesión, PIN errado y bloqueo (`auth.*`); usuarios (`usuario.*`); catálogos (`catalogo.{nombre}.*`); vehículos (`vehiculos.cargar`, `vehiculo.baja`); viajes (`viaje.*`, `viajes.cargar`);
 inspecciones (`inspeccion.crear`, `inspeccion.cerrar`, `inspeccion.corregir`, `llegada.registrar`); hallazgos y novedades (`hallazgo.crear`, `novedad.crear`, `hallazgo.revision`, `hallazgo.seguimiento`); evidencias (`evidencia.crear`);
-transferencias (`transferencia.firmar`, `transferencia.reservas`, `transferencia.no_firma`); notas aclaratorias (`nota.crear`); notificaciones (`notificacion.leer`, `notificacion.responder`); dispositivos y la ingesta Sofasa.
+transferencias (`transferencia.firmar`, `transferencia.reservas`, `transferencia.no_firma`, `transferencia.sin_entrega`); notas aclaratorias (`nota.crear`); notificaciones (`notificacion.leer`, `notificacion.responder`); dispositivos y la ingesta Sofasa.
 
 ### `GET /api/auditoria`
 Capacidad `ver_auditoria` de `GET /api/auth/me`: la tienen `admin` (ve la de **su cliente**) y `super_admin` (ve la de todos); cualquier otro rol recibe `403`. Una página, de la más reciente a la más antigua.
@@ -1448,6 +1497,7 @@ identidad sale del token y **nadie firma por otro** (`403`). Cada firma guarda s
 | `firmada` | ambas partes firman |
 | `con_reservas` | ambas firman y quien recibe dejó sus observaciones (`reservas`) |
 | `no_firma` | una parte se negó a firmar: se deja la constancia (motivo, testigo con usuario y foto) |
+| `recibo_sin_entrega` | el conductor hizo la salida del Cargue y nadie de Botero Soto firma la entrega: solo firma quien recibe (ver `POST …/transferencia/sin-entrega`) |
 | `null` | abierta: falta una firma (o ninguna se ha enviado) |
 
 La primera llamada (sea cual sea la firma) crea la transferencia y exige `entrega_usuario_id` y `recibe_usuario_id`; en las siguientes pueden omitirse y, si se envían, deben ser los mismos
@@ -1501,6 +1551,30 @@ Campo. **Constancia de no firma**: una parte se negó a firmar y la **otra parte
 
 La foto se guarda como una evidencia marcada `es_constancia: true`, que **se admite aunque la inspección ya esté cerrada** y no cuenta como foto de una vista ni de un hallazgo.
 
+### `POST /api/inspecciones/{id}/transferencia/sin-entrega`
+Campo, **solo el conductor del viaje** (decisión del equipo, pendiente de confirmar por el negocio, P-080). Cuando el conductor hizo la salida del Cargue (sin personal de apoyo, o con la excepción «No hay inspector») nadie de Botero Soto firma la entrega: el conductor cierra la transferencia solo con su firma. `201`.
+
+```json
+{ "firma": "<trazo SVG o ruta>" }
+```
+
+| Caso | Respuesta |
+|---|---|
+| el conductor del viaje, en la salida del Cargue que él hizo | `201`: la transferencia queda `recibo_sin_entrega`, con la firma de quien recibe, su fecha e IP, **sin** `entrega_usuario_id`, firma, fecha ni IP de entrega |
+| cualquier otro usuario (otro conductor, un inspector, un administrador, el coordinador) | `403` |
+| sin `firma` | `400` |
+| la etapa no es el Cargue o no es su salida; la salida la hizo el inspector (u otro usuario) | `409` |
+| la transferencia ya tiene tipo de cierre, o quien entrega ya firmó | `409` |
+| la inspección no existe | `404` |
+
+Si la transferencia seguía **abierta** (por ejemplo, quien recibe ya había firmado su parte y quien entrega no), se cierra sin entrega: quien entrega deja de figurar y las reservas que hubiera se descartan. Al cerrarse:
+
+- **desbloquea** la salida de la etapa siguiente, como los demás cierres;
+- los hallazgos de esa inspección quedan con `evidencia_completa: false` y `evidencia_faltante: ["transferencia_sin_entrega"]` (solo firmó una parte, como en la no firma): se recalcula como en los otros cierres y no cuentan en la tasa de rechazo;
+- si la salida se hizo con la excepción «No hay inspector», se crea además la **novedad de proceso** `recibo_sin_entrega` (con el motivo de la inspección, sin nueva notificación); en un cargue sin apoyo planeado **no** se crea ninguna;
+- queda en la auditoría (`transferencia.sin_entrega` y, si hay novedad, `novedad_proceso.crear`);
+- la constancia en PDF y el PDF del informe muestran «recibo sin entrega» y «Entrega: no hubo entrega»; el informe y el inventario traen `tipo_cierre: "recibo_sin_entrega"` y `entrega_usuario_id: null`.
+
 ### `GET /api/inspecciones/{id}/transferencia/constancia/pdf`
 Autenticado. La **constancia de la transferencia en PDF** (`application/pdf`): datos de la unidad, tipo de cierre, las dos firmas con su fecha e IP, las reservas o el motivo de la no firma,
 el testigo y la foto de la constancia. Inspector y conductor solo la descargan de sus viajes (`403` si es de otro). `404` si la inspección no existe o no tiene transferencia.
@@ -1514,6 +1588,8 @@ el testigo y la foto de la constancia. Inspector y conductor solo la descargan d
   "tipo_cierre": null, "entrega_firmada_at": "…", "recibe_firmada_at": null,
   "reservas_texto": null, "no_firma_parte": null, "motivo_no_firma": null, "testigo_usuario_id": null, "evidencia_constancia_id": null }
 ```
+
+`entrega_usuario_id` es `null` solo en el cierre `recibo_sin_entrega`.
 
 `firmada` es `true` cuando están las dos firmas (también si fue con reservas); `firmada_at` se sella cuando está la segunda. En el detalle del informe (`GET /api/inspecciones/{id}`) la
 transferencia llega como `TransferenciaDetalleDto`: los mismos campos más `entrega_nombre`, `recibe_nombre`, `firma_entrega`, `firma_recibe`, `entrega_firma_ip`, `recibe_firma_ip` y `testigo_nombre`.
@@ -1541,6 +1617,7 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | `cuadrante-regiones` | La **región tocable** de cada zona numerada en cada panel (una fila por aparición). Las zonas provisionales no tienen región | `id`, `panel` (código), `cuadrante_id`, `numero`, `nombre`, `lado` (`izquierdo`, `derecho` o `null` del 26 en adelante), `geometria` |
 | `clientes` | Las empresas a las que pertenecen los usuarios y los vehículos (hoy `sofasa`). El primero activo por `orden` es el cliente por defecto de lo que se crea sin cliente explícito | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `estados-sofasa` | Los estados de las órdenes Sofasa: el `codigo` es el `status_code` **real** de la orden y el `nombre`, su etiqueta (ver «Estados Sofasa» abajo). Empieza con los `status_code` que ya tienen las órdenes | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `motivos-sin-inspector` | Los motivos por los que no está el inspector previsto en un cargue con personal de apoyo: `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto) | `id`, `codigo`, `nombre`, `orden`, `activo`, `requiere_texto` |
 
 **Estados Sofasa (`estados-sofasa`).** `GET /api/sofasa/ordenes` sigue devolviendo `status_code` **sin traducir**; el portal lo traduce con este catálogo (`items.find(i => i.codigo === orden.status_code)?.nombre`; si el estado no está, muestra el código). A diferencia de los demás
 catálogos, su `codigo` **no se limita a minúsculas y `_`**: es el texto que trae la orden del origen, y se guarda tal cual (recortado, con sus mayúsculas, hasta 100 caracteres y sin saltos de línea); es único sin distinguir mayúsculas, así que `ENTREGADA` y `entregada` son el mismo. Las demás
@@ -1566,6 +1643,7 @@ Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inacti
       { "id": "uuid", "codigo": null, "tipo_vehiculo": null, "numero": 1, "nombre": "Puerta delantera: parte alta", "orden": 1, "activo": true },
       { "id": "uuid", "codigo": "frente", "tipo_vehiculo": null, "numero": null, "nombre": "Frente", "orden": 101, "activo": true }
     ],
+    "motivos-sin-inspector": [ { "id": "uuid", "codigo": "otro", "nombre": "Otro", "orden": 3, "activo": true, "requiere_texto": true } ],
     "paneles-dano": [ { "id": "uuid", "codigo": "costado_izquierdo", "nombre": "Costado izquierdo", "orden": 4, "activo": true, "imagen_url": "/api/catalogos/paneles-dano/costado_izquierdo/imagen?v=3f2b…c1" } ],
     "cuadrante-regiones": [ { "id": "uuid", "panel": "costado_izquierdo", "cuadrante_id": "uuid", "numero": 1, "nombre": "Puerta delantera: parte alta", "lado": "izquierdo", "geometria": { "puntos": [ [0.34, 0.30], [0.59, 0.30], [0.59, 0.48] ] } } ],
     "puntos-custodia": [], "tipos-unidad": [], "tamanos-dano": [], "clientes": []
@@ -1575,7 +1653,10 @@ Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inacti
 
 ### `GET /api/catalogos/{nombre}`
 Un solo catálogo con **su propia versión**: `{ "version": "…", "items": [ … ] }`. `404` si el nombre no existe (el mensaje lista los
-disponibles). `cuadrante-vistas` (el catálogo anterior de polígonos por vista de foto) **ya no existe**: responde `404` con «El catálogo cuadrante-vistas fue reemplazado por cuadrante-regiones».
+disponibles). `cuadrante-vistas` (el catálogo anterior de polígonos por vista de foto) **ya no existe**: responde `404` como cualquier nombre desconocido (lo reemplazan `paneles-dano` y `cuadrante-regiones`).
+
+`motivos-sin-inspector` trae los motivos por los que no está el inspector: `inspector_no_llego` «El inspector no llegó», `inspector_no_disponible` «El inspector no está disponible» y `otro` «Otro» (`requiere_texto: true`: quien lo elige escribe cuál es). Los valores los confirma Calidad y los administran
+`admin`, `super_admin` y `coordinador_calidad` como los demás catálogos; el `codigo` no cambia y un motivo que alguna inspección usa no se borra (`409`): se inactiva.
 
 ### Versión y copia sin conexión
 Cada respuesta trae la versión en el encabezado `ETag` (por ejemplo `"9f2c4a7b1d3e5f60"`) y también en el cuerpo. La versión es una
@@ -1837,9 +1918,23 @@ fila con la clave en `null` (unidades sin trailer, sin conductor o sin tipo de u
 }
 ```
 
+### `GET /api/reportes/novedades-proceso`
+Las **novedades de proceso** del periodo (cargue sin inspector y recibo sin entrega; no son hallazgos y no cuentan en los patrones ni en la tasa de rechazo): el total y su conteo por tipo, por punto de custodia (el de la etapa), por cliente (el del vehículo) y por mes (`AAAA-MM`, hora de Colombia). Usa los mismos filtros que los demás reportes
+(`desde` y `hasta` sobre la fecha de la novedad, `operacion`, `cliente_id`, `punto_id` —origen o destino del viaje—, `marca`, `trailer` y `proceso`); el filtro `nivel` no aplica. Ordenado de mayor a menor.
+
+```json
+{
+  "total": 6,
+  "por_tipo": [ { "tipo": "cargue_sin_inspector", "total": 5 }, { "tipo": "recibo_sin_entrega", "total": 1 } ],
+  "por_punto": [ { "punto_id": "uuid", "punto_nombre": "CEDI 1", "total": 6 } ],
+  "por_cliente": [ { "cliente_id": "uuid", "cliente_nombre": "Sofasa", "total": 6 } ],
+  "por_mes": [ { "mes": "2026-09", "total": 2 }, { "mes": "2026-10", "total": 4 } ]
+}
+```
+
 ### `GET /api/reportes/patrones`
 El mapa de calor: los hallazgos por proceso, por **zona (lado + número de cuadrante, o la zona provisional)** y por zona y proceso, y por nivel, clase y tamaño. `supera_umbral` es `true` si los hallazgos del grupo **en la ventana del umbral** (los `ventana_dias`
-días que terminan en `hasta`, con los mismos filtros) llegan a `umbral.cantidad`; el umbral sale de los parámetros `umbral_patron_cantidad` y `umbral_patron_ventana_dias`. Absorbe a `GET /api/patrones` y `GET /api/patrones/analisis`.
+días que terminan en `hasta`, con los mismos filtros) llegan a `umbral.cantidad`; el umbral sale de los parámetros `umbral_patron_cantidad` y `umbral_patron_ventana_dias`. Reemplaza a `GET /api/patrones` y `GET /api/patrones/analisis`, que se retiraron en la versión 2.1.0 (responden `404`).
 
 ```json
 {
@@ -1882,39 +1977,9 @@ por operación y por cliente) y con la mediana del tiempo de captura de `GET /ap
 
 El correo sale por el servicio interno MailSender API, que se configura por variables de entorno (`Correo__Url` y `Correo__Remitente`; ver [docs/configuracion.md](docs/configuracion.md)). La hora y los destinatarios se cambian con `PUT /api/parametros/{clave}` y se aplican en un minuto.
 
-### Rutas obsoletas
+### Reporte anterior (camelCase)
 
-`GET /api/patrones` y `GET /api/patrones/analisis` **se retirarán**: responden como antes pero con los encabezados `Deprecation: true` y `Link: </api/reportes/patrones>; rel="successor-version"` (y `deprecated` en el contrato OpenAPI). Use `GET /api/reportes/patrones`.
-
-### Reportes anteriores (camelCase)
-
-Autenticados. Todos sus campos van en `camelCase`.
-
-### `GET /api/patrones` (obsoleto)
-Hallazgos de unidades movilizadas por proceso y zona (mapa de calor). **Obsoleto:** use `GET /api/reportes/patrones`.
-
-```json
-{
-  "total": 40,
-  "porProceso": [ { "proceso": "cargue", "total": 12 } ],
-  "porZona": [ { "parte_vehiculo": "Puerta", "total": 9 } ],
-  "porZonaProceso": [ { "proceso": "cargue", "parte_vehiculo": "Puerta", "total": 4 } ]
-}
-```
-
-Las filas internas conservan `snake_case` (`parte_vehiculo`); lo que va en `camelCase` son las claves de primer nivel.
-`parte_vehiculo` conserva su nombre pero ahora trae el **texto de la zona** del hallazgo («Izquierdo 7 · Puerta delantera», «Frente»); en un hallazgo histórico sin ubicar, la parte que se escribió entonces.
-
-### `GET /api/patrones/analisis` (obsoleto)
-Clases y tamaños de daño, con sugerencias. **Obsoleto:** use `GET /api/reportes/patrones`.
-
-```json
-{
-  "porClase": [ { "clase_dano": "rotura", "total": 7 } ],
-  "porTamano": [ { "tamano_dano": "5_10cm", "total": 5 } ],
-  "sugerencias": [ "…" ]
-}
-```
+Autenticado. Todos sus campos van en `camelCase`.
 
 ### `GET /api/metricas/rechazo`
 Tasa de rechazo (unidades movilizadas con al menos un hallazgo) frente a la línea base.
@@ -1950,7 +2015,7 @@ Un usuario de un cliente **sin cliente asignado** no ve ninguna unidad.
 | `GET /api/inspecciones/{id}`, `GET /api/inspecciones/{id}/pdf`, `GET /api/inspecciones/{id}/hallazgos-previos` y `GET /api/inspecciones/{id}/transferencia/constancia/pdf` | `403` con un informe de un VIN de otro cliente («La inspección es de un VIN de otro cliente») |
 | `GET /api/viajes` y `GET /api/viajes/{id}` | solo los viajes con algún VIN de su cliente, y en el detalle solo esos VIN; `403` con un viaje sin VIN suyos |
 | `GET /api/sofasa/ordenes` | solo las órdenes de VIN de su cliente |
-| `GET /api/patrones`, `/api/patrones/analisis` y `/api/metricas/rechazo` | cuentan solo las unidades de su cliente |
+| `GET /api/reportes/*` y `/api/metricas/rechazo` | cuentan solo las unidades de su cliente |
 | `GET /api/usuarios` | solo los usuarios de su cliente |
 
 Los endpoints de hallazgos, alertas, auditoría y exportaciones que se agreguen después aplican la misma regla: filtran por el cliente de quien consulta y responden `403` con un recurso de otro.

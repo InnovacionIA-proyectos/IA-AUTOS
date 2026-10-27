@@ -158,9 +158,7 @@ public sealed class clsCatalogosService(
     private ICatalogo Buscar(string nombre) =>
         _porNombre.TryGetValue(nombre, out var catalogo)
             ? catalogo
-            : nombre == clsNombresCatalogo.CUADRANTE_VISTAS
-                ? throw new clsEntidadNoEncontradaException("El catálogo cuadrante-vistas fue reemplazado por cuadrante-regiones")
-                : throw new clsEntidadNoEncontradaException($"Catálogo desconocido: {nombre}. Disponibles: {string.Join(", ", _porNombre.Keys.Order())}");
+            : throw new clsEntidadNoEncontradaException($"Catálogo desconocido: {nombre}. Disponibles: {string.Join(", ", _porNombre.Keys.Order())}");
 
     private void Invalidar() => cache.Remove(CLAVE_CACHE);
 

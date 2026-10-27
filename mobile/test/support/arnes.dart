@@ -25,16 +25,36 @@ const sesionPrueba = Sesion(
   usuario: Usuario(id: 'u1', nombre: 'Ana Pérez', email: 'ana@boterosoto.com.co', rol: 'inspector'),
 );
 
+/// Personal de campo que entró con un PIN asignado por un administrador: tiene sesión, pero el resto de la API
+/// le responde 403 hasta que lo cambie.
+const sesionConPinTemporal = Sesion(
+  token: 'jwt-pin',
+  usuario: Usuario(
+    id: 'u9',
+    nombre: 'Luis Gómez',
+    email: '',
+    rol: 'conductor',
+    cedula: '1234567',
+    debeCambiarPin: true,
+  ),
+);
+
 class AlmacenSesionEnMemoria implements AlmacenSesion {
   AlmacenSesionEnMemoria([this.sesion]);
 
   Sesion? sesion;
 
+  /// Keystore no disponible: `guardar` lanza, como puede pasar de verdad en un dispositivo.
+  bool fallaAlGuardar = false;
+
   @override
   Future<Sesion?> leer() async => sesion;
 
   @override
-  Future<void> guardar(Sesion s) async => sesion = s;
+  Future<void> guardar(Sesion s) async {
+    if (fallaAlGuardar) throw Exception('almacén no disponible');
+    sesion = s;
+  }
 
   @override
   Future<void> borrar() async => sesion = null;
@@ -42,13 +62,44 @@ class AlmacenSesionEnMemoria implements AlmacenSesion {
 
 class AuthRepositorioFalso implements AuthRepositorio {
   Object? error;
+  Object? errorCambioPin;
+
+  /// Sesión que devuelve el ingreso con cédula y PIN (por ejemplo, una con `debeCambiarPin`).
+  Sesion? sesionConPin;
+
   final List<(String, String)> intentos = [];
+  final List<(String, String)> cambiosDePin = [];
 
   @override
   Future<Sesion> iniciarSesion(String email, String password) async {
     intentos.add((email, password));
     if (error != null) throw error!;
     return sesionPrueba;
+  }
+
+  @override
+  Future<Sesion> iniciarSesionConPin(String cedula, String pin) async {
+    intentos.add((cedula, pin));
+    if (error != null) throw error!;
+    return sesionConPin ?? sesionPrueba;
+  }
+
+  @override
+  Future<void> cambiarPin(String pinActual, String pinNuevo) async {
+    cambiosDePin.add((pinActual, pinNuevo));
+    if (errorCambioPin != null) throw errorCambioPin!;
+  }
+
+  /// Lo que responde `GET /api/auth/me`. Con `errorCapacidades` se simula que no se pudo pedir.
+  List<String> capacidadesDelPerfil = const [];
+  Object? errorCapacidades;
+  int consultasDePerfil = 0;
+
+  @override
+  Future<List<String>> capacidades() async {
+    consultasDePerfil++;
+    if (errorCapacidades != null) throw errorCapacidades!;
+    return capacidadesDelPerfil;
   }
 }
 
@@ -91,6 +142,11 @@ class InspeccionesRepositorioFalso implements InspeccionesRepositorio {
   }
 }
 
+class DispositivoFalso implements ServicioDispositivo {
+  @override
+  Future<String> id() async => 'equipo-de-prueba';
+}
+
 class UbicacionFalsa implements ServicioUbicacion {
   Posicion? posicion = const Posicion(6.2, -75.5);
   UbicacionNoDisponible? error;
@@ -118,7 +174,8 @@ class Arnes {
         archivos = ArchivosFalsos(const []),
         auth = AuthRepositorioFalso(),
         inspecciones = InspeccionesRepositorioFalso(),
-        ubicacion = UbicacionFalsa();
+        ubicacion = UbicacionFalsa(),
+        dispositivo = DispositivoFalso();
 
   final Entorno entorno;
   final AlmacenSesionEnMemoria almacen;
@@ -129,6 +186,7 @@ class Arnes {
   final AuthRepositorioFalso auth;
   final InspeccionesRepositorioFalso inspecciones;
   final UbicacionFalsa ubicacion;
+  final DispositivoFalso dispositivo;
 
   late final ProcesadorCola procesador = ProcesadorCola(cola: cola, gateway: gateway, red: red, archivos: archivos);
 
@@ -141,6 +199,7 @@ class Arnes {
         procesadorColaProvider.overrideWithValue(procesador),
         inspeccionesRepositorioProvider.overrideWithValue(inspecciones),
         servicioUbicacionProvider.overrideWithValue(ubicacion),
+        servicioDispositivoProvider.overrideWithValue(dispositivo),
       ];
 
   ProviderContainer contenedor() => ProviderContainer(overrides: overrides, retry: (_, _) => null);

@@ -1,26 +1,32 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/tema/tema.dart';
-import '../../vehiculos/domain/etiquetas.dart';
-
-/// Valores de catálogo aceptados por la API (en el mismo orden que la app original).
-const clasesDano = ['deformacion', 'rotura', 'cortado', 'perforacion', 'golpe', 'mancha', 'raya_pintar', 'desconchado', 'particulas', 'faltante'];
-const tamanosDano = ['1_5cm', '5_10cm', '10_20cm', 'mas_20cm', 'requiere_reemplazo', 'mas_10_particulas'];
+import '../../catalogos/domain/catalogos.dart';
 
 /// Pide la clase y el tamaño del daño de la zona elegida. Devuelve null si se cancela.
-Future<({String clase, String tamano})?> pedirDano(BuildContext context, {required String titulo}) {
+///
+/// Las opciones salen de los catálogos descargados (solo las activas, en su orden), nunca de listas fijas: TI y el
+/// coordinador de calidad las administran desde el portal.
+Future<({String clase, String tamano})?> pedirDano(
+  BuildContext context, {
+  required String titulo,
+  required List<ValorCatalogo> clases,
+  required List<ValorCatalogo> tamanos,
+}) {
   return showModalBottomSheet<({String clase, String tamano})>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => _HojaDano(titulo: titulo),
+    builder: (_) => _HojaDano(titulo: titulo, clases: clases, tamanos: tamanos),
   );
 }
 
 class _HojaDano extends StatefulWidget {
-  const _HojaDano({required this.titulo});
+  const _HojaDano({required this.titulo, required this.clases, required this.tamanos});
 
   final String titulo;
+  final List<ValorCatalogo> clases;
+  final List<ValorCatalogo> tamanos;
 
   @override
   State<_HojaDano> createState() => _EstadoHojaDano();
@@ -55,11 +61,11 @@ class _EstadoHojaDano extends State<_HojaDano> {
                         spacing: Espacio.sm,
                         runSpacing: Espacio.sm,
                         children: [
-                          for (final c in clasesDano)
+                          for (final c in widget.clases)
                             ChoiceChip(
-                              label: Text(etiquetar(etiquetaClaseDano, c)),
-                              selected: _clase == c,
-                              onSelected: (_) => setState(() => _clase = c),
+                              label: Text(c.nombre),
+                              selected: _clase == c.codigo,
+                              onSelected: (_) => setState(() => _clase = c.codigo),
                             ),
                         ],
                       ),
@@ -70,11 +76,11 @@ class _EstadoHojaDano extends State<_HojaDano> {
                         spacing: Espacio.sm,
                         runSpacing: Espacio.sm,
                         children: [
-                          for (final t in tamanosDano)
+                          for (final t in widget.tamanos)
                             ChoiceChip(
-                              label: Text(etiquetar(etiquetaTamanoDano, t)),
-                              selected: _tamano == t,
-                              onSelected: (_) => setState(() => _tamano = t),
+                              label: Text(t.nombre),
+                              selected: _tamano == t.codigo,
+                              onSelected: (_) => setState(() => _tamano = t.codigo),
                             ),
                         ],
                       ),

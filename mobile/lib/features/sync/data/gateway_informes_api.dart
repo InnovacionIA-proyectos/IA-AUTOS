@@ -1,4 +1,5 @@
 import '../../../core/http/cliente_api.dart';
+import '../../inspecciones/domain/foto_local.dart';
 import '../../inspecciones/domain/hallazgo_local.dart';
 import '../domain/puertos.dart';
 
@@ -15,9 +16,6 @@ class GatewayInformesApi implements GatewayInformes {
     required String fecha,
     required double lat,
     required double lng,
-    String? conductorNombre,
-    String? placa,
-    String? trailer,
     String? notas,
   }) async {
     // usuario_id lo fija el backend desde el token.
@@ -27,18 +25,15 @@ class GatewayInformesApi implements GatewayInformes {
       'fecha': fecha,
       'lat': lat,
       'lng': lng,
-      'conductor_nombre': conductorNombre,
-      'placa': placa,
-      'trailer': trailer,
       'notas': notas,
     });
     return (r as Map<String, dynamic>)['id'] as String;
   }
 
   @override
-  Future<String> subirImagen(String base64, {String ext = 'jpg'}) async {
-    final r = await _api.post('/api/uploads', cuerpo: {'data': base64, 'ext': ext});
-    return (r as Map<String, dynamic>)['storage_path'] as String;
+  Future<ArchivoSubido> subirImagen(List<int> bytes, {String nombre = 'foto.jpg'}) async {
+    final r = await _api.subirArchivo('/api/uploads', bytes: bytes, nombre: nombre) as Map<String, dynamic>;
+    return ArchivoSubido(storagePath: r['storage_path'] as String, hash: r['hash_sha256'] as String?);
   }
 
   @override
@@ -48,22 +43,49 @@ class GatewayInformesApi implements GatewayInformes {
     required String selloFecha,
     double? selloLat,
     double? selloLng,
+    String? vistaId,
+    String? hallazgoId,
+    double? precision,
+    String? dispositivoId,
+    String? nota,
+    String? hash,
   }) async {
+    // La API exige las diez claves presentes; el valor puede ir nulo (una foto sin GPS, una vista sin nota).
     await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/evidencias', cuerpo: {
+      'hallazgo_id': hallazgoId,
+      'vista_id': vistaId,
       'storage_path': storagePath,
       'sello_fecha': selloFecha,
       'sello_lat': selloLat,
       'sello_lng': selloLng,
+      'precision': precision,
+      'dispositivo_id': dispositivoId,
+      'nota': nota,
+      'hash_sha256': hash,
     });
   }
 
   @override
   Future<void> agregarHallazgo(String inspeccionId, HallazgoLocal hallazgo) async {
+    final foto = hallazgo.foto;
     await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/hallazgos', cuerpo: {
       'parte_vehiculo': hallazgo.parte,
       'clase_dano': hallazgo.clase,
       'tamano_dano': hallazgo.tamano,
       'coords_diagrama': hallazgo.coords?.toJson(),
+      // La evidencia va dentro: el servidor no acepta un hallazgo sin su foto.
+      'evidencia': foto == null
+          ? null
+          : {
+              'storage_path': foto.storagePath,
+              'sello_fecha': foto.selloFecha,
+              'sello_lat': foto.selloLat,
+              'sello_lng': foto.selloLng,
+              'precision': foto.precision,
+              'dispositivo_id': foto.dispositivoId,
+              'nota': foto.nota,
+              'hash_sha256': foto.hash,
+            },
     });
   }
 
@@ -77,14 +99,58 @@ class GatewayInformesApi implements GatewayInformes {
     String inspeccionId, {
     required String entregaId,
     required String recibeId,
-    String? firmaEntrega,
-    String? firmaRecibe,
+    required String? firma,
   }) async {
     await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/transferencia', cuerpo: {
       'entrega_usuario_id': entregaId,
       'recibe_usuario_id': recibeId,
-      'firma_entrega': ?firmaEntrega,
-      'firma_recibe': ?firmaRecibe,
+      'firma': firma,
+    });
+  }
+
+  @override
+  Future<void> recibirConReservas(
+    String inspeccionId, {
+    required String entregaId,
+    required String recibeId,
+    required String? firma,
+    required String reservas,
+  }) async {
+    await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/transferencia/reservas', cuerpo: {
+      'entrega_usuario_id': entregaId,
+      'recibe_usuario_id': recibeId,
+      'firma': firma,
+      'reservas': reservas,
+    });
+  }
+
+  @override
+  Future<void> registrarNoFirma(
+    String inspeccionId, {
+    required String entregaId,
+    required String recibeId,
+    required String parte,
+    required String motivo,
+    required String testigoId,
+    required FotoLocal foto,
+  }) async {
+    await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/transferencia/no-firma', cuerpo: {
+      'entrega_usuario_id': entregaId,
+      'recibe_usuario_id': recibeId,
+      'parte': parte,
+      'motivo': motivo,
+      'testigo_usuario_id': testigoId,
+      // La foto va dentro, con la misma forma que la de un hallazgo: el servidor la guarda como constancia.
+      'evidencia': {
+        'storage_path': foto.storagePath,
+        'sello_fecha': foto.selloFecha,
+        'sello_lat': foto.selloLat,
+        'sello_lng': foto.selloLng,
+        'precision': foto.precision,
+        'dispositivo_id': foto.dispositivoId,
+        'nota': foto.nota,
+        'hash_sha256': foto.hash,
+      },
     });
   }
 }

@@ -42,8 +42,8 @@ public interface IInspeccionRepository
     Task<string?> ObtenerTipoVehiculoAsync(Guid inspeccionId, CancellationToken ct = default);
 
     /// <summary>
-    /// True si el hallazgo es de otra inspeccion YA CERRADA del MISMO vehiculo (mismo VIN) y tiene la misma zona y la misma clase: la condicion para que un hallazgo
-    /// nuevo se marque como preexistente de ese.
+    /// True si el hallazgo es de otra inspeccion YA CERRADA ANTES de que empezara esta, del MISMO vehiculo (mismo VIN), y tiene la misma zona y la misma clase: la condicion para que un
+    /// hallazgo (nuevo, o el que se revisa) se marque como preexistente de ese.
     /// </summary>
     Task<bool> EsHallazgoPrevioDelVehiculoAsync(Guid hallazgoOrigenId, Guid inspeccionId, Guid zonaId, string claseDano, CancellationToken ct = default);
 

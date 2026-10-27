@@ -43,7 +43,7 @@ y por **proceso**. Cuando una cuenta **llega** a `umbral_patron_cantidad` (mayor
   El conteo es de los ultimos N dias hasta el momento de correr.
 - Los hallazgos de otro cliente no se mezclan. Las novedades del conductor sin revisar no cuentan hasta que se revisan.
 
-El reporte de patrones por zona que se agregue despues marcara `supera_umbral` con estos mismos parametros (`umbral_patron_cantidad` y `umbral_patron_ventana_dias`); hoy `GET /api/patrones` no tiene ventana ni umbral.
+El reporte `GET /api/reportes/patrones` marca `supera_umbral` con estos mismos parametros (`umbral_patron_cantidad` y `umbral_patron_ventana_dias`).
 
 ## Captura incompleta
 

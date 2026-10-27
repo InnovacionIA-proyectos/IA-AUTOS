@@ -212,6 +212,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
         var transferencias = await contexto.Transferencias.AsNoTracking()
             .Where(t => inspeccionIds.Contains(t.InspeccionId)).ToListAsync(ct);
         var notas = await new clsConsultasNotas(contexto).ListarPorEntidadesAsync(clsEntidadNota.INSPECCION, inspeccionIds, ct);
+        var novedadesProceso = await new clsConsultasNovedadesProceso(contexto).DeInspeccionesAsync(inspeccionIds, ct);
 
         // La placa, el trailer y el conductor son los del viaje; lo capturado a mano antes de los viajes tiene prioridad.
         InventarioInspeccionDto AInspeccion(clsInspeccion i)
@@ -225,7 +226,9 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                 hallazgos.Where(h => h.InspeccionId == i.Id).Select(h => hallazgosDto[h.Id]).ToList(),
                 evidencias.Where(ev => ev.InspeccionId == i.Id).Select(clsMapeadorInspecciones.AEvidencia).ToList(),
                 transferencias.Where(t => t.InspeccionId == i.Id).Select(clsMapeadorInspecciones.ATransferencia).FirstOrDefault(),
-                notas.GetValueOrDefault(i.Id) ?? []);
+                notas.GetValueOrDefault(i.Id) ?? [],
+                novedadesProceso.GetValueOrDefault(i.Id)?.Motivo,
+                novedadesProceso.GetValueOrDefault(i.Id)?.Novedades ?? []);
         }
 
         var etapasDto = etapas.Select(e => new InventarioEtapaDto(

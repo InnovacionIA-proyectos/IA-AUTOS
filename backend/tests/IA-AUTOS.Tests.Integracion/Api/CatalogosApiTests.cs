@@ -12,7 +12,7 @@ namespace IAAutos.Tests.Integracion.Api;
 public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private static readonly string[] NOMBRES =
-        ["etapas", "puntos-custodia", "tipos-unidad", "clases-dano", "tamanos-dano", "niveles-severidad", "vistas-foto", "cuadrantes", "paneles-dano", "cuadrante-regiones", "clientes", "estados-sofasa"];
+        ["etapas", "puntos-custodia", "tipos-unidad", "clases-dano", "tamanos-dano", "niveles-severidad", "vistas-foto", "cuadrantes", "paneles-dano", "cuadrante-regiones", "clientes", "estados-sofasa", "motivos-sin-inspector"];
 
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);
 
@@ -538,7 +538,7 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         (await ValorAsync(token, "vistas-foto", codigo)).GetProperty("id").GetGuid();
 
     [Fact]
-    public async Task Los_cinco_paneles_de_danos_se_publican_y_cuadrante_vistas_responde_que_fue_reemplazado()
+    public async Task Los_cinco_paneles_de_danos_se_publican_y_cuadrante_vistas_ya_no_existe()
     {
         var token = await TokenAsync(clsRol.INSPECTOR);
 
@@ -551,7 +551,7 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal(["id", "codigo", "nombre", "orden", "activo", "imagen_url"], paneles[0].EnumerateObject().Select(p => p.Name).ToList());
         Assert.All(paneles, p => Assert.Equal(JsonValueKind.Null, p.GetProperty("imagen_url").ValueKind));
         Assert.Equal(HttpStatusCode.NotFound, reemplazado.StatusCode);
-        Assert.Contains("reemplazado por cuadrante-regiones", (await LeerJsonAsync(reemplazado)).GetProperty("message").GetString());
+        Assert.StartsWith("Catálogo desconocido: cuadrante-vistas", (await LeerJsonAsync(reemplazado)).GetProperty("message").GetString());
     }
 
     [Fact]

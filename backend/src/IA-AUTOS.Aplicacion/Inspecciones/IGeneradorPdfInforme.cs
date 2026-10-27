@@ -25,7 +25,7 @@ public sealed record HallazgoInforme(
     string? NivelAccion,
     string Origen,
     bool EsPreexistente,
-    string EstadoSeguimiento,
+    string? EstadoSeguimiento,
     string? Nota,
     IReadOnlyList<FotoInforme> Fotos,
     IReadOnlyList<SeguimientoInforme> Seguimiento,

@@ -29,6 +29,23 @@ public static class clsInstantaneasAuditoria
         i.Trailer,
         i.Notas,
         i.CerradaAt,
+        i.MotivoSinInspector,
+        i.MotivoSinInspectorTexto,
+    };
+
+    public static object De(clsNovedadProceso n) => new
+    {
+        n.Tipo,
+        n.ViajeId,
+        n.VehiculoId,
+        n.EtapaId,
+        n.InspeccionId,
+        n.MotivoCodigo,
+        n.MotivoTexto,
+        n.UsuarioId,
+        n.Fecha,
+        n.Lat,
+        n.Lng,
     };
 
     public static object De(clsHallazgo h) => new

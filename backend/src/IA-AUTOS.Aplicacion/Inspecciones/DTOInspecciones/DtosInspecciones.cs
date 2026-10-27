@@ -2,7 +2,8 @@ namespace IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 
 /// <summary>
 /// La inspeccion toma del viaje de la etapa la placa, el trailer y el conductor: no se piden como texto. <c>Momento</c> es <c>salida</c> o
-/// <c>llegada</c>.
+/// <c>llegada</c>. <c>MotivoSinInspector</c> (codigo activo del catalogo <c>motivos-sin-inspector</c>) y <c>MotivoSinInspectorTexto</c> (de 1 a 300 caracteres, solo si el motivo lo
+/// requiere) los envia el conductor del viaje cuando el inspector previsto no esta en la salida de un Cargue con personal de apoyo; en cualquier otro caso no se admiten (400).
 /// </summary>
 public sealed record CrearInspeccionRequest(
     Guid? EtapaId,
@@ -11,7 +12,9 @@ public sealed record CrearInspeccionRequest(
     double? Lat,
     double? Lng,
     string? Estado,
-    string? Notas);
+    string? Notas,
+    string? MotivoSinInspector = null,
+    string? MotivoSinInspectorTexto = null);
 
 /// <summary>Cuerpo (opcional) de la correccion: la fecha por defecto es ahora y las notas empiezan vacias.</summary>
 public sealed record CorregirInspeccionRequest(DateTimeOffset? Fecha, double? Lat, double? Lng, string? Notas);
@@ -70,6 +73,11 @@ public sealed record CrearEvidenciaRequest(
 /// del viaje) y opcionales despues (si llegan, deben ser los mismos).
 /// </summary>
 public sealed record FirmarTransferenciaRequest(Guid? EntregaUsuarioId, Guid? RecibeUsuarioId, string? Firma);
+
+/// <summary>
+/// El recibo sin entrega: la firma de quien recibe (el conductor del viaje) cuando el conductor hizo la salida del cargue y nadie de Botero Soto firma la entrega. La identidad sale del token.
+/// </summary>
+public sealed record ReciboSinEntregaRequest(string? Firma);
 
 /// <summary>Quien recibe firma «con reservas»: su firma mas las observaciones, que son obligatorias.</summary>
 public sealed record RecibirConReservasRequest(Guid? EntregaUsuarioId, Guid? RecibeUsuarioId, string? Firma, string? Reservas);
@@ -156,7 +164,7 @@ public sealed record InspeccionListadoDto(
 public sealed record TransferenciaDetalleDto(
     Guid Id,
     Guid InspeccionId,
-    Guid EntregaUsuarioId,
+    Guid? EntregaUsuarioId,
     Guid RecibeUsuarioId,
     bool Firmada,
     DateTimeOffset? FirmadaAt,
@@ -217,7 +225,9 @@ public sealed record InformeDetalleDto(
     int Version,
     Guid? CorrigeInspeccionId,
     string MomentoNombre,
-    IReadOnlyList<NotaAclaratoriaDto> NotasAclaratorias);
+    IReadOnlyList<NotaAclaratoriaDto> NotasAclaratorias,
+    MotivoSinInspectorDto? MotivoSinInspector,
+    IReadOnlyList<NovedadProcesoDto> NovedadesProceso);
 
 public sealed record ResumenCierreDto(int Evidencias, int Hallazgos);
 

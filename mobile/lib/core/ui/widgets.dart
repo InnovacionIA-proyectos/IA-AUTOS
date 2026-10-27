@@ -29,6 +29,27 @@ class Insignia extends StatelessWidget {
 }
 
 /// Contenedor con el estilo de tarjeta del sistema de diseño.
+/// Botón para poner **dentro de una fila**.
+///
+/// El tema da a `FilledButton` y `OutlinedButton` un `minimumSize` de ancho infinito, porque casi todos los de
+/// esta app ocupan el ancho de la pantalla. Dentro de un `Row` eso revienta el layout —y en una compilación de
+/// release revienta en blanco, sin decir nada—, así que aquí se acota.
+class BotonEnFila extends StatelessWidget {
+  const BotonEnFila({super.key, required this.texto, required this.onPressed});
+
+  final String texto;
+
+  /// Null lo deshabilita, que es lo que se quiere cuando algo todavía no se puede hacer: se ve, pero no se toca.
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(minimumSize: const Size(0, alturaTactil), padding: const EdgeInsets.symmetric(horizontal: Espacio.md)),
+        child: Text(texto),
+      );
+}
+
 class Tarjeta extends StatelessWidget {
   const Tarjeta({super.key, required this.child, this.onTap, this.padding = const EdgeInsets.all(Espacio.lg)});
 

@@ -1,12 +1,14 @@
 using FluentValidation;
 using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Auth;
+using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Usuarios;
+using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
 
 namespace IAAutos.Aplicacion.Inspecciones;
@@ -20,6 +22,10 @@ public sealed class clsTransferenciasService(
     IInspeccionRepository inspecciones,
     ITransferenciaCustodiaRepository transferencias,
     IViajeRepository viajes,
+    IEtapaRepository etapas,
+    IVehiculoRepository vehiculos,
+    INovedadProcesoRepository novedades,
+    ICatalogosLectura catalogos,
     IUsuarioRepository usuarios,
     IConsultasInspecciones consultas,
     clsFabricaEvidencias fabricaEvidencias,
@@ -31,6 +37,7 @@ public sealed class clsTransferenciasService(
     IUsuarioActual actual,
     IReloj reloj,
     IValidator<FirmarTransferenciaRequest> validadorFirma,
+    IValidator<ReciboSinEntregaRequest> validadorSinEntrega,
     IValidator<RecibirConReservasRequest> validadorReservas,
     IValidator<RegistrarNoFirmaRequest> validadorNoFirma)
 {
@@ -94,6 +101,68 @@ public sealed class clsTransferenciasService(
         return clsMapeadorInspecciones.ATransferencia(transferencia);
     }
 
+    /// <summary>
+    /// El recibo sin entrega: cuando el conductor hizo la salida del Cargue (sin personal de apoyo, o con la excepcion «No hay inspector») nadie de Botero Soto firma la entrega, y el conductor del
+    /// viaje cierra la transferencia solo con su firma. 403 para cualquier otro; 409 si la etapa no es el Cargue, si la salida la hizo el inspector o si la transferencia ya tiene cierre (o quien entrega ya firmo). Cierra
+    /// como «recibo_sin_entrega»: desbloquea la etapa siguiente y deja la evidencia de los hallazgos incompleta (solo firma una parte). Si la salida se hizo con la excepcion, queda ademas la novedad de
+    /// proceso «recibo_sin_entrega» (sin nueva notificacion); en un cargue sin apoyo planeado no se crea ninguna.
+    /// </summary>
+    public async Task<TransferenciaDto> RegistrarReciboSinEntregaAsync(Guid inspeccionId, ReciboSinEntregaRequest solicitud, ContextoCliente cliente, CancellationToken ct = default)
+    {
+        await validadorSinEntrega.ValidarOLanzarAsync(solicitud, ct);
+        var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct) ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
+        var viaje = await viajes.ObtenerPorIdAsync(inspeccion.ViajeId, ct) ?? throw new clsEntidadNoEncontradaException("El viaje de la inspección no existe");
+        var actorId = actual.IdObligatorio();
+        if (viaje.ConductorId != actorId)
+        {
+            throw new clsProhibidoException("Solo el conductor del viaje firma el recibo sin entrega");
+        }
+
+        var etapa = await etapas.ObtenerPorIdAsync(inspeccion.EtapaId, ct) ?? throw new clsEntidadNoEncontradaException("La etapa de la inspección no existe");
+        var codigoEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
+        if (codigoEtapa != clsCodigosEtapa.CARGUE || inspeccion.Momento != clsMomento.SALIDA)
+        {
+            throw new clsConflictoException("El recibo sin entrega solo existe en la salida del Cargue");
+        }
+
+        if (inspeccion.UsuarioId != viaje.ConductorId)
+        {
+            throw new clsConflictoException("La salida de este cargue no la hizo el conductor: la entrega la firma quien la hizo");
+        }
+
+        // Una transferencia que sigue abierta (por ejemplo, quien recibe ya firmo su parte) se cierra sin entrega mientras quien entrega no haya firmado; una cerrada no cambia (409).
+        var ahora = reloj.Ahora;
+        var transferencia = await transferencias.ObtenerPorInspeccionAsync(inspeccionId, ct);
+        object? antes = null;
+        if (transferencia is null)
+        {
+            transferencia = clsTransferenciaCustodia.CrearReciboSinEntrega(inspeccionId, actorId, solicitud.Firma, cliente.Ip, ahora);
+            transferencias.Agregar(transferencia);
+        }
+        else
+        {
+            antes = clsInstantaneasAuditoria.De(transferencia);
+            transferencia.CerrarSinEntrega(actorId, solicitud.Firma, cliente.Ip, ahora);
+        }
+
+        await evidenciaDeHallazgos.RecalcularAsync(inspeccionId, transferencia.TipoCierre, ct);
+        await auditor.RegistrarDeViajeAsync(
+            "transferencia.sin_entrega", "transferencias_custodia", transferencia.Id, viaje.Id, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(transferencia)), ct: ct);
+
+        if (inspeccion.MotivoSinInspector is not null)
+        {
+            var vehiculo = await vehiculos.ObtenerPorIdAsync(etapa.VehiculoId, ct) ?? throw new clsEntidadNoEncontradaException("El vehículo de la etapa no existe");
+            var novedad = clsNovedadProceso.Crear(
+                clsTipoNovedadProceso.RECIBO_SIN_ENTREGA, viaje.Id, vehiculo.Id, etapa.Id, inspeccion.Id, inspeccion.MotivoSinInspector, inspeccion.MotivoSinInspectorTexto, actorId, ahora, null, null, ahora);
+            novedades.Agregar(novedad);
+            await auditor.RegistrarDeViajeAsync(
+                "novedad_proceso.crear", "novedades_proceso", novedad.Id, viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(novedad)), vehiculo.ClienteId, ct);
+        }
+
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        return clsMapeadorInspecciones.ATransferencia(transferencia);
+    }
+
     /// <summary>Audita la accion sobre la transferencia con su estado antes y despues, en el viaje y el cliente de la inspeccion.</summary>
     private async Task RegistrarAsync(string accion, Guid inspeccionId, clsTransferenciaCustodia transferencia, object antes, CancellationToken ct)
     {
@@ -119,7 +188,9 @@ public sealed class clsTransferenciasService(
         var transferencia = await transferencias.ObtenerPorInspeccionAsync(inspeccionId, ct)
             ?? throw new clsEntidadNoEncontradaException("La inspección no tiene transferencia de custodia");
 
-        var entrega = await ArmarFirmaAsync(transferencia.EntregaUsuarioId, transferencia.FirmaEntrega, transferencia.FirmaEntregaAt, transferencia.FirmaEntregaIp, ct);
+        var entrega = transferencia.EntregaUsuarioId is { } entregaId
+            ? await ArmarFirmaAsync(entregaId, transferencia.FirmaEntrega, transferencia.FirmaEntregaAt, transferencia.FirmaEntregaIp, ct)
+            : new FirmaConstancia("Sin entrega", null, null, null, null);
         var recibe = await ArmarFirmaAsync(transferencia.RecibeUsuarioId, transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct);
         string? testigo = null;
         var fotos = new List<FotoConstancia>();

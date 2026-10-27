@@ -86,6 +86,8 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IConsultasExportaciones, clsConsultasExportaciones>();
         servicios.AddSingleton<IGeneradorExcel, clsGeneradorExcel>();
         servicios.AddScoped<INotaAclaratoriaRepository, clsNotaAclaratoriaRepository>();
+        servicios.AddScoped<INovedadProcesoRepository, clsNovedadProcesoRepository>();
+        servicios.AddScoped<IAAutos.Aplicacion.Inspecciones.DTOInspecciones.IConsultasNovedadesProceso, clsConsultasNovedadesProceso>();
         servicios.AddScoped<IParametroRepository, clsParametroRepository>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();
         servicios.AddSingleton<IGeneradorPdfInventario, clsGeneradorPdfInventario>();
@@ -154,6 +156,7 @@ public static class clsDependenciasInfraestructura
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.TAMANOS_DANO, clsTamanoDano.Crear));
         servicios.AddScoped<ICatalogo, clsCatalogoNiveles>();
         servicios.AddScoped<ICatalogo, clsCatalogoEstadosSofasa>();
+        servicios.AddScoped<ICatalogo, clsCatalogoMotivosSinInspector>();
         servicios.AddScoped<ICatalogo, clsCatalogoVistas>();
         servicios.AddScoped<ICatalogo, clsCatalogoCuadrantes>();
         servicios.AddScoped<ICatalogo, clsCatalogoPanelesDano>();

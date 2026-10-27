@@ -200,7 +200,7 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
          join h in contexto.Hallazgos.AsNoTracking() on hallazgoOrigenId equals h.Id
          join ip in contexto.Inspecciones on h.InspeccionId equals ip.Id
          join ep in contexto.Etapas on ip.EtapaId equals ep.Id
-         where actual.Id == inspeccionId && ip.Id != inspeccionId && ip.Estado == clsEstadoInspeccion.CERRADA && ep.VehiculoId == ea.VehiculoId && h.ZonaId == zonaId && h.ClaseDano == claseDano
+         where actual.Id == inspeccionId && ip.Id != inspeccionId && ip.Estado == clsEstadoInspeccion.CERRADA && ip.CerradaAt < actual.IniciadaAt && ep.VehiculoId == ea.VehiculoId && h.ZonaId == zonaId && h.ClaseDano == claseDano
          select h.Id).AnyAsync(ct);
 
     public Task<clsHallazgo?> ObtenerHallazgoAsync(Guid id, CancellationToken ct = default) => contexto.Hallazgos.FirstOrDefaultAsync(h => h.Id == id, ct);

@@ -15,12 +15,11 @@ public static class clsNombresCatalogo
     public const string VISTAS_FOTO = "vistas-foto";
     public const string CUADRANTES = "cuadrantes";
 
-    /// <summary>Reemplazado por <see cref="CUADRANTE_REGIONES"/>: ya no es un catalogo y su ruta responde 404.</summary>
-    public const string CUADRANTE_VISTAS = "cuadrante-vistas";
     public const string PANELES_DANO = "paneles-dano";
     public const string CUADRANTE_REGIONES = "cuadrante-regiones";
     public const string CLIENTES = "clientes";
     public const string ESTADOS_SOFASA = "estados-sofasa";
+    public const string MOTIVOS_SIN_INSPECTOR = "motivos-sin-inspector";
 }
 
 /// <summary>Un valor de catalogo tal como lo ve el cliente: solo los campos propios de ese catalogo (snake_case), con id, codigo, nombre, orden y activo.</summary>
