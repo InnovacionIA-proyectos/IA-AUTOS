@@ -12,6 +12,7 @@ class HallazgoVista {
     this.clase,
     required this.tamano,
     this.nivel,
+    this.esPreexistente = false,
   });
 
   factory HallazgoVista.fromJson(Map<String, dynamic> json) => HallazgoVista(
@@ -24,6 +25,7 @@ class HallazgoVista {
         clase: json['clase_dano'] as String?,
         tamano: json['tamano_dano'] as String? ?? '',
         nivel: json['nivel_severidad'] as String?,
+        esPreexistente: json['es_preexistente'] as bool? ?? false,
       );
 
   final String id;
@@ -37,6 +39,9 @@ class HallazgoVista {
   final String? clase;
   final String tamano;
   final String? nivel;
+
+  /// El daño ya venía de antes y así lo confirmó quien inspeccionó: no ocurrió en esta etapa.
+  final bool esPreexistente;
 }
 
 class EvidenciaVista {

@@ -19,6 +19,7 @@ import '../../viajes/providers.dart';
 import '../domain/etiquetas.dart';
 import '../domain/inventario.dart';
 import '../domain/no_sale.dart';
+import 'detalle_hallazgo.dart';
 import 'hoja_no_sale.dart';
 import '../providers.dart';
 
@@ -240,6 +241,23 @@ class _UltimoInforme extends ConsumerWidget {
   final EtapaVista etapa;
   final InspeccionVista inspeccion;
 
+  /// El daño de esa zona, con su foto. La zona la da el dibujo; el hallazgo sale del informe que se está viendo.
+  void _abrirDetalle(BuildContext context, WidgetRef ref, ZonaDano zona) {
+    final hallazgo = inspeccion.hallazgos
+        .where((h) => h.cuadranteNumero != null && claveDeZona(h.cuadranteNumero!, h.lado) == zona.clave)
+        .firstOrNull;
+    if (hallazgo == null) return;
+    final foto = inspeccion.evidencias.where((e) => e.hallazgoId == hallazgo.id).firstOrNull;
+    final token = ref.read(authControllerProvider).sesion?.token;
+    mostrarDetalleHallazgo(
+      context,
+      hallazgo: hallazgo,
+      catalogos: ref.read(catalogosProvider),
+      urlFoto: resolverUrlImagen(ref.read(entornoProvider).apiUrl, foto?.url),
+      encabezados: token == null ? null : {'Authorization': 'Bearer $token'},
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
@@ -308,14 +326,15 @@ class _UltimoInforme extends ConsumerWidget {
           ],
           if (!ajeno) ...[
             const SizedBox(height: Espacio.md),
-            // Solo lectura: las zonas con hallazgo en rojo. Se puede tocar para ver el nombre de una zona.
+            // Solo lectura: cada zona con daño va del color de su nivel y se toca para ver su detalle.
             SelectorZonaDano(
               contexto: 'vin-${inspeccion.id}',
               alturaMaxima: 300,
-              conDano: {
+              danos: {
                 for (final h in inspeccion.hallazgos)
-                  if (h.cuadranteNumero case final numero?) claveDeZona(numero, h.lado),
+                  if (h.cuadranteNumero case final numero?) claveDeZona(numero, h.lado): h.nivel,
               },
+              alAbrirDano: (zona) => _abrirDetalle(context, ref, zona),
             ),
             const SizedBox(height: Espacio.md),
             if (inspeccion.hallazgos.isEmpty)

@@ -56,11 +56,18 @@ class ZonaDano {
 
   String get clave => claveDeZona(numero, lado);
 
-  /// «Cuadrante 26, lado derecho» o «Cuadrante 54».
-  String get descripcion => switch (lado) {
-        null => 'Cuadrante $numero',
-        final l => 'Cuadrante $numero, lado $l',
-      };
+  /// «Cuadrante 26, lado derecho · AIAG 74-75 / 76-77» o «Cuadrante 54». El AIAG solo si la zona lo trae: el
+  /// catálogo del servidor todavía puede no publicarlo.
+  String get descripcion {
+    final ubicacion = switch (lado) {
+      null => 'Cuadrante $numero',
+      final l => 'Cuadrante $numero, lado $l',
+    };
+    return switch (aiagArea) {
+      final area? when area.isNotEmpty => '$ubicacion · AIAG $area',
+      _ => ubicacion,
+    };
+  }
 }
 
 /// De dónde sale la imagen de fondo de un panel: un asset de la app o los bytes descargados del servidor.
@@ -251,8 +258,9 @@ class DibujoDano {
   List<PanelDano> panelesDondeSeVe(String clave) =>
       [for (final p in paneles) if (regionesDe(p.codigo).any((r) => r.clave == clave)) p];
 
-  /// Cuántas de [conDano] se ven en el panel: el número rojo de la pestaña.
-  int conDanoEn(String panel, Set<String> conDano) => regionesDe(panel).where((r) => conDano.contains(r.clave)).length;
+  /// Cuántas de las zonas de [danos] se ven en el panel: el número de la pestaña.
+  int conDanoEn(String panel, Map<String, String?> danos) =>
+      regionesDe(panel).where((r) => danos.containsKey(r.clave)).length;
 
   static List<Map<String, dynamic>> _lista(Map<String, dynamic> json, String clave) {
     final valor = json[clave];

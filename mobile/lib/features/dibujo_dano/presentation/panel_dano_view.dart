@@ -20,7 +20,7 @@ class PanelDanoView extends StatelessWidget {
     super.key,
     required this.panel,
     required this.regiones,
-    required this.conDano,
+    required this.danos,
     required this.seleccionada,
     required this.controlador,
     required this.alTocar,
@@ -30,7 +30,8 @@ class PanelDanoView extends StatelessWidget {
 
   final PanelDano panel;
   final List<RegionDano> regiones;
-  final Set<String> conDano;
+  /// Clave de la zona con daño al nivel de ese daño (nulo si nadie lo clasificó).
+  final Map<String, String?> danos;
   final String? seleccionada;
 
   /// El zoom de este panel. Lo crea y lo libera quien contiene el panel, para que cada vista conserve el suyo al
@@ -82,7 +83,7 @@ class PanelDanoView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final conDanoAqui = regiones.where((r) => conDano.contains(r.clave)).length;
+    final conDanoAqui = regiones.where((r) => danos.containsKey(r.clave)).length;
     return Semantics(
       label: conDanoAqui == 0
           ? 'Vista ${panel.nombre} del vehículo, sin daños'
@@ -122,7 +123,7 @@ class PanelDanoView extends StatelessWidget {
                                       painter: PintorRegiones(
                                         panel: panel,
                                         regiones: regiones,
-                                        conDano: conDano,
+                                        danos: danos,
                                         seleccionada: seleccionada,
                                         escala: escala,
                                         cuadricula: cuadricula,

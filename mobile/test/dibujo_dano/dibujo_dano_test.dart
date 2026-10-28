@@ -81,11 +81,16 @@ void main() {
       expect(dibujo.zonaDe(26, LadoZona.derecho)!.clave, '26D');
     });
 
-    test('el título es el nombre completo y debajo número y lado', () {
+    test('el título es el nombre completo y debajo número, lado y AIAG', () {
       final zona = dibujo.zonaDe(26, LadoZona.derecho)!;
       expect(zona.nombreCompleto, 'Llanta trasera derecha');
-      expect(zona.descripcion, 'Cuadrante 26, lado derecho');
-      expect(dibujo.zonaDe(54, null)!.descripcion, 'Cuadrante 54');
+      expect(zona.descripcion, 'Cuadrante 26, lado derecho · AIAG 74-75 / 76-77');
+      expect(dibujo.zonaDe(54, null)!.descripcion, 'Cuadrante 54 · AIAG 20');
+    });
+
+    test('sin AIAG la descripción no deja el rótulo colgando', () {
+      const sinAiag = ZonaDano(numero: 54, lado: null, nombre: 'Parabrisas', nombreCompleto: 'Parabrisas');
+      expect(sinAiag.descripcion, 'Cuadrante 54');
     });
   });
 
@@ -154,7 +159,7 @@ void main() {
 
   group('las vistas coinciden', () {
     test('una zona marcada se cuenta en cada pestaña donde se ve', () {
-      const conDano = {'26D'};
+      const conDano = <String, String?>{'26D': 'v2'};
       final dondeSeVe = {for (final p in dibujo.panelesDondeSeVe('26D')) p.codigo};
       for (final p in dibujo.paneles) {
         expect(dibujo.conDanoEn(p.codigo, conDano), dondeSeVe.contains(p.codigo) ? 1 : 0, reason: p.codigo);

@@ -18,7 +18,7 @@ final dibujo = dibujoDeAssets();
 
 Future<void> montar(
   WidgetTester tester, {
-  Set<String> conDano = const {},
+  Map<String, String?> conDano = const {},
   void Function(ZonaDano zona)? alRegistrar,
   void Function(ZonaDano zona)? alAbrirDano,
 }) async {
@@ -34,7 +34,7 @@ Future<void> montar(
           body: SingleChildScrollView(
             child: SelectorZonaDano(
               contexto: 'prueba',
-              conDano: conDano,
+              danos: conDano,
               alRegistrar: alRegistrar ?? (_) {},
               alAbrirDano: alAbrirDano,
               alturaMaxima: 2000,
@@ -78,7 +78,7 @@ void main() {
           home: Scaffold(
             body: ListView(
               padding: const EdgeInsets.all(16),
-              children: [SelectorZonaDano(contexto: 'telefono', conDano: const {}, alRegistrar: (_) {})],
+              children: [SelectorZonaDano(contexto: 'telefono', danos: const {}, alRegistrar: (_) {})],
             ),
           ),
         ),
@@ -110,7 +110,7 @@ void main() {
           home: Scaffold(
             body: ListView(
               padding: const EdgeInsets.all(16),
-              children: [SelectorZonaDano(contexto: 'telefono-llanta', conDano: const {}, alRegistrar: (_) {})],
+              children: [SelectorZonaDano(contexto: 'telefono-llanta', danos: const {}, alRegistrar: (_) {})],
             ),
           ),
         ),
@@ -189,7 +189,7 @@ void main() {
 
   testWidgets('un daño por zona: tocar una zona que ya tiene daño abre ese registro', (tester) async {
     final abiertas = <String>[];
-    await montar(tester, conDano: {'6I'}, alAbrirDano: (z) => abiertas.add(z.clave));
+    await montar(tester, conDano: {'6I': 'v2'}, alAbrirDano: (z) => abiertas.add(z.clave));
 
     await tocarZona(tester, '6I');
 
@@ -199,7 +199,7 @@ void main() {
   });
 
   testWidgets('una zona con daño se cuenta en cada pestaña donde se ve', (tester) async {
-    await montar(tester, conDano: {'26D'});
+    await montar(tester, conDano: {'26D': 'v1_plus'});
 
     final conNumero = find.byWidgetPredicate((w) => w is Badge && w.isLabelVisible);
     expect(conNumero, findsNWidgets(dibujo.panelesDondeSeVe('26D').length));
@@ -223,7 +223,7 @@ void main() {
         child: MaterialApp(
           theme: crearTema(),
           home: const Scaffold(
-            body: SingleChildScrollView(child: SelectorZonaDano(contexto: 'lectura', conDano: {'6I'}, alturaMaxima: 2000)),
+            body: SingleChildScrollView(child: SelectorZonaDano(contexto: 'lectura', danos: {'6I': 'v2'}, alturaMaxima: 2000)),
           ),
         ),
       ),

@@ -475,7 +475,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                 const SizedBox(height: Espacio.md),
                 SelectorZonaDano(
                   contexto: _contextoDibujo,
-                  conDano: {for (final h in _hallazgos) ?h.clave},
+                  danos: {for (final h in _hallazgos) ?h.clave: h.nivel},
                   alRegistrar: _registrarDano,
                   alAbrirDano: _abrirDano,
                 ),

@@ -24,7 +24,7 @@ class SelectorZonaDano extends ConsumerStatefulWidget {
   const SelectorZonaDano({
     super.key,
     required this.contexto,
-    required this.conDano,
+    required this.danos,
     this.alRegistrar,
     this.alAbrirDano,
     this.alturaMaxima = 420,
@@ -33,8 +33,9 @@ class SelectorZonaDano extends ConsumerStatefulWidget {
   /// Separa esta selección de las demás que haya en pantalla (ver [seleccionZonaProvider]).
   final String contexto;
 
-  /// Claves de las zonas que ya tienen daño («26D», «54»).
-  final Set<String> conDano;
+  /// Las zonas que ya tienen daño («26D», «54») con el nivel de severidad de cada una, que es el color con el que
+  /// se pintan. El nivel va nulo cuando nadie lo ha clasificado todavía.
+  final Map<String, String?> danos;
 
   /// Se llama con la zona elegida cuando se pulsa «Registrar daño».
   final void Function(ZonaDano zona)? alRegistrar;
@@ -67,7 +68,7 @@ class _EstadoSelectorZonaDano extends ConsumerState<SelectorZonaDano> {
   /// Después de elegir, si la zona ya tiene daño se abre ese registro: un daño por zona.
   void _despuesDeElegir(DibujoDano dibujo, String clave) {
     final elegida = ref.read(seleccionZonaProvider(widget.contexto)).seleccionada;
-    if (elegida != clave || !widget.conDano.contains(clave)) return;
+    if (elegida != clave || !widget.danos.containsKey(clave)) return;
     final zona = dibujo.zona(clave);
     if (zona != null) widget.alAbrirDano?.call(zona);
   }
@@ -116,7 +117,7 @@ class _EstadoSelectorZonaDano extends ConsumerState<SelectorZonaDano> {
           dibujo: dibujo,
           indice: indice,
           elegida: estado.seleccionada,
-          conDano: widget.conDano,
+          danos: widget.danos,
           alElegir: _seleccion.verPanel,
         ),
         const SizedBox(height: Espacio.sm),
@@ -124,7 +125,7 @@ class _EstadoSelectorZonaDano extends ConsumerState<SelectorZonaDano> {
           key: ValueKey(panel.codigo),
           panel: panel,
           regiones: regiones,
-          conDano: widget.conDano,
+          danos: widget.danos,
           seleccionada: estado.seleccionada,
           controlador: controlador,
           alturaMaxima: widget.alturaMaxima,
@@ -149,7 +150,7 @@ class _EstadoSelectorZonaDano extends ConsumerState<SelectorZonaDano> {
           _FichaZona(
             zona: elegida,
             seVeEn: [for (final p in dibujo.panelesDondeSeVe(elegida.clave)) p.nombre],
-            tieneDano: widget.conDano.contains(elegida.clave),
+            tieneDano: widget.danos.containsKey(elegida.clave),
             alRegistrar: widget.alRegistrar,
             alAbrirDano: widget.alAbrirDano,
             alSoltar: _seleccion.deseleccionar,
@@ -175,14 +176,14 @@ class _Pestanas extends StatelessWidget {
     required this.dibujo,
     required this.indice,
     required this.elegida,
-    required this.conDano,
+    required this.danos,
     required this.alElegir,
   });
 
   final DibujoDano dibujo;
   final int indice;
   final String? elegida;
-  final Set<String> conDano;
+  final Map<String, String?> danos;
   final void Function(int indice) alElegir;
 
   @override
@@ -197,8 +198,8 @@ class _Pestanas extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(right: Espacio.sm),
               child: Badge(
-                isLabelVisible: dibujo.conDanoEn(panel.codigo, conDano) > 0,
-                label: Text('${dibujo.conDanoEn(panel.codigo, conDano)}'),
+                isLabelVisible: dibujo.conDanoEn(panel.codigo, danos) > 0,
+                label: Text('${dibujo.conDanoEn(panel.codigo, danos)}'),
                 backgroundColor: ColoresDibujo.dano,
                 child: ChoiceChip(
                   label: Text(panel.nombre),

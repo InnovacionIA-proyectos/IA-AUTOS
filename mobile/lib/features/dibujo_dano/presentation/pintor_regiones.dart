@@ -15,7 +15,28 @@ abstract final class ColoresDibujo {
   static const rellenoSeleccion = Color(0x8CF6BE00);
   static const puntoAmarillo = Color(0xFFF6BE00);
   static const numero = Color(0xFF6E5100);
+
+  /// La escala de severidad, para leer el dibujo de un vistazo: V1+ y V1 comparten el rojo del rechazo.
+  static const nivelV2 = Color(0xFFE08700);
+  static const rellenoNivelV2 = Color(0x6BE08700);
+  static const nivelV3 = Color(0xFF6B7280);
+  static const rellenoNivelV3 = Color(0x6B6B7280);
+
+  /// Una novedad que nadie ha clasificado todavía: la del conductor, a la espera de un inspector.
+  static const porRevisar = Color(0xFF1D6FD1);
+  static const rellenoPorRevisar = Color(0x6B1D6FD1);
 }
+
+/// Con qué color se pinta un daño según su nivel de severidad.
+///
+/// V1+ y V1 van en el mismo rojo: los dos rechazan el vehículo y quien mira necesita verlos iguales. Un nivel que
+/// la app no conozca (el catálogo lo administra el portal) se pinta como sin clasificar, nunca se oculta.
+({Color linea, Color relleno}) colorDeNivel(String? nivel) => switch (nivel) {
+      'v1_plus' || 'v1' => (linea: ColoresDibujo.dano, relleno: ColoresDibujo.rellenoDano),
+      'v2' => (linea: ColoresDibujo.nivelV2, relleno: ColoresDibujo.rellenoNivelV2),
+      'v3' => (linea: ColoresDibujo.nivelV3, relleno: ColoresDibujo.rellenoNivelV3),
+      _ => (linea: ColoresDibujo.porRevisar, relleno: ColoresDibujo.rellenoPorRevisar),
+    };
 
 /// Pinta las regiones de un panel encima de su imagen: la cuadrícula, las zonas con daño en rojo y la elegida en
 /// amarillo, con el número de cada zona.
@@ -27,7 +48,7 @@ class PintorRegiones extends CustomPainter {
   PintorRegiones({
     required this.panel,
     required this.regiones,
-    required this.conDano,
+    required this.danos,
     required this.seleccionada,
     required this.escala,
     this.cuadricula = true,
@@ -35,7 +56,8 @@ class PintorRegiones extends CustomPainter {
 
   final PanelDano panel;
   final List<RegionDano> regiones;
-  final Set<String> conDano;
+  /// Clave de la zona con daño al nivel de severidad de ese daño; el nivel va nulo si nadie lo clasificó.
+  final Map<String, String?> danos;
   final String? seleccionada;
   final double escala;
   final bool cuadricula;
@@ -55,7 +77,9 @@ class PintorRegiones extends CustomPainter {
 
       final (Color? fondo, Color? linea, double grosor) = switch (r.clave) {
         final c when c == seleccionada => (ColoresDibujo.rellenoSeleccion, ColoresDibujo.seleccion, 2.5),
-        final c when conDano.contains(c) => (ColoresDibujo.rellenoDano, ColoresDibujo.dano, 2.0),
+        final c when danos.containsKey(c) => switch (colorDeNivel(danos[c])) {
+          final color => (color.relleno, color.linea, 2.0),
+        },
         _ when cuadricula => (ColoresDibujo.rellenoCuadricula, ColoresDibujo.cuadricula, 1.2),
         _ => (null, null, 0.0),
       };
@@ -103,7 +127,8 @@ class PintorRegiones extends CustomPainter {
       anterior.seleccionada != seleccionada ||
       anterior.escala != escala ||
       anterior.cuadricula != cuadricula ||
-      !_mismos(anterior.conDano, conDano);
+      !_mismos(anterior.danos, danos);
 
-  static bool _mismos(Set<String> a, Set<String> b) => a.length == b.length && a.containsAll(b);
+  static bool _mismos(Map<String, String?> a, Map<String, String?> b) =>
+      a.length == b.length && a.keys.every((k) => b.containsKey(k) && b[k] == a[k]);
 }
