@@ -75,7 +75,22 @@ public sealed record ViajeVehiculoDto(
     string? LugarDestino = null);
 
 /// <summary>
-/// Viaje completo con sus VIN. El viaje no tiene un cliente propio: <c>Clientes</c>
+/// Algo que paso en el proceso del viaje y no es un dano (una novedad de proceso): <c>Tipo</c> es <c>cargue_sin_inspector</c> (la excepcion «No hay inspector» que el conductor activo en el momento) o
+/// <c>recibo_sin_entrega</c>. Trae el motivo (codigo y nombre del catalogo <c>motivos-sin-inspector</c> y el texto), quien la registro, cuando, el VIN de la unidad y la inspeccion a la que corresponde. Es un registro
+/// aparte: no cuenta en los patrones por zona ni en la tasa de novedad.
+/// </summary>
+public sealed record NovedadDelViajeDto(
+    string Tipo,
+    string? MotivoCodigo,
+    string? Motivo,
+    string? Texto,
+    string? UsuarioNombre,
+    DateTimeOffset Fecha,
+    string Vin,
+    Guid InspeccionId);
+
+/// <summary>
+/// Viaje completo con sus VIN. <c>NovedadesProceso</c> son las novedades de proceso de sus unidades (la excepcion «No hay inspector» y el recibo sin entrega), de la mas antigua a la mas reciente. El viaje no tiene un cliente propio: <c>Clientes</c>
 /// son los de los VIN que quien consulta puede ver (todos para el conductor, el inspector y el super administrador; solo los de su cliente
 /// para el resto) y <c>Vehiculos</c> trae esos mismos VIN.
 /// </summary>
@@ -99,6 +114,7 @@ public sealed record ViajeDto(
     IReadOnlyList<ClienteDto> Clientes,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
+    IReadOnlyList<NovedadDelViajeDto> NovedadesProceso,
     DateTimeOffset? FechaProgramada = null,
     Guid? LugarCargueId = null,
     string? LugarCargue = null);
