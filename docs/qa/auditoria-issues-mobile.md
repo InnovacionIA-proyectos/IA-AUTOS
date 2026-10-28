@@ -10,8 +10,8 @@ se dice.
 
 | | Issues | Qué hacer |
 |---|---|---|
-| Listas | #163, #164, #166, #168, #199, #240 | Cerrar |
-| Listas salvo un detalle | #167, #170, #208, #296 | Cerrar o dejar el detalle anotado |
+| Listas | #163, #164, #166, #167, #168, #170, #199, #240, #296 | Cerrar |
+| Lista salvo un criterio fuera de alcance | #208 | Cerrar; su CA-5 es de #212 |
 | Hechas, bloqueadas por backend | #193, #299 | Esperar a #297 y #298 |
 | A medias | #165, #216 | Completar |
 | Sin empezar | #159, #187, #188, #201, #207, #212, #218, #273, #286, #291, #304, #313 | Pendientes |
@@ -87,7 +87,7 @@ El criterio único está y se probó en dispositivo: el hallazgo llega con `cuad
 
 ---
 
-## Listas salvo un detalle
+## Listas (con una nota)
 
 ### #167 — Checklist, guía de cámara y cierre
 
@@ -100,8 +100,9 @@ Cinco de seis criterios:
 - Un 400 al cerrar muestra el detalle línea por línea; un 409 se toma como éxito.
 - Repetir una foto agrega otra evidencia de la misma vista sin borrar la anterior.
 
-**Falta de CA-6:** el umbral de precisión baja es una constante (`precisionBajaMetros = 30.0`), no un
-parámetro configurable. El valor inicial sí es el que pide el criterio.
+CA-6 cerrado el 28-oct: el umbral sale de `GPS_PRECISION_MINIMA_M` al compilar, con 30 metros de
+valor inicial. No se lee de `GET /api/parametros`, donde el backend ya tiene `gps_precision_minima_m`,
+porque esa ruta es de administradores y del coordinador: a quien está en el patio le responde 403.
 
 ### #170 — Firma, reservas y no firma
 
@@ -110,7 +111,8 @@ Los cinco criterios están implementados: firma por parte con su usuario dueño,
 constancia de no firma con motivo, testigo de `GET /api/usuarios` (nunca una de las dos partes) y
 foto, y el tipo de cierre al final.
 
-**Detalle de CA-3:** el campo de reservas no limita a 1000 caracteres en la pantalla; el servidor sí.
+CA-3 cerrado el 28-oct: el campo de observaciones se corta en los 1000 caracteres que admite el
+servidor, en vez de dejar escribir de más y que lo rechace al enviar.
 
 ### #208 — Revisión de novedades en la app
 
@@ -128,8 +130,9 @@ CA-1 a CA-5: el JSON `version: 6` con la rueda separada en cuatro cuadrantes (ll
 en 34 y 35), 7 paneles, 35 números laterales y 10 centrales, y las 7 imágenes PNG versionadas junto
 al archivo.
 
-**Falta CA-6:** no está el `catalogo-cuadrantes.csv` que Calidad necesita para validar los nombres de
-pieza. CA-7 a CA-9 son de proceso.
+CA-6 cerrado el 28-oct: `assets/dibujo_dano/catalogo-cuadrantes.csv`, 80 filas con número, lado,
+nombre, nombre completo, área AIAG y en qué paneles se dibuja cada zona. No entra en el APK (el
+pubspec solo empaqueta el JSON y la carpeta de imágenes). CA-7 a CA-9 son de proceso.
 
 ---
 
