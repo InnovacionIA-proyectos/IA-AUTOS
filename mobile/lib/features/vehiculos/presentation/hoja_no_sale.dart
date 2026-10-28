@@ -10,6 +10,12 @@ typedef DatosNoSale = ({String hallazgoId, String motivo, String? vinReemplazo})
 /// Lo que el servidor admite en el motivo.
 const motivoNoSaleMax = 500;
 
+/// El VIN como lo guarda el servidor: en mayúsculas y sin espacios.
+///
+/// Se escribe a mano, 17 caracteres, en un teclado que sugiere y mete espacios; el servidor compara exacto y un
+/// espacio de más responde «No existe en el inventario», que parece un problema del dato y es del tecleo.
+String normalizarVin(String texto) => texto.replaceAll(RegExp(r'\s'), '').toUpperCase();
+
 /// Pide los datos para marcar que la unidad no sale del viaje. Devuelve null si se cancela.
 ///
 /// [hallazgos] son los V1+ de inspecciones cerradas del viaje: son los únicos que el servidor acepta como causa.
@@ -120,6 +126,8 @@ class _EstadoHojaNoSale extends State<_HojaNoSale> {
                       TextField(
                         controller: _reemplazo,
                         textCapitalization: TextCapitalization.characters,
+                        autocorrect: false,
+                        enableSuggestions: false,
                         decoration: const InputDecoration(
                           labelText: 'VIN de reemplazo (opcional)',
                           helperText: 'Si ya hay otra unidad que la reemplaza, entra al viaje con sus etapas',
@@ -135,7 +143,10 @@ class _EstadoHojaNoSale extends State<_HojaNoSale> {
                     ? () => Navigator.of(context).pop((
                         hallazgoId: _hallazgoId,
                         motivo: _motivo.text.trim(),
-                        vinReemplazo: _reemplazo.text.trim().isEmpty ? null : _reemplazo.text.trim(),
+                        vinReemplazo: switch (normalizarVin(_reemplazo.text)) {
+                          '' => null,
+                          final vin => vin,
+                        },
                       ))
                     : null,
                 child: const Text('Marcar que no sale'),
