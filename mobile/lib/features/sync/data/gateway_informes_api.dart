@@ -77,6 +77,9 @@ class GatewayInformesApi implements GatewayInformes {
       'tamano_dano': hallazgo.tamano,
       'nivel_severidad': hallazgo.nivel,
       'nota': ?hallazgo.nota,
+      'es_preexistente': hallazgo.esPreexistente,
+      // El servidor lo exige con `es_preexistente` en true y lo prohíbe en false: cuando no lo es, la clave no va.
+      'hallazgo_origen_id': ?hallazgo.hallazgoOrigenId,
       // La evidencia va dentro: el servidor no acepta un hallazgo sin su foto.
       'evidencia': foto == null
           ? null

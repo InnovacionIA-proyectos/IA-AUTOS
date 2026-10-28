@@ -40,15 +40,18 @@ class HallazgoVista {
 }
 
 class EvidenciaVista {
-  const EvidenciaVista({required this.id, this.url});
+  const EvidenciaVista({required this.id, this.url, this.hallazgoId});
 
   factory EvidenciaVista.fromJson(Map<String, dynamic> json) =>
-      EvidenciaVista(id: json['id'] as String, url: json['url'] as String?);
+      EvidenciaVista(id: json['id'] as String, url: json['url'] as String?, hallazgoId: json['hallazgo_id'] as String?);
 
   final String id;
 
   /// Ruta relativa o absoluta de la imagen; null si no es servible.
   final String? url;
+
+  /// El daño que retrata. Null en las fotos del checklist de vistas, que no son de ningún daño.
+  final String? hallazgoId;
 }
 
 /// Los dos momentos de una etapa. Son valores fijos del contrato: la API solo acepta estos dos.

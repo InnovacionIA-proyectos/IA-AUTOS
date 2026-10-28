@@ -101,6 +101,23 @@ void main() {
     expect((Job.fromJson(sinExtras) as InformeJob).extras, isEmpty);
   });
 
+  test('la cola conserva que el daño ya estaba registrado y cuál era', () {
+    const hallazgo = HallazgoLocal(
+      cuadranteNumero: 7,
+      lado: 'izquierdo',
+      zona: 'Izquierdo 7 · Espejo retrovisor',
+      clase: 'golpe',
+      tamano: '1_5cm',
+      nivel: 'v2',
+      esPreexistente: true,
+      hallazgoOrigenId: 'h-previo',
+    );
+
+    final leido = HallazgoLocal.fromJson(hallazgo.toJson());
+
+    expect((leido.esPreexistente, leido.hallazgoOrigenId), (true, 'h-previo'));
+  });
+
   test('un hallazgo encolado por la versión anterior se lee, sin cuadrante', () {
     final viejo = HallazgoLocal.fromJson({
       'parte': 'Capot',

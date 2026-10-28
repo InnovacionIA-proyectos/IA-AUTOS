@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/proveedores.dart';
 import '../../../core/errores/error_api.dart';
+import '../../../core/http/urls_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/visor_imagen.dart';
 import '../../../core/ui/widgets.dart';
@@ -20,12 +21,6 @@ import '../providers.dart';
 final inventarioProvider = FutureProvider.autoDispose.family<Inventario, String>(
   (ref, vin) => ref.watch(vehiculosRepositorioProvider).inventario(vin),
 );
-
-/// URL absoluta de una imagen servida por la API (las evidencias vienen con ruta relativa).
-String? resolverUrlImagen(String apiUrl, String? relativa) {
-  if (relativa == null || relativa.isEmpty) return null;
-  return relativa.startsWith('http') ? relativa : '$apiUrl$relativa';
-}
 
 class VinPage extends ConsumerWidget {
   const VinPage({super.key, required this.vin});

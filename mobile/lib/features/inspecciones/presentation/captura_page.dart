@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../../app/proveedores.dart';
 import '../../../core/dispositivo/servicios.dart';
 import '../../../core/errores/error_api.dart';
+import '../../../core/http/urls_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../auth/presentation/auth_controller.dart';
@@ -22,7 +23,10 @@ import '../domain/checklist_vistas.dart';
 import '../domain/extra_local.dart';
 import '../domain/foto_local.dart';
 import '../domain/hallazgo_local.dart';
+import '../domain/hallazgo_previo.dart';
 import '../domain/reglas_informe.dart';
+import '../providers.dart';
+import 'aviso_preexistente.dart';
 import 'camara_page.dart';
 import 'filas_captura.dart';
 import 'nota_foto.dart';
@@ -71,6 +75,10 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 
   final _fotos = <FotoLocal>[];
   final _hallazgos = <HallazgoLocal>[];
+
+  /// Los daños que ya traía el vehículo, para proponer un daño nuevo como «ya estaba registrado». Vacía mientras
+  /// se cargan, y también cuando no hay copia guardada y no hay señal: entonces no se propone nada.
+  var _previos = const <HallazgoPrevio>[];
   final _extras = <ExtraLocal>[];
   bool _guardandoFoto = false;
   bool _cerrando = false;
@@ -81,6 +89,13 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   void initState() {
     super.initState();
     _buscarUbicacion();
+    _cargarPrevios();
+  }
+
+  /// Trae los hallazgos previos del VIN. No bloquea la captura: si fallan, simplemente no se propone nada.
+  Future<void> _cargarPrevios() async {
+    final previos = await ref.read(hallazgosPreviosRepositorioProvider).de(widget.vin);
+    if (mounted) setState(() => _previos = previos);
   }
 
   @override
@@ -192,6 +207,17 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     );
     if (dano == null || !mounted) return;
 
+    // ¿Es el mismo daño que ya traía el vehículo? Solo se pregunta si hay uno previo de esa zona y esa clase. El
+    // conductor no responde esto: marcar un daño como preexistente es criterio de quien inspecciona, y la API
+    // tampoco le deja ver los hallazgos previos.
+    final previo = _esConductor ? null : previoDe(_previos, clave: zona.clave, clase: dano.clase);
+    var esPreexistente = false;
+    if (previo != null) {
+      final respuesta = await _preguntarPreexistente(previo);
+      if (respuesta == null || !mounted) return;
+      esPreexistente = respuesta;
+    }
+
     // Un daño sin foto es la palabra de alguien contra la del siguiente, y el servidor lo rechaza con 400. Se
     // pide aquí, con la novedad recién marcada, y si no se toma no se registra nada.
     final temporal = await Navigator.of(context).push<String>(
@@ -210,10 +236,24 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
             tamano: dano.tamano,
             nivel: dano.nivel,
             nota: dano.nota,
+            esPreexistente: esPreexistente,
+            hallazgoOrigenId: esPreexistente ? previo!.id : null,
             foto: foto,
           ),
         ));
     _soltarZona();
+  }
+
+  /// Muestra el daño previo con su foto y deja decidir si es el mismo. Null si se sale sin responder.
+  Future<bool?> _preguntarPreexistente(HallazgoPrevio previo) {
+    final token = ref.read(authControllerProvider).sesion?.token;
+    return preguntarPreexistente(
+      context,
+      previo: previo,
+      catalogos: ref.read(catalogosProvider),
+      urlFoto: resolverUrlImagen(ref.read(entornoProvider).apiUrl, previo.fotoUrl),
+      encabezados: token == null ? null : {'Authorization': 'Bearer $token'},
+    );
   }
 
   /// El daño ya registrado en una zona: se corrige su clase, tamaño, nivel u observación, o se quita. La foto se

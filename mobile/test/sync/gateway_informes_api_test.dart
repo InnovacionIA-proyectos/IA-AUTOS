@@ -65,6 +65,50 @@ void main() {
     expect(cuerpo.keys, isNot(contains('nota')));
   });
 
+  test('un daño confirmado como ya registrado viaja con su origen', () async {
+    final (api, adaptador) = gateway((_) => json(201, {'id': 'h1'}));
+
+    await api.agregarHallazgo(
+      'insp-1',
+      const HallazgoLocal(
+        cuadranteNumero: 7,
+        lado: 'izquierdo',
+        zona: 'Izquierdo 7 · Espejo retrovisor',
+        clase: 'golpe',
+        tamano: '1_5cm',
+        nivel: 'v2',
+        esPreexistente: true,
+        hallazgoOrigenId: 'h-previo',
+        foto: fotoDelDano,
+      ),
+    );
+
+    final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
+    expect((cuerpo['es_preexistente'], cuerpo['hallazgo_origen_id']), (true, 'h-previo'));
+  });
+
+  test('un daño nuevo dice que no es preexistente y no manda origen', () async {
+    final (api, adaptador) = gateway((_) => json(201, {'id': 'h1'}));
+
+    await api.agregarHallazgo(
+      'insp-1',
+      const HallazgoLocal(
+        cuadranteNumero: 7,
+        lado: 'izquierdo',
+        zona: 'Izquierdo 7 · Espejo retrovisor',
+        clase: 'golpe',
+        tamano: '1_5cm',
+        nivel: 'v2',
+        foto: fotoDelDano,
+      ),
+    );
+
+    final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
+    expect(cuerpo['es_preexistente'], false);
+    // El servidor exige que el origen falte cuando no es preexistente.
+    expect(cuerpo.keys, isNot(contains('hallazgo_origen_id')));
+  });
+
   test('la observación del daño viaja como nota del hallazgo, no de la foto', () async {
     final (api, adaptador) = gateway((_) => json(201, {'id': 'h1'}));
 

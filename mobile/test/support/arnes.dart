@@ -10,7 +10,9 @@ import 'package:traza_autos/features/auth/domain/almacen_sesion.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/auth/providers.dart';
 import 'package:traza_autos/features/dibujo_dano/providers.dart';
+import 'package:traza_autos/features/inspecciones/data/hallazgos_previos_repositorio.dart';
 import 'package:traza_autos/features/inspecciones/data/inspecciones_repositorio.dart';
+import 'package:traza_autos/features/inspecciones/domain/hallazgo_previo.dart';
 import 'package:traza_autos/features/inspecciones/domain/inspeccion_resumen.dart';
 import 'package:traza_autos/features/inspecciones/providers.dart';
 import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
@@ -177,7 +179,8 @@ class Arnes {
         auth = AuthRepositorioFalso(),
         inspecciones = InspeccionesRepositorioFalso(),
         ubicacion = UbicacionFalsa(),
-        dispositivo = DispositivoFalso();
+        dispositivo = DispositivoFalso(),
+        previos = HallazgosPreviosFalso();
 
   final Entorno entorno;
   final AlmacenSesionEnMemoria almacen;
@@ -189,6 +192,10 @@ class Arnes {
   final InspeccionesRepositorioFalso inspecciones;
   final UbicacionFalsa ubicacion;
   final DispositivoFalso dispositivo;
+
+  /// Los hallazgos previos del VIN. Vacíos por defecto: la mayoría de las pruebas no los necesitan y así la
+  /// captura no pregunta nada.
+  final HallazgosPreviosFalso previos;
 
   late final ProcesadorCola procesador = ProcesadorCola(cola: cola, gateway: gateway, red: red, archivos: archivos);
 
@@ -204,9 +211,18 @@ class Arnes {
         servicioDispositivoProvider.overrideWithValue(dispositivo),
         // Las imágenes del dibujo de daños que bajan del servidor se guardan en Drift; en las pruebas, en memoria.
         almacenImagenesPanelProvider.overrideWithValue(AlmacenImagenesEnMemoria()),
+        hallazgosPreviosRepositorioProvider.overrideWithValue(previos),
       ];
 
   ProviderContainer contenedor() => ProviderContainer(overrides: overrides, retry: (_, _) => null);
 }
 
 ErrorApi errorApi(int status, [String mensaje = 'error']) => ErrorApi(message: mensaje, code: 'X', status: status);
+
+/// Hallazgos previos de mentira: se les pone la lista que la prueba quiera proponer.
+class HallazgosPreviosFalso implements HallazgosPreviosRepositorio {
+  List<HallazgoPrevio> lista = const [];
+
+  @override
+  Future<List<HallazgoPrevio>> de(String vin) async => lista;
+}

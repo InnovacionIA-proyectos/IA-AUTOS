@@ -14,6 +14,8 @@ class HallazgoLocal {
     required this.tamano,
     this.nivel,
     this.nota,
+    this.esPreexistente = false,
+    this.hallazgoOrigenId,
     this.foto,
   });
 
@@ -28,6 +30,8 @@ class HallazgoLocal {
         tamano: json['tamano'] as String,
         nivel: json['nivel'] as String?,
         nota: json['nota'] as String?,
+        esPreexistente: json['es_preexistente'] as bool? ?? false,
+        hallazgoOrigenId: json['hallazgo_origen_id'] as String?,
         // Los hallazgos que encoló una versión anterior no la traen.
         foto: json['foto'] == null ? null : FotoLocal.fromJson(json['foto'] as Map<String, dynamic>),
       );
@@ -53,6 +57,13 @@ class HallazgoLocal {
   /// caracteres.
   final String? nota;
 
+  /// El daño ya venía de antes: lo confirmó quien inspecciona contra un hallazgo previo del mismo vehículo. No es
+  /// un daño que ocurrió en esta etapa, y el informe no se lo cobra a nadie.
+  final bool esPreexistente;
+
+  /// El hallazgo previo que es este mismo daño. El servidor lo exige cuando [esPreexistente] y lo prohíbe cuando no.
+  final String? hallazgoOrigenId;
+
   /// La foto del daño. Nula solo en los hallazgos encolados antes de que fuera obligatoria.
   final FotoLocal? foto;
 
@@ -64,6 +75,8 @@ class HallazgoLocal {
     String? tamano,
     String? Function()? nivel,
     String? Function()? nota,
+    bool? esPreexistente,
+    String? Function()? hallazgoOrigenId,
     FotoLocal? foto,
   }) =>
       HallazgoLocal(
@@ -74,6 +87,8 @@ class HallazgoLocal {
         tamano: tamano ?? this.tamano,
         nivel: nivel == null ? this.nivel : nivel(),
         nota: nota == null ? this.nota : nota(),
+        esPreexistente: esPreexistente ?? this.esPreexistente,
+        hallazgoOrigenId: hallazgoOrigenId == null ? this.hallazgoOrigenId : hallazgoOrigenId(),
         foto: foto ?? this.foto,
       );
 
@@ -87,6 +102,8 @@ class HallazgoLocal {
         'tamano': tamano,
         'nivel': nivel,
         'nota': nota,
+        'es_preexistente': esPreexistente,
+        'hallazgo_origen_id': hallazgoOrigenId,
         'foto': foto?.toJson(),
       };
 }

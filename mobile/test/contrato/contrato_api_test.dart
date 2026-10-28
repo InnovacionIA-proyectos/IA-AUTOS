@@ -103,7 +103,10 @@ void main() {
     ],
     // La evidencia va DENTRO: el servidor no acepta un hallazgo sin su foto.
     // La zona sale del dibujo de daños: cuadrante + lado. El nivel lo asigna el inspector (el conductor lo manda nulo).
-    'CrearHallazgoRequest': ['cuadrante_numero', 'lado', 'clase_dano', 'tamano_dano', 'nivel_severidad', 'evidencia'],
+    'CrearHallazgoRequest': [
+      'cuadrante_numero', 'lado', 'clase_dano', 'tamano_dano', 'nivel_severidad', 'es_preexistente',
+      'hallazgo_origen_id', 'evidencia',
+    ],
     // Una sola firma: el servidor la atribuye al usuario del token.
     'FirmarTransferenciaRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma'],
     // Quien recibe firma dejando sus observaciones: cierra la transferencia como `con_reservas`.
