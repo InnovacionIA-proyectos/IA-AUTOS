@@ -99,49 +99,54 @@ class FilaHallazgo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
-    return Row(
-      children: [
-        // La foto del daño se ve: si no, quien la tomó no tiene cómo comprobar que quedó bien y se entera
-        // cuando ya no está delante del vehículo.
-        if (hallazgo.foto case final foto?)
-          Padding(
-            padding: const EdgeInsets.only(right: Espacio.sm),
-            child: GestureDetector(
-              onTap: () => mostrarVisorImagen(
-                context,
-                imagen: FileImage(File(foto.ruta)),
-                titulo: 'Novedad en ${hallazgo.zona}',
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.file(
-                  File(foto.ruta),
-                  // 48 de alto: es una zona táctil desde que la foto se puede abrir.
-                  width: 56,
-                  height: 48,
-                  fit: BoxFit.cover,
-                  semanticLabel: 'Foto de la novedad en ${hallazgo.zona}',
+    // Su propio aire arriba y abajo: con varias novedades las fotos quedaban pegadas una a otra y la lista se
+    // leía como un bloque, sin saber dónde termina una novedad y empieza la siguiente.
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Espacio.xs),
+      child: Row(
+        children: [
+          // La foto del daño se ve: si no, quien la tomó no tiene cómo comprobar que quedó bien y se entera
+          // cuando ya no está delante del vehículo.
+          if (hallazgo.foto case final foto?)
+            Padding(
+              padding: const EdgeInsets.only(right: Espacio.sm),
+              child: GestureDetector(
+                onTap: () => mostrarVisorImagen(
+                  context,
+                  imagen: FileImage(File(foto.ruta)),
+                  titulo: 'Novedad en ${hallazgo.zona}',
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    File(foto.ruta),
+                    // 48 de alto: es una zona táctil desde que la foto se puede abrir.
+                    width: 56,
+                    height: 48,
+                    fit: BoxFit.cover,
+                    semanticLabel: 'Foto de la novedad en ${hallazgo.zona}',
+                  ),
                 ),
               ),
             ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${hallazgo.zona}: $clase ($tamano)${nivel == null ? '' : ' · $nivel'}',
+                  style: tema.bodySmall?.copyWith(color: Colores.textoPrimario),
+                ),
+                if (hallazgo.nota case final nota?) Text(nota, style: tema.bodySmall),
+              ],
+            ),
           ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${hallazgo.zona}: $clase ($tamano)${nivel == null ? '' : ' · $nivel'}',
-                style: tema.bodySmall?.copyWith(color: Colores.textoPrimario),
-              ),
-              if (hallazgo.nota case final nota?) Text(nota, style: tema.bodySmall),
-            ],
+          TextButton(
+            onPressed: alQuitar,
+            child: Semantics(label: 'Quitar hallazgo ${hallazgo.zona}', child: const Text('Quitar', style: TextStyle(color: Colores.peligro))),
           ),
-        ),
-        TextButton(
-          onPressed: alQuitar,
-          child: Semantics(label: 'Quitar hallazgo ${hallazgo.zona}', child: const Text('Quitar', style: TextStyle(color: Colores.peligro))),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

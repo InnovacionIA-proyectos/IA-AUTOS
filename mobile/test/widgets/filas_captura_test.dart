@@ -204,4 +204,34 @@ void main() {
       expect(find.text('Novedad en Capot'), findsOneWidget);
     });
   });
+
+  // Lo que se vio en el celular con varias novedades: las fotos quedaban una encima de otra, casi tocandose, y
+  // la lista se leia como un solo bloque.
+  testWidgets('varias novedades no quedan pegadas una a otra', (tester) async {
+    FilaHallazgo fila(String zona) => FilaHallazgo(
+          hallazgo: HallazgoLocal(
+            cuadranteNumero: 52,
+            lado: null,
+            zona: zona,
+            clase: 'golpe',
+            tamano: '1_5cm',
+            foto: const FotoLocal(ruta: 'dano.jpg', selloFecha: '2026-01-02T10:00:00.000Z'),
+          ),
+          clase: 'Golpe',
+          tamano: 'De 1 a 5 cm',
+          alQuitar: () {},
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: crearTema(),
+        home: Scaffold(body: ListView(children: [fila('Capot'), fila('Parabrisas')])),
+      ),
+    );
+
+    // El hueco entre las dos fotos es lo que se ve pegado en la pantalla.
+    final arriba = tester.getRect(find.byType(Image).first);
+    final abajo = tester.getRect(find.byType(Image).last);
+    expect(abajo.top - arriba.bottom, greaterThanOrEqualTo(Espacio.sm), reason: 'las fotos no pueden tocarse');
+  });
 }
