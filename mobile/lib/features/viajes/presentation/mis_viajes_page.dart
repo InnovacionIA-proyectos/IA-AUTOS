@@ -205,6 +205,16 @@ class _FilaVehiculo extends StatelessWidget {
                 children: [
                   TextoMono(vehiculo.vin),
                   if (descripcion.isNotEmpty) Text(descripcion, style: tema.bodySmall),
+                  // La unidad sigue en la lista: conserva sus etapas y sus informes, pero ya no se captura
+                  // sobre ella y no cuenta para que el viaje esté completo.
+                  if (!vehiculo.sale)
+                    Text(
+                      switch (vehiculo.noSale?.vinReemplazo) {
+                        final reemplazo? when reemplazo.isNotEmpty => 'No sale · la reemplaza $reemplazo',
+                        _ => 'No sale',
+                      },
+                      style: tema.bodySmall?.copyWith(color: Colores.peligro),
+                    ),
                 ],
               ),
             ),

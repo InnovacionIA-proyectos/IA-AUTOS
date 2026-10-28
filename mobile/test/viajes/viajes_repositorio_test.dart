@@ -67,6 +67,58 @@ void main() {
     expect(await repositorio(AdaptadorFalso((_) => json(200, []))).leerCache('u1'), isNull);
   });
 
+  group('marcarNoSale', () {
+    test('manda el motivo, el hallazgo y el reemplazo, y devuelve el viaje', () async {
+      final conNoSale = viajeJson('v1');
+      conNoSale['vehiculos'] = <Map<String, dynamic>>[
+        {
+          'vin': 'VIN00000000000001',
+          'marca': 'Renault',
+          'modelo': 'Kwid',
+          'estado_unidad': 'no_sale',
+          'no_sale': {
+            'motivo': 'Golpe profundo en el capó',
+            'hallazgo_id': 'h1',
+            'marcado_por_nombre': 'Ana Pérez',
+            'fecha': '2026-10-28T15:00:00Z',
+            'vin_reemplazo': 'VIN00000000000002',
+          },
+        },
+      ];
+      final adaptador = AdaptadorFalso((_) => json(200, conNoSale));
+
+      final viaje = await repositorio(adaptador).marcarNoSale(
+        'v1',
+        'VIN00000000000001',
+        motivo: 'Golpe profundo en el capó',
+        hallazgoId: 'h1',
+        vinReemplazo: 'VIN00000000000002',
+      );
+
+      final peticion = adaptador.peticiones.single;
+      expect(peticion.uri.path, '/api/viajes/v1/vehiculos/VIN00000000000001/no-sale');
+      expect(peticion.method, 'POST');
+      final cuerpo = peticion.data as Map<String, dynamic>;
+      expect((cuerpo['motivo'], cuerpo['hallazgo_id'], cuerpo['vin_reemplazo']),
+          ('Golpe profundo en el capó', 'h1', 'VIN00000000000002'));
+
+      final unidad = viaje.vehiculos.single;
+      expect(unidad.sale, isFalse);
+      expect(unidad.noSale!.motivo, 'Golpe profundo en el capó');
+      expect(unidad.noSale!.vinReemplazo, 'VIN00000000000002');
+    });
+
+    test('sin reemplazo la clave viaja igual, en nulo: el servidor la exige presente', () async {
+      final adaptador = AdaptadorFalso((_) => json(200, viajeJson('v1')));
+
+      await repositorio(adaptador).marcarNoSale('v1', 'VIN00000000000001', motivo: 'Rechazado', hallazgoId: 'h1');
+
+      final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
+      expect(cuerpo.containsKey('vin_reemplazo'), isTrue);
+      expect(cuerpo['vin_reemplazo'], isNull);
+    });
+  });
+
   group('deLaEtapa', () {
     test('sale de la copia guardada, sin tocar la red: es lo que hace que la captura funcione sin señal', () async {
       await repositorio(AdaptadorFalso((_) => json(200, [viajeJson('v1')]))).listarRemoto('u1');

@@ -12,9 +12,12 @@ import 'package:traza_autos/features/vehiculos/data/vehiculos_repositorio.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
 import 'package:traza_autos/features/vehiculos/presentation/vin_page.dart';
 import 'package:traza_autos/features/vehiculos/providers.dart';
+import 'package:traza_autos/features/viajes/domain/viaje.dart';
+import 'package:traza_autos/features/viajes/providers.dart';
 
 import '../support/arnes.dart';
 import '../support/dobles_catalogos.dart';
+import '../support/dobles_viajes.dart';
 
 /// La pantalla del VIN con su ruta de custodia. Es la que abre el inspector en el patio: si revienta, no hay
 /// informe, y en una compilación de release revienta en blanco, sin decir nada.
@@ -82,7 +85,12 @@ const conductor = Sesion(
   usuario: Usuario(id: 'conductor-1', nombre: 'Luis Gómez', email: '', rol: 'conductor'),
 );
 
-Future<void> abrir(WidgetTester tester, {Map<String, dynamic>? inventario, Sesion? sesion}) async {
+Future<void> abrir(
+  WidgetTester tester, {
+  Map<String, dynamic>? inventario,
+  Sesion? sesion,
+  ViajesRepositorioFalso? viajes,
+}) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
@@ -92,6 +100,7 @@ Future<void> abrir(WidgetTester tester, {Map<String, dynamic>? inventario, Sesio
         ...Arnes(sesion: sesion ?? sesionPrueba).overrides,
         catalogosRepositorioProvider.overrideWithValue(CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe')),
         vehiculosRepositorioProvider.overrideWithValue(VehiculosRepositorioFalso(inventario ?? inventarioJson())),
+        viajesRepositorioProvider.overrideWithValue(viajes ?? ViajesRepositorioFalso()),
       ],
       child: MaterialApp(theme: crearTema(), home: const VinPage(vin: 'VIN00000000000001')),
     ),
@@ -192,5 +201,68 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(abiertas.single.queryParameters['proceso'], 'cargue', reason: 'el código, no «Cargue»');
+  });
+
+  group('la unidad no sale', () {
+    /// Inventario con un V1+ en una inspección cerrada del viaje: la única forma de que el servidor lo acepte.
+    Map<String, dynamic> conV1Plus() {
+      final json = inventarioJson();
+      final etapa = (json['etapas'] as List).first as Map<String, dynamic>;
+      final inspeccion = (etapa['inspecciones'] as List).first as Map<String, dynamic>;
+      inspeccion['hallazgos'] = <Map<String, dynamic>>[
+        {'id': 'h1', 'zona': 'Izquierdo 7 · Espejo retrovisor', 'cuadrante_numero': 7, 'lado': 'izquierdo',
+         'clase_dano': 'golpe', 'tamano_dano': 'mas_20cm', 'nivel_severidad': 'v1_plus'},
+      ];
+      return json;
+    }
+
+    ViajesRepositorioFalso delInspector(String inspectorId, {bool noSale = false}) => ViajesRepositorioFalso()
+      ..viajeDeEtapa = Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: 'en_curso',
+        inspectorId: inspectorId,
+        vehiculos: [
+          ViajeVehiculo(
+            vin: 'VIN00000000000001',
+            estadoUnidad: noSale ? 'no_sale' : estadoUnidadActiva,
+            noSale: noSale ? const NoSale(motivo: 'Golpe profundo en el capó', vinReemplazo: 'VIN00000000000002') : null,
+          ),
+        ],
+      );
+
+    testWidgets('se le ofrece al inspector del viaje con un V1+ cerrado', (tester) async {
+      await abrir(tester, inventario: conV1Plus(), viajes: delInspector('u1'));
+
+      expect(find.text('La unidad no sale'), findsOneWidget);
+    });
+
+    testWidgets('a un inspector que no es el del viaje, no', (tester) async {
+      await abrir(tester, inventario: conV1Plus(), viajes: delInspector('otro-inspector'));
+
+      expect(find.text('La unidad no sale'), findsNothing);
+    });
+
+    testWidgets('al conductor, nunca', (tester) async {
+      await abrir(tester, inventario: conV1Plus(), sesion: conductor, viajes: delInspector('conductor-1'));
+
+      expect(find.text('La unidad no sale'), findsNothing);
+    });
+
+    testWidgets('sin un V1+ no hay nada que marcar', (tester) async {
+      await abrir(tester, viajes: delInspector('u1'));
+
+      expect(find.text('La unidad no sale'), findsNothing);
+    });
+
+    testWidgets('una unidad ya marcada dice por qué, en vez del botón', (tester) async {
+      await abrir(tester, inventario: conV1Plus(), viajes: delInspector('u1', noSale: true));
+
+      expect(find.text('La unidad no sale'), findsNothing);
+      expect(find.text('Esta unidad no sale'), findsOneWidget);
+      expect(find.text('Golpe profundo en el capó'), findsOneWidget);
+      expect(find.text('La reemplaza VIN00000000000002'), findsOneWidget);
+    });
   });
 }

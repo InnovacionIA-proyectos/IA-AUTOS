@@ -109,6 +109,32 @@ void main() {
       expect((cola.jobs.single).fallido, isTrue);
     });
 
+    // Lo que el servidor rechaza campo a campo tiene que llegar así a la pantalla de envíos: «Datos inválidos» a
+    // secas no le dice a nadie qué arreglar, y un 400 no se reintenta solo.
+    test('un 400 con fieldErrors deja el job fallido con una línea por campo', () async {
+      await cola.agregar(informe(hallazgos: [hallazgoEjemplo]));
+      gateway.errores['agregarHallazgo'] = [
+        const ErrorApi(
+          message: 'Datos inválidos',
+          code: 'VALIDATION_ERROR',
+          status: 400,
+          details: {
+            'fieldErrors': {
+              'cuadrante_numero': ['El cuadrante indicado no existe o está inactivo'],
+              'nivel_severidad': ['El conductor no asigna el nivel'],
+            },
+          },
+        ),
+      ];
+
+      await procesador.procesar(usuarioPrueba);
+
+      final job = cola.jobs.single;
+      expect(job.fallido, isTrue, reason: 'un 400 no se arregla reintentando');
+      expect(job.error, contains('El cuadrante indicado no existe o está inactivo'));
+      expect(job.error, contains('El conductor no asigna el nivel'));
+    });
+
     test('un fallo al borrar un archivo local no invalida un envío exitoso', () async {
       await cola.agregar(informe(fotos: [foto('no-existe.jpg')]));
       archivos.existentes.add('no-existe.jpg');

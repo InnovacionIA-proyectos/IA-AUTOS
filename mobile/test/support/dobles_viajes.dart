@@ -34,6 +34,11 @@ class ViajesRepositorioFalso implements ViajesRepositorio {
   Object? errorDeLaEtapa;
   final List<String> etapasConsultadas = [];
 
+  /// Lo que responde `marcarNoSale`: el viaje ya marcado, o el error (409) que el servidor devolvería.
+  Viaje? viajeTrasNoSale;
+  Object? errorNoSale;
+  final List<Map<String, Object?>> noSalesMarcados = [];
+
   @override
   Future<List<Viaje>?> leerCache(String usuarioId) async => guardados;
 
@@ -50,5 +55,24 @@ class ViajesRepositorioFalso implements ViajesRepositorio {
     etapasConsultadas.add(viajeId);
     if (errorDeLaEtapa != null) throw errorDeLaEtapa!;
     return viajeDeEtapa;
+  }
+
+  @override
+  Future<Viaje> marcarNoSale(
+    String viajeId,
+    String vin, {
+    required String motivo,
+    required String hallazgoId,
+    String? vinReemplazo,
+  }) async {
+    noSalesMarcados.add({
+      'viaje_id': viajeId,
+      'vin': vin,
+      'motivo': motivo,
+      'hallazgo_id': hallazgoId,
+      'vin_reemplazo': vinReemplazo,
+    });
+    if (errorNoSale != null) throw errorNoSale!;
+    return viajeTrasNoSale ?? viajeDeEtapa!;
   }
 }

@@ -14,8 +14,12 @@ import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
 import '../../dibujo_dano/domain/dibujo_dano.dart';
 import '../../dibujo_dano/presentation/selector_zona_dano.dart';
+import '../../viajes/presentation/mis_viajes_controller.dart';
+import '../../viajes/providers.dart';
 import '../domain/etiquetas.dart';
 import '../domain/inventario.dart';
+import '../domain/no_sale.dart';
+import 'hoja_no_sale.dart';
 import '../providers.dart';
 
 final inventarioProvider = FutureProvider.autoDispose.family<Inventario, String>(
@@ -85,6 +89,8 @@ class _Detalle extends ConsumerWidget {
             ],
           ),
         ),
+        const SizedBox(height: Espacio.md),
+        _NoSale(inventario: inventario),
         const SizedBox(height: Espacio.lg),
         Text('Último informe', style: tema.titleMedium),
         const SizedBox(height: Espacio.sm),
@@ -124,6 +130,98 @@ class _Detalle extends ConsumerWidget {
             const SizedBox(height: Espacio.sm),
           ],
       ],
+    );
+  }
+}
+
+/// Marcar que la unidad no sale del viaje, o decir que ya no sale.
+///
+/// Solo se le ofrece al inspector de ese viaje y solo cuando hay un hallazgo V1+ en una inspección cerrada del
+/// viaje: son las mismas condiciones que el servidor exige, y sin ellas responde 403 o 409.
+class _NoSale extends ConsumerStatefulWidget {
+  const _NoSale({required this.inventario});
+
+  final Inventario inventario;
+
+  @override
+  ConsumerState<_NoSale> createState() => _EstadoNoSale();
+}
+
+class _EstadoNoSale extends ConsumerState<_NoSale> {
+  bool _enviando = false;
+
+  /// El viaje al que pertenece esta unidad hoy. Las etapas de un VIN cuelgan todas del mismo.
+  String? get _viajeId => widget.inventario.etapas.map((e) => e.viajeId).nonNulls.firstOrNull;
+
+  Future<void> _marcar(String viajeId, List<HallazgoVista> impiden) async {
+    final datos = await pedirNoSale(context, hallazgos: impiden, catalogos: ref.read(catalogosProvider));
+    if (datos == null || !mounted) return;
+
+    // El aviso se toma antes de los `await`: después de ellos el widget puede ya no estar en pantalla.
+    final avisos = ScaffoldMessenger.of(context);
+    setState(() => _enviando = true);
+    try {
+      await ref.read(viajesRepositorioProvider).marcarNoSale(
+            viajeId,
+            widget.inventario.vin,
+            motivo: datos.motivo,
+            hallazgoId: datos.hallazgoId,
+            vinReemplazo: datos.vinReemplazo,
+          );
+      // El viaje cambió para todos: la unidad deja de contar y el reemplazo entra con sus etapas.
+      await ref.read(misViajesControllerProvider.notifier).cargar();
+      ref.invalidate(viajeDeEtapaProvider(viajeId));
+      ref.invalidate(inventarioProvider(widget.inventario.vin));
+      avisos.showSnackBar(const SnackBar(content: Text('La unidad quedó marcada como que no sale.')));
+    } on ErrorApi catch (e) {
+      // Un 409 no se arregla reintentando (el hallazgo no es V1+, su inspección no está cerrada, ya no salía):
+      // se muestra tal cual lo explica el servidor.
+      avisos.showSnackBar(SnackBar(content: Text(e.mensajeDetallado)));
+    } finally {
+      if (mounted) setState(() => _enviando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    final viajeId = _viajeId;
+    if (viajeId == null) return const SizedBox.shrink();
+
+    final viaje = ref.watch(viajeDeEtapaProvider(viajeId)).value;
+    if (viaje == null) return const SizedBox.shrink();
+
+    final unidad = viaje.vehiculos.where((v) => v.vin == widget.inventario.vin).firstOrNull;
+    if (unidad != null && !unidad.sale) {
+      return Tarjeta(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Esta unidad no sale', style: tema.titleSmall?.copyWith(color: Colores.peligro)),
+            if (unidad.noSale case final no?) ...[
+              Text(no.motivo, style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
+              if (no.vinReemplazo case final reemplazo?) Text('La reemplaza $reemplazo', style: tema.bodySmall),
+            ],
+          ],
+        ),
+      );
+    }
+
+    final impiden = hallazgosQueImpidenSalir(widget.inventario, viajeId: viajeId);
+    final puede = puedeMarcarNoSale(
+      rol: ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol)),
+      esInspectorDelViaje: viaje.inspectorId != null &&
+          viaje.inspectorId == ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.id)),
+      hayHallazgoV1Plus: impiden.isNotEmpty,
+    );
+    if (!puede) return const SizedBox.shrink();
+
+    return OutlinedButton(
+      onPressed: _enviando ? null : () => _marcar(viajeId, impiden),
+      child: Text(
+        _enviando ? 'Marcando...' : 'La unidad no sale',
+        style: const TextStyle(color: Colores.peligro),
+      ),
     );
   }
 }

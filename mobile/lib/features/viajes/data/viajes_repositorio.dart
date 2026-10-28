@@ -33,6 +33,26 @@ class ViajesRepositorio {
     return viajes;
   }
 
+  /// Marca que una unidad no sale del viaje y devuelve el viaje ya actualizado.
+  ///
+  /// Va directo a la API, sin pasar por la cola: el servidor puede rechazarlo con 409 (el hallazgo no es V1+, su
+  /// inspección no está cerrada, la unidad ya no salía) y quien lo decide tiene que enterarse ahí mismo, no horas
+  /// después en la pantalla de envíos.
+  Future<Viaje> marcarNoSale(
+    String viajeId,
+    String vin, {
+    required String motivo,
+    required String hallazgoId,
+    String? vinReemplazo,
+  }) async {
+    final r = await _api.post(
+      '/api/viajes/${Uri.encodeComponent(viajeId)}/vehiculos/${Uri.encodeComponent(vin)}/no-sale',
+      // Las tres claves van presentes aunque el reemplazo sea nulo: el contrato las exige.
+      cuerpo: {'motivo': motivo, 'hallazgo_id': hallazgoId, 'vin_reemplazo': vinReemplazo},
+    );
+    return Viaje.fromJson(r as Map<String, dynamic>);
+  }
+
   /// El viaje de una etapa, para que la captura muestre su placa, tráiler, unidad y conductor.
   ///
   /// Primero la copia guardada, que es lo que hace que funcione sin señal. Si no está ahí —la copia es vieja, o
