@@ -78,4 +78,15 @@ void main() {
 
     expect(find.byType(Image), findsNothing);
   });
+
+  // En el celular la ficha no tenía salida: se abría, se leía y había que adivinar que se cierra arrastrando.
+  testWidgets('se cierra desde la ficha, sin tener que arrastrarla', (tester) async {
+    await abrir(tester, const HallazgoVista(id: 'h1', zona: 'Capot', clase: 'golpe', tamano: 'mas_20cm'));
+    expect(find.text('Capot'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Cerrar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Capot'), findsNothing);
+  });
 }

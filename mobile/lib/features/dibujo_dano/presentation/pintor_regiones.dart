@@ -38,6 +38,34 @@ abstract final class ColoresDibujo {
       _ => (linea: ColoresDibujo.porRevisar, relleno: ColoresDibujo.rellenoPorRevisar),
     };
 
+/// Con qué se pinta una región: fondo, línea y grosor del trazo (en píxeles de pantalla; el pintor lo divide por
+/// la escala).
+///
+/// Una zona **con daño** conserva el color de su nivel aunque esté elegida, y lo que marca la elección es el
+/// borde: si el amarillo le tapara el relleno, parecería que el daño cambió de estado al tocarlo.
+({Color? fondo, Color? linea, double grosor}) pinturaDeRegion({
+  required bool seleccionada,
+  required bool tieneDano,
+  required String? nivel,
+  required bool cuadricula,
+}) {
+  if (tieneDano) {
+    final color = colorDeNivel(nivel);
+    return (
+      fondo: color.relleno,
+      linea: seleccionada ? ColoresDibujo.seleccion : color.linea,
+      grosor: seleccionada ? 2.5 : 2.0,
+    );
+  }
+  if (seleccionada) {
+    return (fondo: ColoresDibujo.rellenoSeleccion, linea: ColoresDibujo.seleccion, grosor: 2.5);
+  }
+  if (cuadricula) {
+    return (fondo: ColoresDibujo.rellenoCuadricula, linea: ColoresDibujo.cuadricula, grosor: 1.2);
+  }
+  return (fondo: null, linea: null, grosor: 0.0);
+}
+
 /// Pinta las regiones de un panel encima de su imagen: la cuadrícula, las zonas con daño en rojo y la elegida en
 /// amarillo, con el número de cada zona.
 ///
@@ -75,16 +103,16 @@ class PintorRegiones extends CustomPainter {
         ..fillType = PathFillType.evenOdd
         ..addPolygon([for (final p in r.puntos) Offset(p.x * size.width, p.y * size.height)], true);
 
-      final (Color? fondo, Color? linea, double grosor) = switch (r.clave) {
-        final c when c == seleccionada => (ColoresDibujo.rellenoSeleccion, ColoresDibujo.seleccion, 2.5),
-        final c when danos.containsKey(c) => switch (colorDeNivel(danos[c])) {
-          final color => (color.relleno, color.linea, 2.0),
-        },
-        _ when cuadricula => (ColoresDibujo.rellenoCuadricula, ColoresDibujo.cuadricula, 1.2),
-        _ => (null, null, 0.0),
-      };
-      if (fondo != null) canvas.drawPath(camino, relleno..color = fondo);
-      if (linea != null) canvas.drawPath(camino, trazo..color = linea..strokeWidth = grosor / escala);
+      final pintura = pinturaDeRegion(
+        seleccionada: r.clave == seleccionada,
+        tieneDano: danos.containsKey(r.clave),
+        nivel: danos[r.clave],
+        cuadricula: cuadricula,
+      );
+      if (pintura.fondo case final fondo?) canvas.drawPath(camino, relleno..color = fondo);
+      if (pintura.linea case final linea?) {
+        canvas.drawPath(camino, trazo..color = linea..strokeWidth = pintura.grosor / escala);
+      }
     }
 
     if (cuadricula) _numeros(canvas, size);

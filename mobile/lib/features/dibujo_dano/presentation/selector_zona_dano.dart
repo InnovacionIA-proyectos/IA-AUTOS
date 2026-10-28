@@ -273,8 +273,8 @@ class _Candidatos extends StatelessWidget {
   }
 }
 
-/// La zona elegida: su nombre completo, su número y lado, el área AIAG y en qué vistas se ve, con lo que se puede
-/// hacer con ella.
+/// La zona elegida: su nombre completo, su descripción (número, lado y área AIAG) y en qué vistas se ve, con lo
+/// que se puede hacer con ella.
 class _FichaZona extends StatelessWidget {
   const _FichaZona({
     required this.zona,
@@ -295,9 +295,9 @@ class _FichaZona extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
+    // El AIAG ya va en la descripción de la zona: repetirlo aquí lo mostraba dos veces seguidas.
     final detalle = [
       zona.descripcion,
-      if (zona.aiagArea case final aiag?) 'Área AIAG $aiag',
       if (seVeEn.isNotEmpty) 'Se ve en: ${seVeEn.join(', ')}',
     ].join('. ');
     final accion = switch ((tieneDano, alRegistrar, alAbrirDano)) {

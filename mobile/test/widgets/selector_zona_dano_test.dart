@@ -95,6 +95,10 @@ void main() {
     await tester.tapAt(enPantalla(tester, region.puntoEtiqueta));
     await tester.pump();
     expect(find.textContaining('Cuadrante 13, lado izquierdo'), findsOneWidget);
+
+    // El AIAG va una sola vez: lo trae la descripción de la zona y la ficha no lo repite.
+    final ficha = tester.widget<Text>(find.textContaining('Cuadrante 13, lado izquierdo')).data!;
+    expect('AIAG'.allMatches(ficha).length, 1, reason: ficha);
   });
 
   // Lo que pasó en el Redmi: acercar en la llanta delantera y tocarla elegía el rin trasero y movía la vista.

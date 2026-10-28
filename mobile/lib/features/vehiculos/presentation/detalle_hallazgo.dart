@@ -100,6 +100,11 @@ class _DetalleHallazgo extends StatelessWidget {
                 ),
               ),
             ),
+            // La ficha necesita salida propia: arrastrarla hacia abajo no se adivina.
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cerrar')),
+            ),
           ],
         ),
       ),
