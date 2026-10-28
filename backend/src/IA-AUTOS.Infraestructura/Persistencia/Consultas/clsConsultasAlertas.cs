@@ -93,8 +93,6 @@ internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultas
 
         public string RolCreador { get; init; } = string.Empty;
 
-        public bool ConPersonalApoyo { get; init; }
-
         public DateTimeOffset IniciadaAt { get; init; }
     }
 
@@ -121,11 +119,10 @@ internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultas
                                Proceso = p.Codigo,
                                UsuarioId = u.Id,
                                RolCreador = u.Rol,
-                               ConPersonalApoyo = e.ConPersonalApoyo,
                                IniciadaAt = i.IniciadaAt,
                            }).Take(limite).ToListAsync(ct);
         return filas.Select(f => new clsCapturaAbierta(
-            f.InspeccionId, f.EtapaId, f.ViajeId, f.VehiculoId, f.ClienteId, f.Vin, f.Proceso, f.UsuarioId, f.RolCreador, f.ConPersonalApoyo, f.IniciadaAt)).ToList();
+            f.InspeccionId, f.EtapaId, f.ViajeId, f.VehiculoId, f.ClienteId, f.Vin, f.Proceso, f.UsuarioId, f.RolCreador, f.IniciadaAt)).ToList();
     }
 
     private sealed class FilaTransferencia

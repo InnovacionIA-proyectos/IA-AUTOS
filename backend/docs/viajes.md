@@ -11,7 +11,7 @@ están en [CONTRATO.md](../CONTRATO.md#viajes).
 | `tblViajes` | El viaje: `CodigoMtrack` (único entre los que lo tienen), `TipoUnidadId` (catálogo `tipos-unidad`), `Placa`, `Trailer`, `ConductorId`, `InspectorId`, `OrigenId` y `DestinoId` (catálogo `puntos-custodia`), `Estado` y `CreadoPor` |
 | `tblViajes` (programación) | `FechaProgramada` (cuándo está programado el cargue, con zona horaria; nulo) y `LugarCargueId` (llave foránea al lugar real de cargue de `tblLugares`; nulo). Los viajes anteriores quedan con nulos: no se migra nada |
 | `tblViajeVehiculos` | Los VIN de un viaje (único por viaje y vehículo); `LugarDestinoId` es el destino de **cada** unidad (lugar real; nulo en lo anterior). Un VIN puede estar en varios viajes con el tiempo; la aplicación no admite dos viajes **activos** con el mismo VIN |
-| `tblEtapas` | Gana `ViajeId` (obligatorio) y `ConPersonalApoyo` (solo en el Cargue). La unicidad pasa a (viaje, vehículo, orden) |
+| `tblEtapas` | Gana `ViajeId` (obligatorio). La unicidad pasa a (viaje, vehículo, orden). La marca `ConPersonalApoyo` que tuvo en el Cargue se eliminó (script 28): el Cargue no lleva ninguna marca previa |
 | `tblInspecciones` | Gana `ViajeId` (obligatorio): el viaje de la etapa. `ConductorNombre`, `Placa` y `Trailer` solo conservan lo capturado antes de los viajes |
 | `tblUsuarios` | Gana `Cedula` (única entre quienes la tienen): identifica al conductor en la carga por Excel |
 | `tblOrdenesSofasa` | Gana `ViajeId` y `CodigoMtrack`: el viaje al que pertenece la orden |

@@ -30,11 +30,15 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
 
     private static async Task<JsonElement> ClonarAsync(HttpResponseMessage r) => (await r.Content.ReadFromJsonAsync<JsonElement>()).Clone();
 
-    private async Task<Guid> CrearInspeccionAsync(Sesion sesion, Guid etapaId, string momento = "salida", bool conGps = true)
+    /// <summary>Crea la inspeccion. La salida del cargue que hace el conductor lleva el motivo de la excepcion «No hay inspector» (<paramref name="motivo"/>).</summary>
+    private async Task<Guid> CrearInspeccionAsync(Sesion sesion, Guid etapaId, string momento = "salida", bool conGps = true, string? motivo = null)
     {
         var r = await Cliente(sesion.Token).PostAsJsonAsync(
             "/api/inspecciones",
-            new { etapa_id = etapaId, momento, fecha = FECHA, lat = conGps ? 4.6 : (double?)null, lng = conGps ? -74.1 : (double?)null });
+            new Dictionary<string, object?>
+            {
+                ["etapa_id"] = etapaId, ["momento"] = momento, ["fecha"] = FECHA, ["lat"] = conGps ? 4.6 : null, ["lng"] = conGps ? -74.1 : null, ["motivo_sin_inspector"] = motivo,
+            });
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         return (await ClonarAsync(r)).GetProperty("id").GetGuid();
     }
@@ -487,7 +491,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-COND-0002", conductorId: conductor.UsuarioId);
-        var id = await CrearInspeccionAsync(conductor, etapas[0]);
+        var id = await CrearInspeccionAsync(conductor, etapas[0], motivo: "inspector_no_llego");
         var (ruta, _) = await SubirAsync(conductor);
 
         var conNivel = await PostHallazgoAsync(conductor, id, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }, nivel: "v2"));
@@ -1210,12 +1214,11 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     // ---------------------------------------------------------------- cargue sin personal de apoyo
 
     [Fact]
-    public async Task Con_personal_de_apoyo_el_conductor_no_crea_la_salida_del_cargue_y_el_inspector_si()
+    public async Task El_conductor_no_crea_la_salida_del_cargue_sin_la_excepcion_y_el_inspector_si()
     {
         var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
         var inspector = await SesionAsync("insp@ejemplo.com");
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-COND-0002", conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET ConPersonalApoyo = 1 WHERE Id = @e", ("@e", etapas[0]));
 
         var delConductor = await Cliente(conductor.Token).PostAsJsonAsync(
             "/api/inspecciones", new { etapa_id = etapas[0], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
@@ -1225,7 +1228,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(HttpStatusCode.Forbidden, delConductor.StatusCode);
         var cuerpo = await ClonarAsync(delConductor);
         Assert.Equal("FORBIDDEN", cuerpo.GetProperty("code").GetString());
-        Assert.Equal("Este cargue tiene personal de apoyo: el conductor solo firma el recibo", cuerpo.GetProperty("message").GetString());
+        Assert.Equal("La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción", cuerpo.GetProperty("message").GetString());
         Assert.Equal(HttpStatusCode.Created, delInspector.StatusCode);
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones"));
     }
@@ -1235,7 +1238,6 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-COND-0003", conductorId: conductor.UsuarioId);
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET ConPersonalApoyo = 1 WHERE Id = @e", ("@e", etapas[0]));
         await LlegadaCerradaAsync(etapas[0], conductor.UsuarioId);
         var transporte = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
         await LlegadaCerradaAsync(etapas[1], conductor.UsuarioId);
@@ -1250,11 +1252,11 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
-    public async Task Sin_personal_de_apoyo_el_conductor_hace_la_salida_con_las_mismas_reglas_del_inspector()
+    public async Task Con_la_excepcion_el_conductor_hace_la_salida_del_cargue_con_las_mismas_reglas_del_inspector()
     {
         var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-COND-0001", conductorId: conductor.UsuarioId);
-        var id = await CrearInspeccionAsync(conductor, etapas[0]);
+        var id = await CrearInspeccionAsync(conductor, etapas[0], motivo: "inspector_no_llego");
         await TomarVistasObligatoriasAsync(conductor, id, salvo: 2);
 
         var incompleta = await CerrarAsync(conductor, id);

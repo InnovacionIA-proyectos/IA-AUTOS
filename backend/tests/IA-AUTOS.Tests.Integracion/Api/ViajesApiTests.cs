@@ -62,7 +62,6 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Guid? inspectorId = null,
         Guid? origenId = null,
         Guid? lugarDestinoId = null,
-        bool conPersonalApoyo = false,
         string placa = "ABC123") =>
         await Cliente(quien.Token).PostAsync(
             "/api/viajes",
@@ -75,7 +74,6 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
                 conductor_id = conductorId,
                 inspector_id = inspectorId,
                 origen_id = origenId,
-                con_personal_apoyo = conPersonalApoyo,
                 unidades = await UnidadesAsync(quien, vines, lugarDestinoId),
             }));
 
@@ -299,13 +297,13 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var origen = await LugarAsync("cedi_1");
         var destino = await LugarRealAsync(Cliente(coordinador.Token), "Concesionario Autolarte Medellin", "concesionario");
 
-        var r = await CrearViajeAsync(coordinador, "MTK-ALTA", ["VIN-V-01", "vin-v-02"], conductor.UsuarioId, inspector.UsuarioId, origen, destino, conPersonalApoyo: true);
+        var r = await CrearViajeAsync(coordinador, "MTK-ALTA", ["VIN-V-01", "vin-v-02"], conductor.UsuarioId, inspector.UsuarioId, origen, destino);
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var viaje = await LeerJsonAsync(r);
         Assert.Equal(
             ["id", "codigo_mtrack", "tipo_unidad_id", "unidad", "placa", "trailer", "conductor_id", "conductor_nombre", "inspector_id", "inspector_nombre",
-             "origen_id", "origen", "destino_id", "destino", "estado", "con_personal_apoyo", "vehiculos", "clientes", "created_at", "updated_at", "fecha_programada", "lugar_cargue_id", "lugar_cargue"],
+             "origen_id", "origen", "destino_id", "destino", "estado", "vehiculos", "clientes", "created_at", "updated_at", "fecha_programada", "lugar_cargue_id", "lugar_cargue"],
             viaje.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("MTK-ALTA", viaje.GetProperty("codigo_mtrack").GetString());
         Assert.Equal("Niñera", viaje.GetProperty("unidad").GetString());
@@ -320,23 +318,21 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
             Assert.Equal(destino, u.GetProperty("lugar_destino_id").GetGuid());
             Assert.Equal("Concesionario Autolarte Medellin", u.GetProperty("lugar_destino").GetString());
         });
-        Assert.True(viaje.GetProperty("con_personal_apoyo").GetBoolean());
+        Assert.False(viaje.TryGetProperty("con_personal_apoyo", out _));
         Assert.Equal(["VIN-V-01", "VIN-V-02"], Vines(viaje));
 
         Assert.Equal(6, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas"));
-        var etapas = new Dictionary<string, (object? Lugar, bool Apoyo)>();
+        var etapas = new Dictionary<string, object?>();
         foreach (var codigo in new[] { "cargue", "transporte", "descargue" })
         {
             var lugar = await Sembrador.EscalarAsync("SELECT TOP 1 e.PuntoCustodiaId FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE c.Codigo = @c", ("@c", codigo));
-            var apoyo = Convert.ToBoolean(await Sembrador.EscalarAsync("SELECT TOP 1 e.ConPersonalApoyo FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE c.Codigo = @c", ("@c", codigo)));
-            etapas[codigo] = (lugar, apoyo);
+            etapas[codigo] = lugar;
         }
 
-        Assert.Equal(origen, etapas["cargue"].Lugar);
-        Assert.Null(etapas["transporte"].Lugar);
+        Assert.Equal(origen, etapas["cargue"]);
+        Assert.Null(etapas["transporte"]);
         // El Descargue de cada unidad se crea en el tipo de su lugar de destino (un Concesionario).
-        Assert.Equal(await LugarAsync("concesionario"), etapas["descargue"].Lugar);
-        Assert.Equal([true, false, false], new[] { etapas["cargue"].Apoyo, etapas["transporte"].Apoyo, etapas["descargue"].Apoyo });
+        Assert.Equal(await LugarAsync("concesionario"), etapas["descargue"]);
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'viaje.crear'"));
         Assert.Equal(coordinador.UsuarioId, await Sembrador.EscalarAsync("SELECT CreadoPor FROM dbo.tblViajes WHERE CodigoMtrack = 'MTK-ALTA'"));
     }
@@ -625,7 +621,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     }
 
     [Fact]
-    public async Task Cambiar_el_origen_o_el_personal_de_apoyo_se_lleva_al_cargue_que_no_tiene_informe_cerrado_y_el_destino_ya_no_es_del_viaje()
+    public async Task Cambiar_el_origen_se_lleva_al_cargue_que_no_tiene_informe_cerrado_y_el_destino_y_el_personal_de_apoyo_ya_no_se_aceptan()
     {
         var coordinador = await CoordinadorAsync();
         var inspector = await SesionAsync("insp@ejemplo.com", clsRol.INSPECTOR);
@@ -638,17 +634,20 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         await Sembrador.InformeAsync(cargue, inspector.UsuarioId, cerrada: true);
         var descargueAntes = await Sembrador.EscalarAsync("SELECT e.PuntoCustodiaId FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE c.Codigo = 'descargue'");
 
-        var r = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}", Cuerpo(new { origen_id = cedi1, con_personal_apoyo = true }));
+        var r = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}", Cuerpo(new { origen_id = cedi1 }));
+        var conApoyo = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}", Cuerpo(new { con_personal_apoyo = true }));
         var conDestino = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}", Cuerpo(new { destino_id = cedi1 }));
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         Assert.Equal(cedi1, (await LeerJsonAsync(r)).GetProperty("origen_id").GetGuid());
-        // El cargue ya tiene informe cerrado: conserva su lugar historico y su marca. El descargue es de cada unidad y no se toca.
+        // El cargue ya tiene informe cerrado: conserva su lugar historico. El descargue es de cada unidad y no se toca.
         Assert.Equal(origenViejo, await Sembrador.EscalarAsync("SELECT PuntoCustodiaId FROM dbo.tblEtapas WHERE Id = @e", ("@e", cargue)));
-        Assert.False(Convert.ToBoolean(await Sembrador.EscalarAsync("SELECT ConPersonalApoyo FROM dbo.tblEtapas WHERE Id = @e", ("@e", cargue))));
         Assert.Equal(descargueAntes, await Sembrador.EscalarAsync("SELECT e.PuntoCustodiaId FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE c.Codigo = 'descargue'"));
         Assert.Equal(HttpStatusCode.BadRequest, conDestino.StatusCode);
         Assert.StartsWith("Campo no admitido", (await LeerJsonAsync(conDestino)).GetProperty("details").GetProperty("fieldErrors").GetProperty("destino_id")[0].GetString());
+        // El cargue no lleva ninguna marca previa: con_personal_apoyo ya no se acepta.
+        Assert.Equal(HttpStatusCode.BadRequest, conApoyo.StatusCode);
+        Assert.StartsWith("Campo no admitido", (await LeerJsonAsync(conApoyo)).GetProperty("details").GetProperty("fieldErrors").GetProperty("con_personal_apoyo")[0].GetString());
     }
 
     [Fact]
@@ -768,7 +767,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var viaje = await ViajeConVinesAsync(coordinador, "MTK-ST", ["VIN-ST-01", "VIN-ST-02"], conductor.UsuarioId);
         Guid EtapaDe(string vin, int orden) => (Guid)Sembrador.EscalarAsync("SELECT e.Id FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = @v AND e.Orden = @o", ("@v", vin), ("@o", orden)).Result!;
 
-        var primera = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-01", 1), momento = "salida", fecha = FECHA });
+        var primera = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-01", 1), momento = "salida", fecha = FECHA, motivo_sin_inspector = "inspector_no_llego" });
         var estadoTras = (string)(await Sembrador.EscalarAsync("SELECT Estado FROM dbo.tblViajes WHERE Id = @v", ("@v", viaje)))!;
         await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{viaje}/estado", Cuerpo(new { estado = "finalizado" }));
         var enFinalizado = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-01", 2), momento = "salida", fecha = FECHA });

@@ -75,7 +75,6 @@ public class GeneradorPdfInventarioTests
             true,
             Guid.NewGuid(),
             "MTK-1",
-            false,
             "activa",
             null,
             [

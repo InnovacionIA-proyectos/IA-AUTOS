@@ -256,7 +256,7 @@ public sealed partial class GeneradorPdfInformeTests
         var inspeccion = new IAAutos.Aplicacion.Vehiculos.DTOVehiculos.InventarioInspeccionDto(
             Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), "salida", AHORA, null, null, "cerrada", null, null, null, null, AHORA, AHORA, AHORA, AHORA, 1, null, "Inspección de salida",
             [], [evidencia], null, [], null, []);
-        var etapa = new IAAutos.Aplicacion.Vehiculos.DTOVehiculos.InventarioEtapaDto(Guid.NewGuid(), 1, "cargue", null, true, Guid.NewGuid(), "MTK-1", false, "activa", null, [inspeccion]);
+        var etapa = new IAAutos.Aplicacion.Vehiculos.DTOVehiculos.InventarioEtapaDto(Guid.NewGuid(), 1, "cargue", null, true, Guid.NewGuid(), "MTK-1", "activa", null, [inspeccion]);
         var inventario = new IAAutos.Aplicacion.Vehiculos.DTOVehiculos.InventarioDto(Guid.NewGuid(), "VIN123", "Renault", null, null, null, null, "nacional", activo, AHORA, AHORA, [etapa]);
         return new DatosInventarioPdf(inventario, fotos ?? new Dictionary<Guid, FotoInforme>(), paneles ?? [], sinRegion ?? [], omitidas);
     }

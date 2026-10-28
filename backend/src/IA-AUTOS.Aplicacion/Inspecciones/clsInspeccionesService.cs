@@ -105,9 +105,9 @@ public sealed class clsInspeccionesService(
             throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite inspecciones nuevas");
         }
 
-        // En un Cargue con personal de apoyo la salida la hace el inspector: el conductor solo firma el recibo. Si el inspector previsto no esta, el conductor del viaje la hace con el motivo
-        // (la excepcion «No hay inspector»); sin motivo sigue siendo 403 y en cualquier otro caso el motivo no se admite (400).
-        var porExcepcion = actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && etapa.ConPersonalApoyo && await EsCargueAsync(etapa, ct);
+        // La salida de un Cargue la hace siempre el inspector: el conductor solo firma el recibo. Si no hay inspector, el conductor del viaje la hace activando en el momento la excepcion
+        // «No hay inspector» (con su motivo); sin motivo es 403 y en cualquier otro caso el motivo no se admite (400).
+        var porExcepcion = actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && await EsCargueAsync(etapa, ct);
         var motivo = await ResolverMotivoAsync(solicitud, porExcepcion, ct);
 
         // La salida de una etapa solo se crea cuando la etapa anterior del VIN ya termino (su llegada esta cerrada).
@@ -195,7 +195,7 @@ public sealed class clsInspeccionesService(
         var codigo = clsValidador.Opcional(solicitud.MotivoSinInspector);
         if (codigo is null)
         {
-            throw new clsProhibidoException("Este cargue tiene personal de apoyo: el conductor solo firma el recibo");
+            throw new clsProhibidoException("La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción");
         }
 
         var motivo = (await catalogos.ValoresAsync(clsNombresCatalogo.MOTIVOS_SIN_INSPECTOR, ct)).FirstOrDefault(m => m.Codigo == codigo && m.Activo)

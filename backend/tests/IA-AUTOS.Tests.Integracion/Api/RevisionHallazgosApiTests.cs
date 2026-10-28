@@ -353,13 +353,13 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     }
 
     [Fact]
-    public async Task El_coordinador_no_revisa_una_novedad_de_transporte_pero_si_la_de_un_cargue_sin_apoyo()
+    public async Task El_coordinador_no_revisa_una_novedad_de_transporte_pero_si_la_de_un_cargue_hecho_por_excepcion()
     {
         var e = await EscenarioAsync();
         var deTransporte = await RevisarAsync(e.Coordinador, e.Novedad, Cuerpo());
 
-        // El conductor registra un hallazgo en la salida del Cargue (sin personal de apoyo): queda sin zona confirmada ni nivel.
-        var inspeccion = await ComoJsonAsync(await Como(e.Conductor).PostAsJsonAsync("/api/inspecciones", new { etapa_id = e.Etapas[0], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 }));
+        // El conductor registra un hallazgo en la salida del Cargue que hizo por la excepcion «No hay inspector»: queda sin zona confirmada ni nivel.
+        var inspeccion = await ComoJsonAsync(await Como(e.Conductor).PostAsJsonAsync("/api/inspecciones", new { etapa_id = e.Etapas[0], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1, motivo_sin_inspector = "inspector_no_llego" }));
         var (ruta, hash) = await SubirAsync(e.Conductor);
         var creado = await Como(e.Conductor).PostAsJsonAsync($"/api/inspecciones/{inspeccion.GetProperty("id").GetGuid()}/hallazgos", new
         {
@@ -383,20 +383,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     }
 
     [Fact]
-    public async Task El_coordinador_no_revisa_el_hallazgo_del_conductor_de_un_cargue_con_personal_de_apoyo()
-    {
-        var e = await EscenarioAsync();
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET ConPersonalApoyo = 1 WHERE Id = @e", ("@e", e.Etapas[0]));
-        var (_, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(
-            e.Etapas[0], e.Conductor.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!, nivel: null, origen: "conductor");
-
-        var r = await RevisarAsync(e.Coordinador, hallazgo, Cuerpo());
-
-        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
-    }
-
-    [Fact]
-    public async Task El_inspector_tambien_revisa_el_hallazgo_del_conductor_de_un_cargue_sin_personal_de_apoyo()
+    public async Task El_inspector_tambien_revisa_el_hallazgo_del_conductor_de_un_cargue_hecho_por_excepcion()
     {
         var e = await EscenarioAsync();
         var (_, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(

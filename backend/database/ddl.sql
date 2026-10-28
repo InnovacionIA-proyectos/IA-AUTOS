@@ -696,8 +696,8 @@ GO
 /* -----------------------------------------------------------------------------
    tblEtapas (tramo de un VIN dentro de un viaje: etapa del catalogo y el lugar donde se hace)
    - Al agregar un VIN a un viaje se crean sus etapas: Cargue en el origen, Transporte y Descargue en el destino.
-   - ConPersonalApoyo (solo en la etapa de Cargue): con personal de apoyo la inspeccion de salida la hace un inspector; sin el,
-     la hace el conductor.
+   - La salida del Cargue la hace siempre un inspector; si no hay inspector, el conductor activa en el momento la excepcion
+     "No hay inspector" (su motivo sale de tblMotivosSinInspector y queda como novedad de proceso). El Cargue no lleva ninguna marca previa.
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblEtapas', N'U') IS NULL
 BEGIN
@@ -710,7 +710,6 @@ BEGIN
         ViajeId             uniqueidentifier NOT NULL,
         Orden               int              NOT NULL,
         RequiereInspeccion  bit              NOT NULL CONSTRAINT DF_tblEtapas_RequiereInspeccion DEFAULT (1),
-        ConPersonalApoyo    bit              NOT NULL CONSTRAINT DF_tblEtapas_ConPersonalApoyo DEFAULT (0),
         CreatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEtapas_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt           datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEtapas_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblEtapas_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id),

@@ -17,7 +17,6 @@ public sealed record CrearViajeRequest(
     Guid? ConductorId,
     Guid? InspectorId,
     Guid? OrigenId,
-    bool? ConPersonalApoyo,
     IReadOnlyList<UnidadDelViajeRequest>? Unidades);
 
 /// <summary>
@@ -31,7 +30,6 @@ public sealed record ActualizarViajeRequest(
     string? Trailer,
     Guid? ConductorId,
     Guid? OrigenId,
-    bool? ConPersonalApoyo,
     DateTimeOffset? FechaProgramada = null,
     Guid? LugarCargueId = null);
 
@@ -77,7 +75,7 @@ public sealed record ViajeVehiculoDto(
     string? LugarDestino = null);
 
 /// <summary>
-/// Viaje completo con sus VIN. <c>ConPersonalApoyo</c> es la marca de la etapa de Cargue. El viaje no tiene un cliente propio: <c>Clientes</c>
+/// Viaje completo con sus VIN. El viaje no tiene un cliente propio: <c>Clientes</c>
 /// son los de los VIN que quien consulta puede ver (todos para el conductor, el inspector y el super administrador; solo los de su cliente
 /// para el resto) y <c>Vehiculos</c> trae esos mismos VIN.
 /// </summary>
@@ -97,7 +95,6 @@ public sealed record ViajeDto(
     Guid? DestinoId,
     string? Destino,
     string Estado,
-    bool ConPersonalApoyo,
     IReadOnlyList<ViajeVehiculoDto> Vehiculos,
     IReadOnlyList<ClienteDto> Clientes,
     DateTimeOffset CreatedAt,
@@ -123,7 +120,6 @@ public sealed record ViajeResumenDto(
     Guid? DestinoId,
     string? Destino,
     string Estado,
-    bool ConPersonalApoyo,
     int TotalVehiculos,
     int VehiculosCompletos,
     IReadOnlyList<ClienteDto> Clientes,

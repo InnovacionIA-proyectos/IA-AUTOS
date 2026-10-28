@@ -511,7 +511,7 @@ transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus v
   "etapas": [
     {
       "id": "uuid", "orden": 1, "proceso": "cargue", "lugar": "CEDI 1", "requiere_inspeccion": true,
-      "viaje_id": "uuid", "codigo_mtrack": "MTK-001", "con_personal_apoyo": false,
+      "viaje_id": "uuid", "codigo_mtrack": "MTK-001",
       "estado_unidad": "activa", "no_sale": null,
       "inspecciones": [
         { "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "salida", "fecha": "…", "lat": 6.2, "lng": -75.5,
@@ -564,8 +564,8 @@ Las lecturas son para cualquier usuario autenticado, filtradas por la visibilida
 
 Los VIN **no se crean aquí**: deben existir ya en el inventario (`POST /api/vehiculos/cargar` o la ingesta Sofasa). Al agregar un VIN a un viaje se
 crean sus etapas, una por cada valor **activo** del catálogo `etapas` (hoy Cargue, Transporte y Descargue): el **Cargue** se hace en el
-`origen` del viaje, el **Descargue** en su `destino` y el Transporte no tiene lugar. Si el viaje tiene `con_personal_apoyo`, el Cargue queda marcado
-(con personal de apoyo la inspección de salida la hace un inspector; sin él, la hace el conductor).
+`origen` del viaje, el **Descargue** en el destino de la unidad y el Transporte no tiene lugar. El Cargue nace **sin ninguna marca previa**: la inspección de salida la hace siempre un inspector y, si no hay inspector,
+el conductor activa en el momento la excepción «No hay inspector».
 
 Estados: `programado` → `en_curso` → `finalizado`; un viaje `programado` o `en_curso` también puede pasar a `cancelado`. `finalizado` y `cancelado`
 son finales: el viaje ya no admite cambios ni inspecciones nuevas. La primera inspección de un viaje `programado` lo pasa a `en_curso`. Un viaje
@@ -580,7 +580,7 @@ Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viaj
   "id": "uuid", "codigo_mtrack": "MTK-001", "tipo_unidad_id": "uuid", "unidad": "Niñera", "placa": "ABC123", "trailer": "T-9",
   "conductor_id": "uuid", "conductor_nombre": "Carlos Gómez", "inspector_id": null, "inspector_nombre": null,
   "origen_id": "uuid", "origen": "CEDI 1", "destino_id": "uuid", "destino": "Concesionario",
-  "estado": "programado", "con_personal_apoyo": false,
+  "estado": "programado",
   "vehiculos": [
     { "vehiculo_id": "uuid", "vin": "9BWZZZ377VT004251", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional",
       "etapas": 3, "completas": 0, "estado_unidad": "activa", "no_sale": null, "estado_transporte": "sin_registro", "novedades": 0,
@@ -618,7 +618,7 @@ Gestión de viajes. `201` con el `ViajeDto`.
 ```json
 {
   "codigo_mtrack": "MTK-001", "tipo_unidad_id": "uuid", "placa": "ABC123", "trailer": "T-9",
-  "conductor_id": "uuid", "inspector_id": null, "origen_id": "uuid", "con_personal_apoyo": false,
+  "conductor_id": "uuid", "inspector_id": null, "origen_id": "uuid",
   "unidades": [
     { "vin": "9BWZZZ377VT004251", "lugar_destino_id": "uuid" },
     { "vin": "9BWZZZ377VT004252", "lugar_destino_id": "uuid" }
@@ -637,7 +637,6 @@ El destino es de **cada unidad**: el viaje ya no lleva un destino único, así q
 | `conductor_id` | no | usuario activo con rol `conductor` |
 | `inspector_id` | no | usuario activo con rol `inspector` |
 | `origen_id` | no | `id` de un lugar **activo** del catálogo `puntos-custodia` |
-| `con_personal_apoyo` | no | por defecto `false` |
 | `unidades` | no | hasta 500; cada una con su `vin` (que ya exista) y su `lugar_destino_id` (obligatorio: un lugar **activo** del catálogo `lugares`); sin VIN repetidos |
 
 El Descargue de cada unidad se crea en el tipo (`puntos-custodia`) de **su** lugar de destino.
@@ -672,15 +671,14 @@ quién entrega y quién recibe. `403` si es un inspector o conductor y el viaje 
 
 ### `PATCH /api/viajes/{id}`
 Gestión de viajes. Cambia **solo los campos enviados** de un viaje `programado` o `en_curso`; responde `200` con el `ViajeDto`. Campos: `codigo_mtrack`,
-`tipo_unidad_id`, `placa`, `trailer`, `conductor_id`, `origen_id`, `con_personal_apoyo` (mismas reglas que al crear).
-`trailer`, `conductor_id` y `origen_id` admiten `null` para quitarlos; `inspector_id` **ya no se acepta** (lo llena el reclamo del cargue: ver «Reclamo del camión»); `destino_id` **ya no se acepta** (el destino es de cada unidad: ver `PATCH /api/viajes/{id}/vehiculos/{vin}`); `codigo_mtrack`, `tipo_unidad_id`, `placa` y
-`con_personal_apoyo` no. Un campo que no existe responde `400`; un `codigo_mtrack` repetido, `409`; un viaje finalizado o cancelado, `409`.
+`tipo_unidad_id`, `placa`, `trailer`, `conductor_id`, `origen_id` (mismas reglas que al crear).
+`trailer`, `conductor_id` y `origen_id` admiten `null` para quitarlos; `inspector_id` **ya no se acepta** (lo llena el reclamo del cargue: ver «Reclamo del camión»); `destino_id` **ya no se acepta** (el destino es de cada unidad: ver `PATCH /api/viajes/{id}/vehiculos/{vin}`); `con_personal_apoyo` **ya no existe** (el cargue no lleva ninguna marca previa); `codigo_mtrack`, `tipo_unidad_id` y `placa` no admiten `null`. Un campo que no existe responde `400`; un `codigo_mtrack` repetido, `409`; un viaje finalizado o cancelado, `409`.
 
 Mientras el viaje está `programado` también se corrige su programación: `fecha_programada` (ISO 8601 **con zona horaria**, por ejemplo `2026-11-03T06:00:00-05:00`; `null` la quita) y
 `lugar_cargue_id` (un lugar **activo** del catálogo `lugares`; `null` lo quita). Una fecha sin zona o un lugar inexistente o inactivo responde `400` con `details.fieldErrors`;
 en un viaje `en_curso` cambiarlos responde `409` (lo demás del viaje sí se sigue editando).
 
-Al cambiar `origen_id` se actualiza el lugar del Cargue de los VIN del viaje, y `con_personal_apoyo` marca el Cargue; las etapas que
+Al cambiar `origen_id` se actualiza el lugar del Cargue de los VIN del viaje; las etapas que
 ya tienen un informe cerrado no cambian.
 
 ### `PATCH /api/viajes/{id}/estado`
@@ -829,14 +827,14 @@ versión nueva (`POST /api/inspecciones/{id}/corregir`).
 | Cargue y Descargue | la foto de **cada una de las 7 vistas obligatorias** (las activas de `vistas-foto` con `obligatoria: true` para el tipo del vehículo); una foto propia por hallazgo; ubicación en toda foto. Las 2 vistas adicionales (piezas en el baúl y cojinería) **no bloquean** el cierre |
 | Transporte (registro del conductor) | no exige las 7 vistas, pero sí la **ubicación (GPS) y la hora del propio registro** (`lat`/`lng` de la inspección); si hay una novedad, el hallazgo lleva su foto. Cuenta para la cobertura |
 
-Las mismas reglas valen para quien haga la inspección: cuando el cargue no tiene personal de apoyo la hace el conductor, con las mismas 7 vistas, sello y hallazgos.
+Las mismas reglas valen para quien haga la inspección: cuando el conductor hace la salida del cargue por la excepción «No hay inspector», con las mismas 7 vistas, sello y hallazgos.
 
 ### `POST /api/inspecciones`
 Campo. `201` con la inspección. El usuario sale del token (no se envía) y **la placa, el tráiler y el conductor salen del viaje de la etapa**: ya no se piden como texto.
 Inspector y conductor reciben `403` si la etapa es de un viaje que no es suyo; un viaje finalizado o cancelado responde `409`; una etapa inexistente, `404`.
 
-**El conductor no crea la salida de un Cargue con personal de apoyo… salvo que el inspector no esté.** Si la etapa es el Cargue y tiene `con_personal_apoyo: true`, la salida la crea el inspector: el conductor recibe `403` con «Este cargue tiene personal de apoyo: el conductor solo firma el recibo».
-Con `con_personal_apoyo: false`, y en Transporte y Descargue, el conductor sí la crea. La regla es de la salida del Cargue; la llegada y el resto no cambian. La excepción «No hay inspector» está en [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso) (decisión del equipo, pendiente de confirmar por el negocio, P-073).
+**El conductor no crea la salida de un Cargue… salvo que active la excepción.** Si la etapa es el Cargue, la salida la crea el inspector: el conductor recibe `403` con «La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción» (no hay ninguna marca previa en el cargue).
+En Transporte y Descargue el conductor sí la crea. La regla es de la salida del Cargue; la llegada y el resto no cambian. La excepción «No hay inspector» está en [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso) (decisión del equipo, pendiente de confirmar por el negocio, P-073).
 
 **La salida exige la etapa anterior terminada.** Si el VIN tiene una etapa anterior en el viaje (por su `orden`) y esa etapa no tiene su **llegada cerrada**, o tiene una
 **transferencia sin tipo de cierre**, la salida responde `409` con `code: "ETAPA_PREVIA_SIN_CIERRE"` y `details` con `motivo` (`etapa_previa_sin_cierre` si falta cerrar la llegada,
@@ -878,7 +876,7 @@ son la hora del servidor al crear y al cerrar (`cerrada_at` es `null` en borrado
 
 ### Excepción «No hay inspector» y novedades de proceso
 
-Si el inspector previsto no está en el Cargue de una unidad con `con_personal_apoyo: true`, el **conductor del viaje** crea la salida con `motivo_sin_inspector`:
+Si no hay inspector en el Cargue de una unidad, el **conductor del viaje** activa en el momento la excepción y crea la salida con `motivo_sin_inspector`:
 
 ```json
 { "etapa_id": "uuid", "momento": "salida", "fecha": "2026-10-23T08:30:00-05:00", "lat": 6.2442, "lng": -75.5812, "motivo_sin_inspector": "otro", "motivo_sin_inspector_texto": "El inspector se enfermó" }
@@ -893,7 +891,7 @@ Si el inspector previsto no está en el Cargue de una unidad con `con_personal_a
 | conductor de otro viaje | `403` |
 | el inspector ya creó esa salida | `409`, como hoy |
 
-La etapa **conserva** `con_personal_apoyo: true` y la inspección sigue las reglas de la salida sin apoyo (las 7 vistas con sello, hallazgos del conductor sin nivel V). Al crearla, en la misma confirmación:
+La inspección sigue las reglas de la salida que hace el conductor (las 7 vistas con sello, hallazgos del conductor sin nivel V). Al crearla, en la misma confirmación:
 
 - la inspección guarda `motivo_sin_inspector` y su texto (los conserva también la versión que la corrija);
 - se crea la **novedad de proceso** `cargue_sin_inspector` con el motivo, quién la registró y la `fecha`, `lat` y `lng` **del cuerpo** (los del momento en que el conductor eligió el motivo, aunque la envíe después por falta de señal);
@@ -1149,7 +1147,7 @@ La misma fila más `seguimiento` (el historial, como en `GET /api/hallazgos/{id}
 ## Revisión de la novedad
 
 La novedad que registra el conductor nace sin zona, clase ni nivel V: un inspector la revisa, la ubica y le asigna el nivel, que el conductor nunca asigna. A partir de la revisión el hallazgo entra al seguimiento y a los patrones. También se revisan
-así los hallazgos que el conductor registra en la salida de un Cargue sin personal de apoyo, en la de un Cargue con apoyo que él hizo con la excepción «No hay inspector» y en la **llegada del Descargue que hace él** sin inspector en destino (que tampoco traen nivel).
+así los hallazgos que el conductor registra en la salida de un Cargue que él hizo con la excepción «No hay inspector» y en la **llegada del Descargue que hace él** sin inspector en destino (que tampoco traen nivel).
 Al revisar se puede confirmar que el daño **ya estaba registrado** (`es_preexistente` y `hallazgo_origen_id`); si el conductor lo anotó otra vez en la llegada, no queda como un daño del transporte.
 
 ### `POST /api/hallazgos/{id}/revision`
@@ -1178,7 +1176,7 @@ Responde `200` con el `HallazgoDto` ya completo: `revisado_por` y `revisado_at` 
 |---|---|
 | `inspector` | hallazgos de un VIN que está en alguno de sus viajes (`403` si no) |
 | `admin` y `super_admin` | los de su cliente (el `super_admin`, los de cualquiera) |
-| `coordinador_calidad` | **solo** los hallazgos del conductor de la salida de un Cargue **sin personal de apoyo**, de la salida de un Cargue con apoyo que el conductor hizo con la excepción «No hay inspector» o de la **llegada del Descargue que hizo el conductor** (`403` en cualquier otro caso): los revisa a distancia con las fotos y les asigna el nivel V antes de que salga el viaje, de modo que un V1+ todavía se puede recuperar o marcar «no sale». Propuesta pendiente de confirmar por el negocio |
+| `coordinador_calidad` | **solo** los hallazgos del conductor de la salida de un Cargue que el conductor hizo con la excepción «No hay inspector» o de la **llegada del Descargue que hizo el conductor** (`403` en cualquier otro caso): los revisa a distancia con las fotos y les asigna el nivel V antes de que salga el viaje, de modo que un V1+ todavía se puede recuperar o marcar «no sale». Propuesta pendiente de confirmar por el negocio |
 | los demás roles | `403` |
 
 Quien se limita a su cliente recibe `403` con un hallazgo de otro cliente.
@@ -1358,7 +1356,7 @@ Nada de otros viajes del mismo VIN: el inventario solo trae las etapas de sus vi
 
 Las alertas y los avisos llegan a una **bandeja** (el portal y la app) y, las urgentes, también por **push** al celular. La capacidad `ver_alertas` de `GET /api/auth/me` la tienen `coordinador_calidad`, `admin` y `super_admin` (las alertas preventivas
 de su cliente), `inspector` (solo los avisos operativos dirigidos a él: `captura_incompleta` de una inspección que inició y `transferencia_pendiente` de su firma) y `conductor` (solo `respuesta_conductor`, `captura_incompleta` de una inspección que
-él inició en un cargue sin personal de apoyo y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
+él inició en la salida de un cargue y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
 Todo lo que se hace aquí queda en la auditoría.
 
 `NotificacionDto`:
@@ -1439,7 +1437,7 @@ El sistema avisa de lo que requiere atención sin que nadie revise listados. Las
 |---|---|---|---|---|
 | `hallazgo_critico` | preventiva | `alta` | `coordinador_calidad` y `admin` activos del cliente de la unidad | al **cerrar** una inspección con un hallazgo de nivel crítico y al **revisar** una novedad del conductor con ese nivel; una por inspección |
 | `umbral_patron` | preventiva | `media` | `coordinador_calidad` y `admin` activos del cliente | cada hora, cuando los hallazgos de una zona (lado + número) o de un proceso, de ese cliente, llegan al umbral dentro de la ventana; una vez por ventana |
-| `captura_incompleta` | operativo | `media` | quien inició la inspección (el inspector o, solo en un Cargue sin personal de apoyo, el conductor) | cada 10 minutos, si una inspección de Cargue o Descargue sigue en borrador y le faltan fotos de vistas obligatorias; una por inspección |
+| `captura_incompleta` | operativo | `media` | quien inició la inspección (el inspector o, solo en la salida de un Cargue, el conductor) | cada 10 minutos, si una inspección de Cargue o Descargue sigue en borrador y le faltan fotos de vistas obligatorias; una por inspección |
 | `transferencia_pendiente` | operativo | `media` | el firmante que falta (o, si aún no hay transferencia, el conductor o el inspector del viaje) | cada 10 minutos, si una llegada cerrada sigue sin transferencia con tipo de cierre; una por inspección y destinatario |
 
 Los umbrales y los tiempos de espera son **parámetros** que se cambian sin desplegar (`niveles_criticos`, `umbral_patron_cantidad`, `umbral_patron_ventana_dias`, `captura_incompleta_minutos` y `transferencia_pendiente_minutos`; ver «Parámetros»). Las alertas preventivas nunca llegan a un usuario de otro cliente
@@ -1616,7 +1614,7 @@ Campo. **Constancia de no firma**: una parte se negó a firmar y la **otra parte
 La foto se guarda como una evidencia marcada `es_constancia: true`, que **se admite aunque la inspección ya esté cerrada** y no cuenta como foto de una vista ni de un hallazgo.
 
 ### `POST /api/inspecciones/{id}/transferencia/sin-entrega`
-Campo, **solo el conductor del viaje** (decisión del equipo, pendiente de confirmar por el negocio, P-080). Cuando el conductor hizo la salida del Cargue (sin personal de apoyo, o con la excepción «No hay inspector») nadie de Botero Soto firma la entrega: el conductor cierra la transferencia solo con su firma. `201`.
+Campo, **solo el conductor del viaje** (decisión del equipo, pendiente de confirmar por el negocio, P-080). Cuando el conductor hizo la salida del Cargue (por la excepción «No hay inspector») nadie de Botero Soto firma la entrega: el conductor cierra la transferencia solo con su firma. `201`.
 
 ```json
 { "firma": "<trazo SVG o ruta>" }
@@ -1682,7 +1680,7 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | `cuadrante-regiones` | La **región tocable** de cada zona numerada en cada panel (una fila por aparición). Las zonas provisionales no tienen región | `id`, `panel` (código), `cuadrante_id`, `numero`, `nombre`, `lado` (`izquierdo`, `derecho` o `null` del 26 en adelante), `geometria` |
 | `clientes` | Las empresas a las que pertenecen los usuarios y los vehículos (hoy `sofasa`). El primero activo por `orden` es el cliente por defecto de lo que se crea sin cliente explícito | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `estados-sofasa` | Los estados de las órdenes Sofasa: el `codigo` es el `status_code` **real** de la orden y el `nombre`, su etiqueta (ver «Estados Sofasa» abajo). Empieza con los `status_code` que ya tienen las órdenes | `id`, `codigo`, `nombre`, `orden`, `activo` |
-| `motivos-sin-inspector` | Los motivos por los que no está el inspector previsto en un cargue con personal de apoyo: `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto) | `id`, `codigo`, `nombre`, `orden`, `activo`, `requiere_texto` |
+| `motivos-sin-inspector` | Los motivos por los que no hay inspector en un cargue (la excepción «No hay inspector», que activa el conductor en el momento): `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto) | `id`, `codigo`, `nombre`, `orden`, `activo`, `requiere_texto` |
 
 **Estados Sofasa (`estados-sofasa`).** `GET /api/sofasa/ordenes` sigue devolviendo `status_code` **sin traducir**; el portal lo traduce con este catálogo (`items.find(i => i.codigo === orden.status_code)?.nombre`; si el estado no está, muestra el código). A diferencia de los demás
 catálogos, su `codigo` **no se limita a minúsculas y `_`**: es el texto que trae la orden del origen, y se guarda tal cual (recortado, con sus mayúsculas, hasta 100 caracteres y sin saltos de línea); es único sin distinguir mayúsculas, así que `ENTREGADA` y `entregada` son el mismo. Las demás

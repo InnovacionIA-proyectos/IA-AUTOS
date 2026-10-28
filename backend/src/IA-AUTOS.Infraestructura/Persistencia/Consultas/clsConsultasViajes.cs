@@ -63,7 +63,6 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         string? Origen,
         string? Destino,
         string? LugarCargue,
-        bool ConPersonalApoyo,
         int TotalVehiculos,
         int VehiculosCompletos);
 
@@ -220,7 +219,6 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
 
         // Los conteos de los viajes se piden aparte, una consulta por tabla agrupada por viaje (y no una subconsulta por cada fila). Completa es la regla de vwViajesCompletos guardada en cada VIN.
         var ids = filas.Select(f => f.Viaje.Id).ToList();
-        var conPersonalApoyo = (await contexto.Etapas.Where(e => ids.Contains(e.ViajeId) && e.ConPersonalApoyo).Select(e => e.ViajeId).Distinct().ToListAsync(ct)).ToHashSet();
         var conteos = (await (from vv in contexto.ViajeVehiculos
                               join h in contexto.Vehiculos on vv.VehiculoId equals h.Id
                               where ids.Contains(vv.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente)
@@ -229,7 +227,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
             .ToDictionary(x => x.ViajeId);
         return filas
             .Select(f => new FilaViaje(
-                f.Viaje, f.Unidad, f.Conductor, f.Inspector, f.Origen, f.Destino, f.LugarCargue, conPersonalApoyo.Contains(f.Viaje.Id),
+                f.Viaje, f.Unidad, f.Conductor, f.Inspector, f.Origen, f.Destino, f.LugarCargue,
                 conteos.GetValueOrDefault(f.Viaje.Id)?.Total ?? 0, conteos.GetValueOrDefault(f.Viaje.Id)?.Completos ?? 0))
             .ToList();
     }
@@ -299,12 +297,12 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
     private static ViajeResumenDto AResumen(FilaViaje f, IReadOnlyList<ClienteDto> clientes) => new(
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
-        f.Viaje.Estado, f.ConPersonalApoyo, f.TotalVehiculos, f.VehiculosCompletos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt,
+        f.Viaje.Estado, f.TotalVehiculos, f.VehiculosCompletos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt,
         f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue);
 
     private static ViajeDto ADto(FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes) => new(
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
-        f.Viaje.Estado, f.ConPersonalApoyo, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt,
+        f.Viaje.Estado, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt,
         f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue);
 }

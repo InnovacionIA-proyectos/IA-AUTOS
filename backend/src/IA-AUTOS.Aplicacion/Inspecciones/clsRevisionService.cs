@@ -139,13 +139,13 @@ public sealed class clsRevisionService(
     }
 
     /// <summary>
-    /// La salida de un Cargue sin personal de apoyo, la de un Cargue con apoyo que el conductor hizo porque el inspector previsto no estaba (la inspeccion guarda el motivo) o la llegada del Descargue
-    /// que hizo el conductor: en las tres no hay inspector que revise lo que el conductor registro.
+    /// La salida de un Cargue que hizo el conductor (con la excepcion «No hay inspector», que guarda su motivo; o una anterior a la excepcion) o la llegada del Descargue que hizo el conductor: en las dos
+    /// no hay inspector que revise lo que el conductor registro.
     /// </summary>
     private async Task<bool> EsInspeccionSinInspectorAsync(clsInspeccion inspeccion, clsEtapa etapa, clsViaje viaje, CancellationToken ct)
     {
         var proceso = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
-        return (proceso == clsCodigosEtapa.CARGUE && inspeccion.Momento == clsMomento.SALIDA && (!etapa.ConPersonalApoyo || inspeccion.MotivoSinInspector is not null))
+        return (proceso == clsCodigosEtapa.CARGUE && inspeccion.Momento == clsMomento.SALIDA && (inspeccion.MotivoSinInspector is not null || viaje.ConductorId == inspeccion.UsuarioId))
             || (proceso == clsCodigosEtapa.DESCARGUE && inspeccion.Momento == clsMomento.LLEGADA && viaje.ConductorId == inspeccion.UsuarioId);
     }
 
