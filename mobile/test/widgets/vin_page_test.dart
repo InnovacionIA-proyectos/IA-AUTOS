@@ -269,13 +269,14 @@ void main() {
   });
 
   group('las novedades del conductor por revisar', () {
+    // Como la registra el conductor: con su clase y su tamaño, sin nivel y, en este caso, sin GPS.
     const sinClasificar = NovedadPendiente(
       id: 'n1',
       vin: 'VIN00000000000001',
       proceso: 'transporte',
       momento: 'llegada',
+      clase: 'golpe',
       tamano: 'mas_20cm',
-      tipoNovedad: 'golpe',
       foto: FotoNovedad(tomadaEn: null, sinUbicacion: true),
     );
 
@@ -283,6 +284,8 @@ void main() {
       await abrir(tester, novedades: const [sinClasificar]);
 
       expect(find.text('Novedades por revisar'), findsOneWidget);
+      // Lo que el conductor alcanzó a decir: la clase que eligió y el tamaño. Sin la clase, la fila no decía qué
+      // tipo de daño era y había que abrirla para saberlo.
       expect(find.text('Golpe · Más de 20 cm'), findsOneWidget);
       expect(find.text('Sin hora · Sin ubicación'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, 'Revisar'), findsOneWidget);

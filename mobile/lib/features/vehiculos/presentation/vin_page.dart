@@ -95,7 +95,7 @@ class _Detalle extends ConsumerWidget {
         ),
         const SizedBox(height: Espacio.md),
         _NoSale(inventario: inventario),
-        _NovedadesPorRevisar(vin: inventario.vin),
+        _NovedadesPorRevisar(inventario: inventario),
         const SizedBox(height: Espacio.lg),
         Text('Último informe', style: tema.titleMedium),
         const SizedBox(height: Espacio.sm),
@@ -144,9 +144,11 @@ class _Detalle extends ConsumerWidget {
 /// Solo se le muestran a quien puede revisarlas. Mientras estén aquí, el hallazgo existe pero le falta lo que
 /// decide qué pasa con el vehículo: su zona, su clase y su nivel.
 class _NovedadesPorRevisar extends ConsumerWidget {
-  const _NovedadesPorRevisar({required this.vin});
+  const _NovedadesPorRevisar({required this.inventario});
 
-  final String vin;
+  final Inventario inventario;
+
+  String get vin => inventario.vin;
 
   Future<void> _revisar(BuildContext context, WidgetRef ref, NovedadPendiente novedad) async {
     final revisada = await Navigator.of(context).push<bool>(
@@ -168,6 +170,9 @@ class _NovedadesPorRevisar extends ConsumerWidget {
 
     final tema = Theme.of(context).textTheme;
     final catalogos = ref.watch(catalogosProvider);
+    // Quién las registró: todas son del conductor del viaje, así que sale de ahí y no de cada novedad.
+    final viajeId = inventario.etapas.map((e) => e.viajeId).nonNulls.firstOrNull;
+    final conductor = viajeId == null ? null : ref.watch(viajeDeEtapaProvider(viajeId)).value?.conductorNombre;
     return Padding(
       padding: const EdgeInsets.only(top: Espacio.lg),
       child: Column(
@@ -188,7 +193,7 @@ class _NovedadesPorRevisar extends ConsumerWidget {
                           etiquetaNovedad(novedad, catalogos),
                           style: tema.bodyMedium?.copyWith(color: Colores.textoPrimario),
                         ),
-                        Text(detalleNovedad(novedad), style: tema.bodySmall),
+                        Text(detalleNovedad(novedad, conductor: conductor), style: tema.bodySmall),
                       ],
                     ),
                   ),

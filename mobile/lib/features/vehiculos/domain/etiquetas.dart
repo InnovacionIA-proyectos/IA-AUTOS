@@ -50,5 +50,14 @@ const etiquetaRol = <String, String>{
   'super_admin': 'Super administrador',
 };
 
+/// Qué causó la novedad que registró el conductor en ruta. No es la clase del daño: la clase dice qué quedó en
+/// la lata (golpe, rayón), esto dice qué pasó.
+const etiquetaTipoNovedad = <String, String>{
+  'golpe': 'Golpe',
+  'piedra': 'Piedra',
+  'granizo': 'Granizo',
+  'incidente_vial': 'Incidente vial',
+};
+
 /// Devuelve la etiqueta del valor o, si es uno nuevo, el valor tal cual.
 String etiquetar(Map<String, String> catalogo, String valor) => catalogo[valor] ?? valor;

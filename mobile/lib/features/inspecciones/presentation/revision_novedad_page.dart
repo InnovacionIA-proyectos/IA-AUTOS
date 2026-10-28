@@ -10,6 +10,7 @@ import '../../../core/util/formato.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
+import '../../vehiculos/domain/etiquetas.dart';
 import '../../dibujo_dano/domain/dibujo_dano.dart';
 import '../../dibujo_dano/presentation/selector_zona_dano.dart';
 import '../domain/hallazgo_previo.dart';
@@ -18,23 +19,29 @@ import '../providers.dart';
 import 'aviso_preexistente.dart';
 import 'selector_dano.dart';
 
-/// «Golpe en ruta · 1 a 5 cm», o solo el tamaño si la novedad no trae tipo.
-String etiquetaNovedad(NovedadPendiente novedad, Catalogos catalogos) {
-  final tamano = catalogos.etiqueta(Catalogo.tamanosDano, novedad.tamano);
-  return switch (novedad.tipoNovedad) {
-    final tipo? => '${catalogos.etiqueta(Catalogo.clasesDano, tipo)} · $tamano',
-    _ => tamano,
-  };
-}
+/// «Golpe · 1 a 5 cm · Piedra»: la clase que eligió el conductor, el tamaño y, si lo dijo, qué causó la novedad.
+///
+/// La clase y el tipo de novedad no son lo mismo: la clase dice qué quedó en la lata y el tipo, qué pasó en la
+/// vía. El conductor puede no haber elegido clase; quien revisa la pone.
+String etiquetaNovedad(NovedadPendiente novedad, Catalogos catalogos) => [
+      switch (novedad.clase) {
+        final clase? => catalogos.etiqueta(Catalogo.clasesDano, clase),
+        _ => 'Sin clase',
+      },
+      catalogos.etiqueta(Catalogo.tamanosDano, novedad.tamano),
+      if (novedad.tipoNovedad case final tipo?) etiquetar(etiquetaTipoNovedad, tipo),
+    ].join(' · ');
 
-/// Cuándo y dónde la tomó el conductor. Sin GPS lo dice, en vez de callarlo.
-String detalleNovedad(NovedadPendiente novedad) {
+/// Cuándo y dónde la tomó, y quién. Sin GPS lo dice, en vez de callarlo.
+String detalleNovedad(NovedadPendiente novedad, {String? conductor}) {
   final foto = novedad.foto;
-  final hora = foto?.tomadaEn == null ? 'Sin hora' : formatearFecha(foto!.tomadaEn);
-  final lugar = foto != null && foto.tieneUbicacion
-      ? '${foto.lat!.toStringAsFixed(5)}, ${foto.lng!.toStringAsFixed(5)}'
-      : 'Sin ubicación';
-  return '$hora · $lugar';
+  return [
+    foto?.tomadaEn == null ? 'Sin hora' : formatearFecha(foto!.tomadaEn),
+    foto != null && foto.tieneUbicacion
+        ? '${foto.lat!.toStringAsFixed(5)}, ${foto.lng!.toStringAsFixed(5)}'
+        : 'Sin ubicación',
+    ?conductor,
+  ].join(' · ');
 }
 
 /// Revisar la novedad que registró un conductor: ubicarla en el dibujo y ponerle clase, nivel y el tamaño ya
