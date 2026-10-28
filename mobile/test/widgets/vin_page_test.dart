@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/core/ui/widgets.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
@@ -24,12 +25,18 @@ import '../support/dobles_viajes.dart';
 /// informe, y en una compilación de release revienta en blanco, sin decir nada.
 
 class VehiculosRepositorioFalso implements VehiculosRepositorio {
-  VehiculosRepositorioFalso(this.respuesta);
+  VehiculosRepositorioFalso(this.respuesta, {this.error});
 
   final Map<String, dynamic> respuesta;
 
+  /// Lo que lanza en vez de responder; un 403 es el VIN de un viaje ajeno.
+  final Object? error;
+
   @override
-  Future<Inventario> inventario(String vin) async => Inventario.fromJson(respuesta);
+  Future<Inventario> inventario(String vin) async {
+    if (error != null) throw error!;
+    return Inventario.fromJson(respuesta);
+  }
 }
 
 /// El inventario tal como lo sirve la API: dos etapas, la primera con su salida cerrada.
@@ -92,6 +99,7 @@ Future<void> abrir(
   Sesion? sesion,
   ViajesRepositorioFalso? viajes,
   List<NovedadPendiente> novedades = const [],
+  Object? error,
 }) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -101,7 +109,8 @@ Future<void> abrir(
       overrides: [
         ...(Arnes(sesion: sesion ?? sesionPrueba)..novedades.lista = novedades).overrides,
         catalogosRepositorioProvider.overrideWithValue(CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe')),
-        vehiculosRepositorioProvider.overrideWithValue(VehiculosRepositorioFalso(inventario ?? inventarioJson())),
+        vehiculosRepositorioProvider
+            .overrideWithValue(VehiculosRepositorioFalso(inventario ?? inventarioJson(), error: error)),
         viajesRepositorioProvider.overrideWithValue(viajes ?? ViajesRepositorioFalso()),
       ],
       child: MaterialApp(theme: crearTema(), home: const VinPage(vin: 'VIN00000000000001')),
@@ -301,6 +310,23 @@ void main() {
       await abrir(tester);
 
       expect(find.text('Novedades por revisar'), findsNothing);
+    });
+  });
+
+  group('un VIN que no es de mis viajes', () {
+    testWidgets('un 403 lo dice y no ofrece reintentar', (tester) async {
+      await abrir(tester, error: const ErrorApi(message: 'Prohibido', code: 'FORBIDDEN', status: 403));
+
+      expect(find.text(mensajeFueraDeMisViajes), findsOneWidget);
+      // Reintentar un 403 da otro 403: ofrecerlo manda a la persona a golpear una puerta cerrada.
+      expect(find.widgetWithText(FilledButton, 'Reintentar'), findsNothing);
+    });
+
+    testWidgets('un 404 sí se puede reintentar y dice otra cosa', (tester) async {
+      await abrir(tester, error: const ErrorApi(message: 'No existe', code: 'NOT_FOUND', status: 404));
+
+      expect(find.text(mensajeFueraDeMisViajes), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Reintentar'), findsOneWidget);
     });
   });
 }

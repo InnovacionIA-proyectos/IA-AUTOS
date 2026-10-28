@@ -81,7 +81,10 @@ final routerProvider = Provider<GoRouter>((ref) {
                   path: 'vin/:vin',
                   builder: (_, state) => Permitido(
                     capacidad: Capacidad.verInspecciones,
-                    child: VinPage(vin: state.pathParameters['vin']!),
+                    child: VinPage(
+                      vin: state.pathParameters['vin']!,
+                      viajeId: state.uri.queryParameters['viajeId'],
+                    ),
                   ),
                   routes: [
                     // Capturar y firmar exigen más que mirar: es la misma lista con la que el servidor autoriza

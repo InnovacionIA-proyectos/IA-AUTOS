@@ -267,6 +267,21 @@ class Inventario {
     }
     return mejor;
   }
+
+  /// El mismo inventario con solo las etapas de [viajeId]; tal cual si no se pide ninguno.
+  ///
+  /// Un VIN puede haber andado en varios viajes y su inventario los trae todos. Quien abre la unidad lo hace
+  /// desde un viaje, y mezclar las etapas de otro haría ver como pendiente lo que ya se cerró en su momento.
+  Inventario delViaje(String? viajeId) => viajeId == null
+      ? this
+      : Inventario(
+          id: id,
+          vin: vin,
+          marca: marca,
+          modelo: modelo,
+          operacion: operacion,
+          etapas: [for (final e in etapas) if (e.viajeId == viajeId) e],
+        );
 }
 
 /// Por qué todavía no se puede crear la salida de una etapa.

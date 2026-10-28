@@ -229,6 +229,25 @@ void main() {
     });
   });
 
+  group('un viaje que no es mío', () {
+    test('un 403 es de permiso: no se reintenta ni se vuelve a entrar', () {
+      expect(esFueraDeMisViajes(const ErrorApi(message: 'x', code: 'FORBIDDEN', status: 403)), isTrue);
+    });
+
+    test('el 403 del PIN temporal no lo es: ese se levanta cambiando el PIN', () {
+      expect(
+        esFueraDeMisViajes(const ErrorApi(message: 'x', code: codigoCambioPinRequerido, status: 403)),
+        isFalse,
+      );
+    });
+
+    test('404 y 500 no son de permiso', () {
+      expect(esFueraDeMisViajes(const ErrorApi(message: 'x', code: 'NOT_FOUND', status: 404)), isFalse);
+      expect(esFueraDeMisViajes(const ErrorApi(message: 'x', code: 'X', status: 500)), isFalse);
+      expect(esFueraDeMisViajes(Exception('otra cosa')), isFalse);
+    });
+  });
+
   group('el detalle del servidor', () {
     // «Datos invalidos» a secas no le dice nada a quien esta en el patio; «Falta la foto de la vista Superior» si.
     test('se expone linea por linea y se pega al mensaje', () {

@@ -31,9 +31,13 @@ final inventarioProvider = FutureProvider.autoDispose.family<Inventario, String>
 );
 
 class VinPage extends ConsumerWidget {
-  const VinPage({super.key, required this.vin});
+  const VinPage({super.key, required this.vin, this.viajeId});
 
   final String vin;
+
+  /// Desde qué viaje se abrió la unidad. Un VIN puede haber andado en varios y su inventario los trae todos; con
+  /// esto se ven solo las etapas del viaje en el que se está. Null cuando se llega sin saberlo.
+  final String? viajeId;
 
   Future<void> _ir(BuildContext context, WidgetRef ref, String ruta) async {
     await context.push(ruta);
@@ -51,13 +55,20 @@ class VinPage extends ConsumerWidget {
         error: (error, _) => EstadoMensaje(
           icono: Icons.warning_amber_rounded,
           colorIcono: Colores.peligro,
-          titulo: 'No se pudo cargar el VIN',
-          descripcion: error is ErrorApi && error.status == 404 ? 'Este VIN no está registrado. Pide al administrador que lo cargue.' : mensajeDeError(error),
-          accion: FilledButton(onPressed: () => ref.invalidate(inventarioProvider(vin)), child: const Text('Reintentar')),
+          titulo: esFueraDeMisViajes(error) ? mensajeFueraDeMisViajes : 'No se pudo cargar el VIN',
+          descripcion: switch (error) {
+            _ when esFueraDeMisViajes(error) => 'Solo se abren las unidades de los viajes en los que estás.',
+            ErrorApi(status: 404) => 'Este VIN no está registrado. Pide al administrador que lo cargue.',
+            _ => mensajeDeError(error),
+          },
+          // Reintentar un 403 da otro 403: no es un tropiezo de la red, es que esa unidad no es suya.
+          accion: esFueraDeMisViajes(error)
+              ? null
+              : FilledButton(onPressed: () => ref.invalidate(inventarioProvider(vin)), child: const Text('Reintentar')),
         ),
         data: (inv) => RefreshIndicator(
           onRefresh: () => ref.refresh(inventarioProvider(vin).future),
-          child: _Detalle(inventario: inv, alIr: (ruta) => _ir(context, ref, ruta)),
+          child: _Detalle(inventario: inv.delViaje(viajeId), alIr: (ruta) => _ir(context, ref, ruta)),
         ),
       ),
     );

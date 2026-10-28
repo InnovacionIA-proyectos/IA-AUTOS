@@ -104,6 +104,28 @@ void main() {
       expect((novedad.clase, novedad.cuadranteNumero, novedad.tamano), (null, null, '5_10cm'));
     });
 
+    // Un VIN puede haber andado en varios viajes y el inventario los trae todos. Quien abre la unidad lo hace
+    // desde un viaje: mezclar las etapas de otro haría ver como pendiente lo que ya se cerró en su momento.
+    test('con un viaje, solo se ven sus etapas', () {
+      final inv = inventario([
+        {'id': 'e1', 'orden': 1, 'proceso': 'cargue', 'requiere_inspeccion': true, 'viaje_id': 'via-1'},
+        {'id': 'e2', 'orden': 1, 'proceso': 'cargue', 'requiere_inspeccion': true, 'viaje_id': 'via-2'},
+        {'id': 'e3', 'orden': 2, 'proceso': 'transporte', 'requiere_inspeccion': true, 'viaje_id': 'via-1'},
+      ]);
+
+      expect([for (final e in inv.delViaje('via-1').etapas) e.id], ['e1', 'e3']);
+      expect(inv.delViaje('via-1').vin, inv.vin, reason: 'lo demás del inventario no cambia');
+    });
+
+    test('sin viaje se ven todas: se llegó sin saber desde cuál', () {
+      final inv = inventario([
+        {'id': 'e1', 'orden': 1, 'proceso': 'cargue', 'requiere_inspeccion': true, 'viaje_id': 'via-1'},
+        {'id': 'e2', 'orden': 1, 'proceso': 'cargue', 'requiere_inspeccion': true, 'viaje_id': 'via-2'},
+      ]);
+
+      expect(inv.delViaje(null).etapas, hasLength(2));
+    });
+
     test('la etapa trae su lugar y su viaje, que la API ya resuelve', () {
       final inv = inventario([
         {'id': 'e1', 'orden': 1, 'proceso': 'cargue', 'lugar': 'CEDI 1', 'viaje_id': 'via-1', 'requiere_inspeccion': true},

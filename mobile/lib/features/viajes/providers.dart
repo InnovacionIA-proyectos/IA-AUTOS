@@ -18,3 +18,9 @@ final viajeDeEtapaProvider = FutureProvider.autoDispose.family<Viaje?, String>((
   if (usuarioId == null) return null;
   return ref.watch(viajesRepositorioProvider).deLaEtapa(usuarioId, viajeId);
 });
+
+/// Mis viajes ya terminados. No se guardan: solo se consultan con señal.
+final viajesTerminadosProvider = FutureProvider.autoDispose<List<Viaje>>((ref) async {
+  if (ref.watch(authControllerProvider).sesion?.usuario.id == null) return const [];
+  return ref.watch(viajesRepositorioProvider).terminados();
+});

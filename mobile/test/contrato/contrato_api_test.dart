@@ -55,8 +55,12 @@ void main() {
     'ViajeDto': [
       'id', 'codigo_mtrack', 'placa', 'estado', 'unidad', 'trailer', 'conductor_nombre', 'inspector_nombre',
       'origen', 'destino', 'vehiculos',
+      // Con el inspector del viaje se sabe a quién se le ofrece marcar que una unidad no sale.
+      'inspector_id',
     ],
-    'ViajeVehiculoDto': ['vin', 'marca', 'modelo', 'color', 'operacion'],
+    // Una unidad puede dejar de salir del viaje sin bloquearlo.
+    'ViajeVehiculoDto': ['vin', 'marca', 'modelo', 'color', 'operacion', 'estado_unidad', 'no_sale'],
+    'NoSaleDto': ['motivo', 'hallazgo_id', 'marcado_por_nombre', 'fecha', 'vin_reemplazo'],
     // `usuario_id` distingue el informe propio del ajeno: es lo que decide si al conductor se le muestra el
     // detalle de lo que marcó el inspector.
     'InventarioInspeccionDto': [
@@ -77,8 +81,15 @@ void main() {
     // como respaldo en los hallazgos históricos sin ubicar.
     'HallazgoDto': [
       'id', 'parte_vehiculo', 'clase_dano', 'tamano_dano', 'cuadrante_numero', 'lado', 'zona', 'nivel_severidad',
+      // De dónde salió y si ya venía de antes: los dos se muestran en la ficha del daño.
+      'origen', 'es_preexistente',
     ],
-    'EvidenciaDto': ['id', 'url'],
+    // La novedad del conductor pendiente de revisión, tal como la lista `GET /api/hallazgos`: lleva dónde se
+    // registró y su foto con el sello, que es con lo que se juzga sin tener el vehículo delante.
+    'HallazgoListadoDto': ['vin', 'viaje_id', 'proceso', 'momento', 'evidencia', 'tipo_novedad'],
+    // El sello de la foto de la novedad: cuándo y dónde se tomó.
+    'EvidenciaDto': ['id', 'url', 'hallazgo_id', 'sello_fecha', 'sello_lat', 'sello_lng', 'sin_ubicacion'],
+
     'InspeccionListadoDto': ['id', 'vin', 'momento', 'momento_nombre', 'fecha', 'estado'],
     // Los catálogos maestros no son listas fijas en la app: se descargan y se guardan con su versión.
     'CatalogosDto': ['version', 'catalogos'],
@@ -109,6 +120,14 @@ void main() {
     ],
     // Una sola firma: el servidor la atribuye al usuario del token.
     'FirmarTransferenciaRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma'],
+    // Revisar la novedad del conductor: se la ubica, se la clasifica y se le pone el nivel, y el tamaño que
+    // eligió el conductor se puede corregir.
+    'RevisarHallazgoRequest': [
+      'cuadrante_numero', 'lado', 'zona_provisional', 'clase_dano', 'nivel_severidad', 'tamano_dano', 'nota',
+      'es_preexistente', 'hallazgo_origen_id',
+    ],
+    // La unidad que no sale del viaje: su motivo, el hallazgo V1+ que lo causa y el VIN que la reemplaza.
+    'MarcarNoSaleRequest': ['motivo', 'hallazgo_id', 'vin_reemplazo'],
     // Quien recibe firma dejando sus observaciones: cierra la transferencia como `con_reservas`.
     'RecibirConReservasRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma', 'reservas'],
     // La constancia de no firma, con su evidencia dentro, igual que un hallazgo.
@@ -154,6 +173,11 @@ void main() {
       ('post', '/api/inspecciones/{}/transferencia/reservas'),
       ('post', '/api/inspecciones/{}/transferencia/no-firma'),
       ('post', '/api/uploads'),
+      // Las novedades del conductor pendientes de revisión, y la revisión que las completa.
+      ('get', '/api/hallazgos'),
+      ('post', '/api/hallazgos/{}/revision'),
+      // La unidad que no sale del viaje.
+      ('post', '/api/viajes/{}/vehiculos/{}/no-sale'),
       ('get', '/api/sofasa/ordenes'),
     ];
     for (final (metodo, ruta) in usos) {

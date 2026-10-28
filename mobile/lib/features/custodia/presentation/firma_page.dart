@@ -202,9 +202,14 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
         (AsyncError(:final error), _) || (_, AsyncError(:final error)) => EstadoMensaje(
             icono: Icons.warning_amber_rounded,
             colorIcono: Colores.peligro,
-            titulo: 'No se pudo cargar la transferencia',
-            descripcion: mensajeDeError(error),
-            accion: FilledButton(onPressed: recargar, child: const Text('Reintentar')),
+            titulo: esFueraDeMisViajes(error) ? mensajeFueraDeMisViajes : 'No se pudo cargar la transferencia',
+            descripcion: esFueraDeMisViajes(error)
+                ? 'Solo se abren los informes de los viajes en los que estás.'
+                : mensajeDeError(error),
+            // Reintentar un 403 da otro 403.
+            accion: esFueraDeMisViajes(error)
+                ? null
+                : FilledButton(onPressed: recargar, child: const Text('Reintentar')),
           ),
         (AsyncData(value: final lista), AsyncData(value: final t)) => Builder(
             builder: (context) {

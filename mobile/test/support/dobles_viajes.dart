@@ -50,6 +50,12 @@ class ViajesRepositorioFalso implements ViajesRepositorio {
     return remotos;
   }
 
+  /// Los viajes ya terminados: vacíos salvo que la prueba los ponga.
+  List<Viaje> finalizados = const [];
+
+  @override
+  Future<List<Viaje>> terminados() async => finalizados;
+
   @override
   Future<Viaje?> deLaEtapa(String usuarioId, String viajeId) async {
     etapasConsultadas.add(viajeId);

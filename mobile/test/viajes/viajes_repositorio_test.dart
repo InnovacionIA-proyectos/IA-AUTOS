@@ -54,6 +54,19 @@ void main() {
     expect(await cache.leer(ViajesRepositorio.clave('u1')), isNotNull);
   });
 
+  // Un viaje cancelado deja de llegar en la respuesta. Si la copia solo creciera, seguiría en la lista del
+  // patio y alguien intentaría trabajarlo.
+  test('un viaje que deja de llegar se va de la copia', () async {
+    final repo = repositorio(AdaptadorFalso((_) => json(200, [viajeJson('v1'), viajeJson('v2')])));
+    await repo.listarRemoto('u1');
+    expect((await repo.leerCache('u1'))!, hasLength(2));
+
+    await repositorio(AdaptadorFalso((_) => json(200, [viajeJson('v1')]))).listarRemoto('u1');
+
+    final guardados = await repositorio(AdaptadorFalso((_) => json(200, []))).leerCache('u1');
+    expect([for (final v in guardados!) v.id], ['v1']);
+  });
+
   test('la copia es por usuario: nadie lee los viajes de otra persona en un equipo compartido', () async {
     await repositorio(AdaptadorFalso((_) => json(200, [viajeJson('v1')]))).listarRemoto('u1');
 
@@ -65,6 +78,22 @@ void main() {
     await cache.escribir(ViajesRepositorio.clave('u1'), 'esto no es json');
 
     expect(await repositorio(AdaptadorFalso((_) => json(200, []))).leerCache('u1'), isNull);
+  });
+
+  group('terminados', () {
+    test('se piden con estado=finalizado y no tocan la copia de los activos', () async {
+      await repositorio(AdaptadorFalso((_) => json(200, [viajeJson('v1')]))).listarRemoto('u1');
+      final guardadoAntes = await cache.leer(ViajesRepositorio.clave('u1'));
+
+      final adaptador = AdaptadorFalso((_) => json(200, [viajeJson('v9')]));
+      final terminados = await repositorio(adaptador).terminados();
+
+      expect(adaptador.peticiones.single.uri.path, '/api/viajes/mios');
+      expect(adaptador.peticiones.single.uri.queryParameters['estado'], 'finalizado');
+      expect(terminados.single.codigoMtrack, 'MTK-v9');
+      // Si se guardaran, quien está en el patio vería viajes que ya no puede trabajar.
+      expect(await cache.leer(ViajesRepositorio.clave('u1')), guardadoAntes);
+    });
   });
 
   group('marcarNoSale', () {

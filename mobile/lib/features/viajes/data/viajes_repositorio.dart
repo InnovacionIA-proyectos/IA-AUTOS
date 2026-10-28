@@ -53,6 +53,15 @@ class ViajesRepositorio {
     return Viaje.fromJson(r as Map<String, dynamic>);
   }
 
+  /// Mis viajes ya terminados.
+  ///
+  /// No se guardan en la copia local: solo se miran con señal. Mezclarlos con los activos dejaría a quien está
+  /// en el patio con viajes en la lista que ya no puede trabajar.
+  Future<List<Viaje>> terminados() async {
+    final r = await _api.get('/api/viajes/mios', query: {'estado': 'finalizado'});
+    return [for (final v in r as List<dynamic>) Viaje.fromJson(v as Map<String, dynamic>)];
+  }
+
   /// El viaje de una etapa, para que la captura muestre su placa, tráiler, unidad y conductor.
   ///
   /// Primero la copia guardada, que es lo que hace que funcione sin señal. Si no está ahí —la copia es vieja, o

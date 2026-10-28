@@ -9,6 +9,7 @@ import '../../sync/presentation/barra_sync.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../vehiculos/domain/etiquetas.dart';
 import '../domain/viaje.dart';
+import '../providers.dart';
 import 'mis_viajes_controller.dart';
 
 /// Entrada principal del trabajo de campo: los viajes donde la persona es conductor o inspector, con sus VIN.
@@ -22,6 +23,9 @@ class MisViajesPage extends ConsumerStatefulWidget {
 }
 
 class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
+  /// Los terminados se miran aparte: no se guardan y no se trabajan, solo se consultan.
+  bool _verTerminados = false;
+
   @override
   void initState() {
     super.initState();
@@ -86,7 +90,18 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
               ),
             ),
             const BarraSync(),
-            Expanded(child: _cuerpo(estado)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Espacio.lg, Espacio.sm, Espacio.lg, 0),
+              child: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Activos')),
+                  ButtonSegment(value: true, label: Text('Terminados')),
+                ],
+                selected: {_verTerminados},
+                onSelectionChanged: (s) => setState(() => _verTerminados = s.first),
+              ),
+            ),
+            Expanded(child: _verTerminados ? _terminados() : _cuerpo(estado)),
           ],
         ),
       ),
@@ -98,6 +113,34 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
               child: const Icon(Icons.search, size: 28),
             ),
     );
+  }
+
+  /// Los viajes ya terminados. Solo con señal: no hay copia guardada de ellos a propósito.
+  Widget _terminados() {
+    return switch (ref.watch(viajesTerminadosProvider)) {
+      AsyncLoading() => const EstadoCargando(),
+      AsyncError() => EstadoMensaje(
+          icono: Icons.wifi_off_rounded,
+          colorIcono: Colores.advertencia,
+          titulo: 'No pudimos cargar los terminados',
+          descripcion: 'Los viajes terminados solo se consultan con señal; no se guardan en este dispositivo.',
+          accion: FilledButton(
+            onPressed: () => ref.invalidate(viajesTerminadosProvider),
+            child: const Text('Reintentar'),
+          ),
+        ),
+      AsyncData(value: final viajes) when viajes.isEmpty => const EstadoMensaje(
+          icono: Icons.inventory_2_outlined,
+          titulo: 'No tienes viajes terminados',
+          descripcion: 'Aquí van quedando los viajes que ya se cerraron.',
+        ),
+      AsyncData(value: final viajes) => ListView.separated(
+          padding: const EdgeInsets.fromLTRB(Espacio.lg, Espacio.md, Espacio.lg, 88),
+          itemCount: viajes.length,
+          separatorBuilder: (_, _) => const SizedBox(height: Espacio.sm),
+          itemBuilder: (_, i) => _TarjetaViaje(viajes[i]),
+        ),
+    };
   }
 
   Widget _cuerpo(EstadoViajes estado) {
@@ -176,7 +219,7 @@ class _TarjetaViaje extends StatelessWidget {
           if (viaje.vehiculos.isEmpty)
             Text('Este viaje todavía no tiene unidades.', style: tema.bodySmall)
           else
-            for (final vehiculo in viaje.vehiculos) _FilaVehiculo(vehiculo),
+            for (final vehiculo in viaje.vehiculos) _FilaVehiculo(vehiculo, viajeId: viaje.id),
         ],
       ),
     );
@@ -184,9 +227,12 @@ class _TarjetaViaje extends StatelessWidget {
 }
 
 class _FilaVehiculo extends StatelessWidget {
-  const _FilaVehiculo(this.vehiculo);
+  const _FilaVehiculo(this.vehiculo, {required this.viajeId});
 
   final ViajeVehiculo vehiculo;
+
+  /// El viaje desde el que se abre: la unidad puede haber andado en varios y solo interesan sus etapas.
+  final String viajeId;
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +240,9 @@ class _FilaVehiculo extends StatelessWidget {
     final descripcion = [vehiculo.marca, vehiculo.modelo, vehiculo.color].whereType<String>().join(' ');
 
     return InkWell(
-      onTap: () => context.push('/inspecciones/vin/${Uri.encodeComponent(vehiculo.vin)}'),
+      onTap: () => context.push(
+        '/inspecciones/vin/${Uri.encodeComponent(vehiculo.vin)}?viajeId=${Uri.encodeQueryComponent(viajeId)}',
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: Espacio.sm),
         child: Row(
