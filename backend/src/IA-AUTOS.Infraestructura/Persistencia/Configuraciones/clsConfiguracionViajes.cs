@@ -56,6 +56,8 @@ internal sealed class clsConfiguracionViajeVehiculo : IEntityTypeConfiguration<c
         builder.HasOne<clsLugar>().WithMany().HasForeignKey(v => v.LugarDestinoId)
             .HasConstraintName("FK_tblViajeVehiculos_LugarDestino").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(v => v.LugarDestinoId).HasDatabaseName("IX_tblViajeVehiculos_LugarDestino");
+        builder.Property(v => v.Posicion).HasColumnType("tinyint");
+        builder.HasIndex(v => new { v.ViajeId, v.Posicion }).IsUnique().HasFilter("[Posicion] IS NOT NULL").HasDatabaseName("UX_tblViajeVehiculos_Posicion");
         builder.Property(v => v.EstadoUnidad).HasMaxLength(10).HasDefaultValue(clsEstadoUnidad.ACTIVA);
         // Completa la calculan los triggers de la base: la aplicacion nunca la escribe.
         builder.Property(v => v.Completa).HasDefaultValue(false)

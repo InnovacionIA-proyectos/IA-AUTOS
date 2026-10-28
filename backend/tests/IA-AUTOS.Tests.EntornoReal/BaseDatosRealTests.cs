@@ -774,6 +774,17 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task El_parametro_de_las_fotos_de_la_acomodacion_esta_migrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/30-parametro-fotos-de-acomodacion.sql.
+        await using var conexion = await AbrirAsync();
+
+        var parametro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave = N'acomodacion_fotos_minimas' AND Tipo = N'numero'");
+
+        Assert.True(parametro == 1, "Falta el parametro acomodacion_fotos_minimas. Ejecute database/cambios-esquema/30-parametro-fotos-de-acomodacion.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

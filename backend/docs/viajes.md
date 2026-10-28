@@ -99,6 +99,10 @@ además de los suyos y los que reclamó; el conductor no cambia. Un camión recl
 (`CK_tblViajeVehiculos_Posicion`) y que dos unidades de un mismo viaje no compartan posición (`UX_tblViajeVehiculos_Posicion`, índice único filtrado sobre `(ViajeId, Posicion)` para las filas con posición); la misma posición en viajes distintos es válida y las unidades sin posición no cuentan. El script
 [`29-posicion-de-la-unidad.sql`](../database/cambios-esquema/29-posicion-de-la-unidad.sql) (una transacción, repetible, `@esquema` ajustable) no cambia ningún dato: todas las unidades quedan sin posición.
 
+**Registro y cierre de la acomodación.** `PUT /api/viajes/{id}/vehiculos/{vin}/posicion` con `{ "posicion": 1..7 }` (nulo la libera) lo hacen el inspector del viaje (o quien reclamó el cargue), el coordinador de calidad y los administradores, y solo mientras el viaje tiene su segunda inspección del cargue en borrador
+(409 si no). Fuera de 1 a 7 responde `400` «La posición debe estar entre 1 y 7»; una posición que ya tiene otra unidad del viaje, `409` «La posición N ya está ocupada por otra unidad de este viaje» (con varias solicitudes simultáneas por la misma gana exactamente una: lo resuelve el índice único); una unidad
+que no sale no admite posición (409). La respuesta es el viaje, cuyas unidades traen `posicion`. Cada cambio queda auditado (`viaje.posicion_unidad`). El cierre de la segunda inspección del cargue exige la posición de **cada unidad activa** y las fotos de la acomodación (ver [inspecciones.md](inspecciones.md)).
+
 ## Aplicar el cambio en una base existente
 
 Con un usuario que pueda crear tablas y vistas y desactivar triggers (no el de la aplicación), conectado a la base de IA Autos, **antes de desplegar la API**:

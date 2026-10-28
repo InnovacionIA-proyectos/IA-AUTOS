@@ -1818,7 +1818,8 @@ FROM (VALUES
     ('umbral_patron_ventana_dias',         N'30',         'numero', N'Dias de la ventana en la que se cuentan los hallazgos de un patron'),
     ('captura_incompleta_minutos',         N'30',         'numero', N'Minutos que una inspeccion de Cargue o Descargue puede seguir en borrador sin todas las fotos antes de avisar a quien la inicio'),
     ('transferencia_pendiente_minutos',    N'240',        'numero', N'Minutos que una llegada cerrada puede seguir con la transferencia sin cierre antes de avisar al firmante que falta'),
-    ('reclamo_sin_actividad_minutos',      N'30',         'numero', N'Minutos que un camion reclamado puede seguir sin ninguna inspeccion iniciada o cerrada antes de avisar al coordinador; el reclamo no se libera solo')
+    ('reclamo_sin_actividad_minutos',      N'30',         'numero', N'Minutos que un camion reclamado puede seguir sin ninguna inspeccion iniciada o cerrada antes de avisar al coordinador; el reclamo no se libera solo'),
+    ('acomodacion_fotos_minimas',          N'1',          'numero', N'Fotos de la acomodacion de las unidades en la ninera que exige el cierre de la segunda inspeccion del cargue (el valor definitivo lo confirma el negocio)')
 ) AS v (Clave, Valor, Tipo, Descripcion)
 WHERE NOT EXISTS (SELECT 1 FROM dbo.tblParametros p WHERE p.Clave = v.Clave);
 GO

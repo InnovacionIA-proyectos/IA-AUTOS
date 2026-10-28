@@ -36,6 +36,9 @@ public sealed record ActualizarViajeRequest(
 /// <summary>Unidades que se agregan a un viaje activo: cada una con su VIN y su lugar de destino.</summary>
 public sealed record AgregarUnidadesRequest(IReadOnlyList<UnidadDelViajeRequest>? Unidades);
 
+/// <summary>La posicion de una unidad en la ninera, de 1 a 7 (<c>null</c> la libera). La registra el inspector durante la segunda inspeccion del cargue.</summary>
+public sealed record AsignarPosicionRequest(int? Posicion);
+
 /// <summary>Cambia el lugar de destino de una unidad del viaje (un lugar activo del catalogo <c>lugares</c>).</summary>
 public sealed record CambiarDestinoUnidadRequest(Guid? LugarDestinoId);
 
@@ -72,7 +75,8 @@ public sealed record ViajeVehiculoDto(
     string EstadoTransporte,
     int Novedades,
     Guid? LugarDestinoId = null,
-    string? LugarDestino = null);
+    string? LugarDestino = null,
+    int? Posicion = null);
 
 /// <summary>
 /// Algo que paso en el proceso del viaje y no es un dano (una novedad de proceso): <c>Tipo</c> es <c>cargue_sin_inspector</c> (la excepcion «No hay inspector» que el conductor activo en el momento) o

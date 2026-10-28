@@ -160,6 +160,7 @@ public static class clsClavesParametros
     public const string CAPTURA_INCOMPLETA_MINUTOS = "captura_incompleta_minutos";
     public const string TRANSFERENCIA_PENDIENTE_MINUTOS = "transferencia_pendiente_minutos";
     public const string RECLAMO_SIN_ACTIVIDAD_MINUTOS = "reclamo_sin_actividad_minutos";
+    public const string ACOMODACION_FOTOS_MINIMAS = "acomodacion_fotos_minimas";
     public const string REPORTE_DIARIO_DESTINATARIOS = "reporte_diario_destinatarios";
     public const string REPORTE_DIARIO_HORA = "reporte_diario_hora";
     public const string RETENCION_DIAS = "retencion_dias";

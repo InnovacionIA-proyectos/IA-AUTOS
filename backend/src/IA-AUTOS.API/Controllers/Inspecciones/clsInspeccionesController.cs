@@ -117,7 +117,8 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
 
     /// <summary>
     /// Agrega una foto: de una vista (<c>vista_id</c>, una de las 7 obligatorias o de las 2 adicionales con su <c>nota</c>) o de un hallazgo
-    /// (<c>hallazgo_id</c>). El archivo debe haberse subido antes con POST /api/uploads. El servidor agrega su sello y el hash SHA-256.
+    /// (<c>hallazgo_id</c>); en la segunda inspeccion del cargue se envia sin ninguno de los dos y es una foto de la acomodacion. El archivo debe haberse subido antes con POST /api/uploads.
+    /// El servidor agrega su sello y el hash SHA-256.
     /// </summary>
     [HttpPost("{id:guid}/evidencias")]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]

@@ -4,10 +4,12 @@ using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Viajes;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Notificaciones;
+using IAAutos.Aplicacion.Parametros;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Notificaciones;
+using IAAutos.Dominio.Parametros;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
@@ -71,6 +73,7 @@ public sealed class clsInspeccionesService(
     clsEmisorNotificaciones emisor,
     IDescriptorHallazgos descriptorHallazgos,
     clsAccesoViajes acceso,
+    IParametros parametros,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -401,9 +404,19 @@ public sealed class clsInspeccionesService(
             await ValidarVistaAsync(vistaId, solicitud.Nota, ct);
         }
 
-        var evidencia = await fabricaEvidencias.CrearAsync(
-            inspeccionId, solicitud.HallazgoId, solicitud.VistaId, esConstancia: false, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat,
-            solicitud.SelloLng, solicitud.Precision, solicitud.DispositivoId, solicitud.Nota, solicitud.HashSha256, ct);
+        // Toda foto es de una vista o de un hallazgo; la unica sin ninguno de los dos es la de la acomodacion de la segunda inspeccion del cargue.
+        var deAcomodacion = solicitud.HallazgoId is null && solicitud.VistaId is null;
+        if (deAcomodacion && !await EsAcomodacionAsync(inspeccion, ct))
+        {
+            throw clsErroresCampos.De("vista_id", "Indique la vista de la foto (vista_id) o el hallazgo al que pertenece (hallazgo_id)");
+        }
+
+        var evidencia = deAcomodacion
+            ? await fabricaEvidencias.CrearDeAcomodacionAsync(
+                inspeccionId, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat, solicitud.SelloLng, solicitud.Precision, solicitud.DispositivoId, solicitud.Nota, solicitud.HashSha256, ct)
+            : await fabricaEvidencias.CrearAsync(
+                inspeccionId, solicitud.HallazgoId, solicitud.VistaId, esConstancia: false, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat,
+                solicitud.SelloLng, solicitud.Precision, solicitud.DispositivoId, solicitud.Nota, solicitud.HashSha256, ct);
         inspecciones.Agregar(evidencia);
         await auditor.RegistrarDeViajeAsync(
             "evidencia.crear", "evidencias", evidencia.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(evidencia)), ct: ct);
@@ -423,10 +436,14 @@ public sealed class clsInspeccionesService(
         var etapa = await etapas.ObtenerPorIdAsync(inspeccion.EtapaId, ct)
             ?? throw new clsEntidadNoEncontradaException("La etapa de la inspección no existe");
         var codigoEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
-        var exigeVistas = clsEtapaCatalogo.ExigeVistas(codigoEtapa);
+        // La segunda inspeccion del cargue (la salida del Cargue) documenta la acomodacion en la ninera: no exige las fotos de las vistas de estado (quedan solo en la primera) sino la posicion de cada
+        // unidad activa del viaje y las fotos de la acomodacion.
+        var esAcomodacion = EsSegundaInspeccionDelCargue(codigoEtapa, inspeccion);
+        var exigeVistas = clsEtapaCatalogo.ExigeVistas(codigoEtapa) && !esAcomodacion;
         var faltantes = exigeVistas && !inspeccion.EstaCerrada ? await calculadoraVistas.FaltantesAsync(etapa, resumen, ct) : [];
+        var faltantesDeAcomodacion = esAcomodacion && !inspeccion.EstaCerrada ? await FaltantesDeAcomodacionAsync(inspeccion, ct) : null;
         var antes = clsInstantaneasAuditoria.De(inspeccion);
-        inspeccion.Cerrar(resumen, faltantes, exigeUbicacionPropia: !exigeVistas, reloj.Ahora);
+        inspeccion.Cerrar(resumen, faltantes, exigeUbicacionPropia: !exigeVistas, reloj.Ahora, faltantesDeAcomodacion);
         await auditor.RegistrarDeViajeAsync(
             "inspeccion.cerrar", "inspecciones", inspeccion.Id, inspeccion.ViajeId, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(inspeccion)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -434,6 +451,40 @@ public sealed class clsInspeccionesService(
         return new CerrarInspeccionResponse(
             clsMapeadorInspecciones.AInspeccion(inspeccion, await consultasNovedades.DeInspeccionAsync(inspeccion.Id, ct)),
             new ResumenCierreDto(resumen.TotalEvidencias, resumen.TotalHallazgos));
+    }
+
+    /// <summary>
+    /// Lo que le falta a la acomodacion para cerrar la segunda inspeccion del cargue: «Falta la posicion de la unidad {VIN}» por cada unidad activa del viaje sin posicion (las que no salen no la exigen) y las fotos de
+    /// la acomodacion que faltan para llegar al minimo del parametro <c>acomodacion_fotos_minimas</c>.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> FaltantesDeAcomodacionAsync(clsInspeccion inspeccion, CancellationToken ct)
+    {
+        var errores = new List<string>();
+        var sinPosicion = new List<string>();
+        foreach (var enlace in (await viajes.ObtenerVehiculosAsync(inspeccion.ViajeId, ct)).Where(v => !v.NoSale && v.Posicion is null))
+        {
+            var vehiculo = await vehiculos.ObtenerPorIdAsync(enlace.VehiculoId, ct);
+            sinPosicion.Add(vehiculo?.Vin ?? enlace.VehiculoId.ToString());
+        }
+
+        errores.AddRange(sinPosicion.Order(StringComparer.Ordinal).Select(vin => $"Falta la posición de la unidad {vin}"));
+        var minimas = Math.Max(await parametros.EnteroAsync(clsClavesParametros.ACOMODACION_FOTOS_MINIMAS, 1, ct), 0);
+        var fotos = await inspecciones.ContarFotosLibresAsync(inspeccion.Id, ct);
+        if (fotos < minimas)
+        {
+            errores.Add($"Faltan fotos de la acomodación: se exige al menos {minimas} y hay {fotos}");
+        }
+
+        return errores;
+    }
+
+    private static bool EsSegundaInspeccionDelCargue(string? codigoEtapa, clsInspeccion inspeccion) => codigoEtapa == clsCodigosEtapa.CARGUE && inspeccion.Momento == clsMomento.SALIDA;
+
+    private async Task<bool> EsAcomodacionAsync(clsInspeccion inspeccion, CancellationToken ct)
+    {
+        var etapa = await etapas.ObtenerPorIdAsync(inspeccion.EtapaId, ct);
+        var codigo = etapa is null ? null : (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
+        return EsSegundaInspeccionDelCargue(codigo, inspeccion);
     }
 
     /// <summary>True si la etapa es el Cargue (la etapa del catalogo con ese codigo).</summary>
