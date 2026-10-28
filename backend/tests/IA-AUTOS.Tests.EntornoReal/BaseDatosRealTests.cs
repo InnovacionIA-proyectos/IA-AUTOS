@@ -715,6 +715,20 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task El_destino_por_unidad_y_el_recibo_sin_entrega_con_una_sola_firma_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/25-destino-por-unidad-y-cierre-con-una-firma.sql.
+        await using var conexion = await AbrirAsync();
+
+        var cierre = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Cierre' AND parent_object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND definition LIKE N'%recibo_sin_entrega%NoFirmaParte%MotivoNoFirma%'");
+        Assert.True(cierre == 1, "El cierre recibo_sin_entrega no admite una sola firma con su motivo. Ejecute database/cambios-esquema/25-destino-por-unidad-y-cierre-con-una-firma.sql.");
+
+        var recibosSinParteOMotivo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblTransferenciasCustodia WHERE TipoCierre = N'recibo_sin_entrega' AND (NoFirmaParte IS NULL OR MotivoNoFirma IS NULL)");
+
+        Assert.Equal(0, recibosSinParteOMotivo);
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

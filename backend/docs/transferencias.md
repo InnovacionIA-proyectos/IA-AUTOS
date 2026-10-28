@@ -21,7 +21,7 @@ no esté cerrada, no se puede crear la salida de la etapa siguiente. Los endpoin
 | `firmada` | ambas partes firman | las dos firmas |
 | `con_reservas` | quien recibe firma por `/transferencia/reservas` | las dos firmas y `ReservasTexto` (obligatorio, máximo 1 000 caracteres) |
 | `no_firma` | una parte se niega y la otra deja constancia por `/transferencia/no-firma` | `NoFirmaParte`, `MotivoNoFirma`, `TestigoUsuarioId` y `EvidenciaConstanciaId` |
-| `recibo_sin_entrega` | nadie de Botero Soto firma la entrega porque el conductor hizo la salida del Cargue; lo cierra el conductor por `POST …/transferencia/sin-entrega` | solo la firma de quien recibe con su fecha e IP; **sin** usuario, firma, fecha ni IP de entrega |
+| `recibo_sin_entrega` | una sola firma y su motivo. Hoy: nadie de Botero Soto firma la entrega porque el conductor hizo la salida del Cargue; lo cierra el conductor por `POST …/transferencia/sin-entrega`. La base admite también la forma inversa (firma solo quien entrega) para el descargue por punto de entrega | `NoFirmaParte` (la parte que NO firmó) y `MotivoNoFirma` (obligatorio), y solo la otra firma: si no firmó quien entrega, la firma de quien recibe con su fecha e IP y **sin** usuario, firma, fecha ni IP de entrega |
 | sin valor | falta una firma | la transferencia está **abierta** |
 
 - Solo **quien recibe** firma con reservas. Si quien recibe firma después normalmente, las reservas se descartan.
@@ -32,7 +32,7 @@ no esté cerrada, no se puede crear la salida de la etapa siguiente. Los endpoin
 - Cerrada, la transferencia es **inmutable**; solo se acepta repetir exactamente la misma firma (reintento idempotente).
 
 La base de datos refuerza lo mismo: `CK_tblTransferencias_Cierre` exige, según el tipo, las firmas, las reservas, la constancia completa o solo la firma de quien recibe, y `CK_tblTransferencias_Testigo` impide que el testigo sea
-una de las partes. `EntregaUsuarioId` admite nulo, pero solo en el cierre `recibo_sin_entrega` (`CK_tblTransferencias_Entrega`).
+una de las partes. `EntregaUsuarioId` admite nulo, pero solo en el cierre `recibo_sin_entrega` (`CK_tblTransferencias_Entrega`). El script [`25-destino-por-unidad-y-cierre-con-una-firma.sql`](../database/cambios-esquema/25-destino-por-unidad-y-cierre-con-una-firma.sql) generaliza ese cierre: exactamente una de las dos firmas, la parte que no firmó y el motivo (con las dos firmas, o sin motivo, el CHECK falla); los recibos sin entrega ya registrados quedan con `NoFirmaParte = entrega` y el motivo del cargue. `firmada`, `con_reservas` y `no_firma` no cambian.
 
 ## Recibo sin entrega
 

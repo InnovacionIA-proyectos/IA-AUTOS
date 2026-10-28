@@ -88,6 +88,9 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
         Assert.Equal("recibo_sin_entrega", t.GetProperty("tipo_cierre").GetString());
         Assert.Equal(JsonValueKind.Null, t.GetProperty("entrega_usuario_id").ValueKind);
         Assert.Equal(e.Conductor.UsuarioId, t.GetProperty("recibe_usuario_id").GetGuid());
+        // Queda registrado que quien entrega no firmo y por que (lo exige el cierre en la base).
+        Assert.Equal("entrega", t.GetProperty("no_firma_parte").GetString());
+        Assert.Equal("El conductor hizo la salida del cargue y nadie de Botero Soto entregó la unidad", t.GetProperty("motivo_no_firma").GetString());
         Assert.Equal(JsonValueKind.Null, t.GetProperty("entrega_firmada_at").ValueKind);
         Assert.NotEqual(JsonValueKind.Null, t.GetProperty("recibe_firmada_at").ValueKind);
         Assert.False(t.GetProperty("firmada").GetBoolean());

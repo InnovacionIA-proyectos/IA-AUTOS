@@ -931,15 +931,22 @@ INSERT @casosNov (Prueba, Sentencia, Esperado) VALUES
  (N'Notificacion: el tipo novedad_proceso se guarda', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''novedad_proceso'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-1'')', 0),
  (N'CHECK notificacion: un tipo que no existe', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''zz_tipo'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-2'')', 547);
 -- La transferencia (@i2 aun no tiene ninguna): primero lo que debe fallar y al final el recibo sin entrega valido.
-DECLARE @baseTr nvarchar(max) = N'INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId, FirmaEntrega, FirmaRecibe, FirmaEntregaAt, FirmaRecibeAt, FirmaRecibeIp, TipoCierre) VALUES (NEWID(), ''' + @i2Nov + N''', ';
+DECLARE @baseTr nvarchar(max) = N'INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId, FirmaEntrega, FirmaRecibe, FirmaEntregaAt, FirmaRecibeAt, FirmaRecibeIp, TipoCierre, NoFirmaParte, MotivoNoFirma) VALUES (NEWID(), ''' + @i2Nov + N''', ';
 INSERT @casosNov (Prueba, Sentencia, Esperado) VALUES
- (N'CHECK transferencia: el recibo sin entrega no tiene usuario de entrega', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'')', 547),
- (N'CHECK transferencia: el recibo sin entrega no tiene firma de entrega', @baseTr + N'NULL, ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'')', 547),
- (N'CHECK transferencia: el recibo sin entrega exige la firma de quien recibe', @baseTr + N'NULL, ''' + @uNov + N''', NULL, NULL, NULL, NULL, NULL, ''recibo_sin_entrega'')', 547),
- (N'CHECK transferencia: sin quien entrega solo vale el recibo sin entrega (abierta)', @baseTr + N'NULL, ''' + @uNov + N''', NULL, NULL, NULL, NULL, NULL, NULL)', 547),
- (N'CHECK transferencia: sin quien entrega no vale una firmada', @baseTr + N'NULL, ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), ''10.0.0.1'', ''firmada'')', 547),
- (N'CHECK transferencia: tipo de cierre desconocido', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), ''10.0.0.1'', ''zz_cierre'')', 547),
- (N'Transferencia: el recibo sin entrega con la firma de quien recibe se guarda', @baseTr + N'NULL, ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'')', 0),
+ (N'CHECK transferencia: el recibo sin entrega no tiene usuario de entrega', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', ''entrega'', N''zz motivo'')', 547),
+ (N'CHECK transferencia: el recibo sin entrega no tiene firma de entrega', @baseTr + N'NULL, ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', ''entrega'', N''zz motivo'')', 547),
+ (N'CHECK transferencia: el recibo sin entrega exige la firma de quien recibe', @baseTr + N'NULL, ''' + @uNov + N''', NULL, NULL, NULL, NULL, NULL, ''recibo_sin_entrega'', ''entrega'', N''zz motivo'')', 547),
+ (N'CHECK transferencia: sin quien entrega solo vale el recibo sin entrega (abierta)', @baseTr + N'NULL, ''' + @uNov + N''', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)', 547),
+ (N'CHECK transferencia: sin quien entrega no vale una firmada', @baseTr + N'NULL, ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), ''10.0.0.1'', ''firmada'', NULL, NULL)', 547),
+ (N'CHECK transferencia: tipo de cierre desconocido', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), ''10.0.0.1'', ''zz_cierre'', NULL, NULL)', 547),
+ (N'CHECK transferencia: el recibo sin entrega exige su motivo', @baseTr + N'NULL, ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', ''entrega'', NULL)', 547),
+ (N'CHECK transferencia: el recibo sin entrega con el motivo en blanco', @baseTr + N'NULL, ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', ''entrega'', N''  '')', 547),
+ (N'CHECK transferencia: el recibo sin entrega exige la parte que no firmo', @baseTr + N'NULL, ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', NULL, N''zz motivo'')', 547),
+ (N'CHECK transferencia: el recibo sin entrega con las dos firmas', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', ''recibe'', N''zz motivo'')', 547),
+ (N'CHECK transferencia: el recibo sin entrega firmado por quien entrega no lleva firma de quien recibe', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), NULL, NULL, ''recibo_sin_entrega'', ''recibe'', N''zz motivo'')', 547),
+ (N'CHECK transferencia: el recibo sin entrega firmado por quien entrega exige su firma', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', NULL, NULL, NULL, NULL, NULL, ''recibo_sin_entrega'', ''recibe'', N''zz motivo'')', 547),
+ (N'Transferencia: el recibo sin entrega con solo la firma de quien entrega se guarda', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', N''zz-firma-entrega'', NULL, SYSDATETIMEOFFSET(), NULL, NULL, ''recibo_sin_entrega'', ''recibe'', N''zz motivo''); ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL; DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = ''' + @i2Nov + N'''; ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL', 0),
+ (N'Transferencia: el recibo sin entrega con la firma de quien recibe se guarda', @baseTr + N'NULL, ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', ''entrega'', N''zz motivo'')', 0),
  (N'Trigger: el recibo sin entrega es evidencia y no se borra', N'DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = ''' + @i2Nov + N'''', 51003);
 DECLARE @pruebaNP nvarchar(200), @sentenciaNP nvarchar(max), @esperadoNP int, @obtenidoNP int, @mensajeNP nvarchar(4000);
 DECLARE cNovP CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosNov ORDER BY Orden;
@@ -960,7 +967,7 @@ END
 CLOSE cNovP;
 DEALLOCATE cNovP;
 INSERT #r SELECT N'Transferencia: el recibo sin entrega quedo guardado sin usuario ni firma de entrega',
-    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @i2 AND TipoCierre = 'recibo_sin_entrega' AND EntregaUsuarioId IS NULL AND FirmaEntrega IS NULL AND RecibeUsuarioId = @u2) THEN 1 ELSE 0 END, NULL;
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @i2 AND TipoCierre = 'recibo_sin_entrega' AND EntregaUsuarioId IS NULL AND FirmaEntrega IS NULL AND RecibeUsuarioId = @u2 AND NoFirmaParte = 'entrega' AND MotivoNoFirma = N'zz motivo') THEN 1 ELSE 0 END, NULL;
 
 -- Una inspeccion de salida con motivo se guarda (en la etapa nueva, para no chocar con la salida original de las demas) y el motivo queda con su texto.
 INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector, MotivoSinInspectorTexto) VALUES (@i4nov, @e4nov, @vj, @u2, 'salida', SYSDATETIMEOFFSET(), 'otro', N'zz el inspector se enfermo');
@@ -1113,6 +1120,11 @@ BEGIN CATCH
     SET @vistasOk = 0;
 END CATCH
 INSERT #r SELECT N'Vistas de indicadores: se consultan sin error', @vistasOk, NULL;
+
+-- 7n) Recibo sin entrega con una sola firma (la estructura; los casos de datos de la migracion del destino por unidad estan en las pruebas de migracion)
+INSERT #r SELECT N'Recibo sin entrega: el cierre exige la parte que no firmo y el motivo, y admite las dos formas de una sola firma',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Cierre' AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND definition LIKE N'%recibo_sin_entrega%NoFirmaParte%MotivoNoFirma%')
+          AND NOT EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE TipoCierre = 'recibo_sin_entrega' AND (NoFirmaParte IS NULL OR MotivoNoFirma IS NULL)) THEN 1 ELSE 0 END, NULL;
 
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;

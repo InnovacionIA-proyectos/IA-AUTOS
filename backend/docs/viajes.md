@@ -74,6 +74,13 @@ Resultado esperado: 5 indices, 1 columna, 1 procedimiento, 3 triggers y 0 filas 
 Los viajes migrados quedan con estado `finalizado` (todas las etapas de sus VIN con informe cerrado), `en_curso` (algún informe) o `programado` (ninguno), y
 pueden no tener `codigo_mtrack`, `tipo_unidad_id` ni `placa` (el código se completa después con `PATCH /api/viajes/{id}`).
 
+## Destino por unidad (script 25)
+
+`tblViajeVehiculos.LugarDestinoId` (script 24) es el destino de **cada unidad**, hacia el catálogo `lugares`; `tblViajes.DestinoId` queda como dato histórico, sin uso nuevo. El script
+[`25-destino-por-unidad-y-cierre-con-una-firma.sql`](../database/cambios-esquema/25-destino-por-unidad-y-cierre-con-una-firma.sql) (una transacción, repetible, `@esquema` ajustable) migra los viajes anteriores: como su destino era un **tipo** de lugar
+(`tblPuntosCustodia`) y no un lugar real, crea **un lugar histórico inactivo** por cada tipo que algún viaje usaba de destino («Concesionario (por definir)», ciudad «Sin definir») y se lo copia a cada unidad del viaje. Tras migrar,
+ninguna unidad de un viaje con destino queda sin lugar de destino y el de cada una corresponde al de su viaje; quien administra el catálogo reasigna después cada unidad a su lugar real. Un viaje sin destino no inventa uno.
+
 ## Aplicar el cambio en una base existente
 
 Con un usuario que pueda crear tablas y vistas y desactivar triggers (no el de la aplicación), conectado a la base de IA Autos, **antes de desplegar la API**:
