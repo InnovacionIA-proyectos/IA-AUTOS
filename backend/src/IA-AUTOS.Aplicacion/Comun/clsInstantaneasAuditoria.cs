@@ -99,6 +99,8 @@ public static class clsInstantaneasAuditoria
 
     public static object De(clsViaje v) => new
     {
+        v.FechaProgramada,
+        v.LugarCargueId,
         v.CodigoMtrack,
         v.Estado,
         v.TipoUnidadId,

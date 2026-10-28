@@ -33,7 +33,7 @@ public sealed class clsViajesService(
     public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "created_at", "updated_at", "codigo_mtrack", "estado", "placa", "trailer" };
 
     private static readonly string[] CAMPOS_EDITABLES =
-        ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "inspector_id", "origen_id", "destino_id", "con_personal_apoyo"];
+        ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "inspector_id", "origen_id", "destino_id", "con_personal_apoyo", "fecha_programada", "lugar_cargue_id"];
 
     private static readonly string[] CAMPOS_SIN_NULO = ["codigo_mtrack", "tipo_unidad_id", "placa", "con_personal_apoyo"];
 
@@ -137,7 +137,24 @@ public sealed class clsViajesService(
         var destinoId = lector.Identificador("destino_id");
         await ValidarReferenciasAsync(tipoUnidadId, conductorId, inspectorId, origenId, destinoId, ct);
 
+        // La programacion (fecha y lugar real de cargue) solo se corrige mientras el viaje esta programado.
+        var cambiaFecha = lector.Tiene("fecha_programada");
+        var fechaProgramada = cambiaFecha && campos["fecha_programada"].ValueKind != JsonValueKind.Null
+            ? clsFechaProgramada.DeIso(lector.Texto("fecha_programada")) ?? throw clsErroresCampos.De("fecha_programada", "Debe ser una fecha y hora ISO 8601 con zona horaria (por ejemplo 2026-11-03T06:00:00-05:00)")
+            : (DateTimeOffset?)null;
+        var cambiaLugar = lector.Tiene("lugar_cargue_id");
+        var lugarCargueId = lector.Identificador("lugar_cargue_id");
+        if (lugarCargueId is { } lugar && !await catalogos.ExisteActivoAsync(clsNombresCatalogo.LUGARES, lugar, ct))
+        {
+            throw clsErroresCampos.De("lugar_cargue_id", "El lugar de cargue no existe en el catálogo de lugares o está inactivo");
+        }
+
         var antes = clsInstantaneasAuditoria.De(viaje);
+        if (cambiaFecha || cambiaLugar)
+        {
+            viaje.Reprogramar(cambiaFecha, fechaProgramada, cambiaLugar, lugarCargueId, reloj.Ahora);
+        }
+
         viaje.Actualizar(
             codigo,
             tipoUnidadId,

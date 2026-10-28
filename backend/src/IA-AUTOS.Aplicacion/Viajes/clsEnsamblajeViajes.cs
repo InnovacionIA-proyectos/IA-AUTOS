@@ -17,11 +17,12 @@ public sealed class clsEnsamblajeViajes(IViajeRepository viajes, IEtapaRepositor
         IReadOnlyCollection<clsVehiculo> vehiculos,
         bool conPersonalApoyo,
         IReadOnlyList<clsEtapaDeRuta> ruta,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyDictionary<Guid, Guid>? lugarDestinoPorVehiculo = null)
     {
         foreach (var vehiculo in vehiculos)
         {
-            viajes.Agregar(clsViajeVehiculo.Crear(viaje.Id, vehiculo.Id, reloj.Ahora));
+            viajes.Agregar(clsViajeVehiculo.Crear(viaje.Id, vehiculo.Id, reloj.Ahora, lugarDestinoPorVehiculo is not null && lugarDestinoPorVehiculo.TryGetValue(vehiculo.Id, out var destino) ? destino : null));
             foreach (var etapa in clsRutaCustodia.CrearEtapasEstandar(viaje.Id, vehiculo.Id, ruta, viaje.OrigenId, viaje.DestinoId, conPersonalApoyo, reloj.Ahora))
             {
                 etapas.Agregar(etapa);

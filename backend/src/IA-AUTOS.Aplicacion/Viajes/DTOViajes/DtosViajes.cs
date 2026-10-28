@@ -17,7 +17,7 @@ public sealed record CrearViajeRequest(
 
 /// <summary>
 /// Campos que admite el cambio de un viaje. Solo se cambia lo enviado; trailer, conductor, inspector, origen y destino admiten
-/// nulo para quitarlos. Este tipo describe el cuerpo en el contrato: el servicio lo lee campo a campo.
+/// nulo para quitarlos. <c>FechaProgramada</c> (fecha y hora con zona horaria) y <c>LugarCargueId</c> (un lugar activo del catalogo <c>lugares</c>) se corrigen solo mientras el viaje esta programado. Este tipo describe el cuerpo en el contrato: el servicio lo lee campo a campo.
 /// </summary>
 public sealed record ActualizarViajeRequest(
     string? CodigoMtrack,
@@ -28,7 +28,9 @@ public sealed record ActualizarViajeRequest(
     Guid? InspectorId,
     Guid? OrigenId,
     Guid? DestinoId,
-    bool? ConPersonalApoyo);
+    bool? ConPersonalApoyo,
+    DateTimeOffset? FechaProgramada = null,
+    Guid? LugarCargueId = null);
 
 public sealed record AgregarVinesRequest(IReadOnlyList<string>? Vines);
 
@@ -63,7 +65,9 @@ public sealed record ViajeVehiculoDto(
     string EstadoUnidad,
     NoSaleDto? NoSale,
     string EstadoTransporte,
-    int Novedades);
+    int Novedades,
+    Guid? LugarDestinoId = null,
+    string? LugarDestino = null);
 
 /// <summary>
 /// Viaje completo con sus VIN. <c>ConPersonalApoyo</c> es la marca de la etapa de Cargue. El viaje no tiene un cliente propio: <c>Clientes</c>
@@ -90,7 +94,10 @@ public sealed record ViajeDto(
     IReadOnlyList<ViajeVehiculoDto> Vehiculos,
     IReadOnlyList<ClienteDto> Clientes,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset? FechaProgramada = null,
+    Guid? LugarCargueId = null,
+    string? LugarCargue = null);
 
 /// <summary>Fila del listado de viajes: los datos del viaje, el conteo de sus VIN y los clientes de esos VIN (los que quien consulta puede ver).</summary>
 public sealed record ViajeResumenDto(
@@ -114,7 +121,10 @@ public sealed record ViajeResumenDto(
     int VehiculosCompletos,
     IReadOnlyList<ClienteDto> Clientes,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset? FechaProgramada = null,
+    Guid? LugarCargueId = null,
+    string? LugarCargue = null);
 
 /// <summary>
 /// Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio. <c>Pagina</c>, <c>Tamano</c> y <c>Orden</c> son el formato comun de los listados; la exportacion a Excel los
@@ -150,7 +160,9 @@ public sealed record FiltrosViajes(
 
 /// <summary>
 /// Fila de la carga masiva de viajes (una por VIN). Las filas con el mismo codigo MTrack forman un viaje. <c>Fila</c> es el
-/// numero de fila del archivo (para mostrar el error donde esta); si no llega se usa la posicion en la lista.
+/// numero de fila del archivo (para mostrar el error donde esta); si no llega se usa la posicion en la lista. <c>FechaProgramada</c> es la fecha y hora programada del cargue
+/// («2026-11-03 06:00», hora de Colombia salvo que traiga su zona horaria), <c>Origen</c> el nombre del lugar de cargue y <c>Destino</c> el nombre del lugar de destino de ESA unidad
+/// (ambos del catalogo <c>lugares</c>); los tres son obligatorios, y la fecha y el origen deben ser los mismos en todas las filas de un codigo MTrack.
 /// </summary>
 public sealed record FilaCargaViajeRequest(
     int? Fila,
@@ -159,7 +171,10 @@ public sealed record FilaCargaViajeRequest(
     string? Trailer,
     string? CedulaConductor,
     string? Unidad,
-    string? CodigoMtrack);
+    string? CodigoMtrack,
+    string? FechaProgramada = null,
+    string? Origen = null,
+    string? Destino = null);
 
 public sealed record CargarViajesRequest(IReadOnlyList<FilaCargaViajeRequest>? Filas);
 
