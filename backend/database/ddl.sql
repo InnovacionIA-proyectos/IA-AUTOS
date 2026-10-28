@@ -296,6 +296,41 @@ BEGIN
 END
 GO
 
+/* -----------------------------------------------------------------------------
+   tblLugares: el catalogo de lugares REALES (CEDI Envigado, Concesionario Autolarte Medellin...). Nombre es unico; TipoId es el tipo (tblPuntosCustodia queda como catalogo de TIPOS: CEDI 1, Origen,
+   Certificadora, Destino, CEDI 2 y Concesionario); Ciudad es obligatoria. Latitud, Longitud y RadioMetros admiten nulo (un lugar sin ubicacion es valido; las coordenadas van juntas o ninguna).
+   No se siembra ningun lugar: la lista la entrega el negocio.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblLugares', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblLugares
+    (
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblLugares PRIMARY KEY,
+        Nombre     nvarchar(100)     NOT NULL,
+        TipoId     uniqueidentifier  NOT NULL,
+        Ciudad     nvarchar(100)     NOT NULL,
+        Latitud    float             NULL,
+        Longitud   float             NULL,
+        RadioMetros int              NULL,
+        Orden      int               NOT NULL CONSTRAINT DF_tblLugares_Orden DEFAULT (0),
+        Activo     bit               NOT NULL CONSTRAINT DF_tblLugares_Activo DEFAULT (1),
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblLugares_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblLugares_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblLugares_Nombre UNIQUE (Nombre),
+        CONSTRAINT FK_tblLugares_Tipo FOREIGN KEY (TipoId) REFERENCES dbo.tblPuntosCustodia (Id),
+        CONSTRAINT CK_tblLugares_Nombre CHECK (LEN(LTRIM(RTRIM(Nombre))) > 0),
+        CONSTRAINT CK_tblLugares_Ciudad CHECK (LEN(LTRIM(RTRIM(Ciudad))) > 0),
+        CONSTRAINT CK_tblLugares_Orden CHECK (Orden >= 0),
+        CONSTRAINT CK_tblLugares_Latitud CHECK (Latitud IS NULL OR (Latitud BETWEEN -90 AND 90)),
+        CONSTRAINT CK_tblLugares_Longitud CHECK (Longitud IS NULL OR (Longitud BETWEEN -180 AND 180)),
+        -- Las coordenadas van juntas o ninguna.
+        CONSTRAINT CK_tblLugares_Coordenadas CHECK ((Latitud IS NULL AND Longitud IS NULL) OR (Latitud IS NOT NULL AND Longitud IS NOT NULL)),
+        CONSTRAINT CK_tblLugares_Radio CHECK (RadioMetros IS NULL OR RadioMetros > 0)
+    );
+    CREATE INDEX IX_tblLugares_Tipo ON dbo.tblLugares (TipoId);
+END
+GO
+
 -- Niveles de severidad (V1+, V1, V2, V3) con la accion que corresponde a cada uno.
 IF OBJECT_ID(N'dbo.tblNivelesSeveridad', N'U') IS NULL
 BEGIN
@@ -516,6 +551,9 @@ BEGIN
         InspectorId    uniqueidentifier  NULL,
         OrigenId       uniqueidentifier  NULL,
         DestinoId      uniqueidentifier  NULL,
+        -- Cuando esta programado el cargue y en que lugar real se carga (nulos en los viajes anteriores). OrigenId y DestinoId (tipos de lugar) quedan para el historico.
+        FechaProgramada datetimeoffset(3) NULL,
+        LugarCargueId  uniqueidentifier  NULL,
         Estado         varchar(20)       NOT NULL CONSTRAINT DF_tblViajes_Estado DEFAULT ('programado'),
         CreadoPor      uniqueidentifier  NULL,
         CreatedAt      datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajes_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
@@ -526,6 +564,7 @@ BEGIN
         CONSTRAINT FK_tblViajes_Origen FOREIGN KEY (OrigenId) REFERENCES dbo.tblPuntosCustodia (Id),
         CONSTRAINT FK_tblViajes_Destino FOREIGN KEY (DestinoId) REFERENCES dbo.tblPuntosCustodia (Id),
         CONSTRAINT FK_tblViajes_CreadoPor FOREIGN KEY (CreadoPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblViajes_LugarCargue FOREIGN KEY (LugarCargueId) REFERENCES dbo.tblLugares (Id),
         CONSTRAINT CK_tblViajes_Estado CHECK (Estado IN ('programado', 'en_curso', 'finalizado', 'cancelado'))
     );
     CREATE UNIQUE INDEX UX_tblViajes_CodigoMtrack ON dbo.tblViajes (CodigoMtrack) WHERE CodigoMtrack IS NOT NULL;
@@ -536,7 +575,24 @@ BEGIN
     CREATE INDEX IX_tblViajes_Origen ON dbo.tblViajes (OrigenId);
     CREATE INDEX IX_tblViajes_Destino ON dbo.tblViajes (DestinoId);
     CREATE INDEX IX_tblViajes_CreadoPor ON dbo.tblViajes (CreadoPor);
+    CREATE INDEX IX_tblViajes_LugarCargue ON dbo.tblViajes (LugarCargueId);
+    CREATE INDEX IX_tblViajes_FechaProgramada ON dbo.tblViajes (FechaProgramada);
 END
+GO
+
+-- En una base que aun tiene el viaje anterior se agregan las columnas nuevas (nulas), su llave foranea y sus indices; en una base nueva ya estan y esto no hace nada.
+IF COL_LENGTH(N'dbo.tblViajes', N'FechaProgramada') IS NULL
+    ALTER TABLE dbo.tblViajes ADD FechaProgramada datetimeoffset(3) NULL;
+IF COL_LENGTH(N'dbo.tblViajes', N'LugarCargueId') IS NULL
+    ALTER TABLE dbo.tblViajes ADD LugarCargueId uniqueidentifier NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajes_LugarCargue' AND parent_object_id = OBJECT_ID(N'dbo.tblViajes'))
+    ALTER TABLE dbo.tblViajes ADD CONSTRAINT FK_tblViajes_LugarCargue FOREIGN KEY (LugarCargueId) REFERENCES dbo.tblLugares (Id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblViajes_LugarCargue' AND object_id = OBJECT_ID(N'dbo.tblViajes'))
+    CREATE INDEX IX_tblViajes_LugarCargue ON dbo.tblViajes (LugarCargueId);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblViajes_FechaProgramada' AND object_id = OBJECT_ID(N'dbo.tblViajes'))
+    CREATE INDEX IX_tblViajes_FechaProgramada ON dbo.tblViajes (FechaProgramada);
 GO
 
 /* -----------------------------------------------------------------------------
@@ -557,12 +613,15 @@ BEGIN
         NoSaleMarcadoPor      uniqueidentifier  NULL,
         NoSaleAt              datetimeoffset(3) NULL,
         ReemplazoVehiculoId   uniqueidentifier  NULL,
+        -- El destino de CADA unidad (lugar real); nulo en lo anterior.
+        LugarDestinoId        uniqueidentifier  NULL,
         CreatedAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajeVehiculos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajeVehiculos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblViajeVehiculos_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id) ON DELETE CASCADE,
         CONSTRAINT FK_tblViajeVehiculos_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id),
         CONSTRAINT FK_tblViajeVehiculos_NoSaleMarcadoPor FOREIGN KEY (NoSaleMarcadoPor) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT FK_tblViajeVehiculos_Reemplazo FOREIGN KEY (ReemplazoVehiculoId) REFERENCES dbo.tblVehiculos (Id),
+        CONSTRAINT FK_tblViajeVehiculos_LugarDestino FOREIGN KEY (LugarDestinoId) REFERENCES dbo.tblLugares (Id),
         CONSTRAINT UQ_tblViajeVehiculos_Viaje_Vehiculo UNIQUE (ViajeId, VehiculoId),
         CONSTRAINT CK_tblViajeVehiculos_EstadoUnidad CHECK (EstadoUnidad IN ('activa', 'no_sale')),
         -- "No sale" exige su motivo, el hallazgo que lo causa, quien lo marco y cuando; una unidad activa no lleva nada de eso.
@@ -571,7 +630,19 @@ BEGIN
             OR (EstadoUnidad = 'no_sale' AND NoSaleMotivo IS NOT NULL AND NoSaleHallazgoId IS NOT NULL AND NoSaleMarcadoPor IS NOT NULL AND NoSaleAt IS NOT NULL))
     );
     CREATE INDEX IX_tblViajeVehiculos_Vehiculo ON dbo.tblViajeVehiculos (VehiculoId);
+    CREATE INDEX IX_tblViajeVehiculos_LugarDestino ON dbo.tblViajeVehiculos (LugarDestinoId);
 END
+GO
+
+-- En una base que aun tiene la unidad del viaje anterior se agrega el lugar de destino (nulo), su llave foranea y su indice; en una base nueva ya esta y esto no hace nada.
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'LugarDestinoId') IS NULL
+    ALTER TABLE dbo.tblViajeVehiculos ADD LugarDestinoId uniqueidentifier NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajeVehiculos_LugarDestino' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
+    ALTER TABLE dbo.tblViajeVehiculos ADD CONSTRAINT FK_tblViajeVehiculos_LugarDestino FOREIGN KEY (LugarDestinoId) REFERENCES dbo.tblLugares (Id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblViajeVehiculos_LugarDestino' AND object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
+    CREATE INDEX IX_tblViajeVehiculos_LugarDestino ON dbo.tblViajeVehiculos (LugarDestinoId);
 GO
 
 /* -----------------------------------------------------------------------------
@@ -1750,7 +1821,7 @@ SELECT x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Tr
        SUM(x.ConSalidaDigital) AS ConSalidaDigital,
        CAST(ROUND(SUM(x.ConSalidaDigital) * 100.0 / COUNT(*), 2) AS decimal(5, 2)) AS Porcentaje
 FROM (
-    SELECT CAST(SWITCHOFFSET(vj.CreatedAt, N''-05:00'') AS date) AS Fecha, v.ClienteId, v.Operacion, vj.OrigenId, vj.DestinoId, v.Marca, vj.Trailer,
+    SELECT CAST(SWITCHOFFSET(COALESCE(vj.FechaProgramada, vj.CreatedAt), N''-05:00'') AS date) AS Fecha, v.ClienteId, v.Operacion, vj.OrigenId, vj.DestinoId, v.Marca, vj.Trailer,
            CASE WHEN EXISTS (SELECT 1
                              FROM dbo.tblInspecciones i
                              JOIN dbo.tblEtapas e ON e.Id = i.EtapaId

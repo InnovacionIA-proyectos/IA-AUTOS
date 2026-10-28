@@ -695,6 +695,26 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Los_lugares_la_fecha_programada_y_el_destino_por_unidad_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/24-lugares-y-programacion.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblLugares' AND schema_id = SCHEMA_ID()");
+        Assert.True(tabla == 1, "Falta tblLugares. Ejecute database/cambios-esquema/24-lugares-y-programacion.sql.");
+
+        var viaje = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajes') AND name IN (N'FechaProgramada', N'LugarCargueId') AND is_nullable = 1");
+        var unidad = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajeVehiculos') AND name = N'LugarDestinoId' AND is_nullable = 1");
+        var vista = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'vwAdopcion') AND definition LIKE N'%FechaProgramada%'");
+        var radioInvalido = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblLugares WHERE (Latitud IS NULL) <> (Longitud IS NULL) OR RadioMetros <= 0");
+
+        Assert.True(viaje == 2, "Faltan FechaProgramada y LugarCargueId en tblViajes. Ejecute database/cambios-esquema/24-lugares-y-programacion.sql.");
+        Assert.True(unidad == 1, "Falta LugarDestinoId en tblViajeVehiculos. Ejecute database/cambios-esquema/24-lugares-y-programacion.sql.");
+        Assert.True(vista == 1, "vwAdopcion no cuenta por el dia programado. Ejecute database/cambios-esquema/24-lugares-y-programacion.sql.");
+        Assert.Equal(0, radioInvalido);
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();
