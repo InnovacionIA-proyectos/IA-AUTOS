@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "2.6.0"
+    "version": "2.7.0"
   },
   "paths": {
     "/api/viajes": {
@@ -670,6 +670,759 @@
                       "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
                       "code": "PIN_CHANGE_REQUIRED",
                       "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/entregas": {
+      "get": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_ListarEntregas",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregasDelViajeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregasDelViajeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregasDelViajeDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/entregas/{lugar}": {
+      "get": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_ObtenerEntrega",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "lugar",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregaPuntoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregaPuntoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregaPuntoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/entregas/{lugar}/firma": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_FirmarEntrega",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "lugar",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FirmarEntregaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregaPuntoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregaPuntoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregaPuntoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/entregas/{lugar}/una-firma": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_CerrarEntregaConUnaFirma",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "lugar",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CerrarEntregaUnaFirmaRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregaPuntoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregaPuntoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EntregaPuntoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
                       "timestamp": "2026-10-22T14:30:00.000Z"
                     }
                   }
@@ -1637,7 +2390,7 @@
         "tags": [
           "Viajes"
         ],
-        "operationId": "Viajes_AgregarVines",
+        "operationId": "Viajes_AgregarUnidades",
         "parameters": [
           {
             "name": "id",
@@ -1653,12 +2406,410 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AgregarVinesRequest"
+                "$ref": "#/components/schemas/AgregarUnidadesRequest"
               }
             }
           },
           "required": true
         },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/vehiculos/{vin}": {
+      "patch": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_CambiarDestinoDeUnidad",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "vin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CambiarDestinoUnidadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViajeDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_QuitarVin",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "vin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -2446,201 +3597,6 @@
                       "error": "La unidad se marco «no sale» del viaje: no admite llegada",
                       "code": "UNIDAD_NO_SALE",
                       "message": "La unidad se marco «no sale» del viaje: no admite llegada",
-                      "timestamp": "2026-10-22T14:30:00.000Z"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorApiDto"
-                },
-                "examples": {
-                  "INTERNAL_ERROR": {
-                    "summary": "Error inesperado",
-                    "value": {
-                      "error": "Error inesperado",
-                      "code": "INTERNAL_ERROR",
-                      "message": "Error inesperado",
-                      "timestamp": "2026-10-22T14:30:00.000Z"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {}
-        ]
-      }
-    },
-    "/api/viajes/{id}/vehiculos/{vin}": {
-      "delete": {
-        "tags": [
-          "Viajes"
-        ],
-        "operationId": "Viajes_QuitarVin",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "vin",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ViajeDto"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ViajeDto"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ViajeDto"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Error 400: VALIDATION_ERROR",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorApiDto"
-                },
-                "examples": {
-                  "VALIDATION_ERROR": {
-                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
-                    "value": {
-                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
-                      "code": "VALIDATION_ERROR",
-                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
-                      "timestamp": "2026-10-22T14:30:00.000Z",
-                      "details": {
-                        "formErrors": [],
-                        "fieldErrors": {
-                          "campo": [
-                            "mensaje"
-                          ]
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Error 401: UNAUTHORIZED",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorApiDto"
-                },
-                "examples": {
-                  "UNAUTHORIZED": {
-                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
-                    "value": {
-                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
-                      "code": "UNAUTHORIZED",
-                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
-                      "timestamp": "2026-10-22T14:30:00.000Z"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorApiDto"
-                },
-                "examples": {
-                  "FORBIDDEN": {
-                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
-                    "value": {
-                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
-                      "code": "FORBIDDEN",
-                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
-                      "timestamp": "2026-10-22T14:30:00.000Z"
-                    }
-                  },
-                  "PIN_CHANGE_REQUIRED": {
-                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
-                    "value": {
-                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
-                      "code": "PIN_CHANGE_REQUIRED",
-                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
-                      "timestamp": "2026-10-22T14:30:00.000Z"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error 404: NOT_FOUND",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorApiDto"
-                },
-                "examples": {
-                  "NOT_FOUND": {
-                    "summary": "El recurso no existe",
-                    "value": {
-                      "error": "El recurso no existe",
-                      "code": "NOT_FOUND",
-                      "message": "El recurso no existe",
-                      "timestamp": "2026-10-22T14:30:00.000Z"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Error 409: CONFLICT",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorApiDto"
-                },
-                "examples": {
-                  "CONFLICT": {
-                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
-                    "value": {
-                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
-                      "code": "CONFLICT",
-                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
                       "timestamp": "2026-10-22T14:30:00.000Z"
                     }
                   }
@@ -17490,7 +18446,6 @@
             "conductor_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "inspector_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "origen_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "con_personal_apoyo": true,
             "fecha_programada": "2026-10-22T14:30:00.000Z",
             "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
@@ -17504,7 +18459,6 @@
           "conductor_id",
           "inspector_id",
           "origen_id",
-          "destino_id",
           "con_personal_apoyo"
         ],
         "type": "object",
@@ -17549,13 +18503,6 @@
             "format": "uuid"
           },
           "origen_id": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "destino_id": {
             "type": [
               "null",
               "string"
@@ -17790,26 +18737,54 @@
           }
         }
       },
-      "AgregarVinesRequest": {
+      "AgregarUnidadesRequest": {
         "examples": [
           {
-            "vines": [
-              "texto"
+            "unidades": [
+              {
+                "vin": "9FBHSR4E8PM000001",
+                "lugar_destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              }
             ]
           }
         ],
         "required": [
-          "vines"
+          "unidades"
         ],
         "type": "object",
         "properties": {
-          "vines": {
+          "unidades": {
             "type": [
               "null",
               "array"
             ],
             "items": {
-              "type": "string"
+              "examples": [
+                {
+                  "vin": "9FBHSR4E8PM000001",
+                  "lugar_destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                }
+              ],
+              "required": [
+                "vin",
+                "lugar_destino_id"
+              ],
+              "type": "object",
+              "properties": {
+                "vin": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "lugar_destino_id": {
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "format": "uuid"
+                }
+              }
             }
           }
         }
@@ -18326,6 +19301,26 @@
         "properties": {
           "modo": {
             "type": "string"
+          }
+        }
+      },
+      "CambiarDestinoUnidadRequest": {
+        "examples": [
+          {
+            "lugar_destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "required": [
+          "lugar_destino_id"
+        ],
+        "type": "object",
+        "properties": {
+          "lugar_destino_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -18983,6 +19978,33 @@
             ]
           },
           "lado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CerrarEntregaUnaFirmaRequest": {
+        "examples": [
+          {
+            "firma": "texto",
+            "motivo": "Mensaje de ejemplo"
+          }
+        ],
+        "required": [
+          "firma",
+          "motivo"
+        ],
+        "type": "object",
+        "properties": {
+          "firma": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo": {
             "type": [
               "null",
               "string"
@@ -19822,10 +20844,12 @@
             "conductor_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "inspector_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "origen_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "con_personal_apoyo": true,
-            "vines": [
-              "texto"
+            "unidades": [
+              {
+                "vin": "9FBHSR4E8PM000001",
+                "lugar_destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              }
             ]
           }
         ],
@@ -19837,9 +20861,8 @@
           "conductor_id",
           "inspector_id",
           "origen_id",
-          "destino_id",
           "con_personal_apoyo",
-          "vines"
+          "unidades"
         ],
         "type": "object",
         "properties": {
@@ -19889,26 +20912,44 @@
             ],
             "format": "uuid"
           },
-          "destino_id": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
           "con_personal_apoyo": {
             "type": [
               "null",
               "boolean"
             ]
           },
-          "vines": {
+          "unidades": {
             "type": [
               "null",
               "array"
             ],
             "items": {
-              "type": "string"
+              "examples": [
+                {
+                  "vin": "9FBHSR4E8PM000001",
+                  "lugar_destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                }
+              ],
+              "required": [
+                "vin",
+                "lugar_destino_id"
+              ],
+              "type": "object",
+              "properties": {
+                "vin": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "lugar_destino_id": {
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "format": "uuid"
+                }
+              }
             }
           }
         }
@@ -20024,6 +21065,193 @@
           },
           "is_weak": {
             "type": "boolean"
+          }
+        }
+      },
+      "EntregaPuntoDto": {
+        "examples": [
+          {
+            "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "viaje_estado": "texto",
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar": "texto",
+            "ciudad": "texto",
+            "unidades_total": 1,
+            "unidades_pendientes": 1,
+            "entregada": true,
+            "unidades": [
+              {
+                "vehiculo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "vin": "9FBHSR4E8PM000001",
+                "estado": "borrador",
+                "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "tipo_cierre": "texto",
+                "entrega_firmada_at": "2026-10-22T14:30:00.000Z",
+                "recibe_firmada_at": "2026-10-22T14:30:00.000Z",
+                "no_firma_parte": "texto"
+              }
+            ]
+          }
+        ],
+        "required": [
+          "viaje_id",
+          "viaje_estado",
+          "lugar_id",
+          "lugar",
+          "ciudad",
+          "unidades_total",
+          "unidades_pendientes",
+          "entregada",
+          "unidades"
+        ],
+        "type": "object",
+        "properties": {
+          "viaje_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "viaje_estado": {
+            "type": "string"
+          },
+          "lugar_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lugar": {
+            "type": "string"
+          },
+          "ciudad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unidades_total": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unidades_pendientes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "entregada": {
+            "type": "boolean"
+          },
+          "unidades": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntregaUnidadDto"
+            }
+          }
+        }
+      },
+      "EntregasDelViajeDto": {
+        "examples": [
+          {
+            "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "viaje_estado": "texto",
+            "unidades_sin_destino": 1,
+            "puntos": [
+              {
+                "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "viaje_estado": "texto",
+                "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "lugar": "texto",
+                "ciudad": "texto",
+                "unidades_total": 1,
+                "unidades_pendientes": 1,
+                "entregada": true,
+                "unidades": []
+              }
+            ]
+          }
+        ],
+        "required": [
+          "viaje_id",
+          "viaje_estado",
+          "unidades_sin_destino",
+          "puntos"
+        ],
+        "type": "object",
+        "properties": {
+          "viaje_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "viaje_estado": {
+            "type": "string"
+          },
+          "unidades_sin_destino": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "puntos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EntregaPuntoDto"
+            }
+          }
+        }
+      },
+      "EntregaUnidadDto": {
+        "examples": [
+          {
+            "vehiculo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "vin": "9FBHSR4E8PM000001",
+            "estado": "borrador",
+            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "tipo_cierre": "texto",
+            "entrega_firmada_at": "2026-10-22T14:30:00.000Z",
+            "recibe_firmada_at": "2026-10-22T14:30:00.000Z",
+            "no_firma_parte": "texto"
+          }
+        ],
+        "required": [
+          "vehiculo_id",
+          "vin",
+          "estado",
+          "inspeccion_id",
+          "tipo_cierre",
+          "entrega_firmada_at",
+          "recibe_firmada_at",
+          "no_firma_parte"
+        ],
+        "type": "object",
+        "properties": {
+          "vehiculo_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "vin": {
+            "type": "string"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "inspeccion_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "tipo_cierre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entrega_firmada_at": {
+            "format": "date-time"
+          },
+          "recibe_firmada_at": {
+            "format": "date-time"
+          },
+          "no_firma_parte": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -20440,6 +21668,43 @@
           },
           "rol": {
             "type": "string"
+          }
+        }
+      },
+      "FirmarEntregaRequest": {
+        "examples": [
+          {
+            "firma": "texto",
+            "entrega_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "recibe_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "required": [
+          "firma",
+          "entrega_usuario_id",
+          "recibe_usuario_id"
+        ],
+        "type": "object",
+        "properties": {
+          "firma": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entrega_usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "recibe_usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },

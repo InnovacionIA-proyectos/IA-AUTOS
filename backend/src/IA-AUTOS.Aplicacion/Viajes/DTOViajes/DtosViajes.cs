@@ -2,7 +2,13 @@ using IAAutos.Aplicacion.Auth.DTOAuth;
 
 namespace IAAutos.Aplicacion.Viajes.DTOViajes;
 
-/// <summary>Viaje nuevo: unidad transportadora, placa, trailer, conductor, codigo MTrack y, opcionalmente, sus VIN.</summary>
+/// <summary>Una unidad (VIN) que entra a un viaje con el lugar donde se entrega: el destino es de cada unidad.</summary>
+public sealed record UnidadDelViajeRequest(string? Vin, Guid? LugarDestinoId);
+
+/// <summary>
+/// Viaje nuevo: unidad transportadora, placa, trailer, conductor, codigo MTrack y, opcionalmente, sus unidades (cada una con su VIN y el lugar de destino, un lugar activo del catalogo <c>lugares</c>). El viaje
+/// ya no tiene un destino unico: <c>destino_id</c> y <c>vines</c> se rechazan.
+/// </summary>
 public sealed record CrearViajeRequest(
     string? CodigoMtrack,
     Guid? TipoUnidadId,
@@ -11,13 +17,12 @@ public sealed record CrearViajeRequest(
     Guid? ConductorId,
     Guid? InspectorId,
     Guid? OrigenId,
-    Guid? DestinoId,
     bool? ConPersonalApoyo,
-    IReadOnlyList<string>? Vines);
+    IReadOnlyList<UnidadDelViajeRequest>? Unidades);
 
 /// <summary>
-/// Campos que admite el cambio de un viaje. Solo se cambia lo enviado; trailer, conductor, inspector, origen y destino admiten
-/// nulo para quitarlos. <c>FechaProgramada</c> (fecha y hora con zona horaria) y <c>LugarCargueId</c> (un lugar activo del catalogo <c>lugares</c>) se corrigen solo mientras el viaje esta programado. Este tipo describe el cuerpo en el contrato: el servicio lo lee campo a campo.
+/// Campos que admite el cambio de un viaje. Solo se cambia lo enviado; trailer, conductor, inspector y origen admiten
+/// nulo para quitarlos. El destino es de cada unidad (<c>PATCH /api/viajes/{id}/vehiculos/{vin}</c>), no del viaje. <c>FechaProgramada</c> (fecha y hora con zona horaria) y <c>LugarCargueId</c> (un lugar activo del catalogo <c>lugares</c>) se corrigen solo mientras el viaje esta programado. Este tipo describe el cuerpo en el contrato: el servicio lo lee campo a campo.
 /// </summary>
 public sealed record ActualizarViajeRequest(
     string? CodigoMtrack,
@@ -27,12 +32,15 @@ public sealed record ActualizarViajeRequest(
     Guid? ConductorId,
     Guid? InspectorId,
     Guid? OrigenId,
-    Guid? DestinoId,
     bool? ConPersonalApoyo,
     DateTimeOffset? FechaProgramada = null,
     Guid? LugarCargueId = null);
 
-public sealed record AgregarVinesRequest(IReadOnlyList<string>? Vines);
+/// <summary>Unidades que se agregan a un viaje activo: cada una con su VIN y su lugar de destino.</summary>
+public sealed record AgregarUnidadesRequest(IReadOnlyList<UnidadDelViajeRequest>? Unidades);
+
+/// <summary>Cambia el lugar de destino de una unidad del viaje (un lugar activo del catalogo <c>lugares</c>).</summary>
+public sealed record CambiarDestinoUnidadRequest(Guid? LugarDestinoId);
 
 public sealed record CambiarEstadoViajeRequest(string? Estado);
 

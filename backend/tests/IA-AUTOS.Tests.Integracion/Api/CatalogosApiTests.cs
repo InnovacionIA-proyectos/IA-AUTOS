@@ -444,14 +444,15 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
             new { vin = "9FBHSR4E8PM000002", marca = "Renault", operacion = "nacional" },
         } }));
 
+        var lugar = await LugarRealAsync(cliente, "Destino de la ruta");
         await cliente.PatchAsync($"/api/catalogos/etapas/{descargue.GetProperty("id").GetGuid()}", Cuerpo(new { activo = false }));
-        var sinDescargue = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-RUTA-1", tipo_unidad_id = unidad, placa = "ABC123", vines = new[] { "9FBHSR4E8PM000001" } }));
+        var sinDescargue = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-RUTA-1", tipo_unidad_id = unidad, placa = "ABC123", unidades = new[] { new { vin = "9FBHSR4E8PM000001", lugar_destino_id = lugar } } }));
         Assert.Equal(HttpStatusCode.Created, sinDescargue.StatusCode);
         Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = '9FBHSR4E8PM000001'"));
 
         await cliente.PatchAsync($"/api/catalogos/etapas/{descargue.GetProperty("id").GetGuid()}", Cuerpo(new { activo = true }));
         await cliente.PostAsync("/api/catalogos/etapas", Cuerpo(new { codigo = "entrega_final", nombre = "Entrega final", orden = 4 }));
-        var conCuatro = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-RUTA-2", tipo_unidad_id = unidad, placa = "ABC123", vines = new[] { "9FBHSR4E8PM000002" } }));
+        var conCuatro = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-RUTA-2", tipo_unidad_id = unidad, placa = "ABC123", unidades = new[] { new { vin = "9FBHSR4E8PM000002", lugar_destino_id = lugar } } }));
         Assert.Equal(HttpStatusCode.Created, conCuatro.StatusCode);
         Assert.Equal(4, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = '9FBHSR4E8PM000002'"));
     }

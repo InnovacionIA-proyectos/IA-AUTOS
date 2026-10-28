@@ -354,6 +354,18 @@ public sealed class clsViajeVehiculo : clsEntidadBase
         Tocar(ahora);
     }
 
+    /// <summary>Cambia el lugar de destino de esta unidad (solo la suya: las demas unidades del viaje no se tocan). La unidad que no sale ya no tiene entrega: 409.</summary>
+    public void CambiarLugarDestino(Guid lugarDestinoId, DateTimeOffset ahora)
+    {
+        if (NoSale)
+        {
+            throw new clsConflictoException("La unidad está marcada como que no sale del viaje: su destino ya no se cambia");
+        }
+
+        LugarDestinoId = lugarDestinoId;
+        Tocar(ahora);
+    }
+
     public static clsViajeVehiculo Crear(Guid viajeId, Guid vehiculoId, DateTimeOffset ahora, Guid? lugarDestinoId = null)
     {
         var vinEnViaje = new clsViajeVehiculo { ViajeId = viajeId, VehiculoId = vehiculoId, LugarDestinoId = lugarDestinoId };

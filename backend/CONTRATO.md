@@ -618,10 +618,15 @@ Gestión de viajes. `201` con el `ViajeDto`.
 ```json
 {
   "codigo_mtrack": "MTK-001", "tipo_unidad_id": "uuid", "placa": "ABC123", "trailer": "T-9",
-  "conductor_id": "uuid", "inspector_id": null, "origen_id": "uuid", "destino_id": "uuid",
-  "con_personal_apoyo": false, "vines": ["9BWZZZ377VT004251", "9BWZZZ377VT004252"]
+  "conductor_id": "uuid", "inspector_id": null, "origen_id": "uuid", "con_personal_apoyo": false,
+  "unidades": [
+    { "vin": "9BWZZZ377VT004251", "lugar_destino_id": "uuid" },
+    { "vin": "9BWZZZ377VT004252", "lugar_destino_id": "uuid" }
+  ]
 }
 ```
+
+El destino es de **cada unidad**: el viaje ya no lleva un destino único, así que `destino_id` y `vines` **ya no se aceptan** (`400` «Campo no admitido»).
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
@@ -631,12 +636,15 @@ Gestión de viajes. `201` con el `ViajeDto`.
 | `trailer` | no | máximo 50 caracteres |
 | `conductor_id` | no | usuario activo con rol `conductor` |
 | `inspector_id` | no | usuario activo con rol `inspector` |
-| `origen_id`, `destino_id` | no | `id` de un lugar **activo** del catálogo `puntos-custodia` |
+| `origen_id` | no | `id` de un lugar **activo** del catálogo `puntos-custodia` |
 | `con_personal_apoyo` | no | por defecto `false` |
-| `vines` | no | hasta 500 VIN que ya existan; sin repetidos |
+| `unidades` | no | hasta 500; cada una con su `vin` (que ya exista) y su `lugar_destino_id` (obligatorio: un lugar **activo** del catálogo `lugares`); sin VIN repetidos |
+
+El Descargue de cada unidad se crea en el tipo (`puntos-custodia`) de **su** lugar de destino.
 
 Errores: `409` si el `codigo_mtrack` ya existe (el viaje **no se crea**) o si algún VIN ya está en otro viaje activo; `400` con `details.fieldErrors` si un
-campo es inválido, una referencia no existe, está inactiva o es de otro rol, o algún VIN no existe (`vines`). Todo o nada: si algo falla no se crea el viaje ni
+campo es inválido, una referencia no existe, está inactiva o es de otro rol, o alguna unidad no existe (`unidades`). Una unidad sin destino responde `400` con
+`fieldErrors.unidades`: «La unidad requiere un destino»; un lugar que no existe o está inactivo, o un VIN con dos destinos distintos, también. Todo o nada: si algo falla no se crea el viaje ni
 ninguna etapa.
 
 ### `GET /api/viajes`
@@ -664,15 +672,15 @@ quién entrega y quién recibe. `403` si es un inspector o conductor y el viaje 
 
 ### `PATCH /api/viajes/{id}`
 Gestión de viajes. Cambia **solo los campos enviados** de un viaje `programado` o `en_curso`; responde `200` con el `ViajeDto`. Campos: `codigo_mtrack`,
-`tipo_unidad_id`, `placa`, `trailer`, `conductor_id`, `inspector_id`, `origen_id`, `destino_id`, `con_personal_apoyo` (mismas reglas que al crear).
-`trailer`, `conductor_id`, `inspector_id`, `origen_id` y `destino_id` admiten `null` para quitarlos; `codigo_mtrack`, `tipo_unidad_id`, `placa` y
+`tipo_unidad_id`, `placa`, `trailer`, `conductor_id`, `inspector_id`, `origen_id`, `con_personal_apoyo` (mismas reglas que al crear).
+`trailer`, `conductor_id`, `inspector_id` y `origen_id` admiten `null` para quitarlos; `destino_id` **ya no se acepta** (el destino es de cada unidad: ver `PATCH /api/viajes/{id}/vehiculos/{vin}`); `codigo_mtrack`, `tipo_unidad_id`, `placa` y
 `con_personal_apoyo` no. Un campo que no existe responde `400`; un `codigo_mtrack` repetido, `409`; un viaje finalizado o cancelado, `409`.
 
 Mientras el viaje está `programado` también se corrige su programación: `fecha_programada` (ISO 8601 **con zona horaria**, por ejemplo `2026-11-03T06:00:00-05:00`; `null` la quita) y
 `lugar_cargue_id` (un lugar **activo** del catálogo `lugares`; `null` lo quita). Una fecha sin zona o un lugar inexistente o inactivo responde `400` con `details.fieldErrors`;
 en un viaje `en_curso` cambiarlos responde `409` (lo demás del viaje sí se sigue editando).
 
-Al cambiar `origen_id` o `destino_id` se actualiza el lugar del Cargue o del Descargue de los VIN del viaje, y `con_personal_apoyo` marca el Cargue; las etapas que
+Al cambiar `origen_id` se actualiza el lugar del Cargue de los VIN del viaje, y `con_personal_apoyo` marca el Cargue; las etapas que
 ya tienen un informe cerrado no cambian.
 
 ### `PATCH /api/viajes/{id}/estado`
@@ -680,8 +688,28 @@ Gestión de viajes. Cuerpo `{ "estado": "en_curso" }`. `200` con el `ViajeDto`. 
 (por ejemplo `programado` a `finalizado`, o salir de `finalizado`), `409`.
 
 ### `POST /api/viajes/{id}/vehiculos`
-Gestión de viajes. Asigna VIN a un viaje activo y crea sus etapas. Cuerpo `{ "vines": ["…"] }` (de 1 a 500). `200` con el `ViajeDto`. **Todo o nada:** `400`
-si algún VIN no existe; `409` si alguno ya está en este viaje o en otro viaje activo (el mensaje dice cuáles).
+Gestión de viajes. Asigna unidades a un viaje activo y crea sus etapas, con el Descargue en el destino de cada una. Cuerpo `{ "unidades": [ { "vin": "…", "lugar_destino_id": "uuid" } ] }` (de 1 a 500; `vines` **ya
+no se acepta**). `200` con el `ViajeDto`. **Todo o nada:** `400` si alguna unidad no trae destino («La unidad requiere un destino»), si el lugar no existe o está inactivo o si algún VIN no existe; `409` si alguno ya está
+en este viaje o en otro viaje activo (el mensaje dice cuáles). Una unidad que reemplaza a otra que no sale hereda el destino de la reemplazada.
+
+### `PATCH /api/viajes/{id}/vehiculos/{vin}`
+Gestión de viajes. Cambia el destino de **una** unidad: cuerpo `{ "lugar_destino_id": "uuid" }` (un lugar **activo** del catálogo `lugares`; `400` si falta). Solo se mueve el Descargue de esa unidad al tipo del lugar nuevo; las demás
+unidades del viaje no se tocan. `200` con el `ViajeDto`. `404` si el VIN no está en el viaje; `409` si el viaje no está activo, si la unidad no sale del viaje o si su Descargue ya tiene un informe cerrado.
+
+### Entrega por punto
+Cada unidad se entrega en **su** lugar de destino. En cada punto se firma **una vez** entre quien entrega (por defecto el conductor del viaje) y quien recibe (por defecto su inspector): la firma se guarda en la transferencia
+de **cada unidad pendiente del punto** (la del Descargue, sobre su inspección de llegada), con la misma firma, fecha e IP, y cada unidad conserva su transferencia propia. Las unidades que no salen del viaje no se entregan.
+
+- `GET /api/viajes/{id}/entregas` → `{ viaje_id, viaje_estado, unidades_sin_destino, puntos: [ EntregaPuntoDto ] }`: una entrega por lugar de destino. `unidades_sin_destino` cuenta las unidades de viajes anteriores al destino por unidad.
+- `GET /api/viajes/{id}/entregas/{lugar}` → `EntregaPuntoDto`: `{ viaje_id, viaje_estado, lugar_id, lugar, ciudad, unidades_total, unidades_pendientes, entregada, unidades: [ { vehiculo_id, vin, estado, inspeccion_id, tipo_cierre, entrega_firmada_at, recibe_firmada_at, no_firma_parte } ] }`.
+  `unidades_pendientes` es el «Aquí entregas estas N unidades»; `estado` de cada unidad es `sin_inspeccion` (aún no tiene la inspección de llegada del Descargue, donde se firma), `pendiente` o `cerrada`. `404` si ninguna unidad activa del viaje va a ese lugar.
+- `POST /api/viajes/{id}/entregas/{lugar}/firma` con `{ "firma": "…", "entrega_usuario_id"?, "recibe_usuario_id"? }` → `200` con la entrega: la firma del usuario autenticado (quien entrega o quien recibe) se guarda en cada unidad pendiente; con
+  las dos firmas cada transferencia queda `firmada`. Solo el conductor o el inspector del viaje (`403` el resto; `entrega_usuario_id` y `recibe_usuario_id` deben ser usuarios del viaje, distintos entre sí); `409` si no hay unidades pendientes en el punto o alguna aún no tiene la inspección
+  de llegada del Descargue; `400` sin `firma`.
+- `POST /api/viajes/{id}/entregas/{lugar}/una-firma` con `{ "motivo": "…", "firma"? }` → `200` con la entrega: **una sola firma no bloquea**. Cada unidad pendiente queda `recibo_sin_entrega` con la parte que no firmó (`no_firma_parte`) y el `motivo`
+  (obligatorio, hasta 300 caracteres), se crea su **novedad de proceso** `recibo_sin_entrega` y los coordinadores de calidad y administradores del cliente reciben **un solo aviso** por entrega y punto (`novedad_proceso`, con clave de dedupe del viaje y el lugar).
+  La `firma` solo hace falta si quien cierra aún no había firmado; `409` si la otra parte ya firmó. Quien cierra es quien entrega o quien recibe (`403` el resto).
+- **El viaje se finaliza** solo: cuando todas sus unidades activas tienen el Descargue cerrado (inspección de llegada cerrada y transferencia con cierre) y estaba `en_curso`, pasa a `finalizado` (auditoría `viaje.estado.finalizado`); con entregas pendientes sigue en curso.
 
 ### `DELETE /api/viajes/{id}/vehiculos/{vin}`
 Gestión de viajes. Quita un VIN del viaje y borra sus etapas. `200` con el `ViajeDto`. `404` si el VIN no está en el viaje; `409` si el VIN ya tiene inspecciones
