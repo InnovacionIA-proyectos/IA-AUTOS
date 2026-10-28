@@ -88,6 +88,12 @@ class _Detalle extends ConsumerWidget {
     final ultima = inventario.ultimaInspeccion;
     final vinRuta = Uri.encodeComponent(inventario.vin);
     final rol = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol)) ?? '';
+    // Un viaje terminado conserva sus etapas, pero el servidor ya no admite inspecciones nuevas: ofrecerlas
+    // sería mandar a capturar siete fotos para que el envío muera con un 409. Mientras no se sepa el estado del
+    // viaje —sin señal y sin copia— se deja trabajar, que es lo normal.
+    final viajeId = inventario.etapas.map((e) => e.viajeId).nonNulls.firstOrNull;
+    final viaje = viajeId == null ? null : ref.watch(viajeDeEtapaProvider(viajeId)).value;
+    final viajeTerminado = viaje != null && !viaje.admiteTrabajo;
 
     return ListView(
       padding: const EdgeInsets.all(Espacio.lg),
@@ -125,7 +131,11 @@ class _Detalle extends ConsumerWidget {
               etapa: etapa,
               procesoNombre: catalogos.etiqueta(Catalogo.etapas, etapa.proceso),
               momentos: momentosDeEtapa(etapa, inventario),
-              capturaAjena: !puedeCapturar(etapa, rol: rol),
+              motivoSoloLectura: switch (etapa) {
+                _ when viajeTerminado => mensajeViajeTerminado,
+                _ when !puedeCapturar(etapa, rol: rol) => mensajeCargueConApoyo,
+                _ => null,
+              },
               accion: accionDeEtapa(etapa, inventario),
               // El bloqueo nombra la etapa anterior, y el nombre sale del catálogo: el dominio solo da su código.
               nombreDeEtapa: (codigo) => catalogos.etiqueta(Catalogo.etapas, codigo),
@@ -297,6 +307,9 @@ class _EstadoNoSale extends ConsumerState<_NoSale> {
       );
     }
 
+    // En un viaje que ya cerró tampoco se marca: el servidor responde 409.
+    if (!viaje.admiteTrabajo) return const SizedBox.shrink();
+
     final impiden = hallazgosQueImpidenSalir(widget.inventario, viajeId: viajeId);
     final puede = puedeMarcarNoSale(
       rol: ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol)),
@@ -448,7 +461,7 @@ class _TarjetaEtapa extends StatelessWidget {
     required this.etapa,
     required this.procesoNombre,
     required this.momentos,
-    required this.capturaAjena,
+    required this.motivoSoloLectura,
     required this.accion,
     required this.nombreDeEtapa,
     required this.alCapturar,
@@ -462,7 +475,9 @@ class _TarjetaEtapa extends StatelessWidget {
   final List<MomentoEtapa> momentos;
 
   /// La captura de esta etapa no le toca a quien está mirando.
-  final bool capturaAjena;
+  /// Por qué esta etapa no se puede trabajar; null si sí se puede. Se dice en la tarjeta en vez de ofrecer
+  /// acciones que el servidor va a rechazar.
+  final String? motivoSoloLectura;
   final AccionEtapa accion;
   final String Function(String codigoEtapa) nombreDeEtapa;
   final void Function(String momento) alCapturar;
@@ -491,10 +506,10 @@ class _TarjetaEtapa extends StatelessWidget {
               Insignia(etapa.requiereInspeccion ? 'Requiere informe' : 'Solo firma', tono: etapa.requiereInspeccion ? TonoInsignia.info : TonoInsignia.neutro),
             ],
           ),
-          if (capturaAjena)
+          if (motivoSoloLectura case final motivo?)
             Padding(
               padding: const EdgeInsets.only(top: Espacio.sm),
-              child: Text(mensajeCargueConApoyo, style: tema.bodySmall),
+              child: Text(motivo, style: tema.bodySmall),
             )
           else
             for (final momento in momentos) ...[
@@ -502,7 +517,8 @@ class _TarjetaEtapa extends StatelessWidget {
               _FilaMomento(momento: momento, nombreDeEtapa: nombreDeEtapa, alCapturar: () => alCapturar(momento.momento)),
             ],
           const SizedBox(height: Espacio.sm),
-          switch (accion) {
+          if (motivoSoloLectura == null)
+            switch (accion) {
             // Cerrada de cualquiera de las tres formas: ya no admite firmas, y ofrecerlas solo llevaría al 409
             // del servidor.
             FirmarTransferencia(cerrada: true, transferencia: final t?) => Insignia(
@@ -527,8 +543,8 @@ class _TarjetaEtapa extends StatelessWidget {
                   ),
                 ],
               ),
-            SinInforme() => Text('No hay informe previo para firmar en esta etapa.', style: tema.bodySmall),
-          },
+              SinInforme() => Text('No hay informe previo para firmar en esta etapa.', style: tema.bodySmall),
+            },
         ],
       ),
     );

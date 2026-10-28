@@ -328,6 +328,9 @@ bool puedeCapturar(EtapaVista etapa, {required String rol}) =>
 /// Lo que se le dice al conductor cuando no le toca a él.
 const mensajeCargueConApoyo = 'Este cargue tiene personal de apoyo: solo firmas el recibo.';
 
+/// Lo que se dice en una etapa de un viaje que ya cerró. Se puede mirar lo que quedó, no agregar nada.
+const mensajeViajeTerminado = 'Este viaje ya terminó: solo se puede consultar.';
+
 /// Los dos momentos de una etapa que exige inspección, en orden. Una etapa que no la exige no tiene ninguno:
 /// ahí solo se firma.
 List<MomentoEtapa> momentosDeEtapa(EtapaVista etapa, Inventario inventario) {

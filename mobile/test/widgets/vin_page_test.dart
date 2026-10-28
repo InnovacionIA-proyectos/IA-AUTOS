@@ -329,4 +329,31 @@ void main() {
       expect(find.widgetWithText(FilledButton, 'Reintentar'), findsOneWidget);
     });
   });
+
+  // Lo que se vio en el celular: desde un viaje ya terminado la app ofrecía capturar, y el envío habría muerto
+  // con «El viaje está finalizado y no admite inspecciones nuevas» después de tomar las siete fotos.
+  group('un viaje que ya terminó', () {
+    ViajesRepositorioFalso enEstado(String estado) => ViajesRepositorioFalso()
+      ..viajeDeEtapa = Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: estado,
+        inspectorId: 'u1',
+        vehiculos: const [ViajeVehiculo(vin: 'VIN00000000000001')],
+      );
+
+    testWidgets('lo dice y no ofrece capturar', (tester) async {
+      await abrir(tester, viajes: enEstado('finalizado'));
+
+      expect(find.text(mensajeViajeTerminado), findsWidgets);
+      expect(find.widgetWithText(FilledButton, 'Capturar'), findsNothing);
+    });
+
+    testWidgets('en curso sí se trabaja', (tester) async {
+      await abrir(tester, viajes: enEstado('en_curso'));
+
+      expect(find.text(mensajeViajeTerminado), findsNothing);
+    });
+  });
 }

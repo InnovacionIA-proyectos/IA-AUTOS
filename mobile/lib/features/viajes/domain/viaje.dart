@@ -56,6 +56,11 @@ class Viaje {
 
   final List<ViajeVehiculo> vehiculos;
 
+  /// Si todavía se puede trabajar en él. Un viaje terminado o cancelado conserva sus etapas y sus informes, pero
+  /// el servidor no admite inspecciones nuevas: ofrecerlas sería mandar a alguien a capturar siete fotos para
+  /// que el envío muera con un 409.
+  bool get admiteTrabajo => estado == 'programado' || estado == 'en_curso';
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'codigo_mtrack': codigoMtrack,
