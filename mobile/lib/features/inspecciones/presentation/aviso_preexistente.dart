@@ -18,6 +18,9 @@ Future<bool?> preguntarPreexistente(
 }) {
   return showModalBottomSheet<bool>(
     context: context,
+    // Con la foto dentro, la hoja no cabe en el alto que se da por defecto y los botones quedan fuera de la
+    // pantalla. Con esto pide el alto que necesita, y el cuerpo se desplaza si aun asi no alcanza.
+    isScrollControlled: true,
     showDragHandle: true,
     builder: (_) => _HojaPreexistente(
       previo: previo,
@@ -58,32 +61,43 @@ class _HojaPreexistente extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(textoPreexistente(previo, catalogos), style: tema.titleMedium),
-            const SizedBox(height: Espacio.xs),
-            Text(
-              'Compara con el vehículo: si es el mismo daño, confírmalo y el informe no lo cuenta como nuevo.',
-              style: tema.bodySmall,
-            ),
-            if (urlFoto != null) ...[
-              const SizedBox(height: Espacio.md),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Image.network(
-                  urlFoto!,
-                  height: 180,
-                  fit: BoxFit.cover,
-                  headers: encabezados,
-                  semanticLabel: 'Foto del daño registrado antes',
-                  // La URL de una evidencia va firmada y vence: una copia guardada hace horas ya no se puede pedir.
-                  errorBuilder: (_, _, _) => Container(
-                    height: 180,
-                    color: Colores.borde,
-                    alignment: Alignment.center,
-                    child: const Text('La foto anterior no se pudo cargar'),
-                  ),
+            // Los botones van fuera del desplazamiento: son la decisión, y siempre tienen que estar a la vista.
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(textoPreexistente(previo, catalogos), style: tema.titleMedium),
+                    const SizedBox(height: Espacio.xs),
+                    Text(
+                      'Compara con el vehículo: si es el mismo daño, confírmalo y el informe no lo cuenta como nuevo.',
+                      style: tema.bodySmall,
+                    ),
+                    if (urlFoto != null) ...[
+                      const SizedBox(height: Espacio.md),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(
+                          urlFoto!,
+                          height: 180,
+                          fit: BoxFit.cover,
+                          headers: encabezados,
+                          semanticLabel: 'Foto del daño registrado antes',
+                          // La URL de una evidencia va firmada y vence: una copia de hace horas ya no se puede pedir.
+                          errorBuilder: (_, _, _) => Container(
+                            height: 180,
+                            color: Colores.borde,
+                            alignment: Alignment.center,
+                            child: const Text('La foto anterior no se pudo cargar'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ],
+            ),
             const SizedBox(height: Espacio.lg),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),

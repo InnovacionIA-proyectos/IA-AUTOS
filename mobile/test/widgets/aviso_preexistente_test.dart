@@ -77,4 +77,28 @@ void main() {
 
     expect(find.byType(Image), findsNothing);
   });
+
+  // En un teléfono real la hoja traía título de dos líneas, el texto, la foto y los dos botones, y se pasaba del
+  // alto que `showModalBottomSheet` le da por defecto: los botones quedaban cortados y no se podían tocar.
+  testWidgets('en una pantalla de teléfono los dos botones se pueden tocar', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final respuestas = await abrirHoja(tester, urlFoto: 'https://api.test/api/uploads/previo.jpg');
+    await tester.tap(find.widgetWithText(FilledButton, 'Es el mismo daño'));
+    await tester.pumpAndSettle();
+
+    expect(respuestas, [true]);
+  });
+
+  testWidgets('en una pantalla de teléfono «Es nuevo» también alcanza', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final respuestas = await abrirHoja(tester, urlFoto: 'https://api.test/api/uploads/previo.jpg');
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Es nuevo'));
+    await tester.pumpAndSettle();
+
+    expect(respuestas, [false]);
+  });
 }
