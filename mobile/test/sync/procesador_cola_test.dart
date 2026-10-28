@@ -440,7 +440,9 @@ void main() {
       await cola.agregar(informe(
         hallazgos: [
           HallazgoLocal(
-            parte: 'Capot',
+            cuadranteNumero: 52,
+            lado: null,
+            zona: 'Capó, centro adelante',
             clase: 'golpe',
             tamano: '1_5cm',
             foto: FotoLocal(ruta: 'a.jpg', selloFecha: '2026-01-02T10:01:00.000Z', selloLat: 6.2, selloLng: -75.5),
@@ -460,7 +462,9 @@ void main() {
       await cola.agregar(informe(
         hallazgos: [
           HallazgoLocal(
-            parte: 'Capot',
+            cuadranteNumero: 52,
+            lado: null,
+            zona: 'Capó, centro adelante',
             clase: 'golpe',
             tamano: '1_5cm',
             foto: const FotoLocal(

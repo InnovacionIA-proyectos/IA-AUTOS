@@ -3,7 +3,6 @@ import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/sync/domain/puertos.dart';
-import 'package:traza_autos/features/vehiculos/domain/coords_diagrama.dart';
 
 class ColaEnMemoria implements ColaRepositorio {
   final List<Job> jobs = [];
@@ -234,4 +233,12 @@ InformeJob informe({
 FotoLocal foto(String ruta, {String fecha = '2026-01-02T10:01:00.000Z', double? lat = 6.21, double? lng = -75.51, String? storagePath, bool enviada = false}) =>
     FotoLocal(ruta: ruta, selloFecha: fecha, selloLat: lat, selloLng: lng, storagePath: storagePath, enviada: enviada);
 
-const hallazgoEjemplo = HallazgoLocal(parte: 'Capot', clase: 'golpe', tamano: '1_5cm', coords: CoordsDiagrama(0.5, 0.66));
+const hallazgoEjemplo = HallazgoLocal(
+  cuadranteNumero: 26,
+  lado: 'derecho',
+  zona: 'Llanta trasera derecha',
+  clase: 'golpe',
+  tamano: '1_5cm',
+  nivel: 'v2',
+  nota: 'rayón en el costado',
+);

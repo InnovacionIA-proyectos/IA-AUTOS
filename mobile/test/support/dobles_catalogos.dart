@@ -20,6 +20,11 @@ Catalogos catalogosCon(
           Catalogo.tamanosDano: [
             {'id': 'i2', 'codigo': 'mas_20cm', 'nombre': 'Más de 20 cm', 'orden': 1, 'activo': true},
           ],
+          // El inspector no puede registrar un daño sin nivel (el servidor responde 400), así que sin este catálogo
+          // la captura no deja cerrar el informe.
+          Catalogo.nivelesSeveridad: [
+            {'id': 'i3', 'codigo': 'v1', 'nombre': 'V1', 'orden': 1, 'activo': true, 'accion': 'Se rechaza el vehículo'},
+          ],
           Catalogo.vistasFoto: vistas,
           Catalogo.etapas: etapas,
         },

@@ -1,5 +1,6 @@
 import '../../sync/domain/job.dart';
 import 'checklist_vistas.dart';
+import 'extra_local.dart';
 import 'foto_local.dart';
 import 'hallazgo_local.dart';
 
@@ -63,12 +64,22 @@ class FotosSinUbicacion extends BloqueoCierre {
 
 /// Una novedad sin su foto es la palabra de alguien contra la del siguiente, y el servidor la rechaza.
 class HallazgoSinFoto extends BloqueoCierre {
-  const HallazgoSinFoto(this.parte);
+  const HallazgoSinFoto(this.zona);
 
-  final String parte;
+  final String zona;
 
   @override
-  String get mensaje => 'La novedad de «$parte» necesita su foto.';
+  String get mensaje => 'La novedad de «$zona» necesita su foto.';
+}
+
+/// Un extra sin foto no prueba nada: es la misma regla que impone el servidor al cerrar.
+class ExtraSinFoto extends BloqueoCierre {
+  const ExtraSinFoto(this.nombre);
+
+  final String nombre;
+
+  @override
+  String get mensaje => "El extra '$nombre' no tiene foto";
 }
 
 /// Reglas de cierre, en el mismo orden en que conviene resolverlas. Devuelve null si se puede cerrar.
@@ -79,6 +90,7 @@ BloqueoCierre? bloqueoDeCierre({
   required bool hayUbicacion,
   required List<FotoLocal> fotos,
   required List<HallazgoLocal> hallazgos,
+  List<ExtraLocal> extras = const [],
   List<VistaChecklist> checklist = const [],
   bool catalogosListos = true,
 }) {
@@ -89,11 +101,16 @@ BloqueoCierre? bloqueoDeCierre({
   if (faltan.isNotEmpty) return FaltanVistas(faltan);
 
   for (final hallazgo in hallazgos) {
-    if (hallazgo.foto == null) return HallazgoSinFoto(hallazgo.parte);
+    if (hallazgo.foto == null) return HallazgoSinFoto(hallazgo.zona);
+  }
+  for (final extra in extras) {
+    if (extra.fotos.isEmpty) return ExtraSinFoto(extra.nombre);
   }
 
   // Se cuentan todas, incluidas las de los hallazgos: cualquier evidencia sin sello es evidencia floja.
-  final sinSello = [...fotos, ...hallazgos.map((h) => h.foto)].whereType<FotoLocal>().where((f) => f.sinUbicacion);
+  final sinSello = [...fotos, ...hallazgos.map((h) => h.foto), for (final e in extras) ...e.fotos]
+      .whereType<FotoLocal>()
+      .where((f) => f.sinUbicacion);
   if (sinSello.isNotEmpty) return FotosSinUbicacion(sinSello.length);
 
   return null;
@@ -118,6 +135,7 @@ InformeJob construirInformeJob({
   String notas = '',
   required List<FotoLocal> fotos,
   required List<HallazgoLocal> hallazgos,
+  List<ExtraLocal> extras = const [],
 }) {
   String? opcional(String valor) => valor.trim().isEmpty ? null : valor.trim();
   return InformeJob(
@@ -133,6 +151,7 @@ InformeJob construirInformeJob({
     notas: opcional(notas),
     fotos: fotos,
     hallazgos: hallazgos,
+    extras: extras,
   );
 }
 

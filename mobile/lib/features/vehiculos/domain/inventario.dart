@@ -1,21 +1,42 @@
-import 'coords_diagrama.dart';
-
+/// Un hallazgo tal como lo devuelve la API (`HallazgoDto`).
+///
+/// Con el modelo de zonas, `parte_vehiculo` y `coords_diagrama` llegan nulos en todo hallazgo nuevo y la clase llega
+/// nula en una novedad del conductor sin revisar: aquí nada de eso se lee como obligatorio, o un solo hallazgo así
+/// tumbaría la página entera del VIN.
 class HallazgoVista {
-  const HallazgoVista({required this.id, required this.parte, required this.clase, required this.tamano, this.coords});
+  const HallazgoVista({
+    required this.id,
+    required this.zona,
+    this.cuadranteNumero,
+    this.lado,
+    this.clase,
+    required this.tamano,
+    this.nivel,
+  });
 
   factory HallazgoVista.fromJson(Map<String, dynamic> json) => HallazgoVista(
         id: json['id'] as String,
-        parte: json['parte_vehiculo'] as String,
-        clase: json['clase_dano'] as String,
-        tamano: json['tamano_dano'] as String,
-        coords: json['coords_diagrama'] == null ? null : CoordsDiagrama.fromJson(json['coords_diagrama'] as Map<String, dynamic>),
+        // `zona` es el texto que arma el servidor («Izquierdo 7 · Puerta delantera»); en un hallazgo histórico sin
+        // ubicar es la parte que se escribió entonces.
+        zona: json['zona'] as String? ?? json['parte_vehiculo'] as String? ?? 'Sin zona',
+        cuadranteNumero: (json['cuadrante_numero'] as num?)?.toInt(),
+        lado: json['lado'] as String?,
+        clase: json['clase_dano'] as String?,
+        tamano: json['tamano_dano'] as String? ?? '',
+        nivel: json['nivel_severidad'] as String?,
       );
 
   final String id;
-  final String parte;
-  final String clase;
+  final String zona;
+
+  /// Número y lado de la zona; nulos en una zona provisional, en un hallazgo histórico sin ubicar y en la novedad
+  /// del conductor sin revisar. Con ellos se marca la zona en el dibujo.
+  final int? cuadranteNumero;
+  final String? lado;
+
+  final String? clase;
   final String tamano;
-  final CoordsDiagrama? coords;
+  final String? nivel;
 }
 
 class EvidenciaVista {

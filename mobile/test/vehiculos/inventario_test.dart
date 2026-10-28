@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/features/vehiculos/domain/etiquetas.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
-import 'package:traza_autos/features/vehiculos/domain/partes.dart';
 
 Map<String, dynamic> inspeccionJson(
   String id,
@@ -74,7 +73,10 @@ void main() {
       final inv = inventario([
         etapaJson('e1', 1, 'cargue', inspecciones: [
           inspeccionJson('i1', '2026-01-02T10:00:00Z', hallazgos: [
-            {'id': 'h1', 'parte_vehiculo': 'Capot', 'clase_dano': 'golpe', 'tamano_dano': '1_5cm', 'coords_diagrama': {'x': 0.5, 'y': 0.66}},
+            {
+              'id': 'h1', 'parte_vehiculo': null, 'coords_diagrama': null, 'clase_dano': 'golpe', 'tamano_dano': '1_5cm',
+              'cuadrante_numero': 26, 'lado': 'derecho', 'zona': 'Derecho 26 · Llanta trasera', 'nivel_severidad': 'v2',
+            },
           ]),
         ]),
       ]);
@@ -82,8 +84,24 @@ void main() {
       expect(inv.vin, 'VIN00000000000001');
       final insp = inv.etapas.single.inspecciones.single;
       expect(insp.cerrada, isTrue);
-      expect(insp.hallazgos.single.coords!.y, 0.66);
+      final h = insp.hallazgos.single;
+      expect((h.cuadranteNumero, h.lado, h.zona, h.nivel), (26, 'derecho', 'Derecho 26 · Llanta trasera', 'v2'));
       expect(insp.evidencias.single.url, '/api/uploads/i1.jpg');
+    });
+
+    test('un hallazgo histórico (solo parte) y una novedad del conductor (sin clase ni zona) se leen sin romper', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [
+          inspeccionJson('i1', '2026-01-02T10:00:00Z', hallazgos: [
+            {'id': 'h1', 'parte_vehiculo': 'Capot', 'clase_dano': 'golpe', 'tamano_dano': '1_5cm', 'coords_diagrama': {'x': 0.5, 'y': 0.66}},
+            {'id': 'h2', 'parte_vehiculo': null, 'clase_dano': null, 'tamano_dano': '5_10cm', 'zona': null, 'tipo_novedad': 'piedra'},
+          ]),
+        ]),
+      ]);
+
+      final [historico, novedad] = inv.etapas.single.inspecciones.single.hallazgos;
+      expect((historico.zona, historico.cuadranteNumero), ('Capot', null));
+      expect((novedad.clase, novedad.cuadranteNumero, novedad.tamano), (null, null, '5_10cm'));
     });
 
     test('la etapa trae su lugar y su viaje, que la API ya resuelve', () {
@@ -178,38 +196,6 @@ void main() {
     test('etapa de solo firma sin ningún informe en el VIN: no hay nada que firmar', () {
       final inv = inventario([etapaJson('e1', 1, 'punto_origen', requiere: false)]);
       expect(accionDeEtapa(inv.etapas.single, inv), isA<SinInforme>());
-    });
-  });
-
-  group('catálogo de partes', () {
-    final todas = <(String, double, double)>[
-      for (final p in catalogoPartes) ...[
-        if (p.coords != null) (p.base, p.coords!.x, p.coords!.y),
-        for (final pos in p.posiciones) ('${p.base} ${pos.etiqueta}', pos.coords.x, pos.coords.y),
-      ],
-    ];
-
-    test('todas las coordenadas están normalizadas entre 0 y 1', () {
-      for (final (nombre, x, y) in todas) {
-        expect(x, inInclusiveRange(0, 1), reason: nombre);
-        expect(y, inInclusiveRange(0, 1), reason: nombre);
-      }
-    });
-
-    test('cada parte tiene coordenadas propias o posiciones, nunca ambas ni ninguna', () {
-      for (final p in catalogoPartes) {
-        expect(p.coords != null, p.posiciones.isEmpty, reason: p.base);
-      }
-    });
-
-    test('no hay etiquetas repetidas', () {
-      final etiquetas = todas.map((t) => t.$1).toList();
-      expect(etiquetas.toSet().length, etiquetas.length);
-    });
-
-    test('etiquetaParte compone parte y posición en minúsculas', () {
-      expect(etiquetaParte('Guardafango', 'Delantero derecho'), 'Guardafango delantero derecho');
-      expect(etiquetaParte('Capot'), 'Capot');
     });
   });
 

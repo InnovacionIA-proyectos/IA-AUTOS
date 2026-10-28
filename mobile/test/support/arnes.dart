@@ -9,6 +9,7 @@ import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/features/auth/domain/almacen_sesion.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/auth/providers.dart';
+import 'package:traza_autos/features/dibujo_dano/providers.dart';
 import 'package:traza_autos/features/inspecciones/data/inspecciones_repositorio.dart';
 import 'package:traza_autos/features/inspecciones/domain/inspeccion_resumen.dart';
 import 'package:traza_autos/features/inspecciones/providers.dart';
@@ -16,6 +17,7 @@ import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
 import 'package:traza_autos/features/sync/domain/puertos.dart';
 import 'package:traza_autos/features/sync/providers.dart';
 
+import 'dobles_dibujo.dart';
 import 'dobles_sync.dart';
 
 const entornoPrueba = Entorno(flavor: Flavor.dev, apiUrl: 'https://api.test');
@@ -200,6 +202,8 @@ class Arnes {
         inspeccionesRepositorioProvider.overrideWithValue(inspecciones),
         servicioUbicacionProvider.overrideWithValue(ubicacion),
         servicioDispositivoProvider.overrideWithValue(dispositivo),
+        // Las imágenes del dibujo de daños que bajan del servidor se guardan en Drift; en las pruebas, en memoria.
+        almacenImagenesPanelProvider.overrideWithValue(AlmacenImagenesEnMemoria()),
       ];
 
   ProviderContainer contenedor() => ProviderContainer(overrides: overrides, retry: (_, _) => null);

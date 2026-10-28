@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 
 import '../errores/error_api.dart';
@@ -65,6 +67,24 @@ class ClienteApi {
   Future<dynamic> subirArchivo(String ruta, {required List<int> bytes, required String nombre, String campo = 'archivo'}) async {
     final datos = FormData.fromMap({campo: MultipartFile.fromBytes(bytes, filename: nombre)});
     return (await enviar('POST', ruta, cuerpo: datos)).datos;
+  }
+
+  /// Descarga un archivo binario (la imagen de fondo de un panel del dibujo de daños). Los fallos se convierten en
+  /// [ErrorApi] igual que en el resto de llamadas.
+  Future<Uint8List> descargarBytes(String ruta) async {
+    final jwt = await token();
+    try {
+      final respuesta = await _dio.get<List<int>>(
+        ruta,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {if (jwt != null) 'Authorization': 'Bearer $jwt', 'Accept': 'image/*'},
+        ),
+      );
+      return Uint8List.fromList(respuesta.data ?? const []);
+    } on DioException catch (e) {
+      throw _aErrorApi(e);
+    }
   }
 
   /// Petición que devuelve la respuesta completa (estado, encabezados y cuerpo).

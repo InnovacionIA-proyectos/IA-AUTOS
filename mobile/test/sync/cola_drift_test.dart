@@ -4,9 +4,11 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/core/db/app_database.dart';
 import 'package:traza_autos/core/db/cache_lecturas.dart';
+import 'package:traza_autos/features/inspecciones/domain/extra_local.dart';
+import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
+import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
 import 'package:traza_autos/features/sync/data/cola_drift.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
-import 'package:traza_autos/features/vehiculos/domain/coords_diagrama.dart';
 
 import '../support/dobles_sync.dart';
 
@@ -63,7 +65,51 @@ void main() {
     expect(leido.toJson(), original.toJson());
     expect(leido.fotos[0].enviada, isTrue);
     expect(leido.fotos[1].selloLat, 6.21);
-    expect(leido.hallazgos.single.coords, const CoordsDiagrama(0.5, 0.66));
+    expect((leido.hallazgos.single.cuadranteNumero, leido.hallazgos.single.lado), (26, 'derecho'));
+    expect(leido.hallazgos.single.nota, hallazgoEjemplo.nota);
+  });
+
+  // Lo que encoló la versión anterior (parte y coords, sin cuadrante) se sigue leyendo: si fallara al leerse, la
+  // cola lo saltaría sin mostrarlo. El servidor lo rechazará con 400 y quedará en la Cola para descartarlo.
+  test('los extras se guardan con el informe, y un informe sin extras se lee igual', () {
+    final job = InformeJob(
+      id: 'j-extras',
+      etiqueta: 'Informe',
+      creadoEn: 1,
+      etapaId: 'e1',
+      momento: 'salida',
+      fecha: '2026-01-02T10:00:00.000Z',
+      lat: 6.2,
+      lng: -75.5,
+      extras: const [
+        ExtraLocal(
+          tipo: 'otro',
+          nombre: 'Otro: portabicicletas',
+          textoOtro: 'portabicicletas',
+          observacion: 'rayón en el soporte',
+          fotos: [FotoLocal(ruta: 'extra.jpg', selloFecha: '2026-01-02T10:00:00.000Z')],
+        ),
+      ],
+    );
+
+    final leido = Job.fromJson(job.toJson()) as InformeJob;
+    final extra = leido.extras.single;
+    expect((extra.tipo, extra.nombre, extra.textoOtro, extra.observacion), ('otro', 'Otro: portabicicletas', 'portabicicletas', 'rayón en el soporte'));
+    expect(extra.fotos.single.ruta, 'extra.jpg');
+
+    final sinExtras = job.toJson()..remove('extras');
+    expect((Job.fromJson(sinExtras) as InformeJob).extras, isEmpty);
+  });
+
+  test('un hallazgo encolado por la versión anterior se lee, sin cuadrante', () {
+    final viejo = HallazgoLocal.fromJson({
+      'parte': 'Capot',
+      'clase': 'golpe',
+      'tamano': '1_5cm',
+      'coords': {'x': 0.5, 'y': 0.66},
+      'foto': null,
+    });
+    expect((viejo.cuadranteNumero, viejo.zona, viejo.clave), (null, 'Capot', null));
   });
 
   test('persiste una firma', () async {

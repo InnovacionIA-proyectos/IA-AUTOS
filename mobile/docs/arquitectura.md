@@ -9,7 +9,7 @@ presentation  ->  domain  <-  data
 (widgets, controladores)   (reglas, modelos, puertos)   (API, SQLite, archivos)
 ```
 
-- **domain**: Dart puro (sin Flutter ni HTTP). Reglas de cierre, modelos de inventario, catálogo de partes, fotos y
+- **domain**: Dart puro (sin Flutter ni HTTP). Reglas de cierre, modelos de inventario, dibujo de daños (zonas, regiones y toque), fotos y
   hallazgos locales, la cola de sincronización y sus *puertos* (`ColaRepositorio`, `GatewayInformes`, `EstadoRed`,
   `ArchivosLocales`, `AlmacenSesion`).
 - **data**: implementaciones de los puertos (`ColaDrift`, `GatewayInformesApi`, `ArchivosLocalesIo`,
@@ -26,6 +26,8 @@ Reglas de dependencia:
 - `presentation` importa los providers de su propia feature; acude a `app/proveedores.dart` únicamente por los
   transversales (`entornoProvider`, `servicioUbicacionProvider`, `servicioFotosProvider`).
 - `sync` depende de `inspecciones` (transporta sus fotos y hallazgos) y no al revés.
+- `dibujo_dano` depende de `catalogos` (lee el dibujo que publica el servidor) y de `core`. `inspecciones` (la captura)
+  y `vehiculos` (la página del VIN) dependen de `dibujo_dano` para elegir y mostrar la zona; nunca al revés.
 - `sync` se consume como transversal, aunque viva en una funcionalidad. Son dos cosas distintas y ambas van en un
   solo sentido: el estado de la red (`estadoRedProvider`, cuyo puerto está en `sync/domain`) lo leen `inspecciones`,
   `catalogos` y `viajes` para decidir si revalidan; y el estado de la cola (`syncControllerProvider` y `BarraSync`,
@@ -106,8 +108,10 @@ las usará S5-HU-24 y los cuadrantes, S6-HU-01.
   descargó para que, si algún día un catálogo pasa a filtrarse por cliente, no se le muestre a otro.
 - Lo que **sí** queda fijo a propósito (`vehiculos/domain/etiquetas.dart`) son los valores permitidos del contrato:
   `operacion`, `estado` de inspección y `rol`. No están en `/api/catalogos` y la API no manda su nombre.
-- Queda fijo lo que **todavía** no se migró: `vehiculos/domain/partes.dart` dibuja el diagrama con una lista de
-  zonas y coordenadas propia. Lo reemplazan los catálogos `cuadrantes` y `cuadrante-vistas` en S6-HU-01.
+- El dibujo de daños (`dibujo_dano`) usa el que publica el servidor (`paneles-dano`, `zonas-dano` y
+  `cuadrante-regiones`) cuando está completo y sus imágenes están en el equipo; si no, la copia que va en
+  `assets/dibujo_dano/`. Nunca mezcla polígonos de uno con imágenes del otro. Las imágenes bajadas se guardan en
+  `cache_lecturas`, sin tabla nueva. El lado de cada zona sale de los datos, nunca del número.
 
 ## Sesión
 
@@ -149,13 +153,13 @@ Los modelos son manuales (snake_case, igual que la API). `test/contrato/contrato
 
 ## Pruebas
 
-- **Unitarias de dominio**: cola (33), reglas de cierre, trazo de firma, inventario, catálogo de partes y
+- **Unitarias de dominio**: cola (33), reglas de cierre, trazo de firma, inventario, dibujo de daños (carga, clave y toque) y
   catálogos maestros (lecturas, orden y aislamiento por usuario).
 - **Persistencia**: cola y caché sobre SQLite real (en memoria y en archivo, para comprobar que sobrevive a
   reabrir), incluida la descarga y revalidación de catálogos.
 - **Controladores**: sesión, sincronización, listado y catálogos, con dobles de red, API y almacén.
 - **Widgets**: login, cambio de PIN y su redirect, menú por rol y rutas sin permiso, captura (los datos del viaje y el desenlace que se anuncia al
-  cerrar), lienzo de firma, diagrama del vehículo, barra de sincronización y arranque de la app.
+  cerrar), lienzo de firma, selector del dibujo de daños, barra de sincronización y arranque de la app.
 - **Contrato**: campos y rutas contra el OpenAPI del backend.
 
 Pendientes de ejecutar en dispositivo real (no se pueden validar en CI): cámara, GPS, permisos y memoria en gama baja.

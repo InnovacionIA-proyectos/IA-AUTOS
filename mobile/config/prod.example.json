@@ -1,4 +1,5 @@
 {
   "FLAVOR": "prod",
-  "API_URL": "https://<url-de-la-api-produccion>"
+  "API_URL": "https://<url-de-la-api-produccion>",
+  "EXTRAS_HABILITADOS": false
 }

@@ -73,8 +73,11 @@ void main() {
     'InformeDetalleDto': ['transferencia'],
     // Quiénes pueden firmar este viaje: su conductor y su inspector, y nadie más.
     'FirmanteDto': ['id', 'nombre', 'rol'],
-    'HallazgoDto': ['id', 'parte_vehiculo', 'clase_dano', 'tamano_dano', 'coords_diagrama'],
-    'CoordsDiagramaDto': ['x', 'y'],
+    // La zona del hallazgo es cuadrante + lado; `zona` es el texto listo para mostrar. `parte_vehiculo` solo se lee
+    // como respaldo en los hallazgos históricos sin ubicar.
+    'HallazgoDto': [
+      'id', 'parte_vehiculo', 'clase_dano', 'tamano_dano', 'cuadrante_numero', 'lado', 'zona', 'nivel_severidad',
+    ],
     'EvidenciaDto': ['id', 'url'],
     'InspeccionListadoDto': ['id', 'vin', 'momento', 'momento_nombre', 'fecha', 'estado'],
     // Los catálogos maestros no son listas fijas en la app: se descargan y se guardan con su versión.
@@ -99,7 +102,8 @@ void main() {
       'precision', 'dispositivo_id', 'nota', 'hash_sha256',
     ],
     // La evidencia va DENTRO: el servidor no acepta un hallazgo sin su foto.
-    'CrearHallazgoRequest': ['parte_vehiculo', 'clase_dano', 'tamano_dano', 'coords_diagrama', 'evidencia'],
+    // La zona sale del dibujo de daños: cuadrante + lado. El nivel lo asigna el inspector (el conductor lo manda nulo).
+    'CrearHallazgoRequest': ['cuadrante_numero', 'lado', 'clase_dano', 'tamano_dano', 'nivel_severidad', 'evidencia'],
     // Una sola firma: el servidor la atribuye al usuario del token.
     'FirmarTransferenciaRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma'],
     // Quien recibe firma dejando sus observaciones: cierra la transferencia como `con_reservas`.
@@ -131,6 +135,8 @@ void main() {
       ('get', '/api/auth/me'),
       ('get', '/api/usuarios'),
       ('get', '/api/catalogos'),
+      // La imagen de fondo de cada panel del dibujo de daños.
+      ('get', '/api/catalogos/paneles-dano/{}/imagen'),
       ('get', '/api/viajes/mios'),
       ('get', '/api/viajes/{}'),
       ('get', '/api/vehiculos/{}/inventario'),

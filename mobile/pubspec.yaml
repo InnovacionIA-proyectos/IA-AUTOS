@@ -49,7 +49,11 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.png
-    - assets/diagrama-novedades.png
+    # Copia de respaldo del dibujo de daños (versión 6): el JSON con paneles, zonas y regiones, y la imagen de cada
+    # panel. Con ella la primera inspección funciona sin conexión; cuando el servidor publica un dibujo completo se usa
+    # ese. Los polígonos se calcularon sobre ESTAS imágenes: cambiar una exige recalcular sus polígonos.
+    - assets/dibujo_dano/regiones-zonas-dano.json
+    - assets/dibujo_dano/paneles/
     # Guias de encuadre de la camara, una por codigo de vista del catalogo `vistas-foto`. Frontal, trasera y
     # superior no tienen: se toman con la etiqueta sola.
     - assets/guias/

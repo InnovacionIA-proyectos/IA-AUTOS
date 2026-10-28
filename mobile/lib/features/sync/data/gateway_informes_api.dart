@@ -68,11 +68,15 @@ class GatewayInformesApi implements GatewayInformes {
   @override
   Future<void> agregarHallazgo(String inspeccionId, HallazgoLocal hallazgo) async {
     final foto = hallazgo.foto;
+    // La zona es cuadrante + lado (lado nulo en las centrales). `parte_vehiculo` y `coords_diagrama` ya no se
+    // aceptan: si llegan, el servidor responde 400. El nivel va nulo cuando registra el conductor.
     await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/hallazgos', cuerpo: {
-      'parte_vehiculo': hallazgo.parte,
+      'cuadrante_numero': hallazgo.cuadranteNumero,
+      'lado': hallazgo.lado,
       'clase_dano': hallazgo.clase,
       'tamano_dano': hallazgo.tamano,
-      'coords_diagrama': hallazgo.coords?.toJson(),
+      'nivel_severidad': hallazgo.nivel,
+      'nota': ?hallazgo.nota,
       // La evidencia va dentro: el servidor no acepta un hallazgo sin su foto.
       'evidencia': foto == null
           ? null

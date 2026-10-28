@@ -11,10 +11,11 @@ import '../../../core/util/formato.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
+import '../../dibujo_dano/domain/dibujo_dano.dart';
+import '../../dibujo_dano/presentation/selector_zona_dano.dart';
 import '../domain/etiquetas.dart';
 import '../domain/inventario.dart';
 import '../providers.dart';
-import 'diagrama_vehiculo.dart';
 
 final inventarioProvider = FutureProvider.autoDispose.family<Inventario, String>(
   (ref, vin) => ref.watch(vehiculosRepositorioProvider).inventario(vin),
@@ -132,6 +133,14 @@ class _Detalle extends ConsumerWidget {
   }
 }
 
+/// «Llanta trasera derecha: Golpe (De 1 a 5 cm) · V2». La clase y el nivel faltan en una novedad del conductor
+/// que todavía no revisa un inspector.
+String _lineaHallazgo(HallazgoVista h, Catalogos catalogos) {
+  final clase = h.clase == null ? 'Sin clase' : catalogos.etiqueta(Catalogo.clasesDano, h.clase!);
+  final nivel = h.nivel == null ? '' : ' · ${catalogos.etiqueta(Catalogo.nivelesSeveridad, h.nivel!)}';
+  return '${h.zona}: $clase (${catalogos.etiqueta(Catalogo.tamanosDano, h.tamano)})$nivel';
+}
+
 class _UltimoInforme extends ConsumerWidget {
   const _UltimoInforme({required this.etapa, required this.inspeccion});
 
@@ -206,13 +215,21 @@ class _UltimoInforme extends ConsumerWidget {
           ],
           if (!ajeno) ...[
             const SizedBox(height: Espacio.md),
-            Center(child: DiagramaVehiculo(marcas: [for (final h in inspeccion.hallazgos) if (h.coords != null) h.coords!])),
+            // Solo lectura: las zonas con hallazgo en rojo. Se puede tocar para ver el nombre de una zona.
+            SelectorZonaDano(
+              contexto: 'vin-${inspeccion.id}',
+              alturaMaxima: 300,
+              conDano: {
+                for (final h in inspeccion.hallazgos)
+                  if (h.cuadranteNumero case final numero?) claveDeZona(numero, h.lado),
+              },
+            ),
             const SizedBox(height: Espacio.md),
             if (inspeccion.hallazgos.isEmpty)
               Text('Sin hallazgos registrados.', style: tema.bodySmall)
             else
               for (final h in inspeccion.hallazgos)
-                Text('• ${h.parte}: ${catalogos.etiqueta(Catalogo.clasesDano, h.clase)} (${catalogos.etiqueta(Catalogo.tamanosDano, h.tamano)})', style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
+                Text('• ${_lineaHallazgo(h, catalogos)}', style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
           ],
           if (!ajeno && (inspeccion.notas?.trim().isNotEmpty ?? false)) ...[
             const SizedBox(height: Espacio.md),

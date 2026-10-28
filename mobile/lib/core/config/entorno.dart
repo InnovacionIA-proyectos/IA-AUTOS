@@ -9,16 +9,21 @@ enum Flavor {
 }
 
 class Entorno {
-  const Entorno({required this.flavor, required this.apiUrl});
+  const Entorno({required this.flavor, required this.apiUrl, this.extrasHabilitados = false});
 
   /// Lee la configuración de compilación: `FLAVOR` (dev, qa, prod) y `API_URL` (sin barra final).
   factory Entorno.desdeCompilacion() => Entorno(
         flavor: Flavor.desde(const String.fromEnvironment('FLAVOR', defaultValue: 'dev')),
         apiUrl: _sinBarraFinal(const String.fromEnvironment('API_URL')),
+        extrasHabilitados: const bool.fromEnvironment('EXTRAS_HABILITADOS'),
       );
 
   final Flavor flavor;
   final String apiUrl;
+
+  /// Muestra la sección de extras en la captura. Apagado por defecto: el servidor todavía no recibe extras, y
+  /// con la sección visible se capturarían datos que nunca llegan.
+  final bool extrasHabilitados;
 
   /// Sin `API_URL` la app no puede funcionar: se muestra un aviso claro en lugar de fallar en silencio.
   bool get configurado => apiUrl.isNotEmpty;

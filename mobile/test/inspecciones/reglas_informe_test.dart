@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/features/inspecciones/domain/checklist_vistas.dart';
+import 'package:traza_autos/features/inspecciones/domain/extra_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/reglas_informe.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
-import 'package:traza_autos/features/vehiculos/domain/coords_diagrama.dart';
 
 import '../support/dobles_sync.dart';
 
@@ -27,13 +27,14 @@ FotoLocal fotoDe(String? vistaId, {bool conGps = true, double? precision}) => Fo
       precision: precision,
     );
 
-HallazgoLocal hallazgoCon({FotoLocal? foto, String parte = 'Capot'}) =>
-    HallazgoLocal(parte: parte, clase: 'golpe', tamano: '1_5cm', foto: foto);
+HallazgoLocal hallazgoCon({FotoLocal? foto, String zona = 'Capot'}) =>
+    HallazgoLocal(cuadranteNumero: 52, lado: null, zona: zona, clase: 'golpe', tamano: '1_5cm', nivel: 'v1', foto: foto);
 
 BloqueoCierre? bloqueo({
   bool gps = true,
   List<FotoLocal> fotos = const [],
   List<HallazgoLocal> hallazgos = const [],
+  List<ExtraLocal> extras = const [],
   List<VistaChecklist> checklist = const [],
   bool catalogos = true,
 }) =>
@@ -41,6 +42,7 @@ BloqueoCierre? bloqueo({
       hayUbicacion: gps,
       fotos: fotos,
       hallazgos: hallazgos,
+      extras: extras,
       checklist: checklist,
       catalogosListos: catalogos,
     );
@@ -126,6 +128,23 @@ void main() {
       expect(b!.mensaje, 'La novedad de «Capot» necesita su foto.');
     });
 
+    test('un extra sin foto no deja cerrar, y se dice cuál', () {
+      final b = bloqueo(extras: [const ExtraLocal(tipo: 'barras_techo', nombre: 'Barras de techo')]);
+
+      expect(b, isA<ExtraSinFoto>());
+      expect(b!.mensaje, "El extra 'Barras de techo' no tiene foto");
+    });
+
+    test('con su foto, el extra no bloquea', () {
+      expect(bloqueo(extras: [ExtraLocal(tipo: 'platon', nombre: 'Platón', fotos: [fotoDe(null)])]), isNull);
+    });
+
+    test('la foto de un extra sin ubicación también cuenta como evidencia floja', () {
+      final b = bloqueo(extras: [ExtraLocal(tipo: 'platon', nombre: 'Platón', fotos: [fotoDe(null, conGps: false)])]);
+
+      expect(b, isA<FotosSinUbicacion>());
+    });
+
     test('la ubicación tiene prioridad sobre los demás motivos', () {
       expect(bloqueo(gps: false, checklist: checklistDePrueba), isA<SinUbicacion>());
     });
@@ -157,6 +176,7 @@ void main() {
         FaltanVistas([vista('v', 'Frontal')]),
         const FotosSinUbicacion(1),
         const HallazgoSinFoto('Capot'),
+        const ExtraSinFoto('Platón'),
       ];
 
       expect(motivos.every((b) => b.mensaje.isNotEmpty), isTrue);
@@ -195,7 +215,7 @@ void main() {
     test('conserva el sello propio de cada foto y los hallazgos', () {
       final job = construir(notas: ' ojo ');
       expect(job.fotos.single.selloFecha, '2026-01-02T10:01:00.000Z');
-      expect(job.hallazgos.single.coords, const CoordsDiagrama(0.5, 0.66));
+      expect((job.hallazgos.single.cuadranteNumero, job.hallazgos.single.lado), (26, 'derecho'));
       expect(job.notas, 'ojo');
     });
   });

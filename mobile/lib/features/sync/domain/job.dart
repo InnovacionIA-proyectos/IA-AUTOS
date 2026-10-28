@@ -1,5 +1,6 @@
 import '../../../core/errores/error_api.dart';
 import '../../inspecciones/domain/foto_local.dart';
+import '../../inspecciones/domain/extra_local.dart';
 import '../../inspecciones/domain/hallazgo_local.dart';
 
 /// Trabajo de la cola de sincronización. Se guarda en SQLite y es reanudable: cada paso completado se
@@ -80,6 +81,7 @@ class InformeJob extends Job {
     this.notas,
     this.fotos = const [],
     this.hallazgos = const [],
+    this.extras = const [],
     this.inspeccionId,
     this.hallazgosEnviados = 0,
     this.cerrada = false,
@@ -102,6 +104,10 @@ class InformeJob extends Job {
         notas: json['notas'] as String?,
         fotos: [for (final f in json['fotos'] as List<dynamic>) FotoLocal.fromJson(f as Map<String, dynamic>)],
         hallazgos: [for (final h in json['hallazgos'] as List<dynamic>) HallazgoLocal.fromJson(h as Map<String, dynamic>)],
+        // Los informes encolados antes de que existieran los extras no traen la clave.
+        extras: [
+          for (final e in json['extras'] as List<dynamic>? ?? const []) ExtraLocal.fromJson(e as Map<String, dynamic>),
+        ],
         inspeccionId: json['inspeccion_id'] as String?,
         hallazgosEnviados: json['hallazgos_enviados'] as int? ?? 0,
         cerrada: json['cerrada'] as bool? ?? false,
@@ -115,6 +121,10 @@ class InformeJob extends Job {
   final String? notas;
   final List<FotoLocal> fotos;
   final List<HallazgoLocal> hallazgos;
+
+  /// Lo que el dibujo estándar no trae. **El procesador todavía no los envía**: el servidor no tiene dónde
+  /// recibirlos. Quedan guardados con el informe mientras está en la cola.
+  final List<ExtraLocal> extras;
 
   // Progreso reanudable.
   final String? inspeccionId;
@@ -148,6 +158,7 @@ class InformeJob extends Job {
         notas: notas,
         fotos: fotos ?? this.fotos,
         hallazgos: hallazgos ?? this.hallazgos,
+        extras: extras,
         inspeccionId: inspeccionId ?? this.inspeccionId,
         hallazgosEnviados: hallazgosEnviados ?? this.hallazgosEnviados,
         cerrada: cerrada ?? this.cerrada,
@@ -171,6 +182,7 @@ class InformeJob extends Job {
         notas: notas,
         fotos: fotos,
         hallazgos: hallazgos,
+        extras: extras,
         inspeccionId: inspeccionId,
         hallazgosEnviados: hallazgosEnviados,
         cerrada: cerrada,
@@ -194,6 +206,7 @@ class InformeJob extends Job {
         notas: notas,
         fotos: fotos,
         hallazgos: hallazgos,
+        extras: extras,
         inspeccionId: inspeccionId,
         hallazgosEnviados: hallazgosEnviados,
         cerrada: cerrada,
@@ -218,6 +231,7 @@ class InformeJob extends Job {
         'notas': notas,
         'fotos': [for (final f in fotos) f.toJson()],
         'hallazgos': [for (final h in hallazgos) h.toJson()],
+        'extras': [for (final e in extras) e.toJson()],
         'inspeccion_id': inspeccionId,
         'hallazgos_enviados': hallazgosEnviados,
         'cerrada': cerrada,

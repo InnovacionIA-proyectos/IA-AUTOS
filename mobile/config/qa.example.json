@@ -1,4 +1,5 @@
 {
   "FLAVOR": "qa",
-  "API_URL": "https://<url-de-la-api-qa>"
+  "API_URL": "https://<url-de-la-api-qa>",
+  "EXTRAS_HABILITADOS": false
 }

@@ -13,21 +13,30 @@ import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
-import '../../vehiculos/domain/coords_diagrama.dart';
+import '../../dibujo_dano/domain/dibujo_dano.dart';
+import '../../dibujo_dano/presentation/dibujo_dano_controller.dart';
+import '../../dibujo_dano/presentation/selector_zona_dano.dart';
 import '../../vehiculos/domain/etiquetas.dart';
-import '../../vehiculos/presentation/diagrama_vehiculo.dart';
 import '../../viajes/providers.dart';
 import '../domain/checklist_vistas.dart';
+import '../domain/extra_local.dart';
 import '../domain/foto_local.dart';
 import '../domain/hallazgo_local.dart';
 import '../domain/reglas_informe.dart';
 import 'camara_page.dart';
 import 'filas_captura.dart';
 import 'nota_foto.dart';
+import 'seccion_extras.dart';
 import 'sellado.dart';
 import 'selector_dano.dart';
 
-/// Captura de un informe: datos del transporte, novedades sobre el diagrama, fotos selladas y notas.
+/// La selección del dibujo de daños de esta pantalla (ver [seleccionZonaProvider]).
+const _contextoDibujo = 'captura';
+
+/// Lo que se puede hacer con un daño ya registrado al tocar su zona.
+enum _AccionDano { corregir, quitar }
+
+/// Captura de un informe: datos del transporte, novedades sobre el dibujo de daños, fotos selladas y notas.
 ///
 /// Funciona sin señal: al cerrar, el informe completo se guarda en la cola persistente y se envía cuando la conexión
 /// sea estable.
@@ -62,6 +71,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 
   final _fotos = <FotoLocal>[];
   final _hallazgos = <HallazgoLocal>[];
+  final _extras = <ExtraLocal>[];
   bool _guardandoFoto = false;
   bool _cerrando = false;
 
@@ -137,16 +147,34 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 
   /// Hay con que registrar una novedad. Si no, no se puede cerrar el informe: uno cerrado sin hallazgos dice
   /// que el vehiculo venia sano.
+  /// El conductor no asigna el nivel de severidad: lo asigna el inspector (el servidor responde 400 si lo envía).
+  bool get _esConductor => ref.read(authControllerProvider).sesion?.usuario.rol == 'conductor';
+
+  /// Niveles que se ofrecen en la hoja del daño; vacío para el conductor.
+  List<ValorCatalogo> _niveles(Catalogos catalogos) =>
+      _esConductor ? const [] : catalogos.seleccionables(Catalogo.nivelesSeveridad);
+
   bool get _catalogosListos {
     final catalogos = ref.read(catalogosProvider);
-    return catalogos.seleccionables(Catalogo.clasesDano).isNotEmpty && catalogos.seleccionables(Catalogo.tamanosDano).isNotEmpty;
+    return catalogos.seleccionables(Catalogo.clasesDano).isNotEmpty &&
+        catalogos.seleccionables(Catalogo.tamanosDano).isNotEmpty &&
+        (_esConductor || catalogos.seleccionables(Catalogo.nivelesSeveridad).isNotEmpty);
   }
 
-  Future<void> _elegirNovedad(String etiqueta, CoordsDiagrama coords) async {
+  int _indiceDe(ZonaDano zona) => _hallazgos.indexWhere((h) => h.clave == zona.clave);
+
+  void _soltarZona() => ref.read(seleccionZonaProvider(_contextoDibujo).notifier).deseleccionar();
+
+  /// Registra el daño de la zona elegida en el dibujo: clase, tamaño y nivel, y su foto.
+  ///
+  /// Un daño por zona: si la zona ya tiene uno, se abre ese registro en vez de crear otro.
+  Future<void> _registrarDano(ZonaDano zona) async {
+    if (_indiceDe(zona) >= 0) return _abrirDano(zona);
     final catalogos = ref.read(catalogosProvider);
     final clases = catalogos.seleccionables(Catalogo.clasesDano);
     final tamanos = catalogos.seleccionables(Catalogo.tamanosDano);
-    if (clases.isEmpty || tamanos.isEmpty) {
+    final niveles = _niveles(catalogos);
+    if (!_catalogosListos) {
       // Mejor avisar que abrir una hoja sin opciones: los catálogos se descargan al entrar, con señal.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Los catálogos de daño aún no se han descargado. Conéctate e inténtalo de nuevo.')),
@@ -154,21 +182,132 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       return;
     }
 
-    final dano = await pedirDano(context, titulo: etiqueta, clases: clases, tamanos: tamanos);
+    final dano = await pedirDano(
+      context,
+      titulo: zona.nombreCompleto,
+      subtitulo: zona.descripcion,
+      clases: clases,
+      tamanos: tamanos,
+      niveles: niveles,
+    );
     if (dano == null || !mounted) return;
 
     // Un daño sin foto es la palabra de alguien contra la del siguiente, y el servidor lo rechaza con 400. Se
     // pide aquí, con la novedad recién marcada, y si no se toma no se registra nada.
     final temporal = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => CamaraPage(titulo: 'Foto de la novedad: $etiqueta')),
+      MaterialPageRoute(builder: (_) => CamaraPage(titulo: 'Foto del daño: ${zona.nombreCompleto}')),
     );
     if (temporal == null || !mounted) return;
     final foto = await _sellar(temporal);
     if (foto == null || !mounted) return;
 
     setState(() => _hallazgos.add(
-          HallazgoLocal(parte: etiqueta, clase: dano.clase, tamano: dano.tamano, coords: coords, foto: foto),
+          HallazgoLocal(
+            cuadranteNumero: zona.numero,
+            lado: zona.lado,
+            zona: zona.nombreCompleto,
+            clase: dano.clase,
+            tamano: dano.tamano,
+            nivel: dano.nivel,
+            nota: dano.nota,
+            foto: foto,
+          ),
         ));
+    _soltarZona();
+  }
+
+  /// El daño ya registrado en una zona: se corrige su clase, tamaño, nivel u observación, o se quita. La foto se
+  /// conserva.
+  Future<void> _abrirDano(ZonaDano zona) async {
+    final i = _indiceDe(zona);
+    if (i < 0) return;
+    final catalogos = ref.read(catalogosProvider);
+    final hallazgo = _hallazgos[i];
+    final accion = await showModalBottomSheet<_AccionDano>(
+      context: context,
+      showDragHandle: true,
+      builder: (contexto) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Espacio.lg, 0, Espacio.lg, Espacio.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(zona.nombreCompleto, style: Theme.of(contexto).textTheme.titleMedium),
+              Text('${zona.descripcion}. Ya tiene un daño registrado.', style: Theme.of(contexto).textTheme.bodySmall),
+              const SizedBox(height: Espacio.md),
+              FilaHallazgo(
+                hallazgo: hallazgo,
+                clase: catalogos.etiqueta(Catalogo.clasesDano, hallazgo.clase),
+                tamano: catalogos.etiqueta(Catalogo.tamanosDano, hallazgo.tamano),
+                nivel: hallazgo.nivel == null ? null : catalogos.etiqueta(Catalogo.nivelesSeveridad, hallazgo.nivel!),
+                alQuitar: () => Navigator.of(contexto).pop(_AccionDano.quitar),
+              ),
+              const SizedBox(height: Espacio.md),
+              OutlinedButton(
+                onPressed: () => Navigator.of(contexto).pop(_AccionDano.corregir),
+                child: const Text('Cambiar clase, tamaño, nivel u observación'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (accion == null) {
+      _soltarZona();
+      return;
+    }
+    switch (accion) {
+      case _AccionDano.quitar:
+        setState(() => _hallazgos.removeAt(i));
+      case _AccionDano.corregir:
+        final dano = await pedirDano(
+          context,
+          titulo: zona.nombreCompleto,
+          subtitulo: zona.descripcion,
+          clases: catalogos.seleccionables(Catalogo.clasesDano),
+          tamanos: catalogos.seleccionables(Catalogo.tamanosDano),
+          niveles: _niveles(catalogos),
+          inicial: (clase: hallazgo.clase, tamano: hallazgo.tamano, nivel: hallazgo.nivel, nota: hallazgo.nota),
+        );
+        // Se busca de nuevo: mientras la hoja estaba abierta la lista pudo cambiar.
+        final j = _indiceDe(zona);
+        if (dano == null || !mounted || j < 0) break;
+        setState(() => _hallazgos[j] = _hallazgos[j].copiar(
+              clase: dano.clase,
+              tamano: dano.tamano,
+              nivel: () => dano.nivel,
+              nota: () => dano.nota,
+            ));
+    }
+    if (mounted) _soltarZona();
+  }
+
+  /// Agrega un extra (tipo y observación) y pide de una vez su primera foto: sin foto no se puede cerrar.
+  Future<void> _agregarExtra() async {
+    final datos = await pedirExtra(context, tipos: ref.read(catalogosProvider).seleccionables(Catalogo.tiposExtra));
+    if (datos == null || !mounted) return;
+    setState(() => _extras.add(ExtraLocal(
+          tipo: datos.tipo,
+          nombre: datos.nombre,
+          textoOtro: datos.textoOtro,
+          observacion: datos.observacion,
+        )));
+    await _tomarFotoExtra(_extras.length - 1);
+  }
+
+  Future<void> _tomarFotoExtra(int i) async {
+    final extra = _extras[i];
+    final temporal = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => CamaraPage(titulo: 'Foto del extra: ${extra.nombre}')),
+    );
+    if (temporal == null || !mounted) return;
+    final foto = await _sellar(temporal);
+    // Se busca de nuevo: mientras la cámara estaba abierta el extra pudo quitarse.
+    final j = _extras.indexOf(extra);
+    if (foto == null || !mounted || j < 0) return;
+    setState(() => _extras[j] = _extras[j].conFoto(foto));
   }
 
   /// Las vistas que pide esta etapa. Transporte no pide ninguna.
@@ -179,6 +318,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         hayUbicacion: _gps != null,
         fotos: _fotos,
         hallazgos: _hallazgos,
+        extras: _extras,
         checklist: _checklist,
         catalogosListos: _catalogosListos,
       );
@@ -205,6 +345,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         notas: _notas.text,
         fotos: _fotos,
         hallazgos: _hallazgos,
+        extras: _extras,
       );
       await ref.read(colaRepositorioProvider).agregar(job);
       final sync = ref.read(syncControllerProvider.notifier);
@@ -290,9 +431,14 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                 _FilaUbicacion(gps: _gps, error: _errorGps, buscando: _buscandoGps, alReintentar: _buscarUbicacion, alAbrirAjustes: ref.read(servicioUbicacionProvider).abrirAjustes),
                 const SizedBox(height: Espacio.lg),
                 Text('Novedades', style: tema.titleMedium),
-                Text('Toca una parte para registrar un daño. Si no hay novedades, puedes cerrar sin fotos.', style: tema.bodySmall),
+                Text('Toca el cuadrante donde está el daño. Si no hay novedades, puedes cerrar sin fotos.', style: tema.bodySmall),
                 const SizedBox(height: Espacio.md),
-                DiagramaVehiculo(marcas: [for (final h in _hallazgos) if (h.coords != null) h.coords!], onElegir: _elegirNovedad),
+                SelectorZonaDano(
+                  contexto: _contextoDibujo,
+                  conDano: {for (final h in _hallazgos) ?h.clave},
+                  alRegistrar: _registrarDano,
+                  alAbrirDano: _abrirDano,
+                ),
                 if (_hallazgos.isNotEmpty) ...[
                   const SizedBox(height: Espacio.md),
                   for (var i = 0; i < _hallazgos.length; i++)
@@ -300,8 +446,21 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                       hallazgo: _hallazgos[i],
                       clase: catalogos.etiqueta(Catalogo.clasesDano, _hallazgos[i].clase),
                       tamano: catalogos.etiqueta(Catalogo.tamanosDano, _hallazgos[i].tamano),
+                      nivel: switch (_hallazgos[i].nivel) {
+                        final n? => catalogos.etiqueta(Catalogo.nivelesSeveridad, n),
+                        null => null,
+                      },
                       alQuitar: () => setState(() => _hallazgos.removeAt(i)),
                     ),
+                ],
+                if (ref.watch(entornoProvider).extrasHabilitados) ...[
+                  const SizedBox(height: Espacio.lg),
+                  SeccionExtras(
+                    extras: _extras,
+                    alAgregar: _guardandoFoto ? null : _agregarExtra,
+                    alTomarFoto: _guardandoFoto ? null : _tomarFotoExtra,
+                    alQuitar: (i) => setState(() => _extras.removeAt(i)),
+                  ),
                 ],
                 const SizedBox(height: Espacio.lg),
                 if (checklist.isEmpty)

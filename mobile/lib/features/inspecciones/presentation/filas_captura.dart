@@ -82,6 +82,7 @@ class FilaHallazgo extends StatelessWidget {
     required this.hallazgo,
     required this.clase,
     required this.tamano,
+    this.nivel,
     required this.alQuitar,
   });
 
@@ -90,6 +91,9 @@ class FilaHallazgo extends StatelessWidget {
   /// Nombres ya resueltos con el catálogo por quien construye la fila.
   final String clase;
   final String tamano;
+
+  /// Nombre del nivel («V2»); null si no se asignó (el conductor no lo asigna).
+  final String? nivel;
   final VoidCallback alQuitar;
 
   @override
@@ -106,7 +110,7 @@ class FilaHallazgo extends StatelessWidget {
               onTap: () => mostrarVisorImagen(
                 context,
                 imagen: FileImage(File(foto.ruta)),
-                titulo: 'Novedad en ${hallazgo.parte}',
+                titulo: 'Novedad en ${hallazgo.zona}',
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(8),
@@ -116,17 +120,26 @@ class FilaHallazgo extends StatelessWidget {
                   width: 56,
                   height: 48,
                   fit: BoxFit.cover,
-                  semanticLabel: 'Foto de la novedad en ${hallazgo.parte}',
+                  semanticLabel: 'Foto de la novedad en ${hallazgo.zona}',
                 ),
               ),
             ),
           ),
         Expanded(
-          child: Text('${hallazgo.parte}: $clase ($tamano)', style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${hallazgo.zona}: $clase ($tamano)${nivel == null ? '' : ' · $nivel'}',
+                style: tema.bodySmall?.copyWith(color: Colores.textoPrimario),
+              ),
+              if (hallazgo.nota case final nota?) Text(nota, style: tema.bodySmall),
+            ],
+          ),
         ),
         TextButton(
           onPressed: alQuitar,
-          child: Semantics(label: 'Quitar hallazgo ${hallazgo.parte}', child: const Text('Quitar', style: TextStyle(color: Colores.peligro))),
+          child: Semantics(label: 'Quitar hallazgo ${hallazgo.zona}', child: const Text('Quitar', style: TextStyle(color: Colores.peligro))),
         ),
       ],
     );

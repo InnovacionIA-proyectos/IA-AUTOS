@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
 import 'package:traza_autos/features/inspecciones/presentation/captura_page.dart';
+import 'package:traza_autos/features/inspecciones/presentation/filas_captura.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
 import 'package:traza_autos/features/viajes/providers.dart';
 
@@ -179,7 +180,8 @@ void main() {
       await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'), vistas: vistasDePrueba);
 
       expect(find.text('Fotos de la inspección'), findsOneWidget);
-      expect(find.text('Frontal'), findsOneWidget);
+      // «Frontal» también es una pestaña del dibujo de daños: se busca solo dentro del checklist.
+      expect(find.descendant(of: find.byType(FilaVista), matching: find.text('Frontal')), findsOneWidget);
       expect(find.text('Piezas en el baúl'), findsOneWidget);
       expect(find.text('Solo si hay faltante o daño'), findsOneWidget,
           reason: 'la adicional dice cuándo se toma; la obligatoria no lo necesita');

@@ -7,9 +7,9 @@ import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/core/ui/widgets.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
+import 'package:traza_autos/features/dibujo_dano/presentation/selector_zona_dano.dart';
 import 'package:traza_autos/features/vehiculos/data/vehiculos_repositorio.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
-import 'package:traza_autos/features/vehiculos/presentation/diagrama_vehiculo.dart';
 import 'package:traza_autos/features/vehiculos/presentation/vin_page.dart';
 import 'package:traza_autos/features/vehiculos/providers.dart';
 
@@ -121,11 +121,11 @@ void main() {
   // S5-HU-25.4: el conductor recibe el vehículo y firma su recibo. Si antes ve lo que marcó el inspector, su
   // recibo deja de decir lo que él encontró y pasa a confirmar lo del otro.
   group('la tarjeta del informe cuando mira un conductor', () {
-    testWidgets('no muestra los hallazgos del inspector ni su diagrama', (tester) async {
+    testWidgets('no muestra los hallazgos del inspector ni su dibujo de daños', (tester) async {
       await abrir(tester, sesion: conductor);
 
       expect(find.textContaining('Capot'), findsNothing);
-      expect(find.byType(DiagramaVehiculo), findsNothing);
+      expect(find.byType(SelectorZonaDano), findsNothing);
       expect(find.text('Llovía al cargar'), findsNothing);
       expect(find.textContaining('queda en tu firma'), findsOneWidget, reason: 'se dice por qué, no se calla');
     });
@@ -146,7 +146,7 @@ void main() {
       await abrir(tester);
 
       expect(find.textContaining('Capot'), findsOneWidget);
-      expect(find.byType(DiagramaVehiculo), findsOneWidget);
+      expect(find.byType(SelectorZonaDano), findsOneWidget);
     });
   });
 
