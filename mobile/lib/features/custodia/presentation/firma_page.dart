@@ -31,6 +31,9 @@ final _firmantesProvider =
 
 /// Firma de la transferencia: quien entrega y quien recibe, cada uno con su trazo. Se puede firmar solo una parte;
 /// la otra firma desde su dispositivo. El servidor valida que quien firma sea el usuario autenticado.
+/// Lo que el servidor admite en las observaciones de un recibo con reservas.
+const reservasMax = 1000;
+
 class FirmaPage extends ConsumerStatefulWidget {
   const FirmaPage({
     super.key,
@@ -275,6 +278,8 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
                 onChanged: (_) => setState(() {}),
                 minLines: 2,
                 maxLines: 4,
+                // Lo mismo que admite el servidor: se corta aquí en vez de dejar escribir y que lo rechace al enviar.
+                maxLength: reservasMax,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
                   labelText: 'Observaciones',

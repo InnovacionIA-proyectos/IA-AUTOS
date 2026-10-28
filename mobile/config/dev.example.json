@@ -1,5 +1,6 @@
 {
   "FLAVOR": "dev",
   "API_URL": "http://10.0.2.2:8080",
-  "EXTRAS_HABILITADOS": false
+  "EXTRAS_HABILITADOS": false,
+  "GPS_PRECISION_MINIMA_M": 30
 }

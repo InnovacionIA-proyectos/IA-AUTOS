@@ -8,8 +8,12 @@ import 'hallazgo_local.dart';
 ///
 /// Una foto sellada con 200 metros de margen no prueba dónde se tomó. No impide cerrar porque en un patio
 /// techado el GPS siempre es malo y bloquear dejaría a la gente sin poder trabajar; se avisa para que, si se
-/// puede, salgan a cielo abierto. **Valor inicial, pendiente de confirmar con Calidad.**
-const precisionBajaMetros = 30.0;
+/// puede, salgan a cielo abierto.
+///
+/// Es el valor inicial, el mismo que el backend trae en el parámetro `gps_precision_minima_m`. Mientras Calidad
+/// no lo confirme, cada entorno puede ajustarlo al compilar (`GPS_PRECISION_MINIMA_M`, ver `Entorno`): la API no
+/// publica sus parámetros a quien está en el patio, solo a administradores y al coordinador.
+const precisionBajaMetrosPorDefecto = 30.0;
 
 /// Por qué todavía no se puede cerrar un informe.
 ///
@@ -117,8 +121,8 @@ BloqueoCierre? bloqueoDeCierre({
 }
 
 /// Fotos cuyo sello tiene poca precisión. No bloquean: se avisa.
-List<FotoLocal> fotosConPrecisionBaja(List<FotoLocal> fotos) =>
-    [...fotos.where((f) => (f.precision ?? 0) > precisionBajaMetros)];
+List<FotoLocal> fotosConPrecisionBaja(List<FotoLocal> fotos, {double? umbral}) =>
+    [...fotos.where((f) => (f.precision ?? 0) > (umbral ?? precisionBajaMetrosPorDefecto))];
 
 /// Arma el job de un informe cerrado a partir de lo capturado. El sello de cada foto ya viene en [fotos].
 InformeJob construirInformeJob({

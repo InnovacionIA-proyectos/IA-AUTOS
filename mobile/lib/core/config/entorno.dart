@@ -9,13 +9,23 @@ enum Flavor {
 }
 
 class Entorno {
-  const Entorno({required this.flavor, required this.apiUrl, this.extrasHabilitados = false});
+  const Entorno({
+    required this.flavor,
+    required this.apiUrl,
+    this.extrasHabilitados = false,
+    this.precisionBajaMetros,
+  });
 
   /// Lee la configuración de compilación: `FLAVOR` (dev, qa, prod) y `API_URL` (sin barra final).
   factory Entorno.desdeCompilacion() => Entorno(
         flavor: Flavor.desde(const String.fromEnvironment('FLAVOR', defaultValue: 'dev')),
         apiUrl: _sinBarraFinal(const String.fromEnvironment('API_URL')),
         extrasHabilitados: const bool.fromEnvironment('EXTRAS_HABILITADOS'),
+        // 0 quiere decir «no se fijó»: entonces manda el valor inicial de la regla, que vive en el dominio.
+        precisionBajaMetros: switch (const int.fromEnvironment('GPS_PRECISION_MINIMA_M')) {
+          0 => null,
+          final metros => metros.toDouble(),
+        },
       );
 
   final Flavor flavor;
@@ -24,6 +34,11 @@ class Entorno {
   /// Muestra la sección de extras en la captura. Apagado por defecto: el servidor todavía no recibe extras, y
   /// con la sección visible se capturarían datos que nunca llegan.
   final bool extrasHabilitados;
+
+  /// A partir de cuántos metros de margen del GPS se avisa de precisión baja. Es el mismo valor que el backend
+  /// trae en `gps_precision_minima_m`, que la app no puede leer porque esa ruta es de administradores y del
+  /// coordinador. Null si no se fijó al compilar: manda el valor inicial de la regla.
+  final double? precisionBajaMetros;
 
   /// Sin `API_URL` la app no puede funcionar: se muestra un aviso claro en lugar de fallar en silencio.
   bool get configurado => apiUrl.isNotEmpty;

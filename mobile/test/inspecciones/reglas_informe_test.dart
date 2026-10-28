@@ -162,7 +162,15 @@ void main() {
       expect(bloqueo(checklist: checklistDePrueba, fotos: [fotoDe('v-frontal', precision: 500), fotoDe('v-superior')]), isNull);
     });
 
-    test('el umbral es uno solo y está a la vista', () => expect(precisionBajaMetros, 30.0));
+    test('el valor inicial del umbral es 30 metros', () => expect(precisionBajaMetrosPorDefecto, 30.0));
+
+    // Calidad todavía no ha confirmado el umbral, así que cada entorno puede ajustarlo sin recompilar la regla.
+    test('con otro umbral avisa por otro margen', () {
+      final fotos = [fotoDe('a', precision: 5), fotoDe('b', precision: 120)];
+
+      expect(fotosConPrecisionBaja(fotos, umbral: 200).map((f) => f.vistaId), isEmpty);
+      expect(fotosConPrecisionBaja(fotos, umbral: 3).map((f) => f.vistaId), ['a', 'b']);
+    });
   });
 
   group('otras reglas', () {

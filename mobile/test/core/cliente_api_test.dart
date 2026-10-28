@@ -221,6 +221,12 @@ void main() {
       expect(const Entorno(flavor: Flavor.dev, apiUrl: '').configurado, isFalse);
       expect(const Entorno(flavor: Flavor.prod, apiUrl: 'https://x').esProduccion, isTrue);
     });
+
+    // Sin fijarlo al compilar queda nulo, y entonces manda el valor inicial que vive en la regla del informe.
+    test('el umbral de precisión es opcional', () {
+      expect(const Entorno(flavor: Flavor.dev, apiUrl: 'https://x').precisionBajaMetros, isNull);
+      expect(const Entorno(flavor: Flavor.dev, apiUrl: 'https://x', precisionBajaMetros: 50).precisionBajaMetros, 50);
+    });
   });
 
   group('el detalle del servidor', () {

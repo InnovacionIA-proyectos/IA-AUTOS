@@ -520,6 +520,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                       vista: vista,
                       foto: _fotos.ultimaDeLaVista(vista.id),
                       alTomar: _guardandoFoto ? null : () => _tomarFoto(vista),
+                      precisionBaja: ref.watch(entornoProvider).precisionBajaMetros,
                     ),
                     const SizedBox(height: Espacio.sm),
                   ],

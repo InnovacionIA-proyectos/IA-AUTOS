@@ -1,5 +1,6 @@
 {
   "FLAVOR": "qa",
   "API_URL": "https://<url-de-la-api-qa>",
-  "EXTRAS_HABILITADOS": false
+  "EXTRAS_HABILITADOS": false,
+  "GPS_PRECISION_MINIMA_M": 30
 }

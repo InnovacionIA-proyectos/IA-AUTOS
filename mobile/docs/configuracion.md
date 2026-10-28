@@ -10,6 +10,8 @@ una clave.
 |---|---|---|---|
 | `API_URL` | sí | URL sin barra final | dirección pública de la API (`https://...`); en dev puede ser `http://10.0.2.2:8080` (el emulador de Android ve el `localhost` del equipo como `10.0.2.2`) |
 | `FLAVOR` | no | `dev`, `qa`, `prod` | entorno; debe coincidir con el sabor de Android (`--flavor`). Por defecto `dev` |
+| `EXTRAS_HABILITADOS` | no | `true`, `false` | muestra la sección de extras en la captura. Apagado mientras el servidor no los reciba |
+| `GPS_PRECISION_MINIMA_M` | no | metros, entero | desde cuántos metros de margen del GPS se avisa de precisión baja. Por defecto 30, el mismo valor que el backend trae en `gps_precision_minima_m`. Se fija aquí porque `GET /api/parametros` es de administradores y del coordinador: quien está en el patio no puede leerlo |
 
 Sin `API_URL` la app arranca pero muestra un aviso en el login y no deja ingresar.
 

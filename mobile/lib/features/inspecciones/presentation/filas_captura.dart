@@ -14,13 +14,22 @@ import '../domain/reglas_informe.dart';
 
 /// Una fila del checklist: qué vista es, si ya tiene foto y cómo está esa foto.
 class FilaVista extends StatelessWidget {
-  const FilaVista({super.key, required this.vista, required this.foto, required this.alTomar});
+  const FilaVista({
+    super.key,
+    required this.vista,
+    required this.foto,
+    required this.alTomar,
+    this.precisionBaja,
+  });
 
   final VistaChecklist vista;
 
   /// La última foto de la vista; null si todavía no hay.
   final FotoLocal? foto;
   final VoidCallback? alTomar;
+
+  /// Desde cuántos metros se avisa de precisión baja. Null deja el valor inicial de la regla.
+  final double? precisionBaja;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +68,7 @@ class FilaVista extends StatelessWidget {
               if (actual != null && actual.sinUbicacion)
                 // El sello es lo que da valor a la evidencia: sin ubicación hay que repetirla antes de cerrar.
                 Text('Sin ubicación: repítela', style: tema.bodySmall?.copyWith(color: Colores.peligro))
-              else if (actual != null && (actual.precision ?? 0) > precisionBajaMetros)
+              else if (actual != null && (actual.precision ?? 0) > (precisionBaja ?? precisionBajaMetrosPorDefecto))
                 // Avisa, no bloquea: en un patio techado el GPS siempre es malo.
                 Text(
                   'Ubicación poco precisa (±${actual.precision!.round()} m)',

@@ -1,5 +1,6 @@
 {
   "FLAVOR": "prod",
   "API_URL": "https://<url-de-la-api-produccion>",
-  "EXTRAS_HABILITADOS": false
+  "EXTRAS_HABILITADOS": false,
+  "GPS_PRECISION_MINIMA_M": 30
 }
