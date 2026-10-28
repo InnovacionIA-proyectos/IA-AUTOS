@@ -186,6 +186,13 @@ public sealed partial class clsViaje : clsEntidadBase
         Tocar(ahora);
     }
 
+    /// <summary>El inspector del viaje: lo llena el reclamo del cargue y lo vacia su liberacion (nulo = sin inspector).</summary>
+    public void AsignarInspector(Guid? inspectorId, DateTimeOffset ahora)
+    {
+        InspectorId = inspectorId;
+        Tocar(ahora);
+    }
+
     /// <summary>programado -> en_curso -> finalizado, o cancelado desde programado o en curso. Cualquier otro cambio es un conflicto.</summary>
     public void CambiarEstado(string nuevo, DateTimeOffset ahora)
     {

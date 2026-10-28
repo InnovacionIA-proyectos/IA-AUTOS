@@ -87,6 +87,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddSingleton<IGeneradorExcel, clsGeneradorExcel>();
         servicios.AddScoped<INotaAclaratoriaRepository, clsNotaAclaratoriaRepository>();
         servicios.AddScoped<INovedadProcesoRepository, clsNovedadProcesoRepository>();
+        servicios.AddScoped<IReclamoRepository, clsRepositorioReclamos>();
         servicios.AddScoped<IAAutos.Aplicacion.Inspecciones.DTOInspecciones.IConsultasNovedadesProceso, clsConsultasNovedadesProceso>();
         servicios.AddScoped<IParametroRepository, clsParametroRepository>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();

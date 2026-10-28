@@ -177,6 +177,29 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
+    public async Task El_contrato_expone_reclamar_y_liberar_y_el_inspector_del_viaje_ya_no_se_cambia_por_patch()
+    {
+        var contrato = await ObtenerContratoAsync();
+        var esquemas = contrato["components"]!["schemas"]!.AsObject();
+        var rutas = contrato["paths"]!.AsObject();
+
+        Assert.Contains("ReclamarViajeRequest", rutas["/api/viajes/{id}/reclamos"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
+        Assert.Contains("ReclamoDto", rutas["/api/viajes/{id}/reclamos"]!["post"]!["responses"]!["201"]!.ToJsonString());
+        Assert.Contains("ReclamoDto", rutas["/api/viajes/{id}/reclamos"]!["get"]!["responses"]!["200"]!.ToJsonString());
+        Assert.Contains("ReclamoDto", rutas["/api/viajes/{id}/reclamos/{proceso}"]!["delete"]!["responses"]!["200"]!.ToJsonString());
+        Assert.Equal(
+            ["id", "viaje_id", "proceso", "inspector_id", "inspector_nombre", "reclamado_at", "activo", "liberado_at", "liberado_por", "liberado_por_nombre"],
+            esquemas["ReclamoDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList());
+        // El 409 «Ya fue tomado por otro inspector» y el 403 de otro punto estan documentados en reclamar.
+        var respuestas = rutas["/api/viajes/{id}/reclamos"]!["post"]!["responses"]!.AsObject().Select(r => r.Key).ToList();
+        Assert.Contains("403", respuestas);
+        Assert.Contains("409", respuestas);
+        // El inspector lo llena el reclamo del cargue: ya no se cambia por PATCH (al crear el viaje sigue admitiendose).
+        Assert.DoesNotContain("inspector_id", esquemas["ActualizarViajeRequest"]!["properties"]!.AsObject().Select(p => p.Key));
+        Assert.Contains("inspector_id", esquemas["CrearViajeRequest"]!["properties"]!.AsObject().Select(p => p.Key));
+    }
+
+    [Fact]
     public async Task El_contrato_no_cambia_sin_cambiar_la_version()
     {
         var generado = (await ObtenerContratoAsync()).ToJsonString(INDENTADO);

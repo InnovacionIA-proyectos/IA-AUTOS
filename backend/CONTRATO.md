@@ -672,8 +672,8 @@ quién entrega y quién recibe. `403` si es un inspector o conductor y el viaje 
 
 ### `PATCH /api/viajes/{id}`
 Gestión de viajes. Cambia **solo los campos enviados** de un viaje `programado` o `en_curso`; responde `200` con el `ViajeDto`. Campos: `codigo_mtrack`,
-`tipo_unidad_id`, `placa`, `trailer`, `conductor_id`, `inspector_id`, `origen_id`, `con_personal_apoyo` (mismas reglas que al crear).
-`trailer`, `conductor_id`, `inspector_id` y `origen_id` admiten `null` para quitarlos; `destino_id` **ya no se acepta** (el destino es de cada unidad: ver `PATCH /api/viajes/{id}/vehiculos/{vin}`); `codigo_mtrack`, `tipo_unidad_id`, `placa` y
+`tipo_unidad_id`, `placa`, `trailer`, `conductor_id`, `origen_id`, `con_personal_apoyo` (mismas reglas que al crear).
+`trailer`, `conductor_id` y `origen_id` admiten `null` para quitarlos; `inspector_id` **ya no se acepta** (lo llena el reclamo del cargue: ver «Reclamo del camión»); `destino_id` **ya no se acepta** (el destino es de cada unidad: ver `PATCH /api/viajes/{id}/vehiculos/{vin}`); `codigo_mtrack`, `tipo_unidad_id`, `placa` y
 `con_personal_apoyo` no. Un campo que no existe responde `400`; un `codigo_mtrack` repetido, `409`; un viaje finalizado o cancelado, `409`.
 
 Mientras el viaje está `programado` también se corrige su programación: `fecha_programada` (ISO 8601 **con zona horaria**, por ejemplo `2026-11-03T06:00:00-05:00`; `null` la quita) y
@@ -695,6 +695,19 @@ en este viaje o en otro viaje activo (el mensaje dice cuáles). Una unidad que r
 ### `PATCH /api/viajes/{id}/vehiculos/{vin}`
 Gestión de viajes. Cambia el destino de **una** unidad: cuerpo `{ "lugar_destino_id": "uuid" }` (un lugar **activo** del catálogo `lugares`; `400` si falta). Solo se mueve el Descargue de esa unidad al tipo del lugar nuevo; las demás
 unidades del viaje no se tocan. `200` con el `ViajeDto`. `404` si el VIN no está en el viaje; `409` si el viaje no está activo, si la unidad no sale del viaje o si su Descargue ya tiene un informe cerrado.
+
+### Reclamo del camión
+El inspector reclama el camión que va a revisar («revisar este»). Los puntos de cada inspector (lugares del catálogo `lugares`) los asigna Datos; el inspector solo reclama lo de sus puntos.
+
+- `POST /api/viajes/{id}/reclamos` con `{ "proceso": "cargue" | "entrega" }` (solo `inspector`) → `201` con el `ReclamoDto`, o `200` si el reclamo ya era suyo. `cargue`: un cargue **programado para hoy** (hora de Colombia) en uno de sus puntos (`lugar_cargue_id`); el inspector queda como
+  **inspector del viaje** (de ahí salen los firmantes de la transferencia). `entrega`: un viaje cuyas unidades se entregan en uno de sus puntos (revisión de la llegada del Descargue); no cambia el inspector del cargue, y quien la reclama ve y firma las entregas del viaje
+  (`/api/viajes/{id}/entregas`) y es quien recibe por defecto. `403` si el viaje no es de ninguno de sus puntos; `400` con un `proceso` inválido; `409` si el viaje no está activo, el cargue no es de hoy («El cargue no está programado para hoy») o **ya lo tomó otro inspector**
+  («Ya fue tomado por otro inspector»). Si dos inspectores reclaman a la vez gana exactamente uno (lo decide un índice único de la base) y el otro recibe ese `409`.
+- `DELETE /api/viajes/{id}/reclamos/{proceso}` → `200` con el reclamo ya liberado. Lo libera el inspector que lo reclamó, el coordinador de calidad o un administrador (`403` cualquier otro; el coordinador y el administrador, solo de viajes de su cliente). El viaje queda sin inspector (si era el del
+  cargue), el cargue vuelve a estar pendiente y lo que el inspector capturó (inspecciones cerradas, hallazgos) **conserva su autor**. `404` si no hay un reclamo activo. **No hay caducidad automática**: ningún proceso libera reclamos por tiempo.
+- `GET /api/viajes/{id}/reclamos` → lista de `ReclamoDto`, del más reciente al más antiguo (activos y liberados): `{ id, viaje_id, proceso, inspector_id, inspector_nombre, reclamado_at, activo, liberado_at, liberado_por, liberado_por_nombre }`. Es donde queda registrado quién liberó. Conductor e
+  inspector solo lo ven de sus viajes o de los que reclamaron (`403`); coordinador y administrador, de su cliente.
+- Reclamar y liberar quedan en la auditoría (`viaje.reclamar` y `viaje.liberar_reclamo`) con el usuario, la fecha y el viaje.
 
 ### Entrega por punto
 Cada unidad se entrega en **su** lugar de destino. En cada punto se firma **una vez** entre quien entrega (por defecto el conductor del viaje) y quien recibe (por defecto su inspector): la firma se guarda en la transferencia

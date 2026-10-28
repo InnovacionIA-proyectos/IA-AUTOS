@@ -22,7 +22,7 @@ public sealed record CrearViajeRequest(
 
 /// <summary>
 /// Campos que admite el cambio de un viaje. Solo se cambia lo enviado; trailer, conductor, inspector y origen admiten
-/// nulo para quitarlos. El destino es de cada unidad (<c>PATCH /api/viajes/{id}/vehiculos/{vin}</c>), no del viaje. <c>FechaProgramada</c> (fecha y hora con zona horaria) y <c>LugarCargueId</c> (un lugar activo del catalogo <c>lugares</c>) se corrigen solo mientras el viaje esta programado. Este tipo describe el cuerpo en el contrato: el servicio lo lee campo a campo.
+/// nulo para quitarlos. El destino es de cada unidad (<c>PATCH /api/viajes/{id}/vehiculos/{vin}</c>) y el inspector lo llena el reclamo del cargue: <c>inspector_id</c> ya no se acepta. <c>FechaProgramada</c> (fecha y hora con zona horaria) y <c>LugarCargueId</c> (un lugar activo del catalogo <c>lugares</c>) se corrigen solo mientras el viaje esta programado. Este tipo describe el cuerpo en el contrato: el servicio lo lee campo a campo.
 /// </summary>
 public sealed record ActualizarViajeRequest(
     string? CodigoMtrack,
@@ -30,7 +30,6 @@ public sealed record ActualizarViajeRequest(
     string? Placa,
     string? Trailer,
     Guid? ConductorId,
-    Guid? InspectorId,
     Guid? OrigenId,
     bool? ConPersonalApoyo,
     DateTimeOffset? FechaProgramada = null,

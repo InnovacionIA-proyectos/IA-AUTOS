@@ -34,7 +34,7 @@ public sealed class clsViajesService(
     public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "created_at", "updated_at", "codigo_mtrack", "estado", "placa", "trailer" };
 
     private static readonly string[] CAMPOS_EDITABLES =
-        ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "inspector_id", "origen_id", "con_personal_apoyo", "fecha_programada", "lugar_cargue_id"];
+        ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "origen_id", "con_personal_apoyo", "fecha_programada", "lugar_cargue_id"];
 
     private static readonly string[] CAMPOS_SIN_NULO = ["codigo_mtrack", "tipo_unidad_id", "placa", "con_personal_apoyo"];
 
@@ -115,7 +115,7 @@ public sealed class clsViajesService(
 
     /// <summary>
     /// Cambia los campos enviados de un viaje programado o en curso. Al cambiar el origen se actualiza el lugar del Cargue de sus VIN, y al cambiar el
-    /// personal de apoyo se marca el Cargue; las etapas con informe cerrado no se tocan. El destino es de cada unidad: se cambia con <see cref="CambiarDestinoDeUnidadAsync"/>.
+    /// personal de apoyo se marca el Cargue; las etapas con informe cerrado no se tocan. El destino es de cada unidad (<see cref="CambiarDestinoDeUnidadAsync"/>) y el inspector lo llena el reclamo del cargue.
     /// </summary>
     public async Task<ViajeDto> ActualizarAsync(Guid id, IReadOnlyDictionary<string, JsonElement> campos, CancellationToken ct = default)
     {
@@ -137,9 +137,8 @@ public sealed class clsViajesService(
 
         var tipoUnidadId = lector.Identificador("tipo_unidad_id");
         var conductorId = lector.Identificador("conductor_id");
-        var inspectorId = lector.Identificador("inspector_id");
         var origenId = lector.Identificador("origen_id");
-        await ValidarReferenciasAsync(tipoUnidadId, conductorId, inspectorId, origenId, null, ct);
+        await ValidarReferenciasAsync(tipoUnidadId, conductorId, null, origenId, null, ct);
 
         // La programacion (fecha y lugar real de cargue) solo se corrige mientras el viaje esta programado.
         var cambiaFecha = lector.Tiene("fecha_programada");
@@ -165,7 +164,7 @@ public sealed class clsViajesService(
             lector.Texto("placa"),
             lector.Tiene("trailer"), lector.Texto("trailer"),
             lector.Tiene("conductor_id"), conductorId,
-            lector.Tiene("inspector_id"), inspectorId,
+            false, null,
             lector.Tiene("origen_id"), origenId,
             false, null,
             reloj.Ahora);

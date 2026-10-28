@@ -19,7 +19,8 @@ namespace IAAutos.Aplicacion.Viajes;
 /// La entrega por punto: cada unidad del viaje se entrega en SU lugar de destino, y en cada punto se firma una vez entre quien entrega (por defecto el conductor del viaje) y quien recibe (por defecto su
 /// inspector): la firma se guarda en la transferencia de cada unidad pendiente del punto, con la misma firma, fecha e IP, y cada unidad conserva su transferencia propia (la del Descargue, sobre la
 /// inspeccion de llegada). Una sola firma no bloquea: se puede cerrar la entrega con una firma y su motivo, que deja la novedad de proceso y avisa a los coordinadores de calidad. El viaje pasa a
-/// finalizado cuando todas sus unidades activas tienen el Descargue cerrado.
+/// finalizado cuando todas sus unidades activas tienen el Descargue cerrado. El inspector que reclamo la revision de la entrega (<see cref="clsProcesoReclamo.ENTREGA"/>) ve y firma las entregas del viaje y es quien
+/// recibe por defecto.
 /// </summary>
 public sealed class clsEntregasService(
     IViajeRepository viajes,
@@ -31,6 +32,7 @@ public sealed class clsEntregasService(
     IUsuarioRepository usuarios,
     clsEvidenciaDeHallazgos evidenciaDeHallazgos,
     clsEmisorNotificaciones emisor,
+    IReclamoRepository reclamos,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -60,7 +62,7 @@ public sealed class clsEntregasService(
     public async Task<EntregasDelViajeDto> ListarAsync(Guid viajeId, CancellationToken ct = default)
     {
         var viaje = await ObtenerViajeAsync(viajeId, ct);
-        AsegurarVisible(viaje);
+        await AsegurarVisibleAsync(viaje, ct);
         var unidades = await CargarUnidadesAsync(viaje, ct);
         var lugares = await LugaresAsync(ct);
         var puntos = unidades
@@ -76,7 +78,7 @@ public sealed class clsEntregasService(
     public async Task<EntregaPuntoDto> ObtenerPuntoAsync(Guid viajeId, Guid lugarId, CancellationToken ct = default)
     {
         var viaje = await ObtenerViajeAsync(viajeId, ct);
-        AsegurarVisible(viaje);
+        await AsegurarVisibleAsync(viaje, ct);
         var unidades = await CargarUnidadesAsync(viaje, ct);
         return ArmarPunto(viaje, lugarId, DelPunto(unidades, lugarId), await LugaresAsync(ct));
     }
@@ -92,8 +94,9 @@ public sealed class clsEntregasService(
         var firma = clsValidador.Opcional(solicitud.Firma) ?? throw clsErroresCampos.De("firma", "La firma es requerida");
         var viaje = await ObtenerViajeAsync(viajeId, ct);
         viaje.AsegurarActivo();
-        var actorId = ActorDelViaje(viaje);
-        var (entregaId, recibeId) = Firmantes(viaje, solicitud, actorId);
+        var reclamante = await ReclamanteDeLaEntregaAsync(viaje, ct);
+        var actorId = ActorDelViaje(viaje, reclamante);
+        var (entregaId, recibeId) = Firmantes(viaje, solicitud, actorId, reclamante);
         var unidades = await CargarUnidadesAsync(viaje, ct);
         var pendientes = PendientesConInspeccion(DelPunto(unidades, lugarId));
 
@@ -127,12 +130,13 @@ public sealed class clsEntregasService(
 
         var viaje = await ObtenerViajeAsync(viajeId, ct);
         viaje.AsegurarActivo();
-        var actorId = ActorDelViaje(viaje);
+        var reclamante = await ReclamanteDeLaEntregaAsync(viaje, ct);
+        var actorId = ActorDelViaje(viaje, reclamante);
         var unidades = await CargarUnidadesAsync(viaje, ct);
         var pendientes = PendientesConInspeccion(DelPunto(unidades, lugarId));
 
-        // Quien cierra firma su parte; la otra queda sin firmar. Por defecto quien entrega es el conductor y quien recibe, el inspector del viaje.
-        var (entregaId, recibeId) = Firmantes(viaje, new FirmarEntregaRequest(null, null, null), actorId);
+        // Quien cierra firma su parte; la otra queda sin firmar. Por defecto quien entrega es el conductor y quien recibe, el inspector que reclamo la entrega o, sin reclamo, el del viaje.
+        var (entregaId, recibeId) = Firmantes(viaje, new FirmarEntregaRequest(null, null, null), actorId, reclamante);
         var ahora = reloj.Ahora;
         var novedadesCreadas = new List<clsNovedadProceso>();
         foreach (var unidad in pendientes)
@@ -164,20 +168,24 @@ public sealed class clsEntregasService(
     private async Task<clsViaje> ObtenerViajeAsync(Guid viajeId, CancellationToken ct) =>
         await viajes.ObtenerPorIdAsync(viajeId, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {viajeId} no encontrado");
 
-    /// <summary>Conductor e inspector solo ven lo de sus viajes (403 si es de otro).</summary>
-    private void AsegurarVisible(clsViaje viaje)
+    /// <summary>Conductor e inspector solo ven lo de sus viajes y, el inspector, las entregas que reclamo (403 si es de otro).</summary>
+    private async Task AsegurarVisibleAsync(clsViaje viaje, CancellationToken ct)
     {
-        if (actual.SoloSusViajes() is { } usuarioId && !viaje.Participa(usuarioId))
+        if (actual.SoloSusViajes() is { } usuarioId && !viaje.Participa(usuarioId) && await ReclamanteDeLaEntregaAsync(viaje, ct) != usuarioId)
         {
             throw new clsProhibidoException("El viaje no está asignado a su usuario");
         }
     }
 
-    /// <summary>Solo el conductor o el inspector del viaje firman una entrega: nadie actua por otro (403).</summary>
-    private Guid ActorDelViaje(clsViaje viaje)
+    /// <summary>El inspector que reclamo la revision de la entrega del viaje (reclamo activo), o nulo.</summary>
+    private async Task<Guid?> ReclamanteDeLaEntregaAsync(clsViaje viaje, CancellationToken ct) =>
+        (await reclamos.ObtenerActivoAsync(viaje.Id, clsProcesoReclamo.ENTREGA, ct))?.InspectorId;
+
+    /// <summary>Solo el conductor, el inspector del viaje o el inspector que reclamo la entrega firman: nadie actua por otro (403).</summary>
+    private Guid ActorDelViaje(clsViaje viaje, Guid? reclamante)
     {
         var actorId = actual.IdObligatorio();
-        if (!viaje.Participa(actorId))
+        if (!viaje.Participa(actorId) && reclamante != actorId)
         {
             throw new clsProhibidoException("Solo el conductor o el inspector del viaje firman la entrega: nadie actúa por otro");
         }
@@ -188,16 +196,17 @@ public sealed class clsEntregasService(
     /// <summary>
     /// Quien entrega y quien recibe: los indicados o, por defecto, el conductor y el inspector del viaje. Deben ser usuarios del viaje, distintos entre si, y quien envia debe ser uno de los dos.
     /// </summary>
-    private static (Guid Entrega, Guid Recibe) Firmantes(clsViaje viaje, FirmarEntregaRequest solicitud, Guid actorId)
+    private static (Guid Entrega, Guid Recibe) Firmantes(clsViaje viaje, FirmarEntregaRequest solicitud, Guid actorId, Guid? reclamante)
     {
+        bool EsDelViaje(Guid id) => id == viaje.ConductorId || id == viaje.InspectorId || id == reclamante;
         var entrega = solicitud.EntregaUsuarioId ?? viaje.ConductorId;
-        var recibe = solicitud.RecibeUsuarioId ?? viaje.InspectorId;
+        var recibe = solicitud.RecibeUsuarioId ?? reclamante ?? viaje.InspectorId;
         var errores = new Dictionary<string, string[]>();
         if (entrega is null)
         {
             errores["entrega_usuario_id"] = ["Indique quién entrega: el viaje no tiene conductor"];
         }
-        else if (entrega != viaje.ConductorId && entrega != viaje.InspectorId)
+        else if (!EsDelViaje(entrega.Value))
         {
             errores["entrega_usuario_id"] = ["Quien entrega debe ser un usuario del viaje"];
         }
@@ -206,7 +215,7 @@ public sealed class clsEntregasService(
         {
             errores["recibe_usuario_id"] = ["Indique quién recibe: el viaje no tiene inspector"];
         }
-        else if (recibe != viaje.ConductorId && recibe != viaje.InspectorId)
+        else if (!EsDelViaje(recibe.Value))
         {
             errores["recibe_usuario_id"] = ["Quien recibe debe ser un usuario del viaje"];
         }

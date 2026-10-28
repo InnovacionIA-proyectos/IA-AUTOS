@@ -88,7 +88,9 @@ El inspector reclama el camión que va a revisar. Los datos: `tblInspectorLugare
 —la etapa Descargue—, cuándo y, al liberarse, quién y cuándo: `LiberadoAt` y `LiberadoPor` van juntos o ninguno). Un índice único filtrado (`UX_tblReclamos_Activo`) impide dos reclamos **activos** (sin liberar) del mismo viaje y proceso, de modo que el
 segundo en reclamar falla en la base; los reclamos liberados quedan como historial y no se borran (error 51003). `tblViajes.InspectorId` se conserva: lo llena el reclamo del cargue. El script
 [`26-reclamo-inspector.sql`](../database/cambios-esquema/26-reclamo-inspector.sql) (una transacción, repetible, `@esquema` ajustable) también agrega el parámetro `reclamo_sin_actividad_minutos` (número, 30; ver [parametros.md](parametros.md)); no toca ningún dato existente.
-Los endpoints, la visibilidad y el aviso de inactividad son de las historias de backend que siguen.
+**Reclamar y liberar** (`POST /api/viajes/{id}/reclamos` y `DELETE /api/viajes/{id}/reclamos/{proceso}`, ver [CONTRATO.md](../CONTRATO.md#reclamo-del-camión)): el cargue se reclama si está programado para hoy en un punto del inspector; la entrega, si el viaje llega a un punto suyo. Reclamar llena `tblViajes.InspectorId` (en el cargue) y
+deja el reclamo activo; dos reclamos simultáneos los resuelve `UX_tblReclamos_Activo` (el segundo recibe 409 «Ya fue tomado por otro inspector»). Liberar vacía el inspector y no toca lo capturado; no hay caducidad automática. `PATCH /api/viajes/{id}` ya no acepta `inspector_id` (corrección administrativa pendiente de la decisión de negocio PAB-002; al crear el viaje sigue admitiéndose).
+La lista de pendientes, la visibilidad por punto y el aviso de inactividad son de la historia siguiente.
 
 ## Aplicar el cambio en una base existente
 
