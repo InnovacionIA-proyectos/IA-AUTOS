@@ -758,6 +758,22 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_posicion_de_la_unidad_esta_migrada()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/29-posicion-de-la-unidad.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajeVehiculos') AND name = N'Posicion' AND is_nullable = 1");
+        Assert.True(columna == 1, "Falta tblViajeVehiculos.Posicion. Ejecute database/cambios-esquema/29-posicion-de-la-unidad.sql.");
+
+        var restriccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_Posicion' AND parent_object_id = OBJECT_ID(N'tblViajeVehiculos')");
+        var indice = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblViajeVehiculos_Posicion' AND object_id = OBJECT_ID(N'tblViajeVehiculos') AND is_unique = 1 AND has_filter = 1");
+
+        Assert.True(restriccion == 1, "Falta la restriccion de rango de la posicion. Ejecute database/cambios-esquema/29-posicion-de-la-unidad.sql.");
+        Assert.True(indice == 1, "Falta el indice unico de la posicion por viaje. Ejecute database/cambios-esquema/29-posicion-de-la-unidad.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

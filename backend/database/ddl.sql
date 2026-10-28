@@ -598,6 +598,8 @@ GO
 /* -----------------------------------------------------------------------------
    tblViajeVehiculos: los VIN de un viaje. Un VIN puede estar en varios viajes a lo largo del tiempo (la aplicacion no admite
    dos viajes activos con el mismo VIN).
+   Posicion (1 a 7, unica dentro del viaje; nula = sin posicion): la posicion de la unidad en la ninera. La registra la segunda inspeccion del cargue (la de momento 'salida' de la etapa Cargue) y se libera
+   al marcar la unidad "no sale" (lo hace la aplicacion).
    ----------------------------------------------------------------------------- */
 IF OBJECT_ID(N'dbo.tblViajeVehiculos', N'U') IS NULL
 BEGIN
@@ -615,6 +617,8 @@ BEGIN
         ReemplazoVehiculoId   uniqueidentifier  NULL,
         -- El destino de CADA unidad (lugar real); nulo en lo anterior.
         LugarDestinoId        uniqueidentifier  NULL,
+        -- La posicion de la unidad en la ninera (1 a 7, unica dentro del viaje); nula mientras no se registra.
+        Posicion              tinyint           NULL,
         CreatedAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajeVehiculos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt   datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajeVehiculos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblViajeVehiculos_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id) ON DELETE CASCADE,
@@ -624,6 +628,7 @@ BEGIN
         CONSTRAINT FK_tblViajeVehiculos_LugarDestino FOREIGN KEY (LugarDestinoId) REFERENCES dbo.tblLugares (Id),
         CONSTRAINT UQ_tblViajeVehiculos_Viaje_Vehiculo UNIQUE (ViajeId, VehiculoId),
         CONSTRAINT CK_tblViajeVehiculos_EstadoUnidad CHECK (EstadoUnidad IN ('activa', 'no_sale')),
+        CONSTRAINT CK_tblViajeVehiculos_Posicion CHECK (Posicion IS NULL OR Posicion BETWEEN 1 AND 7),
         -- "No sale" exige su motivo, el hallazgo que lo causa, quien lo marco y cuando; una unidad activa no lleva nada de eso.
         CONSTRAINT CK_tblViajeVehiculos_NoSale CHECK (
             (EstadoUnidad = 'activa' AND NoSaleMotivo IS NULL AND NoSaleHallazgoId IS NULL AND NoSaleMarcadoPor IS NULL AND NoSaleAt IS NULL AND ReemplazoVehiculoId IS NULL)
@@ -643,6 +648,17 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajeVehiculo
     ALTER TABLE dbo.tblViajeVehiculos ADD CONSTRAINT FK_tblViajeVehiculos_LugarDestino FOREIGN KEY (LugarDestinoId) REFERENCES dbo.tblLugares (Id);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblViajeVehiculos_LugarDestino' AND object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
     CREATE INDEX IX_tblViajeVehiculos_LugarDestino ON dbo.tblViajeVehiculos (LugarDestinoId);
+GO
+
+-- En una base que aun no tiene la posicion de la unidad se agrega (nula), su restriccion de rango y el indice unico filtrado por viaje; en una base nueva ya estan y esto no hace nada.
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'Posicion') IS NULL
+    ALTER TABLE dbo.tblViajeVehiculos ADD Posicion tinyint NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_Posicion' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
+    ALTER TABLE dbo.tblViajeVehiculos ADD CONSTRAINT CK_tblViajeVehiculos_Posicion CHECK (Posicion IS NULL OR Posicion BETWEEN 1 AND 7);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblViajeVehiculos_Posicion' AND object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
+    CREATE UNIQUE INDEX UX_tblViajeVehiculos_Posicion ON dbo.tblViajeVehiculos (ViajeId, Posicion) WHERE Posicion IS NOT NULL;
 GO
 
 /* -----------------------------------------------------------------------------

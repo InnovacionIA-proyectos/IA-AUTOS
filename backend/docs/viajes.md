@@ -93,6 +93,12 @@ deja el reclamo activo; dos reclamos simultáneos los resuelve `UX_tblReclamos_A
 **Pendientes, visibilidad y aviso.** `GET /api/viajes/pendientes` lista los cargues de hoy de los puntos del inspector y las entregas en curso que llegan a ellos, con su estado (`disponible`, `en_revision` con el nombre del otro inspector, `mio`). El inspector ve (no actúa sobre) los pendientes de sus puntos
 además de los suyos y los que reclamó; el conductor no cambia. Un camión reclamado que lleva `reclamo_sin_actividad_minutos` sin inspecciones avisa una vez al coordinador (tipo `reclamo_sin_actividad`, script [`27-aviso-reclamo-sin-actividad.sql`](../database/cambios-esquema/27-aviso-reclamo-sin-actividad.sql)); el reclamo no se libera. Ver [alertas.md](alertas.md).
 
+## Posición de la unidad en la niñera (script 29)
+
+`tblViajeVehiculos.Posicion` (`tinyint`, nula) es la posición de la unidad dentro de la niñera, de **1 a 7**. La registra la **segunda inspección del cargue** (la de momento `salida` de la etapa Cargue) y se libera al marcar la unidad «no sale» (lo hace la aplicación). La base garantiza el rango
+(`CK_tblViajeVehiculos_Posicion`) y que dos unidades de un mismo viaje no compartan posición (`UX_tblViajeVehiculos_Posicion`, índice único filtrado sobre `(ViajeId, Posicion)` para las filas con posición); la misma posición en viajes distintos es válida y las unidades sin posición no cuentan. El script
+[`29-posicion-de-la-unidad.sql`](../database/cambios-esquema/29-posicion-de-la-unidad.sql) (una transacción, repetible, `@esquema` ajustable) no cambia ningún dato: todas las unidades quedan sin posición.
+
 ## Aplicar el cambio en una base existente
 
 Con un usuario que pueda crear tablas y vistas y desactivar triggers (no el de la aplicación), conectado a la base de IA Autos, **antes de desplegar la API**:
