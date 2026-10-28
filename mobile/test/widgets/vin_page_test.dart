@@ -7,6 +7,7 @@ import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/core/ui/widgets.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
+import 'package:traza_autos/features/inspecciones/domain/novedad_pendiente.dart';
 import 'package:traza_autos/features/dibujo_dano/presentation/selector_zona_dano.dart';
 import 'package:traza_autos/features/vehiculos/data/vehiculos_repositorio.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
@@ -90,6 +91,7 @@ Future<void> abrir(
   Map<String, dynamic>? inventario,
   Sesion? sesion,
   ViajesRepositorioFalso? viajes,
+  List<NovedadPendiente> novedades = const [],
 }) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -97,7 +99,7 @@ Future<void> abrir(
     ProviderScope(
       retry: (_, _) => null,
       overrides: [
-        ...Arnes(sesion: sesion ?? sesionPrueba).overrides,
+        ...(Arnes(sesion: sesion ?? sesionPrueba)..novedades.lista = novedades).overrides,
         catalogosRepositorioProvider.overrideWithValue(CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe')),
         vehiculosRepositorioProvider.overrideWithValue(VehiculosRepositorioFalso(inventario ?? inventarioJson())),
         viajesRepositorioProvider.overrideWithValue(viajes ?? ViajesRepositorioFalso()),
@@ -263,6 +265,39 @@ void main() {
       expect(find.text('Esta unidad no sale'), findsOneWidget);
       expect(find.text('Golpe profundo en el capó'), findsOneWidget);
       expect(find.text('La reemplaza VIN00000000000002'), findsOneWidget);
+    });
+  });
+
+  group('las novedades del conductor por revisar', () {
+    const sinClasificar = NovedadPendiente(
+      id: 'n1',
+      vin: 'VIN00000000000001',
+      proceso: 'transporte',
+      momento: 'llegada',
+      tamano: 'mas_20cm',
+      tipoNovedad: 'golpe',
+      foto: FotoNovedad(tomadaEn: null, sinUbicacion: true),
+    );
+
+    testWidgets('quien inspecciona las ve, con lo que el conductor alcanzó a decir', (tester) async {
+      await abrir(tester, novedades: const [sinClasificar]);
+
+      expect(find.text('Novedades por revisar'), findsOneWidget);
+      expect(find.text('Golpe · Más de 20 cm'), findsOneWidget);
+      expect(find.text('Sin hora · Sin ubicación'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Revisar'), findsOneWidget);
+    });
+
+    testWidgets('el conductor no revisa la suya: el nivel lo pone otra persona', (tester) async {
+      await abrir(tester, sesion: conductor, novedades: const [sinClasificar]);
+
+      expect(find.text('Novedades por revisar'), findsNothing);
+    });
+
+    testWidgets('sin novedades pendientes no se ocupa espacio', (tester) async {
+      await abrir(tester);
+
+      expect(find.text('Novedades por revisar'), findsNothing);
     });
   });
 }

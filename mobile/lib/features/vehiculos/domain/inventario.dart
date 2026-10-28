@@ -13,6 +13,7 @@ class HallazgoVista {
     required this.tamano,
     this.nivel,
     this.esPreexistente = false,
+    this.origen,
   });
 
   factory HallazgoVista.fromJson(Map<String, dynamic> json) => HallazgoVista(
@@ -26,6 +27,7 @@ class HallazgoVista {
         tamano: json['tamano_dano'] as String? ?? '',
         nivel: json['nivel_severidad'] as String?,
         esPreexistente: json['es_preexistente'] as bool? ?? false,
+        origen: json['origen'] as String?,
       );
 
   final String id;
@@ -42,6 +44,12 @@ class HallazgoVista {
 
   /// El daño ya venía de antes y así lo confirmó quien inspeccionó: no ocurrió en esta etapa.
   final bool esPreexistente;
+
+  /// Quién lo registró: `inspector` o `conductor`. Una novedad del conductor ya revisada se ve como cualquier
+  /// otro hallazgo, pero sigue diciendo de dónde salió.
+  final String? origen;
+
+  bool get loRegistroElConductor => origen == 'conductor';
 }
 
 class EvidenciaVista {

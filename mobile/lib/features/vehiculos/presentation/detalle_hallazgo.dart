@@ -67,6 +67,8 @@ class _DetalleHallazgo extends StatelessWidget {
                       '$clase · ${catalogos.etiqueta(Catalogo.tamanosDano, hallazgo.tamano)} · $nivel',
                       style: tema.bodySmall?.copyWith(color: Colores.textoPrimario),
                     ),
+                    if (hallazgo.loRegistroElConductor)
+                      Text('Origen: conductor', style: tema.bodySmall?.copyWith(color: Colores.textoSecundario)),
                     if (hallazgo.esPreexistente)
                       Text('Ya venía de antes', style: tema.bodySmall?.copyWith(color: Colores.textoSecundario)),
                     if (urlFoto != null) ...[

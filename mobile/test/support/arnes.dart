@@ -12,7 +12,9 @@ import 'package:traza_autos/features/auth/providers.dart';
 import 'package:traza_autos/features/dibujo_dano/providers.dart';
 import 'package:traza_autos/features/inspecciones/data/hallazgos_previos_repositorio.dart';
 import 'package:traza_autos/features/inspecciones/data/inspecciones_repositorio.dart';
+import 'package:traza_autos/features/inspecciones/data/novedades_repositorio.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_previo.dart';
+import 'package:traza_autos/features/inspecciones/domain/novedad_pendiente.dart';
 import 'package:traza_autos/features/inspecciones/domain/inspeccion_resumen.dart';
 import 'package:traza_autos/features/inspecciones/providers.dart';
 import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
@@ -180,7 +182,8 @@ class Arnes {
         inspecciones = InspeccionesRepositorioFalso(),
         ubicacion = UbicacionFalsa(),
         dispositivo = DispositivoFalso(),
-        previos = HallazgosPreviosFalso();
+        previos = HallazgosPreviosFalso(),
+        novedades = NovedadesFalso();
 
   final Entorno entorno;
   final AlmacenSesionEnMemoria almacen;
@@ -197,6 +200,9 @@ class Arnes {
   /// captura no pregunta nada.
   final HallazgosPreviosFalso previos;
 
+  /// Las novedades del conductor pendientes de revisión. Vacías por defecto: casi ninguna prueba las necesita.
+  final NovedadesFalso novedades;
+
   late final ProcesadorCola procesador = ProcesadorCola(cola: cola, gateway: gateway, red: red, archivos: archivos);
 
   List<Override> get overrides => [
@@ -212,6 +218,7 @@ class Arnes {
         // Las imágenes del dibujo de daños que bajan del servidor se guardan en Drift; en las pruebas, en memoria.
         almacenImagenesPanelProvider.overrideWithValue(AlmacenImagenesEnMemoria()),
         hallazgosPreviosRepositorioProvider.overrideWithValue(previos),
+        novedadesRepositorioProvider.overrideWithValue(novedades),
       ];
 
   ProviderContainer contenedor() => ProviderContainer(overrides: overrides, retry: (_, _) => null);
@@ -225,4 +232,39 @@ class HallazgosPreviosFalso implements HallazgosPreviosRepositorio {
 
   @override
   Future<List<HallazgoPrevio>> de(String vin) async => lista;
+}
+
+/// Novedades del conductor de mentira: se les pone la lista que la prueba quiera mostrar.
+class NovedadesFalso implements NovedadesRepositorio {
+  List<NovedadPendiente> lista = const [];
+  Object? errorAlRevisar;
+  final List<Map<String, Object?>> revisadas = [];
+
+  @override
+  Future<List<NovedadPendiente>> porRevisar({required String vin, String? viajeId}) async => lista;
+
+  @override
+  Future<void> revisar(
+    String hallazgoId, {
+    required int? cuadranteNumero,
+    required String? lado,
+    required String clase,
+    required String nivel,
+    required String tamano,
+    String? nota,
+    bool esPreexistente = false,
+    String? hallazgoOrigenId,
+  }) async {
+    revisadas.add({
+      'id': hallazgoId,
+      'cuadrante_numero': cuadranteNumero,
+      'lado': lado,
+      'clase': clase,
+      'nivel': nivel,
+      'tamano': tamano,
+      'es_preexistente': esPreexistente,
+      'hallazgo_origen_id': hallazgoOrigenId,
+    });
+    if (errorAlRevisar != null) throw errorAlRevisar!;
+  }
 }

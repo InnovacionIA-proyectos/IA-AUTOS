@@ -73,6 +73,25 @@ void main() {
     expect(find.text('Golpe · Más de 20 cm · Por revisar'), findsOneWidget);
   });
 
+  // Una novedad del conductor ya revisada se ve como cualquier otro hallazgo, pero sigue diciendo de dónde salió.
+  testWidgets('una novedad del conductor dice su origen', (tester) async {
+    await abrir(
+      tester,
+      const HallazgoVista(id: 'h1', zona: 'Capot', clase: 'golpe', tamano: 'mas_20cm', nivel: 'v1', origen: 'conductor'),
+    );
+
+    expect(find.text('Origen: conductor'), findsOneWidget);
+  });
+
+  testWidgets('la del inspector no lo dice: es lo normal', (tester) async {
+    await abrir(
+      tester,
+      const HallazgoVista(id: 'h1', zona: 'Capot', clase: 'golpe', tamano: 'mas_20cm', nivel: 'v1', origen: 'inspector'),
+    );
+
+    expect(find.text('Origen: conductor'), findsNothing);
+  });
+
   testWidgets('sin foto no se deja un hueco', (tester) async {
     await abrir(tester, const HallazgoVista(id: 'h1', zona: 'Capot', clase: 'golpe', tamano: 'mas_20cm'));
 

@@ -13,6 +13,9 @@ import '../../auth/presentation/auth_controller.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
 import '../../dibujo_dano/domain/dibujo_dano.dart';
+import '../../inspecciones/domain/novedad_pendiente.dart';
+import '../../inspecciones/presentation/revision_novedad_page.dart';
+import '../../inspecciones/providers.dart';
 import '../../dibujo_dano/presentation/selector_zona_dano.dart';
 import '../../viajes/presentation/mis_viajes_controller.dart';
 import '../../viajes/providers.dart';
@@ -92,6 +95,7 @@ class _Detalle extends ConsumerWidget {
         ),
         const SizedBox(height: Espacio.md),
         _NoSale(inventario: inventario),
+        _NovedadesPorRevisar(vin: inventario.vin),
         const SizedBox(height: Espacio.lg),
         Text('Último informe', style: tema.titleMedium),
         const SizedBox(height: Espacio.sm),
@@ -131,6 +135,75 @@ class _Detalle extends ConsumerWidget {
             const SizedBox(height: Espacio.sm),
           ],
       ],
+    );
+  }
+}
+
+/// Las novedades que registró el conductor y que nadie ha clasificado todavía, con su foto, para revisarlas.
+///
+/// Solo se le muestran a quien puede revisarlas. Mientras estén aquí, el hallazgo existe pero le falta lo que
+/// decide qué pasa con el vehículo: su zona, su clase y su nivel.
+class _NovedadesPorRevisar extends ConsumerWidget {
+  const _NovedadesPorRevisar({required this.vin});
+
+  final String vin;
+
+  Future<void> _revisar(BuildContext context, WidgetRef ref, NovedadPendiente novedad) async {
+    final revisada = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => RevisionNovedadPage(novedad: novedad)),
+    );
+    if (revisada != true) return;
+    // Al revisarla deja de estar pendiente y pasa a ser un hallazgo del informe: las dos listas cambian.
+    ref.invalidate(novedadesPorRevisarProvider(vin));
+    ref.invalidate(inventarioProvider(vin));
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rol = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol));
+    if (!puedeRevisarNovedades(rol)) return const SizedBox.shrink();
+
+    final novedades = ref.watch(novedadesPorRevisarProvider(vin)).value ?? const <NovedadPendiente>[];
+    if (novedades.isEmpty) return const SizedBox.shrink();
+
+    final tema = Theme.of(context).textTheme;
+    final catalogos = ref.watch(catalogosProvider);
+    return Padding(
+      padding: const EdgeInsets.only(top: Espacio.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Novedades por revisar', style: tema.titleMedium),
+          Text('Las registró el conductor. Les falta la zona, la clase y el nivel.', style: tema.bodySmall),
+          const SizedBox(height: Espacio.sm),
+          for (final novedad in novedades)
+            Tarjeta(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          etiquetaNovedad(novedad, catalogos),
+                          style: tema.bodyMedium?.copyWith(color: Colores.textoPrimario),
+                        ),
+                        Text(detalleNovedad(novedad), style: tema.bodySmall),
+                      ],
+                    ),
+                  ),
+                  FilledButton(
+                    // El tema les da un ancho mínimo infinito para que ocupen la fila solos; dentro de una fila
+                    // hay que soltarlo o el cálculo del tamaño revienta.
+                    style: FilledButton.styleFrom(minimumSize: const Size(0, alturaTactil)),
+                    onPressed: () => _revisar(context, ref, novedad),
+                    child: const Text('Revisar'),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

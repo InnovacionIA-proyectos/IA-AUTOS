@@ -7,6 +7,10 @@ import '../../catalogos/domain/catalogos.dart';
 /// observación opcional (null si se deja vacía).
 typedef DatosDano = ({String clase, String tamano, String? nivel, String? nota});
 
+/// Con qué abre la hoja. Es [DatosDano] con todo opcional: al revisar la novedad de un conductor llega el tamaño
+/// que él eligió y puede que la clase, pero nunca el nivel, que es justo lo que se viene a poner.
+typedef DatosDanoIniciales = ({String? clase, String? tamano, String? nivel, String? nota});
+
 /// Lo mismo que admite el servidor en la nota del hallazgo.
 const notaDanoMax = 500;
 
@@ -24,7 +28,7 @@ Future<DatosDano?> pedirDano(
   required List<ValorCatalogo> clases,
   required List<ValorCatalogo> tamanos,
   List<ValorCatalogo> niveles = const [],
-  DatosDano? inicial,
+  DatosDanoIniciales? inicial,
 }) {
   return showModalBottomSheet<DatosDano>(
     context: context,
@@ -56,7 +60,7 @@ class _HojaDano extends StatefulWidget {
   final List<ValorCatalogo> clases;
   final List<ValorCatalogo> tamanos;
   final List<ValorCatalogo> niveles;
-  final DatosDano? inicial;
+  final DatosDanoIniciales? inicial;
 
   @override
   State<_HojaDano> createState() => _EstadoHojaDano();
