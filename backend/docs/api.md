@@ -4,7 +4,7 @@ La especificación de negocio, las historias de usuario y el índice de toda la 
 
 Todas las rutas, los metodos, los codigos HTTP y la forma de las respuestas conservan el contrato del sistema anterior, de modo que la app movil y el ETL ya desplegados siguen funcionando. Las diferencias intencionales estan en `docs/seguridad.md`.
 
-Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo van en `snake_case`; las unicas excepciones en `camelCase` son el cuerpo de `login-portal` (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint `/api/metricas/rechazo`. El contrato esta versionado (`info.version` 2.8.0, sin prefijo en la ruta) y la lista de cambios respecto a la v1 esta en `docs/migracion-v1-v2.md`. Las fechas son ISO 8601 UTC con milisegundos (`2026-07-17T12:30:15.123Z`) y las de entrada exigen zona horaria. La especificacion OpenAPI se publica en `/openapi/v1.json` cuando `Documentacion__Habilitada=true` (siempre en Development).
+Autenticacion: `Authorization: Bearer <token>` (JWT HS256). Los nombres de campo van en `snake_case`; las unicas excepciones en `camelCase` son el cuerpo de `login-portal` (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint `/api/metricas/rechazo`. El contrato esta versionado (`info.version` 2.9.0, sin prefijo en la ruta) y la lista de cambios respecto a la v1 esta en `docs/migracion-v1-v2.md`. Las fechas son ISO 8601 UTC con milisegundos (`2026-07-17T12:30:15.123Z`) y las de entrada exigen zona horaria. La especificacion OpenAPI se publica en `/openapi/v1.json` cuando `Documentacion__Habilitada=true` (siempre en Development).
 
 ## Roles
 

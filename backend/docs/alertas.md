@@ -51,6 +51,12 @@ Cada 10 minutos se buscan las inspecciones en **borrador** de **Cargue o Descarg
 `clsCalculadoraVistas`). Se avisa a quien la inicio, con las vistas que faltan: el inspector o, **solo en un Cargue sin personal de apoyo**, el conductor (un Descargue iniciado por el conductor no avisa). Un aviso por inspeccion.
 No avisa de una inspeccion cerrada, ni de Transporte, ni de un usuario retirado.
 
+## Camión reclamado sin actividad
+
+Cada 10 minutos, junto con los demás avisos operativos, se buscan los **reclamos activos** de viajes activos hechos hace más de `reclamo_sin_actividad_minutos` (30 por defecto, ajustable sin desplegar) sin ninguna **inspección del viaje iniciada o cerrada después del reclamo** (esa es la «actividad»).
+Se avisa a los `coordinador_calidad` activos del cliente del inspector con una notificación `reclamo_sin_actividad` (urgencia media, bandeja y push) que trae la placa, el viaje, el proceso y el nombre del inspector. Es **un aviso por reclamo** (la clave de dedupe lleva el id del reclamo).
+El reclamo **no se libera**: lo libera una persona (ver [viajes.md](viajes.md)). Necesita el script [`27-aviso-reclamo-sin-actividad.sql`](../database/cambios-esquema/27-aviso-reclamo-sin-actividad.sql) aplicado (el tipo de aviso nuevo en `tblNotificaciones`).
+
 ## Transferencia pendiente
 
 Cada 10 minutos se buscan las **llegadas cerradas** hace mas de `transferencia_pendiente_minutos` cuya transferencia no tiene tipo de cierre, de unidades que siguen en el viaje (no «no sale») y de viajes activos:

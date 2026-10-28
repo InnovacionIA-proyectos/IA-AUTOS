@@ -67,6 +67,15 @@ public sealed class clsViajesController(
         Ok(await servicio.ListarAsync(
             new FiltrosViajesRequest(estado, codigoMtrack, vin, conductorId, inspectorId, clienteId, origenId, destinoId, desde, hasta, pagina, tamano, orden), ct));
 
+    /// <summary>
+    /// La lista de pendientes del inspector: los cargues programados para HOY en sus puntos y las entregas de viajes en curso que llegan a sus puntos, cada uno con su estado (<c>disponible</c>, <c>en_revision</c> con el nombre del
+    /// otro inspector, o <c>mio</c>). Los de otros dias y otros puntos no salen. De ahi se reclama con <c>POST /api/viajes/{id}/reclamos</c>.
+    /// </summary>
+    [HttpGet("pendientes")]
+    [RolesPermitidos(clsRol.INSPECTOR)]
+    [ProducesResponseType<IReadOnlyList<PendienteDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Pendientes(CancellationToken ct) => Ok(await reclamos.ListarPendientesAsync(ct));
+
     /// <summary>Los viajes del usuario autenticado (como conductor o inspector) con sus VIN. Sin estado: los programados y en curso.</summary>
     [HttpGet("mios")]
     [ProducesResponseType<IReadOnlyList<ViajeDto>>(StatusCodes.Status200OK)]

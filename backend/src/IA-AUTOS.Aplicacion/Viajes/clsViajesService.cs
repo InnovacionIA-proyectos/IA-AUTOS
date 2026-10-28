@@ -21,6 +21,7 @@ public sealed class clsViajesService(
     IConsultasViajes consultas,
     ICatalogosLectura catalogos,
     clsEnsamblajeViajes ensamblaje,
+    clsAccesoViajes acceso,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -313,7 +314,7 @@ public sealed class clsViajesService(
     /// <summary>Inspectores y conductores solo abren los viajes en los que participan; el resto, los de su cliente (el super administrador, todos).</summary>
     private async Task AsegurarAccesoAsync(clsViaje viaje, CancellationToken ct)
     {
-        if (actual.SoloSusViajes() is { } usuarioId && !viaje.Participa(usuarioId))
+        if (actual.SoloSusViajes() is { } usuarioId && !await acceso.PuedeVerAsync(viaje, usuarioId, ct))
         {
             throw new clsProhibidoException("El viaje no está asignado a su usuario");
         }

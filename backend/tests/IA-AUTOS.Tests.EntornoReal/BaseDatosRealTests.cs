@@ -747,6 +747,17 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task El_tipo_de_aviso_de_camion_reclamado_sin_actividad_esta_migrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/27-aviso-reclamo-sin-actividad.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tipo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%reclamo_sin_actividad%'");
+
+        Assert.True(tipo == 1, "tblNotificaciones no admite el tipo reclamo_sin_actividad. Ejecute database/cambios-esquema/27-aviso-reclamo-sin-actividad.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

@@ -1,6 +1,7 @@
 using FluentValidation;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
+using IAAutos.Aplicacion.Viajes;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Dominio.Comun;
@@ -69,6 +70,7 @@ public sealed class clsInspeccionesService(
     INovedadProcesoRepository novedades,
     clsEmisorNotificaciones emisor,
     IDescriptorHallazgos descriptorHallazgos,
+    clsAccesoViajes acceso,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -93,7 +95,7 @@ public sealed class clsInspeccionesService(
             ?? throw new clsEntidadNoEncontradaException("El viaje de la etapa no existe");
 
         // Inspectores y conductores solo inspeccionan los viajes en los que participan, y solo mientras el viaje siga activo.
-        if (actual.SoloSusViajes() is { } usuarioViaje && !viaje.Participa(usuarioViaje))
+        if (actual.SoloSusViajes() is { } usuarioViaje && !await acceso.ParticipaOReclamaAsync(viaje, usuarioViaje, ct))
         {
             throw new clsProhibidoException("El viaje de esta etapa no está asignado a su usuario");
         }
@@ -248,7 +250,7 @@ public sealed class clsInspeccionesService(
         var viaje = await viajes.ObtenerPorIdAsync(original.ViajeId, ct)
             ?? throw new clsEntidadNoEncontradaException("El viaje de la inspección no existe");
 
-        if (actual.SoloSusViajes() is { } usuarioViaje && !viaje.Participa(usuarioViaje))
+        if (actual.SoloSusViajes() is { } usuarioViaje && !await acceso.ParticipaOReclamaAsync(viaje, usuarioViaje, ct))
         {
             throw new clsProhibidoException("El viaje de esta inspección no está asignado a su usuario");
         }
@@ -301,7 +303,7 @@ public sealed class clsInspeccionesService(
         if (actual.SoloSusViajes() is { } usuarioViaje)
         {
             var viaje = await viajes.ObtenerPorIdAsync(inspeccion.ViajeId, ct);
-            if (viaje is null || !viaje.Participa(usuarioViaje))
+            if (viaje is null || !await acceso.ParticipaOReclamaAsync(viaje, usuarioViaje, ct))
             {
                 throw new clsProhibidoException("La inspección pertenece a un viaje que no está asignado a su usuario");
             }
@@ -323,7 +325,7 @@ public sealed class clsInspeccionesService(
         if (actual.SoloSusViajes() is { } usuarioViaje)
         {
             var viaje = await viajes.ObtenerPorIdAsync(informe.ViajeId, ct);
-            if (viaje is null || !viaje.Participa(usuarioViaje))
+            if (viaje is null || !await acceso.ParticipaOReclamaAsync(viaje, usuarioViaje, ct))
             {
                 throw new clsProhibidoException("La inspección pertenece a un viaje que no está asignado a su usuario");
             }

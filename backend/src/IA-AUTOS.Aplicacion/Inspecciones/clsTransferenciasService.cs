@@ -3,6 +3,7 @@ using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Auth;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
+using IAAutos.Aplicacion.Viajes;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Custodia;
@@ -32,6 +33,7 @@ public sealed class clsTransferenciasService(
     clsEvidenciaDeHallazgos evidenciaDeHallazgos,
     IAlmacenArchivos almacen,
     IGeneradorPdfConstancia generadorPdf,
+    clsAccesoViajes acceso,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -322,14 +324,12 @@ public sealed class clsTransferenciasService(
     }
 
     /// <summary>Inspector y conductor solo ven lo de sus viajes (403 si es de otro).</summary>
-    private Task AsegurarVisibleAsync(clsViaje viaje, CancellationToken ct)
+    private async Task AsegurarVisibleAsync(clsViaje viaje, CancellationToken ct)
     {
-        if (actual.SoloSusViajes() is { } usuarioViaje && !viaje.Participa(usuarioViaje))
+        if (actual.SoloSusViajes() is { } usuarioViaje && !await acceso.ParticipaOReclamaAsync(viaje, usuarioViaje, ct))
         {
             throw new clsProhibidoException("El viaje no está asignado a su usuario");
         }
-
-        return Task.CompletedTask;
     }
 
     /// <summary>La firma de una parte para el PDF: si se guardo como archivo se incrusta la imagen; si no, se dibuja el trazo.</summary>

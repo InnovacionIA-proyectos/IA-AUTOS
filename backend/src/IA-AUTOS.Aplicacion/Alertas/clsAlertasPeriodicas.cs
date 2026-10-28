@@ -26,9 +26,18 @@ public sealed record clsTransferenciaPendiente(
     Guid InspeccionId, Guid ViajeId, Guid VehiculoId, Guid ClienteId, string Vin, string Proceso, bool ExisteTransferencia,
     Guid? EntregaUsuarioId, bool FaltaEntrega, Guid? RecibeUsuarioId, bool FaltaRecibe, string? ProcesoSiguiente, Guid? ConductorId, Guid? InspectorId);
 
+/// <summary>Un camion reclamado (reclamo activo) por un inspector que aun no inicio ni cerro ninguna inspeccion del viaje despues de reclamarlo.</summary>
+public sealed record clsReclamoSinActividad(
+    Guid ReclamoId, Guid ViajeId, string? CodigoMtrack, string? Placa, string Proceso, Guid InspectorId, string? InspectorNombre, Guid? ClienteId, DateTimeOffset ReclamadoAt);
+
 /// <summary>Consultas de solo lectura de los procesos de alertas.</summary>
 public interface IConsultasAlertas
 {
+    /// <summary>
+    /// Los reclamos activos hechos antes de <paramref name="reclamadosAntesDe"/>, de viajes activos, sin ninguna inspeccion del viaje iniciada o cerrada despues del reclamo (la «actividad»).
+    /// </summary>
+    Task<IReadOnlyList<clsReclamoSinActividad>> ReclamosSinActividadAsync(DateTimeOffset reclamadosAntesDe, int limite, CancellationToken ct = default);
+
     /// <summary>Hallazgos de inspecciones cerradas desde <paramref name="desde"/>, contados por cliente y zona (lado + numero, o zona provisional).</summary>
     Task<IReadOnlyList<clsConteoPatron>> ConteoPorZonaAsync(DateTimeOffset desde, CancellationToken ct = default);
 
@@ -62,6 +71,7 @@ public sealed class clsAlertasPeriodicas(
     public const int VENTANA_DIAS_POR_DEFECTO = 30;
     public const int CAPTURA_MINUTOS_POR_DEFECTO = 30;
     public const int TRANSFERENCIA_MINUTOS_POR_DEFECTO = 240;
+    public const int RECLAMO_MINUTOS_POR_DEFECTO = 30;
     private const int LIMITE_POR_EJECUCION = 500;
 
     /// <summary>
@@ -110,9 +120,52 @@ public sealed class clsAlertasPeriodicas(
         return emitidas;
     }
 
-    /// <summary>Corre los dos avisos operativos: captura incompleta y transferencia pendiente. Devuelve cuantos avisos intento crear.</summary>
+    /// <summary>Corre los avisos operativos: captura incompleta, transferencia pendiente y camion reclamado sin actividad. Devuelve cuantos avisos intento crear.</summary>
     public async Task<int> EjecutarAvisosAsync(CancellationToken ct = default) =>
-        await EjecutarCapturasIncompletasAsync(ct) + await EjecutarTransferenciasPendientesAsync(ct);
+        await EjecutarCapturasIncompletasAsync(ct) + await EjecutarTransferenciasPendientesAsync(ct) + await EjecutarReclamosSinActividadAsync(ct);
+
+    /// <summary>
+    /// Avisa a los coordinadores de calidad del cliente del inspector de un camion reclamado que lleva <c>reclamo_sin_actividad_minutos</c> sin ninguna inspeccion iniciada o cerrada del viaje despues del reclamo (urgencia
+    /// media). Un aviso por reclamo: el reclamo NO se libera, solo lo libera una persona.
+    /// </summary>
+    public async Task<int> EjecutarReclamosSinActividadAsync(CancellationToken ct = default)
+    {
+        var minutos = Math.Max(await parametros.EnteroAsync(clsClavesParametros.RECLAMO_SIN_ACTIVIDAD_MINUTOS, RECLAMO_MINUTOS_POR_DEFECTO, ct), 1);
+        var emitidas = 0;
+        foreach (var reclamo in await consultas.ReclamosSinActividadAsync(reloj.Ahora.AddMinutes(-minutos), LIMITE_POR_EJECUCION, ct))
+        {
+            if (reclamo.ClienteId is not { } clienteId)
+            {
+                continue;
+            }
+
+            var destinatarios = (await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD], clienteId, ct)).Select(u => u.Id).ToList();
+            if (destinatarios.Count == 0)
+            {
+                continue;
+            }
+
+            var camion = reclamo.Placa is { } placa ? $"el camión {placa}" : "el camión";
+            var viaje = reclamo.CodigoMtrack is { } codigo ? $" (viaje {codigo})" : string.Empty;
+            await emisor.EmitirAsync(
+                new clsAlerta(
+                    clsTipoNotificacion.RECLAMO_SIN_ACTIVIDAD,
+                    clsUrgenciaNotificacion.MEDIA,
+                    destinatarios,
+                    clienteId,
+                    reclamo.ViajeId,
+                    null,
+                    null,
+                    null,
+                    $"Camión reclamado sin actividad: {reclamo.Placa ?? reclamo.CodigoMtrack ?? "sin placa"}",
+                    $"{reclamo.InspectorNombre ?? "Un inspector"} reclamó {camion}{viaje} ({reclamo.Proceso}) hace más de {minutos} minutos y no ha iniciado ninguna inspección. El reclamo sigue vigente.",
+                    $"{clsTipoNotificacion.RECLAMO_SIN_ACTIVIDAD}:{reclamo.ReclamoId}"),
+                ct);
+            emitidas += destinatarios.Count;
+        }
+
+        return emitidas;
+    }
 
     /// <summary>
     /// Avisa a quien inicio una inspeccion de Cargue o Descargue que sigue en borrador, sin todas las vistas obligatorias, pasados los <c>captura_incompleta_minutos</c>: el inspector o, solo en un cargue

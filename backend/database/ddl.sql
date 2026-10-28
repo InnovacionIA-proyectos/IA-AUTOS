@@ -1013,7 +1013,7 @@ BEGIN
         CONSTRAINT FK_tblNotificaciones_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
         CONSTRAINT FK_tblNotificaciones_RespondidaPor FOREIGN KEY (RespondidaPor) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT UQ_tblNotificaciones_ClaveDedupe UNIQUE (ClaveDedupe),
-        CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario', 'novedad_proceso')),
+        CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario', 'novedad_proceso', 'reclamo_sin_actividad')),
         CONSTRAINT CK_tblNotificaciones_Urgencia CHECK (Urgencia IN ('alta', 'media')),
         CONSTRAINT CK_tblNotificaciones_Canal CHECK (Canal IN ('bandeja', 'push', 'correo')),
         CONSTRAINT CK_tblNotificaciones_RespuestaMedio CHECK (RespuestaMedio IS NULL OR RespuestaMedio IN ('app', 'llamada')),
