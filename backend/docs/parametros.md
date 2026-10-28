@@ -33,6 +33,7 @@ se aplica en un minuto o menos sin desplegar y cada cambio queda en la auditoria
 | `umbral_patron_ventana_dias` | numero | 30 | dias de la ventana en la que se cuentan los hallazgos de un patron |
 | `captura_incompleta_minutos` | numero | 30 | minutos que una inspeccion de Cargue o Descargue puede seguir en borrador sin todas las fotos antes de avisar a quien la inicio (la inspeccion FLASH AVES dura maximo 5 minutos) |
 | `transferencia_pendiente_minutos` | numero | 240 | minutos que una llegada cerrada puede seguir con la transferencia sin cierre antes de avisar al firmante que falta |
+| `reclamo_sin_actividad_minutos` | numero | 30 | minutos que un camion reclamado puede seguir sin ninguna inspeccion iniciada o cerrada antes de avisar al coordinador; el reclamo no se libera solo (el valor definitivo lo confirma Calidad) |
 
 No hay filas de linea base de rechazo ni de fotos minimas (las vistas obligatorias estan en el catalogo `vistas-foto`). Una fila que ya existe **nunca se sobrescribe** al repetir los scripts.
 

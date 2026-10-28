@@ -729,6 +729,24 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task El_reclamo_del_inspector_y_sus_puntos_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/26-reclamo-inspector.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tablas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'tblInspectorLugares', N'tblReclamos') AND schema_id = SCHEMA_ID()");
+        Assert.True(tablas == 2, "Faltan tblInspectorLugares o tblReclamos. Ejecute database/cambios-esquema/26-reclamo-inspector.sql.");
+
+        var indice = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblReclamos_Activo' AND object_id = OBJECT_ID(N'tblReclamos') AND is_unique = 1 AND has_filter = 1");
+        var parametro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave = N'reclamo_sin_actividad_minutos' AND Tipo = N'numero'");
+        var reclamosActivosRepetidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM (SELECT ViajeId, Proceso FROM tblReclamos WHERE LiberadoAt IS NULL GROUP BY ViajeId, Proceso HAVING COUNT(*) > 1) AS x");
+
+        Assert.True(indice == 1, "Falta el indice unico de reclamos activos. Ejecute database/cambios-esquema/26-reclamo-inspector.sql.");
+        Assert.True(parametro == 1, "Falta el parametro reclamo_sin_actividad_minutos. Ejecute database/cambios-esquema/26-reclamo-inspector.sql.");
+        Assert.Equal(0, reclamosActivosRepetidos);
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();
