@@ -126,6 +126,38 @@ void main() {
       expect(inv.delViaje(null).etapas, hasLength(2));
     });
 
+    // Un informe cerrado no se edita: lo que se aclara después llega al lado, con su autor y su fecha.
+    test('las notas aclaratorias del informe se leen con su autor', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [
+          {
+            ...inspeccionJson('i1', '2026-01-02T10:00:00Z'),
+            'notas_aclaratorias': [
+              {
+                'id': 'n1',
+                'texto': 'La placa estaba mal escrita',
+                'autor_nombre': 'Ana Pérez',
+                'autor_rol': 'inspector',
+                'created_at': '2026-01-03T08:00:00Z',
+              },
+            ],
+          },
+        ]),
+      ]);
+
+      final nota = inv.etapas.single.inspecciones.single.notasAclaratorias.single;
+      expect((nota.texto, nota.autorNombre), ('La placa estaba mal escrita', 'Ana Pérez'));
+      expect(nota.creadoEn, DateTime.utc(2026, 1, 3, 8));
+    });
+
+    test('un informe sin notas aclaratorias no rompe', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('i1', '2026-01-02T10:00:00Z')]),
+      ]);
+
+      expect(inv.etapas.single.inspecciones.single.notasAclaratorias, isEmpty);
+    });
+
     test('la etapa trae su lugar y su viaje, que la API ya resuelve', () {
       final inv = inventario([
         {'id': 'e1', 'orden': 1, 'proceso': 'cargue', 'lugar': 'CEDI 1', 'viaje_id': 'via-1', 'requiere_inspeccion': true},

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../app/proveedores.dart';
 import '../../../core/errores/error_api.dart';
@@ -16,7 +19,11 @@ import '../../catalogos/presentation/catalogos_controller.dart';
 import '../../dibujo_dano/domain/dibujo_dano.dart';
 import '../../inspecciones/domain/novedad_pendiente.dart';
 import '../../inspecciones/presentation/revision_novedad_page.dart';
+import '../../inspecciones/domain/nota_aclaratoria.dart';
+import '../../inspecciones/presentation/nota_aclaratoria_hoja.dart';
 import '../../inspecciones/providers.dart';
+import '../../sync/domain/job.dart';
+import '../../sync/providers.dart';
 import '../../dibujo_dano/presentation/selector_zona_dano.dart';
 import '../../viajes/presentation/mis_viajes_controller.dart';
 import '../../sync/presentation/sync_controller.dart';
@@ -366,6 +373,26 @@ class _UltimoInforme extends ConsumerWidget {
     );
   }
 
+  /// Escribe una nota sobre este informe y la deja en la cola. No se envía al momento a propósito: se escribe
+  /// en el patio, donde puede no haber señal, y el informe que aclara ya no cambia.
+  Future<void> _agregarNota(BuildContext context, WidgetRef ref) async {
+    // El aviso se toma antes de abrir la hoja: después del await el widget puede ya no estar en pantalla.
+    final avisos = ScaffoldMessenger.of(context);
+    final texto = await pedirNotaAclaratoria(context, sobre: 'el informe de ${etapa.proceso}');
+    if (texto == null) return;
+    await ref.read(colaRepositorioProvider).agregar(NotaJob(
+          id: const Uuid().v4(),
+          etiqueta: 'Nota del informe ${etapa.proceso}',
+          creadoEn: DateTime.now().millisecondsSinceEpoch,
+          usuarioId: ref.read(authControllerProvider).sesion?.usuario.id,
+          entidad: EntidadNota.inspeccion,
+          entidadId: inspeccion.id,
+          texto: texto,
+        ));
+    unawaited(ref.read(syncControllerProvider.notifier).sincronizar());
+    avisos.showSnackBar(const SnackBar(content: Text('La nota quedó en la cola.')));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
@@ -377,6 +404,9 @@ class _UltimoInforme extends ConsumerWidget {
     // El conductor recibe el vehículo y firma su recibo. Si antes ve lo que marcó el inspector, su recibo ya
     // no dice lo que él encontró, sino que confirma lo del otro. Su propio informe sí lo ve entero.
     final ajeno = yo?.rol == 'conductor' && inspeccion.usuarioId != null && inspeccion.usuarioId != yo?.id;
+    // El servidor solo acepta la nota de quien registró el informe y de los administradores: a los demás les
+    // responde 403, así que a ellos no se les ofrece.
+    final puedeAclarar = inspeccion.usuarioId == yo?.id || yo?.rol == 'admin' || yo?.rol == 'super_admin';
 
     return Tarjeta(
       child: Column(
@@ -453,6 +483,20 @@ class _UltimoInforme extends ConsumerWidget {
             const SizedBox(height: Espacio.md),
             Text('Notas adicionales', style: tema.bodySmall),
             Text(inspeccion.notas!, style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
+          ],
+          // Lo que se aclaró después de cerrarlo. Va al final, debajo del informe que aclara.
+          if (inspeccion.notasAclaratorias.isNotEmpty) ...[
+            const SizedBox(height: Espacio.md),
+            Text('Notas aclaratorias', style: tema.bodySmall),
+            for (final nota in inspeccion.notasAclaratorias)
+              FilaNotaAclaratoria(nota: nota, cuando: formatearFecha(nota.creadoEn)),
+          ],
+          if (puedeAclarar) ...[
+            const SizedBox(height: Espacio.sm),
+            OutlinedButton(
+              onPressed: () => _agregarNota(context, ref),
+              child: const Text('Agregar nota aclaratoria'),
+            ),
           ],
         ],
       ),

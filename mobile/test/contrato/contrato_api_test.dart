@@ -58,6 +58,8 @@ void main() {
       // Con el inspector del viaje se sabe a quién se le ofrece marcar que una unidad no sale.
       'inspector_id',
     ],
+    // La nota se lee bajo el registro que aclara: sin su autor y su fecha no aclara nada.
+    'NotaAclaratoriaDto': ['id', 'texto', 'autor_nombre', 'autor_rol', 'created_at'],
     // Una unidad puede dejar de salir del viaje sin bloquearlo.
     'ViajeVehiculoDto': ['vin', 'marca', 'modelo', 'color', 'operacion', 'estado_unidad', 'no_sale'],
     'NoSaleDto': ['motivo', 'hallazgo_id', 'marcado_por_nombre', 'fecha', 'vin_reemplazo'],
@@ -128,6 +130,8 @@ void main() {
     ],
     // La unidad que no sale del viaje: su motivo, el hallazgo V1+ que lo causa y el VIN que la reemplaza.
     'MarcarNoSaleRequest': ['motivo', 'hallazgo_id', 'vin_reemplazo'],
+    // Aclarar un registro que ya no se puede cambiar: solo el texto.
+    'AgregarNotaRequest': ['texto'],
     // Quien recibe firma dejando sus observaciones: cierra la transferencia como `con_reservas`.
     'RecibirConReservasRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma', 'reservas'],
     // La constancia de no firma, con su evidencia dentro, igual que un hallazgo.
@@ -178,6 +182,10 @@ void main() {
       ('post', '/api/hallazgos/{}/revision'),
       // La unidad que no sale del viaje.
       ('post', '/api/viajes/{}/vehiculos/{}/no-sale'),
+      // Las notas aclaratorias, una ruta por registro.
+      ('post', '/api/inspecciones/{}/notas'),
+      ('post', '/api/hallazgos/{}/notas'),
+      ('post', '/api/inspecciones/{}/transferencia/notas'),
       ('get', '/api/sofasa/ordenes'),
     ];
     for (final (metodo, ruta) in usos) {

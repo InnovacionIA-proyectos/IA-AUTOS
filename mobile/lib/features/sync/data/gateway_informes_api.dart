@@ -1,6 +1,7 @@
 import '../../../core/http/cliente_api.dart';
 import '../../inspecciones/domain/foto_local.dart';
 import '../../inspecciones/domain/hallazgo_local.dart';
+import '../../inspecciones/domain/nota_aclaratoria.dart';
 import '../domain/puertos.dart';
 
 /// Implementación de [GatewayInformes] sobre la API REST (contrato en backend/docs/openapi.json).
@@ -159,5 +160,17 @@ class GatewayInformesApi implements GatewayInformes {
         'hash_sha256': foto.hash,
       },
     });
+  }
+
+  @override
+  Future<void> agregarNota({required String entidad, required String entidadId, required String texto}) async {
+    final id = Uri.encodeComponent(entidadId);
+    // Cada registro tiene su ruta; el servidor no admite una sola con el tipo adentro.
+    final ruta = switch (entidad) {
+      EntidadNota.hallazgo => '/api/hallazgos/$id/notas',
+      EntidadNota.transferencia => '/api/inspecciones/$id/transferencia/notas',
+      _ => '/api/inspecciones/$id/notas',
+    };
+    await _api.post(ruta, cuerpo: {'texto': texto});
   }
 }

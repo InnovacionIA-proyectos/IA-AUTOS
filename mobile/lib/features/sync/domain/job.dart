@@ -59,6 +59,7 @@ sealed class Job {
         'informe' => InformeJob.fromJson(json),
         'firma' => FirmaJob.fromJson(json),
         'no_firma' => NoFirmaJob.fromJson(json),
+        'nota' => NotaJob.fromJson(json),
         final otro => throw FormatException('Tipo de job desconocido: $otro'),
       };
 }
@@ -460,4 +461,85 @@ class NoFirmaJob extends Job {
 abstract final class ParteTransferencia {
   static const entrega = 'entrega';
   static const recibe = 'recibe';
+}
+
+/// Una nota aclaratoria sobre un registro ya cerrado.
+///
+/// Va por la cola como todo lo demás: se escribe en el patio, donde puede no haber señal, y el informe al que
+/// aclara ya no cambia, así que no hay prisa por que llegue. El servidor solo se la acepta a quien registró el
+/// informe, al administrador y al coordinador de calidad; a los demás les responde 403 y el job queda fallido
+/// con su mensaje.
+class NotaJob extends Job {
+  const NotaJob({
+    required super.id,
+    required super.etiqueta,
+    required super.creadoEn,
+    super.intentos,
+    super.error,
+    super.codigoError,
+    super.fallido,
+    super.usuarioId,
+    required this.entidad,
+    required this.entidadId,
+    required this.texto,
+  });
+
+  factory NotaJob.fromJson(Map<String, dynamic> json) => NotaJob(
+        id: json['id'] as String,
+        etiqueta: json['etiqueta'] as String,
+        creadoEn: json['creado_en'] as int,
+        intentos: json['intentos'] as int? ?? 0,
+        error: json['error'] as String?,
+        codigoError: json['codigo_error'] as String?,
+        fallido: json['fallido'] as bool? ?? false,
+        usuarioId: json['usuario_id'] as String?,
+        entidad: json['entidad'] as String,
+        entidadId: json['entidad_id'] as String,
+        texto: json['texto'] as String,
+      );
+
+  /// A qué se le aclara: `inspeccion`, `hallazgo` o `transferencia`. Decide la ruta.
+  final String entidad;
+  final String entidadId;
+  final String texto;
+
+  @override
+  String get tipo => 'nota';
+
+  @override
+  NotaJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) =>
+      _copiar(intentos: intentos, error: error, codigoError: codigo, fallido: fallido);
+
+  @override
+  NotaJob conUsuario(String usuario) => _copiar(usuarioId: usuario);
+
+  NotaJob _copiar({int? intentos, String? error, String? codigoError, bool? fallido, String? usuarioId}) => NotaJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        intentos: intentos ?? this.intentos,
+        error: error,
+        codigoError: codigoError ?? this.codigoError,
+        fallido: fallido ?? this.fallido,
+        usuarioId: usuarioId ?? this.usuarioId,
+        entidad: entidad,
+        entidadId: entidadId,
+        texto: texto,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'nota',
+        'id': id,
+        'etiqueta': etiqueta,
+        'creado_en': creadoEn,
+        'intentos': intentos,
+        'error': error,
+        'codigo_error': codigoError,
+        'fallido': fallido,
+        'usuario_id': usuarioId,
+        'entidad': entidad,
+        'entidad_id': entidadId,
+        'texto': texto,
+      };
 }

@@ -7,6 +7,7 @@ import 'package:traza_autos/core/db/cache_lecturas.dart';
 import 'package:traza_autos/features/inspecciones/domain/extra_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
+import 'package:traza_autos/features/inspecciones/domain/nota_aclaratoria.dart';
 import 'package:traza_autos/features/sync/data/cola_drift.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 
@@ -127,6 +128,23 @@ void main() {
       'foto': null,
     });
     expect((viejo.cuadranteNumero, viejo.zona, viejo.clave), (null, 'Capot', null));
+  });
+
+  test('persiste una nota aclaratoria con su registro', () async {
+    const nota = NotaJob(
+      id: 'n',
+      etiqueta: 'Nota del informe cargue',
+      creadoEn: 7,
+      usuarioId: 'u1',
+      entidad: EntidadNota.inspeccion,
+      entidadId: 'i1',
+      texto: 'La placa estaba mal escrita',
+    );
+    await cola.agregar(nota);
+
+    final leida = (await cola.listar()).single as NotaJob;
+    expect(leida.toJson(), nota.toJson());
+    expect((leida.entidad, leida.entidadId, leida.texto), (EntidadNota.inspeccion, 'i1', 'La placa estaba mal escrita'));
   });
 
   test('persiste una firma', () async {

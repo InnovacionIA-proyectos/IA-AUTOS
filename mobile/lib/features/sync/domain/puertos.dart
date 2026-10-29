@@ -105,4 +105,7 @@ abstract interface class GatewayInformes {
     required String testigoId,
     required FotoLocal foto,
   });
+
+  /// Agrega una nota aclaratoria al registro: `inspeccion`, `hallazgo` o `transferencia`. Cada uno tiene su ruta.
+  Future<void> agregarNota({required String entidad, required String entidadId, required String texto});
 }

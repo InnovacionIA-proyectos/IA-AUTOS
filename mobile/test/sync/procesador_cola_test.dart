@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
+import 'package:traza_autos/features/inspecciones/domain/nota_aclaratoria.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
@@ -392,6 +393,42 @@ void main() {
       await procesador.procesar(usuarioPrueba);
 
       expect((cola.jobs.single.fallido, cola.jobs.single.intentos), (false, 7));
+    });
+  });
+
+  group('la nota aclaratoria', () {
+    NotaJob nota() => const NotaJob(
+          id: 'n1',
+          etiqueta: 'Nota del informe cargue',
+          creadoEn: 1,
+          usuarioId: usuarioPrueba,
+          entidad: EntidadNota.inspeccion,
+          entidadId: 'i1',
+          texto: 'La placa estaba mal escrita',
+        );
+
+    test('se envía al registro que aclara y sale de la cola', () async {
+      await cola.agregar(nota());
+
+      final r = await procesador.procesar(usuarioPrueba);
+
+      expect(r.enviados, 1);
+      expect(gateway.notasEnviadas.single, (entidad: 'inspeccion', entidadId: 'i1', texto: 'La placa estaba mal escrita'));
+      expect(cola.jobs, isEmpty);
+    });
+
+    // El servidor solo se la acepta a quien registró el informe y a los administradores.
+    test('un 403 la deja fallida con su mensaje, sin reintentar', () async {
+      await cola.agregar(nota());
+      gateway.errores['agregarNota'] = [
+        const ErrorApi(message: 'Solo el autor de la inspección puede aclararla', code: 'FORBIDDEN', status: 403),
+      ];
+
+      await procesador.procesar(usuarioPrueba);
+
+      final job = cola.jobs.single;
+      expect(job.fallido, isTrue);
+      expect(job.error, contains('Solo el autor de la inspección'));
     });
   });
 

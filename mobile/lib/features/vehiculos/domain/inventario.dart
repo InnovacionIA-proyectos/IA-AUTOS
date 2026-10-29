@@ -1,3 +1,5 @@
+import '../../inspecciones/domain/nota_aclaratoria.dart';
+
 /// Un hallazgo tal como lo devuelve la API (`HallazgoDto`).
 ///
 /// Con el modelo de zonas, `parte_vehiculo` y `coords_diagrama` llegan nulos en todo hallazgo nuevo y la clase llega
@@ -166,6 +168,7 @@ class InspeccionVista {
     this.hallazgos = const [],
     this.evidencias = const [],
     this.transferencia,
+    this.notasAclaratorias = const [],
   });
 
   factory InspeccionVista.fromJson(Map<String, dynamic> json) {
@@ -182,6 +185,10 @@ class InspeccionVista {
       hallazgos: [for (final h in (json['hallazgos'] as List<dynamic>? ?? [])) HallazgoVista.fromJson(h as Map<String, dynamic>)],
       evidencias: [for (final e in (json['evidencias'] as List<dynamic>? ?? [])) EvidenciaVista.fromJson(e as Map<String, dynamic>)],
       transferencia: transferencia == null ? null : TransferenciaVista.fromJson(transferencia),
+      notasAclaratorias: [
+        for (final n in (json['notas_aclaratorias'] as List<dynamic>? ?? []))
+          NotaAclaratoria.fromJson(n as Map<String, dynamic>),
+      ],
     );
   }
 
@@ -207,6 +214,10 @@ class InspeccionVista {
 
   /// Null mientras nadie haya empezado la transferencia de este informe.
   final TransferenciaVista? transferencia;
+
+  /// Lo que se aclaró después de cerrarlo. El informe no cambia; las notas se suman al lado. Distinto de
+  /// [notas], que son las que se escribieron al capturar.
+  final List<NotaAclaratoria> notasAclaratorias;
 
   bool get transferenciaFirmada => transferencia?.completa ?? false;
   String? get transferenciaTipoCierre => transferencia?.tipoCierre;

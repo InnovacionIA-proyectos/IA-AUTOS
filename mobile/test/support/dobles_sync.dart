@@ -188,6 +188,15 @@ class GatewayFalso implements GatewayInformes {
     return _paso('registrarNoFirma');
   }
 
+  @override
+  Future<void> agregarNota({required String entidad, required String entidadId, required String texto}) {
+    notasEnviadas.add((entidad: entidad, entidadId: entidadId, texto: texto));
+    return _paso('agregarNota');
+  }
+
+  /// Las notas aclaratorias que se enviaron, con a qué registro iban.
+  final List<({String entidad, String entidadId, String texto})> notasEnviadas = [];
+
   /// Las observaciones de cada recibo con reservas.
   final List<String> reservasEnviadas = [];
 

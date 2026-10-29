@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/core/http/cliente_api.dart';
 import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
+import 'package:traza_autos/features/inspecciones/domain/nota_aclaratoria.dart';
 import 'package:traza_autos/features/sync/data/gateway_informes_api.dart';
 
 import '../support/dio_falso.dart';
@@ -177,5 +178,22 @@ void main() {
     );
 
     expect((adaptador.peticiones.single.data as Map<String, dynamic>)['momento'], 'llegada');
+  });
+
+  // Cada registro tiene su propia ruta; el servidor no admite una sola con el tipo adentro.
+  test('la nota aclaratoria va a la ruta del registro que aclara', () async {
+    for (final caso in [
+      (EntidadNota.inspeccion, '/api/inspecciones/i1/notas'),
+      (EntidadNota.hallazgo, '/api/hallazgos/i1/notas'),
+      (EntidadNota.transferencia, '/api/inspecciones/i1/transferencia/notas'),
+    ]) {
+      final (entidad, ruta) = caso;
+      final (api, adaptador) = gateway((_) => json(201, {'id': 'n1'}));
+
+      await api.agregarNota(entidad: entidad, entidadId: 'i1', texto: 'La placa estaba mal escrita');
+
+      expect(adaptador.peticiones.single.uri.path, ruta, reason: entidad);
+      expect((adaptador.peticiones.single.data as Map)['texto'], 'La placa estaba mal escrita');
+    }
   });
 }

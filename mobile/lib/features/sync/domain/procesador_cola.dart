@@ -104,6 +104,8 @@ class ProcesadorCola {
               await _ejecutarFirma(job);
             case NoFirmaJob():
               await _ejecutarNoFirma(job);
+            case NotaJob():
+              await gateway.agregarNota(entidad: job.entidad, entidadId: job.entidadId, texto: job.texto);
           }
           await cola.eliminar(job.id);
           enviados++;
