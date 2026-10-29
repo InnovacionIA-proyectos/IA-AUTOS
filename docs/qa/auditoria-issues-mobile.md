@@ -16,7 +16,7 @@ Los comentarios para pegar en cada issue están en
 | Listas | #163, #164, #165, #166, #167, #168, #170, #187, #188, #199, #216, #240, #296 | Cerrar |
 | Lista salvo un criterio fuera de alcance | #208 | Cerrar; su CA-5 es de #212 |
 | Hechas, bloqueadas por backend | #193, #299 | Esperar a #297 y #298 |
-| Sin empezar | #159, #187, #188, #201, #207, #212, #218, #273, #286, #291, #304, #313 | Pendientes |
+| Sin empezar | #159, #201, #207, #212, #218, #273, #286, #291, #304, #313 | Pendientes |
 
 ---
 
