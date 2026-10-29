@@ -476,6 +476,8 @@ class _UltimoInforme extends ConsumerWidget {
             ],
           ),
           Text(formatearFecha(inspeccion.fecha), style: tema.bodySmall),
+          if (textoDeVersion(inspeccion, corregida: etapa.fueCorregida(inspeccion)) case final version?)
+            Text(version, style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
           if (ajeno) ...[
             const SizedBox(height: Espacio.md),
             Text(
@@ -709,6 +711,7 @@ class _FilaMomento extends StatelessWidget {
     final inspeccion = momento.inspeccion;
     // El nombre lo manda la API cuando la inspección existe; para la que todavía no, lo pone la app.
     final nombre = inspeccion?.momentoNombre ?? etiquetar(etiquetaMomento, momento.momento);
+    final versionTexto = inspeccion == null ? null : textoDeVersion(inspeccion);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -718,6 +721,7 @@ class _FilaMomento extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(nombre, style: tema.bodyMedium?.copyWith(color: Colores.textoPrimario)),
+              if (versionTexto != null) Text(versionTexto, style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
               if (momento.cerrada && inspeccion?.cerradaEn != null)
                 Text('Cerrada el ${formatearFecha(inspeccion!.cerradaEn)}', style: tema.bodySmall)
               else if (momento.enBorrador)

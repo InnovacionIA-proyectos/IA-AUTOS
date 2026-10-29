@@ -216,6 +216,8 @@ class InspeccionVista {
     this.notasAclaratorias = const [],
     this.motivoSinInspector,
     this.novedadesProceso = const [],
+    this.version = 1,
+    this.corrigeInspeccionId,
   });
 
   factory InspeccionVista.fromJson(Map<String, dynamic> json) {
@@ -244,6 +246,8 @@ class InspeccionVista {
         for (final n in (json['novedades_proceso'] as List<dynamic>? ?? []))
           NovedadProceso.fromJson(n as Map<String, dynamic>),
       ],
+      version: json['version'] as int? ?? 1,
+      corrigeInspeccionId: json['corrige_inspeccion_id'] as String?,
     );
   }
 
@@ -279,6 +283,11 @@ class InspeccionVista {
 
   /// Lo que pasó en el proceso alrededor de esta inspección (cargue sin inspector, recibo sin entrega).
   final List<NovedadProceso> novedadesProceso;
+
+  /// 1 en la original; 2, 3… en las correcciones. Corregir una inspección cerrada no la cambia: crea la versión
+  /// siguiente, que la referencia en [corrigeInspeccionId].
+  final int version;
+  final String? corrigeInspeccionId;
 
   /// La hizo el conductor porque no había inspector.
   bool get fueSinInspector => motivoSinInspector != null;
@@ -335,6 +344,17 @@ class EtapaVista {
   final bool traeMarcaApoyo;
 
   final List<InspeccionVista> inspecciones;
+
+  /// ¿Esta versión ya tiene una corrección encima? Entonces no es la que vale.
+  bool fueCorregida(InspeccionVista inspeccion) => inspecciones.any((o) => o.corrigeInspeccionId == inspeccion.id);
+}
+
+/// Cómo se dice, en una línea, dónde está una inspección en su cadena de versiones. Null en la versión 1 que nadie
+/// corrigió: no hay nada que decir.
+String? textoDeVersion(InspeccionVista inspeccion, {bool corregida = false}) {
+  if (inspeccion.version > 1) return 'Versión ${inspeccion.version} · corrige la versión ${inspeccion.version - 1}';
+  if (corregida) return 'Versión ${inspeccion.version} · ya fue corregida';
+  return null;
 }
 
 class Inventario {
@@ -440,7 +460,11 @@ List<MomentoEtapa> momentosDeEtapa(EtapaVista etapa, Inventario inventario) {
     for (final momento in Momento.todos)
       MomentoEtapa(
         momento: momento,
-        inspeccion: etapa.inspecciones.where((i) => i.momento == momento).lastOrNull,
+        // La versión que vale es la más alta: las anteriores quedan encadenadas debajo, sin cambios.
+        inspeccion: etapa.inspecciones.where((i) => i.momento == momento).fold<InspeccionVista?>(
+          null,
+          (mejor, i) => mejor == null || i.version >= mejor.version ? i : mejor,
+        ),
         // Solo la salida espera a la etapa anterior. La llegada no espera a nada: ni la app ni la API exigen
         // que la salida de esta misma etapa esté capturada antes (comprobado contra la API el 26-oct-2026).
         bloqueo: momento == Momento.salida ? bloqueoSalida : null,

@@ -146,6 +146,8 @@ class _FilaInspeccion extends StatelessWidget {
               children: [
                 if (item.vin != null) TextoMono(item.vin!),
                 Text('${item.momentoNombre} · ${formatearFechaIso(item.fecha)}', style: tema.bodySmall),
+                if (item.version > 1)
+                  Text('Versión ${item.version} · corrige la versión ${item.version - 1}', style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
               ],
             ),
           ),
