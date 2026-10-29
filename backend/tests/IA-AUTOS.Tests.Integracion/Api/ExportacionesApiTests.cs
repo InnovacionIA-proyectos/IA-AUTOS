@@ -217,7 +217,7 @@ public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsP
             [
                 "VIN", "Marca", "Tipo de vehículo", "Operación", "Cliente", "Código MTrack", "Placa", "Tráiler", "Unidad", "Conductor", "Cédula del conductor", "Etapa", "Lugar",
                 "Momento", "Versión", "Estado", "Inicio", "Cierre", "Inspector", "Tipo de cierre",
-                "Entrega: quién", "Entrega: fecha", "Entrega: IP", "Recibe: quién", "Recibe: fecha", "Recibe: IP",
+                "Entrega: quién", "Entrega: fecha", "Entrega: IP", "Recibe: quién", "Recibe: fecha", "Recibe: IP", "Extras",
             ],
             hoja.Titulos);
         // V1: 6, V2: 1, V3: 2 y V5: 1 (V4 es de otro cliente).

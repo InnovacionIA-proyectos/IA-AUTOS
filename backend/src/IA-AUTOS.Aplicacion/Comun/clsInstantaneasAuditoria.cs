@@ -72,6 +72,7 @@ public static class clsInstantaneasAuditoria
         e.InspeccionId,
         e.HallazgoId,
         e.VistaId,
+        e.ExtraId,
         e.StoragePath,
         e.HashSha256,
         e.SelloFecha,
@@ -79,6 +80,14 @@ public static class clsInstantaneasAuditoria
         e.SelloLng,
         e.EsConstancia,
         e.EsSello,
+    };
+
+    public static object De(clsInspeccionExtra x) => new
+    {
+        x.InspeccionId,
+        x.Tipo,
+        x.Texto,
+        x.Observacion,
     };
 
     public static object De(clsTransferenciaCustodia t) => new

@@ -150,7 +150,20 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
     }
 
     public Task<int> ContarFotosLibresAsync(Guid inspeccionId, CancellationToken ct = default) =>
-        contexto.Evidencias.CountAsync(e => e.InspeccionId == inspeccionId && e.VistaId == null && e.HallazgoId == null && !e.EsConstancia && !e.EsSello, ct);
+        contexto.Evidencias.CountAsync(e => e.InspeccionId == inspeccionId && e.VistaId == null && e.HallazgoId == null && e.ExtraId == null && !e.EsConstancia && !e.EsSello, ct);
+
+    public async Task<IReadOnlyList<clsInspeccionExtra>> ObtenerExtrasAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        await contexto.InspeccionExtras.Where(e => e.InspeccionId == inspeccionId).OrderBy(e => e.CreatedAt).ToListAsync(ct);
+
+    public Task<clsInspeccionExtra?> ObtenerExtraAsync(Guid extraId, CancellationToken ct = default) =>
+        contexto.InspeccionExtras.FirstOrDefaultAsync(e => e.Id == extraId, ct);
+
+    public async Task<IReadOnlySet<Guid>> ExtrasConFotoAsync(IReadOnlyCollection<Guid> extraIds, CancellationToken ct = default) =>
+        (await contexto.Evidencias.AsNoTracking().Where(e => e.ExtraId != null && extraIds.Contains(e.ExtraId.Value)).Select(e => e.ExtraId!.Value).Distinct().ToListAsync(ct)).ToHashSet();
+
+    public void Agregar(clsInspeccionExtra extra) => contexto.InspeccionExtras.Add(extra);
+
+    public void Quitar(clsInspeccionExtra extra) => contexto.InspeccionExtras.Remove(extra);
 
     public Task<bool> TieneLlegadaCerradaAsync(Guid etapaId, CancellationToken ct = default) =>
         contexto.Inspecciones.AnyAsync(i => i.EtapaId == etapaId && i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA, ct);

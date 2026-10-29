@@ -4,7 +4,7 @@ using IAAutos.Dominio.Comun;
 namespace IAAutos.Dominio.Inspecciones;
 
 /// <summary>
-/// Foto sellada. Es de una vista (una de las 7 obligatorias o de las 2 adicionales) o de un hallazgo, y lleva el sello del dispositivo (fecha,
+/// Foto sellada. Es de una vista (una de las 7 obligatorias o de las 2 adicionales), de un hallazgo o de un extra del vehiculo, y lleva el sello del dispositivo (fecha,
 /// ubicacion y precision), el del servidor (cuando la recibio) y el hash SHA-256 del archivo. Append-only por diseno.
 /// </summary>
 public sealed partial class clsEvidencia : clsEntidadBase
@@ -22,6 +22,9 @@ public sealed partial class clsEvidencia : clsEntidadBase
 
     /// <summary>Vista de foto del catalogo (frontal, trasera, piezas en el baul...). Nula en las fotos de un hallazgo.</summary>
     public Guid? VistaId { get; private set; }
+
+    /// <summary>El extra del vehiculo (fuera del dibujo estandar) al que pertenece la foto. Nulo en las fotos de una vista, de un hallazgo o de la acomodacion.</summary>
+    public Guid? ExtraId { get; private set; }
 
     public string StoragePath { get; private set; } = string.Empty;
 
@@ -90,6 +93,21 @@ public sealed partial class clsEvidencia : clsEntidadBase
         DateTimeOffset ahora) =>
         Construir(inspeccionId, null, null, esConstancia: false, esSello: false, storagePath, selloFecha, selloLat, selloLng, precision, dispositivoId, hashSha256, nota, ahora, deAcomodacion: true);
 
+    /// <summary>La foto de un extra del vehiculo: pertenece a la inspeccion del extra pero no a una vista ni a un hallazgo.</summary>
+    public static clsEvidencia CrearDeExtra(
+        Guid inspeccionId,
+        Guid extraId,
+        string storagePath,
+        DateTimeOffset selloFecha,
+        double? selloLat,
+        double? selloLng,
+        double? precision,
+        string? dispositivoId,
+        string? hashSha256,
+        string? nota,
+        DateTimeOffset ahora) =>
+        Construir(inspeccionId, null, null, esConstancia: false, esSello: false, storagePath, selloFecha, selloLat, selloLng, precision, dispositivoId, hashSha256, nota, ahora, extraId: extraId);
+
     /// <summary>La foto de una constancia de no firma: pertenece a la inspeccion de la transferencia pero no a una vista ni a un hallazgo.</summary>
     public static clsEvidencia CrearConstancia(
         Guid inspeccionId,
@@ -133,11 +151,12 @@ public sealed partial class clsEvidencia : clsEntidadBase
         string? hashSha256,
         string? nota,
         DateTimeOffset ahora,
-        bool deAcomodacion = false)
+        bool deAcomodacion = false,
+        Guid? extraId = null)
     {
         clsValidador.Latitud(selloLat, "sello_lat");
         clsValidador.Longitud(selloLng, "sello_lng");
-        if (!esConstancia && !esSello && !deAcomodacion && hallazgoId is null && vistaId is null)
+        if (!esConstancia && !esSello && !deAcomodacion && extraId is null && hallazgoId is null && vistaId is null)
         {
             throw clsErroresCampos.De("vista_id", "Indique la vista de la foto o el hallazgo al que pertenece");
         }
@@ -166,6 +185,7 @@ public sealed partial class clsEvidencia : clsEntidadBase
             InspeccionId = inspeccionId,
             HallazgoId = hallazgoId,
             VistaId = vistaId,
+            ExtraId = extraId,
             EsConstancia = esConstancia,
             EsSello = esSello,
             StoragePath = clsValidador.Requerido(storagePath, "storage_path es requerido"),

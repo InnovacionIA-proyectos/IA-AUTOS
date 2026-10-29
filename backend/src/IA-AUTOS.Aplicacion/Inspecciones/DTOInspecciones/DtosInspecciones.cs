@@ -52,7 +52,7 @@ public sealed record CrearHallazgoRequest(
     FotoEvidenciaRequest? Evidencia);
 
 /// <summary>
-/// Foto de una inspeccion: de una vista (<c>VistaId</c>, del catalogo vistas-foto) o de un hallazgo (<c>HallazgoId</c>). Sin ubicacion
+/// Foto de una inspeccion: de una vista (<c>VistaId</c>, del catalogo vistas-foto), de un hallazgo (<c>HallazgoId</c>) o de un extra del vehiculo (<c>ExtraId</c>). Sin ubicacion
 /// completa (<c>SelloLat</c> y <c>SelloLng</c>) la foto queda «sin ubicacion». Las fotos de vistas adicionales exigen <c>Nota</c>.
 /// </summary>
 public sealed record CrearEvidenciaRequest(
@@ -65,7 +65,14 @@ public sealed record CrearEvidenciaRequest(
     double? Precision,
     string? DispositivoId,
     string? Nota,
-    string? HashSha256);
+    string? HashSha256,
+    Guid? ExtraId = null);
+
+/// <summary>Un extra nuevo: <c>Tipo</c> es el codigo de un tipo activo de <c>tipos-extra</c>; <c>Texto</c> es obligatorio con el tipo «otro» y no se admite en los demas; <c>Observacion</c> es opcional (hasta 500 caracteres).</summary>
+public sealed record CrearExtraRequest(string? Tipo, string? Texto, string? Observacion);
+
+/// <summary>Cambia un extra: se envian los tres campos y reemplazan a los guardados (lo que no se envia queda sin valor).</summary>
+public sealed record ActualizarExtraRequest(string? Tipo, string? Texto, string? Observacion);
 
 /// <summary>
 /// Firma de la transferencia. La firma es SIEMPRE la de quien la envia (sale del token): si es quien entrega firma la entrega y si es quien
@@ -227,7 +234,8 @@ public sealed record InformeDetalleDto(
     string MomentoNombre,
     IReadOnlyList<NotaAclaratoriaDto> NotasAclaratorias,
     MotivoSinInspectorDto? MotivoSinInspector,
-    IReadOnlyList<NovedadProcesoDto> NovedadesProceso);
+    IReadOnlyList<NovedadProcesoDto> NovedadesProceso,
+    IReadOnlyList<ExtraDto> Extras);
 
 public sealed record ResumenCierreDto(int Evidencias, int Hallazgos);
 

@@ -122,12 +122,33 @@ internal sealed class clsConfiguracionEvidencia : IEntityTypeConfiguration<clsEv
         builder.HasOne<clsVistaFoto>().WithMany().HasForeignKey(e => e.VistaId)
             .HasConstraintName("FK_tblEvidencias_Vista").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(e => e.VistaId).HasDatabaseName("IX_tblEvidencias_Vista");
+        builder.HasOne<clsInspeccionExtra>().WithMany().HasForeignKey(e => e.ExtraId)
+            .HasConstraintName("FK_tblEvidencias_Extra").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(e => e.ExtraId).HasFilter("[ExtraId] IS NOT NULL").HasDatabaseName("IX_tblEvidencias_Extra");
         builder.Property(e => e.EsConstancia).HasDefaultValue(false);
         builder.Property(e => e.EsSello).HasDefaultValue(false);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(e => e.InspeccionId)
             .HasConstraintName("FK_tblEvidencias_Inspeccion").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(e => e.HallazgoId)
             .HasConstraintName("FK_tblEvidencias_Hallazgo").OnDelete(DeleteBehavior.NoAction);
+    }
+}
+
+internal sealed class clsConfiguracionInspeccionExtra : IEntityTypeConfiguration<clsInspeccionExtra>
+{
+    public void Configure(EntityTypeBuilder<clsInspeccionExtra> builder)
+    {
+        builder.ToTable("tblInspeccionExtras", t => t.HasTrigger("TR_tblInspeccionExtras_NoEnCerrada"));
+        clsConfiguracionBase.Base(builder);
+        builder.Property(e => e.Tipo).HasColumnType("varchar(30)").IsRequired();
+        builder.Property(e => e.Texto).HasMaxLength(clsInspeccionExtra.TEXTO_MAX);
+        builder.Property(e => e.Observacion).HasMaxLength(clsInspeccionExtra.OBSERVACION_MAX);
+        builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(e => e.InspeccionId)
+            .HasConstraintName("FK_tblInspeccionExtras_Inspeccion").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsTipoExtra>().WithMany().HasForeignKey(e => e.Tipo).HasPrincipalKey(t => t.Codigo)
+            .HasConstraintName("FK_tblInspeccionExtras_Tipo").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(e => e.InspeccionId).HasDatabaseName("IX_tblInspeccionExtras_Inspeccion");
+        builder.HasIndex(e => e.Tipo).HasDatabaseName("IX_tblInspeccionExtras_Tipo");
     }
 }
 

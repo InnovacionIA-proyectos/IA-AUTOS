@@ -47,6 +47,24 @@ public sealed class clsFabricaEvidencias(IAlmacenArchivos almacen, IReloj reloj)
         return clsEvidencia.CrearDeAcomodacion(inspeccionId, storagePath, selloFecha, lat, lng, precision, dispositivoId, hash, nota, reloj.Ahora);
     }
 
+    /// <summary>La foto de un extra del vehiculo: del archivo ya subido, con su hash calculado por el servidor, sin vista ni hallazgo.</summary>
+    public async Task<clsEvidencia> CrearDeExtraAsync(
+        Guid inspeccionId,
+        Guid extraId,
+        string storagePath,
+        DateTimeOffset selloFecha,
+        double? lat,
+        double? lng,
+        double? precision,
+        string? dispositivoId,
+        string? nota,
+        string? hashCliente,
+        CancellationToken ct)
+    {
+        var hash = await HashDelArchivoAsync(storagePath, hashCliente, ct);
+        return clsEvidencia.CrearDeExtra(inspeccionId, extraId, storagePath, selloFecha, lat, lng, precision, dispositivoId, hash, nota, reloj.Ahora);
+    }
+
     public async Task<clsEvidencia> CrearAsync(
         Guid inspeccionId,
         Guid? hallazgoId,

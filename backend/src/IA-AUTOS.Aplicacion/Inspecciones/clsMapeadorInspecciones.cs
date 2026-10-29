@@ -62,7 +62,10 @@ public static class clsMapeadorInspecciones
     public static EvidenciaDto AEvidencia(clsEvidencia e) => new(
         e.Id, e.InspeccionId, e.HallazgoId, e.SelloFecha, e.SelloLat, e.SelloLng,
         clsUrlsArchivos.ParaStoragePath(e.StoragePath), null, e.CreatedAt, e.UpdatedAt,
-        e.VistaId, e.HashSha256, e.SelloServidorAt, e.Precision, e.DispositivoId, e.Nota, e.SinUbicacion, e.EsConstancia, e.EsSello, e.StoragePath);
+        e.VistaId, e.HashSha256, e.SelloServidorAt, e.Precision, e.DispositivoId, e.Nota, e.SinUbicacion, e.EsConstancia, e.EsSello, e.StoragePath, e.ExtraId);
+
+    public static ExtraDto AExtra(clsInspeccionExtra e, string nombreDelTipo, IReadOnlyList<EvidenciaDto> fotos) => new(
+        e.Id, e.InspeccionId, e.Tipo, nombreDelTipo, e.Texto, clsInspeccionExtra.NombreParaMostrar(e.Tipo, nombreDelTipo, e.Texto), e.Observacion, e.CreatedAt, e.UpdatedAt, fotos);
 
     public static TransferenciaDto ATransferencia(clsTransferenciaCustodia t) => new(
         t.Id, t.InspeccionId, t.EntregaUsuarioId, t.RecibeUsuarioId, t.EstaCompleta, t.FirmadaAt, t.CreatedAt, t.UpdatedAt,

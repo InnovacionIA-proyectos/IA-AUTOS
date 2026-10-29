@@ -144,7 +144,24 @@ public sealed record EvidenciaDto(
     bool SinUbicacion,
     bool EsConstancia,
     bool EsSello,
-    [property: System.Text.Json.Serialization.JsonIgnore] string? RutaArchivo = null);
+    [property: System.Text.Json.Serialization.JsonIgnore] string? RutaArchivo = null,
+    Guid? ExtraId = null);
+
+/// <summary>
+/// Un extra del vehiculo fuera del dibujo estandar que reporta una inspeccion: <c>Tipo</c> (codigo del catalogo <c>tipos-extra</c>) y su nombre, <c>Texto</c> (solo en «otro»), <c>Nombre</c> (como se muestra:
+/// el del tipo, o «Otro: texto»), la observacion y sus fotos selladas (las evidencias con este <c>ExtraId</c>).
+/// </summary>
+public sealed record ExtraDto(
+    Guid Id,
+    Guid InspeccionId,
+    string Tipo,
+    string TipoNombre,
+    string? Texto,
+    string Nombre,
+    string? Observacion,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<EvidenciaDto> Fotos);
 
 /// <summary>
 /// Las firmas dibujadas no se exponen en los listados. <c>Firmada</c> es true cuando estan las dos firmas (tambien si fue con reservas);
