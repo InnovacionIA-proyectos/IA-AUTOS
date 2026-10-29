@@ -92,6 +92,39 @@ void main() {
     expect(find.text('Origen: conductor'), findsNothing);
   });
 
+  // Al conductor el servidor le oculta el nivel, también cuando ya lo revisaron. Decirle «Por revisar» le dice
+  // algo que no es: no es que nadie lo haya clasificado, es que a él no se le muestra.
+  testWidgets('revisado y sin nivel a la vista dice «Revisado»', (tester) async {
+    await abrir(
+      tester,
+      HallazgoVista(
+        id: 'h1',
+        zona: 'Capot',
+        clase: 'golpe',
+        tamano: 'mas_20cm',
+        revisadoEn: DateTime.utc(2026, 10, 28),
+      ),
+    );
+
+    expect(find.text('Golpe · Más de 20 cm · Revisado'), findsOneWidget);
+  });
+
+  testWidgets('con nivel manda el nivel, no el «Revisado»', (tester) async {
+    await abrir(
+      tester,
+      HallazgoVista(
+        id: 'h1',
+        zona: 'Capot',
+        clase: 'golpe',
+        tamano: 'mas_20cm',
+        nivel: 'v1',
+        revisadoEn: DateTime.utc(2026, 10, 28),
+      ),
+    );
+
+    expect(find.text('Golpe · Más de 20 cm · V1'), findsOneWidget);
+  });
+
   testWidgets('sin foto no se deja un hueco', (tester) async {
     await abrir(tester, const HallazgoVista(id: 'h1', zona: 'Capot', clase: 'golpe', tamano: 'mas_20cm'));
 

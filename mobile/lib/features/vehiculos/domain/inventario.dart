@@ -14,6 +14,7 @@ class HallazgoVista {
     this.nivel,
     this.esPreexistente = false,
     this.origen,
+    this.revisadoEn,
   });
 
   factory HallazgoVista.fromJson(Map<String, dynamic> json) => HallazgoVista(
@@ -28,6 +29,7 @@ class HallazgoVista {
         nivel: json['nivel_severidad'] as String?,
         esPreexistente: json['es_preexistente'] as bool? ?? false,
         origen: json['origen'] as String?,
+        revisadoEn: switch (json['revisado_at']) { final String f => DateTime.tryParse(f), _ => null },
       );
 
   final String id;
@@ -50,6 +52,14 @@ class HallazgoVista {
   final String? origen;
 
   bool get loRegistroElConductor => origen == 'conductor';
+
+  /// Cuándo lo revisó un inspector. Null si nadie lo ha hecho **o** si a quien pregunta no se le muestra: al
+  /// conductor el servidor le oculta la revisión entera.
+  final DateTime? revisadoEn;
+
+  /// Qué decir del nivel cuando no hay nivel que decir. Revisado sin nivel a la vista es el caso del conductor:
+  /// alguien ya lo clasificó, pero a él no se le muestra con qué.
+  bool get yaLoRevisaron => revisadoEn != null;
 }
 
 class EvidenciaVista {

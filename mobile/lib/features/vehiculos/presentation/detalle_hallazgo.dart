@@ -54,8 +54,13 @@ class _DetalleHallazgo extends StatelessWidget {
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
     final clase = hallazgo.clase == null ? 'Sin clase' : catalogos.etiqueta(Catalogo.clasesDano, hallazgo.clase!);
-    // Sin nivel es la novedad de un conductor que todavía no revisa un inspector.
-    final nivel = hallazgo.nivel == null ? 'Por revisar' : catalogos.etiqueta(Catalogo.nivelesSeveridad, hallazgo.nivel!);
+    // Sin nivel hay dos casos distintos y conviene no confundirlos: que nadie lo haya clasificado, o que ya lo
+    // hayan hecho y a quien mira no se le muestre con qué. Al conductor el servidor le oculta el nivel.
+    final nivel = switch (hallazgo) {
+      HallazgoVista(nivel: final codigo?) => catalogos.etiqueta(Catalogo.nivelesSeveridad, codigo),
+      HallazgoVista(yaLoRevisaron: true) => 'Revisado',
+      _ => 'Por revisar',
+    };
 
     return SafeArea(
       child: Padding(
