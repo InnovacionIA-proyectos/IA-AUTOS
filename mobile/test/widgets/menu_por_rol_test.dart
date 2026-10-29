@@ -48,21 +48,31 @@ List<String> etiquetas(WidgetTester tester) => tester
     .toList();
 
 void main() {
-  // S6-HU-02.4: lo del conductor es su viaje. No ve la lista de informes ni Sofasa: con una sola pestaña ni siquiera
-  // se dibuja la barra.
-  testWidgets('el conductor no ve Sofasa ni Inspecciones: le toca su viaje y sus unidades', (tester) async {
+  // S6-HU-02.4: lo del conductor es su viaje y sus avisos. No ve la lista de informes ni Sofasa.
+  testWidgets('el conductor no ve Sofasa ni Inspecciones: le toca su viaje y sus avisos', (tester) async {
     await abrir(tester, sesionCon('conductor', capacidadesDeRol('conductor')));
 
     expect(find.byType(MisViajesPage), findsOneWidget);
-    expect(find.byType(NavigationBar), findsNothing);
-    expect(find.text('Sofasa'), findsNothing);
-    expect(find.text('Inspecciones'), findsNothing);
+    expect(etiquetas(tester), ['Mis viajes', 'Avisos']);
+  });
+
+  // S6-HU-02.11: el comercial no tiene bandeja de alertas.
+  testWidgets('el comercial no ve Avisos', (tester) async {
+    await abrir(tester, sesionCon('comercial', capacidadesDeRol('comercial')));
+
+    expect(etiquetas(tester), isNot(contains('Avisos')));
+  });
+
+  testWidgets('el inspector ve Avisos con sus dos pestañas de siempre', (tester) async {
+    await abrir(tester, sesionCon('inspector', capacidadesDeRol('inspector')));
+
+    expect(etiquetas(tester), ['Mis viajes', 'Inspecciones', 'Avisos']);
   });
 
   testWidgets('el coordinador de calidad sí la ve', (tester) async {
     await abrir(tester, sesionCon('coordinador_calidad', capacidadesDeRol('coordinador_calidad')));
 
-    expect(etiquetas(tester), ['Mis viajes', 'Inspecciones', 'Sofasa']);
+    expect(etiquetas(tester), ['Mis viajes', 'Inspecciones', 'Sofasa', 'Avisos']);
   });
 
   testWidgets('entra por su primera pestaña', (tester) async {

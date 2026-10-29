@@ -9,6 +9,9 @@ abstract final class Capacidad {
   static const administrarCatalogos = 'administrar_catalogos';
   static const cargarVehiculos = 'cargar_vehiculos';
   static const verReportes = 'ver_reportes';
+
+  /// La bandeja de avisos. La tienen todos menos el comercial.
+  static const verAlertas = 'ver_alertas';
 }
 
 /// Respaldo cuando no se pudieron traer del servidor: una sesión restaurada de una versión anterior, o un `/me`
@@ -25,6 +28,8 @@ List<String> capacidadesDeRol(String rol) => [
         Capacidad.administrarCatalogos,
       ],
       if (rol == 'admin' || rol == 'super_admin') Capacidad.cargarVehiculos,
+      if (rol == 'coordinador_calidad' || rol == 'admin' || rol == 'super_admin' || rol == 'inspector' || rol == 'conductor')
+        Capacidad.verAlertas,
     ];
 
 class Usuario {

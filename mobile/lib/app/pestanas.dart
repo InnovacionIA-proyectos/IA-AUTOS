@@ -33,6 +33,13 @@ enum Pestana {
     capacidad: Capacidad.gestionarViajes,
     icono: Icons.inventory_2_outlined,
     iconoActivo: Icons.inventory_2,
+  ),
+  avisos(
+    ruta: '/avisos',
+    etiqueta: 'Avisos',
+    capacidad: Capacidad.verAlertas,
+    icono: Icons.notifications_outlined,
+    iconoActivo: Icons.notifications,
   );
 
   const Pestana({

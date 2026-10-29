@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/auth/domain/sesion.dart';
+import '../features/avisos/presentation/avisos_page.dart';
+import '../features/avisos/providers.dart';
 import '../features/auth/presentation/auth_controller.dart';
 import '../features/auth/presentation/cambiar_pin_page.dart';
 import '../features/auth/presentation/login_page.dart';
@@ -131,6 +133,12 @@ final routerProvider = Provider<GoRouter>((ref) {
               builder: (_, _) => const Permitido(capacidad: Capacidad.gestionarViajes, child: SofasaPage()),
             ),
           ]),
+          StatefulShellBranch(routes: [
+            GoRoute(
+              path: '/avisos',
+              builder: (_, _) => const Permitido(capacidad: Capacidad.verAlertas, child: AvisosPage()),
+            ),
+          ]),
         ],
       ),
     ],
@@ -150,6 +158,8 @@ class _Estructura extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final pendientes = ref.watch(syncControllerProvider.select((s) => s.pendientes + s.fallidos));
     final visibles = pestanasDe(ref.watch(authControllerProvider.select((e) => e.sesion?.usuario)));
+    // Los avisos sin leer van como insignia en su pestaña; solo se piden si la persona tiene la bandeja.
+    final sinLeer = visibles.contains(Pestana.avisos) ? (ref.watch(avisosProvider).value?.noLeidos ?? 0) : 0;
 
     // Con una sola pestaña no hay nada entre qué elegir (y NavigationBar exige al menos dos).
     if (visibles.length < 2) return Scaffold(body: shell);
@@ -167,8 +177,8 @@ class _Estructura extends ConsumerWidget {
         destinations: [
           for (final pestana in visibles)
             NavigationDestination(
-              icon: _conInsignia(pestana, pestana.icono, pendientes),
-              selectedIcon: _conInsignia(pestana, pestana.iconoActivo, pendientes),
+              icon: _conInsignia(pestana, pestana.icono, pendientes, sinLeer),
+              selectedIcon: _conInsignia(pestana, pestana.iconoActivo, pendientes, sinLeer),
               label: pestana.etiqueta,
             ),
         ],
@@ -176,7 +186,9 @@ class _Estructura extends ConsumerWidget {
     );
   }
 
-  Widget _conInsignia(Pestana pestana, IconData icono, int pendientes) => pestana == Pestana.inspecciones
-      ? Badge(isLabelVisible: pendientes > 0, label: Text('$pendientes'), child: Icon(icono))
-      : Icon(icono);
+  Widget _conInsignia(Pestana pestana, IconData icono, int pendientes, int sinLeer) => switch (pestana) {
+        Pestana.inspecciones => Badge(isLabelVisible: pendientes > 0, label: Text('$pendientes'), child: Icon(icono)),
+        Pestana.avisos => Badge(isLabelVisible: sinLeer > 0, label: Text('$sinLeer'), child: Icon(icono)),
+        _ => Icon(icono),
+      };
 }
