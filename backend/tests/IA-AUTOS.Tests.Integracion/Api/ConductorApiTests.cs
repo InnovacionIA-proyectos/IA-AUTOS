@@ -12,7 +12,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// El conductor en ruta: registra las novedades del recorrido de cada unidad de su viaje y confirma su llegada; las novedades avisan a los coordinadores de calidad y administradores del
 /// cliente del vehiculo y el conductor no ve los hallazgos que registraron otros.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class ConductorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-10-21T08:30:00-05:00";

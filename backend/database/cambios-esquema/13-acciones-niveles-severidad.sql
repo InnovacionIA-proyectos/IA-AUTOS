@@ -34,9 +34,9 @@ IF OBJECT_ID(@q + N'.tblNivelesSeveridad', N'U') IS NULL
 IF COL_LENGTH(@q + N'.tblNivelesSeveridad', N'Accion') IS NULL
     THROW 50002, N'Falta la columna Accion de tblNivelesSeveridad: ejecute antes 02-catalogos-maestros.sql.', 1;
 
--- Acciones por nivel (los acentos se escriben con NCHAR para que el script sea ASCII). La tabla temporal es visible desde el SQL dinamico.
+-- Acciones por nivel (los acentos se escriben con NCHAR para que el script sea ASCII). La tabla temporal es visible desde el SQL dinamico y usa la colacion de la base (no la de tempdb) para que se pueda comparar con sus columnas.
 IF OBJECT_ID(N'tempdb..#acciones') IS NOT NULL DROP TABLE #acciones;
-CREATE TABLE #acciones (Codigo varchar(30) NOT NULL PRIMARY KEY, Accion nvarchar(500) NOT NULL);
+CREATE TABLE #acciones (Codigo varchar(30) COLLATE DATABASE_DEFAULT NOT NULL PRIMARY KEY, Accion nvarchar(500) COLLATE DATABASE_DEFAULT NOT NULL);
 INSERT #acciones (Codigo, Accion) VALUES
     ('v1_plus', N'Se recupera antes del despacho'),
     ('v1',      N'Se rechaza el veh' + NCHAR(237) + N'culo'),

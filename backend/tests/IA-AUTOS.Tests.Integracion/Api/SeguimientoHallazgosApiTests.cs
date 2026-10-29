@@ -10,7 +10,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Seguimiento del hallazgo: el coordinador (y comercial, admin y super admin) lo lleva a validado, rechazado, recuperado o derogado; un V2 se valida con la foto del sello de
 /// quien valida; la respuesta dice si la evidencia esta completa y que falta; todo queda en un historial que no se modifica.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class SeguimientoHallazgosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-07-17T12:30:15.123Z";

@@ -13,7 +13,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// La segunda inspeccion del cargue documenta la acomodacion en la ninera: cada unidad del viaje queda en una posicion de 1 a 7, unica dentro del viaje (ESC-01 a ESC-03); el cierre exige la posicion de cada
 /// unidad activa y las fotos de la acomodacion, y deja de exigir las fotos de las vistas de estado (ESC-04); una unidad que no sale no exige posicion y la libera (ESC-05).
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed partial class AcomodacionApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-11-03T06:00:00-05:00";

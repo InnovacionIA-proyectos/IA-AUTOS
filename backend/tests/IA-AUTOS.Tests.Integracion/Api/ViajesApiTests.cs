@@ -11,7 +11,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// El viaje como eje: alta, consulta, cambios, asignacion de VIN, estado, carga por Excel, y la visibilidad por asignacion
 /// (inspectores y conductores solo ven lo de sus viajes).
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-07-17T12:30:15.123Z";

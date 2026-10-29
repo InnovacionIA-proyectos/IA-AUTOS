@@ -10,7 +10,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Listado y detalle de los hallazgos: paginado, con filtros, con el contexto de su inspeccion, y visible solo para el inspector de sus viajes y para quien se limita a su
 /// cliente; el conductor no los consulta.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed class HallazgosListadoApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);

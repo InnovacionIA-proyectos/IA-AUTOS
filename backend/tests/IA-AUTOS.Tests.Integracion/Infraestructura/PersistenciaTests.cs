@@ -14,7 +14,7 @@ using static IAAutos.Tests.Integracion.Infraestructura.clsEscenario;
 
 namespace IAAutos.Tests.Integracion.Infraestructura;
 
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
 {
     public Task InitializeAsync() => bd.LimpiarAsync();

@@ -10,7 +10,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Una unidad con un hallazgo V1+ puede no salir del viaje sin bloquearlo: la marcan el inspector del viaje o el coordinador de calidad con su motivo y el hallazgo que lo causa,
 /// conserva su trazabilidad y puede quedar reemplazada por otro VIN.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);

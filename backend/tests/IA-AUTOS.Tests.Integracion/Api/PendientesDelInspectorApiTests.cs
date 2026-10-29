@@ -14,7 +14,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// La lista de pendientes del inspector (cargues de hoy de sus puntos y entregas que llegan a ellos, con su estado), su visibilidad (pendientes de su punto mas lo que reclamo; el conductor no cambia) y el
 /// aviso al coordinador de un camion reclamado sin actividad (una vez por reclamo, sin liberarlo).
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed class PendientesDelInspectorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private readonly clsEnviadorPushFalso _push = new();

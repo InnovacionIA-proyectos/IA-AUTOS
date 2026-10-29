@@ -11,7 +11,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Inspeccion de salida y de llegada: las 7 vistas obligatorias con su sello, las fotos adicionales, la foto propia de cada hallazgo, la
 /// etapa anterior cerrada y las correcciones por version. Las etapas del escenario son Cargue (0), Transporte (1) y Descargue (2).
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-07-17T12:30:15.123Z";

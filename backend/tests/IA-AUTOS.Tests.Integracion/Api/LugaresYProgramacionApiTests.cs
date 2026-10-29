@@ -11,7 +11,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// El catalogo de lugares reales y la carga de cargues con programacion: el coordinador crea lugares (ESC-01), carga por Excel con fecha y hora programada, lugar de cargue y destino por unidad (ESC-02 a ESC-05),
 /// crea un lugar desde la previsualizacion (ESC-04), solo quien administra cambia el catalogo (ESC-07) y el viaje programado admite corregir su fecha y su lugar de cargue.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed class LugaresYProgramacionApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);

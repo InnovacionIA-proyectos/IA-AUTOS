@@ -12,7 +12,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Exportaciones a Excel (GET /api/exportaciones/*.xlsx): quien las descarga (coordinador, comercial y administradores, con los datos de su cliente), el nombre del archivo, las columnas de cada
 /// uno (datos de la unidad, el viaje y la etapa; las firmas en las inspecciones; la zona y la foto en los hallazgos) y los filtros de los listados.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsPruebaTableroBase(bd)
 {
     private static readonly string[] RUTAS = ["/api/exportaciones/viajes.xlsx", "/api/exportaciones/inspecciones.xlsx", "/api/exportaciones/hallazgos.xlsx"];

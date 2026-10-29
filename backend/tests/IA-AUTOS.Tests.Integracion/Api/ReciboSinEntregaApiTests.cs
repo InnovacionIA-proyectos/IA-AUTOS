@@ -13,7 +13,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// El recibo sin entrega: cuando el conductor hizo la salida del Cargue (sin personal de apoyo, o con la excepcion «No hay inspector») nadie de Botero Soto firma la entrega y el conductor del viaje cierra
 /// la transferencia solo con su firma. Desbloquea la etapa siguiente, deja la evidencia de los hallazgos incompleta, crea la novedad de proceso solo si hubo excepcion y aparece en el PDF y en el reporte.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-10-23T08:30:00-05:00";

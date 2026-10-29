@@ -12,7 +12,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// PDF del informe de una inspeccion (GET /api/inspecciones/{id}/pdf) y del inventario del VIN (GET /api/vehiculos/{vin}/inventario/pdf): con las fotos incrustadas desde el almacen, el panel de danos
 /// con las zonas marcadas, las firmas, las notas aclaratorias y el historial de seguimiento; quien los ve y el maximo de fotos por documento.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed partial class PdfsApiTests(clsBaseDatosFixture bd) : clsPruebaTableroBase(bd)
 {
     // La inspeccion de llegada del Cargue de V3 (Toyota, importacion), con su hallazgo en la zona izquierdo 7.

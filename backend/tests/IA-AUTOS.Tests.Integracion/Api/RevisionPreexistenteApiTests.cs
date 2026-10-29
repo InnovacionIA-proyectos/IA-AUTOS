@@ -12,7 +12,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// «Ya estaba registrado» al revisar: quien revisa el hallazgo del conductor puede confirmar que el dano ya venia (<c>es_preexistente</c> y <c>hallazgo_origen_id</c>) con la misma validacion de cuando se crea un
 /// hallazgo; el coordinador de calidad del cliente tambien lo hace a distancia y pide los hallazgos previos, y revisa los del conductor en la llegada del Descargue que el hizo sin inspector en destino.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed class RevisionPreexistenteApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private readonly clsEnviadorPushFalso _push = new();

@@ -13,7 +13,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// El inspector reclama su camion: reclama el cargue de HOY de uno de sus puntos (ESC-02) o la entrega de un viaje que llega a un punto suyo (ESC-08); el segundo en reclamar recibe 409 (ESC-03) y, si
 /// dos lo hacen a la vez, gana exactamente uno; lo libera el propio inspector, el coordinador o un administrador y lo capturado conserva su autor (ESC-04, ESC-05); no hay caducidad automatica.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);

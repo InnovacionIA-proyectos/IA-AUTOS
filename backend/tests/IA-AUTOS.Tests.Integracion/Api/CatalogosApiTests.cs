@@ -8,7 +8,7 @@ using IAAutos.Tests.Integracion.Infraestructura;
 namespace IAAutos.Tests.Integracion.Api;
 
 /// <summary>Catalogos maestros: lectura con version (ETag), administracion por rol, valores en uso y reglas de los cuadrantes y sus poligonos.</summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private static readonly string[] NOMBRES =
