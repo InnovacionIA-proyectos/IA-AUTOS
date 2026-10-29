@@ -149,7 +149,7 @@ public sealed partial class MigracionAlertasTests : IAsyncLifetime
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "database", "ddl.sql"));
 
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.views WHERE name = 'vwHallazgosVentanaUmbral'"));
-        Assert.Equal(15, await ContarAsync("SELECT COUNT(*) FROM dbo.tblParametros"));
+        Assert.Equal(19, await ContarAsync("SELECT COUNT(*) FROM dbo.tblParametros"));
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM dbo.vwHallazgosVentanaUmbral"));
     }
 
