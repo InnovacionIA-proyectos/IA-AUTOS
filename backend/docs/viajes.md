@@ -36,6 +36,7 @@ programado lo pasa a `en_curso`. Un viaje cancelado deja de ser visible para ins
 - **Conductor en ruta.** El conductor del viaje registra las novedades de cada unidad (`POST /api/viajes/{id}/vehiculos/{vin}/novedades`) y confirma su llegada (`.../llegada`) sobre la etapa de Transporte del VIN; cada VIN del viaje trae su
   `estado_transporte` (`sin_registro`, `con_novedad`, `sin_novedad` o `llegada_con_novedad`) y sus `novedades`. Una unidad marcada «no sale» no admite ninguna de las dos (`409 UNIDAD_NO_SALE`). Ver [CONTRATO.md](../CONTRATO.md) («Conductor en ruta») y
   [notificaciones.md](notificaciones.md).
+- **Programación y destino por unidad.** La carga por Excel exige por fila la fecha y hora programada del cargue (sin zona horaria es hora de Colombia, UTC-5), el lugar de cargue y el lugar de destino de esa unidad; ambos lugares se buscan por nombre en el catálogo `lugares` (activos). Las filas de un mismo `codigo_mtrack` deben coincidir en fecha y lugar de cargue, y cada VIN conserva su destino (`tblViajeVehiculos.LugarDestinoId`). `PATCH /api/viajes/{id}` corrige `fecha_programada` y `lugar_cargue_id` solo mientras el viaje está `programado` (en curso, `409`). `POST /api/viajes` no cambia: no recibe estos campos.
 - **Fuera de este servicio:** la integración con MTrack (el código se digita o llega en el Excel) y la visibilidad por cliente del resto de recursos (vehículos, inspecciones, órdenes).
 
 ## `Completa` e indices de los listados

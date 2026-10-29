@@ -30,6 +30,11 @@ internal sealed class clsConfiguracionViaje : IEntityTypeConfiguration<clsViaje>
             .HasConstraintName("FK_tblViajes_Origen").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsPuntoCustodia>().WithMany().HasForeignKey(v => v.DestinoId)
             .HasConstraintName("FK_tblViajes_Destino").OnDelete(DeleteBehavior.NoAction);
+        builder.Property(v => v.FechaProgramada).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.HasOne<clsLugar>().WithMany().HasForeignKey(v => v.LugarCargueId)
+            .HasConstraintName("FK_tblViajes_LugarCargue").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(v => v.LugarCargueId).HasDatabaseName("IX_tblViajes_LugarCargue");
+        builder.HasIndex(v => v.FechaProgramada).HasDatabaseName("IX_tblViajes_FechaProgramada");
 
         // El codigo MTrack es unico entre los viajes que lo tienen (los migrados pueden no tenerlo).
         builder.HasIndex(v => v.CodigoMtrack).IsUnique().HasFilter("[CodigoMtrack] IS NOT NULL").HasDatabaseName("UX_tblViajes_CodigoMtrack");
@@ -48,6 +53,9 @@ internal sealed class clsConfiguracionViajeVehiculo : IEntityTypeConfiguration<c
             .HasConstraintName("FK_tblViajeVehiculos_Viaje").OnDelete(DeleteBehavior.Cascade);
         builder.HasOne<clsVehiculo>().WithMany().HasForeignKey(v => v.VehiculoId)
             .HasConstraintName("FK_tblViajeVehiculos_Vehiculo").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsLugar>().WithMany().HasForeignKey(v => v.LugarDestinoId)
+            .HasConstraintName("FK_tblViajeVehiculos_LugarDestino").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(v => v.LugarDestinoId).HasDatabaseName("IX_tblViajeVehiculos_LugarDestino");
         builder.Property(v => v.EstadoUnidad).HasMaxLength(10).HasDefaultValue(clsEstadoUnidad.ACTIVA);
         // Completa la calculan los triggers de la base: la aplicacion nunca la escribe.
         builder.Property(v => v.Completa).HasDefaultValue(false)

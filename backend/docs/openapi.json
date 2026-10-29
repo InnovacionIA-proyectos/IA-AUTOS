@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "2.5.0"
+    "version": "2.6.0"
   },
   "paths": {
     "/api/viajes": {
@@ -449,7 +449,9 @@
                             "estado_unidad": "texto",
                             "no_sale": null,
                             "estado_transporte": "texto",
-                            "novedades": 1
+                            "novedades": 1,
+                            "lugar_destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "lugar_destino": "texto"
                           }
                         ],
                         "clientes": [
@@ -460,7 +462,10 @@
                           }
                         ],
                         "created_at": "2026-10-22T14:30:00.000Z",
-                        "updated_at": "2026-10-22T14:30:00.000Z"
+                        "updated_at": "2026-10-22T14:30:00.000Z",
+                        "fecha_programada": "2026-10-22T14:30:00.000Z",
+                        "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "lugar_cargue": "texto"
                       }
                     ]
                   ],
@@ -504,7 +509,9 @@
                             "estado_unidad": "texto",
                             "no_sale": null,
                             "estado_transporte": "texto",
-                            "novedades": 1
+                            "novedades": 1,
+                            "lugar_destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "lugar_destino": "texto"
                           }
                         ],
                         "clientes": [
@@ -515,7 +522,10 @@
                           }
                         ],
                         "created_at": "2026-10-22T14:30:00.000Z",
-                        "updated_at": "2026-10-22T14:30:00.000Z"
+                        "updated_at": "2026-10-22T14:30:00.000Z",
+                        "fecha_programada": "2026-10-22T14:30:00.000Z",
+                        "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "lugar_cargue": "texto"
                       }
                     ]
                   ],
@@ -559,7 +569,9 @@
                             "estado_unidad": "texto",
                             "no_sale": null,
                             "estado_transporte": "texto",
-                            "novedades": 1
+                            "novedades": 1,
+                            "lugar_destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "lugar_destino": "texto"
                           }
                         ],
                         "clientes": [
@@ -570,7 +582,10 @@
                           }
                         ],
                         "created_at": "2026-10-22T14:30:00.000Z",
-                        "updated_at": "2026-10-22T14:30:00.000Z"
+                        "updated_at": "2026-10-22T14:30:00.000Z",
+                        "fecha_programada": "2026-10-22T14:30:00.000Z",
+                        "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "lugar_cargue": "texto"
                       }
                     ]
                   ],
@@ -17476,7 +17491,9 @@
             "inspector_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "origen_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "con_personal_apoyo": true
+            "con_personal_apoyo": true,
+            "fecha_programada": "2026-10-22T14:30:00.000Z",
+            "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -17550,6 +17567,14 @@
               "null",
               "boolean"
             ]
+          },
+          "fecha_programada": {},
+          "lugar_cargue_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -18563,7 +18588,10 @@
                 "trailer": "TR-1",
                 "cedula_conductor": "texto",
                 "unidad": "texto",
-                "codigo_mtrack": "MTK-0001"
+                "codigo_mtrack": "MTK-0001",
+                "fecha_programada": "2026-10-22T14:30:00.000Z",
+                "origen": "texto",
+                "destino": "texto"
               }
             ]
           }
@@ -18587,7 +18615,10 @@
                   "trailer": "TR-1",
                   "cedula_conductor": "texto",
                   "unidad": "texto",
-                  "codigo_mtrack": "MTK-0001"
+                  "codigo_mtrack": "MTK-0001",
+                  "fecha_programada": "2026-10-22T14:30:00.000Z",
+                  "origen": "texto",
+                  "destino": "texto"
                 }
               ],
               "required": [
@@ -18639,6 +18670,24 @@
                   ]
                 },
                 "codigo_mtrack": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "fecha_programada": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "origen": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "destino": {
                   "type": [
                     "null",
                     "string"
@@ -24792,7 +24841,10 @@
                 "vehiculos_completos": 1,
                 "clientes": [],
                 "created_at": "2026-10-22T14:30:00.000Z",
-                "updated_at": "2026-10-22T14:30:00.000Z"
+                "updated_at": "2026-10-22T14:30:00.000Z",
+                "fecha_programada": "2026-10-22T14:30:00.000Z",
+                "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "lugar_cargue": "texto"
               }
             ],
             "total": 1,
@@ -27073,7 +27125,9 @@
                   "vin_reemplazo": "texto"
                 },
                 "estado_transporte": "texto",
-                "novedades": 1
+                "novedades": 1,
+                "lugar_destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "lugar_destino": "texto"
               }
             ],
             "clientes": [
@@ -27084,7 +27138,10 @@
               }
             ],
             "created_at": "2026-10-22T14:30:00.000Z",
-            "updated_at": "2026-10-22T14:30:00.000Z"
+            "updated_at": "2026-10-22T14:30:00.000Z",
+            "fecha_programada": "2026-10-22T14:30:00.000Z",
+            "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar_cargue": "texto"
           }
         ],
         "required": [
@@ -27221,6 +27278,20 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "fecha_programada": {},
+          "lugar_cargue_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "lugar_cargue": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -27253,7 +27324,10 @@
               }
             ],
             "created_at": "2026-10-22T14:30:00.000Z",
-            "updated_at": "2026-10-22T14:30:00.000Z"
+            "updated_at": "2026-10-22T14:30:00.000Z",
+            "fecha_programada": "2026-10-22T14:30:00.000Z",
+            "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar_cargue": "texto"
           }
         ],
         "required": [
@@ -27393,6 +27467,20 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "fecha_programada": {},
+          "lugar_cargue_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "lugar_cargue": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -27417,7 +27505,9 @@
               "vin_reemplazo": "texto"
             },
             "estado_transporte": "texto",
-            "novedades": 1
+            "novedades": 1,
+            "lugar_destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar_destino": "texto"
           }
         ],
         "required": [
@@ -27488,6 +27578,19 @@
           "novedades": {
             "type": "integer",
             "format": "int32"
+          },
+          "lugar_destino_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "lugar_destino": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       }

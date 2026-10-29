@@ -141,10 +141,18 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes"));
     }
 
+    /// <summary>Crea por la API los dos lugares que usan las filas de la carga: «CEDI Envigado» (CEDI 1) y «Concesionario Autolarte Medellín» (Concesionario).</summary>
+    private async Task LugaresDeLaCargaAsync(Sesion coordinador)
+    {
+        Assert.Equal(HttpStatusCode.Created, (await Cliente(coordinador.Token).PostAsync("/api/catalogos/lugares", Cuerpo(new { nombre = "CEDI Envigado", tipo = "cedi_1", ciudad = "Envigado" }))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await Cliente(coordinador.Token).PostAsync("/api/catalogos/lugares", Cuerpo(new { nombre = "Concesionario Autolarte Medellín", tipo = "concesionario", ciudad = "Medellín" }))).StatusCode);
+    }
+
     [Fact]
     public async Task La_carga_por_excel_muestra_el_error_de_cada_fila_antes_de_confirmar_y_solo_guarda_las_validas()
     {
         var coordinador = await CoordinadorAsync();
+        await LugaresDeLaCargaAsync(coordinador);
         await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR, cedula: "1.234.567");
         foreach (var vin in new[] { "VIN-X-01", "VIN-X-02", "VIN-X-03", "VIN-X-04" })
         {
@@ -153,11 +161,11 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
 
         object[] filas =
         [
-            new { fila = 2, vin = "VIN-X-01", placa = "ABC123", trailer = "T-1", cedula_conductor = "1234567", unidad = "Niñera", codigo_mtrack = "MTK-X1" },
-            new { fila = 3, vin = "vin-x-02", placa = "ABC123", trailer = "T-1", cedula_conductor = "1.234.567", unidad = "ninera", codigo_mtrack = "MTK-X1" },
-            new { fila = 4, vin = "VIN-NO-EXISTE", placa = "DEF456", trailer = "", cedula_conductor = "1234567", unidad = "Niñera", codigo_mtrack = "MTK-X2" },
-            new { fila = 5, vin = "VIN-X-03", placa = "GHI789", trailer = "", cedula_conductor = "99999999", unidad = "Niñera", codigo_mtrack = "MTK-X3" },
-            new { fila = 6, vin = "VIN-X-04", placa = "JKL012", trailer = "T-4", cedula_conductor = "1234567", unidad = "Nodriza", codigo_mtrack = "MTK-X4" },
+            new { fila = 2, vin = "VIN-X-01", placa = "ABC123", trailer = "T-1", cedula_conductor = "1234567", unidad = "Niñera", codigo_mtrack = "MTK-X1", fecha_programada = "2026-11-03 06:00", origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" },
+            new { fila = 3, vin = "vin-x-02", placa = "ABC123", trailer = "T-1", cedula_conductor = "1.234.567", unidad = "ninera", codigo_mtrack = "MTK-X1", fecha_programada = "2026-11-03 06:00", origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" },
+            new { fila = 4, vin = "VIN-NO-EXISTE", placa = "DEF456", trailer = "", cedula_conductor = "1234567", unidad = "Niñera", codigo_mtrack = "MTK-X2", fecha_programada = "2026-11-03 06:00", origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" },
+            new { fila = 5, vin = "VIN-X-03", placa = "GHI789", trailer = "", cedula_conductor = "99999999", unidad = "Niñera", codigo_mtrack = "MTK-X3", fecha_programada = "2026-11-03 06:00", origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" },
+            new { fila = 6, vin = "VIN-X-04", placa = "JKL012", trailer = "T-4", cedula_conductor = "1234567", unidad = "Nodriza", codigo_mtrack = "MTK-X4", fecha_programada = "2026-11-03 06:00", origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" },
         ];
 
         var vista = await Cliente(coordinador.Token).PostAsync("/api/viajes/cargar/previsualizar", Cuerpo(new { filas }));
@@ -205,6 +213,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     public async Task La_carga_por_excel_valida_la_coherencia_del_viaje_los_duplicados_y_lo_que_ya_existe()
     {
         var coordinador = await CoordinadorAsync();
+        await LugaresDeLaCargaAsync(coordinador);
         await ViajeConVinesAsync(coordinador, "MTK-EXISTE", ["VIN-OCUPADO"]);
         foreach (var vin in new[] { "VIN-Y-01", "VIN-Y-02", "VIN-Y-03" })
         {
@@ -212,7 +221,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         }
 
         object Fila(int n, string? vin, string? codigo, string? placa = "ABC123", string? unidad = "Niñera", string? cedula = null) =>
-            new { fila = n, vin, placa, trailer = "", cedula_conductor = cedula, unidad, codigo_mtrack = codigo };
+            new { fila = n, vin, placa, trailer = "", cedula_conductor = cedula, unidad, codigo_mtrack = codigo, fecha_programada = "2026-11-03 06:00", origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" };
 
         object[] filas =
         [
@@ -282,7 +291,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var viaje = await LeerJsonAsync(r);
         Assert.Equal(
             ["id", "codigo_mtrack", "tipo_unidad_id", "unidad", "placa", "trailer", "conductor_id", "conductor_nombre", "inspector_id", "inspector_nombre",
-             "origen_id", "origen", "destino_id", "destino", "estado", "con_personal_apoyo", "vehiculos", "clientes", "created_at", "updated_at"],
+             "origen_id", "origen", "destino_id", "destino", "estado", "con_personal_apoyo", "vehiculos", "clientes", "created_at", "updated_at", "fecha_programada", "lugar_cargue_id", "lugar_cargue"],
             viaje.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("MTK-ALTA", viaje.GetProperty("codigo_mtrack").GetString());
         Assert.Equal("Niñera", viaje.GetProperty("unidad").GetString());
@@ -494,7 +503,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(JsonValueKind.Null, antesUnidad.GetProperty("no_sale").ValueKind);
         var unidad = despues.GetProperty("vehiculos")[0];
         Assert.Equal(
-            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale", "estado_transporte", "novedades"],
+            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale", "estado_transporte", "novedades", "lugar_destino_id", "lugar_destino"],
             unidad.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("no_sale", unidad.GetProperty("estado_unidad").GetString());
         var noSale = unidad.GetProperty("no_sale");

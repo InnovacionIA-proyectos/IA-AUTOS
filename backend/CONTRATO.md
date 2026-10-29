@@ -583,12 +583,17 @@ Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viaj
   "estado": "programado", "con_personal_apoyo": false,
   "vehiculos": [
     { "vehiculo_id": "uuid", "vin": "9BWZZZ377VT004251", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional",
-      "etapas": 3, "completas": 0, "estado_unidad": "activa", "no_sale": null, "estado_transporte": "sin_registro", "novedades": 0 }
+      "etapas": 3, "completas": 0, "estado_unidad": "activa", "no_sale": null, "estado_transporte": "sin_registro", "novedades": 0,
+      "lugar_destino_id": "uuid", "lugar_destino": "Concesionario Autolarte Medellín" }
   ],
   "clientes": [ { "id": "uuid", "codigo": "sofasa", "nombre": "Sofasa" } ],
-  "created_at": "…", "updated_at": "…"
+  "created_at": "…", "updated_at": "…",
+  "fecha_programada": "2026-11-03T11:00:00.000Z", "lugar_cargue_id": "uuid", "lugar_cargue": "CEDI Envigado"
 }
 ```
+
+`fecha_programada` es el día y la hora en que se programó el cargue (UTC), `lugar_cargue_id` / `lugar_cargue` el lugar **real** del cargue (catálogo `lugares`) y `lugar_destino_id` / `lugar_destino`
+el lugar de entrega de **cada unidad**; los tres pueden ser `null` en los viajes que no vienen de la carga por Excel. El listado trae `fecha_programada`, `lugar_cargue_id` y `lugar_cargue`.
 
 `codigo_mtrack`, `tipo_unidad_id` y `placa` pueden ser `null` solo en los viajes migrados desde las asignaciones anteriores. `etapas` y `completas`
 de cada VIN cuentan sus etapas del viaje y las que ya tienen informe cerrado. `estado_unidad` es `activa` o `no_sale` y `no_sale` trae el motivo, el hallazgo, quién la marcó y
@@ -663,6 +668,10 @@ Gestión de viajes. Cambia **solo los campos enviados** de un viaje `programado`
 `trailer`, `conductor_id`, `inspector_id`, `origen_id` y `destino_id` admiten `null` para quitarlos; `codigo_mtrack`, `tipo_unidad_id`, `placa` y
 `con_personal_apoyo` no. Un campo que no existe responde `400`; un `codigo_mtrack` repetido, `409`; un viaje finalizado o cancelado, `409`.
 
+Mientras el viaje está `programado` también se corrige su programación: `fecha_programada` (ISO 8601 **con zona horaria**, por ejemplo `2026-11-03T06:00:00-05:00`; `null` la quita) y
+`lugar_cargue_id` (un lugar **activo** del catálogo `lugares`; `null` lo quita). Una fecha sin zona o un lugar inexistente o inactivo responde `400` con `details.fieldErrors`;
+en un viaje `en_curso` cambiarlos responde `409` (lo demás del viaje sí se sigue editando).
+
 Al cambiar `origen_id` o `destino_id` se actualiza el lugar del Cargue o del Descargue de los VIN del viaje, y `con_personal_apoyo` marca el Cargue; las etapas que
 ya tienen un informe cerrado no cambian.
 
@@ -682,15 +691,17 @@ en este viaje.
 Gestión de viajes. Borra el viaje con sus VIN y etapas, solo si **no tiene inspecciones** (`204`); si las tiene, `409` y debe cancelarse con el cambio de estado.
 
 ### Carga de viajes por Excel
-El archivo tiene **una fila por VIN**: VIN, placa, tráiler, cédula del conductor, unidad y código MTrack. El cliente lee el Excel y envía las filas como JSON; las filas con el
+El archivo tiene **una fila por VIN**: VIN, placa, tráiler, cédula del conductor, unidad, código MTrack, fecha y hora programada del cargue, lugar de cargue (origen) y lugar de destino de esa unidad. El cliente lee el Excel y envía las filas como JSON; las filas con el
 mismo `codigo_mtrack` forman **un solo viaje**. Son dos pasos: primero una **vista previa** con el error de cada fila (no guarda nada) y, al confirmar,
 **solo se guardan los viajes de las filas válidas**.
 
 ```json
 {
   "filas": [
-    { "fila": 2, "vin": "9BWZZZ377VT004251", "placa": "ABC123", "trailer": "T-9", "cedula_conductor": "1.234.567", "unidad": "Niñera", "codigo_mtrack": "MTK-001" },
-    { "fila": 3, "vin": "9BWZZZ377VT004252", "placa": "ABC123", "trailer": "T-9", "cedula_conductor": "1.234.567", "unidad": "Niñera", "codigo_mtrack": "MTK-001" }
+    { "fila": 2, "vin": "9BWZZZ377VT004251", "placa": "ABC123", "trailer": "T-9", "cedula_conductor": "1.234.567", "unidad": "Niñera", "codigo_mtrack": "MTK-001",
+      "fecha_programada": "2026-11-03 06:00", "origen": "CEDI Envigado", "destino": "Concesionario Autolarte Medellín" },
+    { "fila": 3, "vin": "9BWZZZ377VT004252", "placa": "ABC123", "trailer": "T-9", "cedula_conductor": "1.234.567", "unidad": "Niñera", "codigo_mtrack": "MTK-001",
+      "fecha_programada": "2026-11-03 06:00", "origen": "CEDI Envigado", "destino": "Concesionario Caminos Cali" }
   ]
 }
 ```
@@ -704,9 +715,14 @@ mismo `codigo_mtrack` forman **un solo viaje**. Son dos pasos: primero una **vis
 | `cedula_conductor` | no | con o sin puntos; debe ser la de un usuario activo con rol `conductor`. Vacía = viaje sin conductor |
 | `unidad` | sí | el `codigo` o el nombre de un valor **activo** de `tipos-unidad` (sin distinguir tildes ni mayúsculas) |
 | `codigo_mtrack` | sí | formato y unicidad como en `POST /api/viajes` |
+| `fecha_programada` | sí | día y hora del cargue: `2026-11-03 06:00` (también `AAAA-MM-DDTHH:mm`); **sin zona horaria es hora de Colombia (UTC-5)** y con zona (`Z`, `-05:00`) se respeta |
+| `origen` | sí | nombre de un lugar **activo** del catálogo `lugares` (sin distinguir tildes ni mayúsculas): el lugar de cargue del viaje |
+| `destino` | sí | nombre de un lugar **activo** del catálogo `lugares`: el destino de **esa** unidad (cada VIN del viaje puede ir a uno distinto) |
+
+Un lugar que no existe o está inactivo marca solo su fila («El lugar X no existe en el catálogo»); el coordinador lo crea con `POST /api/catalogos/lugares` y vuelve a previsualizar.
 
 Una fila es inválida si falla un campo, si su `codigo_mtrack` ya existe, si su VIN ya está en un viaje activo, si repite un VIN dentro de su viaje, si el mismo VIN
-aparece bajo dos códigos del archivo, o si no coincide en placa, tráiler, conductor o unidad con la primera fila válida de su mismo `codigo_mtrack`. Máximo **5000** filas;
+aparece bajo dos códigos del archivo, o si no coincide en placa, tráiler, conductor, unidad, fecha programada o lugar de cargue con la primera fila válida de su mismo `codigo_mtrack` (el destino es de cada unidad y no se compara). Máximo **5000** filas;
 una lista vacía o más grande responde `400`.
 
 - `POST /api/viajes/cargar/previsualizar` (gestión de viajes) → `200`, sin guardar nada.
@@ -1606,7 +1622,8 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | Nombre (ruta y clave) | Qué contiene | Campos de cada valor |
 |---|---|---|
 | `etapas` | Etapas del proceso: `cargue`, `transporte`, `descargue`. Es el `proceso` de un informe o de un tramo de la ruta | `id`, `codigo`, `nombre`, `orden`, `activo` |
-| `puntos-custodia` | Lugares donde se hace una etapa: CEDI 1, Origen, Certificadora, Destino, CEDI 2, Concesionario | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `puntos-custodia` | Los **tipos** de lugar: CEDI 1, Origen, Certificadora, Destino, CEDI 2, Concesionario | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `lugares` | Los lugares **reales** donde se carga y se entrega (CEDI Envigado, Concesionario Autolarte Medellín…). Empieza vacío: lo llena el negocio | `id`, `nombre` (único), `tipo` (el `codigo` de un valor activo de `puntos-custodia`), `tipo_nombre`, `ciudad`, `orden`, `activo`, `latitud`, `longitud`, `radio_metros` y `sin_ubicacion` (los tres primeros `null` mientras no tenga ubicación) |
 | `tipos-unidad` | Tipos de unidad transportadora: niñera, nodriza, quintinaria, planchón grúa | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `clases-dano` | Clases de daño de un hallazgo (10 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `tamanos-dano` | Tamaños de daño de un hallazgo (6 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
@@ -1657,6 +1674,10 @@ disponibles). `cuadrante-vistas` (el catálogo anterior de polígonos por vista 
 
 `motivos-sin-inspector` trae los motivos por los que no está el inspector: `inspector_no_llego` «El inspector no llegó», `inspector_no_disponible` «El inspector no está disponible» y `otro` «Otro» (`requiere_texto: true`: quien lo elige escribe cuál es). Los valores los confirma Calidad y los administran
 `admin`, `super_admin` y `coordinador_calidad` como los demás catálogos; el `codigo` no cambia y un motivo que alguna inspección usa no se borra (`409`): se inactiva.
+
+`lugares` es el catálogo de los sitios reales que usa la carga de cargues por Excel (`origen` y `destino`, por nombre) y que muestra el viaje. Se crea con `nombre`, `tipo` y `ciudad` (los tres obligatorios; `orden` y
+`activo` opcionales), lo cambian los mismos roles de los demás catálogos y cualquier usuario autenticado lo lee. Un nombre repetido (sin distinguir mayúsculas) responde `409`, y un lugar que algún viaje usa no se borra (`409`): se inactiva.
+La ubicación (`latitud`, `longitud`, `radio_metros`) **no se escribe por este catálogo**: queda `null` y `sin_ubicacion: true` hasta que se calibre.
 
 ### Versión y copia sin conexión
 Cada respuesta trae la versión en el encabezado `ETag` (por ejemplo `"9f2c4a7b1d3e5f60"`) y también en el cuerpo. La versión es una

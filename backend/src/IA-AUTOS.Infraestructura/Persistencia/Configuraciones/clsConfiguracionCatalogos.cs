@@ -71,6 +71,21 @@ internal sealed class clsConfiguracionNivelSeveridad : IEntityTypeConfiguration<
     }
 }
 
+internal sealed class clsConfiguracionLugar : IEntityTypeConfiguration<clsLugar>
+{
+    public void Configure(EntityTypeBuilder<clsLugar> builder)
+    {
+        builder.ToTable("tblLugares");
+        clsConfiguracionBase.Base(builder);
+        builder.Property(l => l.Nombre).HasMaxLength(clsCatalogoBase.NOMBRE_MAX).IsRequired();
+        builder.Property(l => l.Ciudad).HasMaxLength(clsLugar.CIUDAD_MAX).IsRequired();
+        builder.HasOne<clsPuntoCustodia>().WithMany().HasForeignKey(l => l.TipoId)
+            .HasConstraintName("FK_tblLugares_Tipo").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(l => l.Nombre).IsUnique().HasDatabaseName("UQ_tblLugares_Nombre");
+        builder.HasIndex(l => l.TipoId).HasDatabaseName("IX_tblLugares_Tipo");
+    }
+}
+
 internal sealed class clsConfiguracionMotivoSinInspector : IEntityTypeConfiguration<clsMotivoSinInspector>
 {
     public void Configure(EntityTypeBuilder<clsMotivoSinInspector> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblMotivosSinInspector");
