@@ -1513,7 +1513,7 @@ identidad sale del token y **nadie firma por otro** (`403`). Cada firma guarda s
 | `firmada` | ambas partes firman |
 | `con_reservas` | ambas firman y quien recibe dejó sus observaciones (`reservas`) |
 | `no_firma` | una parte se negó a firmar: se deja la constancia (motivo, testigo con usuario y foto) |
-| `recibo_sin_entrega` | el conductor hizo la salida del Cargue y nadie de Botero Soto firma la entrega: solo firma quien recibe (ver `POST …/transferencia/sin-entrega`) |
+| `recibo_sin_entrega` | el conductor hizo la salida del Cargue y nadie de Botero Soto firma la entrega: solo firma quien recibe (ver `POST …/transferencia/sin-entrega`). Trae `no_firma_parte: "entrega"` (la parte que no firmó) y `motivo_no_firma`: «El conductor hizo la salida del cargue y nadie de Botero Soto entregó la unidad». La base ya admite también la forma inversa (firma solo quien entrega, `no_firma_parte: "recibe"`), que usará el descargue por punto de entrega |
 | `null` | abierta: falta una firma (o ninguna se ha enviado) |
 
 La primera llamada (sea cual sea la firma) crea la transferencia y exige `entrega_usuario_id` y `recibe_usuario_id`; en las siguientes pueden omitirse y, si se envían, deben ser los mismos

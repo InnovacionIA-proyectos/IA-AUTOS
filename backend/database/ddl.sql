@@ -1082,7 +1082,8 @@ GO
      firmada      ambas partes firmaron;
      con_reservas ambas firmaron y quien recibe dejo sus observaciones (ReservasTexto);
      no_firma     una parte (NoFirmaParte) se nego a firmar: queda el motivo, un testigo con usuario y la foto de la constancia;
-     recibo_sin_entrega  nadie de Botero Soto firma la entrega (el conductor hizo la salida del cargue): solo firma quien recibe y no hay usuario, firma, fecha ni IP de entrega.
+     recibo_sin_entrega  una sola firma y su motivo (MotivoNoFirma): firma solo quien recibe (NoFirmaParte = entrega: nadie de Botero Soto entrego, por ejemplo el conductor hizo la salida del cargue;
+                         no hay usuario, firma, fecha ni IP de entrega) o firma solo quien entrega (NoFirmaParte = recibe: sin firma, fecha ni IP de quien recibe).
    Mientras TipoCierre es NULL la transferencia esta abierta; con un tipo de cierre es inmutable y la etapa siguiente puede iniciarse.
    FirmaEntrega / FirmaRecibe: ruta de la imagen de la firma o trazo de la firma dibujada.
    ----------------------------------------------------------------------------- */
@@ -1127,8 +1128,12 @@ BEGIN
             OR (TipoCierre = 'firmada' AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> '' AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '' AND ReservasTexto IS NULL)
             OR (TipoCierre = 'con_reservas' AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> '' AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '' AND ReservasTexto IS NOT NULL AND ReservasTexto <> '')
             OR (TipoCierre = 'no_firma' AND NoFirmaParte IS NOT NULL AND MotivoNoFirma IS NOT NULL AND MotivoNoFirma <> '' AND TestigoUsuarioId IS NOT NULL AND EvidenciaConstanciaId IS NOT NULL)
-            OR (TipoCierre = 'recibo_sin_entrega' AND EntregaUsuarioId IS NULL AND FirmaEntrega IS NULL AND FirmaEntregaAt IS NULL AND FirmaEntregaIp IS NULL
-                AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '' AND ReservasTexto IS NULL))
+            -- Una sola firma y su motivo: firma solo quien recibe (nadie entrego) o firma solo quien entrega (quien recibe no firmo). NoFirmaParte es la parte que NO firmo.
+            OR (TipoCierre = 'recibo_sin_entrega' AND NoFirmaParte IS NOT NULL AND MotivoNoFirma IS NOT NULL AND MotivoNoFirma <> '' AND ReservasTexto IS NULL
+                AND ((NoFirmaParte = 'entrega' AND EntregaUsuarioId IS NULL AND FirmaEntrega IS NULL AND FirmaEntregaAt IS NULL AND FirmaEntregaIp IS NULL
+                      AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '')
+                  OR (NoFirmaParte = 'recibe' AND EntregaUsuarioId IS NOT NULL AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> ''
+                      AND FirmaRecibe IS NULL AND FirmaRecibeAt IS NULL AND FirmaRecibeIp IS NULL))))
     );
     CREATE INDEX IX_tblTransferencias_Entrega ON dbo.tblTransferenciasCustodia (EntregaUsuarioId);
     CREATE INDEX IX_tblTransferencias_Recibe ON dbo.tblTransferenciasCustodia (RecibeUsuarioId);
