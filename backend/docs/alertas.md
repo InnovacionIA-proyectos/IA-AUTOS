@@ -57,6 +57,10 @@ Cada 10 minutos, junto con los demás avisos operativos, se buscan los **reclamo
 Se avisa a los `coordinador_calidad` activos del cliente del inspector con una notificación `reclamo_sin_actividad` (urgencia media, bandeja y push) que trae la placa, el viaje, el proceso y el nombre del inspector. Es **un aviso por reclamo** (la clave de dedupe lleva el id del reclamo).
 El reclamo **no se libera**: lo libera una persona (ver [viajes.md](viajes.md)). Necesita el script [`27-aviso-reclamo-sin-actividad.sql`](../database/cambios-esquema/27-aviso-reclamo-sin-actividad.sql) aplicado (el tipo de aviso nuevo en `tblNotificaciones`).
 
+## Fuera del rango del lugar
+
+No es un proceso periódico: se dispara con la **primera foto con ubicación** de una inspección de Cargue o Descargue. El servidor calcula la distancia al centro del lugar de la etapa y, si supera el radio más la precisión de la foto, la inspección queda `fuera_de_rango` y se avisa a los `coordinador_calidad` activos del cliente con una notificación `fuera_de_rango` (urgencia alta, bandeja y push) con el viaje, el VIN, el lugar y la distancia. Es **un aviso por inspección** (clave de dedupe: la inspección) y **nunca bloquea** la captura. Con una foto sin ubicación, una precisión mala (la válvula `valvula_precision_m`), un lugar sin ubicación o con la ubicación pendiente de confirmar, el resultado es `sin_confirmacion_posible` y no hay marca ni aviso. Ver CONTRATO.md (`confirmacion_sitio`) y el script [`32-ubicacion-con-rango-y-confirmacion-en-sitio.sql`](../database/cambios-esquema/32-ubicacion-con-rango-y-confirmacion-en-sitio.sql).
+
 ## Transferencia pendiente
 
 Cada 10 minutos se buscan las **llegadas cerradas** hace mas de `transferencia_pendiente_minutos` cuya transferencia no tiene tipo de cierre, de unidades que siguen en el viaje (no «no sale») y de viajes activos:

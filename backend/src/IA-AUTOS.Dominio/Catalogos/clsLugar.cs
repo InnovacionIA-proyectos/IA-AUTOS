@@ -2,6 +2,16 @@ using IAAutos.Dominio.Comun;
 
 namespace IAAutos.Dominio.Catalogos;
 
+/// <summary>El estado de la ubicacion de un lugar: solo una ubicacion confirmada sirve para confirmar «en sitio» la evidencia de una inspeccion.</summary>
+public static class clsEstadoUbicacion
+{
+    public const string SIN_UBICACION = "sin_ubicacion";
+    public const string PENDIENTE_CONFIRMAR = "pendiente_confirmar";
+    public const string CONFIRMADA = "confirmada";
+
+    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { SIN_UBICACION, PENDIENTE_CONFIRMAR, CONFIRMADA };
+}
+
 /// <summary>
 /// Un lugar REAL (CEDI Envigado, Concesionario Autolarte Medellin...): tiene nombre (unico), tipo (uno de los tipos de lugar: CEDI 1, Origen, Certificadora, Destino, CEDI 2 o Concesionario), ciudad y estado. La
 /// ubicacion (latitud, longitud y radio en metros) es opcional: un lugar sin ubicacion es valido y se ve «sin ubicacion». Las coordenadas van juntas o ninguna y el radio es mayor que cero.
@@ -25,6 +35,9 @@ public sealed class clsLugar : clsCatalogoBase
 
     /// <summary>El radio, en metros, dentro del que se considera que alguien esta en el lugar. Nulo mientras no se ha fijado.</summary>
     public int? RadioMetros { get; private set; }
+
+    /// <summary>El estado de la ubicacion (<see cref="clsEstadoUbicacion"/>): sin ubicacion, pendiente de confirmar (la fijo alguien en el momento) o confirmada.</summary>
+    public string EstadoUbicacion { get; private set; } = clsEstadoUbicacion.SIN_UBICACION;
 
     /// <summary>True mientras el lugar no tiene coordenadas.</summary>
     public bool SinUbicacion => Latitud is null || Longitud is null;

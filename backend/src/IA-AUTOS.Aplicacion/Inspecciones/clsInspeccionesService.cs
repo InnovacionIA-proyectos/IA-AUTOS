@@ -65,6 +65,7 @@ public sealed class clsInspeccionesService(
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
     clsFabricaEvidencias fabricaEvidencias,
+    clsConfirmacionEnSitioService confirmacionEnSitio,
     clsVerificadorEtapaPrevia etapaPrevia,
     clsResolutorZona resolutorZona,
     clsCalculadoraVistas calculadoraVistas,
@@ -376,11 +377,17 @@ public sealed class clsInspeccionesService(
             foto.DispositivoId, foto.Nota, foto.HashSha256, ct);
         inspecciones.Agregar(hallazgo);
         inspecciones.Agregar(evidencia);
+        var avisoDeRango = await confirmacionEnSitio.EvaluarAsync(inspeccion, evidencia, reloj.Ahora, ct);
         await auditor.RegistrarDeViajeAsync(
             "hallazgo.crear", "hallazgos", hallazgo.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(hallazgo)), ct: ct);
         await auditor.RegistrarDeViajeAsync(
             "evidencia.crear", "evidencias", evidencia.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(evidencia)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        if (avisoDeRango is not null)
+        {
+            await confirmacionEnSitio.AvisarAsync(avisoDeRango, ct);
+        }
+
         return clsMapeadorInspecciones.AHallazgoCreado((await descriptorHallazgos.DescribirAsync([hallazgo], ct))[0], evidencia);
     }
 
@@ -501,9 +508,16 @@ public sealed class clsInspeccionesService(
                 inspeccionId, solicitud.HallazgoId, solicitud.VistaId, esConstancia: false, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat,
                 solicitud.SelloLng, solicitud.Precision, solicitud.DispositivoId, solicitud.Nota, solicitud.HashSha256, ct);
         inspecciones.Agregar(evidencia);
+        // Con la primera foto con ubicacion se confirma «en sitio» (solo marca: nunca bloquea ni cambia la captura).
+        var avisoDeRango = await confirmacionEnSitio.EvaluarAsync(inspeccion, evidencia, reloj.Ahora, ct);
         await auditor.RegistrarDeViajeAsync(
             "evidencia.crear", "evidencias", evidencia.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(evidencia)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        if (avisoDeRango is not null)
+        {
+            await confirmacionEnSitio.AvisarAsync(avisoDeRango, ct);
+        }
+
         return clsMapeadorInspecciones.AEvidencia(evidencia);
     }
 

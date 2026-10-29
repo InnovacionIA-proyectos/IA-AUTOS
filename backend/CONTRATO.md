@@ -968,9 +968,18 @@ Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de
   "evidencias": [ /* EvidenciaDto, cada una con su propio sello */ ],
   "transferencia": { /* TransferenciaDetalleDto o null */ },
   "iniciada_at": "…", "cerrada_at": "…", "version": 1, "corrige_inspeccion_id": null, "momento_nombre": "Inspección de salida",
-  "notas_aclaratorias": [], "motivo_sin_inspector": null, "novedades_proceso": []
+  "notas_aclaratorias": [], "motivo_sin_inspector": null, "novedades_proceso": [], "extras": [],
+  "confirmacion_sitio": { "resultado": "confirmado_en_sitio", "nombre": "Confirmado en sitio", "distancia_m": 400.0, "evidencia_id": "uuid" }
 }
 ```
+
+**Confirmación «en sitio» (`confirmacion_sitio`).** Con la **primera foto con ubicación** de una inspección de **Cargue o Descargue** el servidor calcula la distancia (círculo máximo) al centro del lugar de la etapa (el lugar de cargue del viaje o el destino de la unidad) y guarda el resultado en la inspección mientras está en borrador; es `null` mientras no se determina y en el Transporte. Es una **marca: nunca bloquea ni cambia la captura** (la foto se guarda y se sella igual). `resultado` es:
+
+- `confirmado_en_sitio`: la distancia no supera el radio **más la precisión de la foto** (la duda del GPS juega a favor: a 1.200 m con precisión de 200 m y radio de 1.000 m queda confirmada; a 1.201 m, no).
+- `fuera_de_rango`: la supera. Avisa **una sola vez por inspección** al `coordinador_calidad` del cliente por bandeja y push (tipo `fuera_de_rango`, urgencia alta, con el viaje, el VIN, el lugar y la distancia).
+- `sin_confirmacion_posible`, sin marca ni aviso: la foto no trae ubicación (0, 0), el lugar no tiene ubicación o su ubicación sigue **pendiente de confirmar** (`estado_ubicacion` distinto de `confirmada`), el viaje o la unidad no tienen lugar, la precisión no se reportó o es de `valvula_precision_m` (500 m) o más, o el cálculo falló. Una foto con ubicación posterior sí puede determinarlo; una vez `confirmado_en_sitio` o `fuera_de_rango`, no cambia.
+
+`distancia_m` es la distancia de la foto que lo determinó (`evidencia_id`); es `null` en `sin_confirmacion_posible`. El radio es el `radio_metros` del lugar y, si no lo tiene, el parámetro `radio_lugar_cargue_m` (1.000 m) en el cargue o `radio_destino_m` (500 m) en el descargue; se leen en cada evaluación.
 
 La placa, el conductor y el tráiler son los **del viaje**; en un informe anterior a los viajes, lo que se capturó a mano tiene prioridad. `ninera` es la placa del viaje (nombre heredado, igual a `placa`).
 
@@ -1708,7 +1717,7 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 |---|---|---|
 | `etapas` | Etapas del proceso: `cargue`, `transporte`, `descargue`. Es el `proceso` de un informe o de un tramo de la ruta | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `puntos-custodia` | Los **tipos** de lugar: CEDI 1, Origen, Certificadora, Destino, CEDI 2, Concesionario | `id`, `codigo`, `nombre`, `orden`, `activo` |
-| `lugares` | Los lugares **reales** donde se carga y se entrega (CEDI Envigado, Concesionario Autolarte Medellín…). Empieza vacío: lo llena el negocio | `id`, `nombre` (único), `tipo` (el `codigo` de un valor activo de `puntos-custodia`), `tipo_nombre`, `ciudad`, `orden`, `activo`, `latitud`, `longitud`, `radio_metros` y `sin_ubicacion` (los tres primeros `null` mientras no tenga ubicación) |
+| `lugares` | Los lugares **reales** donde se carga y se entrega (CEDI Envigado, Concesionario Autolarte Medellín…). Empieza vacío: lo llena el negocio | `id`, `nombre` (único), `tipo` (el `codigo` de un valor activo de `puntos-custodia`), `tipo_nombre`, `ciudad`, `orden`, `activo`, `latitud`, `longitud`, `radio_metros` y `sin_ubicacion` (los tres primeros `null` mientras no tenga ubicación), más `estado_ubicacion` (`sin_ubicacion`, `pendiente_confirmar` o `confirmada`: solo una ubicación confirmada sirve para la confirmación «en sitio») |
 | `tipos-unidad` | Tipos de unidad transportadora: niñera, nodriza, quintinaria, planchón grúa | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `clases-dano` | Clases de daño de un hallazgo (10 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `tamanos-dano` | Tamaños de daño de un hallazgo (6 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
