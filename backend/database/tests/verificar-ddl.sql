@@ -982,6 +982,83 @@ ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
 INSERT #r SELECT N'Novedad de proceso: lo de prueba se limpio', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblNovedadesProceso WHERE ViajeId = @vj) AND NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id = @i4nov)
     AND NOT EXISTS (SELECT 1 FROM dbo.tblNotificaciones WHERE ClaveDedupe LIKE N'zz-novedad-proceso-%') AND NOT EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @i2) THEN 1 ELSE 0 END, NULL;
 
+-- 7m) Lugares reales, fecha programada del viaje, destino por unidad y adopcion por dia programado
+INSERT #r SELECT N'Lugares: la tabla, su nombre unico y su tipo (llave foranea a tblPuntosCustodia)',
+    CASE WHEN OBJECT_ID(N'dbo.tblLugares', N'U') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblLugares_Nombre' AND parent_object_id = OBJECT_ID(N'dbo.tblLugares'))
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblLugares_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblLugares') AND referenced_object_id = OBJECT_ID(N'dbo.tblPuntosCustodia'))
+          AND (SELECT COUNT(*) FROM dbo.tblLugares WHERE Nombre NOT LIKE N'ZZ_TEST%') = 0 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Lugares: latitud, longitud y radio admiten nulo',
+    CASE WHEN (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblLugares') AND name IN (N'Latitud', N'Longitud', N'RadioMetros') AND is_nullable = 1) = 3 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Viajes: FechaProgramada y LugarCargueId nulos, y LugarDestinoId nulo en cada unidad',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblViajes') AND name = N'FechaProgramada' AND is_nullable = 1)
+          AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblViajes') AND name = N'LugarCargueId' AND is_nullable = 1)
+          AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND name = N'LugarDestinoId' AND is_nullable = 1)
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajes_LugarCargue' AND referenced_object_id = OBJECT_ID(N'dbo.tblLugares'))
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajeVehiculos_LugarDestino' AND referenced_object_id = OBJECT_ID(N'dbo.tblLugares')) THEN 1 ELSE 0 END, NULL;
+
+DECLARE @tipoLg nvarchar(36) = CAST((SELECT Id FROM dbo.tblPuntosCustodia WHERE Codigo = 'cedi_1') AS nvarchar(36));
+DECLARE @casosLg TABLE (Orden int IDENTITY(1, 1) PRIMARY KEY, Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+DECLARE @baseLg nvarchar(max) = N'INSERT dbo.tblLugares (Id, Nombre, TipoId, Ciudad, Latitud, Longitud, RadioMetros, Orden) VALUES (NEWID(), ';
+INSERT @casosLg (Prueba, Sentencia, Esperado) VALUES
+ (N'Lugar: uno valido sin coordenadas se guarda', @baseLg + N'N''ZZ_TEST_CEDI Envigado'', ''' + @tipoLg + N''', N''Envigado'', NULL, NULL, NULL, 0)', 0),
+ (N'Lugar: uno con coordenadas y radio se guarda', @baseLg + N'N''ZZ_TEST_Patio Norte'', ''' + @tipoLg + N''', N''Medellin'', 6.2, -75.5, 150, 1)', 0),
+ (N'UNIQUE lugar por nombre (sin distinguir mayusculas)', @baseLg + N'N''zz_test_cedi envigado'', ''' + @tipoLg + N''', N''Envigado'', NULL, NULL, NULL, 0)', 2627),
+ (N'FK lugar: tipo inexistente', @baseLg + N'N''ZZ_TEST_Sin tipo'', NEWID(), N''Envigado'', NULL, NULL, NULL, 0)', 547),
+ (N'CHECK lugar: nombre vacio', @baseLg + N'N''   '', ''' + @tipoLg + N''', N''Envigado'', NULL, NULL, NULL, 0)', 547),
+ (N'CHECK lugar: ciudad vacia', @baseLg + N'N''ZZ_TEST_Sin ciudad'', ''' + @tipoLg + N''', N''  '', NULL, NULL, NULL, 0)', 547),
+ (N'CHECK lugar: orden negativo', @baseLg + N'N''ZZ_TEST_Orden'', ''' + @tipoLg + N''', N''Envigado'', NULL, NULL, NULL, -1)', 547),
+ (N'CHECK lugar: latitud fuera de rango', @baseLg + N'N''ZZ_TEST_Lat'', ''' + @tipoLg + N''', N''Envigado'', 91, -75, NULL, 0)', 547),
+ (N'CHECK lugar: longitud fuera de rango', @baseLg + N'N''ZZ_TEST_Lng'', ''' + @tipoLg + N''', N''Envigado'', 6, -181, NULL, 0)', 547),
+ (N'CHECK lugar: las coordenadas van juntas (solo latitud)', @baseLg + N'N''ZZ_TEST_Solo lat'', ''' + @tipoLg + N''', N''Envigado'', 6, NULL, NULL, 0)', 547),
+ (N'CHECK lugar: las coordenadas van juntas (solo longitud)', @baseLg + N'N''ZZ_TEST_Solo lng'', ''' + @tipoLg + N''', N''Envigado'', NULL, -75, NULL, 0)', 547),
+ (N'CHECK lugar: el radio es mayor que cero', @baseLg + N'N''ZZ_TEST_Radio'', ''' + @tipoLg + N''', N''Envigado'', 6, -75, 0, 0)', 547),
+ (N'FK viaje: lugar de cargue inexistente', N'UPDATE dbo.tblViajes SET LugarCargueId = NEWID() WHERE CodigoMtrack = ''ZZ_TEST_MTK_1''', 547),
+ (N'FK unidad del viaje: lugar de destino inexistente', N'UPDATE dbo.tblViajeVehiculos SET LugarDestinoId = NEWID() WHERE ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_1'')', 547),
+ (N'Viaje: se programa con su fecha y su lugar de cargue', N'UPDATE dbo.tblViajes SET FechaProgramada = ''2026-11-03T06:00:00-05:00'', LugarCargueId = (SELECT Id FROM dbo.tblLugares WHERE Nombre = N''ZZ_TEST_CEDI Envigado'') WHERE CodigoMtrack = ''ZZ_TEST_MTK_1''', 0),
+ (N'Unidad: cada una guarda su propio destino', N'UPDATE dbo.tblViajeVehiculos SET LugarDestinoId = (SELECT Id FROM dbo.tblLugares WHERE Nombre = N''ZZ_TEST_Patio Norte'') WHERE ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_1'')', 0),
+ (N'Lugar: no se borra uno que un viaje usa', N'DELETE FROM dbo.tblLugares WHERE Nombre = N''ZZ_TEST_CEDI Envigado''', 547);
+DECLARE @pruebaLg nvarchar(200), @sentenciaLg nvarchar(max), @esperadoLg int, @obtenidoLg int, @mensajeLg nvarchar(4000);
+DECLARE cLg CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosLg ORDER BY Orden;
+OPEN cLg;
+FETCH NEXT FROM cLg INTO @pruebaLg, @sentenciaLg, @esperadoLg;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoLg = 0; SET @mensajeLg = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaLg);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoLg = ERROR_NUMBER(); SET @mensajeLg = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaLg, CASE WHEN @obtenidoLg = @esperadoLg THEN 1 ELSE 0 END, CASE WHEN @obtenidoLg = @esperadoLg THEN NULL ELSE CONCAT(N'esperaba ', @esperadoLg, N' y fue ', @obtenidoLg, N': ', @mensajeLg) END);
+    FETCH NEXT FROM cLg INTO @pruebaLg, @sentenciaLg, @esperadoLg;
+END
+CLOSE cLg;
+DEALLOCATE cLg;
+
+-- La adopcion cuenta el viaje en su dia programado (hora de Colombia) y, sin fecha programada, en el dia de su creacion: el viaje del ejemplo se crea el 2026-11-01 a las 20:00 y se programa para el 2026-11-03 a las 06:00.
+DECLARE @vjProgLg uniqueidentifier = NEWID(), @vjSinLg uniqueidentifier = NEWID();
+INSERT dbo.tblViajes (Id, CodigoMtrack, TipoUnidadId, Trailer, ConductorId, InspectorId, FechaProgramada, CreatedAt)
+VALUES (@vjProgLg, 'ZZ_TEST_MTK_L1', @tipoUnidad, N'ZZ_TEST_TR_PROG', @u2, @u1, '2026-11-03T06:00:00-05:00', '2026-11-01T20:00:00-05:00');
+INSERT dbo.tblViajes (Id, CodigoMtrack, TipoUnidadId, Trailer, ConductorId, InspectorId, CreatedAt)
+VALUES (@vjSinLg, 'ZZ_TEST_MTK_L2', @tipoUnidad, N'ZZ_TEST_TR_SIN', @u2, @u1, '2026-11-01T20:00:00-05:00');
+INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vjProgLg, @v);
+INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vjSinLg, @v);
+INSERT #r SELECT N'vwAdopcion: el viaje programado cuenta en su dia programado y no en el de su creacion',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.vwAdopcion WHERE Fecha = '2026-11-03' AND Trailer = N'ZZ_TEST_TR_PROG' AND Programados = 1)
+          AND NOT EXISTS (SELECT 1 FROM dbo.vwAdopcion WHERE Fecha = '2026-11-01' AND Trailer = N'ZZ_TEST_TR_PROG') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'vwAdopcion: sin fecha programada el viaje cuenta en el dia de su creacion',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.vwAdopcion WHERE Fecha = '2026-11-01' AND Trailer = N'ZZ_TEST_TR_SIN' AND Programados = 1)
+          AND NOT EXISTS (SELECT 1 FROM dbo.vwAdopcion WHERE Fecha = '2026-11-03' AND Trailer = N'ZZ_TEST_TR_SIN') THEN 1 ELSE 0 END, NULL;
+-- Limpieza de esta seccion: las unidades y los viajes de ejemplo, el lugar de cargue y de destino del viaje base y, al final, los lugares de prueba.
+DELETE FROM dbo.tblViajeVehiculos WHERE ViajeId IN (@vjProgLg, @vjSinLg);
+DELETE FROM dbo.tblViajes WHERE Id IN (@vjProgLg, @vjSinLg);
+UPDATE dbo.tblViajeVehiculos SET LugarDestinoId = NULL WHERE ViajeId = @vj;
+UPDATE dbo.tblViajes SET FechaProgramada = NULL, LugarCargueId = NULL WHERE Id = @vj;
+DELETE FROM dbo.tblLugares WHERE Nombre LIKE N'ZZ_TEST%';
+INSERT #r SELECT N'Lugares: lo de prueba se limpio', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblLugares WHERE Nombre LIKE N'ZZ_TEST%') AND NOT EXISTS (SELECT 1 FROM dbo.tblViajes WHERE CodigoMtrack LIKE 'ZZ_TEST_MTK_L%') THEN 1 ELSE 0 END, NULL;
+
 -- 7g) Parametros: la tabla, sus filas iniciales y sus restricciones
 INSERT #r SELECT N'Parametros: la tabla existe con sus 8 filas iniciales (6 con valor y 2 sin valor) y sin linea base de rechazo',
     CASE WHEN OBJECT_ID(N'dbo.tblParametros', N'U') IS NOT NULL
