@@ -80,10 +80,19 @@ Es reciente: la imagen de la API de hace unos días no ocultaba nada en el inven
 reconstruirla pareció una regresión. Lo era al revés: la redacción es lo nuevo.
 
 **Qué significa para la app:** cuando mira el conductor, sus propios hallazgos se pintan azules «por revisar»
-aunque un inspector ya les haya puesto nivel. Es lo que el contrato quiere, pero la etiqueta «Por revisar»
-dice algo que no es: no es que nadie lo haya clasificado, es que a él no se le muestra. **Para Calidad:** si
-molesta, el dibujo puede pintarlos de un color neutro y la ficha callar el nivel en vez de decir «Por
-revisar».
+aunque un inspector ya les haya puesto nivel. Es lo que el contrato quiere, pero «Por revisar» dice algo que
+no es: no es que nadie lo haya clasificado, es que a él no se le muestra.
+
+La ficha ya distingue los dos casos: dice **«Revisado»** cuando el hallazgo trae fecha de revisión y no trae
+nivel. Hoy eso solo lo ve el inspector o el administrador, porque `ParaConductor` también pone `RevisadoAt` y
+`RevisadoPor` en null.
+
+**Lo que falta, y es una línea de backend:** dejar pasar `revisado_at` (o un `revisado` booleano) al conductor,
+sin soltar el nivel. Con eso el conductor sabría que su novedad ya se revisó, sin saber con qué nivel, que es
+justo la regla. La app no necesita ningún cambio: el día que llegue el campo, la etiqueta cambia sola.
+
+Queda para Calidad el color: el azul «por revisar» en el dibujo sigue diciendo lo mismo que la etiqueta vieja.
+Si molesta, se le puede dar un color propio a «revisado sin nivel a la vista».
 
 ## Cómo se probó
 
