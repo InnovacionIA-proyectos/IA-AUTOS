@@ -98,6 +98,16 @@ class GatewayInformesApi implements GatewayInformes {
   }
 
   @override
+  Future<void> registrarPosicion(String viajeId, String vin, int? posicion) async {
+    // La clave va presente aunque sea nula: `null` libera la posición de la unidad.
+    await _api.enviar(
+      'PUT',
+      '/api/viajes/${Uri.encodeComponent(viajeId)}/vehiculos/${Uri.encodeComponent(vin)}/posicion',
+      cuerpo: {'posicion': posicion},
+    );
+  }
+
+  @override
   Future<void> cerrarInspeccion(String inspeccionId) async {
     await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/cerrar');
   }

@@ -83,6 +83,10 @@ class InformeJob extends Job {
     this.fotos = const [],
     this.hallazgos = const [],
     this.extras = const [],
+    this.viajeId,
+    this.posiciones = const {},
+    this.posicionesPrevias = const {},
+    this.posicionesEnviadas = false,
     this.inspeccionId,
     this.hallazgosEnviados = 0,
     this.cerrada = false,
@@ -109,6 +113,11 @@ class InformeJob extends Job {
         extras: [
           for (final e in json['extras'] as List<dynamic>? ?? const []) ExtraLocal.fromJson(e as Map<String, dynamic>),
         ],
+        viajeId: json['viaje_id'] as String?,
+        // Los informes encolados antes de la acomodación no traen estas claves.
+        posiciones: _posiciones(json['posiciones']),
+        posicionesPrevias: _posiciones(json['posiciones_previas']),
+        posicionesEnviadas: json['posiciones_enviadas'] as bool? ?? false,
         inspeccionId: json['inspeccion_id'] as String?,
         hallazgosEnviados: json['hallazgos_enviados'] as int? ?? 0,
         cerrada: json['cerrada'] as bool? ?? false,
@@ -127,7 +136,17 @@ class InformeJob extends Job {
   /// recibirlos. Quedan guardados con el informe mientras está en la cola.
   final List<ExtraLocal> extras;
 
+  /// Viaje de la etapa. Solo lo necesita la segunda inspección del cargue, para registrar las posiciones.
+  final String? viajeId;
+
+  /// La posición (1 a 7) de cada unidad del viaje en la niñera, por VIN. Solo la segunda inspección del cargue.
+  final Map<String, int> posiciones;
+
+  /// Lo que el viaje traía al abrir la captura. Con él se sabe qué unidades cambiaron de lugar.
+  final Map<String, int> posicionesPrevias;
+
   // Progreso reanudable.
+  final bool posicionesEnviadas;
   final String? inspeccionId;
   final int hallazgosEnviados;
   final bool cerrada;
@@ -140,6 +159,7 @@ class InformeJob extends Job {
     List<FotoLocal>? fotos,
     List<HallazgoLocal>? hallazgos,
     int? hallazgosEnviados,
+    bool? posicionesEnviadas,
     bool? cerrada,
   }) =>
       InformeJob(
@@ -160,6 +180,10 @@ class InformeJob extends Job {
         fotos: fotos ?? this.fotos,
         hallazgos: hallazgos ?? this.hallazgos,
         extras: extras,
+        viajeId: viajeId,
+        posiciones: posiciones,
+        posicionesPrevias: posicionesPrevias,
+        posicionesEnviadas: posicionesEnviadas ?? this.posicionesEnviadas,
         inspeccionId: inspeccionId ?? this.inspeccionId,
         hallazgosEnviados: hallazgosEnviados ?? this.hallazgosEnviados,
         cerrada: cerrada ?? this.cerrada,
@@ -184,6 +208,10 @@ class InformeJob extends Job {
         fotos: fotos,
         hallazgos: hallazgos,
         extras: extras,
+        viajeId: viajeId,
+        posiciones: posiciones,
+        posicionesPrevias: posicionesPrevias,
+        posicionesEnviadas: posicionesEnviadas,
         inspeccionId: inspeccionId,
         hallazgosEnviados: hallazgosEnviados,
         cerrada: cerrada,
@@ -208,6 +236,10 @@ class InformeJob extends Job {
         fotos: fotos,
         hallazgos: hallazgos,
         extras: extras,
+        viajeId: viajeId,
+        posiciones: posiciones,
+        posicionesPrevias: posicionesPrevias,
+        posicionesEnviadas: posicionesEnviadas,
         inspeccionId: inspeccionId,
         hallazgosEnviados: hallazgosEnviados,
         cerrada: cerrada,
@@ -233,10 +265,17 @@ class InformeJob extends Job {
         'fotos': [for (final f in fotos) f.toJson()],
         'hallazgos': [for (final h in hallazgos) h.toJson()],
         'extras': [for (final e in extras) e.toJson()],
+        'viaje_id': viajeId,
+        'posiciones': posiciones,
+        'posiciones_previas': posicionesPrevias,
+        'posiciones_enviadas': posicionesEnviadas,
         'inspeccion_id': inspeccionId,
         'hallazgos_enviados': hallazgosEnviados,
         'cerrada': cerrada,
       };
+
+  static Map<String, int> _posiciones(Object? crudo) =>
+      {for (final e in (crudo as Map<String, dynamic>? ?? const {}).entries) e.key: e.value as int};
 }
 
 class FirmaJob extends Job {

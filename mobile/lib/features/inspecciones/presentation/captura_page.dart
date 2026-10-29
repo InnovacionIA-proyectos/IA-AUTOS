@@ -18,7 +18,9 @@ import '../../dibujo_dano/domain/dibujo_dano.dart';
 import '../../dibujo_dano/presentation/dibujo_dano_controller.dart';
 import '../../dibujo_dano/presentation/selector_zona_dano.dart';
 import '../../vehiculos/domain/etiquetas.dart';
+import '../../viajes/domain/viaje.dart';
 import '../../viajes/providers.dart';
+import '../domain/acomodacion.dart';
 import '../domain/checklist_vistas.dart';
 import '../domain/extra_local.dart';
 import '../domain/foto_local.dart';
@@ -30,6 +32,7 @@ import 'aviso_preexistente.dart';
 import 'camara_page.dart';
 import 'filas_captura.dart';
 import 'nota_foto.dart';
+import 'seccion_acomodacion.dart';
 import 'seccion_extras.dart';
 import 'sellado.dart';
 import 'selector_dano.dart';
@@ -80,6 +83,12 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   /// se cargan, y también cuando no hay copia guardada y no hay señal: entonces no se propone nada.
   var _previos = const <HallazgoPrevio>[];
   final _extras = <ExtraLocal>[];
+
+  /// Solo en la segunda inspección del cargue: las unidades del viaje (null mientras no se conozcan), el lugar que
+  /// cada una tiene y el que ya tenía el viaje al abrir esta pantalla.
+  List<ViajeVehiculo>? _unidades;
+  final _posiciones = <String, int>{};
+  var _posicionesPrevias = const <String, int>{};
   bool _guardandoFoto = false;
   bool _cerrando = false;
 
@@ -90,12 +99,30 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     super.initState();
     _buscarUbicacion();
     _cargarPrevios();
+    final viajeId = widget.viajeId;
+    if (_esAcomodacion && viajeId != null) {
+      ref.listenManual(viajeDeEtapaProvider(viajeId), (_, viaje) => viaje.whenData(_alLlegarElViaje), fireImmediately: true);
+    }
   }
 
   /// Trae los hallazgos previos del VIN. No bloquea la captura: si fallan, simplemente no se propone nada.
   Future<void> _cargarPrevios() async {
     final previos = await ref.read(hallazgosPreviosRepositorioProvider).de(widget.vin);
     if (mounted) setState(() => _previos = previos);
+  }
+
+  bool get _esAcomodacion => esSegundaInspeccionDelCargue(proceso: widget.proceso, momento: widget.momento);
+
+  /// Las unidades del viaje y los lugares que ya tienen, la primera vez que el viaje llega. Si no se pueden
+  /// traer, la sección lo dice y el cierre queda bloqueado: sin saber cuáles son no se puede comprobar que cada
+  /// una tenga su lugar. Lo que ya se eligió no se pisa si el viaje vuelve a llegar.
+  void _alLlegarElViaje(Viaje? viaje) {
+    if (viaje == null || _unidades != null) return;
+    setState(() {
+      _unidades = viaje.vehiculos;
+      _posicionesPrevias = posicionesDelViaje(viaje);
+      _posiciones.addAll(_posicionesPrevias);
+    });
   }
 
   @override
@@ -139,6 +166,19 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     final foto = await _sellar(temporal, vistaId: vista.id, nota: nota);
     if (foto != null && mounted) setState(() => _fotos.add(foto));
   }
+
+  /// Toma una foto de la acomodación: no cubre ninguna vista ni hallazgo, y cuenta para el mínimo del cierre.
+  Future<void> _tomarFotoAcomodacion() async {
+    final temporal = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const CamaraPage(titulo: 'Foto de la acomodación')),
+    );
+    if (temporal == null || !mounted) return;
+    final foto = await _sellar(temporal);
+    if (foto != null && mounted) setState(() => _fotos.add(foto));
+  }
+
+  int get _fotosAcomodacionMinimas =>
+      ref.read(entornoProvider).acomodacionFotosMinimas ?? acomodacionFotosMinimasPorDefecto;
 
   /// Guarda la foto y le pone su sello: fecha, ubicación, precisión y equipo.
   ///
@@ -353,7 +393,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 
   /// Las vistas que pide esta etapa. Transporte no pide ninguna.
   List<VistaChecklist> get _checklist =>
-      pideChecklist(widget.proceso) ? checklistDeVistas(ref.read(catalogosProvider)) : const [];
+      pideChecklist(widget.proceso) && !_esAcomodacion ? checklistDeVistas(ref.read(catalogosProvider)) : const [];
 
   BloqueoCierre? get _bloqueo => bloqueoDeCierre(
         hayUbicacion: _gps != null,
@@ -362,6 +402,9 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         extras: _extras,
         checklist: _checklist,
         catalogosListos: _catalogosListos,
+        acomodacion: _esAcomodacion
+            ? Acomodacion(unidades: _unidades, posiciones: _posiciones, fotosMinimas: _fotosAcomodacionMinimas)
+            : null,
       );
 
   Future<void> _cerrar() async {
@@ -387,6 +430,9 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         fotos: _fotos,
         hallazgos: _hallazgos,
         extras: _extras,
+        viajeId: _esAcomodacion ? widget.viajeId : null,
+        posiciones: _esAcomodacion ? {..._posiciones} : const {},
+        posicionesPrevias: _esAcomodacion ? _posicionesPrevias : const {},
       );
       await ref.read(colaRepositorioProvider).agregar(job);
       final sync = ref.read(syncControllerProvider.notifier);
@@ -448,7 +494,6 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     final catalogos = ref.watch(catalogosProvider);
     final descargandoCatalogos = ref.watch(catalogosControllerProvider).fase == FaseCatalogos.cargando;
     final checklist = _checklist;
-
     return Scaffold(
       // `proceso` es el código (con él se decide el checklist); lo que se lee sale del catálogo, y si todavía
       // no está descargado cae al propio código.
@@ -504,7 +549,24 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                   ),
                 ],
                 const SizedBox(height: Espacio.lg),
-                if (checklist.isEmpty)
+                if (_esAcomodacion)
+                  SeccionAcomodacion(
+                    unidades: _unidades,
+                    posiciones: _posiciones,
+                    fotos: _fotos,
+                    fotosMinimas: _fotosAcomodacionMinimas,
+                    alElegir: (vin, posicion) => setState(() {
+                      if (posicion == null) {
+                        _posiciones.remove(vin);
+                      } else {
+                        _posiciones[vin] = posicion;
+                      }
+                    }),
+                    alTomarFoto: _guardandoFoto ? null : _tomarFotoAcomodacion,
+                    alReintentar: () => ref.invalidate(viajeDeEtapaProvider(widget.viajeId!)),
+                    precisionBaja: ref.watch(entornoProvider).precisionBajaMetros,
+                  )
+                else if (checklist.isEmpty)
                   Text(
                     'Esta etapa no pide fotos por vista; basta la ubicación del registro.',
                     style: tema.bodySmall,

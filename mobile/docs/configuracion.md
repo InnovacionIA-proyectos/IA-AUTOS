@@ -12,6 +12,7 @@ una clave.
 | `FLAVOR` | no | `dev`, `qa`, `prod` | entorno; debe coincidir con el sabor de Android (`--flavor`). Por defecto `dev` |
 | `EXTRAS_HABILITADOS` | no | `true`, `false` | muestra la sección de extras en la captura. Apagado mientras el servidor no los reciba |
 | `GPS_PRECISION_MINIMA_M` | no | metros, entero | desde cuántos metros de margen del GPS se avisa de precisión baja. Por defecto 30, el mismo valor que el backend trae en `gps_precision_minima_m`. Se fija aquí porque `GET /api/parametros` es de administradores y del coordinador: quien está en el patio no puede leerlo |
+| `ACOMODACION_FOTOS_MINIMAS` | no | entero | cuántas fotos de la acomodación pide la app antes de cerrar la segunda inspección del cargue. Por defecto 1, el mismo valor que el backend trae en `acomodacion_fotos_minimas`. Se fija aquí por la misma razón que `GPS_PRECISION_MINIMA_M`; si queda corto, el servidor rechaza el cierre y dice cuántas faltan |
 
 Sin `API_URL` la app arranca pero muestra un aviso en el login y no deja ingresar.
 

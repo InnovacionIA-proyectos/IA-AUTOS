@@ -74,6 +74,10 @@ abstract interface class GatewayInformes {
 
   Future<void> agregarHallazgo(String inspeccionId, HallazgoLocal hallazgo);
 
+  /// Registra (o libera, con null) la posición de una unidad en la niñera. Solo con la segunda inspección del cargue
+  /// en curso: por eso va después de crearla.
+  Future<void> registrarPosicion(String viajeId, String vin, int? posicion);
+
   Future<void> cerrarInspeccion(String inspeccionId);
 
   /// Firma la transferencia. Solo viaja **una** firma, la de quien tiene la sesión: el servidor se la atribuye

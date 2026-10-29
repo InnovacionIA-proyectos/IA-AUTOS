@@ -1,4 +1,6 @@
 import '../../sync/domain/job.dart';
+import '../../viajes/domain/viaje.dart';
+import 'acomodacion.dart';
 import 'checklist_vistas.dart';
 import 'extra_local.dart';
 import 'foto_local.dart';
@@ -86,6 +88,35 @@ class ExtraSinFoto extends BloqueoCierre {
   String get mensaje => "El extra '$nombre' no tiene foto";
 }
 
+/// No se sabe qué unidades tiene el viaje, y sin ellas no se puede comprobar que cada una tenga su lugar.
+class SinUnidadesDelViaje extends BloqueoCierre {
+  const SinUnidadesDelViaje();
+
+  @override
+  String get mensaje => 'No se pudieron cargar las unidades del viaje. Conéctate e inténtalo de nuevo.';
+}
+
+/// Una unidad que sigue en el viaje y no tiene lugar en la niñera. Es la regla del servidor al cerrar la segunda
+/// inspección del cargue, con sus mismas palabras.
+class FaltaPosicion extends BloqueoCierre {
+  const FaltaPosicion(this.vin);
+
+  final String vin;
+
+  @override
+  String get mensaje => 'Falta la posición de la unidad $vin';
+}
+
+class FaltanFotosDeAcomodacion extends BloqueoCierre {
+  const FaltanFotosDeAcomodacion({required this.minimas, required this.hay});
+
+  final int minimas;
+  final int hay;
+
+  @override
+  String get mensaje => 'Faltan fotos de la acomodación: se exige al menos $minimas y hay $hay';
+}
+
 /// Reglas de cierre, en el mismo orden en que conviene resolverlas. Devuelve null si se puede cerrar.
 ///
 /// [checklist] vacío significa que la etapa no pide vistas (Transporte): ahí lo único que se exige es la
@@ -97,12 +128,21 @@ BloqueoCierre? bloqueoDeCierre({
   List<ExtraLocal> extras = const [],
   List<VistaChecklist> checklist = const [],
   bool catalogosListos = true,
+  Acomodacion? acomodacion,
 }) {
   if (!catalogosListos) return const SinCatalogos();
   if (!hayUbicacion) return const SinUbicacion();
 
   final faltan = vistasObligatoriasSinFoto(checklist, fotos);
   if (faltan.isNotEmpty) return FaltanVistas(faltan);
+
+  if (acomodacion != null) {
+    if (acomodacion.unidades == null) return const SinUnidadesDelViaje();
+    final sin = vinesSinPosicion(acomodacion.unidades!, acomodacion.posiciones);
+    if (sin.isNotEmpty) return FaltaPosicion(sin.first);
+    final hay = fotosDeAcomodacion(fotos).length;
+    if (hay < acomodacion.fotosMinimas) return FaltanFotosDeAcomodacion(minimas: acomodacion.fotosMinimas, hay: hay);
+  }
 
   for (final hallazgo in hallazgos) {
     if (hallazgo.foto == null) return HallazgoSinFoto(hallazgo.zona);
@@ -118,6 +158,16 @@ BloqueoCierre? bloqueoDeCierre({
   if (sinSello.isNotEmpty) return FotosSinUbicacion(sinSello.length);
 
   return null;
+}
+
+/// Lo que la segunda inspección del cargue exige además de la ubicación: cada unidad con su lugar y las fotos de la
+/// acomodación. [unidades] es null mientras no se conozca el viaje.
+class Acomodacion {
+  const Acomodacion({required this.unidades, required this.posiciones, required this.fotosMinimas});
+
+  final List<ViajeVehiculo>? unidades;
+  final Map<String, int> posiciones;
+  final int fotosMinimas;
 }
 
 /// Fotos cuyo sello tiene poca precisión. No bloquean: se avisa.
@@ -140,6 +190,9 @@ InformeJob construirInformeJob({
   required List<FotoLocal> fotos,
   required List<HallazgoLocal> hallazgos,
   List<ExtraLocal> extras = const [],
+  String? viajeId,
+  Map<String, int> posiciones = const {},
+  Map<String, int> posicionesPrevias = const {},
 }) {
   String? opcional(String valor) => valor.trim().isEmpty ? null : valor.trim();
   return InformeJob(
@@ -156,6 +209,9 @@ InformeJob construirInformeJob({
     fotos: fotos,
     hallazgos: hallazgos,
     extras: extras,
+    viajeId: viajeId,
+    posiciones: posiciones,
+    posicionesPrevias: posicionesPrevias,
   );
 }
 

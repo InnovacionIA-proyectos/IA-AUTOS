@@ -10,6 +10,7 @@ Viaje viaje(
   String? unidad = 'Niñera',
   String? conductor,
   String estado = 'en_curso',
+  Map<String, int> posiciones = const {},
 }) =>
     Viaje(
       id: id,
@@ -19,7 +20,7 @@ Viaje viaje(
       unidad: unidad,
       trailer: trailer,
       conductorNombre: conductor,
-      vehiculos: [for (final v in vines) ViajeVehiculo(vin: v, marca: 'Renault', modelo: 'Kwid')],
+      vehiculos: [for (final v in vines) ViajeVehiculo(vin: v, marca: 'Renault', modelo: 'Kwid', posicion: posiciones[v])],
     );
 
 class ViajesRepositorioFalso implements ViajesRepositorio {

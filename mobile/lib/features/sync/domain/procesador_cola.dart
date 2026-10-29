@@ -172,6 +172,25 @@ class ProcesadorCola {
     }
     final inspeccionId = job.inspeccionId!;
 
+    // 1b) Posiciones de la niñera (solo la segunda inspección del cargue). Van después de crearla porque el
+    //     servidor solo las admite mientras esa inspección está en curso, y antes de cerrar porque el cierre las exige.
+    if (!job.posicionesEnviadas && job.viajeId != null && job.posiciones.isNotEmpty) {
+      final cambiadas = [
+        for (final e in job.posiciones.entries)
+          if (job.posicionesPrevias[e.key] != e.value) e,
+      ];
+      // Primero se liberan las que cambian y después se asignan: un intercambio (la 4 pasa a la 3 y la 3 a la 4)
+      // chocaría con la que todavía ocupa el lugar.
+      for (final e in cambiadas) {
+        await gateway.registrarPosicion(job.viajeId!, e.key, null);
+      }
+      for (final e in cambiadas) {
+        await gateway.registrarPosicion(job.viajeId!, e.key, e.value);
+      }
+      job = job.conProgreso(posicionesEnviadas: true);
+      await cola.guardar(job);
+    }
+
     // 2) Fotos: subir (si falta) y crear la evidencia con el sello PROPIO de cada foto (si falta).
     for (var i = 0; i < job.fotos.length; i++) {
       var foto = job.fotos[i];

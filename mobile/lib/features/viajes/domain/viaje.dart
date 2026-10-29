@@ -87,6 +87,7 @@ class ViajeVehiculo {
     this.operacion,
     this.estadoUnidad = estadoUnidadActiva,
     this.noSale,
+    this.posicion,
   });
 
   factory ViajeVehiculo.fromJson(Map<String, dynamic> json) => ViajeVehiculo(
@@ -96,6 +97,7 @@ class ViajeVehiculo {
         color: json['color'] as String?,
         operacion: json['operacion'] as String?,
         estadoUnidad: json['estado_unidad'] as String? ?? estadoUnidadActiva,
+        posicion: json['posicion'] as int?,
         noSale: switch (json['no_sale']) {
           final Map<String, dynamic> m => NoSale.fromJson(m),
           _ => null,
@@ -115,6 +117,9 @@ class ViajeVehiculo {
   /// Por qué no sale y quién lo decidió. Null mientras la unidad esté activa.
   final NoSale? noSale;
 
+  /// El lugar (1 a 7) que la unidad tiene en la niñera, o null mientras no se haya registrado.
+  final int? posicion;
+
   bool get sale => estadoUnidad == estadoUnidadActiva;
 
   Map<String, dynamic> toJson() => {
@@ -125,6 +130,7 @@ class ViajeVehiculo {
         'operacion': operacion,
         'estado_unidad': estadoUnidad,
         'no_sale': noSale?.toJson(),
+        'posicion': posicion,
       };
 }
 

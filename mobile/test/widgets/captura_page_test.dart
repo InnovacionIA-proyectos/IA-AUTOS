@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/core/tema/tema.dart';
+import 'package:traza_autos/core/ui/widgets.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
 import 'package:traza_autos/features/inspecciones/presentation/captura_page.dart';
 import 'package:traza_autos/features/inspecciones/presentation/filas_captura.dart';
@@ -27,6 +28,7 @@ Future<Arnes> abrir(
   List<Map<String, dynamic>> vistas = const [],
   String proceso = 'Cargue',
   String procesoCodigo = 'cargue',
+  String momento = Momento.llegada,
 }) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -51,7 +53,7 @@ Future<Arnes> abrir(
           vin: 'VIN00000000000001',
           etapaId: 'e1',
           proceso: procesoCodigo,
-          momento: Momento.salida,
+          momento: momento,
           viajeId: viajeId,
         ),
       ),
@@ -210,9 +212,90 @@ void main() {
     });
 
     testWidgets('el título dice qué momento se está capturando', (tester) async {
-      await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'), vistas: vistasDePrueba);
+      await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'), vistas: vistasDePrueba, momento: Momento.salida);
 
       expect(find.text('Inspección de salida · cargue'), findsOneWidget);
+    });
+  });
+
+  // La segunda inspección del cargue (la salida) no pide las vistas de estado: documenta dónde quedó cada unidad en
+  // la niñera. Es la misma regla con la que el servidor la deja cerrar.
+  group('la acomodación de la segunda inspección del cargue', () {
+    const vinA = 'VINA0000000000001';
+    const vinB = 'VINB0000000000002';
+
+    Future<void> abrirAcomodacion(WidgetTester tester, {Map<String, int> posiciones = const {}}) => abrir(
+          tester,
+          ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1', vines: [vinA, vinB], posiciones: posiciones),
+          vistas: vistasDePrueba,
+          momento: Momento.salida,
+        );
+
+    testWidgets('en vez de las vistas pide el lugar de cada unidad del viaje', (tester) async {
+      await abrirAcomodacion(tester);
+
+      expect(find.text('Acomodación en la niñera'), findsOneWidget);
+      expect(find.text('Fotos de la inspección'), findsNothing);
+      expect(find.text(vinA), findsOneWidget);
+      expect(find.text(vinB), findsOneWidget);
+    });
+
+    testWidgets('en la llegada del cargue sigue pidiendo las vistas', (tester) async {
+      await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1', vines: [vinA]), vistas: vistasDePrueba);
+
+      expect(find.text('Acomodación en la niñera'), findsNothing);
+      expect(find.text('Fotos de la inspección'), findsOneWidget);
+    });
+
+    testWidgets('no deja cerrar mientras falte el lugar de una unidad, y dice cuál', (tester) async {
+      await abrirAcomodacion(tester);
+
+      final boton = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Cerrar informe'));
+      expect(boton.onPressed, isNull);
+      expect(find.text('Falta la posición de la unidad $vinA'), findsOneWidget);
+    });
+
+    testWidgets('elegir el lugar de una unidad avanza al siguiente faltante', (tester) async {
+      await abrirAcomodacion(tester);
+
+      await tester.tap(find.descendant(of: find.widgetWithText(Tarjeta, vinA), matching: find.widgetWithText(ChoiceChip, '4')));
+      await tester.pump();
+
+      expect(find.text('Falta la posición de la unidad $vinB'), findsOneWidget);
+    });
+
+    testWidgets('un lugar que ya tiene otra unidad no se puede elegir', (tester) async {
+      await abrirAcomodacion(tester, posiciones: {vinA: 4});
+
+      final chip = tester.widget<ChoiceChip>(
+        find.descendant(of: find.widgetWithText(Tarjeta, vinB), matching: find.widgetWithText(ChoiceChip, '4')),
+      );
+      expect(chip.onSelected, isNull);
+    });
+
+    testWidgets('las posiciones que el viaje ya tenía llegan marcadas', (tester) async {
+      await abrirAcomodacion(tester, posiciones: {vinA: 4, vinB: 3});
+
+      for (final (vin, posicion) in [(vinA, '4'), (vinB, '3')]) {
+        final elegidas = tester
+            .widgetList<ChoiceChip>(find.descendant(of: find.widgetWithText(Tarjeta, vin), matching: find.byType(ChoiceChip)))
+            .where((c) => c.selected);
+        expect(elegidas.map((c) => ((c.label as SizedBox).child as Text).data), [posicion], reason: vin);
+      }
+      expect(find.text('Sin posición todavía'), findsNothing);
+    });
+
+    testWidgets('sin poder traer el viaje lo dice y no deja cerrar', (tester) async {
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()..errorDeLaEtapa = Exception('sin red'),
+        vistas: vistasDePrueba,
+        momento: Momento.salida,
+      );
+
+      expect(find.text('No se pudieron cargar las unidades del viaje.'), findsOneWidget);
+      final boton = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Cerrar informe'));
+      expect(boton.onPressed, isNull);
     });
   });
 

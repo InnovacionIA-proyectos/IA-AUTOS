@@ -144,6 +144,15 @@ class GatewayFalso implements GatewayInformes {
   @override
   Future<void> agregarHallazgo(String inspeccionId, HallazgoLocal hallazgo) => _paso('agregarHallazgo');
 
+  /// Cada posicion que se mando, en orden: (viaje, VIN, posicion; null es liberar).
+  final List<(String, String, int?)> posicionesEnviadas = [];
+
+  @override
+  Future<void> registrarPosicion(String viajeId, String vin, int? posicion) {
+    posicionesEnviadas.add((viajeId, vin, posicion));
+    return _paso('registrarPosicion');
+  }
+
   @override
   Future<void> cerrarInspeccion(String inspeccionId) => _paso('cerrarInspeccion');
 
@@ -220,6 +229,10 @@ InformeJob informe({
   String? inspeccionId,
   int hallazgosEnviados = 0,
   bool cerrada = false,
+  String? viajeId,
+  Map<String, int> posiciones = const {},
+  Map<String, int> posicionesPrevias = const {},
+  bool posicionesEnviadas = false,
 }) => InformeJob(
   id: id,
   etiqueta: 'Informe $id',
@@ -237,6 +250,10 @@ InformeJob informe({
   inspeccionId: inspeccionId,
   hallazgosEnviados: hallazgosEnviados,
   cerrada: cerrada,
+  viajeId: viajeId,
+  posiciones: posiciones,
+  posicionesPrevias: posicionesPrevias,
+  posicionesEnviadas: posicionesEnviadas,
 );
 
 FotoLocal foto(String ruta, {String fecha = '2026-01-02T10:01:00.000Z', double? lat = 6.21, double? lng = -75.51, String? storagePath, bool enviada = false}) =>
