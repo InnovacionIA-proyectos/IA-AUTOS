@@ -111,6 +111,8 @@ class ProcesadorCola {
               await gateway.agregarNota(entidad: job.entidad, entidadId: job.entidadId, texto: job.texto);
             case EntregaPuntoJob():
               await _ejecutarEntregaPunto(job);
+            case ReciboSinEntregaJob():
+              await gateway.firmarReciboSinEntrega(job.inspeccionId, firma: job.firma);
           }
           await cola.eliminar(job.id);
           enviados++;
@@ -171,6 +173,8 @@ class ProcesadorCola {
         lat: job.lat,
         lng: job.lng,
         notas: job.notas,
+        motivoSinInspector: job.motivoSinInspector,
+        motivoSinInspectorTexto: job.motivoSinInspectorTexto,
       );
       job = job.conProgreso(inspeccionId: id);
       await cola.guardar(job);

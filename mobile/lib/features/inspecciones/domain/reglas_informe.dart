@@ -193,6 +193,8 @@ InformeJob construirInformeJob({
   String? viajeId,
   Map<String, int> posiciones = const {},
   Map<String, int> posicionesPrevias = const {},
+  String? motivoSinInspector,
+  String? motivoSinInspectorTexto,
 }) {
   String? opcional(String valor) => valor.trim().isEmpty ? null : valor.trim();
   return InformeJob(
@@ -212,6 +214,8 @@ InformeJob construirInformeJob({
     viajeId: viajeId,
     posiciones: posiciones,
     posicionesPrevias: posicionesPrevias,
+    motivoSinInspector: motivoSinInspector,
+    motivoSinInspectorTexto: motivoSinInspectorTexto,
   );
 }
 

@@ -99,7 +99,10 @@ class GatewayFalso implements GatewayInformes {
     String? placa,
     String? trailer,
     String? notas,
+    String? motivoSinInspector,
+    String? motivoSinInspectorTexto,
   }) async {
+    motivosEnviados.add((motivoSinInspector, motivoSinInspectorTexto));
     await _paso('crearInspeccion');
     return 'insp-${++_inspecciones}';
   }
@@ -151,6 +154,18 @@ class GatewayFalso implements GatewayInformes {
   Future<void> registrarPosicion(String viajeId, String vin, int? posicion) {
     posicionesEnviadas.add((viajeId, vin, posicion));
     return _paso('registrarPosicion');
+  }
+
+  /// El motivo «No hay inspector» con que se creó cada inspección: (código, texto); (null, null) en las normales.
+  final List<(String?, String?)> motivosEnviados = [];
+
+  /// Las inspecciones sobre las que se firmó el recibo sin entrega, con el trazo.
+  final List<(String, String)> recibosSinEntrega = [];
+
+  @override
+  Future<void> firmarReciboSinEntrega(String inspeccionId, {required String firma}) {
+    recibosSinEntrega.add((inspeccionId, firma));
+    return _paso('firmarReciboSinEntrega');
   }
 
   /// Cada firma de una entrega por punto que salió: (viaje, lugar, motivo si es una sola firma, firma).
@@ -248,6 +263,8 @@ InformeJob informe({
   Map<String, int> posiciones = const {},
   Map<String, int> posicionesPrevias = const {},
   bool posicionesEnviadas = false,
+  String? motivoSinInspector,
+  String? motivoSinInspectorTexto,
 }) => InformeJob(
   id: id,
   etiqueta: 'Informe $id',
@@ -269,6 +286,8 @@ InformeJob informe({
   posiciones: posiciones,
   posicionesPrevias: posicionesPrevias,
   posicionesEnviadas: posicionesEnviadas,
+  motivoSinInspector: motivoSinInspector,
+  motivoSinInspectorTexto: motivoSinInspectorTexto,
 );
 
 FotoLocal foto(String ruta, {String fecha = '2026-01-02T10:01:00.000Z', double? lat = 6.21, double? lng = -75.51, String? storagePath, bool enviada = false}) =>

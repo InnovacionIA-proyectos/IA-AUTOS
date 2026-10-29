@@ -61,6 +61,7 @@ sealed class Job {
         'no_firma' => NoFirmaJob.fromJson(json),
         'nota' => NotaJob.fromJson(json),
         'entrega_punto' => EntregaPuntoJob.fromJson(json),
+        'recibo_sin_entrega' => ReciboSinEntregaJob.fromJson(json),
         final otro => throw FormatException('Tipo de job desconocido: $otro'),
       };
 }
@@ -88,6 +89,8 @@ class InformeJob extends Job {
     this.posiciones = const {},
     this.posicionesPrevias = const {},
     this.posicionesEnviadas = false,
+    this.motivoSinInspector,
+    this.motivoSinInspectorTexto,
     this.inspeccionId,
     this.hallazgosEnviados = 0,
     this.cerrada = false,
@@ -119,6 +122,8 @@ class InformeJob extends Job {
         posiciones: _posiciones(json['posiciones']),
         posicionesPrevias: _posiciones(json['posiciones_previas']),
         posicionesEnviadas: json['posiciones_enviadas'] as bool? ?? false,
+        motivoSinInspector: json['motivo_sin_inspector'] as String?,
+        motivoSinInspectorTexto: json['motivo_sin_inspector_texto'] as String?,
         inspeccionId: json['inspeccion_id'] as String?,
         hallazgosEnviados: json['hallazgos_enviados'] as int? ?? 0,
         cerrada: json['cerrada'] as bool? ?? false,
@@ -145,6 +150,12 @@ class InformeJob extends Job {
 
   /// Lo que el viaje traía al abrir la captura. Con él se sabe qué unidades cambiaron de lugar.
   final Map<String, int> posicionesPrevias;
+
+  /// Solo en la salida del cargue que hace el conductor cuando no hay inspector: el código del motivo del catálogo
+  /// `motivos-sin-inspector` y, si el motivo lo pide, lo que escribió. La fecha, lat y lng del informe son los del
+  /// momento en que eligió el motivo.
+  final String? motivoSinInspector;
+  final String? motivoSinInspectorTexto;
 
   // Progreso reanudable.
   final bool posicionesEnviadas;
@@ -185,6 +196,8 @@ class InformeJob extends Job {
         posiciones: posiciones,
         posicionesPrevias: posicionesPrevias,
         posicionesEnviadas: posicionesEnviadas ?? this.posicionesEnviadas,
+        motivoSinInspector: motivoSinInspector,
+        motivoSinInspectorTexto: motivoSinInspectorTexto,
         inspeccionId: inspeccionId ?? this.inspeccionId,
         hallazgosEnviados: hallazgosEnviados ?? this.hallazgosEnviados,
         cerrada: cerrada ?? this.cerrada,
@@ -213,6 +226,8 @@ class InformeJob extends Job {
         posiciones: posiciones,
         posicionesPrevias: posicionesPrevias,
         posicionesEnviadas: posicionesEnviadas,
+        motivoSinInspector: motivoSinInspector,
+        motivoSinInspectorTexto: motivoSinInspectorTexto,
         inspeccionId: inspeccionId,
         hallazgosEnviados: hallazgosEnviados,
         cerrada: cerrada,
@@ -241,6 +256,8 @@ class InformeJob extends Job {
         posiciones: posiciones,
         posicionesPrevias: posicionesPrevias,
         posicionesEnviadas: posicionesEnviadas,
+        motivoSinInspector: motivoSinInspector,
+        motivoSinInspectorTexto: motivoSinInspectorTexto,
         inspeccionId: inspeccionId,
         hallazgosEnviados: hallazgosEnviados,
         cerrada: cerrada,
@@ -270,6 +287,8 @@ class InformeJob extends Job {
         'posiciones': posiciones,
         'posiciones_previas': posicionesPrevias,
         'posiciones_enviadas': posicionesEnviadas,
+        'motivo_sin_inspector': motivoSinInspector,
+        'motivo_sin_inspector_texto': motivoSinInspectorTexto,
         'inspeccion_id': inspeccionId,
         'hallazgos_enviados': hallazgosEnviados,
         'cerrada': cerrada,
@@ -672,5 +691,77 @@ class EntregaPuntoJob extends Job {
         'lugar_id': lugarId,
         'firma': firma,
         'motivo': motivo,
+      };
+}
+
+/// La firma del recibo sin entrega: el conductor hizo la salida del cargue sin inspector, nadie de la empresa
+/// entrega, y él cierra la transferencia solo con su firma. Va por la cola con su dueño.
+class ReciboSinEntregaJob extends Job {
+  const ReciboSinEntregaJob({
+    required super.id,
+    required super.etiqueta,
+    required super.creadoEn,
+    super.intentos,
+    super.error,
+    super.codigoError,
+    super.fallido,
+    super.usuarioId,
+    required this.inspeccionId,
+    required this.firma,
+  });
+
+  factory ReciboSinEntregaJob.fromJson(Map<String, dynamic> json) => ReciboSinEntregaJob(
+        id: json['id'] as String,
+        etiqueta: json['etiqueta'] as String,
+        creadoEn: json['creado_en'] as int,
+        intentos: json['intentos'] as int? ?? 0,
+        error: json['error'] as String?,
+        codigoError: json['codigo_error'] as String?,
+        fallido: json['fallido'] as bool? ?? false,
+        usuarioId: json['usuario_id'] as String?,
+        inspeccionId: json['inspeccion_id'] as String,
+        firma: json['firma'] as String,
+      );
+
+  final String inspeccionId;
+  final String firma;
+
+  @override
+  String get tipo => 'recibo_sin_entrega';
+
+  @override
+  ReciboSinEntregaJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) =>
+      _copiar(intentos: intentos, error: error, codigoError: codigo, fallido: fallido);
+
+  @override
+  ReciboSinEntregaJob conUsuario(String usuario) => _copiar(usuarioId: usuario);
+
+  ReciboSinEntregaJob _copiar({int? intentos, String? error, String? codigoError, bool? fallido, String? usuarioId}) =>
+      ReciboSinEntregaJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        intentos: intentos ?? this.intentos,
+        error: error,
+        codigoError: codigoError ?? this.codigoError,
+        fallido: fallido ?? this.fallido,
+        usuarioId: usuarioId ?? this.usuarioId,
+        inspeccionId: inspeccionId,
+        firma: firma,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'recibo_sin_entrega',
+        'id': id,
+        'etiqueta': etiqueta,
+        'creado_en': creadoEn,
+        'intentos': intentos,
+        'error': error,
+        'codigo_error': codigoError,
+        'fallido': fallido,
+        'usuario_id': usuarioId,
+        'inspeccion_id': inspeccionId,
+        'firma': firma,
       };
 }

@@ -32,6 +32,13 @@ const etiquetaTipoCierre = <String, String>{
   'firmada': 'Transferencia firmada',
   'con_reservas': 'Recibida con reservas',
   'no_firma': 'Constancia de no firma',
+  'recibo_sin_entrega': 'Recibo sin entrega',
+};
+
+/// Las novedades de proceso: lo que pasó alrededor de una inspección y no es un daño.
+const etiquetaNovedadProceso = <String, String>{
+  'cargue_sin_inspector': 'Cargue sin inspector',
+  'recibo_sin_entrega': 'Recibo sin entrega',
 };
 
 const etiquetaEstadoViaje = <String, String>{

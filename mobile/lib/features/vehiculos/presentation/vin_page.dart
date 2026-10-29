@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../app/proveedores.dart';
+import '../../../core/dispositivo/servicios.dart';
 import '../../../core/errores/error_api.dart';
 import '../../../core/http/urls_api.dart';
 import '../../../core/tema/tema.dart';
@@ -17,7 +18,9 @@ import '../../auth/presentation/auth_controller.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
 import '../../dibujo_dano/domain/dibujo_dano.dart';
+import '../../custodia/presentation/recibo_sin_entrega_page.dart';
 import '../../inspecciones/domain/novedad_pendiente.dart';
+import '../../inspecciones/presentation/hoja_sin_inspector.dart';
 import '../../inspecciones/presentation/revision_novedad_page.dart';
 import '../../inspecciones/domain/nota_aclaratoria.dart';
 import '../../inspecciones/presentation/nota_aclaratoria_hoja.dart';
@@ -90,6 +93,51 @@ class _Detalle extends ConsumerWidget {
   final Inventario inventario;
   final void Function(String ruta) alIr;
 
+  /// «No hay inspector»: el conductor elige el motivo, se toma la fecha y el lugar de ese momento, y sigue la captura
+  /// de la salida del cargue. Esos tres datos viajan con la inspección: la novedad de proceso los guarda tal cual,
+  /// aunque el informe se envíe horas después.
+  Future<void> _sinInspector(BuildContext context, WidgetRef ref, EtapaVista etapa, String vinRuta) async {
+    final motivos = ref.read(catalogosProvider).seleccionables(Catalogo.motivosSinInspector);
+    final motivo = await pedirMotivoSinInspector(context, motivos: motivos);
+    if (motivo == null || !context.mounted) return;
+    final Posicion posicion;
+    try {
+      posicion = await ref.read(servicioUbicacionProvider).obtenerActual();
+    } on UbicacionNoDisponible catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.motivo)));
+      return;
+    }
+    if (!context.mounted) return;
+    final consulta = [
+      'proceso=${Uri.encodeQueryComponent(etapa.proceso)}',
+      'momento=${Momento.salida}',
+      if (etapa.viajeId != null) 'viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}',
+      'motivo=${Uri.encodeQueryComponent(motivo.codigo)}',
+      if (motivo.texto != null) 'motivoTexto=${Uri.encodeQueryComponent(motivo.texto!)}',
+      'fechaMotivo=${Uri.encodeQueryComponent(DateTime.now().toUtc().toIso8601String())}',
+      'latMotivo=${posicion.lat}',
+      'lngMotivo=${posicion.lng}',
+    ].join('&');
+    alIr('/inspecciones/vin/$vinRuta/captura/${etapa.id}?$consulta');
+  }
+
+  /// La salida del cargue que hizo el conductor sin inspector, cuando todavía falta cerrar su transferencia: ahí no
+  /// hay quien entregue, y quien recibe firma solo.
+  InspeccionVista? _reciboSinEntrega(EtapaVista etapa, String rol) {
+    if (rol != 'conductor' || etapa.proceso != 'cargue') return null;
+    final salida = etapa.inspecciones.where((i) => i.momento == Momento.salida && i.fueSinInspector && i.cerrada).lastOrNull;
+    return salida == null || (salida.transferencia?.cerrada ?? false) ? null : salida;
+  }
+
+  Future<void> _firmarReciboSinEntrega(BuildContext context, WidgetRef ref, EtapaVista etapa) async {
+    final salida = _reciboSinEntrega(etapa, 'conductor');
+    if (salida == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => ReciboSinEntregaPage(vin: inventario.vin, inspeccionId: salida.id)),
+    );
+    ref.invalidate(inventarioProvider(inventario.vin));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
@@ -142,9 +190,12 @@ class _Detalle extends ConsumerWidget {
               momentos: momentosDeEtapa(etapa, inventario),
               motivoSoloLectura: switch (etapa) {
                 _ when viajeTerminado => mensajeViajeTerminado,
-                _ when !puedeCapturar(etapa, rol: rol) => mensajeCargueConApoyo,
                 _ => null,
               },
+              sinInspector: (momento) => conductorUsaExcepcion(etapa, rol: rol, momento: momento),
+              alSinInspector: () => _sinInspector(context, ref, etapa, vinRuta),
+              reciboSinEntrega: _reciboSinEntrega(etapa, rol),
+              alReciboSinEntrega: () => _firmarReciboSinEntrega(context, ref, etapa),
               accion: accionDeEtapa(etapa, inventario),
               // El bloqueo nombra la etapa anterior, y el nombre sale del catálogo: el dominio solo da su código.
               nombreDeEtapa: (codigo) => catalogos.etiqueta(Catalogo.etapas, codigo),
@@ -516,6 +567,10 @@ class _TarjetaEtapa extends StatelessWidget {
     required this.nombreDeEtapa,
     required this.alCapturar,
     required this.alFirmar,
+    required this.sinInspector,
+    required this.alSinInspector,
+    required this.reciboSinEntrega,
+    required this.alReciboSinEntrega,
   });
 
   final EtapaVista etapa;
@@ -532,6 +587,14 @@ class _TarjetaEtapa extends StatelessWidget {
   final String Function(String codigoEtapa) nombreDeEtapa;
   final void Function(String momento) alCapturar;
   final void Function(FirmarTransferencia accion) alFirmar;
+
+  /// ¿En este momento el conductor no captura sino que activa «No hay inspector»?
+  final bool Function(String momento) sinInspector;
+  final VoidCallback alSinInspector;
+
+  /// La salida sin inspector cuya transferencia espera la firma del conductor; null si no aplica.
+  final InspeccionVista? reciboSinEntrega;
+  final VoidCallback alReciboSinEntrega;
 
   @override
   Widget build(BuildContext context) {
@@ -564,8 +627,24 @@ class _TarjetaEtapa extends StatelessWidget {
           else
             for (final momento in momentos) ...[
               const SizedBox(height: Espacio.sm),
-              _FilaMomento(momento: momento, nombreDeEtapa: nombreDeEtapa, alCapturar: () => alCapturar(momento.momento)),
+              _FilaMomento(
+                momento: momento,
+                nombreDeEtapa: nombreDeEtapa,
+                alCapturar: () => alCapturar(momento.momento),
+                sinInspector: sinInspector(momento.momento),
+                alSinInspector: alSinInspector,
+              ),
             ],
+          // Lo que pasó en el proceso alrededor de estas inspecciones: cargue sin inspector, recibo sin entrega.
+          for (final inspeccion in etapa.inspecciones)
+            for (final novedad in inspeccion.novedadesProceso)
+              Padding(
+                padding: const EdgeInsets.only(top: Espacio.sm),
+                child: Text(
+                  '${etiquetar(etiquetaNovedadProceso, novedad.tipo)} · ${novedad.resumen}',
+                  style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+                ),
+              ),
           const SizedBox(height: Espacio.sm),
           if (motivoSoloLectura == null)
             switch (accion) {
@@ -587,10 +666,14 @@ class _TarjetaEtapa extends StatelessWidget {
                     ),
                     const SizedBox(height: Espacio.sm),
                   ],
-                  FilledButton(
-                    onPressed: () => alFirmar(a),
-                    child: Text(a.soloFirma ? 'Revisar y firmar' : 'Firmar transferencia'),
-                  ),
+                  if (reciboSinEntrega != null)
+                    // Nadie de la empresa entrega: en vez de esperar una firma que no llega, el conductor cierra con la suya.
+                    FilledButton(onPressed: alReciboSinEntrega, child: const Text('Firmar recibo sin entrega'))
+                  else
+                    FilledButton(
+                      onPressed: () => alFirmar(a),
+                      child: Text(a.soloFirma ? 'Revisar y firmar' : 'Firmar transferencia'),
+                    ),
                 ],
               ),
               SinInforme() => Text('No hay informe previo para firmar en esta etapa.', style: tema.bodySmall),
@@ -604,11 +687,21 @@ class _TarjetaEtapa extends StatelessWidget {
 /// Una de las dos filas de la etapa: «Inspección de salida» o «Inspección de llegada», con lo que hay hecho y lo
 /// que se puede hacer.
 class _FilaMomento extends StatelessWidget {
-  const _FilaMomento({required this.momento, required this.nombreDeEtapa, required this.alCapturar});
+  const _FilaMomento({
+    required this.momento,
+    required this.nombreDeEtapa,
+    required this.alCapturar,
+    required this.sinInspector,
+    required this.alSinInspector,
+  });
 
   final MomentoEtapa momento;
   final String Function(String codigoEtapa) nombreDeEtapa;
   final VoidCallback alCapturar;
+
+  /// La salida del cargue del conductor: en vez de «Capturar», «No hay inspector».
+  final bool sinInspector;
+  final VoidCallback alSinInspector;
 
   @override
   Widget build(BuildContext context) {
@@ -644,7 +737,9 @@ class _FilaMomento extends StatelessWidget {
           const Insignia('Borrador', tono: TonoInsignia.info)
         else
           // Deshabilitado, no escondido: que se vea que falta y por qué.
-          BotonEnFila(texto: 'Capturar', onPressed: momento.sePuedeCapturar ? alCapturar : null),
+          sinInspector
+              ? BotonEnFila(texto: 'No hay inspector', onPressed: momento.sePuedeCapturar ? alSinInspector : null)
+              : BotonEnFila(texto: 'Capturar', onPressed: momento.sePuedeCapturar ? alCapturar : null),
       ],
     );
   }

@@ -55,6 +55,11 @@ class CapturaPage extends ConsumerStatefulWidget {
     required this.proceso,
     required this.momento,
     this.viajeId,
+    this.motivoSinInspector,
+    this.motivoSinInspectorTexto,
+    this.fechaMotivo,
+    this.latMotivo,
+    this.lngMotivo,
   });
 
   final String vin;
@@ -66,6 +71,15 @@ class CapturaPage extends ConsumerStatefulWidget {
 
   /// Viaje del que cuelga la etapa. De él salen la placa, el tráiler, la unidad y el conductor.
   final String? viajeId;
+
+  /// «No hay inspector»: el conductor hace la salida del cargue por la excepción. Es el código del motivo, lo que
+  /// escribió si el motivo lo pide, y la fecha y el lugar del momento en que lo eligió (con ellos se registra la
+  /// novedad, aunque el informe se envíe después).
+  final String? motivoSinInspector;
+  final String? motivoSinInspectorTexto;
+  final DateTime? fechaMotivo;
+  final double? latMotivo;
+  final double? lngMotivo;
 
   @override
   ConsumerState<CapturaPage> createState() => _EstadoCapturaPage();
@@ -415,6 +429,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     setState(() => _cerrando = true);
     try {
       final ahora = DateTime.now();
+      final sinInspector = widget.motivoSinInspector != null;
       final job = construirInformeJob(
         id: const Uuid().v4(),
         creadoEn: ahora.millisecondsSinceEpoch,
@@ -423,13 +438,16 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         vin: widget.vin,
         proceso: ref.read(catalogosProvider).etiqueta(Catalogo.etapas, widget.proceso),
         etapaId: widget.etapaId,
-        fecha: ahora,
-        lat: gps.lat,
-        lng: gps.lng,
+        // Sin inspector, la fecha y el lugar son los del momento en que se eligió el motivo, no los del cierre.
+        fecha: sinInspector ? (widget.fechaMotivo ?? ahora) : ahora,
+        lat: sinInspector ? (widget.latMotivo ?? gps.lat) : gps.lat,
+        lng: sinInspector ? (widget.lngMotivo ?? gps.lng) : gps.lng,
         notas: _notas.text,
         fotos: _fotos,
         hallazgos: _hallazgos,
         extras: _extras,
+        motivoSinInspector: widget.motivoSinInspector,
+        motivoSinInspectorTexto: widget.motivoSinInspectorTexto,
         viajeId: _esAcomodacion ? widget.viajeId : null,
         posiciones: _esAcomodacion ? {..._posiciones} : const {},
         posicionesPrevias: _esAcomodacion ? _posicionesPrevias : const {},
@@ -508,6 +526,17 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
               padding: const EdgeInsets.all(Espacio.lg),
               children: [
                 Text(widget.vin, style: tema.bodySmall?.copyWith(fontFamily: 'monospace')),
+                if (widget.motivoSinInspector case final codigo?) ...[
+                  const SizedBox(height: Espacio.md),
+                  Tarjeta(
+                    child: Text(
+                      'Sin inspector: ${catalogos.etiqueta(Catalogo.motivosSinInspector, codigo)}'
+                      '${widget.motivoSinInspectorTexto == null ? '' : ' · ${widget.motivoSinInspectorTexto}'}. '
+                      'Se avisará al coordinador.',
+                      style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: Espacio.md),
                 Text('Datos del transporte', style: tema.titleMedium),
                 const SizedBox(height: Espacio.md),

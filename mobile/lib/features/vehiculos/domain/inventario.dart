@@ -101,6 +101,9 @@ abstract final class TipoCierre {
   static const firmada = 'firmada';
   static const conReservas = 'con_reservas';
   static const noFirma = 'no_firma';
+
+  /// El conductor hizo la salida del cargue sin inspector y nadie de la empresa entregó: firma solo quien recibe.
+  static const reciboSinEntrega = 'recibo_sin_entrega';
 }
 
 /// La transferencia de un informe tal como la ve la pantalla. Lo que importa aquí es **quién falta por
@@ -155,6 +158,48 @@ class TransferenciaVista {
       };
 }
 
+/// El motivo por el que el conductor hizo la salida del cargue sin inspector.
+class MotivoSinInspector {
+  const MotivoSinInspector({required this.codigo, required this.nombre, this.texto});
+
+  factory MotivoSinInspector.fromJson(Map<String, dynamic> json) => MotivoSinInspector(
+        codigo: json['codigo'] as String? ?? '',
+        nombre: json['nombre'] as String? ?? '',
+        texto: json['texto'] as String?,
+      );
+
+  final String codigo;
+  final String nombre;
+
+  /// Lo que escribió quien lo registró, cuando el motivo lo pide («Otro»).
+  final String? texto;
+
+  /// «Otro: El inspector se enfermó», o solo el nombre.
+  String get resumen => texto == null || texto!.isEmpty ? nombre : '$nombre: $texto';
+}
+
+/// Algo del proceso que no es un daño: no tiene zona, clase ni nivel. Por ahora, el cargue sin inspector y el recibo
+/// sin entrega.
+class NovedadProceso {
+  const NovedadProceso({required this.tipo, required this.motivo, this.texto, this.usuarioNombre, this.fecha});
+
+  factory NovedadProceso.fromJson(Map<String, dynamic> json) => NovedadProceso(
+        tipo: json['tipo'] as String? ?? '',
+        motivo: json['motivo'] as String? ?? '',
+        texto: json['texto'] as String?,
+        usuarioNombre: json['usuario_nombre'] as String?,
+        fecha: switch (json['fecha']) { final String f => DateTime.tryParse(f), _ => null },
+      );
+
+  final String tipo;
+  final String motivo;
+  final String? texto;
+  final String? usuarioNombre;
+  final DateTime? fecha;
+
+  String get resumen => texto == null || texto!.isEmpty ? motivo : '$motivo: $texto';
+}
+
 class InspeccionVista {
   const InspeccionVista({
     required this.id,
@@ -169,6 +214,8 @@ class InspeccionVista {
     this.evidencias = const [],
     this.transferencia,
     this.notasAclaratorias = const [],
+    this.motivoSinInspector,
+    this.novedadesProceso = const [],
   });
 
   factory InspeccionVista.fromJson(Map<String, dynamic> json) {
@@ -188,6 +235,14 @@ class InspeccionVista {
       notasAclaratorias: [
         for (final n in (json['notas_aclaratorias'] as List<dynamic>? ?? []))
           NotaAclaratoria.fromJson(n as Map<String, dynamic>),
+      ],
+      motivoSinInspector: switch (json['motivo_sin_inspector']) {
+        final Map<String, dynamic> m => MotivoSinInspector.fromJson(m),
+        _ => null,
+      },
+      novedadesProceso: [
+        for (final n in (json['novedades_proceso'] as List<dynamic>? ?? []))
+          NovedadProceso.fromJson(n as Map<String, dynamic>),
       ],
     );
   }
@@ -219,6 +274,15 @@ class InspeccionVista {
   /// [notas], que son las que se escribieron al capturar.
   final List<NotaAclaratoria> notasAclaratorias;
 
+  /// Por qué la hizo el conductor sin inspector; null en las demás inspecciones.
+  final MotivoSinInspector? motivoSinInspector;
+
+  /// Lo que pasó en el proceso alrededor de esta inspección (cargue sin inspector, recibo sin entrega).
+  final List<NovedadProceso> novedadesProceso;
+
+  /// La hizo el conductor porque no había inspector.
+  bool get fueSinInspector => motivoSinInspector != null;
+
   bool get transferenciaFirmada => transferencia?.completa ?? false;
   String? get transferenciaTipoCierre => transferencia?.tipoCierre;
 
@@ -234,6 +298,7 @@ class EtapaVista {
     this.lugar,
     this.viajeId,
     this.conPersonalApoyo = false,
+    this.traeMarcaApoyo = true,
     this.inspecciones = const [],
   });
 
@@ -245,6 +310,7 @@ class EtapaVista {
         lugar: json['lugar'] as String?,
         viajeId: json['viaje_id'] as String?,
         conPersonalApoyo: json['con_personal_apoyo'] as bool? ?? false,
+        traeMarcaApoyo: json.containsKey('con_personal_apoyo'),
         inspecciones: [for (final i in (json['inspecciones'] as List<dynamic>? ?? [])) InspeccionVista.fromJson(i as Map<String, dynamic>)],
       );
 
@@ -263,6 +329,10 @@ class EtapaVista {
 
   /// En el cargue hay inspector o embarcador. Entonces el conductor no captura: solo firma el recibo.
   final bool conPersonalApoyo;
+
+  /// La API manda la marca `con_personal_apoyo`. El contrato 2.10 la retiró: la salida del cargue la hace siempre un
+  /// inspector, y el conductor solo la hace con la excepción «No hay inspector».
+  final bool traeMarcaApoyo;
 
   final List<InspeccionVista> inspecciones;
 }
@@ -347,15 +417,16 @@ class MomentoEtapa {
   bool get sePuedeCapturar => inspeccion == null && bloqueo == null;
 }
 
-/// Quién captura esta etapa: el conductor solo cuando no hay quien lo haga por él.
+/// La salida del cargue no la hace el conductor: la hace un inspector, y si no hay ninguno el conductor activa en el
+/// momento la excepción «No hay inspector» y da el motivo. Vale con la marca de personal de apoyo (contrato anterior)
+/// y sin ella (contrato 2.10 en adelante, donde la regla es para todos los cargues).
 ///
-/// La API se lo permitiría igual; es la app la que no se lo ofrece, porque el cargue con personal de apoyo lo
-/// inspecciona ese personal y el conductor solo firma lo que recibe.
-bool puedeCapturar(EtapaVista etapa, {required String rol}) =>
-    !(rol == 'conductor' && etapa.proceso == 'cargue' && etapa.conPersonalApoyo);
-
-/// Lo que se le dice al conductor cuando no le toca a él.
-const mensajeCargueConApoyo = 'Este cargue tiene personal de apoyo: solo firmas el recibo.';
+/// La llegada y las demás etapas no cambian: ahí el conductor captura como siempre.
+bool conductorUsaExcepcion(EtapaVista etapa, {required String rol, required String momento}) =>
+    rol == 'conductor' &&
+    etapa.proceso == 'cargue' &&
+    momento == Momento.salida &&
+    (etapa.conPersonalApoyo || !etapa.traeMarcaApoyo);
 
 /// Lo que se dice en una etapa de un viaje que ya cerró. Se puede mirar lo que quedó, no agregar nada.
 const mensajeViajeTerminado = 'Este viaje ya terminó: solo se puede consultar.';

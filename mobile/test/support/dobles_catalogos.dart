@@ -9,6 +9,8 @@ Catalogos catalogosCon(
   List<Map<String, dynamic>> vistas = const [],
   /// Etapas con su nombre para mostrar. Importan donde se distingue el código de su etiqueta («cargue» / «Cargue»).
   List<Map<String, dynamic>> etapas = const [],
+  /// Los motivos de «No hay inspector». Vacío = no se descargaron.
+  List<Map<String, dynamic>> motivos = const [],
 }) =>
     Catalogos.desdeRespuesta(
       {
@@ -27,10 +29,17 @@ Catalogos catalogosCon(
           ],
           Catalogo.vistasFoto: vistas,
           Catalogo.etapas: etapas,
+          Catalogo.motivosSinInspector: motivos,
         },
       },
       usuarioId: usuarioId,
     );
+
+/// Los motivos de «No hay inspector» como los sirve la API.
+const motivosDePrueba = [
+  {'id': 'm1', 'codigo': 'inspector_no_llego', 'nombre': 'El inspector no llegó', 'orden': 1, 'activo': true, 'requiere_texto': false},
+  {'id': 'm2', 'codigo': 'otro', 'nombre': 'Otro', 'orden': 3, 'activo': true, 'requiere_texto': true},
+];
 
 /// Las etapas como las sirve la API: el código en minúscula y el nombre capitalizado.
 const etapasDePrueba = [

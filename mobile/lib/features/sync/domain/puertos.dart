@@ -51,6 +51,8 @@ abstract interface class GatewayInformes {
     required double lat,
     required double lng,
     String? notas,
+    String? motivoSinInspector,
+    String? motivoSinInspectorTexto,
   });
 
   /// Sube la imagen como multipart y devuelve dónde quedó y su huella.
@@ -79,6 +81,10 @@ abstract interface class GatewayInformes {
   Future<void> registrarPosicion(String viajeId, String vin, int? posicion);
 
   Future<void> cerrarInspeccion(String inspeccionId);
+
+  /// El recibo sin entrega: el conductor cierra solo con su firma la transferencia de la salida del cargue que hizo
+  /// sin inspector.
+  Future<void> firmarReciboSinEntrega(String inspeccionId, {required String firma});
 
   /// La firma de quien tiene la sesión sobre la entrega de un punto: el servidor la guarda en cada unidad pendiente.
   /// Quién entrega y quién recibe salen del viaje (su conductor y su inspector).

@@ -31,6 +31,9 @@ abstract final class Catalogo {
   /// backend; confirmarlo cuando lo publique. Sin él, la captura ofrece solo «Otro».
   static const tiposExtra = 'tipos_extra';
   static const clientes = 'clientes';
+
+  /// Por qué no hay inspector en un cargue: `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto).
+  static const motivosSinInspector = 'motivos-sin-inspector';
 }
 
 /// Catálogos que hoy la API sirve iguales para todos, pero que podría pasar a filtrar por el cliente del usuario.

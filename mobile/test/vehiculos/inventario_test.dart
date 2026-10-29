@@ -433,26 +433,71 @@ void main() {
     });
   });
 
-  group('quien captura la etapa', () {
-    // La API se lo permitiria igual; es la app la que no se lo ofrece, porque ese cargue lo inspecciona el
-    // personal de apoyo y el conductor solo firma lo que recibe.
-    test('el conductor no captura un cargue con personal de apoyo', () {
+  group('quien hace la salida del cargue', () {
+    // La salida del cargue la hace un inspector. Si no hay, el conductor activa «No hay inspector» y da el motivo:
+    // en vez de «Capturar» se le ofrece esa excepción.
+    test('con la marca de personal de apoyo, el conductor usa la excepción en la salida del cargue', () {
       final inv = inventario([etapaJson('e1', 1, 'cargue', conApoyo: true)]);
 
-      expect(puedeCapturar(inv.etapas.single, rol: 'conductor'), isFalse);
-      expect(puedeCapturar(inv.etapas.single, rol: 'inspector'), isTrue, reason: 'a el si le toca');
+      expect(conductorUsaExcepcion(inv.etapas.single, rol: 'conductor', momento: 'salida'), isTrue);
+      expect(conductorUsaExcepcion(inv.etapas.single, rol: 'inspector', momento: 'salida'), isFalse, reason: 'a el si le toca');
     });
 
-    test('sin personal de apoyo el conductor si captura: no hay quien lo haga por el', () {
+    test('sin la marca en la respuesta (contrato 2.10) la regla es la misma para todos los cargues', () {
+      final json = etapaJson('e1', 1, 'cargue')..remove('con_personal_apoyo');
+      final etapa = inventario([json]).etapas.single;
+
+      expect(etapa.traeMarcaApoyo, isFalse);
+      expect(conductorUsaExcepcion(etapa, rol: 'conductor', momento: 'salida'), isTrue);
+    });
+
+    test('con la marca en falso el conductor captura: no hay quien lo haga por el', () {
       final inv = inventario([etapaJson('e1', 1, 'cargue')]);
 
-      expect(puedeCapturar(inv.etapas.single, rol: 'conductor'), isTrue);
+      expect(conductorUsaExcepcion(inv.etapas.single, rol: 'conductor', momento: 'salida'), isFalse);
+    });
+
+    test('solo es de la salida: la llegada del cargue la captura como siempre', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue', conApoyo: true)]);
+
+      expect(conductorUsaExcepcion(inv.etapas.single, rol: 'conductor', momento: 'llegada'), isFalse);
     });
 
     test('solo aplica al cargue: en descargue el conductor captura igual', () {
-      final inv = inventario([etapaJson('e1', 1, 'descargue', conApoyo: true)]);
+      final json = etapaJson('e1', 1, 'descargue', conApoyo: true)..remove('con_personal_apoyo');
+      final inv = inventario([json]);
 
-      expect(puedeCapturar(inv.etapas.single, rol: 'conductor'), isTrue);
+      expect(conductorUsaExcepcion(inv.etapas.single, rol: 'conductor', momento: 'salida'), isFalse);
+    });
+  });
+
+  group('lo que trae la inspección sin inspector', () {
+    test('lee el motivo y las novedades de proceso', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [
+          {
+            ...inspeccionJson('i1', '2026-01-01T08:00:00Z', cerradaEn: '2026-01-01T09:00:00Z'),
+            'motivo_sin_inspector': {'codigo': 'otro', 'nombre': 'Otro', 'texto': 'El inspector se enfermó'},
+            'novedades_proceso': [
+              {'tipo': 'cargue_sin_inspector', 'motivo_codigo': 'otro', 'motivo': 'Otro', 'texto': 'El inspector se enfermó', 'usuario_nombre': 'Carlos', 'fecha': '2026-01-01T08:00:00Z'},
+            ],
+          },
+        ]),
+      ]);
+
+      final inspeccion = inv.etapas.single.inspecciones.single;
+      expect(inspeccion.fueSinInspector, isTrue);
+      expect(inspeccion.motivoSinInspector!.resumen, 'Otro: El inspector se enfermó');
+      expect(inspeccion.novedadesProceso.single.tipo, 'cargue_sin_inspector');
+      expect(inspeccion.novedadesProceso.single.resumen, 'Otro: El inspector se enfermó');
+    });
+
+    test('una inspección normal no trae ni motivo ni novedades', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('i1', '2026-01-01T08:00:00Z')])]);
+
+      final inspeccion = inv.etapas.single.inspecciones.single;
+      expect(inspeccion.fueSinInspector, isFalse);
+      expect(inspeccion.novedadesProceso, isEmpty);
     });
   });
 }

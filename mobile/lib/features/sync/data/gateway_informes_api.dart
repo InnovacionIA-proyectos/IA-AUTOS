@@ -18,6 +18,8 @@ class GatewayInformesApi implements GatewayInformes {
     required double lat,
     required double lng,
     String? notas,
+    String? motivoSinInspector,
+    String? motivoSinInspectorTexto,
   }) async {
     // usuario_id lo fija el backend desde el token.
     final r = await _api.post('/api/inspecciones', cuerpo: {
@@ -27,6 +29,9 @@ class GatewayInformesApi implements GatewayInformes {
       'lat': lat,
       'lng': lng,
       'notas': notas,
+      // Solo en la excepción «No hay inspector»: en cualquier otro caso el servidor responde 400 «Campo no admitido».
+      'motivo_sin_inspector': ?motivoSinInspector,
+      'motivo_sin_inspector_texto': ?motivoSinInspectorTexto,
     });
     return (r as Map<String, dynamic>)['id'] as String;
   }
@@ -110,6 +115,11 @@ class GatewayInformesApi implements GatewayInformes {
   @override
   Future<void> cerrarInspeccion(String inspeccionId) async {
     await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/cerrar');
+  }
+
+  @override
+  Future<void> firmarReciboSinEntrega(String inspeccionId, {required String firma}) async {
+    await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/transferencia/sin-entrega', cuerpo: {'firma': firma});
   }
 
   @override
