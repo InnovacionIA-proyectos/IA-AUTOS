@@ -11,6 +11,7 @@ import '../../vehiculos/domain/etiquetas.dart';
 import '../domain/viaje.dart';
 import '../providers.dart';
 import 'mis_viajes_controller.dart';
+import 'seccion_pendientes.dart';
 
 /// Entrada principal del trabajo de campo: los viajes donde la persona es conductor o inspector, con sus VIN.
 ///
@@ -145,6 +146,31 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
 
   Widget _cuerpo(EstadoViajes estado) {
     final cargar = ref.read(misViajesControllerProvider.notifier).cargar;
+    // Solo el inspector reclama camiones: a los demás la API les responde 403. Con la lista lista, los pendientes de
+    // su punto van arriba, también cuando todavía no tiene viajes propios, que es justo cuando más los necesita.
+    final inspector = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol)) == 'inspector';
+    if (inspector && estado.fase == FaseViajes.listo) {
+      final tema = Theme.of(context).textTheme;
+      return RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(pendientesProvider);
+          await cargar();
+        },
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(Espacio.lg, Espacio.md, Espacio.lg, 88),
+          children: [
+            const SeccionPendientes(),
+            const SizedBox(height: Espacio.lg),
+            Text('Mis viajes', style: tema.titleMedium),
+            const SizedBox(height: Espacio.sm),
+            if (estado.viajes.isEmpty)
+              Text('Cuando reclames un camión o se te asigne un viaje aparecerá aquí con sus unidades.', style: tema.bodySmall)
+            else
+              for (final viaje in estado.viajes) ...[_TarjetaViaje(viaje), const SizedBox(height: Espacio.sm)],
+          ],
+        ),
+      );
+    }
     return switch (estado.fase) {
       FaseViajes.cargando => const EstadoCargando(),
       FaseViajes.error => EstadoMensaje(

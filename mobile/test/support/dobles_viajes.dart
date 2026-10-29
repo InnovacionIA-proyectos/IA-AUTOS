@@ -1,4 +1,6 @@
+import 'package:traza_autos/features/viajes/data/reclamos_repositorio.dart';
 import 'package:traza_autos/features/viajes/data/viajes_repositorio.dart';
+import 'package:traza_autos/features/viajes/domain/pendiente.dart';
 import 'package:traza_autos/features/viajes/domain/viaje.dart';
 
 Viaje viaje(
@@ -83,3 +85,96 @@ class ViajesRepositorioFalso implements ViajesRepositorio {
     return viajeTrasNoSale ?? viajeDeEtapa!;
   }
 }
+
+/// Los pendientes del inspector de mentira: lo que devuelve cada consulta, y lo que se reclamó o liberó.
+class ReclamosRepositorioFalso implements ReclamosRepositorio {
+  List<Pendiente> pendientesActuales = const [];
+
+  /// Lo que responde la lista tras la siguiente consulta, para simular que otro inspector se adelantó.
+  List<Pendiente>? despuesDeConsultar;
+  Object? errorPendientes;
+  Object? errorReclamar;
+  Object? errorLiberar;
+  Viaje? viajeDelPendiente;
+  int consultas = 0;
+  final List<(String, String)> reclamados = [];
+  final List<(String, String)> liberados = [];
+
+  @override
+  Future<List<Pendiente>> pendientes() async {
+    consultas++;
+    if (errorPendientes != null) throw errorPendientes!;
+    return pendientesActuales;
+  }
+
+  @override
+  Future<void> reclamar(String viajeId, String proceso) async {
+    reclamados.add((viajeId, proceso));
+    if (errorReclamar != null) {
+      if (despuesDeConsultar != null) pendientesActuales = despuesDeConsultar!;
+      throw errorReclamar!;
+    }
+    pendientesActuales = [
+      for (final p in pendientesActuales)
+        if (p.viajeId == viajeId && p.proceso == proceso)
+          Pendiente(
+            viajeId: p.viajeId,
+            proceso: p.proceso,
+            lugar: p.lugar,
+            estado: EstadoPendiente.mio,
+            unidades: p.unidades,
+            codigoMtrack: p.codigoMtrack,
+            placa: p.placa,
+            fechaProgramada: p.fechaProgramada,
+          )
+        else
+          p,
+    ];
+  }
+
+  @override
+  Future<void> liberar(String viajeId, String proceso) async {
+    liberados.add((viajeId, proceso));
+    if (errorLiberar != null) throw errorLiberar!;
+    pendientesActuales = [
+      for (final p in pendientesActuales)
+        if (p.viajeId == viajeId && p.proceso == proceso)
+          Pendiente(
+            viajeId: p.viajeId,
+            proceso: p.proceso,
+            lugar: p.lugar,
+            estado: EstadoPendiente.disponible,
+            unidades: p.unidades,
+            codigoMtrack: p.codigoMtrack,
+            placa: p.placa,
+            fechaProgramada: p.fechaProgramada,
+          )
+        else
+          p,
+    ];
+  }
+
+  @override
+  Future<Viaje> viaje(String viajeId) async => viajeDelPendiente ?? viaje2(viajeId);
+}
+
+Viaje viaje2(String id) => viaje(id, vines: const ['VINAAAAAAAAAAAAA1', 'VINBBBBBBBBBBBBB2']);
+
+Pendiente pendienteDe(
+  String viajeId, {
+  String placa = 'ABC123',
+  String proceso = 'cargue',
+  EstadoPendiente estado = EstadoPendiente.disponible,
+  String? por,
+  String lugar = 'CEDI Envigado',
+}) =>
+    Pendiente(
+      viajeId: viajeId,
+      proceso: proceso,
+      lugar: lugar,
+      estado: estado,
+      unidades: 2,
+      codigoMtrack: 'MTK-$viajeId',
+      placa: placa,
+      reclamadoPorNombre: por,
+    );
