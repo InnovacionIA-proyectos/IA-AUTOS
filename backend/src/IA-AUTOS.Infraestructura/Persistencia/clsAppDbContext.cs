@@ -61,6 +61,10 @@ public sealed class clsAppDbContext : DbContext
 
     public DbSet<clsNovedadProceso> NovedadesProceso => Set<clsNovedadProceso>();
 
+    public DbSet<clsReclamo> Reclamos => Set<clsReclamo>();
+
+    public DbSet<clsInspectorLugar> InspectorLugares => Set<clsInspectorLugar>();
+
     public DbSet<clsEvidencia> Evidencias => Set<clsEvidencia>();
 
     public DbSet<clsTransferenciaCustodia> Transferencias => Set<clsTransferenciaCustodia>();

@@ -25,6 +25,7 @@ public sealed class clsViajesController(
     clsTransferenciasService transferencias,
     clsNoSaleService noSale,
     clsEntregasService entregas,
+    clsReclamosService reclamos,
     clsConductorService conductor) : clsControladorBase
 {
     /// <summary>
@@ -107,6 +108,34 @@ public sealed class clsViajesController(
     [CuerpoSolicitud(typeof(CerrarEntregaUnaFirmaRequest))]
     public async Task<IActionResult> CerrarEntregaConUnaFirma(Guid id, Guid lugar, CancellationToken ct) =>
         Ok(await entregas.CerrarConUnaFirmaAsync(id, lugar, await LeerCuerpoAsync<CerrarEntregaUnaFirmaRequest>(ct), Cliente(), ct));
+
+    /// <summary>
+    /// El inspector reclama la revision del viaje («revisar este»): <c>proceso</c> <c>cargue</c> (un cargue programado para hoy en uno de sus puntos; queda como inspector del viaje) o <c>entrega</c> (un viaje que llega
+    /// a uno de sus puntos). <c>201</c> con el reclamo; <c>200</c> si ya era suyo. 403 si el viaje no es de ninguno de sus puntos; 409 «Ya fue tomado por otro inspector» si otro lo reclamo antes (si dos lo hacen a la vez, gana uno).
+    /// </summary>
+    [HttpPost("{id:guid}/reclamos")]
+    [RolesPermitidos(clsRol.INSPECTOR)]
+    [ProducesResponseType<ReclamoDto>(StatusCodes.Status201Created)]
+    [CuerpoSolicitud(typeof(ReclamarViajeRequest))]
+    public async Task<IActionResult> Reclamar(Guid id, CancellationToken ct)
+    {
+        var (reclamo, creado) = await reclamos.ReclamarAsync(id, await LeerCuerpoAsync<ReclamarViajeRequest>(ct), ct);
+        return creado ? Creado(reclamo) : Ok(reclamo);
+    }
+
+    /// <summary>
+    /// Libera el reclamo activo del proceso (<c>cargue</c> o <c>entrega</c>): lo libera el inspector que lo reclamo, el coordinador de calidad o un administrador (403 cualquier otro). El viaje queda sin inspector y lo
+    /// capturado conserva su autor; queda registrado quien libero. 404 si no hay un reclamo activo. Ningun proceso libera reclamos por tiempo.
+    /// </summary>
+    [HttpDelete("{id:guid}/reclamos/{proceso}")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType<ReclamoDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> LiberarReclamo(Guid id, string proceso, CancellationToken ct) => Ok(await reclamos.LiberarAsync(id, proceso, ct));
+
+    /// <summary>Los reclamos del viaje (activos y liberados), del mas reciente al mas antiguo, con quien reclamo y quien libero.</summary>
+    [HttpGet("{id:guid}/reclamos")]
+    [ProducesResponseType<IReadOnlyList<ReclamoDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListarReclamos(Guid id, CancellationToken ct) => Ok(await reclamos.ListarAsync(id, ct));
 
     /// <summary>Los usuarios del viaje que pueden firmar una transferencia (su conductor y su inspector activos): solo ellos aparecen al elegir los firmantes.</summary>
     [HttpGet("{id:guid}/firmantes")]
