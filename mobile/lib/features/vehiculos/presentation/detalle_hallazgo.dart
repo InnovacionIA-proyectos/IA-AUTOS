@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/tema/tema.dart';
+import '../../../core/ui/foto_evidencia.dart';
 import '../../../core/ui/visor_imagen.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../domain/inventario.dart';
@@ -13,7 +14,9 @@ Future<void> mostrarDetalleHallazgo(
   required HallazgoVista hallazgo,
   required Catalogos catalogos,
   String? urlFoto,
-  Map<String, String>? encabezados,
+  DateTime? venceFoto,
+  VoidCallback? alVencerFoto,
+  bool sinSenal = false,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -23,7 +26,9 @@ Future<void> mostrarDetalleHallazgo(
       hallazgo: hallazgo,
       catalogos: catalogos,
       urlFoto: urlFoto,
-      encabezados: encabezados,
+      venceFoto: venceFoto,
+      alVencerFoto: alVencerFoto,
+      sinSenal: sinSenal,
     ),
   );
 }
@@ -33,13 +38,17 @@ class _DetalleHallazgo extends StatelessWidget {
     required this.hallazgo,
     required this.catalogos,
     required this.urlFoto,
-    required this.encabezados,
+    required this.venceFoto,
+    required this.alVencerFoto,
+    required this.sinSenal,
   });
 
   final HallazgoVista hallazgo;
   final Catalogos catalogos;
   final String? urlFoto;
-  final Map<String, String>? encabezados;
+  final DateTime? venceFoto;
+  final VoidCallback? alVencerFoto;
+  final bool sinSenal;
 
   @override
   Widget build(BuildContext context) {
@@ -74,27 +83,19 @@ class _DetalleHallazgo extends StatelessWidget {
                     if (urlFoto != null) ...[
                       const SizedBox(height: Espacio.md),
                       GestureDetector(
+                        // El enlace va firmado: el visor lo abre igual, sin encabezados.
                         onTap: () => mostrarVisorImagen(
                           context,
-                          imagen: NetworkImage(urlFoto!, headers: encabezados),
+                          imagen: NetworkImage(urlFoto!),
                           titulo: hallazgo.zona,
                         ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: Image.network(
-                            urlFoto!,
-                            height: 200,
-                            fit: BoxFit.cover,
-                            headers: encabezados,
-                            semanticLabel: 'Foto del daño en ${hallazgo.zona}',
-                            // La URL va firmada y vence: con el informe abierto hace rato ya no se puede pedir.
-                            errorBuilder: (_, _, _) => Container(
-                              height: 200,
-                              color: Colores.borde,
-                              alignment: Alignment.center,
-                              child: const Text('La foto no se pudo cargar'),
-                            ),
-                          ),
+                        child: FotoEvidencia(
+                          url: urlFoto,
+                          alto: 200,
+                          venceEn: venceFoto,
+                          alVencer: alVencerFoto,
+                          sinSenal: sinSenal,
+                          semanticLabel: 'Foto del daño en ${hallazgo.zona}',
                         ),
                       ),
                     ],

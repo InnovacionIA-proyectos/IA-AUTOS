@@ -246,13 +246,14 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 
   /// Muestra el daño previo con su foto y deja decidir si es el mismo. Null si se sale sin responder.
   Future<bool?> _preguntarPreexistente(HallazgoPrevio previo) {
-    final token = ref.read(authControllerProvider).sesion?.token;
     return preguntarPreexistente(
       context,
       previo: previo,
       catalogos: ref.read(catalogosProvider),
       urlFoto: resolverUrlImagen(ref.read(entornoProvider).apiUrl, previo.fotoUrl),
-      encabezados: token == null ? null : {'Authorization': 'Bearer $token'},
+      // Guardados para el patio, sus enlaces casi siempre llegan vencidos: se vuelven a pedir.
+      alVencerFoto: _cargarPrevios,
+      sinSenal: !ref.read(syncControllerProvider).online,
     );
   }
 

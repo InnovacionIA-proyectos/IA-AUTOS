@@ -5,13 +5,14 @@ import '../../../app/proveedores.dart';
 import '../../../core/errores/error_api.dart';
 import '../../../core/http/urls_api.dart';
 import '../../../core/tema/tema.dart';
+import '../../../core/ui/foto_evidencia.dart';
 import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
-import '../../auth/presentation/auth_controller.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
 import '../../vehiculos/domain/etiquetas.dart';
 import '../../dibujo_dano/domain/dibujo_dano.dart';
+import '../../sync/presentation/sync_controller.dart';
 import '../../dibujo_dano/presentation/selector_zona_dano.dart';
 import '../domain/hallazgo_previo.dart';
 import '../domain/novedad_pendiente.dart';
@@ -73,11 +74,6 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
     if (mounted) setState(() => _previos = previos);
   }
 
-  Map<String, String>? get _encabezados {
-    final token = ref.read(authControllerProvider).sesion?.token;
-    return token == null ? null : {'Authorization': 'Bearer $token'};
-  }
-
   String? _url(String? relativa) => resolverUrlImagen(ref.read(entornoProvider).apiUrl, relativa);
 
   /// Ubicada la zona, se pide la clase, el tamaño y el nivel, y se pregunta si el daño ya venía de antes.
@@ -113,7 +109,8 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
         previo: previo,
         catalogos: catalogos,
         urlFoto: _url(previo.fotoUrl),
-        encabezados: _encabezados,
+        alVencerFoto: _cargarPrevios,
+        sinSenal: !ref.read(syncControllerProvider).online,
       );
       if (respuesta == null || !mounted) return;
       esPreexistente = respuesta;
@@ -175,21 +172,14 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
             ),
             if (url != null) ...[
               const SizedBox(height: Espacio.md),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Image.network(
-                  url,
-                  height: 220,
-                  fit: BoxFit.cover,
-                  headers: _encabezados,
-                  semanticLabel: 'Foto de la novedad del conductor',
-                  errorBuilder: (_, _, _) => Container(
-                    height: 220,
-                    color: Colores.borde,
-                    alignment: Alignment.center,
-                    child: const Text('La foto no se pudo cargar'),
-                  ),
-                ),
+              FotoEvidencia(
+                url: url,
+                alto: 220,
+                venceEn: novedad.foto?.venceEn,
+                // Al vencer, los enlaces nuevos vienen con la lista de novedades.
+                alVencer: () => ref.invalidate(novedadesPorRevisarProvider(novedad.vin)),
+                sinSenal: !ref.watch(syncControllerProvider).online,
+                semanticLabel: 'Foto de la novedad del conductor',
               ),
             ],
             const SizedBox(height: Espacio.lg),

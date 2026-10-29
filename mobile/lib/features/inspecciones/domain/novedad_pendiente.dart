@@ -6,7 +6,7 @@ library;
 
 /// La foto de la novedad, con el sello de cuándo y dónde se tomó.
 class FotoNovedad {
-  const FotoNovedad({this.url, this.tomadaEn, this.lat, this.lng, this.sinUbicacion = false});
+  const FotoNovedad({this.url, this.tomadaEn, this.lat, this.lng, this.sinUbicacion = false, this.venceEn});
 
   factory FotoNovedad.fromJson(Map<String, dynamic> json) => FotoNovedad(
         url: json['url'] as String?,
@@ -14,6 +14,7 @@ class FotoNovedad {
         lat: (json['sello_lat'] as num?)?.toDouble(),
         lng: (json['sello_lng'] as num?)?.toDouble(),
         sinUbicacion: json['sin_ubicacion'] as bool? ?? false,
+        venceEn: switch (json['url_expira_at']) { final String f => DateTime.tryParse(f), _ => null },
       );
 
   final String? url;
@@ -23,6 +24,9 @@ class FotoNovedad {
 
   /// La tomó sin GPS: el sello dice la hora pero no el lugar.
   final bool sinUbicacion;
+
+  /// Hasta cuándo vale el enlace firmado de la foto.
+  final DateTime? venceEn;
 
   bool get tieneUbicacion => !sinUbicacion && lat != null && lng != null;
 }

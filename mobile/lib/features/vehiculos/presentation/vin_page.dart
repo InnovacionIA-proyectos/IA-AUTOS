@@ -6,6 +6,7 @@ import '../../../app/proveedores.dart';
 import '../../../core/errores/error_api.dart';
 import '../../../core/http/urls_api.dart';
 import '../../../core/tema/tema.dart';
+import '../../../core/ui/foto_evidencia.dart';
 import '../../../core/ui/visor_imagen.dart';
 import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
@@ -18,6 +19,7 @@ import '../../inspecciones/presentation/revision_novedad_page.dart';
 import '../../inspecciones/providers.dart';
 import '../../dibujo_dano/presentation/selector_zona_dano.dart';
 import '../../viajes/presentation/mis_viajes_controller.dart';
+import '../../sync/presentation/sync_controller.dart';
 import '../../viajes/providers.dart';
 import '../domain/etiquetas.dart';
 import '../domain/inventario.dart';
@@ -119,7 +121,7 @@ class _Detalle extends ConsumerWidget {
         if (ultima == null)
           Tarjeta(child: Text('Este VIN aún no tiene informes.', style: tema.bodySmall))
         else
-          _UltimoInforme(etapa: ultima.etapa, inspeccion: ultima.inspeccion),
+          _UltimoInforme(vin: inventario.vin, etapa: ultima.etapa, inspeccion: ultima.inspeccion),
         const SizedBox(height: Espacio.lg),
         Text('Cambio de responsabilidad', style: tema.titleMedium),
         const SizedBox(height: Espacio.sm),
@@ -338,7 +340,10 @@ String _lineaHallazgo(HallazgoVista h, Catalogos catalogos) {
 }
 
 class _UltimoInforme extends ConsumerWidget {
-  const _UltimoInforme({required this.etapa, required this.inspeccion});
+  const _UltimoInforme({required this.vin, required this.etapa, required this.inspeccion});
+
+  /// El VIN del inventario: es la clave con la que se vuelve a pedir, cuando un enlace de foto vence.
+  final String vin;
 
   final EtapaVista etapa;
   final InspeccionVista inspeccion;
@@ -350,13 +355,14 @@ class _UltimoInforme extends ConsumerWidget {
         .firstOrNull;
     if (hallazgo == null) return;
     final foto = inspeccion.evidencias.where((e) => e.hallazgoId == hallazgo.id).firstOrNull;
-    final token = ref.read(authControllerProvider).sesion?.token;
     mostrarDetalleHallazgo(
       context,
       hallazgo: hallazgo,
       catalogos: ref.read(catalogosProvider),
       urlFoto: resolverUrlImagen(ref.read(entornoProvider).apiUrl, foto?.url),
-      encabezados: token == null ? null : {'Authorization': 'Bearer $token'},
+      venceFoto: foto?.venceEn,
+      alVencerFoto: () => ref.invalidate(inventarioProvider(vin)),
+      sinSenal: !ref.read(syncControllerProvider).online,
     );
   }
 
@@ -365,9 +371,9 @@ class _UltimoInforme extends ConsumerWidget {
     final tema = Theme.of(context).textTheme;
     final catalogos = ref.watch(catalogosProvider);
     final apiUrl = ref.watch(entornoProvider).apiUrl;
-    final token = ref.watch(authControllerProvider.select((e) => e.sesion?.token));
     final yo = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario));
-    final fotos = [for (final e in inspeccion.evidencias) if (resolverUrlImagen(apiUrl, e.url) != null) resolverUrlImagen(apiUrl, e.url)!];
+    final sinSenal = !ref.watch(syncControllerProvider).online;
+    final fotos = [for (final e in inspeccion.evidencias) if (resolverUrlImagen(apiUrl, e.url) != null) e];
     // El conductor recibe el vehículo y firma su recibo. Si antes ve lo que marcó el inspector, su recibo ya
     // no dice lo que él encontró, sino que confirma lo del otro. Su propio informe sí lo ve entero.
     final ajeno = yo?.rol == 'conductor' && inspeccion.usuarioId != null && inspeccion.usuarioId != yo?.id;
@@ -404,23 +410,21 @@ class _UltimoInforme extends ConsumerWidget {
                 itemCount: fotos.length,
                 separatorBuilder: (_, _) => const SizedBox(width: Espacio.sm),
                 itemBuilder: (_, i) => GestureDetector(
+                  // El enlace va firmado: el visor lo abre igual, sin encabezados.
                   onTap: () => mostrarVisorImagen(
                     context,
-                    imagen: NetworkImage(fotos[i], headers: token == null ? null : {'Authorization': 'Bearer $token'}),
+                    imagen: NetworkImage(resolverUrlImagen(apiUrl, fotos[i].url)!),
                     titulo: 'Evidencia ${i + 1} de ${fotos.length}',
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Image.network(
-                      fotos[i],
-                      width: 88,
-                      height: 88,
-                      fit: BoxFit.cover,
-                      // Si la API no sirve las imágenes públicamente, se piden con la sesión.
-                      headers: token == null ? null : {'Authorization': 'Bearer $token'},
-                      semanticLabel: 'Foto de evidencia del informe',
-                      errorBuilder: (_, _, _) => Container(width: 88, height: 88, color: Colores.borde, child: const Icon(Icons.broken_image_outlined)),
-                    ),
+                  child: FotoEvidencia(
+                    url: resolverUrlImagen(apiUrl, fotos[i].url),
+                    ancho: 88,
+                    alto: 88,
+                    venceEn: fotos[i].venceEn,
+                    sinSenal: sinSenal,
+                    // Los enlaces nuevos vienen con el inventario: no sirve pedir otra vez la misma imagen.
+                    alVencer: () => ref.invalidate(inventarioProvider(vin)),
+                    semanticLabel: 'Foto de evidencia del informe',
                   ),
                 ),
               ),

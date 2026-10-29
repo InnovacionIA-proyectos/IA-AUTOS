@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/tema/tema.dart';
+import '../../../core/ui/foto_evidencia.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../domain/hallazgo_previo.dart';
 
@@ -14,7 +15,8 @@ Future<bool?> preguntarPreexistente(
   required HallazgoPrevio previo,
   required Catalogos catalogos,
   String? urlFoto,
-  Map<String, String>? encabezados,
+  VoidCallback? alVencerFoto,
+  bool sinSenal = false,
 }) {
   return showModalBottomSheet<bool>(
     context: context,
@@ -26,7 +28,8 @@ Future<bool?> preguntarPreexistente(
       previo: previo,
       catalogos: catalogos,
       urlFoto: urlFoto,
-      encabezados: encabezados,
+      alVencerFoto: alVencerFoto,
+      sinSenal: sinSenal,
     ),
   );
 }
@@ -43,13 +46,15 @@ class _HojaPreexistente extends StatelessWidget {
     required this.previo,
     required this.catalogos,
     required this.urlFoto,
-    required this.encabezados,
+    required this.alVencerFoto,
+    required this.sinSenal,
   });
 
   final HallazgoPrevio previo;
   final Catalogos catalogos;
   final String? urlFoto;
-  final Map<String, String>? encabezados;
+  final VoidCallback? alVencerFoto;
+  final bool sinSenal;
 
   @override
   Widget build(BuildContext context) {
@@ -76,22 +81,13 @@ class _HojaPreexistente extends StatelessWidget {
                     ),
                     if (urlFoto != null) ...[
                       const SizedBox(height: Espacio.md),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: Image.network(
-                          urlFoto!,
-                          height: 180,
-                          fit: BoxFit.cover,
-                          headers: encabezados,
-                          semanticLabel: 'Foto del daño registrado antes',
-                          // La URL de una evidencia va firmada y vence: una copia de hace horas ya no se puede pedir.
-                          errorBuilder: (_, _, _) => Container(
-                            height: 180,
-                            color: Colores.borde,
-                            alignment: Alignment.center,
-                            child: const Text('La foto anterior no se pudo cargar'),
-                          ),
-                        ),
+                      FotoEvidencia(
+                        url: urlFoto,
+                        alto: 180,
+                        venceEn: previo.fotoVenceEn,
+                        alVencer: alVencerFoto,
+                        sinSenal: sinSenal,
+                        semanticLabel: 'Foto del daño registrado antes',
                       ),
                     ],
                   ],

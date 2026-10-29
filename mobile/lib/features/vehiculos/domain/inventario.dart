@@ -53,10 +53,15 @@ class HallazgoVista {
 }
 
 class EvidenciaVista {
-  const EvidenciaVista({required this.id, this.url, this.hallazgoId});
+  const EvidenciaVista({required this.id, this.url, this.hallazgoId, this.venceEn});
 
   factory EvidenciaVista.fromJson(Map<String, dynamic> json) =>
-      EvidenciaVista(id: json['id'] as String, url: json['url'] as String?, hallazgoId: json['hallazgo_id'] as String?);
+      EvidenciaVista(
+        id: json['id'] as String,
+        url: json['url'] as String?,
+        hallazgoId: json['hallazgo_id'] as String?,
+        venceEn: switch (json['url_expira_at']) { final String f => DateTime.tryParse(f), _ => null },
+      );
 
   final String id;
 
@@ -65,6 +70,9 @@ class EvidenciaVista {
 
   /// El daño que retrata. Null en las fotos del checklist de vistas, que no son de ningún daño.
   final String? hallazgoId;
+
+  /// Hasta cuándo vale el enlace firmado. Pasada esa hora el servidor responde 403 y hay que pedir uno nuevo.
+  final DateTime? venceEn;
 }
 
 /// Los dos momentos de una etapa. Son valores fijos del contrato: la API solo acepta estos dos.

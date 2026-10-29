@@ -22,6 +22,7 @@ class HallazgoPrevio {
     this.tamano,
     this.cerradaEn,
     this.fotoUrl,
+    this.fotoVenceEn,
   });
 
   factory HallazgoPrevio.fromJson(Map<String, dynamic> json) => HallazgoPrevio(
@@ -35,6 +36,7 @@ class HallazgoPrevio {
         tamano: json['tamano'] as String?,
         cerradaEn: switch (json['cerrada_en']) { final String f => DateTime.tryParse(f), _ => null },
         fotoUrl: json['foto_url'] as String?,
+        fotoVenceEn: switch (json['foto_vence_en']) { final String f => DateTime.tryParse(f), _ => null },
       );
 
   /// El que viaja como `hallazgo_origen_id` cuando se confirma que es el mismo daño.
@@ -56,6 +58,10 @@ class HallazgoPrevio {
   /// La foto del daño, para compararla con el vehículo que se tiene delante.
   final String? fotoUrl;
 
+  /// Hasta cuándo vale su enlace. Guardados para usarlos sin señal, casi siempre llegan vencidos: entonces se
+  /// vuelven a pedir en vez de mostrar un hueco.
+  final DateTime? fotoVenceEn;
+
   /// La clave de la zona («7I»), la misma del dibujo. Null en un hallazgo histórico que nunca se ubicó.
   String? get clave => cuadranteNumero == null ? null : claveDeZona(cuadranteNumero!, lado);
 
@@ -70,6 +76,7 @@ class HallazgoPrevio {
         'tamano': tamano,
         'cerrada_en': cerradaEn?.toIso8601String(),
         'foto_url': fotoUrl,
+        'foto_vence_en': fotoVenceEn?.toIso8601String(),
       };
 }
 
@@ -84,7 +91,7 @@ List<HallazgoPrevio> hallazgosPreviosDe(Inventario inventario) {
       if (!inspeccion.cerrada) continue;
       final fotos = {
         for (final e in inspeccion.evidencias)
-          if (e.hallazgoId != null) e.hallazgoId!: e.url,
+          if (e.hallazgoId != null) e.hallazgoId!: e,
       };
       for (final h in inspeccion.hallazgos) {
         previos.add((
@@ -99,7 +106,8 @@ List<HallazgoPrevio> hallazgosPreviosDe(Inventario inventario) {
             clase: h.clase,
             tamano: h.tamano,
             cerradaEn: inspeccion.cerradaEn,
-            fotoUrl: fotos[h.id],
+            fotoUrl: fotos[h.id]?.url,
+            fotoVenceEn: fotos[h.id]?.venceEn,
           ),
         ));
       }
