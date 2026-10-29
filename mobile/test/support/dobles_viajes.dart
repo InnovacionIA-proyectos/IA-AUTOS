@@ -1,6 +1,9 @@
+import 'package:traza_autos/core/dispositivo/servicios.dart';
 import 'package:traza_autos/features/viajes/data/entregas_repositorio.dart';
+import 'package:traza_autos/features/viajes/data/lugares_repositorio.dart';
 import 'package:traza_autos/features/viajes/data/reclamos_repositorio.dart';
 import 'package:traza_autos/features/viajes/domain/entrega_punto.dart';
+import 'package:traza_autos/features/viajes/domain/ubicacion_lugar.dart';
 import 'package:traza_autos/features/viajes/data/viajes_repositorio.dart';
 import 'package:traza_autos/features/viajes/domain/pendiente.dart';
 import 'package:traza_autos/features/viajes/domain/viaje.dart';
@@ -209,3 +212,25 @@ EntregaPunto puntoDe(
       pendientes: estado == EstadoEntrega.cerrada ? 0 : vines.length,
       entregada: estado == EstadoEntrega.cerrada,
     );
+
+/// La ubicación de los lugares de mentira.
+class LugaresRepositorioFalso implements LugaresRepositorio {
+  Map<String, EstadoUbicacionLugar> estadosPorLugar = {};
+  Object? errorAlConsultar;
+  Object? errorAlFijar;
+  final fijados = <(String, Posicion)>[];
+
+  @override
+  Future<Map<String, EstadoUbicacionLugar>> estados() async {
+    if (errorAlConsultar != null) throw errorAlConsultar!;
+    return estadosPorLugar;
+  }
+
+  @override
+  Future<EstadoUbicacionLugar> fijar(String lugarId, Posicion posicion) async {
+    if (errorAlFijar != null) throw errorAlFijar!;
+    fijados.add((lugarId, posicion));
+    estadosPorLugar = {...estadosPorLugar, lugarId: EstadoUbicacionLugar.pendienteConfirmar};
+    return EstadoUbicacionLugar.pendienteConfirmar;
+  }
+}

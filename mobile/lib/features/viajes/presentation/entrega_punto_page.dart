@@ -12,6 +12,7 @@ import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
 import '../domain/entrega_punto.dart';
 import '../providers.dart';
+import 'fijar_ubicacion.dart';
 
 /// Lo que admite el servidor en el motivo de un cierre con una sola firma.
 const motivoUnaFirmaMax = 300;
@@ -77,14 +78,15 @@ class EntregasViajePage extends ConsumerWidget {
   }
 }
 
-class _TarjetaPunto extends StatelessWidget {
+class _TarjetaPunto extends ConsumerWidget {
   const _TarjetaPunto({required this.punto, required this.alFirmar});
 
   final EntregaPunto punto;
   final VoidCallback alFirmar;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final esConductor = ref.watch(authControllerProvider).sesion?.usuario.rol == 'conductor';
     final tema = Theme.of(context).textTheme;
     final lugar = [punto.lugar, punto.ciudad].whereType<String>().where((p) => p.isNotEmpty).join(' · ');
     return Tarjeta(
@@ -106,6 +108,10 @@ class _TarjetaPunto extends StatelessWidget {
           ),
           const SizedBox(height: Espacio.sm),
           for (final unidad in punto.unidades) _FilaUnidad(unidad),
+          if (esConductor) ...[
+            const SizedBox(height: Espacio.sm),
+            FijarUbicacionLugar(lugarId: punto.lugarId),
+          ],
           if (!punto.entregada) ...[
             const SizedBox(height: Espacio.sm),
             FilledButton(onPressed: alFirmar, child: const Text('Firmar la entrega')),
