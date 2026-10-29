@@ -826,6 +826,17 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task El_tipo_de_aviso_de_la_propuesta_de_ubicacion_esta_migrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/33-tipo-de-aviso-propuesta-de-ubicacion.sql.
+        await using var conexion = await AbrirAsync();
+
+        var notificacion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%propuesta_ubicacion%'");
+
+        Assert.True(notificacion == 1, "Falta el tipo de notificacion propuesta_ubicacion. Ejecute database/cambios-esquema/33-tipo-de-aviso-propuesta-de-ubicacion.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

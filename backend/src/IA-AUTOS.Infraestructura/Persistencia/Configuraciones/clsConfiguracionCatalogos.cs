@@ -1,4 +1,5 @@
 using IAAutos.Dominio.Catalogos;
+using IAAutos.Dominio.Usuarios;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -37,6 +38,24 @@ internal sealed class clsConfiguracionTipoUnidad : IEntityTypeConfiguration<clsT
 internal sealed class clsConfiguracionCliente : IEntityTypeConfiguration<clsCliente>
 {
     public void Configure(EntityTypeBuilder<clsCliente> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblClientes");
+}
+
+internal sealed class clsConfiguracionPropuestaUbicacion : IEntityTypeConfiguration<clsPropuestaUbicacion>
+{
+    public void Configure(EntityTypeBuilder<clsPropuestaUbicacion> builder)
+    {
+        // Una propuesta decidida no se modifica ni se borra (trigger): EF debe saber que la tabla tiene trigger.
+        builder.ToTable("tblPropuestasUbicacion", t => t.HasTrigger("TR_tblPropuestasUbicacion_NoModificarDecidida"));
+        clsConfiguracionBase.Base(builder);
+        builder.Property(p => p.Estado).HasColumnType("varchar(15)").IsRequired();
+        builder.Property(p => p.DecididaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.HasOne<clsLugar>().WithMany().HasForeignKey(p => p.LugarId)
+            .HasConstraintName("FK_tblPropuestasUbicacion_Lugar").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(p => p.DecididaPor)
+            .HasConstraintName("FK_tblPropuestasUbicacion_DecididaPor").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(p => p.LugarId).HasDatabaseName("IX_tblPropuestasUbicacion_Lugar");
+        builder.HasIndex(p => p.LugarId).IsUnique().HasFilter("[Estado] = 'pendiente'").HasDatabaseName("UX_tblPropuestasUbicacion_Pendiente");
+    }
 }
 
 internal sealed class clsConfiguracionTipoExtra : IEntityTypeConfiguration<clsTipoExtra>
@@ -85,6 +104,9 @@ internal sealed class clsConfiguracionLugar : IEntityTypeConfiguration<clsLugar>
         builder.Property(l => l.Nombre).HasMaxLength(clsCatalogoBase.NOMBRE_MAX).IsRequired();
         builder.Property(l => l.Ciudad).HasMaxLength(clsLugar.CIUDAD_MAX).IsRequired();
         builder.Property(l => l.EstadoUbicacion).HasColumnType("varchar(25)").IsRequired();
+        builder.Property(l => l.UbicacionFijadaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(l => l.UbicacionFijadaPor)
+            .HasConstraintName("FK_tblLugares_UbicacionFijadaPor").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsPuntoCustodia>().WithMany().HasForeignKey(l => l.TipoId)
             .HasConstraintName("FK_tblLugares_Tipo").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(l => l.Nombre).IsUnique().HasDatabaseName("UQ_tblLugares_Nombre");

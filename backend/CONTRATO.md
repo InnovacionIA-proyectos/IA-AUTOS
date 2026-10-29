@@ -1404,7 +1404,7 @@ Nada de otros viajes del mismo VIN: el inventario solo trae las etapas de sus vi
 
 Las alertas y los avisos llegan a una **bandeja** (el portal y la app) y, las urgentes, también por **push** al celular. La capacidad `ver_alertas` de `GET /api/auth/me` la tienen `coordinador_calidad`, `admin` y `super_admin` (las alertas preventivas
 de su cliente), `inspector` (solo los avisos operativos dirigidos a él: `captura_incompleta` de una inspección que inició y `transferencia_pendiente` de su firma) y `conductor` (solo `respuesta_conductor`, `captura_incompleta` de una inspección que
-él inició en la salida de un cargue y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
+él inició en la salida de un cargue y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente`, `cargue_sin_reclamar` y `propuesta_ubicacion` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
 Todo lo que se hace aquí queda en la auditoría.
 
 `NotificacionDto`:
@@ -1476,6 +1476,39 @@ El push sale por **Firebase Cloud Messaging** a cada dispositivo activo del dest
 la alerta responde igual y la notificación de push guarda el motivo en `ErrorEnvio` (un token que FCM ya no reconoce deja el dispositivo inactivo). Una misma alerta no se repite: su clave (alerta, destinatario y canal) es única. Se configura con
 `Notificaciones__FcmProyectoId`, `Notificaciones__FcmClientEmail` y `Notificaciones__FcmClavePrivada` (ver [docs/configuracion.md](docs/configuracion.md)).
 
+## Ubicación de los lugares
+
+La ubicación de un lugar (`latitud`, `longitud`, `radio_metros`) tiene un estado, `estado_ubicacion`, que el catálogo `lugares` devuelve junto con quién la fijó (`ubicacion_fijada_por`) y cuándo (`ubicacion_fijada_at`):
+
+| `estado_ubicacion` | Qué significa | Cómo se llega |
+|---|---|---|
+| `sin_ubicacion` | el lugar no tiene coordenadas | estado inicial; también al quitar las coordenadas |
+| `pendiente_confirmar` | alguien en el sitio dejó su posición con «fijar ubicación aquí»; **todavía no genera marcas de «fuera del rango»** | `POST /api/lugares/{id}/ubicacion` |
+| `confirmada` | la ubicación es la oficial: la «confirmación en sitio» la usa | la carga manual por el catálogo o confirmar una propuesta de autocalibración |
+
+**Carga manual.** `PATCH /api/catalogos/lugares/{id}` (y el `POST` de creación) aceptan `latitud` (−90 a 90), `longitud` (−180 a 180) y `radio_metros` (1 a 100.000); los pueden cambiar `admin`, `super_admin` y `coordinador_calidad`, como el resto del catálogo. Las coordenadas van **juntas o ninguna** (`400`), el radio necesita coordenadas (`400`) y lo que no se envía se conserva. Con coordenadas la ubicación queda `confirmada` con el autor y la fecha; enviando `latitud`, `longitud` y `radio_metros` en `null` el lugar vuelve a `sin_ubicacion`.
+
+### `POST /api/lugares/{id}/ubicacion`
+«Fijar ubicación aquí»: quien está en un lugar **sin ubicación** deja la suya. Roles: `inspector`, `conductor`, `coordinador_calidad`, `admin` y `super_admin` (`comercial` recibe `403`).
+
+```json
+{ "lat": 6.1706, "lng": -75.5874, "precision": 18.5 }
+```
+`lat` y `lng` son obligatorios (`400` si faltan o están fuera de rango); `precision` (metros, opcional, no negativa) es la del GPS y queda en la auditoría (`lugar.fijar_ubicacion`). `200` con el lugar: `{ "id", "nombre", "latitud", "longitud", "radio_metros": null, "estado_ubicacion": "pendiente_confirmar", "ubicacion_fijada_por", "ubicacion_fijada_at", "precision_m" }`. `404` si el lugar no existe. `409` si el lugar ya tiene ubicación (pendiente o confirmada): una ubicación existente la cambia quien administra el catálogo.
+
+### Autocalibración: propuestas de ubicación
+Cada hora el servidor toma las fotos selladas de las vistas de Cargue y Descargue (lugar de cargue del viaje y destino de la unidad) con ubicación y con precisión menor que `valvula_precision_m`, de los lugares **activos cuya ubicación no está confirmada**. Si un lugar reúne fotos de **al menos 3 visitas distintas** (viajes), propone el **centro** en la mediana de las coordenadas y el **radio** que cubre al 90 % de las fotos (redondeado hacia arriba a 10 m, entre 100 y 5.000 m), crea una propuesta `pendiente` y avisa al `coordinador_calidad` del cliente (`propuesta_ubicacion`, urgencia media, bandeja y push). **El lugar no cambia** mientras la propuesta esté pendiente. No se repite una propuesta pendiente ni se vuelve a proponer tras una decisión sin fotos nuevas.
+
+`PropuestaUbicacionDto`: `{ "id", "lugar_id", "lugar", "centro_lat", "centro_lng", "radio_metros", "fotos", "visitas", "estado", "decidida_por", "decidida_at", "created_at" }`.
+
+| Endpoint | Roles | Qué hace |
+|---|---|---|
+| `GET /api/lugares/propuestas?estado=pendiente` | `coordinador_calidad`, `admin`, `super_admin` | lista, las más recientes primero; `estado` (`pendiente`, `confirmada` o `descartada`) es opcional (`400` si es otro) |
+| `POST /api/lugares/propuestas/{id}/confirmar` | los mismos | el lugar queda con ese centro y radio como ubicación `confirmada` (auditoría `lugar.confirmar_propuesta`) |
+| `POST /api/lugares/propuestas/{id}/descartar` | los mismos | la propuesta queda `descartada` y el lugar no cambia (auditoría `lugar.descartar_propuesta`) |
+
+`404` si la propuesta no existe; `409` si ya estaba decidida (una propuesta decidida no se decide otra vez, ni se modifica ni se borra).
+
 ## Alertas
 
 El sistema avisa de lo que requiere atención sin que nadie revise listados. Las alertas y los avisos **no tienen endpoints propios**: se guardan como notificaciones y se leen en la bandeja (`GET /api/notificaciones`, ver «Notificaciones»); aquí está qué genera cada una y a quién llega. El detalle de los procesos está en
@@ -1487,6 +1520,8 @@ El sistema avisa de lo que requiere atención sin que nadie revise listados. Las
 | `umbral_patron` | preventiva | `media` | `coordinador_calidad` y `admin` activos del cliente | cada hora, cuando los hallazgos de una zona (lado + número) o de un proceso, de ese cliente, llegan al umbral dentro de la ventana; una vez por ventana |
 | `captura_incompleta` | operativo | `media` | quien inició la inspección (el inspector o, solo en la salida de un Cargue, el conductor) | cada 10 minutos, si una inspección de Cargue o Descargue sigue en borrador y le faltan fotos de vistas obligatorias; una por inspección |
 | `transferencia_pendiente` | operativo | `media` | el firmante que falta (o, si aún no hay transferencia, el conductor o el inspector del viaje) | cada 10 minutos, si una llegada cerrada sigue sin transferencia con tipo de cierre; una por inspección y destinatario |
+| `cargue_sin_reclamar` | operativo | `media` | `coordinador_calidad` activos del cliente de las unidades del viaje | cada 10 minutos, si un cargue programado lleva `cargue_sin_reclamar_minutos` (30) pasada su hora programada, sin reclamo activo ni inspección iniciada (solo si esa hora fue en las últimas 24 horas); uno por viaje |
+| `propuesta_ubicacion` | operativo | `media` | `coordinador_calidad` activos del cliente | cada hora, cuando la autocalibración propone el centro y el radio de un lugar (ver «Ubicación de los lugares»); uno por propuesta |
 
 Los umbrales y los tiempos de espera son **parámetros** que se cambian sin desplegar (`niveles_criticos`, `umbral_patron_cantidad`, `umbral_patron_ventana_dias`, `captura_incompleta_minutos` y `transferencia_pendiente_minutos`; ver «Parámetros»). Las alertas preventivas nunca llegan a un usuario de otro cliente
 (ver «Visibilidad por cliente»). Cada una lleva su clave de dedupe: correr un proceso otra vez, o dos instancias a la vez, no repite nada. Llegan por **bandeja** y, por **push**, a los dispositivos activos del destinatario; **nunca por correo** (el único correo es el reporte diario).
@@ -1772,7 +1807,7 @@ disponibles). `cuadrante-vistas` (el catálogo anterior de polígonos por vista 
 
 `lugares` es el catálogo de los sitios reales que usa la carga de cargues por Excel (`origen` y `destino`, por nombre) y que muestra el viaje. Se crea con `nombre`, `tipo` y `ciudad` (los tres obligatorios; `orden` y
 `activo` opcionales), lo cambian los mismos roles de los demás catálogos y cualquier usuario autenticado lo lee. Un nombre repetido (sin distinguir mayúsculas) responde `409`, y un lugar que algún viaje usa no se borra (`409`): se inactiva.
-La ubicación (`latitud`, `longitud`, `radio_metros`) **no se escribe por este catálogo**: queda `null` y `sin_ubicacion: true` hasta que se calibre.
+La ubicación (`latitud`, `longitud`, `radio_metros`) la cargan los mismos roles por este catálogo (el lugar queda `confirmada`) y también se fija «aquí» o se calibra sola: ver «Ubicación de los lugares». Mientras no se fija, queda `null` con `sin_ubicacion: true`; `estado_ubicacion`, `ubicacion_fijada_por` y `ubicacion_fijada_at` salen en cada lugar.
 
 ### Versión y copia sin conexión
 Cada respuesta trae la versión en el encabezado `ETag` (por ejemplo `"9f2c4a7b1d3e5f60"`) y también en el cuerpo. La versión es una

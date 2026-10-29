@@ -71,6 +71,8 @@ public sealed class clsAppDbContext : DbContext
 
     public DbSet<clsTipoExtra> TiposExtra => Set<clsTipoExtra>();
 
+    public DbSet<clsPropuestaUbicacion> PropuestasUbicacion => Set<clsPropuestaUbicacion>();
+
     public DbSet<clsTransferenciaCustodia> Transferencias => Set<clsTransferenciaCustodia>();
 
     public DbSet<clsViaje> Viajes => Set<clsViaje>();

@@ -23,6 +23,9 @@ public static class clsTipoNotificacion
     /// <summary>La primera foto sellada de una inspeccion de Cargue o Descargue se tomo fuera del rango del lugar: aviso al coordinador de calidad. No bloquea nada.</summary>
     public const string FUERA_DE_RANGO = "fuera_de_rango";
 
+    /// <summary>La autocalibracion propone el centro y el radio de un lugar sin ubicacion confirmada: aviso al coordinador de calidad, que la confirma o la descarta.</summary>
+    public const string PROPUESTA_UBICACION = "propuesta_ubicacion";
+
     /// <summary>Un cargue programado sigue sin reclamo pasados los minutos del parametro: aviso al coordinador de calidad.</summary>
     public const string CARGUE_SIN_RECLAMAR = "cargue_sin_reclamar";
 
@@ -31,7 +34,7 @@ public static class clsTipoNotificacion
 
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string>
     {
-        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD, FUERA_DE_RANGO, CARGUE_SIN_RECLAMAR,
+        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD, FUERA_DE_RANGO, CARGUE_SIN_RECLAMAR, PROPUESTA_UBICACION,
     };
 }
 

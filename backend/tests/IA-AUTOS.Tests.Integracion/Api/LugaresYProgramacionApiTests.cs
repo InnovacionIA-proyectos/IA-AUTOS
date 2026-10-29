@@ -69,7 +69,7 @@ public sealed class LugaresYProgramacionApiTests(clsBaseDatosFixture bd) : clsPr
         Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
         var lugar = await LeerJsonAsync(creado);
         Assert.Equal(
-            ["id", "nombre", "tipo", "tipo_nombre", "ciudad", "orden", "activo", "latitud", "longitud", "radio_metros", "sin_ubicacion", "estado_ubicacion"], lugar.EnumerateObject().Select(p => p.Name).ToList());
+            ["id", "nombre", "tipo", "tipo_nombre", "ciudad", "orden", "activo", "latitud", "longitud", "radio_metros", "sin_ubicacion", "estado_ubicacion", "ubicacion_fijada_por", "ubicacion_fijada_at"], lugar.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("CEDI Envigado", lugar.GetProperty("nombre").GetString());
         Assert.Equal("cedi_1", lugar.GetProperty("tipo").GetString());
         Assert.Equal("CEDI 1", lugar.GetProperty("tipo_nombre").GetString());
@@ -130,7 +130,7 @@ public sealed class LugaresYProgramacionApiTests(clsBaseDatosFixture bd) : clsPr
         var tipoInexistente = await CrearLugarAsync(coordinador, "", extra: new { nombre = "Tipo raro", tipo = "no_existe", ciudad = "Envigado" });
         var sinCiudad = await CrearLugarAsync(coordinador, "", extra: new { nombre = "Sin ciudad", tipo = "cedi_1" });
         var repetido = await CrearLugarAsync(coordinador, "cedi envigado");
-        var camposDeMas = await CrearLugarAsync(coordinador, "", extra: new { nombre = "Con ubicacion", tipo = "cedi_1", ciudad = "Envigado", latitud = 6.2 });
+        var camposDeMas = await CrearLugarAsync(coordinador, "", extra: new { nombre = "Con ubicacion", tipo = "cedi_1", ciudad = "Envigado", dato_inventado = 6.2 });
 
         foreach (var r in new[] { sinNombre, sinTipo, tipoInexistente, sinCiudad, camposDeMas })
         {

@@ -111,6 +111,12 @@ El script [`32-ubicacion-con-rango-y-confirmacion-en-sitio.sql`](../database/cam
 
 `ddl.sql` ya trae el esquema nuevo y `tests/verificar-ddl.sql` cubre sus restricciones (386 comprobaciones). No cambia ningún dato existente salvo marcar como confirmada la ubicación de los lugares que ya tenían coordenadas.
 
+## Tipo de aviso de la propuesta de ubicación (script 33)
+
+El script [`33-tipo-de-aviso-propuesta-de-ubicacion.sql`](../database/cambios-esquema/33-tipo-de-aviso-propuesta-de-ubicacion.sql) (ajustando `@esquema`, en una sola ejecución, una transacción, repetible; **antes de desplegar la API**, después del 32) reemplaza `CK_tblNotificaciones_Tipo` por una restricción que admite además `propuesta_ubicacion` (el aviso al coordinador de calidad cuando la autocalibración propone el centro y el radio de un lugar), sin quitar ninguno de los once tipos existentes. No cambia ningún dato.
+
+`ddl.sql` ya trae la restricción nueva (y la reemplaza en una base antigua) y `tests/verificar-ddl.sql` cubre el tipo (387 comprobaciones).
+
 ## Cargar los cuadrantes y las acciones de los niveles
 
 Los cuadrantes de la ficha del vehículo genérico (36 zonas y 97 polígonos) se cargan con

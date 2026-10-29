@@ -42,6 +42,7 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblInspeccionExtras DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblPropuestasUbicacion DISABLE TRIGGER ALL;
             DELETE FROM dbo.tblPropuestasUbicacion;
+            UPDATE dbo.tblLugares SET UbicacionFijadaPor = NULL;
             DELETE FROM dbo.tblNovedadesProceso;
             DELETE FROM dbo.tblReclamos;
             DELETE FROM dbo.tblInspectorLugares;

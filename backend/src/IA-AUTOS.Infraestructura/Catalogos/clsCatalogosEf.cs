@@ -145,9 +145,9 @@ internal sealed class clsCatalogoEstadosSofasa(clsAppDbContext contexto, IReloj 
 /// <c>activo</c>. Salen ademas el nombre del tipo, la ubicacion (<c>latitud</c>, <c>longitud</c> y <c>radio_metros</c>, nulos mientras no se fijan) y <c>sin_ubicacion</c>. Un lugar que un viaje o una unidad usa
 /// no se borra (409): se inactiva.
 /// </summary>
-internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj) : clsCatalogoEf<clsLugar>(contexto, reloj, clsNombresCatalogo.LUGARES)
+internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj, IUsuarioActual actual) : clsCatalogoEf<clsLugar>(contexto, reloj, clsNombresCatalogo.LUGARES)
 {
-    protected override IReadOnlyList<string> CamposPermitidos { get; } = ["nombre", "tipo", "ciudad", "orden", "activo"];
+    protected override IReadOnlyList<string> CamposPermitidos { get; } = ["nombre", "tipo", "ciudad", "orden", "activo", "latitud", "longitud", "radio_metros"];
 
     private async Task<Dictionary<Guid, (string Codigo, string Nombre)>> TiposAsync(CancellationToken ct) =>
         (await Contexto.PuntosCustodia.AsNoTracking().Select(p => new { p.Id, p.Codigo, p.Nombre }).ToListAsync(ct)).ToDictionary(p => p.Id, p => (p.Codigo, p.Nombre));
@@ -166,6 +166,8 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj)
         ["radio_metros"] = l.RadioMetros,
         ["sin_ubicacion"] = l.SinUbicacion,
         ["estado_ubicacion"] = l.EstadoUbicacion,
+        ["ubicacion_fijada_por"] = l.UbicacionFijadaPor,
+        ["ubicacion_fijada_at"] = l.UbicacionFijadaAt,
     };
 
     protected override ValorCatalogo Mapear(clsLugar l) => Armar(l, new Dictionary<Guid, (string, string)>());
@@ -179,8 +181,12 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj)
         return filas.Select(l => Armar(l, tipos)).ToList();
     }
 
-    protected override async Task<clsLugar> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct) =>
-        clsLugar.Crear(campos.Texto("nombre"), await TipoActivoAsync(campos.Texto("tipo"), requerido: true, ct) ?? Guid.Empty, campos.Texto("ciudad"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora);
+    protected override async Task<clsLugar> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct)
+    {
+        var lugar = clsLugar.Crear(campos.Texto("nombre"), await TipoActivoAsync(campos.Texto("tipo"), requerido: true, ct) ?? Guid.Empty, campos.Texto("ciudad"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora);
+        AplicarUbicacion(lugar, campos);
+        return lugar;
+    }
 
     protected override async Task AplicarAsync(clsLugar entidad, clsCamposCatalogo campos, CancellationToken ct)
     {
@@ -188,6 +194,27 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj)
         {
             entidad.CambiarLugar(campos.Tiene("tipo") ? await TipoActivoAsync(campos.Texto("tipo"), requerido: true, ct) : null, campos.Texto("ciudad"), Reloj.Ahora);
         }
+
+        AplicarUbicacion(entidad, campos);
+    }
+
+    /// <summary>
+    /// La carga manual de la ubicacion: quien administra el catalogo (admin, super_admin y coordinador_calidad, como en todos los catalogos) fija latitud, longitud y radio, y la ubicacion queda
+    /// CONFIRMADA con su autor y su fecha. Lo que no se envia se conserva; sin coordenadas la ubicacion se quita.
+    /// </summary>
+    private void AplicarUbicacion(clsLugar lugar, clsCamposCatalogo campos)
+    {
+        if (!campos.Tiene("latitud") && !campos.Tiene("longitud") && !campos.Tiene("radio_metros"))
+        {
+            return;
+        }
+
+        lugar.FijarUbicacionConfirmada(
+            campos.Tiene("latitud") ? campos.Numero("latitud") : lugar.Latitud,
+            campos.Tiene("longitud") ? campos.Numero("longitud") : lugar.Longitud,
+            campos.Tiene("radio_metros") ? campos.Entero("radio_metros") : lugar.RadioMetros,
+            actual.IdObligatorio(),
+            Reloj.Ahora);
     }
 
     /// <summary>El id del tipo de lugar con ese codigo (activo); 400 si falta o no existe.</summary>
