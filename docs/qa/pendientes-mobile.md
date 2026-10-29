@@ -61,30 +61,29 @@ funciona; `HallazgoDto` no cambió.
 - **El almacén S3 local**: `adobe/s3mock` no es compatible con el SDK nuevo («response ended prematurely»)
   aunque la cabecera del compose lo recomiende; en las pruebas se usó almacenamiento en disco.
 
-## Un defecto del backend, encontrado el 29-oct
+## Lo que el conductor no ve del hallazgo (aclarado el 29-oct)
 
-`GET /api/vehiculos/{vin}/inventario` devuelve en **null** el nivel de severidad, el estado de seguimiento y
-la evidencia completa de cada hallazgo. Los otros dos endpoints devuelven lo mismo bien, en la misma
-compilación y para las mismas filas:
+`GET /api/vehiculos/{vin}/inventario` devuelve `nivel_severidad`, `estado_seguimiento` y `evidencia_completa`
+en **null cuando quien pregunta es el conductor**. No es un defecto: lo hace a propósito
+`clsVisibilidadConductor.ParaConductor`, que además le oculta la nota, el hallazgo de origen, quién confirmó y
+quién revisó. Es la regla de S5-HU-25.4: el conductor revisa en lectura los hallazgos del inspector (zona,
+clase, tamaño y foto) **sin nivel V ni seguimiento**.
 
-| Endpoint | `nivel_severidad` | `estado_seguimiento` | `evidencia_completa` |
+Con el mismo hallazgo y la misma compilación:
+
+| Rol | `nivel_severidad` | `estado_seguimiento` | `evidencia_completa` |
 |---|---|---|---|
-| `GET /api/hallazgos` | `v2` | `pendiente` | `false` |
-| `GET /api/inspecciones/{id}` | `v2` | `pendiente` | `false` |
-| `GET /api/vehiculos/{vin}/inventario` | **`null`** | **`null`** | **`null`** |
+| super_admin | `v2` | `pendiente` | `false` |
+| conductor | `null` | `null` | `null` |
 
-Comprobado con el hallazgo `3767a391` del VIN `93YRBC00XR7654321`, que en la base tiene `NivelSeveridad = 'v2'`
-y `EstadoSeguimiento = 'pendiente'`. El resto de campos del mismo hallazgo (zona, cuadrante, lado, clase,
-origen, preexistente) sí llegan bien por los tres caminos, así que no es el hallazgo: es cómo lo arma el
-inventario.
+Es reciente: la imagen de la API de hace unos días no ocultaba nada en el inventario, y por eso al
+reconstruirla pareció una regresión. Lo era al revés: la redacción es lo nuevo.
 
-Apareció al reconstruir la imagen de la API desde el código actual; la imagen anterior, de varios días atrás,
-sí devolvía el nivel por el inventario.
-
-**Qué rompe en la app:** la pantalla del VIN lee el inventario, así que todos los daños se pintan azules «por
-revisar» y su ficha dice «Por revisar» aunque tengan nivel. Es el CA-4 de #193, que en dispositivo se vio
-bien antes de la reconstrucción. No hay nada que arreglar del lado de mobile: en cuanto el inventario mande
-el nivel, el color sale solo.
+**Qué significa para la app:** cuando mira el conductor, sus propios hallazgos se pintan azules «por revisar»
+aunque un inspector ya les haya puesto nivel. Es lo que el contrato quiere, pero la etiqueta «Por revisar»
+dice algo que no es: no es que nadie lo haya clasificado, es que a él no se le muestra. **Para Calidad:** si
+molesta, el dibujo puede pintarlos de un color neutro y la ficha callar el nivel en vez de decir «Por
+revisar».
 
 ## Cómo se probó
 
