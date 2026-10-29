@@ -127,6 +127,7 @@ class GatewayFalso implements GatewayInformes {
     String? dispositivoId,
     String? nota,
     String? hash,
+    String? extraId,
   }) async {
     await _paso('agregarEvidencia');
     evidencias.add({
@@ -141,7 +142,18 @@ class GatewayFalso implements GatewayInformes {
       'dispositivo_id': dispositivoId,
       'nota': nota,
       'hash_sha256': hash,
+      'extra_id': extraId,
     });
+  }
+
+  /// Cada extra que se creó: (inspección, tipo, texto, observación).
+  final List<(String, String, String?, String?)> extrasCreados = [];
+
+  @override
+  Future<String> crearExtra(String inspeccionId, {required String tipo, String? texto, String? observacion}) async {
+    await _paso('crearExtra');
+    extrasCreados.add((inspeccionId, tipo, texto, observacion));
+    return 'extra-${extrasCreados.length}';
   }
 
   @override

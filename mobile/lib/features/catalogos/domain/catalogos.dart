@@ -27,9 +27,9 @@ abstract final class Catalogo {
   /// dibuja con la copia de los assets.
   static const zonasDano = 'zonas-dano';
 
-  /// Tipos de extra (barras de techo, volco, platón). **Todavía no lo publica la API**: es el nombre que propone el
-  /// backend; confirmarlo cuando lo publique. Sin él, la captura ofrece solo «Otro».
-  static const tiposExtra = 'tipos_extra';
+  /// Tipos de extra: `barras_techo`, `volco`, `platon` y `otro`. Los administra Calidad. Sin ellos, la captura ofrece
+  /// solo «Otro».
+  static const tiposExtra = 'tipos-extra';
   static const clientes = 'clientes';
 
   /// Por qué no hay inspector en un cargue: `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto).

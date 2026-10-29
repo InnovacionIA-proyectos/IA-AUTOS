@@ -168,17 +168,6 @@ class SeccionExtras extends StatelessWidget {
       children: [
         Text('Extras del vehículo', style: tema.titleMedium),
         Text('Barras de techo, volco, platón u otro elemento que el dibujo no trae, con sus fotos.', style: tema.bodySmall),
-        const SizedBox(height: Espacio.sm),
-        // Se dice en pantalla: quien captura tiene que saber que esto todavía no queda en el servidor.
-        Tarjeta(
-          child: Row(
-            children: [
-              const Icon(Icons.info_outline, size: 18, color: Colores.advertencia),
-              const SizedBox(width: Espacio.sm),
-              Expanded(child: Text('Los extras todavía no se envían al servidor.', style: tema.bodySmall)),
-            ],
-          ),
-        ),
         for (var i = 0; i < extras.length; i++) ...[
           const SizedBox(height: Espacio.sm),
           _FilaExtra(

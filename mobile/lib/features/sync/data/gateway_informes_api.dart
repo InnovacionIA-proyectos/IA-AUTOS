@@ -55,6 +55,7 @@ class GatewayInformesApi implements GatewayInformes {
     String? dispositivoId,
     String? nota,
     String? hash,
+    String? extraId,
   }) async {
     // La API exige las diez claves presentes; el valor puede ir nulo (una foto sin GPS, una vista sin nota).
     await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/evidencias', cuerpo: {
@@ -68,7 +69,20 @@ class GatewayInformesApi implements GatewayInformes {
       'dispositivo_id': dispositivoId,
       'nota': nota,
       'hash_sha256': hash,
+      // Solo la foto de un extra lo lleva: en cualquier otra evidencia el servidor no admite el campo.
+      'extra_id': ?extraId,
     });
+  }
+
+  @override
+  Future<String> crearExtra(String inspeccionId, {required String tipo, String? texto, String? observacion}) async {
+    // `texto` solo con «otro» y `observacion` solo si la hay: el servidor responde 400 «Campo no admitido» al resto.
+    final r = await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/extras', cuerpo: {
+      'tipo': tipo,
+      'texto': ?texto,
+      'observacion': ?observacion,
+    });
+    return (r as Map<String, dynamic>)['id'] as String;
   }
 
   @override

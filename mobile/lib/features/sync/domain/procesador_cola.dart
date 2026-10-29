@@ -264,6 +264,51 @@ class ProcesadorCola {
       await cola.guardar(job);
     }
 
+    // 3b) Extras: se crea cada uno (y se guarda el id que le dio el servidor) y después se mandan sus fotos. Va antes
+    //     de cerrar porque el cierre exige la foto de cada extra. Es reanudable por extra y por foto.
+    for (var i = 0; i < job.extras.length; i++) {
+      var extra = job.extras[i];
+      if (extra.extraId == null) {
+        final id = await gateway.crearExtra(
+          inspeccionId,
+          tipo: extra.tipo,
+          texto: extra.textoOtro,
+          observacion: extra.observacion,
+        );
+        extra = extra.conId(id);
+        job = job.conProgreso(extras: _reemplazar(job.extras, i, extra));
+        await cola.guardar(job);
+      }
+      for (var k = 0; k < extra.fotos.length; k++) {
+        var foto = extra.fotos[k];
+        if (foto.storagePath == null) {
+          final subido = await gateway.subirImagen(await archivos.leerBytes(foto.ruta), nombre: 'extra-$i-$k.jpg');
+          foto = foto.copyWith(storagePath: subido.storagePath, hash: subido.hash);
+          extra = extra.conFotos(_reemplazar(extra.fotos, k, foto));
+          job = job.conProgreso(extras: _reemplazar(job.extras, i, extra));
+          await cola.guardar(job);
+        }
+        if (!foto.enviada) {
+          await gateway.agregarEvidencia(
+            inspeccionId,
+            storagePath: foto.storagePath!,
+            selloFecha: foto.selloFecha,
+            selloLat: foto.selloLat,
+            selloLng: foto.selloLng,
+            precision: foto.precision,
+            dispositivoId: foto.dispositivoId,
+            nota: foto.nota,
+            hash: foto.hash,
+            extraId: extra.extraId,
+          );
+          foto = foto.copyWith(enviada: true);
+          extra = extra.conFotos(_reemplazar(extra.fotos, k, foto));
+          job = job.conProgreso(extras: _reemplazar(job.extras, i, extra));
+          await cola.guardar(job);
+        }
+      }
+    }
+
     // 4) Cerrar (idempotente: 409 "ya cerrada" cuenta como éxito).
     if (!job.cerrada) {
       try {
@@ -399,7 +444,7 @@ class ProcesadorCola {
   }
 
   Future<void> _borrarFotos(InformeJob job) async {
-    for (final foto in job.fotos) {
+    for (final foto in [...job.fotos, for (final e in job.extras) ...e.fotos]) {
       try {
         await archivos.borrar(foto.ruta);
       } catch (_) {

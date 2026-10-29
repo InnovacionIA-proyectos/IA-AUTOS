@@ -72,7 +72,12 @@ abstract interface class GatewayInformes {
     String? dispositivoId,
     String? nota,
     String? hash,
+    String? extraId,
   });
+
+  /// Crea un extra de la inspección (barras de techo, volco, platón u otro) y devuelve su id: con él se mandan sus
+  /// fotos.
+  Future<String> crearExtra(String inspeccionId, {required String tipo, String? texto, String? observacion});
 
   Future<void> agregarHallazgo(String inspeccionId, HallazgoLocal hallazgo);
 

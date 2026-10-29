@@ -140,8 +140,8 @@ class InformeJob extends Job {
   final List<FotoLocal> fotos;
   final List<HallazgoLocal> hallazgos;
 
-  /// Lo que el dibujo estándar no trae. **El procesador todavía no los envía**: el servidor no tiene dónde
-  /// recibirlos. Quedan guardados con el informe mientras está en la cola.
+  /// Lo que el dibujo estándar no trae. Se envían después de los hallazgos y antes de cerrar, porque el cierre exige
+  /// la foto de cada extra.
   final List<ExtraLocal> extras;
 
   /// Viaje de la etapa. Solo lo necesita la segunda inspección del cargue, para registrar las posiciones.
@@ -174,6 +174,7 @@ class InformeJob extends Job {
     List<HallazgoLocal>? hallazgos,
     int? hallazgosEnviados,
     bool? posicionesEnviadas,
+    List<ExtraLocal>? extras,
     bool? cerrada,
   }) =>
       InformeJob(
@@ -193,7 +194,7 @@ class InformeJob extends Job {
         notas: notas,
         fotos: fotos ?? this.fotos,
         hallazgos: hallazgos ?? this.hallazgos,
-        extras: extras,
+        extras: extras ?? this.extras,
         viajeId: viajeId,
         posiciones: posiciones,
         posicionesPrevias: posicionesPrevias,

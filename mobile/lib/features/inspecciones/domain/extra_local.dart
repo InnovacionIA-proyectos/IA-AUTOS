@@ -15,6 +15,7 @@ class ExtraLocal {
     this.textoOtro,
     this.observacion,
     this.fotos = const [],
+    this.extraId,
   });
 
   factory ExtraLocal.fromJson(Map<String, dynamic> json) => ExtraLocal(
@@ -25,6 +26,7 @@ class ExtraLocal {
         fotos: [
           for (final f in json['fotos'] as List<dynamic>? ?? const []) FotoLocal.fromJson(f as Map<String, dynamic>),
         ],
+        extraId: json['extra_id'] as String?,
       );
 
   /// Código del catálogo de tipos de extra, o [tipoExtraOtro].
@@ -39,12 +41,35 @@ class ExtraLocal {
   final String? observacion;
   final List<FotoLocal> fotos;
 
+  /// El id que le dio el servidor al crearlo. Mientras sea nulo, el extra no se ha enviado; con él, un corte entre la
+  /// creación y sus fotos no lo crea dos veces.
+  final String? extraId;
+
   ExtraLocal conFoto(FotoLocal foto) => ExtraLocal(
         tipo: tipo,
         nombre: nombre,
         textoOtro: textoOtro,
         observacion: observacion,
         fotos: [...fotos, foto],
+        extraId: extraId,
+      );
+
+  ExtraLocal conId(String id) => ExtraLocal(
+        tipo: tipo,
+        nombre: nombre,
+        textoOtro: textoOtro,
+        observacion: observacion,
+        fotos: fotos,
+        extraId: id,
+      );
+
+  ExtraLocal conFotos(List<FotoLocal> nuevas) => ExtraLocal(
+        tipo: tipo,
+        nombre: nombre,
+        textoOtro: textoOtro,
+        observacion: observacion,
+        fotos: nuevas,
+        extraId: extraId,
       );
 
   Map<String, dynamic> toJson() => {
@@ -53,5 +78,6 @@ class ExtraLocal {
         'texto_otro': textoOtro,
         'observacion': observacion,
         'fotos': [for (final f in fotos) f.toJson()],
+        'extra_id': extraId,
       };
 }

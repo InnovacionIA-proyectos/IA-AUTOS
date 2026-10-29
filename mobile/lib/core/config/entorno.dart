@@ -36,8 +36,9 @@ class Entorno {
   final Flavor flavor;
   final String apiUrl;
 
-  /// Muestra la sección de extras en la captura. Apagado por defecto: el servidor todavía no recibe extras, y
-  /// con la sección visible se capturarían datos que nunca llegan.
+  /// Muestra la sección de extras en la captura. Los extras ya se envían con el informe (contrato 2.14.0); queda
+  /// apagado por defecto hasta que el backend con esa ruta esté desplegado en el entorno: contra uno que no la tiene,
+  /// el informe con extras fallaría al enviarse.
   final bool extrasHabilitados;
 
   /// A partir de cuántos metros de margen del GPS se avisa de precisión baja. Es el mismo valor que el backend

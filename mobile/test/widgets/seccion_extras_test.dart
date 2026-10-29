@@ -87,7 +87,7 @@ void main() {
       expect(find.byType(SeccionExtras), findsNothing);
     });
 
-    testWidgets('con el interruptor prendido aparece y dice que todavía no se envían', (tester) async {
+    testWidgets('con el interruptor prendido aparece, sin avisos de que no se envíe', (tester) async {
       await abrir(
         tester,
         ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'),
@@ -95,7 +95,7 @@ void main() {
       );
 
       expect(find.byType(SeccionExtras), findsOneWidget);
-      expect(find.text('Los extras todavía no se envían al servidor.'), findsOneWidget);
+      expect(find.textContaining('no se envían'), findsNothing, reason: 'los extras ya salen con el informe');
       expect(find.widgetWithText(OutlinedButton, 'Agregar extra'), findsOneWidget);
     });
   });
