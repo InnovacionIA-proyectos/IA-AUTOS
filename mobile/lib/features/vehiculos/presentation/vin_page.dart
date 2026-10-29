@@ -406,7 +406,8 @@ class _UltimoInforme extends ConsumerWidget {
     final ajeno = yo?.rol == 'conductor' && inspeccion.usuarioId != null && inspeccion.usuarioId != yo?.id;
     // El servidor solo acepta la nota de quien registró el informe y de los administradores: a los demás les
     // responde 403, así que a ellos no se les ofrece.
-    final puedeAclarar = inspeccion.usuarioId == yo?.id || yo?.rol == 'admin' || yo?.rol == 'super_admin';
+    final puedeAclarar =
+        !ajeno && (inspeccion.usuarioId == yo?.id || yo?.rol == 'admin' || yo?.rol == 'super_admin');
 
     return Tarjeta(
       child: Column(
@@ -484,8 +485,9 @@ class _UltimoInforme extends ConsumerWidget {
             Text('Notas adicionales', style: tema.bodySmall),
             Text(inspeccion.notas!, style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
           ],
-          // Lo que se aclaró después de cerrarlo. Va al final, debajo del informe que aclara.
-          if (inspeccion.notasAclaratorias.isNotEmpty) ...[
+          // Lo que se aclaró después de cerrarlo, debajo del informe que aclara. En un informe ajeno no se
+          // muestran: una nota puede decir justo lo que al conductor se le oculta antes de firmar.
+          if (!ajeno && inspeccion.notasAclaratorias.isNotEmpty) ...[
             const SizedBox(height: Espacio.md),
             Text('Notas aclaratorias', style: tema.bodySmall),
             for (final nota in inspeccion.notasAclaratorias)

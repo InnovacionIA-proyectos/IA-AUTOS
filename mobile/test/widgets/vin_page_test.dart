@@ -66,6 +66,9 @@ Map<String, dynamic> inventarioJson() => {
               // Lo registró el inspector del viaje, no quien mira.
               'usuario_id': 'inspector-1',
               'notas': 'Llovía al cargar',
+              'notas_aclaratorias': [
+                {'id': 'n1', 'texto': 'El golpe del capó resultó ser V1+', 'autor_nombre': 'Ana Pérez'},
+              ],
               'hallazgos': [
                 {'id': 'h1', 'parte_vehiculo': 'Capot', 'clase_dano': 'golpe', 'tamano_dano': 'mas_20cm'},
               ],
@@ -147,6 +150,10 @@ void main() {
       expect(find.textContaining('Capot'), findsNothing);
       expect(find.byType(SelectorZonaDano), findsNothing);
       expect(find.text('Llovía al cargar'), findsNothing);
+      // Una nota aclaratoria puede decir justo lo que se le oculta antes de firmar.
+      expect(find.text('Notas aclaratorias'), findsNothing);
+      expect(find.textContaining('resultó ser V1+'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Agregar nota aclaratoria'), findsNothing);
       expect(find.textContaining('queda en tu firma'), findsOneWidget, reason: 'se dice por qué, no se calla');
     });
 
