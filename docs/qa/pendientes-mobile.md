@@ -94,6 +94,44 @@ justo la regla. La app no necesita ningún cambio: el día que llegue el campo, 
 Queda para Calidad el color: el azul «por revisar» en el dibujo sigue diciendo lo mismo que la etiqueta vieja.
 Si molesta, se le puede dar un color propio a «revisado sin nivel a la vista».
 
+## Lo que viene del backend y nos va a tocar (revisado el 29-oct)
+
+`origin/QA` **no se ha movido** desde que salió `299-dibujo-v6-y-extras`: no hay nada que traer. Pero hay una
+pila de ramas de backend sin fusionar que lleva el contrato de **2.5.0 a 2.13.0**. Cuando entren, esto es lo
+que cambia para mobile.
+
+### Desaparece `con_personal_apoyo`
+
+Sale de `ViajeDto` y de `InventarioEtapaDto`. El commit lo explica: «la salida la hace siempre un inspector y
+el conductor solo la hace activando la excepción» (contrato 2.10.0).
+
+Es un cambio de regla, no de nombre. Hoy la app bloquea al conductor **solo** si la etapa trae la marca
+(`puedeCapturar` en `vehiculos/domain/inventario.dart`). Con la regla nueva se invierte: el conductor **nunca**
+captura la salida del cargue, salvo que active la excepción, que es **#273** y está sin empezar.
+
+Lo que hay que tocar cuando llegue:
+- `EtapaVista.conPersonalApoyo` y `puedeCapturar`: la condición ya no es la marca.
+- `mensajeCargueConApoyo`: el texto queda obsoleto.
+- La prueba de contrato, que hoy exige `con_personal_apoyo` en `InventarioEtapaDto`.
+- **#167 CA-3** quedará describiendo una regla que ya no existe; conviene avisarlo al cerrarla.
+
+### Campos nuevos que la app podrá leer
+
+- `ViajeVehiculoDto` e `InventarioEtapaDto`: `posicion` (es **#304**).
+- `ViajeVehiculoDto`: `lugar_destino` y `lugar_destino_id` (**#286**).
+- `ViajeDto`: `fecha_programada`, `lugar_cargue`, `novedades_proceso`.
+
+### Rutas nuevas
+
+`/api/viajes/pendientes`, `/api/viajes/{id}/entregas` y sus tres de firma (**#286**),
+`/api/viajes/{id}/reclamos` y `/reclamos/{proceso}` (**#291**), y
+`/api/viajes/{id}/vehiculos/{vin}/posicion` (**#304**). Ninguna la usa la app todavía.
+
+### Lo que **no** viene en esa pila
+
+Ni `zonas-dano` ni el catálogo de extras. Es decir, lo que bloquea a **#193** y **#299** (la siembra del v6,
+issues #297 y #298) y a **#308** (#306 y #307) sigue sin aparecer.
+
 ## Cómo se probó
 
 Con la API local y tres VIN en un viaje, un usuario por rol (Ana inspectora, Luis conductor, Marta
