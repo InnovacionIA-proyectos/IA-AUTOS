@@ -1959,5 +1959,90 @@ GROUP BY x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.
 END
 GO
 
+/* -----------------------------------------------------------------------------
+   Extras del vehiculo fuera del dibujo estandar (barras de techo, volco, platon, otro...).
+   tblTiposExtra: el catalogo de tipos, con el patron de los demas catalogos (Codigo unico, Nombre, Orden, Activo). Un tipo con extras reportados no se borra (la llave foranea lo impide): se inactiva
+   y los extras conservan su tipo.
+   tblInspeccionExtras: los extras de una inspeccion. Exige la inspeccion y el tipo (por su Codigo); Texto es el texto libre y solo se admite cuando el tipo es otro; Observacion admite hasta 500
+   caracteres. Un extra no se agrega, cambia ni quita en una inspeccion cerrada (error 51009).
+   tblEvidencias.ExtraId: la foto de un extra; no es a la vez de una vista, de un hallazgo, una constancia ni un sello.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblTiposExtra', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblTiposExtra
+    (
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblTiposExtra PRIMARY KEY,
+        Codigo     varchar(30)       NOT NULL,
+        Nombre     nvarchar(100)     NOT NULL,
+        Orden      int               NOT NULL CONSTRAINT DF_tblTiposExtra_Orden DEFAULT (0),
+        Activo     bit               NOT NULL CONSTRAINT DF_tblTiposExtra_Activo DEFAULT (1),
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTiposExtra_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTiposExtra_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblTiposExtra_Codigo UNIQUE (Codigo),
+        CONSTRAINT CK_tblTiposExtra_Nombre CHECK (LEN(LTRIM(RTRIM(Nombre))) > 0),
+        CONSTRAINT CK_tblTiposExtra_Orden CHECK (Orden >= 0)
+    );
+END
+GO
+
+INSERT INTO dbo.tblTiposExtra (Id, Codigo, Nombre, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
+FROM (VALUES
+    ('barras_techo', N'Barras de techo',            1),
+    ('volco',        N'Volco',                      2),
+    ('platon',       N'Plat' + NCHAR(243) + N'n',   3),
+    ('otro',         N'Otro',                       4)) AS v (Codigo, Nombre, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblTiposExtra t WHERE t.Codigo = v.Codigo);
+GO
+
+IF OBJECT_ID(N'dbo.tblInspeccionExtras', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblInspeccionExtras
+    (
+        Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblInspeccionExtras PRIMARY KEY,
+        InspeccionId  uniqueidentifier  NOT NULL,
+        Tipo          varchar(30)       NOT NULL,
+        Texto         nvarchar(100)     NULL,
+        Observacion   nvarchar(500)     NULL,
+        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspeccionExtras_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspeccionExtras_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblInspeccionExtras_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
+        CONSTRAINT FK_tblInspeccionExtras_Tipo FOREIGN KEY (Tipo) REFERENCES dbo.tblTiposExtra (Codigo),
+        CONSTRAINT CK_tblInspeccionExtras_Texto CHECK (Texto IS NULL OR (Tipo = 'otro' AND LEN(LTRIM(RTRIM(Texto))) > 0)),
+        CONSTRAINT CK_tblInspeccionExtras_Observacion CHECK (Observacion IS NULL OR LEN(LTRIM(RTRIM(Observacion))) > 0)
+    );
+    CREATE INDEX IX_tblInspeccionExtras_Inspeccion ON dbo.tblInspeccionExtras (InspeccionId);
+    CREATE INDEX IX_tblInspeccionExtras_Tipo ON dbo.tblInspeccionExtras (Tipo);
+END
+GO
+
+CREATE OR ALTER TRIGGER dbo.TR_tblInspeccionExtras_NoEnCerrada
+ON dbo.tblInspeccionExtras
+AFTER INSERT, UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1
+               FROM (SELECT InspeccionId FROM inserted UNION SELECT InspeccionId FROM deleted) x
+               JOIN dbo.tblInspecciones n ON n.Id = x.InspeccionId
+               WHERE n.Estado = 'cerrada')
+        THROW 51009, 'La inspeccion esta cerrada y es inmutable; no admite cambios en sus extras', 1;
+END
+GO
+
+IF COL_LENGTH(N'dbo.tblEvidencias', N'ExtraId') IS NULL
+    ALTER TABLE dbo.tblEvidencias ADD ExtraId uniqueidentifier NULL;
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblEvidencias_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblEvidencias'))
+    ALTER TABLE dbo.tblEvidencias ADD CONSTRAINT FK_tblEvidencias_Extra FOREIGN KEY (ExtraId) REFERENCES dbo.tblInspeccionExtras (Id);
+-- Se crea con SQL dinamico y solo si las columnas que compara existen, para poder ejecutar este script tambien sobre una base que aun no las tiene (se agregan con sus cambios de esquema).
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblEvidencias_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblEvidencias'))
+   AND COL_LENGTH(N'dbo.tblEvidencias', N'VistaId') IS NOT NULL AND COL_LENGTH(N'dbo.tblEvidencias', N'EsConstancia') IS NOT NULL AND COL_LENGTH(N'dbo.tblEvidencias', N'EsSello') IS NOT NULL
+    EXEC (N'ALTER TABLE dbo.tblEvidencias ADD CONSTRAINT CK_tblEvidencias_Extra CHECK (ExtraId IS NULL OR (HallazgoId IS NULL AND VistaId IS NULL AND EsConstancia = 0 AND EsSello = 0))');
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblEvidencias_Extra' AND object_id = OBJECT_ID(N'dbo.tblEvidencias'))
+    CREATE INDEX IX_tblEvidencias_Extra ON dbo.tblEvidencias (ExtraId) WHERE ExtraId IS NOT NULL;
+GO
+
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';
 GO

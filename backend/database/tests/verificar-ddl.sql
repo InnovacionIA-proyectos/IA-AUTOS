@@ -34,12 +34,14 @@ BEGIN
     ALTER TABLE dbo.tblHallazgoSeguimiento DISABLE TRIGGER ALL;
     ALTER TABLE dbo.tblNotificaciones DISABLE TRIGGER ALL;
     ALTER TABLE dbo.tblNovedadesProceso DISABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblInspeccionExtras DISABLE TRIGGER ALL;
     BEGIN TRY
         DELETE FROM dbo.tblNovedadesProceso WHERE VehiculoId = @v OR InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblNotificaciones WHERE VehiculoId = @v OR InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblHallazgoSeguimiento WHERE HallazgoId IN (SELECT h.Id FROM dbo.tblHallazgos h WHERE h.InspeccionId IN (SELECT Id FROM @insp));
         DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblEvidencias WHERE InspeccionId IN (SELECT Id FROM @insp);
+        DELETE FROM dbo.tblInspeccionExtras WHERE InspeccionId IN (SELECT Id FROM @insp);
         -- Las unidades que "no salen" apuntan a un hallazgo, y un hallazgo preexistente apunta a su origen: se quitan primero.
         DELETE FROM dbo.tblViajeVehiculos WHERE VehiculoId = @v;
         DELETE FROM dbo.tblHallazgos WHERE EsPreexistente = 1 AND InspeccionId IN (SELECT Id FROM @insp);
@@ -60,6 +62,7 @@ BEGIN
         ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
         ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
         ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
+        ALTER TABLE dbo.tblInspeccionExtras ENABLE TRIGGER ALL;
         THROW;
     END CATCH
     ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
@@ -69,6 +72,7 @@ BEGIN
     ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
     ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
     ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblInspeccionExtras ENABLE TRIGGER ALL;
 END
 GO
 
@@ -1246,6 +1250,72 @@ EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_POS2';
 -- 7r) Parametro del minimo de fotos de la acomodacion
 INSERT #r SELECT N'Parametros: acomodacion_fotos_minimas existe como numero con valor 1',
     CASE WHEN (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'acomodacion_fotos_minimas' AND Valor = N'1' AND Tipo = 'numero') = 1 THEN 1 ELSE 0 END, NULL;
+
+-- 7s) Extras del vehiculo: el catalogo de tipos, el texto libre solo en otro, las fotos de un extra y la inmutabilidad al cierre
+INSERT #r SELECT N'Tipos de extra: barras_techo, volco, platon y otro sembrados y activos',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblTiposExtra WHERE Codigo IN ('barras_techo', 'volco', 'platon', 'otro') AND Activo = 1) = 4 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Extras: tablas, columna de la foto, restricciones y trigger de inmutabilidad',
+    CASE WHEN OBJECT_ID(N'dbo.tblInspeccionExtras', N'U') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblEvidencias') AND name = N'ExtraId' AND is_nullable = 1)
+          AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblInspeccionExtras_Texto' AND parent_object_id = OBJECT_ID(N'dbo.tblInspeccionExtras'))
+          AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblEvidencias_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblEvidencias'))
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblEvidencias_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblEvidencias'))
+          AND EXISTS (SELECT 1 FROM sys.triggers WHERE name = N'TR_tblInspeccionExtras_NoEnCerrada') THEN 1 ELSE 0 END, NULL;
+
+DECLARE @vExt uniqueidentifier = NEWID(), @eExt uniqueidentifier = NEWID(), @iExtB uniqueidentifier = NEWID(), @iExtC uniqueidentifier = NEWID();
+DECLARE @xOtro uniqueidentifier = NEWID(), @xBarras uniqueidentifier = NEWID(), @xCerrado uniqueidentifier = NEWID(), @xFoto uniqueidentifier = NEWID();
+INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion, ClienteId) VALUES (@vExt, 'ZZ_TEST_VIN_EXT', N'Renault', 'nacional', @cli);
+INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vj, @vExt);
+INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@eExt, @vExt, @vj, @pc, 1);
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@iExtB, @eExt, @vj, @u1, 'llegada', SYSDATETIMEOFFSET());
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@iExtC, @eExt, @vj, @u1, 'salida', SYSDATETIMEOFFSET());
+INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Observacion) VALUES (@xCerrado, @iExtC, 'volco', N'sin novedad');
+UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @iExtC;
+DECLARE @sB nvarchar(36) = CAST(@iExtB AS nvarchar(36)), @sC nvarchar(36) = CAST(@iExtC AS nvarchar(36)), @sOtro nvarchar(36) = CAST(@xOtro AS nvarchar(36)), @sBarras nvarchar(36) = CAST(@xBarras AS nvarchar(36));
+DECLARE @sCerrado nvarchar(36) = CAST(@xCerrado AS nvarchar(36)), @sFoto nvarchar(36) = CAST(@xFoto AS nvarchar(36));
+DECLARE @evBase nvarchar(max) = N'INSERT dbo.tblEvidencias (Id, InspeccionId, ExtraId, StoragePath, SelloFecha, SelloLat, SelloLng';
+DECLARE @casosExt TABLE (Orden int IDENTITY(1, 1) PRIMARY KEY, Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosExt (Prueba, Sentencia, Esperado) VALUES
+ (N'Extra: otro con su texto libre se guarda', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Texto, Observacion) VALUES (''' + @sOtro + N''', ''' + @sB + N''', ''otro'', N''portabicicletas'', N''en el techo'')', 0),
+ (N'CHECK extra: el texto libre solo se admite en otro', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Texto) VALUES (NEWID(), ''' + @sB + N''', ''barras_techo'', N''algo'')', 547),
+ (N'CHECK extra: el texto libre no puede estar en blanco', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Texto) VALUES (NEWID(), ''' + @sB + N''', ''otro'', N''   '')', 547),
+ (N'CHECK extra: la observacion no puede estar en blanco', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Observacion) VALUES (NEWID(), ''' + @sB + N''', ''platon'', N''   '')', 547),
+ (N'Extra: la observacion admite 500 caracteres', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Observacion) VALUES (''' + @sBarras + N''', ''' + @sB + N''', ''barras_techo'', REPLICATE(N''x'', 500))', 0),
+ (N'Extra: la observacion no admite 501 caracteres', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Observacion) VALUES (NEWID(), ''' + @sB + N''', ''platon'', REPLICATE(N''x'', 501))', 2628),
+ (N'FK extra: el tipo debe existir en el catalogo', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo) VALUES (NEWID(), ''' + @sB + N''', ''no_existe'')', 547),
+ (N'FK extra: exige la inspeccion', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo) VALUES (NEWID(), NEWID(), ''platon'')', 547),
+ (N'Foto de extra: se guarda con su sello', @evBase + N') VALUES (NEWID(), ''' + @sB + N''', ''' + @sBarras + N''', N''extra.jpg'', SYSDATETIMEOFFSET(), 4.6, -74.1)', 0),
+ (N'FK foto de extra: el extra debe existir', @evBase + N') VALUES (NEWID(), ''' + @sB + N''', NEWID(), N''extra.jpg'', SYSDATETIMEOFFSET(), 4.6, -74.1)', 547),
+ (N'CHECK foto de extra: no es a la vez de una vista', @evBase + N', VistaId) SELECT NEWID(), ''' + @sB + N''', ''' + @sBarras + N''', N''extra.jpg'', SYSDATETIMEOFFSET(), 4.6, -74.1, Id FROM dbo.tblVistasFoto WHERE Codigo = ''frontal''', 547),
+ (N'CHECK foto de extra: no es a la vez una constancia', @evBase + N', EsConstancia) VALUES (NEWID(), ''' + @sB + N''', ''' + @sBarras + N''', N''extra.jpg'', SYSDATETIMEOFFSET(), 4.6, -74.1, 1)', 547),
+ (N'CHECK foto de extra: no es a la vez un sello', @evBase + N', EsSello) VALUES (NEWID(), ''' + @sB + N''', ''' + @sBarras + N''', N''extra.jpg'', SYSDATETIMEOFFSET(), 4.6, -74.1, 1)', 547),
+ (N'Tipo de extra: un tipo con extras no se borra', N'DELETE FROM dbo.tblTiposExtra WHERE Codigo = ''barras_techo''', 547),
+ (N'Extra: con fotos no se borra (la foto es evidencia)', N'DELETE FROM dbo.tblInspeccionExtras WHERE Id = ''' + @sBarras + N'''', 547),
+ (N'Extra: inactivar su tipo no cambia el extra', N'UPDATE dbo.tblTiposExtra SET Activo = 0 WHERE Codigo = ''volco''; IF NOT EXISTS (SELECT 1 FROM dbo.tblInspeccionExtras WHERE Id = ''' + @sCerrado + N''' AND Tipo = ''volco'') THROW 52001, ''El extra perdio su tipo'', 1; UPDATE dbo.tblTiposExtra SET Activo = 1 WHERE Codigo = ''volco''', 0),
+ (N'Trigger extra: no se agrega a una inspeccion cerrada', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo) VALUES (NEWID(), ''' + @sC + N''', ''platon'')', 51009),
+ (N'Trigger extra: no se cambia en una inspeccion cerrada', N'UPDATE dbo.tblInspeccionExtras SET Observacion = N''otra'' WHERE Id = ''' + @sCerrado + N'''', 51009),
+ (N'Trigger extra: no se quita de una inspeccion cerrada', N'DELETE FROM dbo.tblInspeccionExtras WHERE Id = ''' + @sCerrado + N'''', 51009),
+ (N'Extra: en un borrador se cambia', N'UPDATE dbo.tblInspeccionExtras SET Observacion = N''cambiada'' WHERE Id = ''' + @sOtro + N'''', 0),
+ (N'Extra: en un borrador, sin fotos, se quita', N'DELETE FROM dbo.tblInspeccionExtras WHERE Id = ''' + @sOtro + N'''', 0);
+DECLARE @pruebaEx nvarchar(200), @sentenciaEx nvarchar(max), @esperadoEx int, @obtenidoEx int, @mensajeEx nvarchar(4000);
+DECLARE cExt CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosExt ORDER BY Orden;
+OPEN cExt;
+FETCH NEXT FROM cExt INTO @pruebaEx, @sentenciaEx, @esperadoEx;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoEx = 0; SET @mensajeEx = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaEx);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoEx = ERROR_NUMBER(); SET @mensajeEx = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaEx, CASE WHEN @obtenidoEx = @esperadoEx THEN 1 ELSE 0 END, CASE WHEN @obtenidoEx = @esperadoEx THEN NULL ELSE CONCAT(N'esperaba ', @esperadoEx, N' y fue ', @obtenidoEx, N': ', @mensajeEx) END);
+    FETCH NEXT FROM cExt INTO @pruebaEx, @sentenciaEx, @esperadoEx;
+END
+CLOSE cExt;
+DEALLOCATE cExt;
+EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_EXT';
 
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
