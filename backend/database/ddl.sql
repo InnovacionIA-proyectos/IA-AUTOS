@@ -646,6 +646,54 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblViajeVehiculos_Lug
 GO
 
 /* -----------------------------------------------------------------------------
+   tblInspectorLugares: los puntos de cada inspector (usuario y lugar real del catalogo tblLugares, unico por pareja); un inspector puede tener varios.
+   tblReclamos: quien reclamo un cargue o una entrega (la etapa Descargue), cuando y, al liberarse, quien y cuando. Un indice unico filtrado impide dos reclamos ACTIVOS (sin liberar) del mismo viaje y
+   proceso; los liberados quedan como historial y no se borran (51003). tblViajes.InspectorId se conserva: lo llena el reclamo del cargue.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblInspectorLugares', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblInspectorLugares
+    (
+        Id         uniqueidentifier  NOT NULL CONSTRAINT PK_tblInspectorLugares PRIMARY KEY,
+        UsuarioId  uniqueidentifier  NOT NULL,
+        LugarId    uniqueidentifier  NOT NULL,
+        CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblInspectorLugares_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblInspectorLugares_Par UNIQUE (UsuarioId, LugarId),
+        CONSTRAINT FK_tblInspectorLugares_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblInspectorLugares_Lugar FOREIGN KEY (LugarId) REFERENCES dbo.tblLugares (Id)
+    );
+    CREATE INDEX IX_tblInspectorLugares_Lugar ON dbo.tblInspectorLugares (LugarId);
+END
+GO
+
+IF OBJECT_ID(N'dbo.tblReclamos', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblReclamos
+    (
+        Id           uniqueidentifier  NOT NULL CONSTRAINT PK_tblReclamos PRIMARY KEY,
+        ViajeId      uniqueidentifier  NOT NULL,
+        InspectorId  uniqueidentifier  NOT NULL,
+        Proceso      varchar(10)       NOT NULL,
+        ReclamadoAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblReclamos_ReclamadoAt DEFAULT (SYSDATETIMEOFFSET()),
+        LiberadoAt   datetimeoffset(3) NULL,
+        LiberadoPor  uniqueidentifier  NULL,
+        CONSTRAINT FK_tblReclamos_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
+        CONSTRAINT FK_tblReclamos_Inspector FOREIGN KEY (InspectorId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblReclamos_LiberadoPor FOREIGN KEY (LiberadoPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT CK_tblReclamos_Proceso CHECK (Proceso IN ('cargue', 'entrega')),
+        -- Liberado y quien lo libero van juntos o ninguno, y no se libera antes de reclamarse.
+        CONSTRAINT CK_tblReclamos_Liberacion CHECK ((LiberadoAt IS NULL AND LiberadoPor IS NULL) OR (LiberadoAt IS NOT NULL AND LiberadoPor IS NOT NULL AND LiberadoAt >= ReclamadoAt))
+    );
+    CREATE INDEX IX_tblReclamos_Viaje ON dbo.tblReclamos (ViajeId);
+    CREATE INDEX IX_tblReclamos_Inspector ON dbo.tblReclamos (InspectorId);
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblReclamos_Activo' AND object_id = OBJECT_ID(N'dbo.tblReclamos'))
+    CREATE UNIQUE INDEX UX_tblReclamos_Activo ON dbo.tblReclamos (ViajeId, Proceso) WHERE LiberadoAt IS NULL;
+GO
+
+/* -----------------------------------------------------------------------------
    tblEtapas (tramo de un VIN dentro de un viaje: etapa del catalogo y el lugar donde se hace)
    - Al agregar un VIN a un viaje se crean sus etapas: Cargue en el origen, Transporte y Descargue en el destino.
    - ConPersonalApoyo (solo en la etapa de Cargue): con personal de apoyo la inspeccion de salida la hace un inspector; sin el,
@@ -1664,7 +1712,7 @@ GO
    ----------------------------------------------------------------------------- */
 DECLARE @tablaProtegida sysname, @sqlProtegida nvarchar(max);
 DECLARE cProtegidas CURSOR LOCAL FAST_FORWARD FOR
-    SELECT v FROM (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblTransferenciasCustodia'), (N'tblAuditLog'), (N'tblHallazgoSeguimiento'), (N'tblNotificaciones'), (N'tblNotasAclaratorias'), (N'tblNovedadesProceso')) AS t (v);
+    SELECT v FROM (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblTransferenciasCustodia'), (N'tblAuditLog'), (N'tblHallazgoSeguimiento'), (N'tblNotificaciones'), (N'tblNotasAclaratorias'), (N'tblNovedadesProceso'), (N'tblReclamos')) AS t (v);
 OPEN cProtegidas;
 FETCH NEXT FROM cProtegidas INTO @tablaProtegida;
 WHILE @@FETCH_STATUS = 0
@@ -1754,7 +1802,8 @@ FROM (VALUES
     ('umbral_patron_cantidad',             N'10',         'numero', N'Hallazgos por zona o por proceso, dentro de la ventana, a partir de los cuales se alerta de un patron'),
     ('umbral_patron_ventana_dias',         N'30',         'numero', N'Dias de la ventana en la que se cuentan los hallazgos de un patron'),
     ('captura_incompleta_minutos',         N'30',         'numero', N'Minutos que una inspeccion de Cargue o Descargue puede seguir en borrador sin todas las fotos antes de avisar a quien la inicio'),
-    ('transferencia_pendiente_minutos',    N'240',        'numero', N'Minutos que una llegada cerrada puede seguir con la transferencia sin cierre antes de avisar al firmante que falta')
+    ('transferencia_pendiente_minutos',    N'240',        'numero', N'Minutos que una llegada cerrada puede seguir con la transferencia sin cierre antes de avisar al firmante que falta'),
+    ('reclamo_sin_actividad_minutos',      N'30',         'numero', N'Minutos que un camion reclamado puede seguir sin ninguna inspeccion iniciada o cerrada antes de avisar al coordinador; el reclamo no se libera solo')
 ) AS v (Clave, Valor, Tipo, Descripcion)
 WHERE NOT EXISTS (SELECT 1 FROM dbo.tblParametros p WHERE p.Clave = v.Clave);
 GO

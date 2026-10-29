@@ -54,7 +54,7 @@ public sealed class ParametrosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBas
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var lista = (await ComoJsonAsync(r)).EnumerateArray().ToList();
-        Assert.Equal(13, lista.Count);
+        Assert.Equal(14, lista.Count);
         Assert.Equal(["clave", "valor", "tipo", "descripcion", "actualizado_por", "updated_at"], lista[0].EnumerateObject().Select(p => p.Name).ToList());
         var claves = lista.Select(p => p.GetProperty("clave").GetString()!).ToList();
         Assert.Equal(claves.Order(StringComparer.Ordinal).ToList(), claves);

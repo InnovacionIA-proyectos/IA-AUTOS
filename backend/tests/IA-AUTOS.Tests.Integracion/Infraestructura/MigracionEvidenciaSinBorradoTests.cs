@@ -144,7 +144,7 @@ public sealed partial class MigracionEvidenciaSinBorradoTests : IAsyncLifetime
         Assert.Equal(0, await ContarAsync("SELECT COUNT(*) FROM sys.foreign_keys WHERE delete_referential_action = 1 AND name IN (N'FK_tblViajeVehiculos_Vehiculo', N'FK_tblEtapas_Vehiculo', N'FK_tblInspecciones_Etapa', N'FK_tblHallazgos_Inspeccion', N'FK_tblEvidencias_Inspeccion', N'FK_tblTransferencias_Inspeccion')"));
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.foreign_keys WHERE delete_referential_action = 1 AND name = N'FK_tblViajeVehiculos_Viaje'"));
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.foreign_keys WHERE delete_referential_action = 1 AND name = N'FK_tblCuadranteVistas_Cuadrante'"));
-        Assert.Equal(5, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name LIKE N'TR[_]%[_]NoBorrar' AND is_instead_of_trigger = 1 AND OBJECT_NAME(parent_id) NOT IN (N'tblHallazgoSeguimiento', N'tblNotificaciones', N'tblNotasAclaratorias', N'tblNovedadesProceso')"));
+        Assert.Equal(5, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name LIKE N'TR[_]%[_]NoBorrar' AND is_instead_of_trigger = 1 AND OBJECT_NAME(parent_id) NOT IN (N'tblHallazgoSeguimiento', N'tblNotificaciones', N'tblNotasAclaratorias', N'tblNovedadesProceso', N'tblReclamos')"));
 
         // Repetir el script no cambia nada (ya esta aplicado).
         await EjecutarAsync(_cadena, await ScriptMigracionAsync());
@@ -188,7 +188,7 @@ public sealed partial class MigracionEvidenciaSinBorradoTests : IAsyncLifetime
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "database", "ddl.sql"));
 
         Assert.Equal(2, await ContarAsync("SELECT COUNT(*) FROM dbo.tblVehiculos WHERE Activo = 1"));
-        Assert.Equal(5, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name LIKE N'TR[_]%[_]NoBorrar' AND is_instead_of_trigger = 1 AND OBJECT_NAME(parent_id) NOT IN (N'tblHallazgoSeguimiento', N'tblNotificaciones', N'tblNotasAclaratorias', N'tblNovedadesProceso')"));
+        Assert.Equal(5, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name LIKE N'TR[_]%[_]NoBorrar' AND is_instead_of_trigger = 1 AND OBJECT_NAME(parent_id) NOT IN (N'tblHallazgoSeguimiento', N'tblNotificaciones', N'tblNotasAclaratorias', N'tblNovedadesProceso', N'tblReclamos')"));
         Assert.Equal(51003, await ErrorDeAsync("DELETE FROM dbo.tblEvidencias"));
     }
 
@@ -199,7 +199,7 @@ public sealed partial class MigracionEvidenciaSinBorradoTests : IAsyncLifetime
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "database", "ddl.sql"));
 
         Assert.Equal(2, await ContarAsync("SELECT COUNT(*) FROM dbo.tblVehiculos WHERE Activo = 1"));
-        Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name LIKE N'TR[_]%[_]NoBorrar' AND is_instead_of_trigger = 1 AND OBJECT_NAME(parent_id) NOT IN (N'tblHallazgoSeguimiento', N'tblNotificaciones', N'tblNotasAclaratorias', N'tblNovedadesProceso')"));
+        Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name LIKE N'TR[_]%[_]NoBorrar' AND is_instead_of_trigger = 1 AND OBJECT_NAME(parent_id) NOT IN (N'tblHallazgoSeguimiento', N'tblNotificaciones', N'tblNotasAclaratorias', N'tblNovedadesProceso', N'tblReclamos')"));
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name = N'TR_tblAuditLog_NoBorrar'"));
     }
 }

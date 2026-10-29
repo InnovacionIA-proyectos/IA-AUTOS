@@ -54,12 +54,14 @@
     <Content Include="..\..\database\cambios-esquema\23-novedad-de-proceso.sql" Link="database\cambios-esquema\23-novedad-de-proceso.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\24-lugares-y-programacion.sql" Link="database\cambios-esquema\24-lugares-y-programacion.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\25-destino-por-unidad-y-cierre-con-una-firma.sql" Link="database\cambios-esquema\25-destino-por-unidad-y-cierre-con-una-firma.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\26-reclamo-inspector.sql" Link="database\cambios-esquema\26-reclamo-inspector.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-indicadores.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-completa.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-estados-sofasa.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-novedad-proceso.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-lugares.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-destino-por-unidad.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-reclamo-inspector.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi-versiones.json" Link="docs\openapi-versiones.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\CONTRATO.md" Link="CONTRATO.md" CopyToOutputDirectory="PreserveNewest" />

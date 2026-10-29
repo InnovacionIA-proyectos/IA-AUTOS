@@ -1126,6 +1126,71 @@ INSERT #r SELECT N'Recibo sin entrega: el cierre exige la parte que no firmo y e
     CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Cierre' AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND definition LIKE N'%recibo_sin_entrega%NoFirmaParte%MotivoNoFirma%')
           AND NOT EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE TipoCierre = 'recibo_sin_entrega' AND (NoFirmaParte IS NULL OR MotivoNoFirma IS NULL)) THEN 1 ELSE 0 END, NULL;
 
+-- 7o) Reclamo del camion por el inspector: los puntos del inspector, el reclamo con su liberacion y el parametro del aviso de inactividad
+INSERT #r SELECT N'Reclamo: las tablas, el par unico, las llaves foraneas y el indice unico filtrado de reclamos activos',
+    CASE WHEN OBJECT_ID(N'dbo.tblInspectorLugares', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.tblReclamos', N'U') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblInspectorLugares_Par' AND parent_object_id = OBJECT_ID(N'dbo.tblInspectorLugares'))
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblInspectorLugares_Lugar' AND parent_object_id = OBJECT_ID(N'dbo.tblInspectorLugares') AND referenced_object_id = OBJECT_ID(N'dbo.tblLugares'))
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblInspectorLugares_Usuario' AND parent_object_id = OBJECT_ID(N'dbo.tblInspectorLugares') AND referenced_object_id = OBJECT_ID(N'dbo.tblUsuarios'))
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblReclamos_Viaje' AND referenced_object_id = OBJECT_ID(N'dbo.tblViajes'))
+          AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblReclamos_Activo' AND object_id = OBJECT_ID(N'dbo.tblReclamos') AND is_unique = 1 AND has_filter = 1)
+          AND EXISTS (SELECT 1 FROM sys.triggers WHERE name = N'TR_tblReclamos_NoBorrar' AND parent_id = OBJECT_ID(N'dbo.tblReclamos') AND is_disabled = 0) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Reclamo: el parametro reclamo_sin_actividad_minutos es un numero con valor inicial 30',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblParametros WHERE Clave = 'reclamo_sin_actividad_minutos' AND Valor = N'30' AND Tipo = 'numero' AND LEN(Descripcion) > 0) THEN 1 ELSE 0 END, NULL;
+
+DECLARE @lugarRec uniqueidentifier = NEWID();
+INSERT dbo.tblLugares (Id, Nombre, TipoId, Ciudad) SELECT @lugarRec, N'ZZ_TEST_LUGAR_RECLAMO', Id, N'Envigado' FROM dbo.tblPuntosCustodia WHERE Codigo = 'cedi_1';
+DECLARE @lugarRecTxt nvarchar(36) = CAST(@lugarRec AS nvarchar(36)), @u1Rec nvarchar(36) = CAST(@u1 AS nvarchar(36)), @u2Rec nvarchar(36) = CAST(@u2 AS nvarchar(36)), @vjRec nvarchar(36) = CAST(@vj AS nvarchar(36));
+DECLARE @baseRec nvarchar(max) = N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso, ReclamadoAt, LiberadoAt, LiberadoPor) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u1Rec + N''', ';
+DECLARE @casosRec TABLE (Orden int IDENTITY(1, 1) PRIMARY KEY, Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosRec (Prueba, Sentencia, Esperado) VALUES
+ (N'Puntos del inspector: un punto se guarda', N'INSERT dbo.tblInspectorLugares (Id, UsuarioId, LugarId) VALUES (NEWID(), ''' + @u1Rec + N''', ''' + @lugarRecTxt + N''')', 0),
+ (N'UNIQUE puntos del inspector: la pareja usuario y lugar no se repite', N'INSERT dbo.tblInspectorLugares (Id, UsuarioId, LugarId) VALUES (NEWID(), ''' + @u1Rec + N''', ''' + @lugarRecTxt + N''')', 2627),
+ (N'Puntos del inspector: otro inspector puede tener el mismo punto', N'INSERT dbo.tblInspectorLugares (Id, UsuarioId, LugarId) VALUES (NEWID(), ''' + @u2Rec + N''', ''' + @lugarRecTxt + N''')', 0),
+ (N'FK puntos del inspector: lugar inexistente', N'INSERT dbo.tblInspectorLugares (Id, UsuarioId, LugarId) VALUES (NEWID(), ''' + @u1Rec + N''', NEWID())', 547),
+ (N'CHECK reclamo: proceso desconocido', @baseRec + N'''descargue'', SYSDATETIMEOFFSET(), NULL, NULL)', 547),
+ (N'CHECK reclamo: liberado sin quien lo libero', @baseRec + N'''cargue'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), NULL)', 547),
+ (N'CHECK reclamo: quien libero sin fecha de liberacion', @baseRec + N'''cargue'', SYSDATETIMEOFFSET(), NULL, ''' + @u2Rec + N''')', 547),
+ (N'CHECK reclamo: no se libera antes de reclamarse', @baseRec + N'''cargue'', SYSDATETIMEOFFSET(), DATEADD(HOUR, -1, SYSDATETIMEOFFSET()), ''' + @u2Rec + N''')', 547),
+ (N'FK reclamo: viaje inexistente', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), NEWID(), ''' + @u1Rec + N''', ''cargue'')', 547),
+ (N'Reclamo: el cargue se reclama', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u1Rec + N''', ''cargue'')', 0),
+ (N'UNIQUE filtrado reclamo: no hay dos reclamos activos del mismo viaje y proceso', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''cargue'')', 2601),
+ (N'Reclamo: la entrega del mismo viaje se reclama aparte', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''entrega'')', 0),
+ (N'Reclamo: liberar guarda quien y cuando', N'UPDATE dbo.tblReclamos SET LiberadoAt = SYSDATETIMEOFFSET(), LiberadoPor = ''' + @u2Rec + N''' WHERE ViajeId = ''' + @vjRec + N''' AND Proceso = ''cargue'' AND LiberadoAt IS NULL', 0),
+ (N'Reclamo: liberado el reclamo, el cargue se puede reclamar de nuevo', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''cargue'')', 0),
+ (N'Trigger: un reclamo es historial y no se borra', N'DELETE FROM dbo.tblReclamos WHERE ViajeId = ''' + @vjRec + N'''', 51003);
+DECLARE @pruebaRc nvarchar(200), @sentenciaRc nvarchar(max), @esperadoRc int, @obtenidoRc int, @mensajeRc nvarchar(4000);
+DECLARE cRec CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosRec ORDER BY Orden;
+OPEN cRec;
+FETCH NEXT FROM cRec INTO @pruebaRc, @sentenciaRc, @esperadoRc;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoRc = 0; SET @mensajeRc = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaRc);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoRc = ERROR_NUMBER(); SET @mensajeRc = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaRc, CASE WHEN @obtenidoRc = @esperadoRc THEN 1 ELSE 0 END, CASE WHEN @obtenidoRc = @esperadoRc THEN NULL ELSE CONCAT(N'esperaba ', @esperadoRc, N' y fue ', @obtenidoRc, N': ', @mensajeRc) END);
+    FETCH NEXT FROM cRec INTO @pruebaRc, @sentenciaRc, @esperadoRc;
+END
+CLOSE cRec;
+DEALLOCATE cRec;
+INSERT #r SELECT N'Reclamo: quedaron los dos del cargue (uno liberado y uno activo) y el de la entrega',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblReclamos WHERE ViajeId = @vj AND Proceso = 'cargue' AND LiberadoAt IS NOT NULL AND LiberadoPor = @u2) = 1
+          AND (SELECT COUNT(*) FROM dbo.tblReclamos WHERE ViajeId = @vj AND Proceso = 'cargue' AND LiberadoAt IS NULL) = 1
+          AND (SELECT COUNT(*) FROM dbo.tblReclamos WHERE ViajeId = @vj AND Proceso = 'entrega' AND LiberadoAt IS NULL) = 1 THEN 1 ELSE 0 END, NULL;
+
+-- Limpieza de esta seccion (los reclamos son historial: solo se borran con su trigger apagado).
+ALTER TABLE dbo.tblReclamos DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblReclamos WHERE ViajeId = @vj;
+ALTER TABLE dbo.tblReclamos ENABLE TRIGGER ALL;
+DELETE FROM dbo.tblInspectorLugares WHERE LugarId = @lugarRec;
+DELETE FROM dbo.tblLugares WHERE Id = @lugarRec;
+INSERT #r SELECT N'Reclamo: lo de prueba se limpio', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblReclamos WHERE ViajeId = @vj) AND NOT EXISTS (SELECT 1 FROM dbo.tblInspectorLugares WHERE LugarId = @lugarRec)
+    AND NOT EXISTS (SELECT 1 FROM dbo.tblLugares WHERE Id = @lugarRec) THEN 1 ELSE 0 END, NULL;
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';

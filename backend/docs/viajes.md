@@ -82,6 +82,14 @@ pueden no tener `codigo_mtrack`, `tipo_unidad_id` ni `placa` (el código se comp
 (`tblPuntosCustodia`) y no un lugar real, crea **un lugar histórico inactivo** por cada tipo que algún viaje usaba de destino («Concesionario (por definir)», ciudad «Sin definir») y se lo copia a cada unidad del viaje. Tras migrar,
 ninguna unidad de un viaje con destino queda sin lugar de destino y el de cada una corresponde al de su viaje; quien administra el catálogo reasigna después cada unidad a su lugar real. Un viaje sin destino no inventa uno.
 
+## Reclamo del camión por el inspector (script 26)
+
+El inspector reclama el camión que va a revisar. Los datos: `tblInspectorLugares` (los puntos de cada inspector: usuario y lugar del catálogo `lugares`, único por pareja; un inspector puede tener varios) y `tblReclamos` (quién reclamó un `cargue` o una `entrega`
+—la etapa Descargue—, cuándo y, al liberarse, quién y cuándo: `LiberadoAt` y `LiberadoPor` van juntos o ninguno). Un índice único filtrado (`UX_tblReclamos_Activo`) impide dos reclamos **activos** (sin liberar) del mismo viaje y proceso, de modo que el
+segundo en reclamar falla en la base; los reclamos liberados quedan como historial y no se borran (error 51003). `tblViajes.InspectorId` se conserva: lo llena el reclamo del cargue. El script
+[`26-reclamo-inspector.sql`](../database/cambios-esquema/26-reclamo-inspector.sql) (una transacción, repetible, `@esquema` ajustable) también agrega el parámetro `reclamo_sin_actividad_minutos` (número, 30; ver [parametros.md](parametros.md)); no toca ningún dato existente.
+Los endpoints, la visibilidad y el aviso de inactividad son de las historias de backend que siguen.
+
 ## Aplicar el cambio en una base existente
 
 Con un usuario que pueda crear tablas y vistas y desactivar triggers (no el de la aplicación), conectado a la base de IA Autos, **antes de desplegar la API**:
