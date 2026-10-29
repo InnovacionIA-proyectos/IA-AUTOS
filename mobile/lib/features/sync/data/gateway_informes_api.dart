@@ -118,6 +118,45 @@ class GatewayInformesApi implements GatewayInformes {
   }
 
   @override
+  Future<void> crearNovedad(
+    String viajeId,
+    String vin, {
+    required String tipoNovedad,
+    required String tamanoDano,
+    required String fecha,
+    required double lat,
+    required double lng,
+    required FotoLocal foto,
+  }) async {
+    // Sin texto libre ni zona, clase o nivel: el servidor responde 400 «Campo no admitido» si llega cualquiera. La
+    // evidencia va con su sello completo y sin `nota`.
+    await _api.post('${_rutaUnidad(viajeId, vin)}/novedades', cuerpo: {
+      'fecha': fecha,
+      'lat': lat,
+      'lng': lng,
+      'tipo_novedad': tipoNovedad,
+      'tamano_dano': tamanoDano,
+      'evidencia': {
+        'storage_path': foto.storagePath,
+        'sello_fecha': foto.selloFecha,
+        'sello_lat': foto.selloLat,
+        'sello_lng': foto.selloLng,
+        'precision': foto.precision,
+        'dispositivo_id': foto.dispositivoId,
+        'hash_sha256': foto.hash,
+      },
+    });
+  }
+
+  @override
+  Future<void> confirmarLlegada(String viajeId, String vin, {required String fecha, required double lat, required double lng}) async {
+    await _api.post('${_rutaUnidad(viajeId, vin)}/llegada', cuerpo: {'fecha': fecha, 'lat': lat, 'lng': lng});
+  }
+
+  String _rutaUnidad(String viajeId, String vin) =>
+      '/api/viajes/${Uri.encodeComponent(viajeId)}/vehiculos/${Uri.encodeComponent(vin)}';
+
+  @override
   Future<void> firmarReciboSinEntrega(String inspeccionId, {required String firma}) async {
     await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/transferencia/sin-entrega', cuerpo: {'firma': firma});
   }

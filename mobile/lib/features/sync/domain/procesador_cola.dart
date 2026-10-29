@@ -2,6 +2,12 @@ import '../../../core/errores/error_api.dart';
 import 'job.dart';
 import 'puertos.dart';
 
+/// Códigos con que el servidor explica un 409 del conductor en ruta.
+const codigoEtapaPreviaSinCierre = 'ETAPA_PREVIA_SIN_CIERRE';
+const codigoLlegadaYaCerrada = 'LLEGADA_YA_CERRADA';
+
+enum _Desenlace { hecho, espera }
+
 /// Lo que responde el servidor a la firma de un punto que ya no tiene unidades por entregar.
 const mensajeSinPendientes = 'No hay unidades pendientes de entrega';
 
@@ -94,9 +100,11 @@ class ProcesadorCola {
       // No empezar a drenar si la señal no es estable o la API no responde.
       if (!await red.redEstable() || !await red.apiAlcanzable()) return _resultado(0, usuarioId);
 
+      final esperando = <String>{};
       while (true) {
         if (!await red.redEstable()) break;
-        final job = (await _suyos(usuarioId)).where((j) => !j.fallido).firstOrNull;
+        // Los que esperan a que se cierre la etapa anterior se saltan en esta pasada: no bloquean a los demás.
+        final job = (await _suyos(usuarioId)).where((j) => !j.fallido && !esperando.contains(j.id)).firstOrNull;
         if (job == null) break;
 
         try {
@@ -113,6 +121,16 @@ class ProcesadorCola {
               await _ejecutarEntregaPunto(job);
             case ReciboSinEntregaJob():
               await gateway.firmarReciboSinEntrega(job.inspeccionId, firma: job.firma);
+            case NovedadJob():
+              if (await _ejecutarNovedad(job) == _Desenlace.espera) {
+                esperando.add(job.id);
+                continue;
+              }
+            case LlegadaJob():
+              if (await _ejecutarLlegada(job) == _Desenlace.espera) {
+                esperando.add(job.id);
+                continue;
+              }
           }
           await cola.eliminar(job.id);
           enviados++;
@@ -304,6 +322,66 @@ class ProcesadorCola {
       recibeId: job.recibeId,
       firma: job.firma,
     );
+  }
+
+  /// La novedad del conductor: primero la foto (y se guarda su ruta, para no volver a subirla si se corta), después la
+  /// novedad. Un 409 `ETAPA_PREVIA_SIN_CIERRE` no es un fallo: el Cargue todavía no está cerrado, la novedad queda en
+  /// espera con el aviso «Falta cerrar …» y se reintenta en la próxima pasada.
+  Future<_Desenlace> _ejecutarNovedad(NovedadJob inicial) async {
+    var job = inicial;
+    if (job.foto.storagePath == null) {
+      final subido = await gateway.subirImagen(await archivos.leerBytes(job.foto.ruta), nombre: 'novedad.jpg');
+      job = job.conFoto(job.foto.copyWith(storagePath: subido.storagePath, hash: subido.hash));
+      await cola.guardar(job);
+    }
+    try {
+      await gateway.crearNovedad(
+        job.viajeId,
+        job.vin,
+        tipoNovedad: job.tipoNovedad,
+        tamanoDano: job.tamanoDano,
+        fecha: job.fecha,
+        lat: job.lat,
+        lng: job.lng,
+        foto: job.foto,
+      );
+    } on ErrorApi catch (e) {
+      if (await _enEspera(job, e)) return _Desenlace.espera;
+      rethrow;
+    }
+    try {
+      await archivos.borrar(job.foto.ruta);
+    } catch (_) {
+      // Un archivo que no se pudo borrar no invalida una novedad ya registrada.
+    }
+    return _Desenlace.hecho;
+  }
+
+  /// «Llegué». Un 409 `LLEGADA_YA_CERRADA` es un éxito para un reintento: la primera confirmación ya quedó y el
+  /// servidor no repite nada. Con `ETAPA_PREVIA_SIN_CIERRE` espera, igual que la novedad.
+  Future<_Desenlace> _ejecutarLlegada(LlegadaJob job) async {
+    try {
+      await gateway.confirmarLlegada(job.viajeId, job.vin, fecha: job.fecha, lat: job.lat, lng: job.lng);
+    } on ErrorApi catch (e) {
+      if (e.status == 409 && e.code == codigoLlegadaYaCerrada) return _Desenlace.hecho;
+      if (await _enEspera(job, e)) return _Desenlace.espera;
+      rethrow;
+    }
+    return _Desenlace.hecho;
+  }
+
+  /// Si el error es que falta cerrar la etapa anterior: deja el job en la cola, sin gastar un intento ni marcarlo
+  /// fallido, con el mensaje de lo que falta.
+  Future<bool> _enEspera(Job job, ErrorApi e) async {
+    if (e.status != 409 || e.code != codigoEtapaPreviaSinCierre) return false;
+    final etapa = switch (e.details) { final Map m => m['etapa_previa'] as String?, _ => null };
+    await cola.guardar(job.conIntento(
+      intentos: job.intentos,
+      error: etapa == null ? 'Falta cerrar la etapa anterior' : 'Falta cerrar $etapa',
+      codigo: e.code,
+      fallido: false,
+    ));
+    return true;
   }
 
   /// Un 409 «No hay unidades pendientes» es que la entrega ya quedó cerrada: lo más probable es que el envío anterior

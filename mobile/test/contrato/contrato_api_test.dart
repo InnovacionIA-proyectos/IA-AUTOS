@@ -61,7 +61,10 @@ void main() {
     // La nota se lee bajo el registro que aclara: sin su autor y su fecha no aclara nada.
     'NotaAclaratoriaDto': ['id', 'texto', 'autor_nombre', 'autor_rol', 'created_at'],
     // Una unidad puede dejar de salir del viaje sin bloquearlo.
-    'ViajeVehiculoDto': ['vin', 'marca', 'modelo', 'color', 'operacion', 'estado_unidad', 'no_sale'],
+    // `estado_transporte` y `novedades` son lo que el conductor ve de cada unidad en su viaje.
+    'ViajeVehiculoDto': [
+      'vin', 'marca', 'modelo', 'color', 'operacion', 'estado_unidad', 'no_sale', 'estado_transporte', 'novedades',
+    ],
     'NoSaleDto': ['motivo', 'hallazgo_id', 'marcado_por_nombre', 'fecha', 'vin_reemplazo'],
     // `usuario_id` distingue el informe propio del ajeno: es lo que decide si al conductor se le muestra el
     // detalle de lo que marcó el inspector.
@@ -138,6 +141,10 @@ void main() {
     'RegistrarNoFirmaRequest': [
       'entrega_usuario_id', 'recibe_usuario_id', 'parte', 'motivo', 'testigo_usuario_id', 'evidencia',
     ],
+    // La novedad del conductor en ruta: sin texto libre ni zona, clase o nivel, y la evidencia va dentro, sin `nota`.
+    'RegistrarNovedadRequest': ['fecha', 'lat', 'lng', 'tipo_novedad', 'tamano_dano', 'evidencia'],
+    // «Llegué»: la fecha y el lugar del momento.
+    'RegistrarLlegadaRequest': ['fecha', 'lat', 'lng'],
     // La app sube multipart, no base64: `SubirArchivoRequest` ya no se usa.
   };
 
@@ -173,6 +180,8 @@ void main() {
       ('post', '/api/inspecciones/{}/evidencias'),
       ('post', '/api/inspecciones/{}/hallazgos'),
       ('post', '/api/inspecciones/{}/cerrar'),
+      ('post', '/api/viajes/{}/vehiculos/{}/novedades'),
+      ('post', '/api/viajes/{}/vehiculos/{}/llegada'),
       ('post', '/api/inspecciones/{}/transferencia'),
       ('post', '/api/inspecciones/{}/transferencia/reservas'),
       ('post', '/api/inspecciones/{}/transferencia/no-firma'),

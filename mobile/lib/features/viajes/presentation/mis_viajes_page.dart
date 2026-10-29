@@ -10,6 +10,7 @@ import '../../sync/presentation/sync_controller.dart';
 import '../../vehiculos/domain/etiquetas.dart';
 import '../domain/viaje.dart';
 import '../providers.dart';
+import 'acciones_conductor.dart';
 import 'entrega_punto_page.dart';
 import 'mis_viajes_controller.dart';
 import 'seccion_pendientes.dart';
@@ -246,7 +247,7 @@ class _TarjetaViaje extends StatelessWidget {
           if (viaje.vehiculos.isEmpty)
             Text('Este viaje todavía no tiene unidades.', style: tema.bodySmall)
           else
-            for (final vehiculo in viaje.vehiculos) _FilaVehiculo(vehiculo, viajeId: viaje.id),
+            for (final vehiculo in viaje.vehiculos) _FilaVehiculo(vehiculo, viaje: viaje),
           // Entregar es lo que se hace con un viaje en ruta: en cada punto se firma una vez para todas sus unidades.
           if (viaje.estado == 'en_curso' && viaje.vehiculos.isNotEmpty) ...[
             const SizedBox(height: Espacio.sm),
@@ -263,50 +264,60 @@ class _TarjetaViaje extends StatelessWidget {
   }
 }
 
-class _FilaVehiculo extends StatelessWidget {
-  const _FilaVehiculo(this.vehiculo, {required this.viajeId});
+class _FilaVehiculo extends ConsumerWidget {
+  const _FilaVehiculo(this.vehiculo, {required this.viaje});
 
   final ViajeVehiculo vehiculo;
 
   /// El viaje desde el que se abre: la unidad puede haber andado en varios y solo interesan sus etapas.
-  final String viajeId;
+  final Viaje viaje;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
     final descripcion = [vehiculo.marca, vehiculo.modelo, vehiculo.color].whereType<String>().join(' ');
+    // Las acciones de la ruta son del conductor, mientras el viaje admita trabajo y la unidad siga saliendo. Un
+    // viaje programado también: la primera novedad es la que lo pone en curso.
+    final rol = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol));
+    final conAcciones = rol == 'conductor' && viaje.admiteTrabajo && vehiculo.sale;
 
-    return InkWell(
-      onTap: () => context.push(
-        '/inspecciones/vin/${Uri.encodeComponent(vehiculo.vin)}?viajeId=${Uri.encodeQueryComponent(viajeId)}',
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: Espacio.sm),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextoMono(vehiculo.vin),
-                  if (descripcion.isNotEmpty) Text(descripcion, style: tema.bodySmall),
-                  // La unidad sigue en la lista: conserva sus etapas y sus informes, pero ya no se captura
-                  // sobre ella y no cuenta para que el viaje esté completo.
-                  if (!vehiculo.sale)
-                    Text(
-                      switch (vehiculo.noSale?.vinReemplazo) {
-                        final reemplazo? when reemplazo.isNotEmpty => 'No sale · la reemplaza $reemplazo',
-                        _ => 'No sale',
-                      },
-                      style: tema.bodySmall?.copyWith(color: Colores.peligro),
-                    ),
-                ],
-              ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => context.push(
+            '/inspecciones/vin/${Uri.encodeComponent(vehiculo.vin)}?viajeId=${Uri.encodeQueryComponent(viaje.id)}',
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: Espacio.sm),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextoMono(vehiculo.vin),
+                      if (descripcion.isNotEmpty) Text(descripcion, style: tema.bodySmall),
+                      // La unidad sigue en la lista: conserva sus etapas y sus informes, pero ya no se captura
+                      // sobre ella y no cuenta para que el viaje esté completo.
+                      if (!vehiculo.sale)
+                        Text(
+                          switch (vehiculo.noSale?.vinReemplazo) {
+                            final reemplazo? when reemplazo.isNotEmpty => 'No sale · la reemplaza $reemplazo',
+                            _ => 'No sale',
+                          },
+                          style: tema.bodySmall?.copyWith(color: Colores.peligro),
+                        ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, size: 20, color: Colores.textoSecundario),
+              ],
             ),
-            const Icon(Icons.chevron_right, size: 20, color: Colores.textoSecundario),
-          ],
+          ),
         ),
-      ),
+        if (conAcciones) AccionesConductor(viaje: viaje, unidad: vehiculo),
+      ],
     );
   }
 }

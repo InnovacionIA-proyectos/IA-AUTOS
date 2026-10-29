@@ -156,6 +156,33 @@ class GatewayFalso implements GatewayInformes {
     return _paso('registrarPosicion');
   }
 
+  /// Cada novedad del conductor que salió: (viaje, VIN, tipo, tamaño, fecha, lat, lng, ruta de la foto subida).
+  final List<(String, String, String, String, String, double, double, String?)> novedadesEnviadas = [];
+
+  @override
+  Future<void> crearNovedad(
+    String viajeId,
+    String vin, {
+    required String tipoNovedad,
+    required String tamanoDano,
+    required String fecha,
+    required double lat,
+    required double lng,
+    required FotoLocal foto,
+  }) {
+    novedadesEnviadas.add((viajeId, vin, tipoNovedad, tamanoDano, fecha, lat, lng, foto.storagePath));
+    return _paso('crearNovedad');
+  }
+
+  /// Cada llegada que salió: (viaje, VIN, fecha, lat, lng).
+  final List<(String, String, String, double, double)> llegadasEnviadas = [];
+
+  @override
+  Future<void> confirmarLlegada(String viajeId, String vin, {required String fecha, required double lat, required double lng}) {
+    llegadasEnviadas.add((viajeId, vin, fecha, lat, lng));
+    return _paso('confirmarLlegada');
+  }
+
   /// El motivo «No hay inspector» con que se creó cada inspección: (código, texto); (null, null) en las normales.
   final List<(String?, String?)> motivosEnviados = [];
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../domain/viaje.dart';
+import '../../vehiculos/providers.dart';
 import '../providers.dart';
 
 enum FaseViajes { cargando, listo, error, sinConexion }
@@ -66,9 +67,26 @@ class MisViajesController extends Notifier<EstadoViajes> {
     if (!online) return;
 
     try {
-      state = EstadoViajes(FaseViajes.listo, await repositorio.listarRemoto(usuarioId));
+      final viajes = await repositorio.listarRemoto(usuarioId);
+      state = EstadoViajes(FaseViajes.listo, viajes);
+      if (ref.read(authControllerProvider).sesion?.usuario.rol == 'conductor') await _descargarInventarios(viajes);
     } catch (_) {
       if (cache == null) state = const EstadoViajes(FaseViajes.error);
+    }
+  }
+
+  /// El conductor mira en lectura los hallazgos de su viaje aunque después no haya señal: por eso, al abrir con señal,
+  /// se baja el inventario de cada unidad y queda guardado. Lo que no se pueda bajar se salta: la lista ya se ve.
+  Future<void> _descargarInventarios(List<Viaje> viajes) async {
+    final repositorio = ref.read(vehiculosRepositorioProvider);
+    for (final viaje in viajes) {
+      for (final unidad in viaje.vehiculos) {
+        try {
+          await repositorio.inventario(unidad.vin);
+        } catch (_) {
+          continue;
+        }
+      }
     }
   }
 }

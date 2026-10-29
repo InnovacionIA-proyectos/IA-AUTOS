@@ -88,6 +88,8 @@ class ViajeVehiculo {
     this.estadoUnidad = estadoUnidadActiva,
     this.noSale,
     this.posicion,
+    this.estadoTransporte = EstadoTransporte.sinRegistro,
+    this.novedades = 0,
   });
 
   factory ViajeVehiculo.fromJson(Map<String, dynamic> json) => ViajeVehiculo(
@@ -98,6 +100,8 @@ class ViajeVehiculo {
         operacion: json['operacion'] as String?,
         estadoUnidad: json['estado_unidad'] as String? ?? estadoUnidadActiva,
         posicion: json['posicion'] as int?,
+        estadoTransporte: json['estado_transporte'] as String? ?? EstadoTransporte.sinRegistro,
+        novedades: json['novedades'] as int? ?? 0,
         noSale: switch (json['no_sale']) {
           final Map<String, dynamic> m => NoSale.fromJson(m),
           _ => null,
@@ -120,6 +124,10 @@ class ViajeVehiculo {
   /// El lugar (1 a 7) que la unidad tiene en la niñera, o null mientras no se haya registrado.
   final int? posicion;
 
+  /// Qué ha registrado el conductor de esta unidad en el transporte, y cuántas novedades.
+  final String estadoTransporte;
+  final int novedades;
+
   bool get sale => estadoUnidad == estadoUnidadActiva;
 
   Map<String, dynamic> toJson() => {
@@ -131,7 +139,24 @@ class ViajeVehiculo {
         'estado_unidad': estadoUnidad,
         'no_sale': noSale?.toJson(),
         'posicion': posicion,
+        'estado_transporte': estadoTransporte,
+        'novedades': novedades,
       };
+}
+
+/// Los valores de `estado_transporte` de una unidad.
+abstract final class EstadoTransporte {
+  /// El conductor no ha registrado nada de esa unidad.
+  static const sinRegistro = 'sin_registro';
+
+  /// Tiene novedades y todavía no confirmó la llegada.
+  static const conNovedad = 'con_novedad';
+
+  /// Confirmó la llegada y no tiene novedades.
+  static const sinNovedad = 'sin_novedad';
+
+  /// Confirmó la llegada y tiene novedades.
+  static const llegadaConNovedad = 'llegada_con_novedad';
 }
 
 /// Valor de `estado_unidad` de una unidad que sigue en el viaje.

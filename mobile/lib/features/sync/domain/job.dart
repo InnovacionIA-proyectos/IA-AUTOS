@@ -62,6 +62,8 @@ sealed class Job {
         'nota' => NotaJob.fromJson(json),
         'entrega_punto' => EntregaPuntoJob.fromJson(json),
         'recibo_sin_entrega' => ReciboSinEntregaJob.fromJson(json),
+        'novedad' => NovedadJob.fromJson(json),
+        'llegada' => LlegadaJob.fromJson(json),
         final otro => throw FormatException('Tipo de job desconocido: $otro'),
       };
 }
@@ -763,5 +765,202 @@ class ReciboSinEntregaJob extends Job {
         'usuario_id': usuarioId,
         'inspeccion_id': inspeccionId,
         'firma': firma,
+      };
+}
+
+/// Una novedad del conductor en ruta: la foto, el tipo y el tamaño, con la fecha y el lugar del momento en que la
+/// registró (no del momento en que se envía). Es reanudable: primero sube la foto y guarda su ruta, después crea la
+/// novedad, así un corte entre los dos pasos no vuelve a subir el archivo.
+class NovedadJob extends Job {
+  const NovedadJob({
+    required super.id,
+    required super.etiqueta,
+    required super.creadoEn,
+    super.intentos,
+    super.error,
+    super.codigoError,
+    super.fallido,
+    super.usuarioId,
+    required this.viajeId,
+    required this.vin,
+    required this.tipoNovedad,
+    required this.tamanoDano,
+    required this.fecha,
+    required this.lat,
+    required this.lng,
+    required this.foto,
+  });
+
+  factory NovedadJob.fromJson(Map<String, dynamic> json) => NovedadJob(
+        id: json['id'] as String,
+        etiqueta: json['etiqueta'] as String,
+        creadoEn: json['creado_en'] as int,
+        intentos: json['intentos'] as int? ?? 0,
+        error: json['error'] as String?,
+        codigoError: json['codigo_error'] as String?,
+        fallido: json['fallido'] as bool? ?? false,
+        usuarioId: json['usuario_id'] as String?,
+        viajeId: json['viaje_id'] as String,
+        vin: json['vin'] as String,
+        tipoNovedad: json['tipo_novedad'] as String,
+        tamanoDano: json['tamano_dano'] as String,
+        fecha: json['fecha'] as String,
+        lat: (json['lat'] as num).toDouble(),
+        lng: (json['lng'] as num).toDouble(),
+        foto: FotoLocal.fromJson(json['foto'] as Map<String, dynamic>),
+      );
+
+  final String viajeId;
+  final String vin;
+
+  /// `golpe`, `piedra`, `granizo` o `incidente_vial`: se elige de una lista, no se escribe.
+  final String tipoNovedad;
+
+  /// Código del catálogo `tamanos-dano`.
+  final String tamanoDano;
+
+  /// Cuándo y dónde la registró: se toman al guardarla, no al enviarla.
+  final String fecha;
+  final double lat;
+  final double lng;
+  final FotoLocal foto;
+
+  @override
+  String get tipo => 'novedad';
+
+  NovedadJob conFoto(FotoLocal nueva) => _copiar(foto: nueva);
+
+  @override
+  NovedadJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) =>
+      _copiar(intentos: intentos, error: error, codigoError: codigo, fallido: fallido);
+
+  @override
+  NovedadJob conUsuario(String usuario) => _copiar(usuarioId: usuario);
+
+  NovedadJob _copiar({int? intentos, String? error, String? codigoError, bool? fallido, String? usuarioId, FotoLocal? foto}) =>
+      NovedadJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        intentos: intentos ?? this.intentos,
+        error: error,
+        codigoError: codigoError ?? this.codigoError,
+        fallido: fallido ?? this.fallido,
+        usuarioId: usuarioId ?? this.usuarioId,
+        viajeId: viajeId,
+        vin: vin,
+        tipoNovedad: tipoNovedad,
+        tamanoDano: tamanoDano,
+        fecha: fecha,
+        lat: lat,
+        lng: lng,
+        foto: foto ?? this.foto,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'novedad',
+        'id': id,
+        'etiqueta': etiqueta,
+        'creado_en': creadoEn,
+        'intentos': intentos,
+        'error': error,
+        'codigo_error': codigoError,
+        'fallido': fallido,
+        'usuario_id': usuarioId,
+        'viaje_id': viajeId,
+        'vin': vin,
+        'tipo_novedad': tipoNovedad,
+        'tamano_dano': tamanoDano,
+        'fecha': fecha,
+        'lat': lat,
+        'lng': lng,
+        'foto': foto.toJson(),
+      };
+}
+
+/// «Llegué»: la confirmación de que la unidad llegó, con la fecha y el lugar del momento en que el conductor la
+/// pulsó (no del envío). El servidor cierra con ella el transporte de esa unidad.
+class LlegadaJob extends Job {
+  const LlegadaJob({
+    required super.id,
+    required super.etiqueta,
+    required super.creadoEn,
+    super.intentos,
+    super.error,
+    super.codigoError,
+    super.fallido,
+    super.usuarioId,
+    required this.viajeId,
+    required this.vin,
+    required this.fecha,
+    required this.lat,
+    required this.lng,
+  });
+
+  factory LlegadaJob.fromJson(Map<String, dynamic> json) => LlegadaJob(
+        id: json['id'] as String,
+        etiqueta: json['etiqueta'] as String,
+        creadoEn: json['creado_en'] as int,
+        intentos: json['intentos'] as int? ?? 0,
+        error: json['error'] as String?,
+        codigoError: json['codigo_error'] as String?,
+        fallido: json['fallido'] as bool? ?? false,
+        usuarioId: json['usuario_id'] as String?,
+        viajeId: json['viaje_id'] as String,
+        vin: json['vin'] as String,
+        fecha: json['fecha'] as String,
+        lat: (json['lat'] as num).toDouble(),
+        lng: (json['lng'] as num).toDouble(),
+      );
+
+  final String viajeId;
+  final String vin;
+  final String fecha;
+  final double lat;
+  final double lng;
+
+  @override
+  String get tipo => 'llegada';
+
+  @override
+  LlegadaJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) =>
+      _copiar(intentos: intentos, error: error, codigoError: codigo, fallido: fallido);
+
+  @override
+  LlegadaJob conUsuario(String usuario) => _copiar(usuarioId: usuario);
+
+  LlegadaJob _copiar({int? intentos, String? error, String? codigoError, bool? fallido, String? usuarioId}) => LlegadaJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        intentos: intentos ?? this.intentos,
+        error: error,
+        codigoError: codigoError ?? this.codigoError,
+        fallido: fallido ?? this.fallido,
+        usuarioId: usuarioId ?? this.usuarioId,
+        viajeId: viajeId,
+        vin: vin,
+        fecha: fecha,
+        lat: lat,
+        lng: lng,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'llegada',
+        'id': id,
+        'etiqueta': etiqueta,
+        'creado_en': creadoEn,
+        'intentos': intentos,
+        'error': error,
+        'codigo_error': codigoError,
+        'fallido': fallido,
+        'usuario_id': usuarioId,
+        'viaje_id': viajeId,
+        'vin': vin,
+        'fecha': fecha,
+        'lat': lat,
+        'lng': lng,
       };
 }

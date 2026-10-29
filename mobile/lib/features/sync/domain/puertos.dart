@@ -82,6 +82,21 @@ abstract interface class GatewayInformes {
 
   Future<void> cerrarInspeccion(String inspeccionId);
 
+  /// Registra una novedad del conductor sobre una unidad del viaje. La foto ya está subida ([FotoLocal.storagePath]).
+  Future<void> crearNovedad(
+    String viajeId,
+    String vin, {
+    required String tipoNovedad,
+    required String tamanoDano,
+    required String fecha,
+    required double lat,
+    required double lng,
+    required FotoLocal foto,
+  });
+
+  /// Confirma la llegada de una unidad, con la fecha y el lugar del momento en que el conductor lo hizo.
+  Future<void> confirmarLlegada(String viajeId, String vin, {required String fecha, required double lat, required double lng});
+
   /// El recibo sin entrega: el conductor cierra solo con su firma la transferencia de la salida del cargue que hizo
   /// sin inspector.
   Future<void> firmarReciboSinEntrega(String inspeccionId, {required String firma});

@@ -48,11 +48,15 @@ List<String> etiquetas(WidgetTester tester) => tester
     .toList();
 
 void main() {
-  testWidgets('el conductor no ve Sofasa: le toca su viaje y sus unidades', (tester) async {
+  // S6-HU-02.4: lo del conductor es su viaje. No ve la lista de informes ni Sofasa: con una sola pestaña ni siquiera
+  // se dibuja la barra.
+  testWidgets('el conductor no ve Sofasa ni Inspecciones: le toca su viaje y sus unidades', (tester) async {
     await abrir(tester, sesionCon('conductor', capacidadesDeRol('conductor')));
 
-    expect(etiquetas(tester), ['Mis viajes', 'Inspecciones']);
+    expect(find.byType(MisViajesPage), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
     expect(find.text('Sofasa'), findsNothing);
+    expect(find.text('Inspecciones'), findsNothing);
   });
 
   testWidgets('el coordinador de calidad sí la ve', (tester) async {
@@ -84,7 +88,8 @@ void main() {
     tester.element(find.byType(MisViajesPage)).go('/sofasa');
     await avanzar(tester);
 
-    expect(find.textContaining('Mis viajes, Inspecciones'), findsOneWidget);
+    expect(find.textContaining('Mis viajes'), findsWidgets);
+    expect(find.textContaining('Mis viajes, Inspecciones'), findsNothing, reason: 'al conductor no se le ofrece Inspecciones');
   });
 
   // Lo que manda el servidor pesa más que el rol: un inspector al que le quitaron registrar_inspecciones ve los

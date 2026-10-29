@@ -35,6 +35,14 @@ const etiquetaTipoCierre = <String, String>{
   'recibo_sin_entrega': 'Recibo sin entrega',
 };
 
+/// Qué ha registrado el conductor de una unidad en el transporte.
+const etiquetaEstadoTransporte = <String, String>{
+  'sin_registro': 'Sin registro',
+  'con_novedad': 'Con novedad',
+  'sin_novedad': 'Sin novedad',
+  'llegada_con_novedad': 'Llegada con novedad',
+};
+
 /// Las novedades de proceso: lo que pasó alrededor de una inspección y no es un daño.
 const etiquetaNovedadProceso = <String, String>{
   'cargue_sin_inspector': 'Cargue sin inspector',

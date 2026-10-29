@@ -51,8 +51,15 @@ enum Pestana {
 }
 
 /// Las pestañas que esta persona puede ver, en el orden de la barra.
-List<Pestana> pestanasDe(Usuario? usuario) =>
-    usuario == null ? const [] : [for (final p in Pestana.values) if (usuario.puede(p.capacidad)) p];
+///
+/// El conductor no ve «Inspecciones»: lo suyo es su viaje —reportar novedades y confirmar la llegada de cada
+/// unidad— y la lista de informes no le sirve de nada. Sus informes los abre desde la unidad, en «Mis viajes».
+List<Pestana> pestanasDe(Usuario? usuario) => usuario == null
+    ? const []
+    : [
+        for (final p in Pestana.values)
+          if (usuario.puede(p.capacidad) && !(usuario.rol == 'conductor' && p == Pestana.inspecciones)) p,
+      ];
 
 /// A dónde llega al entrar: su primera pestaña. Si no tuviera ninguna va igual a la primera, que le mostrará
 /// «sin permisos» en vez de dejarlo en una pantalla en blanco.
