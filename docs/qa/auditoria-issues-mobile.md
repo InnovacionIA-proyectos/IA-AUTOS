@@ -8,9 +8,6 @@ Lo que no se comprobó aquí: el comportamiento en dispositivo de lo que ya se p
 anteriores. Donde el criterio pide una prueba de campo (instalar un APK, revisar con el negocio),
 se dice.
 
-Los comentarios para pegar en cada issue están en
-[comentarios-issues-mobile.md](comentarios-issues-mobile.md).
-
 | | Issues | Qué hacer |
 |---|---|---|
 | Listas | #163, #164, #165, #166, #167, #168, #170, #187, #188, #199, #216, #240, #296 | Cerrar |
