@@ -13,7 +13,7 @@ Los comentarios para pegar en cada issue están en
 
 | | Issues | Qué hacer |
 |---|---|---|
-| Listas | #163, #164, #165, #166, #167, #168, #170, #187, #199, #216, #240, #296 | Cerrar |
+| Listas | #163, #164, #165, #166, #167, #168, #170, #187, #188, #199, #216, #240, #296 | Cerrar |
 | Lista salvo un criterio fuera de alcance | #208 | Cerrar; su CA-5 es de #212 |
 | Hechas, bloqueadas por backend | #193, #299 | Esperar a #297 y #298 |
 | Sin empezar | #159, #187, #188, #201, #207, #212, #218, #273, #286, #291, #304, #313 | Pendientes |
@@ -199,7 +199,6 @@ Falta CA-4 al pie de la letra:
 | Issue | Qué falta |
 |---|---|
 | #159 | La app no lee `version` ni `corrige_inspeccion_id`: no hay cadena de versiones |
-| #188 | No existen las notas aclaratorias en la app |
 | #201 | No existen `NovedadJob` ni `LlegadaJob` |
 | #207 | No existe la pantalla del conductor |
 | #212 | No existe la bandeja «Avisos» |
