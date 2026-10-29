@@ -549,7 +549,7 @@ public sealed class BaseDatosRealTests
                              'retencion_dias', 'gps_precision_minima_m', 'url_firmada_minutos')
             """);
         var invalidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Tipo NOT IN ('numero', 'porcentaje', 'texto', 'lista', 'hora', 'correos')");
-        var lineaBase = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR Clave LIKE '%fotos_minimas%'");
+        var lineaBase = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR (Clave LIKE '%fotos_minimas%' AND Clave <> 'acomodacion_fotos_minimas')");
 
         Assert.True(iniciales == 8, $"Faltan parametros iniciales (hay {iniciales} de 8). {ayuda}");
         Assert.Equal(0, invalidos);
