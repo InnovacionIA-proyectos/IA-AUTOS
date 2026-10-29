@@ -71,7 +71,9 @@ public sealed class clsNoSaleService(
         if (reemplazo is not null)
         {
             var conPersonalApoyo = (await viajes.ObtenerEtapasAsync(viaje.Id, null, ct)).Any(e => e.ConPersonalApoyo);
-            await ensamblaje.AgregarVehiculosAsync(viaje, [reemplazo], conPersonalApoyo, await catalogos.RutaEstandarAsync(ct), ct);
+            // El reemplazo hereda el destino de la unidad que sale del viaje.
+            await ensamblaje.AgregarVehiculosAsync(
+                viaje, [reemplazo], conPersonalApoyo, await catalogos.RutaEstandarAsync(ct), ct, new Dictionary<Guid, Guid?> { [reemplazo.Id] = enlace.LugarDestinoId });
         }
 
         inspecciones.Agregar(clsHallazgoSeguimiento.CrearNoSale(hallazgo.Id, actual.IdObligatorio(), motivo, ahora));

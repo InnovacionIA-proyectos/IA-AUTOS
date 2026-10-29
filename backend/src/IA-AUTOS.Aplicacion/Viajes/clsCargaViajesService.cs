@@ -393,7 +393,7 @@ public sealed class clsCargaViajesService(
                 cabecera.Codigo, cabecera.TipoUnidadId, cabecera.Placa, cabecera.Trailer, cabecera.ConductorId, null, null, null,
                 actual.IdObligatorio(), reloj.Ahora, cabecera.FechaProgramada, cabecera.LugarCargueId);
             viajes.Agregar(viaje);
-            var destinos = grupo.Where(f => f.LugarDestinoId is not null).ToDictionary(f => f.Vehiculo!.Id, f => f.LugarDestinoId!.Value);
+            var destinos = grupo.Where(f => f.LugarDestinoId is not null).ToDictionary(f => f.Vehiculo!.Id, f => f.LugarDestinoId);
             await ensamblaje.AgregarVehiculosAsync(viaje, grupo.Select(f => f.Vehiculo!).ToList(), false, ruta, ct, destinos);
             await auditor.RegistrarDeViajeAsync(
                 "viaje.crear",

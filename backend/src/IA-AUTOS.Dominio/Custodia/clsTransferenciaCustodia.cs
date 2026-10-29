@@ -154,6 +154,61 @@ public sealed class clsTransferenciaCustodia : clsEntidadBase
         Tocar(ahora);
     }
 
+    /// <summary>
+    /// Cierra como «recibo sin entrega» con UNA sola firma y su motivo (obligatorio): la del propio usuario, que es quien entrega o quien recibe (403 si no es ninguna de las dos partes). Si firma quien recibe, quien
+    /// entrega no firmo (<c>NoFirmaParte = entrega</c>: sin usuario, firma, fecha ni IP de entrega); si firma quien entrega, quien recibe no firmo (<c>NoFirmaParte = recibe</c>). 409 si la otra parte ya firmo o si la
+    /// transferencia ya esta cerrada. Si el usuario ya habia firmado su parte, la firma no hace falta; si no, es obligatoria.
+    /// </summary>
+    public void CerrarConUnaFirma(Guid usuarioId, string? firma, string? motivo, string? ip, DateTimeOffset ahora)
+    {
+        if (EstaCerrada)
+        {
+            throw ConflictoPorCierre();
+        }
+
+        var parte = ParteObligatoria(usuarioId, "cerrar con una sola firma");
+        var texto = clsValidador.Opcional(motivo) ?? throw clsErroresCampos.De("motivo", "El motivo es obligatorio");
+        if (texto.Length > MOTIVO_MAX)
+        {
+            throw clsErroresCampos.De("motivo", $"El motivo admite máximo {MOTIVO_MAX} caracteres");
+        }
+
+        if (parte == clsParteFirmante.ENTREGA)
+        {
+            if (!string.IsNullOrEmpty(FirmaRecibe))
+            {
+                throw new clsConflictoException("Quien recibe ya firmó: la entrega no puede cerrarse con una sola firma");
+            }
+
+            if (!string.IsNullOrEmpty(firma) || string.IsNullOrEmpty(FirmaEntrega))
+            {
+                PonerFirma(clsParteFirmante.ENTREGA, FirmaValida(firma), ip, ahora);
+            }
+
+            NoFirmaParte = clsParteFirmante.RECIBE;
+        }
+        else
+        {
+            if (!string.IsNullOrEmpty(FirmaEntrega))
+            {
+                throw new clsConflictoException("Quien entrega ya firmó: la entrega no puede cerrarse con una sola firma");
+            }
+
+            if (!string.IsNullOrEmpty(firma) || string.IsNullOrEmpty(FirmaRecibe))
+            {
+                PonerFirma(clsParteFirmante.RECIBE, FirmaValida(firma), ip, ahora);
+            }
+
+            ReservasTexto = null;
+            EntregaUsuarioId = null;
+            NoFirmaParte = clsParteFirmante.ENTREGA;
+        }
+
+        MotivoNoFirma = texto;
+        TipoCierre = clsTipoCierre.RECIBO_SIN_ENTREGA;
+        Tocar(ahora);
+    }
+
     /// <summary><see cref="clsParteFirmante"/> del usuario en esta transferencia, o nulo si no es ninguna de las dos partes.</summary>
     public string? ParteDe(Guid usuarioId) =>
         EntregaUsuarioId is not null && usuarioId == EntregaUsuarioId ? clsParteFirmante.ENTREGA : usuarioId == RecibeUsuarioId ? clsParteFirmante.RECIBE : null;

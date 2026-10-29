@@ -26,14 +26,15 @@ public sealed class clsViajesService(
     IUsuarioActual actual,
     IReloj reloj,
     IValidator<CrearViajeRequest> validadorCrear,
-    IValidator<AgregarVinesRequest> validadorVines,
+    IValidator<AgregarUnidadesRequest> validadorUnidades,
+    IValidator<CambiarDestinoUnidadRequest> validadorDestinoUnidad,
     IValidator<CambiarEstadoViajeRequest> validadorEstado)
 {
     /// <summary>Los campos por los que se puede ordenar el listado (<c>orden=campo:asc|desc</c>).</summary>
     public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "created_at", "updated_at", "codigo_mtrack", "estado", "placa", "trailer" };
 
     private static readonly string[] CAMPOS_EDITABLES =
-        ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "inspector_id", "origen_id", "destino_id", "con_personal_apoyo", "fecha_programada", "lugar_cargue_id"];
+        ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "inspector_id", "origen_id", "con_personal_apoyo", "fecha_programada", "lugar_cargue_id"];
 
     private static readonly string[] CAMPOS_SIN_NULO = ["codigo_mtrack", "tipo_unidad_id", "placa", "con_personal_apoyo"];
 
@@ -44,21 +45,25 @@ public sealed class clsViajesService(
         await validadorCrear.ValidarOLanzarAsync(solicitud, ct);
         var codigo = clsViaje.CodigoValido(solicitud.CodigoMtrack);
         await AsegurarCodigoLibreAsync(codigo, null, ct);
-        await ValidarReferenciasAsync(solicitud.TipoUnidadId, solicitud.ConductorId, solicitud.InspectorId, solicitud.OrigenId, solicitud.DestinoId, ct);
+        await ValidarReferenciasAsync(solicitud.TipoUnidadId, solicitud.ConductorId, solicitud.InspectorId, solicitud.OrigenId, null, ct);
+        var unidades = solicitud.Unidades ?? [];
+        await ValidarDestinosAsync(unidades, ct);
 
+        // El viaje ya no tiene un destino unico: cada unidad lleva el suyo.
         var viaje = clsViaje.Crear(
             codigo, solicitud.TipoUnidadId, solicitud.Placa, solicitud.Trailer, solicitud.ConductorId, solicitud.InspectorId,
-            solicitud.OrigenId, solicitud.DestinoId, actual.IdObligatorio(), reloj.Ahora);
+            solicitud.OrigenId, null, actual.IdObligatorio(), reloj.Ahora);
 
-        var vehiculosAAgregar = await ResolverVehiculosAsync(viaje, solicitud.Vines ?? [], new HashSet<Guid>(), ct);
+        var vehiculosAAgregar = await ResolverVehiculosAsync(viaje, unidades.Select(u => u.Vin!).ToList(), new HashSet<Guid>(), ct);
+        var destinos = DestinosPorVehiculo(vehiculosAAgregar, unidades);
         viajes.Agregar(viaje);
-        await ensamblaje.AgregarVehiculosAsync(viaje, vehiculosAAgregar, solicitud.ConPersonalApoyo ?? false, await catalogos.RutaEstandarAsync(ct), ct);
+        await ensamblaje.AgregarVehiculosAsync(viaje, vehiculosAAgregar, solicitud.ConPersonalApoyo ?? false, await catalogos.RutaEstandarAsync(ct), ct, destinos);
         await auditor.RegistrarDeViajeAsync(
             "viaje.crear",
             "viajes",
             viaje.Id,
             viaje.Id,
-            new DetalleAuditoria(null, new { viaje = clsInstantaneasAuditoria.De(viaje), vines = vehiculosAAgregar.Select(v => v.Vin).ToList() }),
+            new DetalleAuditoria(null, new { viaje = clsInstantaneasAuditoria.De(viaje), vines = vehiculosAAgregar.Select(v => v.Vin).ToList(), destinos = destinos.Select(d => new { vehiculo_id = d.Key, lugar_destino_id = d.Value }).ToList() }),
             vehiculosAAgregar.Select(v => (Guid?)v.ClienteId).FirstOrDefault(),
             ct);
 
@@ -109,8 +114,8 @@ public sealed class clsViajesService(
     // ---------------------------------------------------------------------------------------------- cambios
 
     /// <summary>
-    /// Cambia los campos enviados de un viaje programado o en curso. Al cambiar el origen o el destino se actualiza el lugar del
-    /// Cargue o del Descargue de sus VIN, y al cambiar el personal de apoyo se marca el Cargue; las etapas con informe cerrado no se tocan.
+    /// Cambia los campos enviados de un viaje programado o en curso. Al cambiar el origen se actualiza el lugar del Cargue de sus VIN, y al cambiar el
+    /// personal de apoyo se marca el Cargue; las etapas con informe cerrado no se tocan. El destino es de cada unidad: se cambia con <see cref="CambiarDestinoDeUnidadAsync"/>.
     /// </summary>
     public async Task<ViajeDto> ActualizarAsync(Guid id, IReadOnlyDictionary<string, JsonElement> campos, CancellationToken ct = default)
     {
@@ -134,8 +139,7 @@ public sealed class clsViajesService(
         var conductorId = lector.Identificador("conductor_id");
         var inspectorId = lector.Identificador("inspector_id");
         var origenId = lector.Identificador("origen_id");
-        var destinoId = lector.Identificador("destino_id");
-        await ValidarReferenciasAsync(tipoUnidadId, conductorId, inspectorId, origenId, destinoId, ct);
+        await ValidarReferenciasAsync(tipoUnidadId, conductorId, inspectorId, origenId, null, ct);
 
         // La programacion (fecha y lugar real de cargue) solo se corrige mientras el viaje esta programado.
         var cambiaFecha = lector.Tiene("fecha_programada");
@@ -163,13 +167,13 @@ public sealed class clsViajesService(
             lector.Tiene("conductor_id"), conductorId,
             lector.Tiene("inspector_id"), inspectorId,
             lector.Tiene("origen_id"), origenId,
-            lector.Tiene("destino_id"), destinoId,
+            false, null,
             reloj.Ahora);
 
         var personalApoyo = lector.Booleano("con_personal_apoyo");
-        if (lector.Tiene("origen_id") || lector.Tiene("destino_id") || personalApoyo is not null)
+        if (lector.Tiene("origen_id") || personalApoyo is not null)
         {
-            await PropagarAEtapasAsync(viaje, lector.Tiene("origen_id"), lector.Tiene("destino_id"), personalApoyo, ct);
+            await PropagarAEtapasAsync(viaje, lector.Tiene("origen_id"), personalApoyo, ct);
         }
 
         await auditor.RegistrarDeViajeAsync(
@@ -190,19 +194,62 @@ public sealed class clsViajesService(
         return await ObtenerDtoAsync(id, ct);
     }
 
-    /// <summary>Agrega VIN a un viaje activo: se crean sus etapas. Todo o nada: si alguno no existe o ya esta en otro viaje activo, no se agrega ninguno.</summary>
-    public async Task<ViajeDto> AgregarVinesAsync(Guid id, AgregarVinesRequest solicitud, CancellationToken ct = default)
+    /// <summary>
+    /// Agrega unidades a un viaje activo, cada una con su lugar de destino (400 si falta): se crean sus etapas, con el Descargue en el destino de la unidad. Todo o nada: si alguna no existe o ya esta en otro
+    /// viaje activo, no se agrega ninguna.
+    /// </summary>
+    public async Task<ViajeDto> AgregarUnidadesAsync(Guid id, AgregarUnidadesRequest solicitud, CancellationToken ct = default)
     {
-        await validadorVines.ValidarOLanzarAsync(solicitud, ct);
+        await validadorUnidades.ValidarOLanzarAsync(solicitud, ct);
         var viaje = await ObtenerViajeAsync(id, ct);
         viaje.AsegurarActivo();
 
+        var unidades = solicitud.Unidades!;
+        await ValidarDestinosAsync(unidades, ct);
         var yaEnElViaje = (await viajes.ObtenerVehiculosAsync(id, ct)).Select(v => v.VehiculoId).ToHashSet();
         var conPersonalApoyo = (await viajes.ObtenerEtapasAsync(id, null, ct)).Any(e => e.ConPersonalApoyo);
-        var vehiculosAAgregar = await ResolverVehiculosAsync(viaje, solicitud.Vines!, yaEnElViaje, ct);
-        await ensamblaje.AgregarVehiculosAsync(viaje, vehiculosAAgregar, conPersonalApoyo, await catalogos.RutaEstandarAsync(ct), ct);
+        var vehiculosAAgregar = await ResolverVehiculosAsync(viaje, unidades.Select(u => u.Vin!).ToList(), yaEnElViaje, ct);
+        var destinos = DestinosPorVehiculo(vehiculosAAgregar, unidades);
+        await ensamblaje.AgregarVehiculosAsync(viaje, vehiculosAAgregar, conPersonalApoyo, await catalogos.RutaEstandarAsync(ct), ct, destinos);
         await auditor.RegistrarDeViajeAsync(
-            "viaje.agregar_vin", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(null, new { vines = vehiculosAAgregar.Select(v => v.Vin).ToList() }), ct: ct);
+            "viaje.agregar_vin", "viajes", viaje.Id, viaje.Id,
+            new DetalleAuditoria(null, new { vines = vehiculosAAgregar.Select(v => v.Vin).ToList(), destinos = destinos.Select(d => new { vehiculo_id = d.Key, lugar_destino_id = d.Value }).ToList() }), ct: ct);
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        return await ObtenerDtoAsync(id, ct);
+    }
+
+    /// <summary>
+    /// Cambia el lugar de destino de UNA unidad de un viaje activo: solo se mueve su etapa de Descargue (las demas unidades no se tocan). 409 si la unidad no sale del viaje o si su Descargue ya tiene un
+    /// informe cerrado.
+    /// </summary>
+    public async Task<ViajeDto> CambiarDestinoDeUnidadAsync(Guid id, string vin, CambiarDestinoUnidadRequest solicitud, CancellationToken ct = default)
+    {
+        await validadorDestinoUnidad.ValidarOLanzarAsync(solicitud, ct);
+        var viaje = await ObtenerViajeAsync(id, ct);
+        viaje.AsegurarActivo();
+        var vehiculo = await vehiculos.ObtenerPorVinAsync(vin, ct)
+            ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
+        var enlace = await viajes.ObtenerVehiculoAsync(id, vehiculo.Id, ct)
+            ?? throw new clsEntidadNoEncontradaException($"El VIN {vehiculo.Vin} no está en este viaje");
+        await ValidarDestinosAsync([new UnidadDelViajeRequest(vehiculo.Vin, solicitud.LugarDestinoId)], ct);
+
+        var codigosPorEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).ToDictionary(v => v.Id, v => v.Codigo);
+        var descargue = (await viajes.ObtenerEtapasAsync(id, vehiculo.Id, ct)).FirstOrDefault(e => codigosPorEtapa.TryGetValue(e.EtapaCatalogoId, out var codigo) && codigo == clsCodigosEtapa.DESCARGUE);
+        if (descargue is not null && (await viajes.EtapasConInformeCerradoAsync(id, ct)).Contains(descargue.Id))
+        {
+            throw new clsConflictoException("El descargue de la unidad ya tiene un informe cerrado: su destino no se cambia");
+        }
+
+        var antes = enlace.LugarDestinoId;
+        enlace.CambiarLugarDestino(solicitud.LugarDestinoId!.Value, reloj.Ahora);
+        if (descargue is not null && (await ensamblaje.PuntoDeLosLugaresAsync(ct)).TryGetValue(solicitud.LugarDestinoId.Value, out var punto))
+        {
+            descargue.CambiarLugar(punto, reloj.Ahora);
+        }
+
+        await auditor.RegistrarDeViajeAsync(
+            "viaje.cambiar_destino_unidad", "viajes", viaje.Id, viaje.Id,
+            new DetalleAuditoria(new { vin = vehiculo.Vin, lugar_destino_id = antes }, new { vin = vehiculo.Vin, lugar_destino_id = enlace.LugarDestinoId }), vehiculo.ClienteId, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ObtenerDtoAsync(id, ct);
     }
@@ -355,14 +402,14 @@ public sealed class clsViajesService(
         var faltan = normalizados.Where(v => !existentes.ContainsKey(v)).ToList();
         if (faltan.Count > 0)
         {
-            throw clsErroresCampos.De("vines", $"No existen en el inventario: {string.Join(", ", faltan)}. Cárguelos antes de asignarlos a un viaje");
+            throw clsErroresCampos.De("unidades", $"No existen en el inventario: {string.Join(", ", faltan)}. Cárguelos antes de asignarlos a un viaje");
         }
 
         var encontrados = normalizados.Select(v => existentes[v]).ToList();
         var inactivos = encontrados.Where(v => !v.Activo).Select(v => v.Vin).ToList();
         if (inactivos.Count > 0)
         {
-            throw clsErroresCampos.De("vines", $"Están dados de baja y no se asignan a un viaje: {string.Join(", ", inactivos)}");
+            throw clsErroresCampos.De("unidades", $"Están dados de baja y no se asignan a un viaje: {string.Join(", ", inactivos)}");
         }
 
         var repetidos = encontrados.Where(v => yaEnElViaje.Contains(v.Id)).Select(v => v.Vin).ToList();
@@ -382,8 +429,45 @@ public sealed class clsViajesService(
         return encontrados;
     }
 
-    /// <summary>Lleva a las etapas del viaje el cambio de origen, de destino o de personal de apoyo; las que ya tienen informe cerrado no cambian.</summary>
-    private async Task PropagarAEtapasAsync(clsViaje viaje, bool cambiaOrigen, bool cambiaDestino, bool? personalApoyo, CancellationToken ct)
+    /// <summary>
+    /// Cada unidad debe traer un destino (400 «La unidad requiere un destino») que sea un lugar activo del catalogo <c>lugares</c>; un mismo VIN repetido no puede ir a dos destinos distintos.
+    /// Se devuelven todos los errores juntos bajo <c>unidades</c>.
+    /// </summary>
+    private async Task ValidarDestinosAsync(IReadOnlyList<UnidadDelViajeRequest> unidades, CancellationToken ct)
+    {
+        var errores = new List<string>();
+        foreach (var unidad in unidades)
+        {
+            if (unidad.LugarDestinoId is not { } lugar || lugar == Guid.Empty)
+            {
+                errores.Add("La unidad requiere un destino");
+            }
+            else if (!await catalogos.ExisteActivoAsync(clsNombresCatalogo.LUGARES, lugar, ct))
+            {
+                errores.Add($"El lugar de destino de la unidad {unidad.Vin} no existe en el catálogo de lugares o está inactivo");
+            }
+        }
+
+        errores.AddRange(unidades
+            .Where(u => u.Vin is not null && u.LugarDestinoId is not null)
+            .GroupBy(u => clsVin.Normalizar(u.Vin!))
+            .Where(g => g.Select(u => u.LugarDestinoId).Distinct().Count() > 1)
+            .Select(g => $"La unidad {g.Key} aparece con destinos distintos"));
+        if (errores.Count > 0)
+        {
+            throw clsErroresCampos.Varios(new Dictionary<string, string[]> { ["unidades"] = errores.Distinct().ToArray() });
+        }
+    }
+
+    /// <summary>El destino de cada vehiculo resuelto, tomado de la unidad que lo trajo (por VIN normalizado).</summary>
+    private static IReadOnlyDictionary<Guid, Guid?> DestinosPorVehiculo(IReadOnlyList<clsVehiculo> vehiculosResueltos, IReadOnlyList<UnidadDelViajeRequest> unidades)
+    {
+        var porVin = unidades.GroupBy(u => clsVin.Normalizar(u.Vin!)).ToDictionary(g => g.Key, g => g.First().LugarDestinoId);
+        return vehiculosResueltos.ToDictionary(v => v.Id, v => porVin[clsVin.Normalizar(v.Vin)]);
+    }
+
+    /// <summary>Lleva a las etapas del viaje el cambio de origen o de personal de apoyo; las que ya tienen informe cerrado no cambian. El Descargue es de cada unidad y no se toca aqui.</summary>
+    private async Task PropagarAEtapasAsync(clsViaje viaje, bool cambiaOrigen, bool? personalApoyo, CancellationToken ct)
     {
         var codigosPorEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).ToDictionary(v => v.Id, v => v.Codigo);
         var cerradas = await viajes.EtapasConInformeCerradoAsync(viaje.Id, ct);
@@ -397,10 +481,6 @@ public sealed class clsViajesService(
             if (codigo == clsCodigosEtapa.CARGUE && cambiaOrigen)
             {
                 etapa.CambiarLugar(viaje.OrigenId, reloj.Ahora);
-            }
-            else if (codigo == clsCodigosEtapa.DESCARGUE && cambiaDestino)
-            {
-                etapa.CambiarLugar(viaje.DestinoId, reloj.Ahora);
             }
 
             if (codigo == clsCodigosEtapa.CARGUE && personalApoyo is { } marca)

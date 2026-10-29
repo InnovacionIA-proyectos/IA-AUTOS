@@ -71,7 +71,7 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
             ["/api/viajes|post"] = "CrearViajeRequest",
             ["/api/viajes/{id}|patch"] = "ActualizarViajeRequest",
             ["/api/viajes/{id}/estado|patch"] = "CambiarEstadoViajeRequest",
-            ["/api/viajes/{id}/vehiculos|post"] = "AgregarVinesRequest",
+            ["/api/viajes/{id}/vehiculos|post"] = "AgregarUnidadesRequest",
             ["/api/viajes/cargar/previsualizar|post"] = "CargarViajesRequest",
             ["/api/viajes/cargar|post"] = "CargarViajesRequest",
             ["/api/inspecciones|post"] = "CrearInspeccionRequest",
@@ -144,6 +144,36 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.True(
             versionado == generado,
             "docs/openapi.json no coincide con el contrato generado. Si el cambio es intencional, suba info.version (clsOpenApi.VERSION) y regenere el archivo con ACTUALIZAR_OPENAPI=1, OPENAPI_PUBLICAR=1 y OPENAPI_DESTINO.");
+    }
+
+    [Fact]
+    public async Task El_contrato_exige_el_destino_por_unidad_y_ya_no_tiene_el_destino_unico_del_viaje()
+    {
+        var contrato = await ObtenerContratoAsync();
+        var esquemas = contrato["components"]!["schemas"]!.AsObject();
+        var rutas = contrato["paths"]!.AsObject();
+        static List<string> Propiedades(JsonNode esquema) => esquema["properties"]!.AsObject().Select(p => p.Key).ToList();
+
+        // El viaje se crea con sus unidades, cada una con su VIN y su lugar de destino; el cuerpo viejo (destino unico y lista de VIN) ya no esta.
+        var crear = Propiedades(esquemas["CrearViajeRequest"]!);
+        Assert.Contains("unidades", crear);
+        Assert.DoesNotContain("destino_id", crear);
+        Assert.DoesNotContain("vines", crear);
+        var unidad = esquemas["CrearViajeRequest"]!["properties"]!["unidades"]!["items"]!;
+        Assert.Equal(["vin", "lugar_destino_id"], Propiedades(unidad));
+        Assert.Equal(["vin", "lugar_destino_id"], unidad["required"]!.AsArray().Select(r => r!.GetValue<string>()).ToList());
+        Assert.Equal(["unidades"], Propiedades(esquemas["AgregarUnidadesRequest"]!));
+        Assert.Equal(["vin", "lugar_destino_id"], esquemas["AgregarUnidadesRequest"]!["properties"]!["unidades"]!["items"]!["required"]!.AsArray().Select(r => r!.GetValue<string>()).ToList());
+        Assert.DoesNotContain("destino_id", Propiedades(esquemas["ActualizarViajeRequest"]!));
+        Assert.Null(esquemas["AgregarVinesRequest"]);
+
+        // Cambiar el destino de una unidad y la entrega por punto.
+        Assert.Contains("CambiarDestinoUnidadRequest", rutas["/api/viajes/{id}/vehiculos/{vin}"]!["patch"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
+        Assert.Contains("EntregasDelViajeDto", rutas["/api/viajes/{id}/entregas"]!["get"]!["responses"]!["200"]!.ToJsonString());
+        Assert.Contains("EntregaPuntoDto", rutas["/api/viajes/{id}/entregas/{lugar}"]!["get"]!["responses"]!["200"]!.ToJsonString());
+        Assert.Contains("FirmarEntregaRequest", rutas["/api/viajes/{id}/entregas/{lugar}/firma"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
+        Assert.Contains("CerrarEntregaUnaFirmaRequest", rutas["/api/viajes/{id}/entregas/{lugar}/una-firma"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
+        Assert.Equal(["vehiculo_id", "vin", "estado", "inspeccion_id", "tipo_cierre", "entrega_firmada_at", "recibe_firmada_at", "no_firma_parte"], Propiedades(esquemas["EntregaUnidadDto"]!));
     }
 
     [Fact]

@@ -448,10 +448,11 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var viaje = await Sembrador.ViajeAsync();
         await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0004");
 
-        var agregado = await Cliente(token).PostAsJsonAsync($"/api/viajes/{viaje}/vehiculos", new { vines = new[] { "VIN-BAJA-0004" } });
+        var destino = await LugarRealAsync(Cliente(token), "Destino de la baja");
+        var agregado = await Cliente(token).PostAsJsonAsync($"/api/viajes/{viaje}/vehiculos", new { unidades = new[] { new { vin = "VIN-BAJA-0004", lugar_destino_id = destino } } });
 
         Assert.Equal(HttpStatusCode.BadRequest, agregado.StatusCode);
-        Assert.Contains("VIN-BAJA-0004", (await ClonarAsync(agregado)).GetProperty("details").GetProperty("fieldErrors").GetProperty("vines")[0].GetString());
+        Assert.Contains("VIN-BAJA-0004", (await ClonarAsync(agregado)).GetProperty("details").GetProperty("fieldErrors").GetProperty("unidades")[0].GetString());
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajeVehiculos WHERE ViajeId = @v", ("@v", viaje)));
     }
 

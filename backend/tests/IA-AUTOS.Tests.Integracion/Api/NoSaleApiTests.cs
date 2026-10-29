@@ -310,7 +310,8 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
         var otroViaje = await Sembrador.ViajeAsync();
 
-        var asignada = await Cliente(coordinador.Token).PostAsJsonAsync($"/api/viajes/{otroViaje}/vehiculos", new { vines = new[] { "VIN-NS-A" } });
+        var destino = await LugarRealAsync(Cliente(coordinador.Token), "Destino de la unidad");
+        var asignada = await Cliente(coordinador.Token).PostAsJsonAsync($"/api/viajes/{otroViaje}/vehiculos", new { unidades = new[] { new { vin = "VIN-NS-A", lugar_destino_id = destino } } });
 
         Assert.Equal(HttpStatusCode.OK, asignada.StatusCode);
         var inventario = await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/vehiculos/VIN-NS-A/inventario"));

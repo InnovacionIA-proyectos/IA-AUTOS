@@ -44,6 +44,14 @@ Solo vale en la salida del Cargue que él hizo (`409` si la hizo el inspector o 
 - **Novedad de proceso.** Si la salida se hizo con la excepción «No hay inspector» se crea además la novedad `recibo_sin_entrega` (con el motivo de la inspección, sin nueva notificación); en un cargue sin apoyo planeado no se crea ninguna. El conteo por tipo, punto, cliente y mes está en `GET /api/reportes/novedades-proceso`.
 - La constancia en PDF y el PDF del informe dicen «recibo sin entrega» y «Entrega: no hubo entrega». Es una decisión del equipo pendiente de confirmar por el negocio (P-080). En el descargue sin inspector sigue sin definir quién recibe.
 
+## Entrega por punto
+
+Con el destino por unidad cada unidad se entrega en su propio lugar. En cada punto del viaje se firma **una vez** (`POST /api/viajes/{id}/entregas/{lugar}/firma`): quien entrega (por defecto el conductor del viaje) y quien recibe (por defecto su inspector)
+firman, y la firma de cada uno se guarda en la transferencia **de cada unidad pendiente del punto** (sobre la inspección de llegada del Descargue) con la misma firma, fecha e IP; cada unidad conserva su transferencia propia, así que `UQ_tblTransferencias_Inspeccion` no cambia.
+Una sola firma no bloquea: `POST …/entregas/{lugar}/una-firma` cierra la entrega del punto con la firma de quien cierra y su motivo; cada unidad queda `recibo_sin_entrega` (con `NoFirmaParte`, la parte que no firmó, y `MotivoNoFirma`), se registra la novedad de proceso `recibo_sin_entrega`
+por unidad (con el motivo escrito como texto del motivo `otro`) y los coordinadores de calidad y administradores del cliente reciben un solo aviso `novedad_proceso` por entrega y punto (clave de dedupe con el viaje y el lugar). El viaje pasa a `finalizado` cuando todas sus unidades activas
+tienen el Descargue cerrado. Los endpoints y sus cuerpos están en [CONTRATO.md](../CONTRATO.md#entrega-por-punto).
+
 ## Qué bloquea
 
 La salida de una etapa exige que la etapa anterior del mismo VIN esté **terminada**: su llegada cerrada **y** ninguna transferencia suya sin tipo de cierre. Si falta algo, `409` con
