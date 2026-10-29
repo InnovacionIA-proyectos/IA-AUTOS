@@ -97,7 +97,8 @@ public sealed record InventarioEtapaDto(
     string? CodigoMtrack,
     string EstadoUnidad,
     NoSaleDto? NoSale,
-    IReadOnlyList<InventarioInspeccionDto> Inspecciones);
+    IReadOnlyList<InventarioInspeccionDto> Inspecciones,
+    int? Posicion = null);
 
 public sealed record InventarioDto(
     Guid Id,

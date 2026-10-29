@@ -22,6 +22,7 @@ internal sealed class clsGeneradorPdfInforme : IGeneradorPdfInforme
         Unidad(doc, d);
         Viaje(doc, d);
         Etapa(doc, d);
+        Acomodacion(doc, d);
         FotosDeVistas(doc, d);
         Hallazgos(doc, d);
         Paneles(doc, d);
@@ -78,6 +79,31 @@ internal sealed class clsGeneradorPdfInforme : IGeneradorPdfInforme
         {
             doc.Escribir($"Observaciones: {d.Observaciones}", 11);
         }
+    }
+
+    /// <summary>Cada unidad del viaje con su posicion en la ninera; solo en el informe de la segunda inspeccion del cargue.</summary>
+    private static void Acomodacion(clsDocumentoPdf doc, DatosInforme d)
+    {
+        if (d.Acomodacion is not { } acomodacion)
+        {
+            return;
+        }
+
+        Seccion(doc, "Acomodación en la niñera");
+        foreach (var u in acomodacion.Unidades)
+        {
+            var posicion = u.Posicion is { } p ? $"Posición {p}" : u.NoSale ? "No sale del viaje" : "Sin posición";
+            doc.Escribir($"{posicion} — VIN {u.Vin}", 11);
+        }
+
+        Seccion(doc, "Fotos de la acomodación");
+        if (acomodacion.Fotos.Count == 0)
+        {
+            doc.Escribir("Sin fotos de la acomodación.", 11);
+            return;
+        }
+
+        doc.Galeria(acomodacion.Fotos.Select(AFoto).ToList(), 2, FOTO_ALTO);
     }
 
     private static void FotosDeVistas(clsDocumentoPdf doc, DatosInforme d)

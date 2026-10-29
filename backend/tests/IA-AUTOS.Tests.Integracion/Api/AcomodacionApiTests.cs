@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Tests.Integracion.Infraestructura;
 
@@ -13,7 +14,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// unidad activa y las fotos de la acomodacion, y deja de exigir las fotos de las vistas de estado (ESC-04); una unidad que no sale no exige posicion y la libera (ESC-05).
 /// </summary>
 [Collection(clsColeccionBaseDatos.NOMBRE)]
-public sealed class AcomodacionApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
+public sealed partial class AcomodacionApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-11-03T06:00:00-05:00";
 
@@ -96,6 +97,21 @@ public sealed class AcomodacionApiTests(clsBaseDatosFixture bd) : clsPruebaApiBa
     }
 
     private Task<HttpResponseMessage> CerrarAsync(Sesion quien, Guid inspeccion) => Como(quien).PostAsync($"/api/inspecciones/{inspeccion}/cerrar", null);
+
+    /// <summary>El texto del PDF en una sola linea (las lineas que se parten por el ancho se vuelven a unir).</summary>
+    private static string Plano(byte[] pdf) =>
+        string.Join(' ', TextoDeLinea().Matches(Encoding.Latin1.GetString(pdf)).Select(m => m.Groups[1].Value.Replace(@"\(", "(").Replace(@"\)", ")").Replace(@"\\", @"\")));
+
+    [GeneratedRegex(@"\(((?:\\.|[^\\)])*)\) Tj")]
+    private static partial Regex TextoDeLinea();
+
+    private async Task<byte[]> PdfAsync(Sesion quien, string ruta)
+    {
+        var r = await Como(quien).GetAsync(ruta);
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal("application/pdf", r.Content.Headers.ContentType?.MediaType);
+        return await r.Content.ReadAsByteArrayAsync();
+    }
 
     private static List<string?> Detalles(JsonElement cuerpo) => cuerpo.GetProperty("details").EnumerateArray().Select(d => d.GetString()).ToList();
 
@@ -337,5 +353,53 @@ public sealed class AcomodacionApiTests(clsBaseDatosFixture bd) : clsPruebaApiBa
         Assert.Equal(JsonValueKind.Null, unidad.GetProperty("posicion").ValueKind);
         // La posicion que dejo libre la puede tomar otra unidad.
         Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[0], 6)).StatusCode);
+    }
+
+    // ------------------------------------------------------------------------------------- ESC-06: informe e inventario
+
+    [Fact]
+    public async Task El_informe_y_el_inventario_muestran_la_posicion_de_cada_unidad_y_las_fotos_de_la_acomodacion()
+    {
+        var e = await EscenarioAsync();
+        var posiciones = new[] { 4, 3, 7 };
+        for (var i = 0; i < VINES.Length; i++)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[i], posiciones[i])).StatusCode);
+        }
+
+        Assert.Equal(HttpStatusCode.Created, (await FotoDeAcomodacionAsync(e.Inspector, e.Inspeccion)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(e.Inspector, e.Inspeccion)).StatusCode);
+
+        var informe = Plano(await PdfAsync(e.Coordinador, $"/api/inspecciones/{e.Inspeccion}/pdf"));
+        var inventario = Plano(await PdfAsync(e.Coordinador, $"/api/vehiculos/{VINES[0]}/inventario/pdf"));
+        var json = await JsonAsync(await Como(e.Coordinador).GetAsync($"/api/vehiculos/{VINES[0]}/inventario"));
+
+        // El informe lista cada unidad con su posicion, de la 3 a la 7, y trae la foto de la acomodacion con su sello.
+        Assert.Contains("Acomodaci", informe);
+        Assert.True(informe.IndexOf("Posici", StringComparison.Ordinal) >= 0);
+        var posicionesEnElInforme = Regex.Matches(informe, @"Posici\\363n (\d) \\227 VIN (\w+)").Select(m => (m.Groups[1].Value, m.Groups[2].Value)).ToList();
+        Assert.Equal([("3", VINES[1]), ("4", VINES[0]), ("7", VINES[2])], posicionesEnElInforme);
+        Assert.Contains("Foto de la acomodaci", informe);
+        Assert.Contains("SHA-256", informe);
+        // El inventario del VIN muestra la posicion donde fue despachado.
+        Assert.Matches(@"Posici\\363n en ni\\361era: 4", inventario);
+        Assert.Equal([4], json.GetProperty("etapas").EnumerateArray().Select(x => x.GetProperty("posicion")).Where(p => p.ValueKind == JsonValueKind.Number).Select(p => p.GetInt32()).Distinct().ToList());
+    }
+
+    [Fact]
+    public async Task Un_viaje_anterior_al_cambio_sin_posiciones_genera_informe_e_inventario_sin_error_y_sin_el_dato()
+    {
+        var inspector = await SesionAsync("camilo@ejemplo.com", clsRol.INSPECTOR);
+        var coordinador = await SesionAsync("luisa@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
+        var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-ANTIGUO-001", inspectorId: inspector.UsuarioId);
+        var cierre = await Sembrador.InformeAsync(etapas[0], inspector.UsuarioId, cerrada: true);
+
+        var informe = Plano(await PdfAsync(coordinador, $"/api/inspecciones/{cierre}/pdf"));
+        var inventario = Plano(await PdfAsync(coordinador, "/api/vehiculos/VIN-ANTIGUO-001/inventario/pdf"));
+        var json = await JsonAsync(await Como(coordinador).GetAsync("/api/vehiculos/VIN-ANTIGUO-001/inventario"));
+
+        Assert.Contains("VIN-ANTIGUO-001", informe);
+        Assert.DoesNotContain("Posici", inventario);
+        Assert.All(json.GetProperty("etapas").EnumerateArray(), x => Assert.Equal(JsonValueKind.Null, x.GetProperty("posicion").ValueKind));
     }
 }

@@ -504,6 +504,8 @@ incluidos los que aún no están en un viaje. Inspector y conductor solo ven los
 Autenticado. Inventario completo de un VIN: etapas (de todos sus viajes), y dentro de cada una sus inspecciones con hallazgos, evidencias y
 transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus viajes (`404` si no existe) y, del VIN, ve solo las etapas de sus viajes.
 
+Cada etapa trae `posicion`: la posición (de 1 a 7) que tuvo el VIN en la niñera de ese viaje, o `null` si no se registró (los viajes anteriores al cambio y las unidades que no salen).
+
 ```json
 {
   "id": "uuid", "vin": "…", "marca": "…", "tipo_vehiculo": null, "modelo": null, "chasis": null, "color": null,
@@ -512,7 +514,7 @@ transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus v
     {
       "id": "uuid", "orden": 1, "proceso": "cargue", "lugar": "CEDI 1", "requiere_inspeccion": true,
       "viaje_id": "uuid", "codigo_mtrack": "MTK-001",
-      "estado_unidad": "activa", "no_sale": null,
+      "estado_unidad": "activa", "no_sale": null, "posicion": 4,
       "inspecciones": [
         { "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "salida", "fecha": "…", "lat": 6.2, "lng": -75.5,
           "estado": "cerrada", "conductor_nombre": null, "placa": null, "trailer": null, "notas": null,
@@ -548,7 +550,7 @@ descarga binaria, no JSON; en errores sí devuelve el JSON de error. La solicitu
 use `fetch` con el token y descargue el `blob` (un enlace directo no lo envía).
 
 El PDF trae el inventario (cada proceso con sus inspecciones, hallazgos y evidencias) **más las fotos de cada inspección con su sello** (fecha y hora, ubicación, sello del servidor y hash SHA-256) y, al final, los **paneles del dibujo de daños**
-con la imagen del panel y cada zona con hallazgos resaltada y marcada con **cuántos hallazgos tiene**; las zonas sin dibujo en los paneles (el frente, las llantas) se listan aparte. Un vehículo dado de baja lo dice. Un PDF lleva hasta **60 fotos**
+con la imagen del panel y cada zona con hallazgos resaltada y marcada con **cuántos hallazgos tiene**; las zonas sin dibujo en los paneles (el frente, las llantas) se listan aparte. Un vehículo dado de baja lo dice. Cada proceso trae «Posición en niñera: N» cuando el VIN fue despachado con posición registrada. Un PDF lleva hasta **60 fotos**
 (primero las de los hallazgos): si hay más, el PDF avisa cuántas dejó fuera. Lo ve quien ve el inventario.
 
 ---
@@ -944,7 +946,7 @@ Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es e
 Autenticado. El **informe de la inspección en PDF** (`Content-Type: application/pdf`, nombre `informe-{vin}-{proceso}-{momento}-v{version}.pdf`), como descarga binaria (use `fetch` con el token y descargue el `blob`). Lleva:
 
 - los datos de la **unidad** (VIN, marca, modelo, tipo de vehículo, color, operación y cliente), del **viaje** (código MTrack, placa, tráiler, unidad, conductor y cédula) y de la **etapa** (proceso, lugar, momento, versión, inicio, cierre e inspector);
-- las **fotos de cada vista** con su sello: fecha y hora, ubicación (y precisión), sello del servidor y hash SHA-256;
+- las **fotos de cada vista** con su sello: fecha y hora, ubicación (y precisión), sello del servidor y hash SHA-256; en el informe de la segunda inspección del cargue (la salida de la etapa Cargue) la sección «Acomodación en la niñera» lista cada unidad del viaje con su posición («Posición N — VIN …»; «Sin posición» o «No sale del viaje» si no la tiene) y las fotos van como «Fotos de la acomodación»;
 - los **hallazgos** con su zona (lado + número + nombre), clase, tamaño, nivel (con su acción), origen, si es preexistente, su estado de seguimiento, su nota y su foto, con las notas aclaratorias de cada uno;
 - el **panel de daños**: la imagen de cada panel con las zonas de los hallazgos resaltadas y marcadas con el número del hallazgo (las zonas sin dibujo se listan aparte);
 - la **transferencia** con las dos firmas (imagen o trazo, con su fecha e IP), las reservas o la constancia de no firma (motivo, testigo y foto) y sus notas aclaratorias;

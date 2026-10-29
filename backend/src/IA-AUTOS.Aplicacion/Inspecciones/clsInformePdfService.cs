@@ -123,13 +123,17 @@ public sealed class clsInformePdfService(
                 (notasDeHallazgos.GetValueOrDefault(h.Id) ?? []).Select(AInforme).ToList()));
         }
 
+        // La segunda inspeccion del cargue (salida de la etapa Cargue) documenta la acomodacion: sus fotos sin vista son las de la acomodacion y el informe lista cada unidad con su posicion.
+        var esAcomodacion = informe.Proceso == clsCodigosEtapa.CARGUE && informe.Momento == clsMomento.SALIDA;
         var fotosDeVistas = new List<FotoInforme>();
+        var fotosDeAcomodacion = new List<FotoInforme>();
         foreach (var foto in informe.Evidencias.Where(e => e.HallazgoId is null && !e.EsConstancia && !e.EsSello).OrderBy(e => e.CreatedAt))
         {
-            var titulo = foto.VistaId is { } vistaId ? $"Vista: {vistas.GetValueOrDefault(vistaId) ?? "sin nombre"}" : "Foto adicional";
+            var deAcomodacion = esAcomodacion && foto.VistaId is null;
+            var titulo = foto.VistaId is { } vistaId ? $"Vista: {vistas.GetValueOrDefault(vistaId) ?? "sin nombre"}" : deAcomodacion ? "Foto de la acomodación" : "Foto adicional";
             if (await CargarAsync(foto, titulo, presupuesto, ct) is { } cargada)
             {
-                fotosDeVistas.Add(cargada);
+                (deAcomodacion ? fotosDeAcomodacion : fotosDeVistas).Add(cargada);
             }
         }
 
@@ -170,9 +174,23 @@ public sealed class clsInformePdfService(
             await TransferenciaAsync(informe, presupuesto, ct),
             informe.NotasAclaratorias.Select(AInforme).ToList(),
             presupuesto.Omitidas,
-            reloj.Ahora);
+            reloj.Ahora,
+            esAcomodacion ? new AcomodacionInforme(await UnidadesDeAcomodacionAsync(informe.ViajeId, ct), fotosDeAcomodacion) : null);
         var momento = informe.Momento;
         return new InformePdf(generador.Generar(datos), $"informe-{informe.Vin}-{informe.Proceso}-{momento}-v{informe.Version}.pdf");
+    }
+
+    /// <summary>Las unidades del viaje con su posicion en la ninera, por posicion (las que no la tienen al final, por VIN).</summary>
+    private async Task<IReadOnlyList<UnidadAcomodacionInforme>> UnidadesDeAcomodacionAsync(Guid viajeId, CancellationToken ct)
+    {
+        var unidades = new List<UnidadAcomodacionInforme>();
+        foreach (var enlace in await viajes.ObtenerVehiculosAsync(viajeId, ct))
+        {
+            var vin = (await vehiculos.ObtenerPorIdAsync(enlace.VehiculoId, ct))?.Vin ?? enlace.VehiculoId.ToString();
+            unidades.Add(new UnidadAcomodacionInforme(vin, enlace.Posicion, enlace.NoSale));
+        }
+
+        return unidades.OrderBy(u => u.Posicion ?? int.MaxValue).ThenBy(u => u.Vin, StringComparer.Ordinal).ToList();
     }
 
     private async Task<TransferenciaInforme?> TransferenciaAsync(InformeDetalleDto informe, Presupuesto presupuesto, CancellationToken ct)
