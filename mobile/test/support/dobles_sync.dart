@@ -153,6 +153,21 @@ class GatewayFalso implements GatewayInformes {
     return _paso('registrarPosicion');
   }
 
+  /// Cada firma de una entrega por punto que salió: (viaje, lugar, motivo si es una sola firma, firma).
+  final List<(String, String, String?, String?)> entregasEnviadas = [];
+
+  @override
+  Future<void> firmarEntregaPunto(String viajeId, String lugarId, {required String firma}) {
+    entregasEnviadas.add((viajeId, lugarId, null, firma));
+    return _paso('firmarEntregaPunto');
+  }
+
+  @override
+  Future<void> cerrarEntregaConUnaFirma(String viajeId, String lugarId, {required String motivo, String? firma}) {
+    entregasEnviadas.add((viajeId, lugarId, motivo, firma));
+    return _paso('cerrarEntregaConUnaFirma');
+  }
+
   @override
   Future<void> cerrarInspeccion(String inspeccionId) => _paso('cerrarInspeccion');
 

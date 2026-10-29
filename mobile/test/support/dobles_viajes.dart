@@ -1,4 +1,6 @@
+import 'package:traza_autos/features/viajes/data/entregas_repositorio.dart';
 import 'package:traza_autos/features/viajes/data/reclamos_repositorio.dart';
+import 'package:traza_autos/features/viajes/domain/entrega_punto.dart';
 import 'package:traza_autos/features/viajes/data/viajes_repositorio.dart';
 import 'package:traza_autos/features/viajes/domain/pendiente.dart';
 import 'package:traza_autos/features/viajes/domain/viaje.dart';
@@ -177,4 +179,33 @@ Pendiente pendienteDe(
       codigoMtrack: 'MTK-$viajeId',
       placa: placa,
       reclamadoPorNombre: por,
+    );
+
+/// Las entregas por punto de mentira.
+class EntregasRepositorioFalso implements EntregasRepositorio {
+  List<EntregaPunto> puntos = const [];
+  Object? error;
+  int consultas = 0;
+
+  @override
+  Future<List<EntregaPunto>> delViaje(String viajeId) async {
+    consultas++;
+    if (error != null) throw error!;
+    return puntos;
+  }
+}
+
+EntregaPunto puntoDe(
+  String lugar, {
+  List<String> vines = const ['VINAAAAAAAAAAAAA1', 'VINBBBBBBBBBBBBB2'],
+  EstadoEntrega estado = EstadoEntrega.pendiente,
+  String viajeId = 'v1',
+}) =>
+    EntregaPunto(
+      viajeId: viajeId,
+      lugarId: 'l-$lugar',
+      lugar: lugar,
+      unidades: [for (final v in vines) UnidadEntrega(vin: v, estado: estado)],
+      pendientes: estado == EstadoEntrega.cerrada ? 0 : vines.length,
+      entregada: estado == EstadoEntrega.cerrada,
     );

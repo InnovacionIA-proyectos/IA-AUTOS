@@ -80,6 +80,14 @@ abstract interface class GatewayInformes {
 
   Future<void> cerrarInspeccion(String inspeccionId);
 
+  /// La firma de quien tiene la sesión sobre la entrega de un punto: el servidor la guarda en cada unidad pendiente.
+  /// Quién entrega y quién recibe salen del viaje (su conductor y su inspector).
+  Future<void> firmarEntregaPunto(String viajeId, String lugarId, {required String firma});
+
+  /// Cierra la entrega de un punto con una sola firma y el motivo de la otra parte. [firma] solo hace falta si quien
+  /// cierra todavía no había firmado.
+  Future<void> cerrarEntregaConUnaFirma(String viajeId, String lugarId, {required String motivo, String? firma});
+
   /// Firma la transferencia. Solo viaja **una** firma, la de quien tiene la sesión: el servidor se la atribuye
   /// al usuario del token.
   Future<void> firmarTransferencia(

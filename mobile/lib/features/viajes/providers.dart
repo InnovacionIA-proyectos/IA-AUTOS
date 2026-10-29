@@ -2,8 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/proveedores.dart';
 import '../../core/db/cache_lecturas.dart';
+import 'data/entregas_repositorio.dart';
 import 'data/reclamos_repositorio.dart';
 import 'data/viajes_repositorio.dart';
+import 'domain/entrega_punto.dart';
 import 'domain/pendiente.dart';
 import 'domain/viaje.dart';
 import '../auth/presentation/auth_controller.dart';
@@ -40,4 +42,13 @@ final pendientesProvider = FutureProvider.autoDispose<List<Pendiente>>(
 /// El viaje de un pendiente, con sus unidades.
 final viajeDePendienteProvider = FutureProvider.autoDispose.family<Viaje, String>(
   (ref, viajeId) => ref.watch(reclamosRepositorioProvider).viaje(viajeId),
+);
+
+final entregasRepositorioProvider = Provider<EntregasRepositorio>(
+  (ref) => EntregasRepositorio(ref.watch(clienteApiProvider)),
+);
+
+/// Los puntos de entrega de un viaje. Se consulta con señal: lo que está pendiente lo dice el servidor.
+final entregasDelViajeProvider = FutureProvider.autoDispose.family<List<EntregaPunto>, String>(
+  (ref, viajeId) => ref.watch(entregasRepositorioProvider).delViaje(viajeId),
 );

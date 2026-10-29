@@ -2,6 +2,9 @@ import '../../../core/errores/error_api.dart';
 import 'job.dart';
 import 'puertos.dart';
 
+/// Lo que responde el servidor a la firma de un punto que ya no tiene unidades por entregar.
+const mensajeSinPendientes = 'No hay unidades pendientes de entrega';
+
 /// Resultado de una pasada de sincronización.
 class ResultadoSync {
   const ResultadoSync({required this.enviados, required this.pendientes, required this.fallidos});
@@ -106,6 +109,8 @@ class ProcesadorCola {
               await _ejecutarNoFirma(job);
             case NotaJob():
               await gateway.agregarNota(entidad: job.entidad, entidadId: job.entidadId, texto: job.texto);
+            case EntregaPuntoJob():
+              await _ejecutarEntregaPunto(job);
           }
           await cola.eliminar(job.id);
           enviados++;
@@ -295,6 +300,20 @@ class ProcesadorCola {
       recibeId: job.recibeId,
       firma: job.firma,
     );
+  }
+
+  /// Un 409 «No hay unidades pendientes» es que la entrega ya quedó cerrada: lo más probable es que el envío anterior
+  /// sí llegó y solo se perdió la respuesta. Se toma como hecho, así reintentar no deja nada a medias ni firma dos veces.
+  Future<void> _ejecutarEntregaPunto(EntregaPuntoJob job) async {
+    try {
+      if (job.motivo case final motivo?) {
+        await gateway.cerrarEntregaConUnaFirma(job.viajeId, job.lugarId, motivo: motivo, firma: job.firma);
+      } else {
+        await gateway.firmarEntregaPunto(job.viajeId, job.lugarId, firma: job.firma!);
+      }
+    } on ErrorApi catch (e) {
+      if (e.status != 409 || !e.message.startsWith(mensajeSinPendientes)) rethrow;
+    }
   }
 
   Future<void> _borrarFotos(InformeJob job) async {

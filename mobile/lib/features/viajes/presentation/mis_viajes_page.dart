@@ -10,6 +10,7 @@ import '../../sync/presentation/sync_controller.dart';
 import '../../vehiculos/domain/etiquetas.dart';
 import '../domain/viaje.dart';
 import '../providers.dart';
+import 'entrega_punto_page.dart';
 import 'mis_viajes_controller.dart';
 import 'seccion_pendientes.dart';
 
@@ -246,6 +247,16 @@ class _TarjetaViaje extends StatelessWidget {
             Text('Este viaje todavía no tiene unidades.', style: tema.bodySmall)
           else
             for (final vehiculo in viaje.vehiculos) _FilaVehiculo(vehiculo, viajeId: viaje.id),
+          // Entregar es lo que se hace con un viaje en ruta: en cada punto se firma una vez para todas sus unidades.
+          if (viaje.estado == 'en_curso' && viaje.vehiculos.isNotEmpty) ...[
+            const SizedBox(height: Espacio.sm),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute(builder: (_) => EntregasViajePage(viajeId: viaje.id)),
+              ),
+              child: const Text('Entrega por punto'),
+            ),
+          ],
         ],
       ),
     );

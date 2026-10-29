@@ -113,6 +113,19 @@ class GatewayInformesApi implements GatewayInformes {
   }
 
   @override
+  Future<void> firmarEntregaPunto(String viajeId, String lugarId, {required String firma}) async {
+    await _api.post('${_rutaEntrega(viajeId, lugarId)}/firma', cuerpo: {'firma': firma});
+  }
+
+  @override
+  Future<void> cerrarEntregaConUnaFirma(String viajeId, String lugarId, {required String motivo, String? firma}) async {
+    await _api.post('${_rutaEntrega(viajeId, lugarId)}/una-firma', cuerpo: {'motivo': motivo, 'firma': ?firma});
+  }
+
+  String _rutaEntrega(String viajeId, String lugarId) =>
+      '/api/viajes/${Uri.encodeComponent(viajeId)}/entregas/${Uri.encodeComponent(lugarId)}';
+
+  @override
   Future<void> firmarTransferencia(
     String inspeccionId, {
     required String entregaId,

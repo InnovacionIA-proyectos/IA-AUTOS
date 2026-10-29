@@ -60,6 +60,7 @@ sealed class Job {
         'firma' => FirmaJob.fromJson(json),
         'no_firma' => NoFirmaJob.fromJson(json),
         'nota' => NotaJob.fromJson(json),
+        'entrega_punto' => EntregaPuntoJob.fromJson(json),
         final otro => throw FormatException('Tipo de job desconocido: $otro'),
       };
 }
@@ -580,5 +581,96 @@ class NotaJob extends Job {
         'entidad': entidad,
         'entidad_id': entidadId,
         'texto': texto,
+      };
+}
+
+/// La firma de la entrega de un punto: una sola para todas las unidades que se entregan allí, o el cierre con una
+/// sola firma cuando la otra parte no está. Va por la cola para que se envíe sola al volver la señal.
+///
+/// Repetirla no duplica nada: el servidor guarda la misma firma en cada unidad pendiente, y cuando ya no queda
+/// ninguna responde que no hay pendientes, que para el procesador es haber terminado.
+class EntregaPuntoJob extends Job {
+  const EntregaPuntoJob({
+    required super.id,
+    required super.etiqueta,
+    required super.creadoEn,
+    super.intentos,
+    super.error,
+    super.codigoError,
+    super.fallido,
+    super.usuarioId,
+    required this.viajeId,
+    required this.lugarId,
+    this.firma,
+    this.motivo,
+  });
+
+  factory EntregaPuntoJob.fromJson(Map<String, dynamic> json) => EntregaPuntoJob(
+        id: json['id'] as String,
+        etiqueta: json['etiqueta'] as String,
+        creadoEn: json['creado_en'] as int,
+        intentos: json['intentos'] as int? ?? 0,
+        error: json['error'] as String?,
+        codigoError: json['codigo_error'] as String?,
+        fallido: json['fallido'] as bool? ?? false,
+        usuarioId: json['usuario_id'] as String?,
+        viajeId: json['viaje_id'] as String,
+        lugarId: json['lugar_id'] as String,
+        firma: json['firma'] as String?,
+        motivo: json['motivo'] as String?,
+      );
+
+  final String viajeId;
+  final String lugarId;
+
+  /// El trazo (path SVG) de quien firma. Obligatorio salvo que quien cierra con una sola firma ya hubiera firmado.
+  final String? firma;
+
+  /// Con motivo es el cierre con una sola firma; sin él, la firma de una de las partes.
+  final String? motivo;
+
+  bool get unaSolaFirma => motivo != null;
+
+  @override
+  String get tipo => 'entrega_punto';
+
+  @override
+  EntregaPuntoJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) =>
+      _copiar(intentos: intentos, error: error, codigoError: codigo, fallido: fallido);
+
+  @override
+  EntregaPuntoJob conUsuario(String usuario) => _copiar(usuarioId: usuario);
+
+  EntregaPuntoJob _copiar({int? intentos, String? error, String? codigoError, bool? fallido, String? usuarioId}) =>
+      EntregaPuntoJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        intentos: intentos ?? this.intentos,
+        error: error,
+        codigoError: codigoError ?? this.codigoError,
+        fallido: fallido ?? this.fallido,
+        usuarioId: usuarioId ?? this.usuarioId,
+        viajeId: viajeId,
+        lugarId: lugarId,
+        firma: firma,
+        motivo: motivo,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'entrega_punto',
+        'id': id,
+        'etiqueta': etiqueta,
+        'creado_en': creadoEn,
+        'intentos': intentos,
+        'error': error,
+        'codigo_error': codigoError,
+        'fallido': fallido,
+        'usuario_id': usuarioId,
+        'viaje_id': viajeId,
+        'lugar_id': lugarId,
+        'firma': firma,
+        'motivo': motivo,
       };
 }
