@@ -84,6 +84,7 @@ internal sealed class clsConfiguracionLugar : IEntityTypeConfiguration<clsLugar>
         clsConfiguracionBase.Base(builder);
         builder.Property(l => l.Nombre).HasMaxLength(clsCatalogoBase.NOMBRE_MAX).IsRequired();
         builder.Property(l => l.Ciudad).HasMaxLength(clsLugar.CIUDAD_MAX).IsRequired();
+        builder.Property(l => l.EstadoUbicacion).HasColumnType("varchar(25)").IsRequired();
         builder.HasOne<clsPuntoCustodia>().WithMany().HasForeignKey(l => l.TipoId)
             .HasConstraintName("FK_tblLugares_Tipo").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(l => l.Nombre).IsUnique().HasDatabaseName("UQ_tblLugares_Nombre");

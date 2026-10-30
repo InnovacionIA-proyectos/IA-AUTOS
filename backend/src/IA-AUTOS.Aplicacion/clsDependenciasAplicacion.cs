@@ -76,6 +76,7 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsCargaViajesService>();
         servicios.AddScoped<clsSofasaService>();
         servicios.AddScoped<clsReportesService>();
+        servicios.AddScoped<clsConfirmacionEnSitioService>();
         servicios.AddScoped<clsInspeccionesService>();
         servicios.AddScoped<clsArchivosService>();
         return servicios;

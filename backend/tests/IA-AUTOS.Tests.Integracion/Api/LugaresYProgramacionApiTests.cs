@@ -69,7 +69,7 @@ public sealed class LugaresYProgramacionApiTests(clsBaseDatosFixture bd) : clsPr
         Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
         var lugar = await LeerJsonAsync(creado);
         Assert.Equal(
-            ["id", "nombre", "tipo", "tipo_nombre", "ciudad", "orden", "activo", "latitud", "longitud", "radio_metros", "sin_ubicacion"], lugar.EnumerateObject().Select(p => p.Name).ToList());
+            ["id", "nombre", "tipo", "tipo_nombre", "ciudad", "orden", "activo", "latitud", "longitud", "radio_metros", "sin_ubicacion", "estado_ubicacion"], lugar.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("CEDI Envigado", lugar.GetProperty("nombre").GetString());
         Assert.Equal("cedi_1", lugar.GetProperty("tipo").GetString());
         Assert.Equal("CEDI 1", lugar.GetProperty("tipo_nombre").GetString());
@@ -79,6 +79,7 @@ public sealed class LugaresYProgramacionApiTests(clsBaseDatosFixture bd) : clsPr
         Assert.Equal(JsonValueKind.Null, lugar.GetProperty("longitud").ValueKind);
         Assert.Equal(JsonValueKind.Null, lugar.GetProperty("radio_metros").ValueKind);
         Assert.True(lugar.GetProperty("sin_ubicacion").GetBoolean());
+        Assert.Equal("sin_ubicacion", lugar.GetProperty("estado_ubicacion").GetString());
 
         var lista = await Cliente(inspector.Token).GetAsync("/api/catalogos/lugares");
         var todos = await LeerJsonAsync(await Cliente(inspector.Token).GetAsync("/api/catalogos"));

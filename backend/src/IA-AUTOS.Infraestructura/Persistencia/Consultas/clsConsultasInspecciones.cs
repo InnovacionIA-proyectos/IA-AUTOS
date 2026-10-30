@@ -246,6 +246,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
             await consultaNotas.ListarAsync(clsEntidadNota.INSPECCION, insp.Id, ct),
             novedadesProceso.Motivo,
             novedadesProceso.Novedades,
-            await ObtenerExtrasAsync(insp.Id, ct));
+            await ObtenerExtrasAsync(insp.Id, ct),
+            insp.ConfirmacionSitio is { } resultado ? new ConfirmacionSitioDto(resultado, clsResultadoConfirmacionSitio.Nombre(resultado), insp.ConfirmacionDistanciaM, insp.ConfirmacionEvidenciaId) : null);
     }
 }

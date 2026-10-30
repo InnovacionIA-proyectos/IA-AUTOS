@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "2.14.0"
+    "version": "2.15.0"
   },
   "paths": {
     "/api/viajes": {
@@ -21947,6 +21947,45 @@
           }
         }
       },
+      "ConfirmacionSitioDto": {
+        "examples": [
+          {
+            "resultado": "texto",
+            "nombre": "Nombre de ejemplo",
+            "distancia_m": 1.5,
+            "evidencia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "required": [
+          "resultado",
+          "nombre",
+          "distancia_m",
+          "evidencia_id"
+        ],
+        "type": "object",
+        "properties": {
+          "resultado": {
+            "type": "string"
+          },
+          "nombre": {
+            "type": "string"
+          },
+          "distancia_m": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "evidencia_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "ConteoClaseTableroDto": {
         "examples": [
           {
@@ -25135,7 +25174,13 @@
                 "updated_at": "2026-10-22T14:30:00.000Z",
                 "fotos": []
               }
-            ]
+            ],
+            "confirmacion_sitio": {
+              "resultado": "texto",
+              "nombre": "Nombre de ejemplo",
+              "distancia_m": 1.5,
+              "evidencia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            }
           }
         ],
         "required": [
@@ -25365,6 +25410,16 @@
             "items": {
               "$ref": "#/components/schemas/ExtraDto"
             }
+          },
+          "confirmacion_sitio": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConfirmacionSitioDto"
+              }
+            ]
           }
         }
       },

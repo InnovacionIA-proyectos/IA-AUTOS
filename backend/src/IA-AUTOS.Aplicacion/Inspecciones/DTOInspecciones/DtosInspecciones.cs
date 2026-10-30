@@ -235,7 +235,14 @@ public sealed record InformeDetalleDto(
     IReadOnlyList<NotaAclaratoriaDto> NotasAclaratorias,
     MotivoSinInspectorDto? MotivoSinInspector,
     IReadOnlyList<NovedadProcesoDto> NovedadesProceso,
-    IReadOnlyList<ExtraDto> Extras);
+    IReadOnlyList<ExtraDto> Extras,
+    ConfirmacionSitioDto? ConfirmacionSitio = null);
+
+/// <summary>
+/// El resultado de confirmar «en sitio» la evidencia sellada de una inspeccion de Cargue o Descargue: <c>Resultado</c> (<c>confirmado_en_sitio</c>, <c>fuera_de_rango</c> o <c>sin_confirmacion_posible</c>),
+/// su nombre, la distancia (en metros) de la foto al centro del lugar cuando se pudo calcular y la foto que lo determino. Es una marca: nunca bloquea nada.
+/// </summary>
+public sealed record ConfirmacionSitioDto(string Resultado, string Nombre, double? DistanciaM, Guid? EvidenciaId);
 
 public sealed record ResumenCierreDto(int Evidencias, int Hallazgos);
 

@@ -165,6 +165,7 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj)
         ["longitud"] = l.Longitud,
         ["radio_metros"] = l.RadioMetros,
         ["sin_ubicacion"] = l.SinUbicacion,
+        ["estado_ubicacion"] = l.EstadoUbicacion,
     };
 
     protected override ValorCatalogo Mapear(clsLugar l) => Armar(l, new Dictionary<Guid, (string, string)>());
