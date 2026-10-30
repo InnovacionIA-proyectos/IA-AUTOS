@@ -159,6 +159,20 @@ public static class clsClavesParametros
     public const string UMBRAL_PATRON_VENTANA_DIAS = "umbral_patron_ventana_dias";
     public const string CAPTURA_INCOMPLETA_MINUTOS = "captura_incompleta_minutos";
     public const string TRANSFERENCIA_PENDIENTE_MINUTOS = "transferencia_pendiente_minutos";
+    public const string RECLAMO_SIN_ACTIVIDAD_MINUTOS = "reclamo_sin_actividad_minutos";
+
+    /// <summary>Radio, en metros, de un lugar de cargue para confirmar «en sitio» la evidencia (se usa si el lugar no trae su propio radio).</summary>
+    public const string RADIO_LUGAR_CARGUE_M = "radio_lugar_cargue_m";
+
+    /// <summary>Radio, en metros, de un destino para confirmar «en sitio» la evidencia (se usa si el lugar no trae su propio radio).</summary>
+    public const string RADIO_DESTINO_M = "radio_destino_m";
+
+    /// <summary>Precision del GPS, en metros, a partir de la cual una foto no confirma ni acusa la ubicacion.</summary>
+    public const string VALVULA_PRECISION_M = "valvula_precision_m";
+
+    /// <summary>Minutos desde la hora programada de un cargue sin reclamo antes de avisar al coordinador.</summary>
+    public const string CARGUE_SIN_RECLAMAR_MINUTOS = "cargue_sin_reclamar_minutos";
+    public const string ACOMODACION_FOTOS_MINIMAS = "acomodacion_fotos_minimas";
     public const string REPORTE_DIARIO_DESTINATARIOS = "reporte_diario_destinatarios";
     public const string REPORTE_DIARIO_HORA = "reporte_diario_hora";
     public const string RETENCION_DIAS = "retencion_dias";

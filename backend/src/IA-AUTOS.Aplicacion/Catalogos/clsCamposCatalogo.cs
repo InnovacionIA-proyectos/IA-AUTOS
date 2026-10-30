@@ -39,6 +39,16 @@ public sealed class clsCamposCatalogo(IReadOnlyDictionary<string, JsonElement> c
         return valor.ValueKind == JsonValueKind.Number && valor.TryGetInt32(out var entero) ? entero : throw TipoInvalido(campo, "entero");
     }
 
+    public double? Numero(string campo)
+    {
+        if (!campos.TryGetValue(campo, out var valor) || valor.ValueKind == JsonValueKind.Null)
+        {
+            return null;
+        }
+
+        return valor.ValueKind == JsonValueKind.Number && valor.TryGetDouble(out var numero) && double.IsFinite(numero) ? numero : throw TipoInvalido(campo, "número");
+    }
+
     public bool? Booleano(string campo)
     {
         if (!campos.TryGetValue(campo, out var valor) || valor.ValueKind == JsonValueKind.Null)

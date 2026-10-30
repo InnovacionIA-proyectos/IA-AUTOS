@@ -3,19 +3,21 @@ using IAAutos.Aplicacion.Inspecciones.Validators;
 
 namespace IAAutos.Tests.Unitarios.Aplicacion;
 
-/// <summary>Reglas de forma del cuerpo de un hallazgo: la zona (cuadrante + lado, o zona provisional), el preexistente y la nota.</summary>
+/// <summary>
+/// Reglas de forma del cuerpo de un hallazgo: la zona (cuadrante + lado), el preexistente y la nota. Que un cuadrante lleve lado o no lo decide el catalogo al resolver la zona,
+/// no el validador.
+/// </summary>
 public class ValidadorHallazgoTests
 {
     private static readonly FotoEvidenciaRequest FOTO = new("3f2b6c1e-0000-4000-8000-123456789abc.png", DateTimeOffset.UtcNow, 4.6, -74.1, null, null, null, null);
 
     private static CrearHallazgoRequest Solicitud(
-        int? cuadrante = null,
+        int? cuadrante = 54,
         string? lado = null,
-        string? provisional = null,
         bool? esPreexistente = null,
         Guid? origen = null,
         string? nota = null) =>
-        new(cuadrante, lado, provisional, "golpe", "5_10cm", "v2", esPreexistente, origen, nota, FOTO);
+        new(cuadrante, lado, "golpe", "5_10cm", "v2", esPreexistente, origen, nota, FOTO);
 
     private static Dictionary<string, string[]> Errores(CrearHallazgoRequest solicitud) =>
         new CrearHallazgoRequestValidator().Validate(solicitud).Errors
@@ -25,60 +27,31 @@ public class ValidadorHallazgoTests
     [Theory]
     [InlineData(1, "izquierdo")]
     [InlineData(7, "derecho")]
-    [InlineData(25, "izquierdo")]
-    [InlineData(26, null)]
-    [InlineData(38, null)]
-    public void Un_cuadrante_con_el_lado_que_le_corresponde_es_valido(int cuadrante, string? lado)
+    [InlineData(35, "izquierdo")]
+    [InlineData(54, null)]
+    [InlineData(59, null)]
+    public void Un_cuadrante_con_o_sin_lado_es_valido_en_su_forma(int cuadrante, string? lado)
     {
         Assert.Empty(Errores(Solicitud(cuadrante: cuadrante, lado: lado)));
     }
 
     [Theory]
-    [InlineData("frente")]
-    [InlineData("llanta_delantera_izquierda")]
-    [InlineData("llanta_delantera_derecha")]
-    [InlineData("llanta_trasera_izquierda")]
-    [InlineData("llanta_trasera_derecha")]
-    public void Una_zona_provisional_de_la_lista_es_valida(string zona)
+    [InlineData("arriba")]
+    [InlineData("")]
+    [InlineData("Izquierdo")]
+    public void El_lado_si_viene_debe_ser_izquierdo_o_derecho(string lado)
     {
-        Assert.Empty(Errores(Solicitud(provisional: zona)));
-    }
-
-    [Theory]
-    [InlineData(1, null)]
-    [InlineData(25, "arriba")]
-    [InlineData(7, "")]
-    public void Del_1_al_25_el_lado_es_obligatorio_y_debe_ser_izquierdo_o_derecho(int cuadrante, string? lado)
-    {
-        var errores = Errores(Solicitud(cuadrante: cuadrante, lado: lado));
-
-        Assert.Contains("Lado", errores.Keys);
-    }
-
-    [Theory]
-    [InlineData(26, "izquierdo")]
-    [InlineData(30, "derecho")]
-    public void Del_26_en_adelante_el_lado_no_se_envia(int cuadrante, string lado)
-    {
-        var errores = Errores(Solicitud(cuadrante: cuadrante, lado: lado));
+        var errores = Errores(Solicitud(cuadrante: 7, lado: lado));
 
         Assert.Equal(["Lado"], errores.Keys);
-        Assert.Contains("26 en adelante", errores["Lado"][0]);
     }
 
     [Fact]
-    public void La_zona_es_exactamente_una_de_las_dos_formas()
+    public void Sin_cuadrante_la_zona_no_existe()
     {
-        Assert.Contains("CuadranteNumero", Errores(Solicitud()).Keys);
-        Assert.Contains("CuadranteNumero", Errores(Solicitud(cuadrante: 7, lado: "izquierdo", provisional: "frente")).Keys);
-        Assert.Contains("CuadranteNumero", Errores(Solicitud(provisional: "  ")).Keys);
-    }
+        var errores = Errores(Solicitud(cuadrante: null));
 
-    [Fact]
-    public void Una_zona_provisional_no_lleva_lado_y_debe_ser_de_la_lista()
-    {
-        Assert.Contains("Lado", Errores(Solicitud(provisional: "frente", lado: "izquierdo")).Keys);
-        Assert.Contains("ZonaProvisional", Errores(Solicitud(provisional: "techo")).Keys);
+        Assert.Equal("La zona indicada no existe", errores["CuadranteNumero"][0]);
     }
 
     [Fact]
@@ -93,19 +66,19 @@ public class ValidadorHallazgoTests
     {
         var origen = Guid.NewGuid();
 
-        Assert.Empty(Errores(Solicitud(provisional: "frente", esPreexistente: true, origen: origen)));
-        Assert.Contains("HallazgoOrigenId", Errores(Solicitud(provisional: "frente", esPreexistente: true)).Keys);
-        Assert.Contains("HallazgoOrigenId", Errores(Solicitud(provisional: "frente", origen: origen)).Keys);
-        Assert.Contains("HallazgoOrigenId", Errores(Solicitud(provisional: "frente", esPreexistente: false, origen: origen)).Keys);
-        Assert.Contains("HallazgoOrigenId", Errores(Solicitud(provisional: "frente", esPreexistente: true, origen: Guid.Empty)).Keys);
+        Assert.Empty(Errores(Solicitud(esPreexistente: true, origen: origen)));
+        Assert.Contains("HallazgoOrigenId", Errores(Solicitud(esPreexistente: true)).Keys);
+        Assert.Contains("HallazgoOrigenId", Errores(Solicitud(origen: origen)).Keys);
+        Assert.Contains("HallazgoOrigenId", Errores(Solicitud(esPreexistente: false, origen: origen)).Keys);
+        Assert.Contains("HallazgoOrigenId", Errores(Solicitud(esPreexistente: true, origen: Guid.Empty)).Keys);
     }
 
     [Fact]
     public void La_nota_admite_hasta_500_caracteres_y_la_foto_es_obligatoria()
     {
-        Assert.Empty(Errores(Solicitud(provisional: "frente", nota: new string('n', 500))));
-        Assert.Contains("Nota", Errores(Solicitud(provisional: "frente", nota: new string('n', 501))).Keys);
-        Assert.Contains("Evidencia", Errores(Solicitud(provisional: "frente") with { Evidencia = null }).Keys);
+        Assert.Empty(Errores(Solicitud(nota: new string('n', 500))));
+        Assert.Contains("Nota", Errores(Solicitud(nota: new string('n', 501))).Keys);
+        Assert.Contains("Evidencia", Errores(Solicitud() with { Evidencia = null }).Keys);
     }
 
     [Theory]
@@ -113,7 +86,7 @@ public class ValidadorHallazgoTests
     [InlineData("golpe", " ", "TamanoDano")]
     public void La_clase_y_el_tamano_son_obligatorios(string? clase, string tamano, string campo)
     {
-        var errores = Errores(Solicitud(provisional: "frente") with { ClaseDano = clase, TamanoDano = tamano });
+        var errores = Errores(Solicitud() with { ClaseDano = clase, TamanoDano = tamano });
 
         Assert.Contains(campo, errores.Keys);
     }

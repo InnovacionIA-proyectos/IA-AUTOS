@@ -40,6 +40,9 @@ public interface IViajeRepository
     /// <summary>Etapas del viaje (o del VIN) que ya tienen un informe cerrado: su lugar y su marca ya no se cambian.</summary>
     Task<IReadOnlySet<Guid>> EtapasConInformeCerradoAsync(Guid viajeId, CancellationToken ct = default);
 
+    /// <summary>True si alguna unidad del viaje tiene en borrador la inspeccion de salida del Cargue (la segunda inspeccion del cargue, donde se registra la acomodacion).</summary>
+    Task<bool> TieneSegundaInspeccionDelCargueEnCursoAsync(Guid viajeId, CancellationToken ct = default);
+
     /// <summary>Id del viaje activo de un VIN, o el de un viaje con ese codigo MTrack que lo lleve (para vincular ordenes Sofasa).</summary>
     Task<Guid?> BuscarViajeParaOrdenAsync(Guid vehiculoId, string? codigoMtrack, CancellationToken ct = default);
 

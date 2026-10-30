@@ -13,7 +13,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Parametros editables: quien administra los catalogos los consulta y cambia el valor (sin crear ni borrar claves), un valor que no cumple su tipo se rechaza en el campo valor, el cambio se aplica
 /// de inmediato en los procesos que lo leen y queda en la auditoria con el valor antes y despues.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class ParametrosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);
@@ -54,7 +54,7 @@ public sealed class ParametrosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBas
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var lista = (await ComoJsonAsync(r)).EnumerateArray().ToList();
-        Assert.Equal(13, lista.Count);
+        Assert.Equal(19, lista.Count);
         Assert.Equal(["clave", "valor", "tipo", "descripcion", "actualizado_por", "updated_at"], lista[0].EnumerateObject().Select(p => p.Name).ToList());
         var claves = lista.Select(p => p.GetProperty("clave").GetString()!).ToList();
         Assert.Equal(claves.Order(StringComparer.Ordinal).ToList(), claves);

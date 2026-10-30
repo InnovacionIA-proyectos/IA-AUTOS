@@ -11,7 +11,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// El viaje como eje: alta, consulta, cambios, asignacion de VIN, estado, carga por Excel, y la visibilidad por asignacion
 /// (inspectores y conductores solo ven lo de sus viajes).
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-07-17T12:30:15.123Z";
@@ -39,6 +39,21 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
 
     private Task<Guid> LugarAsync(string codigo) => IdAsync("tblPuntosCustodia", codigo);
 
+    /// <summary>El lugar de destino que usan los viajes de las pruebas cuando no se indica otro (se crea una vez, por SQL).</summary>
+    private Task<Guid> DestinoPorDefectoAsync(Sesion quien) => LugarRealAsync(Cliente(quien.Token), "Destino por defecto");
+
+    /// <summary>Las unidades de un viaje: cada VIN con su lugar de destino (el de por defecto si no se indica).</summary>
+    private async Task<object[]> UnidadesAsync(Sesion quien, string[]? vines, Guid? lugarDestinoId = null)
+    {
+        if (vines is null or { Length: 0 })
+        {
+            return [];
+        }
+
+        var lugar = lugarDestinoId ?? await DestinoPorDefectoAsync(quien);
+        return vines.Select(v => (object)new { vin = v, lugar_destino_id = lugar }).ToArray();
+    }
+
     private async Task<HttpResponseMessage> CrearViajeAsync(
         Sesion quien,
         string codigo,
@@ -46,8 +61,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Guid? conductorId = null,
         Guid? inspectorId = null,
         Guid? origenId = null,
-        Guid? destinoId = null,
-        bool conPersonalApoyo = false,
+        Guid? lugarDestinoId = null,
         string placa = "ABC123") =>
         await Cliente(quien.Token).PostAsync(
             "/api/viajes",
@@ -60,9 +74,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
                 conductor_id = conductorId,
                 inspector_id = inspectorId,
                 origen_id = origenId,
-                destino_id = destinoId,
-                con_personal_apoyo = conPersonalApoyo,
-                vines = vines ?? [],
+                unidades = await UnidadesAsync(quien, vines, lugarDestinoId),
             }));
 
     private async Task<Guid> ViajeConVinesAsync(Sesion coordinador, string codigo, string[] vines, Guid? conductorId = null, Guid? inspectorId = null)
@@ -141,10 +153,18 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes"));
     }
 
+    /// <summary>Crea por la API los dos lugares que usan las filas de la carga: «CEDI Envigado» (CEDI 1) y «Concesionario Autolarte Medellín» (Concesionario).</summary>
+    private async Task LugaresDeLaCargaAsync(Sesion coordinador)
+    {
+        Assert.Equal(HttpStatusCode.Created, (await Cliente(coordinador.Token).PostAsync("/api/catalogos/lugares", Cuerpo(new { nombre = "CEDI Envigado", tipo = "cedi_1", ciudad = "Envigado" }))).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await Cliente(coordinador.Token).PostAsync("/api/catalogos/lugares", Cuerpo(new { nombre = "Concesionario Autolarte Medellín", tipo = "concesionario", ciudad = "Medellín" }))).StatusCode);
+    }
+
     [Fact]
     public async Task La_carga_por_excel_muestra_el_error_de_cada_fila_antes_de_confirmar_y_solo_guarda_las_validas()
     {
         var coordinador = await CoordinadorAsync();
+        await LugaresDeLaCargaAsync(coordinador);
         await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR, cedula: "1.234.567");
         foreach (var vin in new[] { "VIN-X-01", "VIN-X-02", "VIN-X-03", "VIN-X-04" })
         {
@@ -153,11 +173,11 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
 
         object[] filas =
         [
-            new { fila = 2, vin = "VIN-X-01", placa = "ABC123", trailer = "T-1", cedula_conductor = "1234567", unidad = "Niñera", codigo_mtrack = "MTK-X1" },
-            new { fila = 3, vin = "vin-x-02", placa = "ABC123", trailer = "T-1", cedula_conductor = "1.234.567", unidad = "ninera", codigo_mtrack = "MTK-X1" },
-            new { fila = 4, vin = "VIN-NO-EXISTE", placa = "DEF456", trailer = "", cedula_conductor = "1234567", unidad = "Niñera", codigo_mtrack = "MTK-X2" },
-            new { fila = 5, vin = "VIN-X-03", placa = "GHI789", trailer = "", cedula_conductor = "99999999", unidad = "Niñera", codigo_mtrack = "MTK-X3" },
-            new { fila = 6, vin = "VIN-X-04", placa = "JKL012", trailer = "T-4", cedula_conductor = "1234567", unidad = "Nodriza", codigo_mtrack = "MTK-X4" },
+            new { fila = 2, vin = "VIN-X-01", placa = "ABC123", trailer = "T-1", cedula_conductor = "1234567", unidad = "Niñera", codigo_mtrack = "MTK-X1", fecha_programada = "2026-11-03 06:00", origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" },
+            new { fila = 3, vin = "vin-x-02", placa = "ABC123", trailer = "T-1", cedula_conductor = "1.234.567", unidad = "ninera", codigo_mtrack = "MTK-X1", fecha_programada = "2026-11-03 06:00", origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" },
+            new { fila = 4, vin = "VIN-NO-EXISTE", placa = "DEF456", trailer = "", cedula_conductor = "1234567", unidad = "Niñera", codigo_mtrack = "MTK-X2", fecha_programada = "2026-11-03 06:00", origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" },
+            new { fila = 5, vin = "VIN-X-03", placa = "GHI789", trailer = "", cedula_conductor = "99999999", unidad = "Niñera", codigo_mtrack = "MTK-X3", fecha_programada = "2026-11-03 06:00", origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" },
+            new { fila = 6, vin = "VIN-X-04", placa = "JKL012", trailer = "T-4", cedula_conductor = "1234567", unidad = "Nodriza", codigo_mtrack = "MTK-X4", fecha_programada = "2026-11-03 06:00", origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" },
         ];
 
         var vista = await Cliente(coordinador.Token).PostAsync("/api/viajes/cargar/previsualizar", Cuerpo(new { filas }));
@@ -205,6 +225,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     public async Task La_carga_por_excel_valida_la_coherencia_del_viaje_los_duplicados_y_lo_que_ya_existe()
     {
         var coordinador = await CoordinadorAsync();
+        await LugaresDeLaCargaAsync(coordinador);
         await ViajeConVinesAsync(coordinador, "MTK-EXISTE", ["VIN-OCUPADO"]);
         foreach (var vin in new[] { "VIN-Y-01", "VIN-Y-02", "VIN-Y-03" })
         {
@@ -212,7 +233,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         }
 
         object Fila(int n, string? vin, string? codigo, string? placa = "ABC123", string? unidad = "Niñera", string? cedula = null) =>
-            new { fila = n, vin, placa, trailer = "", cedula_conductor = cedula, unidad, codigo_mtrack = codigo };
+            new { fila = n, vin, placa, trailer = "", cedula_conductor = cedula, unidad, codigo_mtrack = codigo, fecha_programada = "2026-11-03 06:00", origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" };
 
         object[] filas =
         [
@@ -266,7 +287,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     // ------------------------------------------------------------------------------------------------- alta
 
     [Fact]
-    public async Task Crear_un_viaje_crea_las_tres_etapas_de_cada_vin_con_origen_y_destino()
+    public async Task Crear_un_viaje_crea_las_tres_etapas_de_cada_vin_con_el_origen_del_viaje_y_el_destino_de_cada_unidad()
     {
         var coordinador = await CoordinadorAsync();
         var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
@@ -274,38 +295,44 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         await Sembrador.VehiculoAsync("VIN-V-01");
         await Sembrador.VehiculoAsync("VIN-V-02");
         var origen = await LugarAsync("cedi_1");
-        var destino = await LugarAsync("concesionario");
+        var destino = await LugarRealAsync(Cliente(coordinador.Token), "Concesionario Autolarte Medellin", "concesionario");
 
-        var r = await CrearViajeAsync(coordinador, "MTK-ALTA", ["VIN-V-01", "vin-v-02"], conductor.UsuarioId, inspector.UsuarioId, origen, destino, conPersonalApoyo: true);
+        var r = await CrearViajeAsync(coordinador, "MTK-ALTA", ["VIN-V-01", "vin-v-02"], conductor.UsuarioId, inspector.UsuarioId, origen, destino);
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var viaje = await LeerJsonAsync(r);
         Assert.Equal(
             ["id", "codigo_mtrack", "tipo_unidad_id", "unidad", "placa", "trailer", "conductor_id", "conductor_nombre", "inspector_id", "inspector_nombre",
-             "origen_id", "origen", "destino_id", "destino", "estado", "con_personal_apoyo", "vehiculos", "clientes", "created_at", "updated_at"],
+             "origen_id", "origen", "destino_id", "destino", "estado", "vehiculos", "clientes", "created_at", "updated_at", "novedades_proceso", "fecha_programada", "lugar_cargue_id", "lugar_cargue"],
             viaje.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("MTK-ALTA", viaje.GetProperty("codigo_mtrack").GetString());
         Assert.Equal("Niñera", viaje.GetProperty("unidad").GetString());
         Assert.Equal("programado", viaje.GetProperty("estado").GetString());
         Assert.Equal("Nombre cond@ejemplo.com", viaje.GetProperty("conductor_nombre").GetString());
         Assert.Equal("CEDI 1", viaje.GetProperty("origen").GetString());
-        Assert.Equal("Concesionario", viaje.GetProperty("destino").GetString());
-        Assert.True(viaje.GetProperty("con_personal_apoyo").GetBoolean());
+        // El viaje ya no tiene un destino unico: lo lleva cada unidad.
+        Assert.Equal(JsonValueKind.Null, viaje.GetProperty("destino_id").ValueKind);
+        Assert.Equal(JsonValueKind.Null, viaje.GetProperty("destino").ValueKind);
+        Assert.All(viaje.GetProperty("vehiculos").EnumerateArray(), u =>
+        {
+            Assert.Equal(destino, u.GetProperty("lugar_destino_id").GetGuid());
+            Assert.Equal("Concesionario Autolarte Medellin", u.GetProperty("lugar_destino").GetString());
+        });
+        Assert.False(viaje.TryGetProperty("con_personal_apoyo", out _));
         Assert.Equal(["VIN-V-01", "VIN-V-02"], Vines(viaje));
 
         Assert.Equal(6, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas"));
-        var etapas = new Dictionary<string, (object? Lugar, bool Apoyo)>();
+        var etapas = new Dictionary<string, object?>();
         foreach (var codigo in new[] { "cargue", "transporte", "descargue" })
         {
             var lugar = await Sembrador.EscalarAsync("SELECT TOP 1 e.PuntoCustodiaId FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE c.Codigo = @c", ("@c", codigo));
-            var apoyo = Convert.ToBoolean(await Sembrador.EscalarAsync("SELECT TOP 1 e.ConPersonalApoyo FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE c.Codigo = @c", ("@c", codigo)));
-            etapas[codigo] = (lugar, apoyo);
+            etapas[codigo] = lugar;
         }
 
-        Assert.Equal(origen, etapas["cargue"].Lugar);
-        Assert.Null(etapas["transporte"].Lugar);
-        Assert.Equal(destino, etapas["descargue"].Lugar);
-        Assert.Equal([true, false, false], new[] { etapas["cargue"].Apoyo, etapas["transporte"].Apoyo, etapas["descargue"].Apoyo });
+        Assert.Equal(origen, etapas["cargue"]);
+        Assert.Null(etapas["transporte"]);
+        // El Descargue de cada unidad se crea en el tipo de su lugar de destino (un Concesionario).
+        Assert.Equal(await LugarAsync("concesionario"), etapas["descargue"]);
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'viaje.crear'"));
         Assert.Equal(coordinador.UsuarioId, await Sembrador.EscalarAsync("SELECT CreadoPor FROM dbo.tblViajes WHERE CodigoMtrack = 'MTK-ALTA'"));
     }
@@ -349,7 +376,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(HttpStatusCode.BadRequest, conductorRetirado.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, inspectorQueEsConductor.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, vinInexistente.StatusCode);
-        Assert.Contains("VIN-INEXISTENTE", (await LeerJsonAsync(vinInexistente)).GetProperty("details").GetProperty("fieldErrors").GetProperty("vines")[0].GetString());
+        Assert.Contains("VIN-INEXISTENTE", (await LeerJsonAsync(vinInexistente)).GetProperty("details").GetProperty("fieldErrors").GetProperty("unidades")[0].GetString());
         Assert.Equal(HttpStatusCode.BadRequest, codigoMalo.StatusCode);
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes"));
     }
@@ -389,7 +416,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var crear = await CrearViajeAsync(quien, "MTK-ROL");
         var cambiar = await Cliente(quien.Token).PatchAsync($"/api/viajes/{id}", Cuerpo(new { placa = "NUEVA1" }));
         var estado = await Cliente(quien.Token).PatchAsync($"/api/viajes/{id}/estado", Cuerpo(new { estado = "en_curso" }));
-        var agregar = await Cliente(quien.Token).PostAsync($"/api/viajes/{id}/vehiculos", Cuerpo(new { vines = new[] { "X" } }));
+        var agregar = await Cliente(quien.Token).PostAsync($"/api/viajes/{id}/vehiculos", Cuerpo(new { unidades = new[] { new { vin = "X", lugar_destino_id = Guid.NewGuid() } } }));
         var previsualizar = await Cliente(quien.Token).PostAsync("/api/viajes/cargar/previsualizar", Cuerpo(new { filas = new[] { new { vin = "X" } } }));
         var borrar = await Cliente(quien.Token).DeleteAsync($"/api/viajes/{id}");
 
@@ -494,7 +521,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(JsonValueKind.Null, antesUnidad.GetProperty("no_sale").ValueKind);
         var unidad = despues.GetProperty("vehiculos")[0];
         Assert.Equal(
-            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale", "estado_transporte", "novedades"],
+            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale", "estado_transporte", "novedades", "lugar_destino_id", "lugar_destino", "posicion"],
             unidad.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("no_sale", unidad.GetProperty("estado_unidad").GetString());
         var noSale = unidad.GetProperty("no_sale");
@@ -594,28 +621,33 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     }
 
     [Fact]
-    public async Task Cambiar_origen_destino_o_personal_de_apoyo_se_lleva_a_las_etapas_que_no_tienen_informe_cerrado()
+    public async Task Cambiar_el_origen_se_lleva_al_cargue_que_no_tiene_informe_cerrado_y_el_destino_y_el_personal_de_apoyo_ya_no_se_aceptan()
     {
         var coordinador = await CoordinadorAsync();
         var inspector = await SesionAsync("insp@ejemplo.com", clsRol.INSPECTOR);
         var cedi1 = await LugarAsync("cedi_1");
-        var cedi2 = await LugarAsync("cedi_2");
         var origenViejo = await LugarAsync("origen");
-        var destino = await LugarAsync("destino");
         await Sembrador.VehiculoAsync("VIN-P-01");
-        var creado = await LeerJsonAsync(await CrearViajeAsync(coordinador, "MTK-PROP", ["VIN-P-01"], inspectorId: inspector.UsuarioId, origenId: origenViejo, destinoId: destino));
+        var creado = await LeerJsonAsync(await CrearViajeAsync(coordinador, "MTK-PROP", ["VIN-P-01"], inspectorId: inspector.UsuarioId, origenId: origenViejo));
         var id = creado.GetProperty("id").GetGuid();
         var cargue = (Guid)(await Sembrador.EscalarAsync("SELECT e.Id FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE c.Codigo = 'cargue'"))!;
         await Sembrador.InformeAsync(cargue, inspector.UsuarioId, cerrada: true);
+        var descargueAntes = await Sembrador.EscalarAsync("SELECT e.PuntoCustodiaId FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE c.Codigo = 'descargue'");
 
-        var r = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}", Cuerpo(new { origen_id = cedi1, destino_id = cedi2, con_personal_apoyo = true }));
+        var r = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}", Cuerpo(new { origen_id = cedi1 }));
+        var conApoyo = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}", Cuerpo(new { con_personal_apoyo = true }));
+        var conDestino = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}", Cuerpo(new { destino_id = cedi1 }));
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         Assert.Equal(cedi1, (await LeerJsonAsync(r)).GetProperty("origen_id").GetGuid());
-        // El cargue ya tiene informe cerrado: conserva su lugar historico. El descargue si cambia.
+        // El cargue ya tiene informe cerrado: conserva su lugar historico. El descargue es de cada unidad y no se toca.
         Assert.Equal(origenViejo, await Sembrador.EscalarAsync("SELECT PuntoCustodiaId FROM dbo.tblEtapas WHERE Id = @e", ("@e", cargue)));
-        Assert.False(Convert.ToBoolean(await Sembrador.EscalarAsync("SELECT ConPersonalApoyo FROM dbo.tblEtapas WHERE Id = @e", ("@e", cargue))));
-        Assert.Equal(cedi2, await Sembrador.EscalarAsync("SELECT e.PuntoCustodiaId FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE c.Codigo = 'descargue'"));
+        Assert.Equal(descargueAntes, await Sembrador.EscalarAsync("SELECT e.PuntoCustodiaId FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE c.Codigo = 'descargue'"));
+        Assert.Equal(HttpStatusCode.BadRequest, conDestino.StatusCode);
+        Assert.StartsWith("Campo no admitido", (await LeerJsonAsync(conDestino)).GetProperty("details").GetProperty("fieldErrors").GetProperty("destino_id")[0].GetString());
+        // El cargue no lleva ninguna marca previa: con_personal_apoyo ya no se acepta.
+        Assert.Equal(HttpStatusCode.BadRequest, conApoyo.StatusCode);
+        Assert.StartsWith("Campo no admitido", (await LeerJsonAsync(conApoyo)).GetProperty("details").GetProperty("fieldErrors").GetProperty("con_personal_apoyo")[0].GetString());
     }
 
     [Fact]
@@ -651,13 +683,13 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         await Sembrador.VehiculoAsync("VIN-AS-03");
         await ViajeConVinesAsync(coordinador, "MTK-OTRO", ["VIN-AS-04"]);
 
-        var repetido = await Cliente(coordinador.Token).PostAsync($"/api/viajes/{id}/vehiculos", Cuerpo(new { vines = new[] { "VIN-AS-02", "vin-as-01" } }));
-        var enOtro = await Cliente(coordinador.Token).PostAsync($"/api/viajes/{id}/vehiculos", Cuerpo(new { vines = new[] { "VIN-AS-02", "VIN-AS-04" } }));
-        var inexistente = await Cliente(coordinador.Token).PostAsync($"/api/viajes/{id}/vehiculos", Cuerpo(new { vines = new[] { "VIN-AS-02", "VIN-NO-EXISTE" } }));
-        var vacio = await Cliente(coordinador.Token).PostAsync($"/api/viajes/{id}/vehiculos", Cuerpo(new { vines = Array.Empty<string>() }));
+        var repetido = await Cliente(coordinador.Token).PostAsync($"/api/viajes/{id}/vehiculos", Cuerpo(new { unidades = await UnidadesAsync(coordinador, ["VIN-AS-02", "vin-as-01"]) }));
+        var enOtro = await Cliente(coordinador.Token).PostAsync($"/api/viajes/{id}/vehiculos", Cuerpo(new { unidades = await UnidadesAsync(coordinador, ["VIN-AS-02", "VIN-AS-04"]) }));
+        var inexistente = await Cliente(coordinador.Token).PostAsync($"/api/viajes/{id}/vehiculos", Cuerpo(new { unidades = await UnidadesAsync(coordinador, ["VIN-AS-02", "VIN-NO-EXISTE"]) }));
+        var vacio = await Cliente(coordinador.Token).PostAsync($"/api/viajes/{id}/vehiculos", Cuerpo(new { unidades = Array.Empty<object>() }));
         Assert.Equal(3, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas WHERE ViajeId = @v", ("@v", id)));
 
-        var agregado = await Cliente(coordinador.Token).PostAsync($"/api/viajes/{id}/vehiculos", Cuerpo(new { vines = new[] { "VIN-AS-02", "VIN-AS-03" } }));
+        var agregado = await Cliente(coordinador.Token).PostAsync($"/api/viajes/{id}/vehiculos", Cuerpo(new { unidades = await UnidadesAsync(coordinador, ["VIN-AS-02", "VIN-AS-03"]) }));
 
         Assert.Equal(HttpStatusCode.Conflict, repetido.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, enOtro.StatusCode);
@@ -735,7 +767,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var viaje = await ViajeConVinesAsync(coordinador, "MTK-ST", ["VIN-ST-01", "VIN-ST-02"], conductor.UsuarioId);
         Guid EtapaDe(string vin, int orden) => (Guid)Sembrador.EscalarAsync("SELECT e.Id FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = @v AND e.Orden = @o", ("@v", vin), ("@o", orden)).Result!;
 
-        var primera = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-01", 1), momento = "salida", fecha = FECHA });
+        var primera = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-01", 1), momento = "salida", fecha = FECHA, motivo_sin_inspector = "inspector_no_llego" });
         var estadoTras = (string)(await Sembrador.EscalarAsync("SELECT Estado FROM dbo.tblViajes WHERE Id = @v", ("@v", viaje)))!;
         await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{viaje}/estado", Cuerpo(new { estado = "finalizado" }));
         var enFinalizado = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-01", 2), momento = "salida", fecha = FECHA });

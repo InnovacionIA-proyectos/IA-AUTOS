@@ -38,7 +38,7 @@ public static class clsEstadoSeguimiento
 }
 
 /// <summary>
-/// Averia atribuida a una zona del vehiculo (lado + numero, o una zona provisional), con su clase, tamano y nivel de severidad. Un hallazgo
+/// Averia atribuida a una zona del vehiculo (lado + numero), con su clase, tamano y nivel de severidad. Un hallazgo
 /// preexistente apunta al hallazgo previo del mismo VIN que ya lo tenia. <see cref="ParteVehiculo"/> y <see cref="CoordsDiagrama"/> son del modelo
 /// anterior (una parte en texto y un punto sobre una sola imagen): solo quedan en los hallazgos historicos.
 /// </summary>

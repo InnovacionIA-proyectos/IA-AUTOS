@@ -34,12 +34,14 @@ BEGIN
     ALTER TABLE dbo.tblHallazgoSeguimiento DISABLE TRIGGER ALL;
     ALTER TABLE dbo.tblNotificaciones DISABLE TRIGGER ALL;
     ALTER TABLE dbo.tblNovedadesProceso DISABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblInspeccionExtras DISABLE TRIGGER ALL;
     BEGIN TRY
         DELETE FROM dbo.tblNovedadesProceso WHERE VehiculoId = @v OR InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblNotificaciones WHERE VehiculoId = @v OR InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblHallazgoSeguimiento WHERE HallazgoId IN (SELECT h.Id FROM dbo.tblHallazgos h WHERE h.InspeccionId IN (SELECT Id FROM @insp));
         DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblEvidencias WHERE InspeccionId IN (SELECT Id FROM @insp);
+        DELETE FROM dbo.tblInspeccionExtras WHERE InspeccionId IN (SELECT Id FROM @insp);
         -- Las unidades que "no salen" apuntan a un hallazgo, y un hallazgo preexistente apunta a su origen: se quitan primero.
         DELETE FROM dbo.tblViajeVehiculos WHERE VehiculoId = @v;
         DELETE FROM dbo.tblHallazgos WHERE EsPreexistente = 1 AND InspeccionId IN (SELECT Id FROM @insp);
@@ -60,6 +62,7 @@ BEGIN
         ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
         ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
         ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
+        ALTER TABLE dbo.tblInspeccionExtras ENABLE TRIGGER ALL;
         THROW;
     END CATCH
     ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
@@ -69,6 +72,7 @@ BEGIN
     ALTER TABLE dbo.tblHallazgoSeguimiento ENABLE TRIGGER ALL;
     ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
     ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
+    ALTER TABLE dbo.tblInspeccionExtras ENABLE TRIGGER ALL;
 END
 GO
 
@@ -541,40 +545,47 @@ END
 CLOSE cBorrado; DEALLOCATE cBorrado;
 
 -- 7c) Zonas del dano, paneles, regiones, hallazgo con nivel y estado de la unidad del viaje
-INSERT #r SELECT N'Paneles: existen los 5 paneles de la ficha, separados de las vistas de foto',
-    CASE WHEN (SELECT COUNT(*) FROM dbo.tblPanelesDano WHERE Codigo IN ('superior','perfil_posterior_izquierdo','perfil_posterior_derecho','costado_izquierdo','costado_derecho')) = 5 THEN 1 ELSE 0 END, NULL;
-INSERT #r SELECT N'Zonas provisionales: frente y las cuatro llantas, sin cuadrante, numero ni lado',
-    CASE WHEN (SELECT COUNT(*) FROM dbo.tblZonasDano WHERE CuadranteId IS NULL AND Numero IS NULL AND Lado IS NULL
-                 AND Codigo IN ('frente','llanta_delantera_izquierda','llanta_delantera_derecha','llanta_trasera_izquierda','llanta_trasera_derecha')) = 5 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Dibujo: una base nueva trae las columnas del dibujo version 6 y ninguna zona provisional',
+    CASE WHEN COL_LENGTH(N'dbo.tblCuadrantes', N'LlevaLado') IS NOT NULL AND COL_LENGTH(N'dbo.tblZonasDano', N'LlevaLado') IS NOT NULL AND COL_LENGTH(N'dbo.tblZonasDano', N'NombreCompleto') IS NOT NULL
+          AND COL_LENGTH(N'dbo.tblZonasDano', N'AiagArea') IS NOT NULL AND COL_LENGTH(N'dbo.tblPanelesDano', N'AnchoRef') IS NOT NULL AND COL_LENGTH(N'dbo.tblPanelesDano', N'AltoRef') IS NOT NULL
+          AND COL_LENGTH(N'dbo.tblPanelesDano', N'Version') IS NOT NULL AND COL_LENGTH(N'dbo.tblRegionesDano', N'Prioridad') IS NOT NULL
+          AND COL_LENGTH(N'dbo.tblZonasDano', N'Codigo') IS NULL AND COL_LENGTH(N'dbo.tblZonasDano', N'Nombre') IS NULL THEN 1 ELSE 0 END, NULL;
+
+-- Paneles de prueba (el dibujo lo siembra el guion 34 desde el archivo; una base nueva no trae paneles).
+INSERT dbo.tblPanelesDano (Id, Codigo, Nombre, Orden, AnchoRef, AltoRef, Version)
+VALUES (NEWID(), 'zz_superior', N'ZZ_TEST superior', 1, 767, 1340, 6), (NEWID(), 'zz_costado_izquierdo', N'ZZ_TEST costado izquierdo', 2, 1071, 491, 6);
+INSERT #r SELECT N'Paneles: guardan el tamano de referencia de su imagen y la version del archivo',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblPanelesDano WHERE Codigo = 'zz_superior' AND AnchoRef = 767 AND AltoRef = 1340 AND Version = 6) THEN 1 ELSE 0 END, NULL;
 
 DECLARE @cuad7 uniqueidentifier = NEWID(), @cuad30 uniqueidentifier = NEWID();
-INSERT dbo.tblCuadrantes (Id, TipoVehiculo, Numero, Nombre) VALUES (@cuad7, 'zz_zona', 7, N'ZZ_TEST zona 7'), (@cuad30, 'zz_zona', 30, N'ZZ_TEST zona 30');
-INSERT #r SELECT N'Cuadrante nuevo: el trigger crea dos zonas (izquierdo y derecho) del 1 al 25 y una sin lado del 26 en adelante',
+INSERT dbo.tblCuadrantes (Id, TipoVehiculo, Numero, Nombre, LlevaLado) VALUES (@cuad7, 'zz_zona', 7, N'ZZ_TEST zona 7', 1), (@cuad30, 'zz_zona', 30, N'ZZ_TEST zona 30', 0);
+INSERT #r SELECT N'Cuadrante nuevo: el trigger crea dos zonas (izquierdo y derecho) si lleva lado y una sin lado si no',
     CASE WHEN (SELECT COUNT(*) FROM dbo.tblZonasDano WHERE CuadranteId = @cuad7 AND Lado IN ('izquierdo','derecho')) = 2
           AND (SELECT COUNT(*) FROM dbo.tblZonasDano WHERE CuadranteId = @cuad30 AND Lado IS NULL) = 1 THEN 1 ELSE 0 END, NULL;
 
 DECLARE @zonaIzq7 uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE CuadranteId = @cuad7 AND Lado = 'izquierdo');
 DECLARE @zonaDer7 uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE CuadranteId = @cuad7 AND Lado = 'derecho');
 DECLARE @zona30 uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE CuadranteId = @cuad30);
-DECLARE @zonaFrente uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente');
-DECLARE @panelSup uniqueidentifier = (SELECT Id FROM dbo.tblPanelesDano WHERE Codigo = 'superior');
-DECLARE @panelCostIzq uniqueidentifier = (SELECT Id FROM dbo.tblPanelesDano WHERE Codigo = 'costado_izquierdo');
+DECLARE @panelSup uniqueidentifier = (SELECT Id FROM dbo.tblPanelesDano WHERE Codigo = 'zz_superior');
+DECLARE @panelCostIzq uniqueidentifier = (SELECT Id FROM dbo.tblPanelesDano WHERE Codigo = 'zz_costado_izquierdo');
 
 -- Una region valida: la zona izquierdo 7 dibujada en el costado izquierdo.
 INSERT dbo.tblRegionesDano (Id, PanelId, ZonaId, CuadranteId, Geometria) VALUES (NEWID(), @panelCostIzq, @zonaIzq7, @cuad7, N'{"puntos":[[0.1,0.1],[0.2,0.1],[0.2,0.2]]}');
-INSERT #r SELECT N'Region: la zona izquierdo 7 se dibuja en el costado izquierdo', CASE WHEN EXISTS (SELECT 1 FROM dbo.tblRegionesDano WHERE ZonaId = @zonaIzq7 AND PanelId = @panelCostIzq) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Region: la zona izquierdo 7 se dibuja en el costado izquierdo, con prioridad 1 por defecto', CASE WHEN EXISTS (SELECT 1 FROM dbo.tblRegionesDano WHERE ZonaId = @zonaIzq7 AND PanelId = @panelCostIzq AND Prioridad = 1) THEN 1 ELSE 0 END, NULL;
+-- Nombre completo y codigo AIAG de una zona: son de la zona (por pieza y lado).
+UPDATE dbo.tblZonasDano SET NombreCompleto = N'ZZ_TEST zona 7 izquierda', AiagArea = N'14/16' WHERE Id = @zonaIzq7;
+INSERT #r SELECT N'Zona: guarda su nombre completo y su codigo AIAG', CASE WHEN EXISTS (SELECT 1 FROM dbo.tblZonasDano WHERE Id = @zonaIzq7 AND NombreCompleto = N'ZZ_TEST zona 7 izquierda' AND AiagArea = N'14/16') THEN 1 ELSE 0 END, NULL;
 
 DECLARE @bConductor uniqueidentifier = NEWID();
 DECLARE @casosZona TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
 INSERT @casosZona VALUES
- (N'CHECK una zona sobre el numero 25 no lleva lado', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,Lado) VALUES (NEWID(),''' + CAST(@cuad30 AS nvarchar(36)) + N''',30,''izquierdo'')', 547),
- (N'CHECK una zona del 1 al 25 exige lado', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,Lado) VALUES (NEWID(),''' + CAST(@cuad7 AS nvarchar(36)) + N''',7,NULL)', 547),
- (N'CHECK lado distinto de izquierdo o derecho', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,Lado) VALUES (NEWID(),''' + CAST(@cuad7 AS nvarchar(36)) + N''',7,''centro'')', 547),
- (N'UNIQUE una zona por cuadrante y lado', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,Lado) VALUES (NEWID(),''' + CAST(@cuad7 AS nvarchar(36)) + N''',7,''izquierdo'')', 2601),
- (N'FK el numero de la zona es el de su cuadrante', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,Lado) VALUES (NEWID(),''' + CAST(@cuad7 AS nvarchar(36)) + N''',30,NULL)', 547),
- (N'CHECK una zona provisional exige codigo y nombre', N'INSERT dbo.tblZonasDano (Id,Codigo) VALUES (NEWID(),''zz_provisional'')', 547),
- (N'UNIQUE codigo de la zona provisional', N'INSERT dbo.tblZonasDano (Id,Codigo,Nombre) VALUES (NEWID(),''frente'',N''Otra'')', 2601),
- (N'FK una region no puede ser de una zona provisional', N'INSERT dbo.tblRegionesDano (Id,PanelId,ZonaId,CuadranteId,Geometria) VALUES (NEWID(),''' + CAST(@panelSup AS nvarchar(36)) + N''',''' + CAST(@zonaFrente AS nvarchar(36)) + N''',''' + CAST(@cuad7 AS nvarchar(36)) + N''',N''{"puntos":[]}'')', 547),
+ (N'CHECK una zona de un cuadrante sin lado no lleva lado', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,LlevaLado,Lado) VALUES (NEWID(),''' + CAST(@cuad30 AS nvarchar(36)) + N''',30,0,''izquierdo'')', 547),
+ (N'CHECK una zona de un cuadrante con lado exige lado', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,LlevaLado,Lado) VALUES (NEWID(),''' + CAST(@cuad7 AS nvarchar(36)) + N''',7,1,NULL)', 547),
+ (N'FK la zona no puede decir distinto que su cuadrante si lleva lado', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,LlevaLado,Lado) VALUES (NEWID(),''' + CAST(@cuad30 AS nvarchar(36)) + N''',30,1,''izquierdo'')', 547),
+ (N'CHECK lado distinto de izquierdo o derecho', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,LlevaLado,Lado) VALUES (NEWID(),''' + CAST(@cuad7 AS nvarchar(36)) + N''',7,1,''centro'')', 547),
+ (N'UNIQUE una zona por cuadrante y lado', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,LlevaLado,Lado) VALUES (NEWID(),''' + CAST(@cuad7 AS nvarchar(36)) + N''',7,1,''izquierdo'')', 2601),
+ (N'FK el numero de la zona es el de su cuadrante', N'INSERT dbo.tblZonasDano (Id,CuadranteId,Numero,LlevaLado,Lado) VALUES (NEWID(),''' + CAST(@cuad7 AS nvarchar(36)) + N''',30,1,NULL)', 547),
+ (N'CHECK el cuadrante no cambia su regla de lado mientras tiene zonas del otro tipo', N'UPDATE dbo.tblCuadrantes SET LlevaLado = 0 WHERE Id = ''' + CAST(@cuad7 AS nvarchar(36)) + N'''', 547),
  (N'FK la zona de una region es de su cuadrante', N'INSERT dbo.tblRegionesDano (Id,PanelId,ZonaId,CuadranteId,Geometria) VALUES (NEWID(),''' + CAST(@panelSup AS nvarchar(36)) + N''',''' + CAST(@zonaDer7 AS nvarchar(36)) + N''',''' + CAST(@cuad30 AS nvarchar(36)) + N''',N''{"puntos":[]}'')', 547),
  (N'UNIQUE una zona se dibuja una vez por panel', N'INSERT dbo.tblRegionesDano (Id,PanelId,ZonaId,CuadranteId,Geometria) VALUES (NEWID(),''' + CAST(@panelCostIzq AS nvarchar(36)) + N''',''' + CAST(@zonaIzq7 AS nvarchar(36)) + N''',''' + CAST(@cuad7 AS nvarchar(36)) + N''',N''{"puntos":[]}'')', 2627),
  (N'CHECK la geometria de la region es JSON', N'INSERT dbo.tblRegionesDano (Id,PanelId,ZonaId,CuadranteId,Geometria) VALUES (NEWID(),''' + CAST(@panelSup AS nvarchar(36)) + N''',''' + CAST(@zonaDer7 AS nvarchar(36)) + N''',''' + CAST(@cuad7 AS nvarchar(36)) + N''',N''no es json'')', 547),
@@ -768,17 +779,17 @@ INSERT #r SELECT N'Parametros de alertas: niveles criticos v1_plus,v1 (lista), u
 -- Un hallazgo del inspector en la llegada del Cargue de la unidad 5 y una novedad del conductor sin revisar en la salida de su Transporte (ya creada arriba): mientras las inspecciones estan en
 -- borrador la vista no trae ninguno; ya cerradas, trae solo el hallazgo del inspector hasta que la novedad se revisa.
 DECLARE @hvA uniqueidentifier = NEWID(), @hvB uniqueidentifier = NEWID();
-INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) VALUES (@hvA, @l5, (SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'), 'golpe', '5_10cm', 'v2');
+INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) VALUES (@hvA, @l5, @zonaDer7, 'golpe', '5_10cm', 'v2');
 INSERT dbo.tblHallazgos (Id, InspeccionId, TamanoDano, Origen, TipoNovedad) VALUES (@hvB, @st5, '5_10cm', 'conductor', 'golpe');
 INSERT #r SELECT N'vwHallazgosVentanaUmbral: una inspeccion en borrador no trae hallazgos',
     CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral WHERE HallazgoId IN (@hvA, @hvB)) THEN 1 ELSE 0 END, NULL;
 UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id IN (@l5, @st5);
 INSERT #r SELECT N'vwHallazgosVentanaUmbral: trae el hallazgo con su cliente, zona, proceso y fecha de cierre y excluye la novedad del conductor sin revisar',
     CASE WHEN EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral w WHERE w.HallazgoId = @hvA AND w.InspeccionId = @l5 AND w.ViajeId = @vj5 AND w.VehiculoId = @v5
-                       AND w.ClienteId = (SELECT ClienteId FROM dbo.tblVehiculos WHERE Id = @v5) AND w.ZonaCodigo = 'frente' AND w.Numero IS NULL AND w.Lado IS NULL
+                       AND w.ClienteId = (SELECT ClienteId FROM dbo.tblVehiculos WHERE Id = @v5) AND w.ZonaId = @zonaDer7 AND w.Numero = 7 AND w.Lado = 'derecho'
                        AND w.Proceso = 'cargue' AND w.Fecha IS NOT NULL)
           AND NOT EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral WHERE HallazgoId = @hvB) THEN 1 ELSE 0 END, NULL;
-UPDATE dbo.tblHallazgos SET ClaseDano = 'golpe', NivelSeveridad = 'v1', ZonaId = (SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'), RevisadoAt = SYSDATETIMEOFFSET(), RevisadoPor = @u1 WHERE Id = @hvB;
+UPDATE dbo.tblHallazgos SET ClaseDano = 'golpe', NivelSeveridad = 'v1', ZonaId = @zonaDer7, RevisadoAt = SYSDATETIMEOFFSET(), RevisadoPor = @u1 WHERE Id = @hvB;
 INSERT #r SELECT N'vwHallazgosVentanaUmbral: la novedad revisada entra a la vista con su proceso',
     CASE WHEN EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral w WHERE w.HallazgoId = @hvB AND w.Proceso = 'transporte') THEN 1 ELSE 0 END, NULL;
 ALTER TABLE dbo.tblHallazgos DISABLE TRIGGER ALL;
@@ -929,17 +940,25 @@ INSERT @casosNov (Prueba, Sentencia, Esperado) VALUES
  (N'CHECK inspeccion: el texto del motivo en blanco', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector, MotivoSinInspectorTexto) VALUES (NEWID(), ''' + @e4Txt + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''salida'', SYSDATETIMEOFFSET(), ''otro'', N''  '')', 547),
  (N'FK inspeccion: motivo sin inspector inexistente', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector) VALUES (NEWID(), ''' + @e1Nov + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''llegada'', SYSDATETIMEOFFSET(), ''zz_no_existe'')', 547),
  (N'Notificacion: el tipo novedad_proceso se guarda', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''novedad_proceso'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-1'')', 0),
+ (N'Notificacion: el tipo reclamo_sin_actividad se guarda', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''reclamo_sin_actividad'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-3'')', 0),
  (N'CHECK notificacion: un tipo que no existe', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''zz_tipo'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-2'')', 547);
 -- La transferencia (@i2 aun no tiene ninguna): primero lo que debe fallar y al final el recibo sin entrega valido.
-DECLARE @baseTr nvarchar(max) = N'INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId, FirmaEntrega, FirmaRecibe, FirmaEntregaAt, FirmaRecibeAt, FirmaRecibeIp, TipoCierre) VALUES (NEWID(), ''' + @i2Nov + N''', ';
+DECLARE @baseTr nvarchar(max) = N'INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId, FirmaEntrega, FirmaRecibe, FirmaEntregaAt, FirmaRecibeAt, FirmaRecibeIp, TipoCierre, NoFirmaParte, MotivoNoFirma) VALUES (NEWID(), ''' + @i2Nov + N''', ';
 INSERT @casosNov (Prueba, Sentencia, Esperado) VALUES
- (N'CHECK transferencia: el recibo sin entrega no tiene usuario de entrega', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'')', 547),
- (N'CHECK transferencia: el recibo sin entrega no tiene firma de entrega', @baseTr + N'NULL, ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'')', 547),
- (N'CHECK transferencia: el recibo sin entrega exige la firma de quien recibe', @baseTr + N'NULL, ''' + @uNov + N''', NULL, NULL, NULL, NULL, NULL, ''recibo_sin_entrega'')', 547),
- (N'CHECK transferencia: sin quien entrega solo vale el recibo sin entrega (abierta)', @baseTr + N'NULL, ''' + @uNov + N''', NULL, NULL, NULL, NULL, NULL, NULL)', 547),
- (N'CHECK transferencia: sin quien entrega no vale una firmada', @baseTr + N'NULL, ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), ''10.0.0.1'', ''firmada'')', 547),
- (N'CHECK transferencia: tipo de cierre desconocido', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), ''10.0.0.1'', ''zz_cierre'')', 547),
- (N'Transferencia: el recibo sin entrega con la firma de quien recibe se guarda', @baseTr + N'NULL, ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'')', 0),
+ (N'CHECK transferencia: el recibo sin entrega no tiene usuario de entrega', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', ''entrega'', N''zz motivo'')', 547),
+ (N'CHECK transferencia: el recibo sin entrega no tiene firma de entrega', @baseTr + N'NULL, ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', ''entrega'', N''zz motivo'')', 547),
+ (N'CHECK transferencia: el recibo sin entrega exige la firma de quien recibe', @baseTr + N'NULL, ''' + @uNov + N''', NULL, NULL, NULL, NULL, NULL, ''recibo_sin_entrega'', ''entrega'', N''zz motivo'')', 547),
+ (N'CHECK transferencia: sin quien entrega solo vale el recibo sin entrega (abierta)', @baseTr + N'NULL, ''' + @uNov + N''', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)', 547),
+ (N'CHECK transferencia: sin quien entrega no vale una firmada', @baseTr + N'NULL, ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), ''10.0.0.1'', ''firmada'', NULL, NULL)', 547),
+ (N'CHECK transferencia: tipo de cierre desconocido', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), ''10.0.0.1'', ''zz_cierre'', NULL, NULL)', 547),
+ (N'CHECK transferencia: el recibo sin entrega exige su motivo', @baseTr + N'NULL, ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', ''entrega'', NULL)', 547),
+ (N'CHECK transferencia: el recibo sin entrega con el motivo en blanco', @baseTr + N'NULL, ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', ''entrega'', N''  '')', 547),
+ (N'CHECK transferencia: el recibo sin entrega exige la parte que no firmo', @baseTr + N'NULL, ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', NULL, N''zz motivo'')', 547),
+ (N'CHECK transferencia: el recibo sin entrega con las dos firmas', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', ''recibe'', N''zz motivo'')', 547),
+ (N'CHECK transferencia: el recibo sin entrega firmado por quien entrega no lleva firma de quien recibe', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', N''zz-firma-entrega'', N''zz-firma'', SYSDATETIMEOFFSET(), NULL, NULL, ''recibo_sin_entrega'', ''recibe'', N''zz motivo'')', 547),
+ (N'CHECK transferencia: el recibo sin entrega firmado por quien entrega exige su firma', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', NULL, NULL, NULL, NULL, NULL, ''recibo_sin_entrega'', ''recibe'', N''zz motivo'')', 547),
+ (N'Transferencia: el recibo sin entrega con solo la firma de quien entrega se guarda', @baseTr + N'''' + CAST(@u1 AS nvarchar(36)) + N''', ''' + @uNov + N''', N''zz-firma-entrega'', NULL, SYSDATETIMEOFFSET(), NULL, NULL, ''recibo_sin_entrega'', ''recibe'', N''zz motivo''); ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL; DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = ''' + @i2Nov + N'''; ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL', 0),
+ (N'Transferencia: el recibo sin entrega con la firma de quien recibe se guarda', @baseTr + N'NULL, ''' + @uNov + N''', NULL, N''zz-firma'', NULL, SYSDATETIMEOFFSET(), ''10.0.0.1'', ''recibo_sin_entrega'', ''entrega'', N''zz motivo'')', 0),
  (N'Trigger: el recibo sin entrega es evidencia y no se borra', N'DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = ''' + @i2Nov + N'''', 51003);
 DECLARE @pruebaNP nvarchar(200), @sentenciaNP nvarchar(max), @esperadoNP int, @obtenidoNP int, @mensajeNP nvarchar(4000);
 DECLARE cNovP CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosNov ORDER BY Orden;
@@ -960,7 +979,7 @@ END
 CLOSE cNovP;
 DEALLOCATE cNovP;
 INSERT #r SELECT N'Transferencia: el recibo sin entrega quedo guardado sin usuario ni firma de entrega',
-    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @i2 AND TipoCierre = 'recibo_sin_entrega' AND EntregaUsuarioId IS NULL AND FirmaEntrega IS NULL AND RecibeUsuarioId = @u2) THEN 1 ELSE 0 END, NULL;
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @i2 AND TipoCierre = 'recibo_sin_entrega' AND EntregaUsuarioId IS NULL AND FirmaEntrega IS NULL AND RecibeUsuarioId = @u2 AND NoFirmaParte = 'entrega' AND MotivoNoFirma = N'zz motivo') THEN 1 ELSE 0 END, NULL;
 
 -- Una inspeccion de salida con motivo se guarda (en la etapa nueva, para no chocar con la salida original de las demas) y el motivo queda con su texto.
 INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector, MotivoSinInspectorTexto) VALUES (@i4nov, @e4nov, @vj, @u2, 'salida', SYSDATETIMEOFFSET(), 'otro', N'zz el inspector se enfermo');
@@ -982,6 +1001,83 @@ ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
 INSERT #r SELECT N'Novedad de proceso: lo de prueba se limpio', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblNovedadesProceso WHERE ViajeId = @vj) AND NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id = @i4nov)
     AND NOT EXISTS (SELECT 1 FROM dbo.tblNotificaciones WHERE ClaveDedupe LIKE N'zz-novedad-proceso-%') AND NOT EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @i2) THEN 1 ELSE 0 END, NULL;
 
+-- 7m) Lugares reales, fecha programada del viaje, destino por unidad y adopcion por dia programado
+INSERT #r SELECT N'Lugares: la tabla, su nombre unico y su tipo (llave foranea a tblPuntosCustodia)',
+    CASE WHEN OBJECT_ID(N'dbo.tblLugares', N'U') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblLugares_Nombre' AND parent_object_id = OBJECT_ID(N'dbo.tblLugares'))
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblLugares_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblLugares') AND referenced_object_id = OBJECT_ID(N'dbo.tblPuntosCustodia'))
+          AND (SELECT COUNT(*) FROM dbo.tblLugares WHERE Nombre NOT LIKE N'ZZ_TEST%') = 0 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Lugares: latitud, longitud y radio admiten nulo',
+    CASE WHEN (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblLugares') AND name IN (N'Latitud', N'Longitud', N'RadioMetros') AND is_nullable = 1) = 3 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Viajes: FechaProgramada y LugarCargueId nulos, y LugarDestinoId nulo en cada unidad',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblViajes') AND name = N'FechaProgramada' AND is_nullable = 1)
+          AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblViajes') AND name = N'LugarCargueId' AND is_nullable = 1)
+          AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND name = N'LugarDestinoId' AND is_nullable = 1)
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajes_LugarCargue' AND referenced_object_id = OBJECT_ID(N'dbo.tblLugares'))
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajeVehiculos_LugarDestino' AND referenced_object_id = OBJECT_ID(N'dbo.tblLugares')) THEN 1 ELSE 0 END, NULL;
+
+DECLARE @tipoLg nvarchar(36) = CAST((SELECT Id FROM dbo.tblPuntosCustodia WHERE Codigo = 'cedi_1') AS nvarchar(36));
+DECLARE @casosLg TABLE (Orden int IDENTITY(1, 1) PRIMARY KEY, Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+DECLARE @baseLg nvarchar(max) = N'INSERT dbo.tblLugares (Id, Nombre, TipoId, Ciudad, Latitud, Longitud, RadioMetros, Orden) VALUES (NEWID(), ';
+INSERT @casosLg (Prueba, Sentencia, Esperado) VALUES
+ (N'Lugar: uno valido sin coordenadas se guarda', @baseLg + N'N''ZZ_TEST_CEDI Envigado'', ''' + @tipoLg + N''', N''Envigado'', NULL, NULL, NULL, 0)', 0),
+ (N'Lugar: uno con coordenadas y radio se guarda', @baseLg + N'N''ZZ_TEST_Patio Norte'', ''' + @tipoLg + N''', N''Medellin'', 6.2, -75.5, 150, 1)', 0),
+ (N'UNIQUE lugar por nombre (sin distinguir mayusculas)', @baseLg + N'N''zz_test_cedi envigado'', ''' + @tipoLg + N''', N''Envigado'', NULL, NULL, NULL, 0)', 2627),
+ (N'FK lugar: tipo inexistente', @baseLg + N'N''ZZ_TEST_Sin tipo'', NEWID(), N''Envigado'', NULL, NULL, NULL, 0)', 547),
+ (N'CHECK lugar: nombre vacio', @baseLg + N'N''   '', ''' + @tipoLg + N''', N''Envigado'', NULL, NULL, NULL, 0)', 547),
+ (N'CHECK lugar: ciudad vacia', @baseLg + N'N''ZZ_TEST_Sin ciudad'', ''' + @tipoLg + N''', N''  '', NULL, NULL, NULL, 0)', 547),
+ (N'CHECK lugar: orden negativo', @baseLg + N'N''ZZ_TEST_Orden'', ''' + @tipoLg + N''', N''Envigado'', NULL, NULL, NULL, -1)', 547),
+ (N'CHECK lugar: latitud fuera de rango', @baseLg + N'N''ZZ_TEST_Lat'', ''' + @tipoLg + N''', N''Envigado'', 91, -75, NULL, 0)', 547),
+ (N'CHECK lugar: longitud fuera de rango', @baseLg + N'N''ZZ_TEST_Lng'', ''' + @tipoLg + N''', N''Envigado'', 6, -181, NULL, 0)', 547),
+ (N'CHECK lugar: las coordenadas van juntas (solo latitud)', @baseLg + N'N''ZZ_TEST_Solo lat'', ''' + @tipoLg + N''', N''Envigado'', 6, NULL, NULL, 0)', 547),
+ (N'CHECK lugar: las coordenadas van juntas (solo longitud)', @baseLg + N'N''ZZ_TEST_Solo lng'', ''' + @tipoLg + N''', N''Envigado'', NULL, -75, NULL, 0)', 547),
+ (N'CHECK lugar: el radio es mayor que cero', @baseLg + N'N''ZZ_TEST_Radio'', ''' + @tipoLg + N''', N''Envigado'', 6, -75, 0, 0)', 547),
+ (N'FK viaje: lugar de cargue inexistente', N'UPDATE dbo.tblViajes SET LugarCargueId = NEWID() WHERE CodigoMtrack = ''ZZ_TEST_MTK_1''', 547),
+ (N'FK unidad del viaje: lugar de destino inexistente', N'UPDATE dbo.tblViajeVehiculos SET LugarDestinoId = NEWID() WHERE ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_1'')', 547),
+ (N'Viaje: se programa con su fecha y su lugar de cargue', N'UPDATE dbo.tblViajes SET FechaProgramada = ''2026-11-03T06:00:00-05:00'', LugarCargueId = (SELECT Id FROM dbo.tblLugares WHERE Nombre = N''ZZ_TEST_CEDI Envigado'') WHERE CodigoMtrack = ''ZZ_TEST_MTK_1''', 0),
+ (N'Unidad: cada una guarda su propio destino', N'UPDATE dbo.tblViajeVehiculos SET LugarDestinoId = (SELECT Id FROM dbo.tblLugares WHERE Nombre = N''ZZ_TEST_Patio Norte'') WHERE ViajeId = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = ''ZZ_TEST_MTK_1'')', 0),
+ (N'Lugar: no se borra uno que un viaje usa', N'DELETE FROM dbo.tblLugares WHERE Nombre = N''ZZ_TEST_CEDI Envigado''', 547);
+DECLARE @pruebaLg nvarchar(200), @sentenciaLg nvarchar(max), @esperadoLg int, @obtenidoLg int, @mensajeLg nvarchar(4000);
+DECLARE cLg CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosLg ORDER BY Orden;
+OPEN cLg;
+FETCH NEXT FROM cLg INTO @pruebaLg, @sentenciaLg, @esperadoLg;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoLg = 0; SET @mensajeLg = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaLg);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoLg = ERROR_NUMBER(); SET @mensajeLg = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaLg, CASE WHEN @obtenidoLg = @esperadoLg THEN 1 ELSE 0 END, CASE WHEN @obtenidoLg = @esperadoLg THEN NULL ELSE CONCAT(N'esperaba ', @esperadoLg, N' y fue ', @obtenidoLg, N': ', @mensajeLg) END);
+    FETCH NEXT FROM cLg INTO @pruebaLg, @sentenciaLg, @esperadoLg;
+END
+CLOSE cLg;
+DEALLOCATE cLg;
+
+-- La adopcion cuenta el viaje en su dia programado (hora de Colombia) y, sin fecha programada, en el dia de su creacion: el viaje del ejemplo se crea el 2026-11-01 a las 20:00 y se programa para el 2026-11-03 a las 06:00.
+DECLARE @vjProgLg uniqueidentifier = NEWID(), @vjSinLg uniqueidentifier = NEWID();
+INSERT dbo.tblViajes (Id, CodigoMtrack, TipoUnidadId, Trailer, ConductorId, InspectorId, FechaProgramada, CreatedAt)
+VALUES (@vjProgLg, 'ZZ_TEST_MTK_L1', @tipoUnidad, N'ZZ_TEST_TR_PROG', @u2, @u1, '2026-11-03T06:00:00-05:00', '2026-11-01T20:00:00-05:00');
+INSERT dbo.tblViajes (Id, CodigoMtrack, TipoUnidadId, Trailer, ConductorId, InspectorId, CreatedAt)
+VALUES (@vjSinLg, 'ZZ_TEST_MTK_L2', @tipoUnidad, N'ZZ_TEST_TR_SIN', @u2, @u1, '2026-11-01T20:00:00-05:00');
+INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vjProgLg, @v);
+INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vjSinLg, @v);
+INSERT #r SELECT N'vwAdopcion: el viaje programado cuenta en su dia programado y no en el de su creacion',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.vwAdopcion WHERE Fecha = '2026-11-03' AND Trailer = N'ZZ_TEST_TR_PROG' AND Programados = 1)
+          AND NOT EXISTS (SELECT 1 FROM dbo.vwAdopcion WHERE Fecha = '2026-11-01' AND Trailer = N'ZZ_TEST_TR_PROG') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'vwAdopcion: sin fecha programada el viaje cuenta en el dia de su creacion',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.vwAdopcion WHERE Fecha = '2026-11-01' AND Trailer = N'ZZ_TEST_TR_SIN' AND Programados = 1)
+          AND NOT EXISTS (SELECT 1 FROM dbo.vwAdopcion WHERE Fecha = '2026-11-03' AND Trailer = N'ZZ_TEST_TR_SIN') THEN 1 ELSE 0 END, NULL;
+-- Limpieza de esta seccion: las unidades y los viajes de ejemplo, el lugar de cargue y de destino del viaje base y, al final, los lugares de prueba.
+DELETE FROM dbo.tblViajeVehiculos WHERE ViajeId IN (@vjProgLg, @vjSinLg);
+DELETE FROM dbo.tblViajes WHERE Id IN (@vjProgLg, @vjSinLg);
+UPDATE dbo.tblViajeVehiculos SET LugarDestinoId = NULL WHERE ViajeId = @vj;
+UPDATE dbo.tblViajes SET FechaProgramada = NULL, LugarCargueId = NULL WHERE Id = @vj;
+DELETE FROM dbo.tblLugares WHERE Nombre LIKE N'ZZ_TEST%';
+INSERT #r SELECT N'Lugares: lo de prueba se limpio', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblLugares WHERE Nombre LIKE N'ZZ_TEST%') AND NOT EXISTS (SELECT 1 FROM dbo.tblViajes WHERE CodigoMtrack LIKE 'ZZ_TEST_MTK_L%') THEN 1 ELSE 0 END, NULL;
+
 -- 7g) Parametros: la tabla, sus filas iniciales y sus restricciones
 INSERT #r SELECT N'Parametros: la tabla existe con sus 8 filas iniciales (6 con valor y 2 sin valor) y sin linea base de rechazo',
     CASE WHEN OBJECT_ID(N'dbo.tblParametros', N'U') IS NOT NULL
@@ -990,7 +1086,7 @@ INSERT #r SELECT N'Parametros: la tabla existe con sus 8 filas iniciales (6 con 
           AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'objetivo_diario_novedad' AND Valor = N'1.2' AND Tipo = 'porcentaje') = 1
           AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'reporte_diario_hora' AND Valor = N'06:00' AND Tipo = 'hora') = 1
           AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'gps_precision_minima_m' AND Valor = N'30' AND Tipo = 'numero') = 1
-          AND NOT EXISTS (SELECT 1 FROM dbo.tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR Clave LIKE '%fotos_minimas%') THEN 1 ELSE 0 END, NULL;
+          AND NOT EXISTS (SELECT 1 FROM dbo.tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR (Clave LIKE '%fotos_minimas%' AND Clave <> 'acomodacion_fotos_minimas')) THEN 1 ELSE 0 END, NULL;
 DECLARE @casosParam TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
 INSERT @casosParam VALUES
  (N'Parametro: uno valido se guarda', N'INSERT dbo.tblParametros (Clave, Valor, Tipo, Descripcion) VALUES (''zz_param_1'', N''5'', ''numero'', N''prueba'')', 0),
@@ -1036,6 +1132,277 @@ BEGIN CATCH
     SET @vistasOk = 0;
 END CATCH
 INSERT #r SELECT N'Vistas de indicadores: se consultan sin error', @vistasOk, NULL;
+
+-- 7n) Recibo sin entrega con una sola firma (la estructura; los casos de datos de la migracion del destino por unidad estan en las pruebas de migracion)
+INSERT #r SELECT N'Recibo sin entrega: el cierre exige la parte que no firmo y el motivo, y admite las dos formas de una sola firma',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Cierre' AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND definition LIKE N'%recibo_sin_entrega%NoFirmaParte%MotivoNoFirma%')
+          AND NOT EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE TipoCierre = 'recibo_sin_entrega' AND (NoFirmaParte IS NULL OR MotivoNoFirma IS NULL)) THEN 1 ELSE 0 END, NULL;
+
+-- 7o) Reclamo del camion por el inspector: los puntos del inspector, el reclamo con su liberacion y el parametro del aviso de inactividad
+INSERT #r SELECT N'Reclamo: las tablas, el par unico, las llaves foraneas y el indice unico filtrado de reclamos activos',
+    CASE WHEN OBJECT_ID(N'dbo.tblInspectorLugares', N'U') IS NOT NULL AND OBJECT_ID(N'dbo.tblReclamos', N'U') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblInspectorLugares_Par' AND parent_object_id = OBJECT_ID(N'dbo.tblInspectorLugares'))
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblInspectorLugares_Lugar' AND parent_object_id = OBJECT_ID(N'dbo.tblInspectorLugares') AND referenced_object_id = OBJECT_ID(N'dbo.tblLugares'))
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblInspectorLugares_Usuario' AND parent_object_id = OBJECT_ID(N'dbo.tblInspectorLugares') AND referenced_object_id = OBJECT_ID(N'dbo.tblUsuarios'))
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblReclamos_Viaje' AND referenced_object_id = OBJECT_ID(N'dbo.tblViajes'))
+          AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblReclamos_Activo' AND object_id = OBJECT_ID(N'dbo.tblReclamos') AND is_unique = 1 AND has_filter = 1)
+          AND EXISTS (SELECT 1 FROM sys.triggers WHERE name = N'TR_tblReclamos_NoBorrar' AND parent_id = OBJECT_ID(N'dbo.tblReclamos') AND is_disabled = 0) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Reclamo: el parametro reclamo_sin_actividad_minutos es un numero con valor inicial 30',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblParametros WHERE Clave = 'reclamo_sin_actividad_minutos' AND Valor = N'30' AND Tipo = 'numero' AND LEN(Descripcion) > 0) THEN 1 ELSE 0 END, NULL;
+
+DECLARE @lugarRec uniqueidentifier = NEWID();
+INSERT dbo.tblLugares (Id, Nombre, TipoId, Ciudad) SELECT @lugarRec, N'ZZ_TEST_LUGAR_RECLAMO', Id, N'Envigado' FROM dbo.tblPuntosCustodia WHERE Codigo = 'cedi_1';
+DECLARE @lugarRecTxt nvarchar(36) = CAST(@lugarRec AS nvarchar(36)), @u1Rec nvarchar(36) = CAST(@u1 AS nvarchar(36)), @u2Rec nvarchar(36) = CAST(@u2 AS nvarchar(36)), @vjRec nvarchar(36) = CAST(@vj AS nvarchar(36));
+DECLARE @baseRec nvarchar(max) = N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso, ReclamadoAt, LiberadoAt, LiberadoPor) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u1Rec + N''', ';
+DECLARE @casosRec TABLE (Orden int IDENTITY(1, 1) PRIMARY KEY, Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosRec (Prueba, Sentencia, Esperado) VALUES
+ (N'Puntos del inspector: un punto se guarda', N'INSERT dbo.tblInspectorLugares (Id, UsuarioId, LugarId) VALUES (NEWID(), ''' + @u1Rec + N''', ''' + @lugarRecTxt + N''')', 0),
+ (N'UNIQUE puntos del inspector: la pareja usuario y lugar no se repite', N'INSERT dbo.tblInspectorLugares (Id, UsuarioId, LugarId) VALUES (NEWID(), ''' + @u1Rec + N''', ''' + @lugarRecTxt + N''')', 2627),
+ (N'Puntos del inspector: otro inspector puede tener el mismo punto', N'INSERT dbo.tblInspectorLugares (Id, UsuarioId, LugarId) VALUES (NEWID(), ''' + @u2Rec + N''', ''' + @lugarRecTxt + N''')', 0),
+ (N'FK puntos del inspector: lugar inexistente', N'INSERT dbo.tblInspectorLugares (Id, UsuarioId, LugarId) VALUES (NEWID(), ''' + @u1Rec + N''', NEWID())', 547),
+ (N'CHECK reclamo: proceso desconocido', @baseRec + N'''descargue'', SYSDATETIMEOFFSET(), NULL, NULL)', 547),
+ (N'CHECK reclamo: liberado sin quien lo libero', @baseRec + N'''cargue'', SYSDATETIMEOFFSET(), SYSDATETIMEOFFSET(), NULL)', 547),
+ (N'CHECK reclamo: quien libero sin fecha de liberacion', @baseRec + N'''cargue'', SYSDATETIMEOFFSET(), NULL, ''' + @u2Rec + N''')', 547),
+ (N'CHECK reclamo: no se libera antes de reclamarse', @baseRec + N'''cargue'', SYSDATETIMEOFFSET(), DATEADD(HOUR, -1, SYSDATETIMEOFFSET()), ''' + @u2Rec + N''')', 547),
+ (N'FK reclamo: viaje inexistente', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), NEWID(), ''' + @u1Rec + N''', ''cargue'')', 547),
+ (N'Reclamo: el cargue se reclama', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u1Rec + N''', ''cargue'')', 0),
+ (N'UNIQUE filtrado reclamo: no hay dos reclamos activos del mismo viaje y proceso', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''cargue'')', 2601),
+ (N'Reclamo: la entrega del mismo viaje se reclama aparte', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''entrega'')', 0),
+ (N'Reclamo: liberar guarda quien y cuando', N'UPDATE dbo.tblReclamos SET LiberadoAt = SYSDATETIMEOFFSET(), LiberadoPor = ''' + @u2Rec + N''' WHERE ViajeId = ''' + @vjRec + N''' AND Proceso = ''cargue'' AND LiberadoAt IS NULL', 0),
+ (N'Reclamo: liberado el reclamo, el cargue se puede reclamar de nuevo', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''cargue'')', 0),
+ (N'Trigger: un reclamo es historial y no se borra', N'DELETE FROM dbo.tblReclamos WHERE ViajeId = ''' + @vjRec + N'''', 51003);
+DECLARE @pruebaRc nvarchar(200), @sentenciaRc nvarchar(max), @esperadoRc int, @obtenidoRc int, @mensajeRc nvarchar(4000);
+DECLARE cRec CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosRec ORDER BY Orden;
+OPEN cRec;
+FETCH NEXT FROM cRec INTO @pruebaRc, @sentenciaRc, @esperadoRc;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoRc = 0; SET @mensajeRc = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaRc);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoRc = ERROR_NUMBER(); SET @mensajeRc = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaRc, CASE WHEN @obtenidoRc = @esperadoRc THEN 1 ELSE 0 END, CASE WHEN @obtenidoRc = @esperadoRc THEN NULL ELSE CONCAT(N'esperaba ', @esperadoRc, N' y fue ', @obtenidoRc, N': ', @mensajeRc) END);
+    FETCH NEXT FROM cRec INTO @pruebaRc, @sentenciaRc, @esperadoRc;
+END
+CLOSE cRec;
+DEALLOCATE cRec;
+INSERT #r SELECT N'Reclamo: quedaron los dos del cargue (uno liberado y uno activo) y el de la entrega',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblReclamos WHERE ViajeId = @vj AND Proceso = 'cargue' AND LiberadoAt IS NOT NULL AND LiberadoPor = @u2) = 1
+          AND (SELECT COUNT(*) FROM dbo.tblReclamos WHERE ViajeId = @vj AND Proceso = 'cargue' AND LiberadoAt IS NULL) = 1
+          AND (SELECT COUNT(*) FROM dbo.tblReclamos WHERE ViajeId = @vj AND Proceso = 'entrega' AND LiberadoAt IS NULL) = 1 THEN 1 ELSE 0 END, NULL;
+
+-- Limpieza de esta seccion (los reclamos son historial: solo se borran con su trigger apagado).
+ALTER TABLE dbo.tblReclamos DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblReclamos WHERE ViajeId = @vj;
+ALTER TABLE dbo.tblReclamos ENABLE TRIGGER ALL;
+DELETE FROM dbo.tblInspectorLugares WHERE LugarId = @lugarRec;
+DELETE FROM dbo.tblLugares WHERE Id = @lugarRec;
+INSERT #r SELECT N'Reclamo: lo de prueba se limpio', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblReclamos WHERE ViajeId = @vj) AND NOT EXISTS (SELECT 1 FROM dbo.tblInspectorLugares WHERE LugarId = @lugarRec)
+    AND NOT EXISTS (SELECT 1 FROM dbo.tblLugares WHERE Id = @lugarRec) THEN 1 ELSE 0 END, NULL;
+
+-- 7p) Sin marca de personal de apoyo: el cargue no lleva ninguna marca previa y el catalogo de motivos de la excepcion esta sembrado
+INSERT #r SELECT N'Etapas: ya no existe la marca ConPersonalApoyo ni su restriccion por defecto',
+    CASE WHEN COL_LENGTH(N'dbo.tblEtapas', N'ConPersonalApoyo') IS NULL
+          AND NOT EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'DF_tblEtapas_ConPersonalApoyo') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Motivos de la excepcion: la siembra (inspector_no_llego, inspector_no_disponible y otro con texto) esta activa',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblMotivosSinInspector WHERE Codigo IN ('inspector_no_llego', 'inspector_no_disponible', 'otro') AND Activo = 1) = 3
+          AND EXISTS (SELECT 1 FROM dbo.tblMotivosSinInspector WHERE Codigo = 'otro' AND RequiereTexto = 1)
+          AND NOT EXISTS (SELECT 1 FROM dbo.tblMotivosSinInspector WHERE Codigo IN ('inspector_no_llego', 'inspector_no_disponible') AND RequiereTexto = 1) THEN 1 ELSE 0 END, NULL;
+
+-- 7q) Posicion de la unidad en la ninera: de 1 a 7, unica dentro del viaje, nula mientras no se registra
+INSERT #r SELECT N'Posicion de la unidad: columna nula, restriccion de rango e indice unico filtrado por viaje',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND name = N'Posicion' AND is_nullable = 1 AND TYPE_NAME(user_type_id) = N'tinyint')
+          AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_Posicion' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
+          AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblViajeVehiculos_Posicion' AND object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND is_unique = 1 AND has_filter = 1) THEN 1 ELSE 0 END, NULL;
+
+DECLARE @vPos2 uniqueidentifier = NEWID();
+INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion, ClienteId) VALUES (@vPos2, 'ZZ_TEST_VIN_POS2', N'Renault', 'nacional', @cli);
+INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vj, @vPos2);
+DECLARE @vjPos nvarchar(36) = CAST(@vj AS nvarchar(36)), @vjPosOtro nvarchar(36) = CAST(@vjProgLg AS nvarchar(36)), @vPosA nvarchar(36) = CAST(@v AS nvarchar(36)), @vPosB nvarchar(36) = CAST(@vPos2 AS nvarchar(36));
+DECLARE @casosPos TABLE (Orden int IDENTITY(1, 1) PRIMARY KEY, Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosPos (Prueba, Sentencia, Esperado) VALUES
+ (N'CHECK posicion: la 0 no es valida', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 0 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosA + N'''', 547),
+ (N'CHECK posicion: la 8 no es valida', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 8 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosA + N'''', 547),
+ (N'Posicion: la 4 se guarda', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 4 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosA + N'''', 0),
+ (N'UNIQUE filtrado posicion: la 4 ya esta ocupada en el mismo viaje', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 4 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosB + N'''', 2601),
+ (N'Posicion: la misma posicion en otro viaje es valida', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 4 WHERE ViajeId = ''' + @vjPosOtro + N''' AND VehiculoId = ''' + @vPosA + N'''', 0),
+ (N'Posicion: otra posicion libre del mismo viaje se guarda', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 7 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosB + N'''', 0),
+ (N'Posicion: liberar una posicion la deja disponible para otra unidad', N'UPDATE dbo.tblViajeVehiculos SET Posicion = NULL WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosA + N'''; UPDATE dbo.tblViajeVehiculos SET Posicion = 4 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosB + N'''', 0);
+DECLARE @pruebaPs nvarchar(200), @sentenciaPs nvarchar(max), @esperadoPs int, @obtenidoPs int, @mensajePs nvarchar(4000);
+DECLARE cPos CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosPos ORDER BY Orden;
+OPEN cPos;
+FETCH NEXT FROM cPos INTO @pruebaPs, @sentenciaPs, @esperadoPs;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoPs = 0; SET @mensajePs = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaPs);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoPs = ERROR_NUMBER(); SET @mensajePs = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaPs, CASE WHEN @obtenidoPs = @esperadoPs THEN 1 ELSE 0 END, CASE WHEN @obtenidoPs = @esperadoPs THEN NULL ELSE CONCAT(N'esperaba ', @esperadoPs, N' y fue ', @obtenidoPs, N': ', @mensajePs) END);
+    FETCH NEXT FROM cPos INTO @pruebaPs, @sentenciaPs, @esperadoPs;
+END
+CLOSE cPos;
+DEALLOCATE cPos;
+INSERT #r SELECT N'Posicion: varias unidades sin posicion en el mismo viaje no chocan',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND Posicion IS NULL) = 1
+          AND (SELECT COUNT(*) FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND Posicion IS NOT NULL) = 1 THEN 1 ELSE 0 END, NULL;
+EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_POS2';
+
+-- 7r) Parametro del minimo de fotos de la acomodacion
+INSERT #r SELECT N'Parametros: acomodacion_fotos_minimas existe como numero con valor 1',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'acomodacion_fotos_minimas' AND Valor = N'1' AND Tipo = 'numero') = 1 THEN 1 ELSE 0 END, NULL;
+
+-- 7s) Extras del vehiculo: el catalogo de tipos, el texto libre solo en otro, las fotos de un extra y la inmutabilidad al cierre
+INSERT #r SELECT N'Tipos de extra: barras_techo, volco, platon y otro sembrados y activos',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblTiposExtra WHERE Codigo IN ('barras_techo', 'volco', 'platon', 'otro') AND Activo = 1) = 4 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Extras: tablas, columna de la foto, restricciones y trigger de inmutabilidad',
+    CASE WHEN OBJECT_ID(N'dbo.tblInspeccionExtras', N'U') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblEvidencias') AND name = N'ExtraId' AND is_nullable = 1)
+          AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblInspeccionExtras_Texto' AND parent_object_id = OBJECT_ID(N'dbo.tblInspeccionExtras'))
+          AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblEvidencias_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblEvidencias'))
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblEvidencias_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblEvidencias'))
+          AND EXISTS (SELECT 1 FROM sys.triggers WHERE name = N'TR_tblInspeccionExtras_NoEnCerrada') THEN 1 ELSE 0 END, NULL;
+
+DECLARE @vExt uniqueidentifier = NEWID(), @eExt uniqueidentifier = NEWID(), @iExtB uniqueidentifier = NEWID(), @iExtC uniqueidentifier = NEWID();
+DECLARE @xOtro uniqueidentifier = NEWID(), @xBarras uniqueidentifier = NEWID(), @xCerrado uniqueidentifier = NEWID(), @xFoto uniqueidentifier = NEWID();
+INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion, ClienteId) VALUES (@vExt, 'ZZ_TEST_VIN_EXT', N'Renault', 'nacional', @cli);
+INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vj, @vExt);
+INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@eExt, @vExt, @vj, @pc, 1);
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@iExtB, @eExt, @vj, @u1, 'llegada', SYSDATETIMEOFFSET());
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@iExtC, @eExt, @vj, @u1, 'salida', SYSDATETIMEOFFSET());
+INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Observacion) VALUES (@xCerrado, @iExtC, 'volco', N'sin novedad');
+UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @iExtC;
+DECLARE @sB nvarchar(36) = CAST(@iExtB AS nvarchar(36)), @sC nvarchar(36) = CAST(@iExtC AS nvarchar(36)), @sOtro nvarchar(36) = CAST(@xOtro AS nvarchar(36)), @sBarras nvarchar(36) = CAST(@xBarras AS nvarchar(36));
+DECLARE @sCerrado nvarchar(36) = CAST(@xCerrado AS nvarchar(36)), @sFoto nvarchar(36) = CAST(@xFoto AS nvarchar(36));
+DECLARE @evBase nvarchar(max) = N'INSERT dbo.tblEvidencias (Id, InspeccionId, ExtraId, StoragePath, SelloFecha, SelloLat, SelloLng';
+DECLARE @casosExt TABLE (Orden int IDENTITY(1, 1) PRIMARY KEY, Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosExt (Prueba, Sentencia, Esperado) VALUES
+ (N'Extra: otro con su texto libre se guarda', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Texto, Observacion) VALUES (''' + @sOtro + N''', ''' + @sB + N''', ''otro'', N''portabicicletas'', N''en el techo'')', 0),
+ (N'CHECK extra: el texto libre solo se admite en otro', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Texto) VALUES (NEWID(), ''' + @sB + N''', ''barras_techo'', N''algo'')', 547),
+ (N'CHECK extra: el texto libre no puede estar en blanco', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Texto) VALUES (NEWID(), ''' + @sB + N''', ''otro'', N''   '')', 547),
+ (N'CHECK extra: la observacion no puede estar en blanco', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Observacion) VALUES (NEWID(), ''' + @sB + N''', ''platon'', N''   '')', 547),
+ (N'Extra: la observacion admite 500 caracteres', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Observacion) VALUES (''' + @sBarras + N''', ''' + @sB + N''', ''barras_techo'', REPLICATE(N''x'', 500))', 0),
+ (N'Extra: la observacion no admite 501 caracteres', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo, Observacion) VALUES (NEWID(), ''' + @sB + N''', ''platon'', REPLICATE(N''x'', 501))', 2628),
+ (N'FK extra: el tipo debe existir en el catalogo', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo) VALUES (NEWID(), ''' + @sB + N''', ''no_existe'')', 547),
+ (N'FK extra: exige la inspeccion', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo) VALUES (NEWID(), NEWID(), ''platon'')', 547),
+ (N'Foto de extra: se guarda con su sello', @evBase + N') VALUES (NEWID(), ''' + @sB + N''', ''' + @sBarras + N''', N''extra.jpg'', SYSDATETIMEOFFSET(), 4.6, -74.1)', 0),
+ (N'FK foto de extra: el extra debe existir', @evBase + N') VALUES (NEWID(), ''' + @sB + N''', NEWID(), N''extra.jpg'', SYSDATETIMEOFFSET(), 4.6, -74.1)', 547),
+ (N'CHECK foto de extra: no es a la vez de una vista', @evBase + N', VistaId) SELECT NEWID(), ''' + @sB + N''', ''' + @sBarras + N''', N''extra.jpg'', SYSDATETIMEOFFSET(), 4.6, -74.1, Id FROM dbo.tblVistasFoto WHERE Codigo = ''frontal''', 547),
+ (N'CHECK foto de extra: no es a la vez una constancia', @evBase + N', EsConstancia) VALUES (NEWID(), ''' + @sB + N''', ''' + @sBarras + N''', N''extra.jpg'', SYSDATETIMEOFFSET(), 4.6, -74.1, 1)', 547),
+ (N'CHECK foto de extra: no es a la vez un sello', @evBase + N', EsSello) VALUES (NEWID(), ''' + @sB + N''', ''' + @sBarras + N''', N''extra.jpg'', SYSDATETIMEOFFSET(), 4.6, -74.1, 1)', 547),
+ (N'Tipo de extra: un tipo con extras no se borra', N'DELETE FROM dbo.tblTiposExtra WHERE Codigo = ''barras_techo''', 547),
+ (N'Extra: con fotos no se borra (la foto es evidencia)', N'DELETE FROM dbo.tblInspeccionExtras WHERE Id = ''' + @sBarras + N'''', 547),
+ (N'Extra: inactivar su tipo no cambia el extra', N'UPDATE dbo.tblTiposExtra SET Activo = 0 WHERE Codigo = ''volco''; IF NOT EXISTS (SELECT 1 FROM dbo.tblInspeccionExtras WHERE Id = ''' + @sCerrado + N''' AND Tipo = ''volco'') THROW 52001, ''El extra perdio su tipo'', 1; UPDATE dbo.tblTiposExtra SET Activo = 1 WHERE Codigo = ''volco''', 0),
+ (N'Trigger extra: no se agrega a una inspeccion cerrada', N'INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo) VALUES (NEWID(), ''' + @sC + N''', ''platon'')', 51009),
+ (N'Trigger extra: no se cambia en una inspeccion cerrada', N'UPDATE dbo.tblInspeccionExtras SET Observacion = N''otra'' WHERE Id = ''' + @sCerrado + N'''', 51009),
+ (N'Trigger extra: no se quita de una inspeccion cerrada', N'DELETE FROM dbo.tblInspeccionExtras WHERE Id = ''' + @sCerrado + N'''', 51009),
+ (N'Extra: en un borrador se cambia', N'UPDATE dbo.tblInspeccionExtras SET Observacion = N''cambiada'' WHERE Id = ''' + @sOtro + N'''', 0),
+ (N'Extra: en un borrador, sin fotos, se quita', N'DELETE FROM dbo.tblInspeccionExtras WHERE Id = ''' + @sOtro + N'''', 0);
+DECLARE @pruebaEx nvarchar(200), @sentenciaEx nvarchar(max), @esperadoEx int, @obtenidoEx int, @mensajeEx nvarchar(4000);
+DECLARE cExt CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosExt ORDER BY Orden;
+OPEN cExt;
+FETCH NEXT FROM cExt INTO @pruebaEx, @sentenciaEx, @esperadoEx;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoEx = 0; SET @mensajeEx = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaEx);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoEx = ERROR_NUMBER(); SET @mensajeEx = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaEx, CASE WHEN @obtenidoEx = @esperadoEx THEN 1 ELSE 0 END, CASE WHEN @obtenidoEx = @esperadoEx THEN NULL ELSE CONCAT(N'esperaba ', @esperadoEx, N' y fue ', @obtenidoEx, N': ', @mensajeEx) END);
+    FETCH NEXT FROM cExt INTO @pruebaEx, @sentenciaEx, @esperadoEx;
+END
+CLOSE cExt;
+DEALLOCATE cExt;
+EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_EXT';
+
+-- 7t) Ubicacion con rango y confirmacion en sitio: parametros, estado de la ubicacion del lugar, resultado de la confirmacion de la inspeccion, tipos de notificacion y propuestas de autocalibracion
+INSERT #r SELECT N'Parametros del rango: 4 sembrados como numero y la precision minima del GPS sigue en 30',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblParametros WHERE Tipo = 'numero' AND ((Clave = 'radio_lugar_cargue_m' AND Valor = N'1000') OR (Clave = 'radio_destino_m' AND Valor = N'500')
+                    OR (Clave = 'valvula_precision_m' AND Valor = N'500') OR (Clave = 'cargue_sin_reclamar_minutos' AND Valor = N'30'))) = 4
+          AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'gps_precision_minima_m' AND Valor = N'30') = 1 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Ubicacion: columnas del lugar y de la inspeccion, tabla de propuestas y trigger de las decididas',
+    CASE WHEN (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblLugares') AND name IN (N'EstadoUbicacion', N'UbicacionFijadaPor', N'UbicacionFijadaAt')) = 3
+          AND (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblInspecciones') AND name IN (N'ConfirmacionSitio', N'ConfirmacionDistanciaM', N'ConfirmacionEvidenciaId') AND is_nullable = 1) = 3
+          AND OBJECT_ID(N'dbo.tblPropuestasUbicacion', N'U') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.triggers WHERE name = N'TR_tblPropuestasUbicacion_NoModificarDecidida')
+          AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblPropuestasUbicacion_Pendiente' AND is_unique = 1 AND has_filter = 1) THEN 1 ELSE 0 END, NULL;
+
+DECLARE @vUbi uniqueidentifier = NEWID(), @eUbi uniqueidentifier = NEWID(), @iUbi uniqueidentifier = NEWID(), @evUbi uniqueidentifier = NEWID(), @lugUbi uniqueidentifier = NEWID(), @lugUbi2 uniqueidentifier = NEWID();
+INSERT dbo.tblLugares (Id, Nombre, TipoId, Ciudad, Latitud, Longitud, RadioMetros) SELECT @lugUbi, N'ZZ_TEST_LUGAR_UBICACION', Id, N'Medellin', 6.2, -75.5, 1000 FROM dbo.tblPuntosCustodia WHERE Codigo = 'origen';
+INSERT dbo.tblLugares (Id, Nombre, TipoId, Ciudad) SELECT @lugUbi2, N'ZZ_TEST_LUGAR_SIN_UBICACION', Id, N'Medellin' FROM dbo.tblPuntosCustodia WHERE Codigo = 'destino';
+INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion, ClienteId) VALUES (@vUbi, 'ZZ_TEST_VIN_UBI', N'Renault', 'nacional', @cli);
+INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vj, @vUbi);
+INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@eUbi, @vUbi, @vj, @pc, 1);
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@iUbi, @eUbi, @vj, @u1, 'llegada', SYSDATETIMEOFFSET());
+INSERT dbo.tblEvidencias (Id, InspeccionId, StoragePath, SelloFecha, SelloLat, SelloLng) VALUES (@evUbi, @iUbi, N'ubi.jpg', SYSDATETIMEOFFSET(), 6.2, -75.5);
+DECLARE @sI nvarchar(36) = CAST(@iUbi AS nvarchar(36)), @sEv nvarchar(36) = CAST(@evUbi AS nvarchar(36)), @sL nvarchar(36) = CAST(@lugUbi AS nvarchar(36)), @sL2 nvarchar(36) = CAST(@lugUbi2 AS nvarchar(36)), @sU nvarchar(36) = CAST(@u1 AS nvarchar(36));
+DECLARE @casosUbi TABLE (Orden int IDENTITY(1, 1) PRIMARY KEY, Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosUbi (Prueba, Sentencia, Esperado) VALUES
+ (N'Lugar: un lugar sin ubicacion nace sin_ubicacion', N'IF (SELECT EstadoUbicacion FROM dbo.tblLugares WHERE Id = ''' + @sL2 + N''') <> ''sin_ubicacion'' THROW 52002, ''El estado inicial no es sin_ubicacion'', 1', 0),
+ (N'CHECK lugar: un estado de ubicacion inventado', N'UPDATE dbo.tblLugares SET EstadoUbicacion = ''inventado'' WHERE Id = ''' + @sL + N'''', 547),
+ (N'Lugar: pendiente_confirmar con quien y cuando la fijo', N'UPDATE dbo.tblLugares SET EstadoUbicacion = ''pendiente_confirmar'', Latitud = 3.4, Longitud = -76.5, UbicacionFijadaPor = ''' + @sU + N''', UbicacionFijadaAt = SYSDATETIMEOFFSET() WHERE Id = ''' + @sL2 + N'''', 0),
+ (N'FK lugar: quien fijo la ubicacion debe existir', N'UPDATE dbo.tblLugares SET UbicacionFijadaPor = NEWID() WHERE Id = ''' + @sL + N'''', 547),
+ (N'Lugar: confirmada se guarda', N'UPDATE dbo.tblLugares SET EstadoUbicacion = ''confirmada'' WHERE Id = ''' + @sL2 + N'''', 0),
+ (N'CHECK inspeccion: un resultado de confirmacion inventado', N'UPDATE dbo.tblInspecciones SET ConfirmacionSitio = ''inventado'' WHERE Id = ''' + @sI + N'''', 547),
+ (N'CHECK inspeccion: la distancia o la foto exigen un resultado', N'UPDATE dbo.tblInspecciones SET ConfirmacionDistanciaM = 400 WHERE Id = ''' + @sI + N'''', 547),
+ (N'CHECK inspeccion: la distancia no es negativa', N'UPDATE dbo.tblInspecciones SET ConfirmacionSitio = ''confirmado_en_sitio'', ConfirmacionDistanciaM = -1 WHERE Id = ''' + @sI + N'''', 547),
+ (N'FK inspeccion: la foto que determino la confirmacion debe existir', N'UPDATE dbo.tblInspecciones SET ConfirmacionSitio = ''confirmado_en_sitio'', ConfirmacionDistanciaM = 400, ConfirmacionEvidenciaId = NEWID() WHERE Id = ''' + @sI + N'''', 547),
+ (N'Inspeccion: confirmado_en_sitio con su distancia y su foto', N'UPDATE dbo.tblInspecciones SET ConfirmacionSitio = ''confirmado_en_sitio'', ConfirmacionDistanciaM = 400, ConfirmacionEvidenciaId = ''' + @sEv + N''' WHERE Id = ''' + @sI + N'''', 0),
+ (N'Inspeccion: fuera_de_rango con su distancia', N'UPDATE dbo.tblInspecciones SET ConfirmacionSitio = ''fuera_de_rango'', ConfirmacionDistanciaM = 2500 WHERE Id = ''' + @sI + N'''', 0),
+ (N'Inspeccion: sin_confirmacion_posible sin distancia', N'UPDATE dbo.tblInspecciones SET ConfirmacionSitio = ''sin_confirmacion_posible'', ConfirmacionDistanciaM = NULL, ConfirmacionEvidenciaId = NULL WHERE Id = ''' + @sI + N'''', 0),
+ (N'Notificacion: el tipo fuera_de_rango se guarda', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''fuera_de_rango'',''alta'',''' + @sU + N''',N''T'',N''M'',''bandeja'',''zz_ubi_1'')', 0),
+ (N'Notificacion: el tipo cargue_sin_reclamar se guarda', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''cargue_sin_reclamar'',''alta'',''' + @sU + N''',N''T'',N''M'',''bandeja'',''zz_ubi_2'')', 0),
+ (N'Notificacion: el tipo propuesta_ubicacion se guarda', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''propuesta_ubicacion'',''media'',''' + @sU + N''',N''T'',N''M'',''bandeja'',''zz_ubi_4'')', 0),
+ (N'Notificacion: un tipo existente sigue valido', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''reclamo_sin_actividad'',''alta'',''' + @sU + N''',N''T'',N''M'',''bandeja'',''zz_ubi_3'')', 0),
+ (N'Propuesta: una pendiente se guarda', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas) VALUES (NEWID(), ''' + @sL + N''', 6.25, -75.56, 300, 12, 5)', 0),
+ (N'UNIQUE filtrado propuesta: un lugar solo tiene una pendiente', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas) VALUES (NEWID(), ''' + @sL + N''', 6.26, -75.57, 350, 9, 4)', 2601),
+ (N'CHECK propuesta: el radio debe ser positivo', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas) VALUES (NEWID(), ''' + @sL2 + N''', 6.25, -75.56, 0, 12, 5)', 547),
+ (N'CHECK propuesta: las coordenadas estan en rango', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas) VALUES (NEWID(), ''' + @sL2 + N''', 91, -75.56, 300, 12, 5)', 547),
+ (N'CHECK propuesta: el estado es uno de los tres', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas, Estado) VALUES (NEWID(), ''' + @sL2 + N''', 6.25, -75.56, 300, 12, 5, ''inventada'')', 547),
+ (N'CHECK propuesta: una decidida trae su autor y su fecha', N'UPDATE dbo.tblPropuestasUbicacion SET Estado = ''confirmada'' WHERE LugarId = ''' + @sL + N'''', 547),
+ (N'FK propuesta: el lugar debe existir', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas) VALUES (NEWID(), NEWID(), 6.25, -75.56, 300, 12, 5)', 547),
+ (N'Propuesta: se decide con su autor y su fecha', N'UPDATE dbo.tblPropuestasUbicacion SET Estado = ''confirmada'', DecididaPor = ''' + @sU + N''', DecididaAt = SYSDATETIMEOFFSET(), UpdatedAt = SYSDATETIMEOFFSET() WHERE LugarId = ''' + @sL + N'''', 0),
+ (N'Trigger propuesta: una decidida no se modifica', N'UPDATE dbo.tblPropuestasUbicacion SET RadioMetros = 999 WHERE LugarId = ''' + @sL + N'''', 51010),
+ (N'Trigger propuesta: una decidida no se borra', N'DELETE FROM dbo.tblPropuestasUbicacion WHERE LugarId = ''' + @sL + N'''', 51010),
+ (N'Propuesta: decidida la anterior, el lugar admite otra pendiente', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas) VALUES (NEWID(), ''' + @sL + N''', 6.3, -75.6, 400, 20, 8)', 0),
+ (N'Propuesta: una pendiente se puede borrar', N'DELETE FROM dbo.tblPropuestasUbicacion WHERE LugarId = ''' + @sL + N''' AND Estado = ''pendiente''', 0);
+DECLARE @pruebaUb nvarchar(200), @sentenciaUb nvarchar(max), @esperadoUb int, @obtenidoUb int, @mensajeUb nvarchar(4000);
+DECLARE cUbi CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosUbi ORDER BY Orden;
+OPEN cUbi;
+FETCH NEXT FROM cUbi INTO @pruebaUb, @sentenciaUb, @esperadoUb;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoUb = 0; SET @mensajeUb = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaUb);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoUb = ERROR_NUMBER(); SET @mensajeUb = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaUb, CASE WHEN @obtenidoUb = @esperadoUb THEN 1 ELSE 0 END, CASE WHEN @obtenidoUb = @esperadoUb THEN NULL ELSE CONCAT(N'esperaba ', @esperadoUb, N' y fue ', @obtenidoUb, N': ', @mensajeUb) END);
+    FETCH NEXT FROM cUbi INTO @pruebaUb, @sentenciaUb, @esperadoUb;
+END
+CLOSE cUbi;
+DEALLOCATE cUbi;
+-- Limpieza de lo que creo este bloque: las propuestas decididas se borran con su trigger apagado.
+ALTER TABLE dbo.tblPropuestasUbicacion DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblPropuestasUbicacion WHERE LugarId IN (@lugUbi, @lugUbi2);
+ALTER TABLE dbo.tblPropuestasUbicacion ENABLE TRIGGER ALL;
+ALTER TABLE dbo.tblNotificaciones DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblNotificaciones WHERE ClaveDedupe LIKE 'zz_ubi_%';
+ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
+UPDATE dbo.tblInspecciones SET ConfirmacionSitio = NULL, ConfirmacionDistanciaM = NULL, ConfirmacionEvidenciaId = NULL WHERE Id = @iUbi;
+DELETE FROM dbo.tblLugares WHERE Id IN (@lugUbi, @lugUbi2);
+EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_UBI';
 
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;

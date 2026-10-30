@@ -11,9 +11,10 @@ using Microsoft.Extensions.Logging;
 namespace IAAutos.Aplicacion.Viajes;
 
 /// <summary>
-/// Carga masiva de viajes desde un Excel (una fila por VIN: VIN, placa, trailer, cedula del conductor, unidad y codigo MTrack). Las
-/// filas con el mismo codigo MTrack forman un viaje. Primero se muestra una vista previa con el error de cada fila (sin guardar
-/// nada) y al confirmar solo se guardan los viajes de las filas validas; una fila invalida no frena a las demas.
+/// Carga masiva de viajes desde un Excel (una fila por VIN: VIN, placa, trailer, cedula del conductor, unidad, codigo MTrack, fecha y hora programada del cargue, lugar de cargue y lugar de
+/// destino de ESA unidad). Las filas con el mismo codigo MTrack forman un viaje y deben coincidir en placa, trailer, conductor, unidad, fecha programada y lugar de cargue; el destino es de cada
+/// unidad. Los lugares se buscan por nombre en el catalogo <c>lugares</c>. Primero se muestra una vista previa con el error de cada fila (sin guardar nada) y al confirmar solo se guardan los
+/// viajes de las filas validas; una fila invalida no frena a las demas.
 /// </summary>
 public sealed class clsCargaViajesService(
     IViajeRepository viajes,
@@ -44,6 +45,18 @@ public sealed class clsCargaViajesService(
         public string? UnidadTexto { get; init; }
 
         public string? Codigo { get; init; }
+
+        public string? FechaTexto { get; init; }
+
+        public string? OrigenTexto { get; init; }
+
+        public string? DestinoTexto { get; init; }
+
+        public DateTimeOffset? FechaProgramada { get; set; }
+
+        public Guid? LugarCargueId { get; set; }
+
+        public Guid? LugarDestinoId { get; set; }
 
         public clsVehiculo? Vehiculo { get; set; }
 
@@ -103,6 +116,9 @@ public sealed class clsCargaViajesService(
             Cedula = ValorSinCedulaInvalida(f.CedulaConductor),
             UnidadTexto = clsValidador.Opcional(f.Unidad),
             Codigo = clsValidador.Opcional(f.CodigoMtrack),
+            FechaTexto = clsValidador.Opcional(f.FechaProgramada),
+            OrigenTexto = clsValidador.Opcional(f.Origen),
+            DestinoTexto = clsValidador.Opcional(f.Destino),
         }).ToList();
 
     /// <summary>La cedula se compara normalizada; si no es valida se deja el texto para que la validacion de la fila lo reporte.</summary>
@@ -125,10 +141,12 @@ public sealed class clsCargaViajesService(
         var vehiculosPorVin = await vehiculos.ObtenerPorVinesAsync(filas.Where(f => f.Vin is not null).Select(f => f.Vin!).Distinct().ToList(), ct);
         var conductores = await usuarios.ObtenerPorCedulasAsync(filas.Where(f => f.Cedula is not null).Select(f => f.Cedula!).Distinct().ToList(), ct);
         var unidades = (await catalogos.ValoresAsync(clsNombresCatalogo.TIPOS_UNIDAD, ct)).Where(u => u.Activo).ToList();
+        var lugares = (await catalogos.ValoresAsync(clsNombresCatalogo.LUGARES, ct)).Where(l => l.Activo).ToList();
 
         foreach (var fila in filas)
         {
             ValidarCampos(fila, vehiculosPorVin, conductores, unidades);
+            ValidarProgramacion(fila, lugares);
         }
 
         ValidarCoherenciaDeViajes(filas);
@@ -217,7 +235,49 @@ public sealed class clsCargaViajesService(
     }
 
     /// <summary>
-    /// Las filas con el mismo codigo MTrack son un solo viaje: deben coincidir en placa, trailer, conductor y unidad con la primera
+    /// La programacion de la fila: la fecha y hora del cargue (obligatoria; sin zona horaria es hora de Colombia) y los lugares de cargue (origen) y de destino de la unidad, que deben existir y estar
+    /// activos en el catalogo de lugares (se buscan por nombre, sin distinguir mayusculas ni acentos).
+    /// </summary>
+    private static void ValidarProgramacion(Fila fila, IReadOnlyList<ValorCatalogo> lugares)
+    {
+        if (fila.FechaTexto is null)
+        {
+            fila.Errores.Add("La fecha y hora programada del cargue es requerida");
+        }
+        else if (clsFechaProgramada.DeCarga(fila.FechaTexto) is { } fecha)
+        {
+            fila.FechaProgramada = fecha;
+        }
+        else
+        {
+            fila.Errores.Add($"La fecha y hora programada \"{fila.FechaTexto}\" no es válida: use AAAA-MM-DD HH:mm (por ejemplo 2026-11-03 06:00)");
+        }
+
+        fila.LugarCargueId = BuscarLugar(fila, fila.OrigenTexto, "El lugar de cargue (origen) es requerido", lugares);
+        fila.LugarDestinoId = BuscarLugar(fila, fila.DestinoTexto, "El lugar de destino de la unidad es requerido", lugares);
+    }
+
+    private static Guid? BuscarLugar(Fila fila, string? texto, string faltante, IReadOnlyList<ValorCatalogo> lugares)
+    {
+        if (texto is null)
+        {
+            fila.Errores.Add(faltante);
+            return null;
+        }
+
+        var buscado = clsTextoComparable.Normalizar(texto);
+        var lugar = lugares.FirstOrDefault(l => clsTextoComparable.Normalizar(l.TryGetValue("nombre", out var nombre) ? nombre as string : null) == buscado);
+        if (lugar is null)
+        {
+            fila.Errores.Add($"El lugar {texto} no existe en el catálogo");
+            return null;
+        }
+
+        return lugar.Id;
+    }
+
+    /// <summary>
+    /// Las filas con el mismo codigo MTrack son un solo viaje: deben coincidir en placa, trailer, conductor, unidad, fecha programada y lugar de cargue con la primera
     /// fila sin errores propios del grupo, y un VIN no puede repetirse dentro del viaje.
     /// </summary>
     private static void ValidarCoherenciaDeViajes(List<Fila> filas)
@@ -263,6 +323,16 @@ public sealed class clsCargaViajesService(
                     if (fila.TipoUnidadId != cabecera.TipoUnidadId)
                     {
                         distintos.Add("la unidad");
+                    }
+
+                    if (fila.FechaProgramada != cabecera.FechaProgramada)
+                    {
+                        distintos.Add("la fecha programada");
+                    }
+
+                    if (fila.LugarCargueId != cabecera.LugarCargueId)
+                    {
+                        distintos.Add("el lugar de cargue");
                     }
 
                     if (distintos.Count > 0)
@@ -321,15 +391,16 @@ public sealed class clsCargaViajesService(
         {
             var viaje = clsViaje.Crear(
                 cabecera.Codigo, cabecera.TipoUnidadId, cabecera.Placa, cabecera.Trailer, cabecera.ConductorId, null, null, null,
-                actual.IdObligatorio(), reloj.Ahora);
+                actual.IdObligatorio(), reloj.Ahora, cabecera.FechaProgramada, cabecera.LugarCargueId);
             viajes.Agregar(viaje);
-            await ensamblaje.AgregarVehiculosAsync(viaje, grupo.Select(f => f.Vehiculo!).ToList(), false, ruta, ct);
+            var destinos = grupo.Where(f => f.LugarDestinoId is not null).ToDictionary(f => f.Vehiculo!.Id, f => f.LugarDestinoId);
+            await ensamblaje.AgregarVehiculosAsync(viaje, grupo.Select(f => f.Vehiculo!).ToList(), ruta, ct, destinos);
             await auditor.RegistrarDeViajeAsync(
                 "viaje.crear",
                 "viajes",
                 viaje.Id,
                 viaje.Id,
-                new DetalleAuditoria(null, new { viaje = clsInstantaneasAuditoria.De(viaje), vines = grupo.Select(f => f.Vin).ToList() }),
+                new DetalleAuditoria(null, new { viaje = clsInstantaneasAuditoria.De(viaje), vines = grupo.Select(f => f.Vin).ToList(), destinos = grupo.Select(f => new { vin = f.Vin, lugar_destino_id = f.LugarDestinoId }).ToList() }),
                 grupo[0].Vehiculo!.ClienteId,
                 ct);
             await unidadDeTrabajo.GuardarCambiosAsync(ct);

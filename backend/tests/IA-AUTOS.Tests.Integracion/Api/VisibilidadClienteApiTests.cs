@@ -12,7 +12,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// informes, viajes, ordenes Sofasa y reportes) y un recurso de otro cliente responde 403; el super administrador ve todos y es el unico que pide un cliente
 /// distinto del suyo.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class VisibilidadClienteApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);

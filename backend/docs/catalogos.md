@@ -79,9 +79,56 @@ valor en uso no se borra.
 órdenes (sin distinguir mayúsculas ni espacios de los bordes), con el código como etiqueta provisional. **La etiqueta de cada estado la define Calidad/Operaciones (PAB-032)** y se cambia desde el portal (`PATCH /api/catalogos/estados-sofasa/{id}` con `nombre`). Mientras no haya
 órdenes el catálogo queda vacío; cuando lleguen, se vuelve a ejecutar el script para agregar los estados que falten (no cambia una etiqueta ya editada) o se agregan desde el portal. Resultado esperado: `Tabla = 1` y `SinEstado = 0`.
 
+## Lugares reales
+
+`tblLugares` la crea [`24-lugares-y-programacion.sql`](../database/cambios-esquema/24-lugares-y-programacion.sql) (ajustando `@esquema`, en una sola ejecución, una transacción, repetible). Es el catálogo de los lugares **reales** (CEDI Envigado, Concesionario Autolarte Medellín…): `Nombre` (único), `TipoId` (llave foránea a `tblPuntosCustodia`, que queda como catálogo de **tipos**: CEDI 1, Origen, Certificadora, Destino, CEDI 2 y Concesionario), `Ciudad`, `Activo` y `Orden`, más `Latitud`, `Longitud` y `RadioMetros`, que admiten nulo (un lugar sin ubicación es válido; las coordenadas van juntas o ninguna y el radio es mayor que cero). **No se siembra ningún lugar**: la lista la entrega el negocio (PAB-001). Los seis puntos genéricos no se renombran ni se borran, y `tblEtapas.PuntoCustodiaId` y `tblViajes.OrigenId`/`DestinoId` siguen intactos para el histórico. Resultado esperado del script: `Tabla = 1`, `ColumnasViaje = 2`, `ColumnaUnidad = 1`, `Lugares = 0`, `ViajesConFecha = 0` y `DiaProgramadoEnLaVista = 1`.
+
 ## Motivos por los que no está el inspector
 
 `tblMotivosSinInspector` (`Codigo`, `Nombre`, `RequiereTexto`, `Orden`, `Activo`) la crea [`23-novedad-de-proceso.sql`](../database/cambios-esquema/23-novedad-de-proceso.sql) con tres valores iniciales: `inspector_no_llego` «El inspector no llegó», `inspector_no_disponible` «El inspector no está disponible» y `otro` «Otro» (`RequiereTexto = 1`: quien lo elige escribe cuál es). **Calidad confirma los valores** y se editan como los demás catálogos. Repetir el script no toca los que ya existen. El script también agrega `MotivoSinInspector` y `MotivoSinInspectorTexto` a `tblInspecciones`, la tabla `tblNovedadesProceso` (ver [evidencia-inmutable.md](evidencia-inmutable.md)), el tipo de notificación `novedad_proceso` y el cierre `recibo_sin_entrega` de la transferencia (ver [transferencias.md](transferencias.md)). La API lo publica como el catálogo `motivos-sin-inspector` (`codigo`, `nombre`, `requiere_texto`, `orden` y `activo`, con su `ETag`) y lo administran `admin`, `super_admin` y `coordinador_calidad`. Resultado esperado: `Tablas = 2`, `Motivos = 3`, `Triggers = 3`, `ColumnasInspeccion = 2`, `CierreNuevo = 1`, `EntregaNula = 1`, `TipoNotificacion = 1` y `NovedadesProceso = 0`.
+
+## Extras del vehículo fuera del dibujo estándar
+
+Los elementos que no están en el dibujo (barras de techo, volco, platón…) se reportan como **extras** de una inspección, con su tipo, sus fotos selladas y una observación, sin tocar el dibujo ni los hallazgos. El script [`31-extras-del-vehiculo.sql`](../database/cambios-esquema/31-extras-del-vehiculo.sql) (ajustando `@esquema`, en una sola ejecución, una transacción, repetible; antes de desplegar la API) crea:
+
+- `tblTiposExtra` (`Codigo` único, `Nombre`, `Orden`, `Activo`, con el patrón de los demás catálogos), sembrada con `barras_techo` «Barras de techo», `volco` «Volco», `platon` «Platón» y `otro` «Otro». La lista se amplía desde el portal sin cambiar el esquema; una fila que ya existe nunca se sobrescribe. Un tipo con extras reportados **no se borra** (la llave foránea lo impide): se inactiva y los extras conservan su tipo.
+- `tblInspeccionExtras`: el extra de una inspección. Exige la inspección y el tipo (`Tipo` guarda el `Codigo` y lo referencia con una llave foránea); `Texto` (hasta 100 caracteres) es el texto libre y **solo se admite cuando el tipo es `otro`** (`CK_tblInspeccionExtras_Texto`); `Observacion` admite hasta 500 caracteres y no puede quedar en blanco. Un extra no se agrega, cambia ni quita en una inspección cerrada (trigger, error 51009); el de un borrador sin fotos sí se cambia y se quita.
+- `tblEvidencias.ExtraId` (nula, llave foránea a `tblInspeccionExtras`): la foto de un extra. `CK_tblEvidencias_Extra` impide que una foto de extra sea a la vez de una vista, de un hallazgo, una constancia o un sello. Como toda evidencia, la foto de un extra no se borra, y por eso un extra con fotos tampoco.
+
+`ddl.sql` ya trae el esquema nuevo y `tests/verificar-ddl.sql` cubre sus restricciones. No cambia ningún dato existente.
+
+**En la API:** el catálogo se sirve como `tipos-extra` (`GET|POST /api/catalogos/tipos-extra`, `PATCH|DELETE .../{id}`, con el mismo CRUD genérico, caché y versión de los demás; lo cambian `admin`, `super_admin` y `coordinador_calidad`). Borrar un tipo con extras responde `409` «El valor está en uso y no se puede borrar: solo puede inactivarlo». Los extras se reportan con `POST /api/inspecciones/{id}/extras` (ver CONTRATO.md); una foto de un extra es una evidencia con `extra_id`, no cuenta como foto de la acomodación, y el cierre de la inspección exige al menos una foto por extra.
+
+## Ubicación con rango y confirmación «en sitio» (script 32)
+
+El script [`32-ubicacion-con-rango-y-confirmacion-en-sitio.sql`](../database/cambios-esquema/32-ubicacion-con-rango-y-confirmacion-en-sitio.sql) (ajustando `@esquema`, en una sola ejecución, una transacción, repetible; antes de desplegar la API) prepara la base para confirmar que la evidencia sellada se tomó en el lugar:
+
+- **Parámetros** (de `tblParametros`, tipo número, nunca se sobrescriben): `radio_lugar_cargue_m` 1000, `radio_destino_m` 500, `valvula_precision_m` 500 y `cargue_sin_reclamar_minutos` 30. Son valores ilustrativos que confirma el negocio. No toca `gps_precision_minima_m` (30 m): ese es el aviso de precisión baja.
+- **`tblLugares`** gana `EstadoUbicacion` (`sin_ubicacion`, `pendiente_confirmar` o `confirmada`, con `CK_tblLugares_EstadoUbicacion`), `UbicacionFijadaPor` y `UbicacionFijadaAt` (quién y cuándo fijó la ubicación). Los lugares que ya tenían coordenadas quedan `confirmada` y los demás `sin_ubicacion`; al repetir el script no se vuelve a marcar nada.
+- **`tblInspecciones`** gana `ConfirmacionSitio` (`confirmado_en_sitio`, `fuera_de_rango` o `sin_confirmacion_posible`; nulo mientras no se determina), `ConfirmacionDistanciaM` (metros, no negativa) y `ConfirmacionEvidenciaId` (la foto que lo determinó, con llave foránea a `tblEvidencias`). La distancia y la foto solo existen con un resultado. Se escriben con la inspección en borrador: una cerrada es inmutable (trigger existente).
+- **`CK_tblNotificaciones_Tipo`** admite `fuera_de_rango` y `cargue_sin_reclamar` además de los nueve tipos existentes.
+- **`tblPropuestasUbicacion`**: las propuestas de autocalibración de un lugar (`CentroLat`, `CentroLng`, `RadioMetros`, `Fotos`, `Visitas`, `Estado` pendiente, confirmada o descartada, y la decisión con `DecididaPor` y `DecididaAt`). Un lugar tiene una sola propuesta pendiente a la vez (`UX_tblPropuestasUbicacion_Pendiente`) y una decidida no se modifica ni se borra (trigger, error 51010).
+
+`ddl.sql` ya trae el esquema nuevo y `tests/verificar-ddl.sql` cubre sus restricciones (386 comprobaciones). No cambia ningún dato existente salvo marcar como confirmada la ubicación de los lugares que ya tenían coordenadas.
+
+## Tipo de aviso de la propuesta de ubicación (script 33)
+
+El script [`33-tipo-de-aviso-propuesta-de-ubicacion.sql`](../database/cambios-esquema/33-tipo-de-aviso-propuesta-de-ubicacion.sql) (ajustando `@esquema`, en una sola ejecución, una transacción, repetible; **antes de desplegar la API**, después del 32) reemplaza `CK_tblNotificaciones_Tipo` por una restricción que admite además `propuesta_ubicacion` (el aviso al coordinador de calidad cuando la autocalibración propone el centro y el radio de un lugar), sin quitar ninguno de los once tipos existentes. No cambia ningún dato.
+
+`ddl.sql` ya trae la restricción nueva (y la reemplaza en una base antigua) y `tests/verificar-ddl.sql` cubre el tipo (387 comprobaciones).
+
+## Resiembra del dibujo version 6 (script 34)
+
+El script [`34-resembrar-dibujo-v6.sql`](../database/cambios-esquema/34-resembrar-dibujo-v6.sql) (ajustando `@esquema`, en una sola ejecucion de script y una transaccion; **antes de desplegar la API**, despues del 33) reemplaza el dibujo de danos
+completo con el archivo `regiones-zonas-dano.json` version 6 (incrustado; unos 190 KB: en DBeaver se abre con *File > Open File* y se ejecuta como script). Ver [zonas-dano.md](zonas-dano.md) para el modelo y para lo que hace segun la base
+sea identica al archivo, cambie solo en textos o cambie en estructura:
+
+- Cuadrantes: `LlevaLado`. Zonas: sin provisionales (se van las columnas `Codigo` y `Nombre`), con `LlevaLado` (llave foranea compuesta con el cuadrante), `NombreCompleto` y `AiagArea`; `CK_tblZonasDano_Forma` exige lado si el cuadrante lo lleva.
+- Paneles: `AnchoRef`, `AltoRef` y `Version`. Regiones: `Prioridad`.
+- Los hallazgos de las zonas viejas quedan sin zona (`MigracionPendiente = 1`); se borran regiones, zonas, cuadrantes (y en cascada `tblCuadranteVistas`) y paneles viejos y se siembran 7 paneles, 45 cuadrantes, 80 zonas y 251 regiones.
+- Se recrean `vwPatronesPorCuadrante`, `vwHallazgosVentanaUmbral` y `vwAveriasPorConfiguracion` (sin `ZonaCodigo`; la ultima trae `AiagArea`).
+
+`ddl.sql` ya trae el esquema nuevo (una base nueva no trae dibujo: se siembra con este guion) y `tests/verificar-ddl.sql` cubre sus restricciones. Las imagenes de fondo de los paneles no se cargan aqui: se cargan desde el portal.
 
 ## Cargar los cuadrantes y las acciones de los niveles
 

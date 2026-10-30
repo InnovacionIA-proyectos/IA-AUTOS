@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
-using Testcontainers.MsSql;
 
 namespace IAAutos.Tests.Integracion.Infraestructura;
 
@@ -12,21 +11,17 @@ namespace IAAutos.Tests.Integracion.Infraestructura;
 /// </summary>
 public sealed partial class MigracionZonaDanoTests : IAsyncLifetime
 {
-    private readonly MsSqlContainer _contenedor = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2019-latest").Build();
     private string _cadena = string.Empty;
 
     public async Task InitializeAsync()
     {
-        await _contenedor.StartAsync();
-        var maestra = _contenedor.GetConnectionString();
-        await EjecutarAsync(maestra, "CREATE DATABASE IAAutosMigracionZona");
-        _cadena = new SqlConnectionStringBuilder(maestra) { InitialCatalog = "IAAutosMigracionZona" }.ConnectionString;
+        _cadena = await clsServidorSql.CrearBaseAsync("IAAutosMigracionZona");
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "Infraestructura", "Esquemas", "ddl-previo-a-zona-dano.sql"));
         await EjecutarAsync(_cadena, await LeerScriptAsync("04-cargar-cuadrantes-ficha.sql"));
         await EjecutarAsync(_cadena, DATOS_PREVIOS);
     }
 
-    public async Task DisposeAsync() => await _contenedor.DisposeAsync();
+    public async Task DisposeAsync() => await clsServidorSql.EliminarBaseAsync(_cadena);
 
     private static async Task EjecutarAsync(string cadena, string sql)
     {
@@ -200,10 +195,10 @@ public sealed partial class MigracionZonaDanoTests : IAsyncLifetime
     [Fact]
     public async Task El_ddl_nuevo_se_puede_ejecutar_sobre_la_base_anterior_y_la_migracion_se_completa_despues()
     {
-        // Antes de migrar: el ddl crea las tablas y semillas nuevas pero no toca los hallazgos ni las unidades de los viajes.
+        // Antes de migrar: el ddl no toca los hallazgos ni las unidades de los viajes ni crea el dibujo (en una base anterior lo crean los guiones 10 y 34).
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "database", "ddl.sql"));
         Assert.Equal(0, await ContarAsync("SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('dbo.tblHallazgos') AND name = 'ZonaId'"));
-        Assert.Equal(5, await ContarAsync("SELECT COUNT(*) FROM dbo.tblPanelesDano"));
+        Assert.Equal(0, await ContarAsync("SELECT COUNT(*) FROM sys.tables WHERE name = 'tblPanelesDano'"));
 
         await EjecutarAsync(_cadena, await LeerScriptAsync("10-zona-dano-y-hallazgo.sql"));
 

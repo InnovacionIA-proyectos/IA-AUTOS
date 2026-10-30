@@ -38,6 +38,7 @@ public sealed class clsAppDbContext : DbContext
     public DbSet<clsNivelSeveridad> NivelesSeveridad => Set<clsNivelSeveridad>();
     public DbSet<clsEstadoSofasa> EstadosSofasa => Set<clsEstadoSofasa>();
     public DbSet<clsMotivoSinInspector> MotivosSinInspector => Set<clsMotivoSinInspector>();
+    public DbSet<clsLugar> Lugares => Set<clsLugar>();
     public DbSet<clsVistaFoto> VistasFoto => Set<clsVistaFoto>();
     public DbSet<clsCuadrante> Cuadrantes => Set<clsCuadrante>();
     public DbSet<clsCuadranteVista> CuadranteVistas => Set<clsCuadranteVista>();
@@ -60,7 +61,17 @@ public sealed class clsAppDbContext : DbContext
 
     public DbSet<clsNovedadProceso> NovedadesProceso => Set<clsNovedadProceso>();
 
+    public DbSet<clsReclamo> Reclamos => Set<clsReclamo>();
+
+    public DbSet<clsInspectorLugar> InspectorLugares => Set<clsInspectorLugar>();
+
     public DbSet<clsEvidencia> Evidencias => Set<clsEvidencia>();
+
+    public DbSet<clsInspeccionExtra> InspeccionExtras => Set<clsInspeccionExtra>();
+
+    public DbSet<clsTipoExtra> TiposExtra => Set<clsTipoExtra>();
+
+    public DbSet<clsPropuestaUbicacion> PropuestasUbicacion => Set<clsPropuestaUbicacion>();
 
     public DbSet<clsTransferenciaCustodia> Transferencias => Set<clsTransferenciaCustodia>();
 

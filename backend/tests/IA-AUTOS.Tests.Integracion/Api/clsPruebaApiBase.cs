@@ -52,6 +52,26 @@ public abstract class clsPruebaApiBase(clsBaseDatosFixture bd) : IAsyncLifetime
         return cliente;
     }
 
+    /// <summary>
+    /// Un lugar real del catalogo <c>lugares</c>, creado por la API (la que renueva el cache de los catalogos): el existente con ese nombre, o uno nuevo del tipo y la ciudad indicados.
+    /// Quien llama usa un cliente con permiso de administrar catalogos (coordinador de calidad, admin).
+    /// </summary>
+    protected static async Task<Guid> LugarRealAsync(HttpClient cliente, string nombre = "Lugar de prueba", string tipo = "destino", string ciudad = "Medellin")
+    {
+        var lista = await cliente.GetFromJsonAsync<JsonElement>("/api/catalogos/lugares");
+        foreach (var lugar in lista.GetProperty("items").EnumerateArray())
+        {
+            if (lugar.GetProperty("nombre").GetString() == nombre)
+            {
+                return lugar.GetProperty("id").GetGuid();
+            }
+        }
+
+        var respuesta = await cliente.PostAsJsonAsync("/api/catalogos/lugares", new { nombre, tipo, ciudad });
+        respuesta.EnsureSuccessStatusCode();
+        return (await respuesta.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+    }
+
     /// <summary>Inicia sesion por la API y devuelve el token emitido.</summary>
     protected async Task<string> LoginAsync(string email, string password, clsFabricaApi? fabrica = null)
     {

@@ -1,4 +1,5 @@
 using IAAutos.Dominio.Catalogos;
+using IAAutos.Dominio.Usuarios;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -39,6 +40,29 @@ internal sealed class clsConfiguracionCliente : IEntityTypeConfiguration<clsClie
     public void Configure(EntityTypeBuilder<clsCliente> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblClientes");
 }
 
+internal sealed class clsConfiguracionPropuestaUbicacion : IEntityTypeConfiguration<clsPropuestaUbicacion>
+{
+    public void Configure(EntityTypeBuilder<clsPropuestaUbicacion> builder)
+    {
+        // Una propuesta decidida no se modifica ni se borra (trigger): EF debe saber que la tabla tiene trigger.
+        builder.ToTable("tblPropuestasUbicacion", t => t.HasTrigger("TR_tblPropuestasUbicacion_NoModificarDecidida"));
+        clsConfiguracionBase.Base(builder);
+        builder.Property(p => p.Estado).HasColumnType("varchar(15)").IsRequired();
+        builder.Property(p => p.DecididaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.HasOne<clsLugar>().WithMany().HasForeignKey(p => p.LugarId)
+            .HasConstraintName("FK_tblPropuestasUbicacion_Lugar").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(p => p.DecididaPor)
+            .HasConstraintName("FK_tblPropuestasUbicacion_DecididaPor").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(p => p.LugarId).HasDatabaseName("IX_tblPropuestasUbicacion_Lugar");
+        builder.HasIndex(p => p.LugarId).IsUnique().HasFilter("[Estado] = 'pendiente'").HasDatabaseName("UX_tblPropuestasUbicacion_Pendiente");
+    }
+}
+
+internal sealed class clsConfiguracionTipoExtra : IEntityTypeConfiguration<clsTipoExtra>
+{
+    public void Configure(EntityTypeBuilder<clsTipoExtra> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblTiposExtra");
+}
+
 internal sealed class clsConfiguracionClaseDano : IEntityTypeConfiguration<clsClaseDano>
 {
     public void Configure(EntityTypeBuilder<clsClaseDano> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblClasesDano");
@@ -68,6 +92,25 @@ internal sealed class clsConfiguracionNivelSeveridad : IEntityTypeConfiguration<
     {
         clsConfiguracionCatalogo.Codificado(builder, "tblNivelesSeveridad");
         builder.Property(n => n.Accion).HasMaxLength(clsNivelSeveridad.ACCION_MAX);
+    }
+}
+
+internal sealed class clsConfiguracionLugar : IEntityTypeConfiguration<clsLugar>
+{
+    public void Configure(EntityTypeBuilder<clsLugar> builder)
+    {
+        builder.ToTable("tblLugares");
+        clsConfiguracionBase.Base(builder);
+        builder.Property(l => l.Nombre).HasMaxLength(clsCatalogoBase.NOMBRE_MAX).IsRequired();
+        builder.Property(l => l.Ciudad).HasMaxLength(clsLugar.CIUDAD_MAX).IsRequired();
+        builder.Property(l => l.EstadoUbicacion).HasColumnType("varchar(25)").IsRequired();
+        builder.Property(l => l.UbicacionFijadaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(l => l.UbicacionFijadaPor)
+            .HasConstraintName("FK_tblLugares_UbicacionFijadaPor").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsPuntoCustodia>().WithMany().HasForeignKey(l => l.TipoId)
+            .HasConstraintName("FK_tblLugares_Tipo").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(l => l.Nombre).IsUnique().HasDatabaseName("UQ_tblLugares_Nombre");
+        builder.HasIndex(l => l.TipoId).HasDatabaseName("IX_tblLugares_Tipo");
     }
 }
 
@@ -115,7 +158,7 @@ internal sealed class clsConfiguracionCuadranteVista : IEntityTypeConfiguration<
     }
 }
 
-/// <summary>Los cinco paneles de la ficha del vehiculo donde se toca la region del dano; cada uno con su imagen de fondo.</summary>
+/// <summary>Los paneles de la ficha del vehiculo donde se toca la region del dano; cada uno con su imagen de fondo, su tamano de referencia y la version del archivo del dibujo.</summary>
 internal sealed class clsConfiguracionPanelDano : IEntityTypeConfiguration<clsPanelDano>
 {
     public void Configure(EntityTypeBuilder<clsPanelDano> builder)
@@ -126,7 +169,7 @@ internal sealed class clsConfiguracionPanelDano : IEntityTypeConfiguration<clsPa
     }
 }
 
-/// <summary>Las zonas del dano: cada cuadrante numerado con su lado, mas las zonas provisionales. Solo lectura desde la aplicacion (las crea la base).</summary>
+/// <summary>Las zonas del dano: cada cuadrante numerado con su lado (o sin lado si no lo lleva). Solo lectura desde la aplicacion (las crea la base).</summary>
 internal sealed class clsConfiguracionZonaDano : IEntityTypeConfiguration<clsZonaDano>
 {
     public void Configure(EntityTypeBuilder<clsZonaDano> builder)
@@ -134,14 +177,13 @@ internal sealed class clsConfiguracionZonaDano : IEntityTypeConfiguration<clsZon
         builder.ToTable("tblZonasDano");
         clsConfiguracionBase.Base(builder);
         builder.Property(z => z.Lado).HasColumnType("varchar(10)");
-        builder.Property(z => z.Codigo).HasColumnType("varchar(40)");
-        builder.Property(z => z.Nombre).HasMaxLength(clsCatalogoBase.NOMBRE_MAX);
+        builder.Property(z => z.NombreCompleto).HasMaxLength(200);
+        builder.Property(z => z.AiagArea).HasMaxLength(100);
         builder.HasIndex(z => new { z.CuadranteId, z.Lado }).IsUnique().HasDatabaseName("UX_tblZonasDano_Cuadrante_Lado");
-        builder.HasIndex(z => z.Codigo).IsUnique().HasDatabaseName("UX_tblZonasDano_Codigo");
     }
 }
 
-/// <summary>El poligono de una zona numerada en un panel: una zona se dibuja una vez por panel y al borrar la zona se borran sus regiones.</summary>
+/// <summary>El poligono de una zona en un panel: una zona se dibuja una vez por panel y al borrar la zona se borran sus regiones.</summary>
 internal sealed class clsConfiguracionRegionDano : IEntityTypeConfiguration<clsRegionDano>
 {
     public void Configure(EntityTypeBuilder<clsRegionDano> builder)

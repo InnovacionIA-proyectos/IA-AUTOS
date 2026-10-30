@@ -1,4 +1,5 @@
 using IAAutos.Aplicacion.Alertas;
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Parametros;
@@ -19,8 +20,6 @@ internal sealed class clsHallazgoVentana
 
     public string? Lado { get; set; }
 
-    public string? ZonaCodigo { get; set; }
-
     public string Proceso { get; set; } = string.Empty;
 
     public DateTimeOffset Fecha { get; set; }
@@ -38,17 +37,107 @@ internal sealed class clsParametroRepository(clsAppDbContext contexto) : IParame
 /// <summary>Lo que leen los procesos periodicos de alertas: conteos de patrones y las capturas y transferencias que siguen pendientes.</summary>
 internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultasAlertas
 {
+    private sealed class FilaFotoDeLugar
+    {
+        public Guid LugarId { get; init; }
+
+        public string LugarNombre { get; init; } = string.Empty;
+
+        public Guid ViajeId { get; init; }
+
+        public Guid ClienteId { get; init; }
+
+        public double Lat { get; init; }
+
+        public double Lng { get; init; }
+    }
+
+    public async Task<IReadOnlyList<clsFotoDeLugar>> FotosPorLugarAsync(double valvulaPrecisionM, int limite, CancellationToken ct = default)
+    {
+        // Solo las fotos de vistas de Cargue y Descargue, selladas con ubicacion y con buena precision; el lugar es el de cargue del viaje (Cargue) o el destino de la unidad (Descargue).
+        var baseFotos = from ev in contexto.Evidencias.AsNoTracking()
+                        join i in contexto.Inspecciones.AsNoTracking() on ev.InspeccionId equals i.Id
+                        join e in contexto.Etapas.AsNoTracking() on i.EtapaId equals e.Id
+                        join p in contexto.EtapasCatalogo.AsNoTracking() on e.EtapaCatalogoId equals p.Id
+                        join v in contexto.Vehiculos.AsNoTracking() on e.VehiculoId equals v.Id
+                        where !ev.EsConstancia && !ev.EsSello && (ev.SelloLat != 0 || ev.SelloLng != 0) && ev.Precision != null && ev.Precision < valvulaPrecisionM
+                        select new { ev, i, e, p, v };
+        var cargue = await (from f in baseFotos
+                            join vj in contexto.Viajes.AsNoTracking() on f.i.ViajeId equals vj.Id
+                            join l in contexto.Lugares.AsNoTracking() on vj.LugarCargueId equals l.Id
+                            where f.p.Codigo == clsCodigosEtapa.CARGUE && l.Activo && l.EstadoUbicacion != clsEstadoUbicacion.CONFIRMADA
+                            select new FilaFotoDeLugar { LugarId = l.Id, LugarNombre = l.Nombre, ViajeId = vj.Id, ClienteId = f.v.ClienteId, Lat = f.ev.SelloLat, Lng = f.ev.SelloLng })
+            .Take(limite).ToListAsync(ct);
+        var descargue = await (from f in baseFotos
+                               join vv in contexto.ViajeVehiculos.AsNoTracking() on new { ViajeId = f.i.ViajeId, VehiculoId = f.e.VehiculoId } equals new { vv.ViajeId, vv.VehiculoId }
+                               join l in contexto.Lugares.AsNoTracking() on vv.LugarDestinoId equals l.Id
+                               where f.p.Codigo == clsCodigosEtapa.DESCARGUE && l.Activo && l.EstadoUbicacion != clsEstadoUbicacion.CONFIRMADA
+                               select new FilaFotoDeLugar { LugarId = l.Id, LugarNombre = l.Nombre, ViajeId = f.i.ViajeId, ClienteId = f.v.ClienteId, Lat = f.ev.SelloLat, Lng = f.ev.SelloLng })
+            .Take(limite).ToListAsync(ct);
+        return cargue.Concat(descargue).Select(f => new clsFotoDeLugar(f.LugarId, f.LugarNombre, f.ViajeId, f.ClienteId, f.Lat, f.Lng)).ToList();
+    }
+
+    private sealed class FilaCargueSinReclamar
+    {
+        public Guid ViajeId { get; init; }
+
+        public string? CodigoMtrack { get; init; }
+
+        public string? Placa { get; init; }
+
+        public DateTimeOffset FechaProgramada { get; init; }
+
+        public string? Lugar { get; init; }
+
+        public Guid ClienteId { get; init; }
+    }
+
+    public async Task<IReadOnlyList<clsCargueSinReclamar>> CarguesSinReclamarAsync(DateTimeOffset programadosDesde, DateTimeOffset programadosAntesDe, int limite, CancellationToken ct = default)
+    {
+        var filas = await (from vj in contexto.Viajes.AsNoTracking()
+                           join vv in contexto.ViajeVehiculos.AsNoTracking() on vj.Id equals vv.ViajeId
+                           join v in contexto.Vehiculos.AsNoTracking() on vv.VehiculoId equals v.Id
+                           join l in contexto.Lugares.AsNoTracking() on vj.LugarCargueId equals l.Id into lugares
+                           from l in lugares.DefaultIfEmpty()
+                           where vj.Estado == clsEstadoViaje.PROGRAMADO && vj.FechaProgramada != null && vj.FechaProgramada >= programadosDesde && vj.FechaProgramada < programadosAntesDe
+                              && vv.EstadoUnidad == clsEstadoUnidad.ACTIVA
+                              && !contexto.Reclamos.Any(r => r.ViajeId == vj.Id && r.Proceso == clsProcesoReclamo.CARGUE && r.LiberadoAt == null)
+                              && !contexto.Inspecciones.Any(i => i.ViajeId == vj.Id)
+                           orderby vj.FechaProgramada
+                           select new FilaCargueSinReclamar
+                           {
+                               ViajeId = vj.Id,
+                               CodigoMtrack = vj.CodigoMtrack,
+                               Placa = vj.Placa,
+                               FechaProgramada = vj.FechaProgramada!.Value,
+                               Lugar = l != null ? l.Nombre : null,
+                               ClienteId = v.ClienteId,
+                           }).Distinct().Take(limite).ToListAsync(ct);
+        return filas.Select(f => new clsCargueSinReclamar(f.ViajeId, f.CodigoMtrack, f.Placa, f.FechaProgramada, f.Lugar, f.ClienteId)).ToList();
+    }
+
+    public async Task<IReadOnlyList<clsReclamoSinActividad>> ReclamosSinActividadAsync(DateTimeOffset reclamadosAntesDe, int limite, CancellationToken ct = default) =>
+        await (from r in contexto.Reclamos.AsNoTracking()
+               join vj in contexto.Viajes.AsNoTracking() on r.ViajeId equals vj.Id
+               join u in contexto.Usuarios.AsNoTracking() on r.InspectorId equals u.Id
+               where r.LiberadoAt == null && r.ReclamadoAt < reclamadosAntesDe
+                  && (vj.Estado == clsEstadoViaje.PROGRAMADO || vj.Estado == clsEstadoViaje.EN_CURSO)
+                  && !contexto.Inspecciones.Any(i => i.ViajeId == r.ViajeId && (i.IniciadaAt > r.ReclamadoAt || i.CerradaAt > r.ReclamadoAt))
+               orderby r.ReclamadoAt
+               select new clsReclamoSinActividad(r.Id, vj.Id, vj.CodigoMtrack, vj.Placa, r.Proceso, r.InspectorId, u.Nombre, u.ClienteId, r.ReclamadoAt)).Take(limite).ToListAsync(ct);
+
     public async Task<IReadOnlyList<clsConteoPatron>> ConteoPorZonaAsync(DateTimeOffset desde, CancellationToken ct = default)
     {
         var filas = await contexto.Set<clsHallazgoVentana>().AsNoTracking()
-            .Where(h => h.Fecha >= desde && (h.Numero != null || h.ZonaCodigo != null))
-            .GroupBy(h => new { h.ClienteId, h.Numero, h.Lado, h.ZonaCodigo })
-            .Select(g => new { g.Key.ClienteId, g.Key.Numero, g.Key.Lado, g.Key.ZonaCodigo, Total = g.Count() })
+            .Where(h => h.Fecha >= desde && h.Numero != null)
+            .GroupBy(h => new { h.ClienteId, h.Numero, h.Lado })
+            .Select(g => new { g.Key.ClienteId, g.Key.Numero, g.Key.Lado, Total = g.Count() })
             .ToListAsync(ct);
         return filas.Select(f =>
         {
-            var clave = f.Numero is { } numero ? $"{f.Lado ?? "sin-lado"}-{numero}" : f.ZonaCodigo!;
-            var nombre = f.Numero is { } n ? (f.Lado is { Length: > 0 } lado ? $"{char.ToUpperInvariant(lado[0])}{lado[1..]} {n}" : $"{n}") : f.ZonaCodigo!;
+            var numero = f.Numero!.Value;
+            var clave = $"{f.Lado ?? "sin-lado"}-{numero}";
+            var nombre = f.Lado is { Length: > 0 } lado ? $"{char.ToUpperInvariant(lado[0])}{lado[1..]} {numero}" : $"{numero}";
             return new clsConteoPatron(f.ClienteId, clave, nombre, f.Total);
         }).ToList();
     }
@@ -83,8 +172,6 @@ internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultas
 
         public string RolCreador { get; init; } = string.Empty;
 
-        public bool ConPersonalApoyo { get; init; }
-
         public DateTimeOffset IniciadaAt { get; init; }
     }
 
@@ -111,11 +198,10 @@ internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultas
                                Proceso = p.Codigo,
                                UsuarioId = u.Id,
                                RolCreador = u.Rol,
-                               ConPersonalApoyo = e.ConPersonalApoyo,
                                IniciadaAt = i.IniciadaAt,
                            }).Take(limite).ToListAsync(ct);
         return filas.Select(f => new clsCapturaAbierta(
-            f.InspeccionId, f.EtapaId, f.ViajeId, f.VehiculoId, f.ClienteId, f.Vin, f.Proceso, f.UsuarioId, f.RolCreador, f.ConPersonalApoyo, f.IniciadaAt)).ToList();
+            f.InspeccionId, f.EtapaId, f.ViajeId, f.VehiculoId, f.ClienteId, f.Vin, f.Proceso, f.UsuarioId, f.RolCreador, f.IniciadaAt)).ToList();
     }
 
     private sealed class FilaTransferencia

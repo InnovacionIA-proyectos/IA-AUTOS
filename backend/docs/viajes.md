@@ -9,8 +9,9 @@ están en [CONTRATO.md](../CONTRATO.md#viajes).
 | Tabla | Contenido |
 |---|---|
 | `tblViajes` | El viaje: `CodigoMtrack` (único entre los que lo tienen), `TipoUnidadId` (catálogo `tipos-unidad`), `Placa`, `Trailer`, `ConductorId`, `InspectorId`, `OrigenId` y `DestinoId` (catálogo `puntos-custodia`), `Estado` y `CreadoPor` |
-| `tblViajeVehiculos` | Los VIN de un viaje (único por viaje y vehículo). Un VIN puede estar en varios viajes con el tiempo; la aplicación no admite dos viajes **activos** con el mismo VIN |
-| `tblEtapas` | Gana `ViajeId` (obligatorio) y `ConPersonalApoyo` (solo en el Cargue). La unicidad pasa a (viaje, vehículo, orden) |
+| `tblViajes` (programación) | `FechaProgramada` (cuándo está programado el cargue, con zona horaria; nulo) y `LugarCargueId` (llave foránea al lugar real de cargue de `tblLugares`; nulo). Los viajes anteriores quedan con nulos: no se migra nada |
+| `tblViajeVehiculos` | Los VIN de un viaje (único por viaje y vehículo); `LugarDestinoId` es el destino de **cada** unidad (lugar real; nulo en lo anterior). Un VIN puede estar en varios viajes con el tiempo; la aplicación no admite dos viajes **activos** con el mismo VIN |
+| `tblEtapas` | Gana `ViajeId` (obligatorio). La unicidad pasa a (viaje, vehículo, orden). La marca `ConPersonalApoyo` que tuvo en el Cargue se eliminó (script 28): el Cargue no lleva ninguna marca previa |
 | `tblInspecciones` | Gana `ViajeId` (obligatorio): el viaje de la etapa. `ConductorNombre`, `Placa` y `Trailer` solo conservan lo capturado antes de los viajes |
 | `tblUsuarios` | Gana `Cedula` (única entre quienes la tienen): identifica al conductor en la carga por Excel |
 | `tblOrdenesSofasa` | Gana `ViajeId` y `CodigoMtrack`: el viaje al que pertenece la orden |
@@ -35,6 +36,8 @@ programado lo pasa a `en_curso`. Un viaje cancelado deja de ser visible para ins
 - **Conductor en ruta.** El conductor del viaje registra las novedades de cada unidad (`POST /api/viajes/{id}/vehiculos/{vin}/novedades`) y confirma su llegada (`.../llegada`) sobre la etapa de Transporte del VIN; cada VIN del viaje trae su
   `estado_transporte` (`sin_registro`, `con_novedad`, `sin_novedad` o `llegada_con_novedad`) y sus `novedades`. Una unidad marcada «no sale» no admite ninguna de las dos (`409 UNIDAD_NO_SALE`). Ver [CONTRATO.md](../CONTRATO.md) («Conductor en ruta») y
   [notificaciones.md](notificaciones.md).
+- **Programación y destino por unidad.** La carga por Excel exige por fila la fecha y hora programada del cargue (sin zona horaria es hora de Colombia, UTC-5), el lugar de cargue y el lugar de destino de esa unidad; ambos lugares se buscan por nombre en el catálogo `lugares` (activos). Las filas de un mismo `codigo_mtrack` deben coincidir en fecha y lugar de cargue, y cada VIN conserva su destino (`tblViajeVehiculos.LugarDestinoId`). `PATCH /api/viajes/{id}` corrige `fecha_programada` y `lugar_cargue_id` solo mientras el viaje está `programado` (en curso, `409`). `POST /api/viajes` no cambia: no recibe estos campos.
+- **Destino por unidad y entrega por punto.** El viaje ya no tiene destino único: cada unidad entra con su `lugar_destino_id` (catálogo `lugares`; sin él, `400` «La unidad requiere un destino») y su Descargue se crea en el tipo de ese lugar. `PATCH /api/viajes/{id}/vehiculos/{vin}` cambia el destino de UNA unidad y solo mueve su Descargue; `PATCH /api/viajes/{id}` ya no acepta `destino_id`. La entrega se firma por punto (`/api/viajes/{id}/entregas`, ver [transferencias.md](transferencias.md)) y el viaje se finaliza cuando todas sus unidades activas tienen el Descargue cerrado. `tblViajes.DestinoId` queda solo como dato histórico.
 - **Fuera de este servicio:** la integración con MTrack (el código se digita o llega en el Excel) y la visibilidad por cliente del resto de recursos (vehículos, inspecciones, órdenes).
 
 ## `Completa` e indices de los listados
@@ -71,6 +74,34 @@ Resultado esperado: 5 indices, 1 columna, 1 procedimiento, 3 triggers y 0 filas 
 
 Los viajes migrados quedan con estado `finalizado` (todas las etapas de sus VIN con informe cerrado), `en_curso` (algún informe) o `programado` (ninguno), y
 pueden no tener `codigo_mtrack`, `tipo_unidad_id` ni `placa` (el código se completa después con `PATCH /api/viajes/{id}`).
+
+## Destino por unidad (script 25)
+
+`tblViajeVehiculos.LugarDestinoId` (script 24) es el destino de **cada unidad**, hacia el catálogo `lugares`; `tblViajes.DestinoId` queda como dato histórico, sin uso nuevo. El script
+[`25-destino-por-unidad-y-cierre-con-una-firma.sql`](../database/cambios-esquema/25-destino-por-unidad-y-cierre-con-una-firma.sql) (una transacción, repetible, `@esquema` ajustable) migra los viajes anteriores: como su destino era un **tipo** de lugar
+(`tblPuntosCustodia`) y no un lugar real, crea **un lugar histórico inactivo** por cada tipo que algún viaje usaba de destino («Concesionario (por definir)», ciudad «Sin definir») y se lo copia a cada unidad del viaje. Tras migrar,
+ninguna unidad de un viaje con destino queda sin lugar de destino y el de cada una corresponde al de su viaje; quien administra el catálogo reasigna después cada unidad a su lugar real. Un viaje sin destino no inventa uno.
+
+## Reclamo del camión por el inspector (script 26)
+
+El inspector reclama el camión que va a revisar. Los datos: `tblInspectorLugares` (los puntos de cada inspector: usuario y lugar del catálogo `lugares`, único por pareja; un inspector puede tener varios) y `tblReclamos` (quién reclamó un `cargue` o una `entrega`
+—la etapa Descargue—, cuándo y, al liberarse, quién y cuándo: `LiberadoAt` y `LiberadoPor` van juntos o ninguno). Un índice único filtrado (`UX_tblReclamos_Activo`) impide dos reclamos **activos** (sin liberar) del mismo viaje y proceso, de modo que el
+segundo en reclamar falla en la base; los reclamos liberados quedan como historial y no se borran (error 51003). `tblViajes.InspectorId` se conserva: lo llena el reclamo del cargue. El script
+[`26-reclamo-inspector.sql`](../database/cambios-esquema/26-reclamo-inspector.sql) (una transacción, repetible, `@esquema` ajustable) también agrega el parámetro `reclamo_sin_actividad_minutos` (número, 30; ver [parametros.md](parametros.md)); no toca ningún dato existente.
+**Reclamar y liberar** (`POST /api/viajes/{id}/reclamos` y `DELETE /api/viajes/{id}/reclamos/{proceso}`, ver [CONTRATO.md](../CONTRATO.md#reclamo-del-camión)): el cargue se reclama si está programado para hoy en un punto del inspector; la entrega, si el viaje llega a un punto suyo. Reclamar llena `tblViajes.InspectorId` (en el cargue) y
+deja el reclamo activo; dos reclamos simultáneos los resuelve `UX_tblReclamos_Activo` (el segundo recibe 409 «Ya fue tomado por otro inspector»). Liberar vacía el inspector y no toca lo capturado; no hay caducidad automática. `PATCH /api/viajes/{id}` ya no acepta `inspector_id` (corrección administrativa pendiente de la decisión de negocio PAB-002; al crear el viaje sigue admitiéndose).
+**Pendientes, visibilidad y aviso.** `GET /api/viajes/pendientes` lista los cargues de hoy de los puntos del inspector y las entregas en curso que llegan a ellos, con su estado (`disponible`, `en_revision` con el nombre del otro inspector, `mio`). El inspector ve (no actúa sobre) los pendientes de sus puntos
+además de los suyos y los que reclamó; el conductor no cambia. Un camión reclamado que lleva `reclamo_sin_actividad_minutos` sin inspecciones avisa una vez al coordinador (tipo `reclamo_sin_actividad`, script [`27-aviso-reclamo-sin-actividad.sql`](../database/cambios-esquema/27-aviso-reclamo-sin-actividad.sql)); el reclamo no se libera. Ver [alertas.md](alertas.md).
+
+## Posición de la unidad en la niñera (script 29)
+
+`tblViajeVehiculos.Posicion` (`tinyint`, nula) es la posición de la unidad dentro de la niñera, de **1 a 7**. La registra la **segunda inspección del cargue** (la de momento `salida` de la etapa Cargue) y se libera al marcar la unidad «no sale» (lo hace la aplicación). La base garantiza el rango
+(`CK_tblViajeVehiculos_Posicion`) y que dos unidades de un mismo viaje no compartan posición (`UX_tblViajeVehiculos_Posicion`, índice único filtrado sobre `(ViajeId, Posicion)` para las filas con posición); la misma posición en viajes distintos es válida y las unidades sin posición no cuentan. El script
+[`29-posicion-de-la-unidad.sql`](../database/cambios-esquema/29-posicion-de-la-unidad.sql) (una transacción, repetible, `@esquema` ajustable) no cambia ningún dato: todas las unidades quedan sin posición.
+
+**Registro y cierre de la acomodación.** `PUT /api/viajes/{id}/vehiculos/{vin}/posicion` con `{ "posicion": 1..7 }` (nulo la libera) lo hacen el inspector del viaje (o quien reclamó el cargue), el coordinador de calidad y los administradores, y solo mientras el viaje tiene su segunda inspección del cargue en borrador
+(409 si no). Fuera de 1 a 7 responde `400` «La posición debe estar entre 1 y 7»; una posición que ya tiene otra unidad del viaje, `409` «La posición N ya está ocupada por otra unidad de este viaje» (con varias solicitudes simultáneas por la misma gana exactamente una: lo resuelve el índice único); una unidad
+que no sale no admite posición (409). La respuesta es el viaje, cuyas unidades traen `posicion`. Cada cambio queda auditado (`viaje.posicion_unidad`). El informe PDF de la segunda inspección del cargue lista cada unidad con su posición y trae las fotos de la acomodación con su sello, y el inventario del VIN (JSON y PDF) muestra «Posición en niñera: N» en las etapas de los viajes en que fue despachado con posición; un viaje sin posiciones genera ambos documentos igual, sin el dato. El cierre de la segunda inspección del cargue exige la posición de **cada unidad activa** y las fotos de la acomodación (ver [inspecciones.md](inspecciones.md)).
 
 ## Aplicar el cambio en una base existente
 

@@ -1,5 +1,4 @@
 using Microsoft.Data.SqlClient;
-using Testcontainers.MsSql;
 
 namespace IAAutos.Tests.Integracion.Infraestructura;
 
@@ -11,20 +10,15 @@ namespace IAAutos.Tests.Integracion.Infraestructura;
 /// </summary>
 public sealed class MigracionCatalogosMaestrosTests : IAsyncLifetime
 {
-    private readonly MsSqlContainer _contenedor = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2019-latest").Build();
     private string _cadenaConexion = string.Empty;
 
     public async Task InitializeAsync()
     {
-        await _contenedor.StartAsync();
-        var maestra = _contenedor.GetConnectionString();
-        await EjecutarAsync(maestra, "CREATE DATABASE IAAutosMigracion");
-        var constructor = new SqlConnectionStringBuilder(maestra) { InitialCatalog = "IAAutosMigracion" };
-        _cadenaConexion = constructor.ConnectionString;
+        _cadenaConexion = await clsServidorSql.CrearBaseAsync("IAAutosMigracion");
         await EjecutarAsync(_cadenaConexion, ESQUEMA_PREVIO);
     }
 
-    public async Task DisposeAsync() => await _contenedor.DisposeAsync();
+    public async Task DisposeAsync() => await clsServidorSql.EliminarBaseAsync(_cadenaConexion);
 
     private static async Task EjecutarAsync(string cadena, string sql)
     {

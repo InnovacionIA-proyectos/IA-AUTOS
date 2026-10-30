@@ -12,7 +12,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Exportaciones a Excel (GET /api/exportaciones/*.xlsx): quien las descarga (coordinador, comercial y administradores, con los datos de su cliente), el nombre del archivo, las columnas de cada
 /// uno (datos de la unidad, el viaje y la etapa; las firmas en las inspecciones; la zona y la foto en los hallazgos) y los filtros de los listados.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsPruebaTableroBase(bd)
 {
     private static readonly string[] RUTAS = ["/api/exportaciones/viajes.xlsx", "/api/exportaciones/inspecciones.xlsx", "/api/exportaciones/hallazgos.xlsx"];
@@ -217,7 +217,7 @@ public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsP
             [
                 "VIN", "Marca", "Tipo de vehículo", "Operación", "Cliente", "Código MTrack", "Placa", "Tráiler", "Unidad", "Conductor", "Cédula del conductor", "Etapa", "Lugar",
                 "Momento", "Versión", "Estado", "Inicio", "Cierre", "Inspector", "Tipo de cierre",
-                "Entrega: quién", "Entrega: fecha", "Entrega: IP", "Recibe: quién", "Recibe: fecha", "Recibe: IP",
+                "Entrega: quién", "Entrega: fecha", "Entrega: IP", "Recibe: quién", "Recibe: fecha", "Recibe: IP", "Extras",
             ],
             hoja.Titulos);
         // V1: 6, V2: 1, V3: 2 y V5: 1 (V4 es de otro cliente).
@@ -267,6 +267,7 @@ public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsP
         var coordinador = await SesionAsync(clsRol.COORDINADOR_CALIDAD);
         var foto = DateTimeOffset.UtcNow.AddDays(-3);
         await SembrarFirmasYFotosAsync(e.I1, e.Conductor, foto);
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblZonasDano SET AiagArea = N'10/12' WHERE Numero = 7");
 
         var (_, hoja) = await DescargarAsync(coordinador, RUTAS[2]);
 
@@ -274,7 +275,7 @@ public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsP
             [
                 "VIN", "Marca", "Tipo de vehículo", "Operación", "Cliente", "Código MTrack", "Placa", "Tráiler", "Unidad", "Conductor", "Cédula del conductor", "Etapa", "Lugar",
                 "Momento", "Versión", "Estado de la inspección", "Inicio", "Cierre",
-                "Lado", "Número", "Zona", "Clase de daño", "Tamaño", "Nivel", "Preexistente", "Origen", "Estado de seguimiento", "Foto: fecha y hora", "Foto: latitud", "Foto: longitud",
+                "Lado", "Número", "Zona", "Código AIAG", "Clase de daño", "Tamaño", "Nivel", "Preexistente", "Origen", "Estado de seguimiento", "Foto: fecha y hora", "Foto: latitud", "Foto: longitud",
             ],
             hoja.Titulos);
         Assert.Equal(2, hoja.Filas.Count);
@@ -282,6 +283,7 @@ public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsP
         Assert.Equal("izquierdo", v3["Lado"]);
         Assert.Equal("7", v3["Número"]);
         Assert.Equal("Puerta delantera", v3["Zona"]);
+        Assert.Equal("10/12", v3["Código AIAG"]);
         Assert.Equal("rotura", v3["Clase de daño"]);
         Assert.Equal("1_5cm", v3["Tamaño"]);
         Assert.Equal("v3", v3["Nivel"]);
@@ -295,10 +297,12 @@ public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsP
         Assert.Equal("4.60971", v3["Foto: latitud"]);
         Assert.Equal("-74.08175", v3["Foto: longitud"]);
         Assert.Equal(DiaDeColombia(foto), DiaDeSerie(v3["Foto: fecha y hora"]));
-        // La zona provisional no tiene lado ni numero: va solo su nombre.
+        // Un cuadrante sin lado (el 50 «Frente») va sin lado, con su numero y su pieza, y sin codigo AIAG mientras no lo tenga.
         var v2 = hoja.De("VIN", "VIN-IND-0002").Single();
-        Assert.False(v2.ContainsKey("Lado") || v2.ContainsKey("Número"));
-        Assert.False(string.IsNullOrWhiteSpace(v2["Zona"]));
+        Assert.False(v2.ContainsKey("Lado"));
+        Assert.Equal("50", v2["Número"]);
+        Assert.Equal("Frente", v2["Zona"]);
+        Assert.False(v2.ContainsKey("Código AIAG"));
         Assert.Equal("v1", v2["Nivel"]);
         Assert.False(v2.ContainsKey("Foto: fecha y hora"));
     }

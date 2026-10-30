@@ -133,32 +133,27 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
-    public async Task Los_cuadrantes_cargados_son_la_ficha_completa_con_geometria_valida()
+    public async Task Los_cuadrantes_cargados_son_el_dibujo_version_6_con_geometria_valida()
     {
-        // Los cuadrantes son zonas (36 numeros de la ficha; el 4 y el 12 no existen) y cada zona se dibuja en las vistas donde aparece.
-        // Se carga con database/cambios-esquema/04-cargar-cuadrantes-ficha.sql.
+        // El dibujo de danos (45 cuadrantes, 80 zonas) lo siembra database/cambios-esquema/34-resembrar-dibujo-v6.sql desde el archivo version 6: cada zona se dibuja en al menos un panel
+        // y todo poligono es valido (al menos 3 puntos con coordenadas entre 0 y 1).
         await using var conexion = await AbrirAsync();
-        var ayuda = "Ejecute database/cambios-esquema/03-cuadrantes-por-zona.sql y luego 04-cargar-cuadrantes-ficha.sql.";
+        const string AYUDA = "Ejecute database/cambios-esquema/34-resembrar-dibujo-v6.sql.";
 
-        var zonas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadrantes");
-        var poligonos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadranteVistas");
-        var vistasConPoligonos = await EscalarAsync<int>(conexion, "SELECT COUNT(DISTINCT VistaFotoId) FROM tblCuadranteVistas");
-        var sinPoligono = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadrantes c WHERE NOT EXISTS (SELECT 1 FROM tblCuadranteVistas p WHERE p.CuadranteId = c.Id)");
-        var enVistaAdicional = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadranteVistas p JOIN tblVistasFoto v ON v.Id = p.VistaFotoId WHERE v.Obligatoria = 0");
+        var cuadrantes = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadrantes");
+        var zonas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano");
+        var zonasSinRegion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano z WHERE NOT EXISTS (SELECT 1 FROM tblRegionesDano r WHERE r.ZonaId = z.Id)");
         var geometriaInvalida = await EscalarAsync<int>(conexion, """
-            SELECT COUNT(*) FROM tblCuadranteVistas p
-             WHERE ISJSON(p.Geometria) = 0
-                OR (SELECT COUNT(*) FROM OPENJSON(p.Geometria, '$.puntos')) < 3
-                OR EXISTS (SELECT 1 FROM OPENJSON(p.Geometria, '$.puntos') pt
+            SELECT COUNT(*) FROM tblRegionesDano r
+             WHERE ISJSON(r.Geometria) = 0
+                OR (SELECT COUNT(*) FROM OPENJSON(r.Geometria, '$.puntos')) < 3
+                OR EXISTS (SELECT 1 FROM OPENJSON(r.Geometria, '$.puntos') pt
                             WHERE TRY_CAST(JSON_VALUE(pt.value, '$[0]') AS float) IS NULL OR TRY_CAST(JSON_VALUE(pt.value, '$[0]') AS float) NOT BETWEEN 0 AND 1
                                OR TRY_CAST(JSON_VALUE(pt.value, '$[1]') AS float) IS NULL OR TRY_CAST(JSON_VALUE(pt.value, '$[1]') AS float) NOT BETWEEN 0 AND 1)
             """);
 
-        Assert.True(zonas == 36, $"Se esperaban 36 cuadrantes (zonas) y hay {zonas}. {ayuda}");
-        Assert.True(poligonos == 97, $"Se esperaban 97 poligonos por vista y hay {poligonos}. {ayuda}");
-        Assert.Equal(5, vistasConPoligonos);
-        Assert.Equal(0, sinPoligono);
-        Assert.Equal(0, enVistaAdicional);
+        Assert.True(cuadrantes == 45 && zonas == 80, $"Se esperaban 45 cuadrantes y 80 zonas y hay {cuadrantes} y {zonas}. {AYUDA}");
+        Assert.Equal(0, zonasSinRegion);
         Assert.Equal(0, geometriaInvalida);
     }
 
@@ -176,7 +171,7 @@ public sealed class BaseDatosRealTests
             ("@t", tabla), ("@c", columna));
 
         Assert.True(await Columnas("tblEtapas", "ViajeId", obligatoria: true) == 1, $"tblEtapas.ViajeId debe existir y ser obligatoria. {ayuda}");
-        Assert.True(await Columnas("tblEtapas", "ConPersonalApoyo") == 1, $"Falta tblEtapas.ConPersonalApoyo. {ayuda}");
+        Assert.True(await Columnas("tblEtapas", "ConPersonalApoyo") == 0, $"Sobra tblEtapas.ConPersonalApoyo: ejecute database/cambios-esquema/28-sin-personal-de-apoyo.sql. {ayuda}");
         Assert.True(await Columnas("tblInspecciones", "ViajeId", obligatoria: true) == 1, $"tblInspecciones.ViajeId debe existir y ser obligatoria. {ayuda}");
         Assert.True(await Columnas("tblUsuarios", "Cedula") == 1, $"Falta tblUsuarios.Cedula. {ayuda}");
         Assert.True(await Columnas("tblOrdenesSofasa", "ViajeId") == 1, $"Falta tblOrdenesSofasa.ViajeId. {ayuda}");
@@ -408,10 +403,14 @@ public sealed class BaseDatosRealTests
             Assert.True(await Columnas("tblViajeVehiculos", columna) == 1, $"Falta tblViajeVehiculos.{columna}. {ayuda}");
         }
 
-        var paneles = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblPanelesDano WHERE Codigo IN ('superior','perfil_posterior_izquierdo','perfil_posterior_derecho','costado_izquierdo','costado_derecho')");
-        var provisionales = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano WHERE CuadranteId IS NULL AND Codigo IN ('frente','llanta_delantera_izquierda','llanta_delantera_derecha','llanta_trasera_izquierda','llanta_trasera_derecha')");
-        var zonasEsperadas = await EscalarAsync<int>(conexion, "SELECT ISNULL(SUM(CASE WHEN Numero <= 25 THEN 2 ELSE 1 END), 0) FROM tblCuadrantes");
-        var zonas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano WHERE CuadranteId IS NOT NULL");
+        // El dibujo (paneles, cuadrantes y zonas) lo reemplaza 34-resembrar-dibujo-v6.sql: aqui solo se comprueba que haya paneles y que cada cuadrante tenga las zonas que su regla pide
+        // (con la columna LlevaLado si ya existe; antes del 34, del 1 al 25 con lado).
+        var paneles = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblPanelesDano");
+        var tieneLlevaLado = await Columnas("tblCuadrantes", "LlevaLado") == 1;
+        var zonasEsperadas = await EscalarAsync<int>(conexion, tieneLlevaLado
+            ? "SELECT ISNULL(SUM(CASE WHEN LlevaLado = 1 THEN 2 ELSE 1 END), 0) FROM tblCuadrantes"
+            : "SELECT ISNULL(SUM(CASE WHEN Numero <= 25 THEN 2 ELSE 1 END), 0) FROM tblCuadrantes");
+        var zonas = await EscalarAsync<int>(conexion, tieneLlevaLado ? "SELECT COUNT(*) FROM tblZonasDano" : "SELECT COUNT(*) FROM tblZonasDano WHERE CuadranteId IS NOT NULL");
         var restricciones = await EscalarAsync<int>(conexion, """
             SELECT COUNT(*) FROM sys.objects
              WHERE name IN (N'FK_tblZonasDano_Cuadrante', N'CK_tblZonasDano_Forma', N'FK_tblRegionesDano_Zona', N'FK_tblHallazgos_Zona', N'FK_tblHallazgos_Nivel',
@@ -421,9 +420,8 @@ public sealed class BaseDatosRealTests
         var disparador = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE name = N'TR_tblCuadrantes_CrearZonas' AND is_disabled = 0");
         var hallazgosSinUbicarSinMarca = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblHallazgos WHERE ZonaId IS NULL AND Origen = 'inspector' AND MigracionPendiente = 0");
 
-        Assert.True(paneles == 5, $"Faltan paneles del dibujo de danos. {ayuda}");
-        Assert.True(provisionales == 5, $"Faltan zonas provisionales. {ayuda}");
-        Assert.True(zonas == zonasEsperadas, $"Hay {zonas} zonas numeradas y los cuadrantes esperan {zonasEsperadas} (dos por lado del 1 al 25 y una del 26 en adelante). {ayuda}");
+        Assert.True(paneles > 0, $"Faltan paneles del dibujo de danos. {ayuda}");
+        Assert.True(zonas == zonasEsperadas, $"Hay {zonas} zonas numeradas y los cuadrantes esperan {zonasEsperadas} (dos por lado si lo llevan y una si no). {ayuda}");
         Assert.True(restricciones == 13, $"Faltan relaciones o restricciones de zonas, hallazgos o unidades del viaje. {ayuda}");
         Assert.True(disparador == 1, $"Falta el trigger que crea las zonas de un cuadrante nuevo. {ayuda}");
         Assert.Equal(0, hallazgosSinUbicarSinMarca);
@@ -549,7 +547,7 @@ public sealed class BaseDatosRealTests
                              'retencion_dias', 'gps_precision_minima_m', 'url_firmada_minutos')
             """);
         var invalidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Tipo NOT IN ('numero', 'porcentaje', 'texto', 'lista', 'hora', 'correos')");
-        var lineaBase = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR Clave LIKE '%fotos_minimas%'");
+        var lineaBase = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR (Clave LIKE '%fotos_minimas%' AND Clave <> 'acomodacion_fotos_minimas')");
 
         Assert.True(iniciales == 8, $"Faltan parametros iniciales (hay {iniciales} de 8). {ayuda}");
         Assert.Equal(0, invalidos);
@@ -692,6 +690,166 @@ public sealed class BaseDatosRealTests
         Assert.True(cierre == 1, "tblTransferenciasCustodia no admite el cierre recibo_sin_entrega. Ejecute database/cambios-esquema/23-novedad-de-proceso.sql.");
         Assert.True(entregaNula == 1, "EntregaUsuarioId debe admitir nulo. Ejecute database/cambios-esquema/23-novedad-de-proceso.sql.");
         Assert.True(notificacion == 1, "tblNotificaciones no admite el tipo novedad_proceso. Ejecute database/cambios-esquema/23-novedad-de-proceso.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task Los_lugares_la_fecha_programada_y_el_destino_por_unidad_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/24-lugares-y-programacion.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblLugares' AND schema_id = SCHEMA_ID()");
+        Assert.True(tabla == 1, "Falta tblLugares. Ejecute database/cambios-esquema/24-lugares-y-programacion.sql.");
+
+        var viaje = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajes') AND name IN (N'FechaProgramada', N'LugarCargueId') AND is_nullable = 1");
+        var unidad = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajeVehiculos') AND name = N'LugarDestinoId' AND is_nullable = 1");
+        var vista = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'vwAdopcion') AND definition LIKE N'%FechaProgramada%'");
+        var radioInvalido = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblLugares WHERE (Latitud IS NULL AND Longitud IS NOT NULL) OR (Latitud IS NOT NULL AND Longitud IS NULL) OR RadioMetros <= 0");
+
+        Assert.True(viaje == 2, "Faltan FechaProgramada y LugarCargueId en tblViajes. Ejecute database/cambios-esquema/24-lugares-y-programacion.sql.");
+        Assert.True(unidad == 1, "Falta LugarDestinoId en tblViajeVehiculos. Ejecute database/cambios-esquema/24-lugares-y-programacion.sql.");
+        Assert.True(vista == 1, "vwAdopcion no cuenta por el dia programado. Ejecute database/cambios-esquema/24-lugares-y-programacion.sql.");
+        Assert.Equal(0, radioInvalido);
+    }
+
+    [FactEntornoReal]
+    public async Task El_destino_por_unidad_y_el_recibo_sin_entrega_con_una_sola_firma_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/25-destino-por-unidad-y-cierre-con-una-firma.sql.
+        await using var conexion = await AbrirAsync();
+
+        var cierre = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Cierre' AND parent_object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND definition LIKE N'%recibo_sin_entrega%NoFirmaParte%MotivoNoFirma%'");
+        Assert.True(cierre == 1, "El cierre recibo_sin_entrega no admite una sola firma con su motivo. Ejecute database/cambios-esquema/25-destino-por-unidad-y-cierre-con-una-firma.sql.");
+
+        var recibosSinParteOMotivo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblTransferenciasCustodia WHERE TipoCierre = N'recibo_sin_entrega' AND (NoFirmaParte IS NULL OR MotivoNoFirma IS NULL)");
+
+        Assert.Equal(0, recibosSinParteOMotivo);
+    }
+
+    [FactEntornoReal]
+    public async Task El_reclamo_del_inspector_y_sus_puntos_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/26-reclamo-inspector.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tablas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'tblInspectorLugares', N'tblReclamos') AND schema_id = SCHEMA_ID()");
+        Assert.True(tablas == 2, "Faltan tblInspectorLugares o tblReclamos. Ejecute database/cambios-esquema/26-reclamo-inspector.sql.");
+
+        var indice = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblReclamos_Activo' AND object_id = OBJECT_ID(N'tblReclamos') AND is_unique = 1 AND has_filter = 1");
+        var parametro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave = N'reclamo_sin_actividad_minutos' AND Tipo = N'numero'");
+        var reclamosActivosRepetidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM (SELECT ViajeId, Proceso FROM tblReclamos WHERE LiberadoAt IS NULL GROUP BY ViajeId, Proceso HAVING COUNT(*) > 1) AS x");
+
+        Assert.True(indice == 1, "Falta el indice unico de reclamos activos. Ejecute database/cambios-esquema/26-reclamo-inspector.sql.");
+        Assert.True(parametro == 1, "Falta el parametro reclamo_sin_actividad_minutos. Ejecute database/cambios-esquema/26-reclamo-inspector.sql.");
+        Assert.Equal(0, reclamosActivosRepetidos);
+    }
+
+    [FactEntornoReal]
+    public async Task El_tipo_de_aviso_de_camion_reclamado_sin_actividad_esta_migrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/27-aviso-reclamo-sin-actividad.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tipo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%reclamo_sin_actividad%'");
+
+        Assert.True(tipo == 1, "tblNotificaciones no admite el tipo reclamo_sin_actividad. Ejecute database/cambios-esquema/27-aviso-reclamo-sin-actividad.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task La_posicion_de_la_unidad_esta_migrada()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/29-posicion-de-la-unidad.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajeVehiculos') AND name = N'Posicion' AND is_nullable = 1");
+        Assert.True(columna == 1, "Falta tblViajeVehiculos.Posicion. Ejecute database/cambios-esquema/29-posicion-de-la-unidad.sql.");
+
+        var restriccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_Posicion' AND parent_object_id = OBJECT_ID(N'tblViajeVehiculos')");
+        var indice = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblViajeVehiculos_Posicion' AND object_id = OBJECT_ID(N'tblViajeVehiculos') AND is_unique = 1 AND has_filter = 1");
+
+        Assert.True(restriccion == 1, "Falta la restriccion de rango de la posicion. Ejecute database/cambios-esquema/29-posicion-de-la-unidad.sql.");
+        Assert.True(indice == 1, "Falta el indice unico de la posicion por viaje. Ejecute database/cambios-esquema/29-posicion-de-la-unidad.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task El_parametro_de_las_fotos_de_la_acomodacion_esta_migrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/30-parametro-fotos-de-acomodacion.sql.
+        await using var conexion = await AbrirAsync();
+
+        var parametro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave = N'acomodacion_fotos_minimas' AND Tipo = N'numero'");
+
+        Assert.True(parametro == 1, "Falta el parametro acomodacion_fotos_minimas. Ejecute database/cambios-esquema/30-parametro-fotos-de-acomodacion.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task Los_extras_del_vehiculo_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/31-extras-del-vehiculo.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tablas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'tblTiposExtra', N'tblInspeccionExtras')");
+        Assert.True(tablas == 2, "Faltan las tablas de los extras. Ejecute database/cambios-esquema/31-extras-del-vehiculo.sql.");
+
+        var tipos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblTiposExtra WHERE Codigo IN (N'barras_techo', N'volco', N'platon', N'otro')");
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblEvidencias') AND name = N'ExtraId' AND is_nullable = 1");
+        var restriccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblEvidencias_Extra' AND parent_object_id = OBJECT_ID(N'tblEvidencias')");
+        var textoLibre = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblInspeccionExtras_Texto' AND parent_object_id = OBJECT_ID(N'tblInspeccionExtras')");
+        var trigger = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE name = N'TR_tblInspeccionExtras_NoEnCerrada'");
+
+        Assert.True(tipos == 4, "Falta sembrar los tipos de extra. Ejecute database/cambios-esquema/31-extras-del-vehiculo.sql.");
+        Assert.True(columna == 1, "Falta tblEvidencias.ExtraId. Ejecute database/cambios-esquema/31-extras-del-vehiculo.sql.");
+        Assert.True(restriccion == 1 && textoLibre == 1, "Faltan las restricciones de los extras. Ejecute database/cambios-esquema/31-extras-del-vehiculo.sql.");
+        Assert.True(trigger == 1, "Falta el trigger de inmutabilidad de los extras. Ejecute database/cambios-esquema/31-extras-del-vehiculo.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task La_ubicacion_con_rango_y_la_confirmacion_en_sitio_estan_migradas()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/32-ubicacion-con-rango-y-confirmacion-en-sitio.sql.
+        await using var conexion = await AbrirAsync();
+
+        var parametros = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave IN (N'radio_lugar_cargue_m', N'radio_destino_m', N'valvula_precision_m', N'cargue_sin_reclamar_minutos') AND Tipo = N'numero'");
+        var lugar = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblLugares') AND name IN (N'EstadoUbicacion', N'UbicacionFijadaPor', N'UbicacionFijadaAt')");
+        var inspeccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblInspecciones') AND name IN (N'ConfirmacionSitio', N'ConfirmacionDistanciaM', N'ConfirmacionEvidenciaId')");
+        var notificacion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%cargue_sin_reclamar%' AND definition LIKE N'%fuera_de_rango%'");
+        var propuestas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblPropuestasUbicacion'");
+
+        const string AVISO = "Ejecute database/cambios-esquema/32-ubicacion-con-rango-y-confirmacion-en-sitio.sql.";
+        Assert.True(parametros == 4, "Faltan los parametros del rango y del cargue sin reclamar. " + AVISO);
+        Assert.True(lugar == 3, "Faltan las columnas del estado de la ubicacion del lugar. " + AVISO);
+        Assert.True(inspeccion == 3, "Faltan las columnas de la confirmacion en sitio de la inspeccion. " + AVISO);
+        Assert.True(notificacion == 1, "Faltan los tipos de notificacion fuera_de_rango y cargue_sin_reclamar. " + AVISO);
+        Assert.True(propuestas == 1, "Falta la tabla de propuestas de ubicacion. " + AVISO);
+    }
+
+    [FactEntornoReal]
+    public async Task El_tipo_de_aviso_de_la_propuesta_de_ubicacion_esta_migrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/33-tipo-de-aviso-propuesta-de-ubicacion.sql.
+        await using var conexion = await AbrirAsync();
+
+        var notificacion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%propuesta_ubicacion%'");
+
+        Assert.True(notificacion == 1, "Falta el tipo de notificacion propuesta_ubicacion. Ejecute database/cambios-esquema/33-tipo-de-aviso-propuesta-de-ubicacion.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task El_dibujo_de_danos_version_6_esta_sembrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/34-resembrar-dibujo-v6.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columnas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE (object_id = OBJECT_ID(N'tblCuadrantes') AND name = N'LlevaLado') OR (object_id = OBJECT_ID(N'tblZonasDano') AND name IN (N'LlevaLado', N'NombreCompleto', N'AiagArea')) OR (object_id = OBJECT_ID(N'tblPanelesDano') AND name IN (N'AnchoRef', N'AltoRef', N'Version')) OR (object_id = OBJECT_ID(N'tblRegionesDano') AND name = N'Prioridad')");
+        var provisionales = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblZonasDano') AND name IN (N'Codigo', N'Nombre')");
+
+        const string AVISO = "Ejecute database/cambios-esquema/34-resembrar-dibujo-v6.sql.";
+        Assert.True(columnas == 8 && provisionales == 0, "Faltan las columnas del dibujo version 6 o siguen las zonas provisionales. " + AVISO);
+        var paneles = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblPanelesDano");
+        var cuadrantes = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadrantes");
+        var zonas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano");
+        var regiones = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblRegionesDano");
+        Assert.True(paneles == 7 && cuadrantes == 45 && zonas == 80 && regiones == 251, $"El dibujo no es el de la version 6 (paneles {paneles}, cuadrantes {cuadrantes}, zonas {zonas}, regiones {regiones}; se esperan 7, 45, 80 y 251). " + AVISO);
     }
 
     [FactEntornoReal]

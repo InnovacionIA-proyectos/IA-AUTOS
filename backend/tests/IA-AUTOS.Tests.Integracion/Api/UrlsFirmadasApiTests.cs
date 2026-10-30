@@ -13,7 +13,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Una foto solo se ve con una URL firmada por el sistema y vigente: sin firma, con una firma que no es la suya o vencida responde 403 URL_FIRMADA_INVALIDA; con una firma valida se ve sin
 /// encabezado de autenticacion; la vigencia es el parametro <c>url_firmada_minutos</c>.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class UrlsFirmadasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private static readonly byte[] JPEG = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00];

@@ -9,10 +9,11 @@ using Microsoft.Extensions.DependencyInjection;
 namespace IAAutos.Tests.Integracion.Api;
 
 /// <summary>
-/// La excepcion «No hay inspector»: en un Cargue con personal de apoyo el conductor del viaje crea la salida cuando trae el motivo (del catalogo <c>motivos-sin-inspector</c>); queda el motivo en la
-/// inspeccion, una novedad de proceso, el aviso al coordinador de calidad y al administrador del cliente y su registro en la auditoria. Fuera de ese caso el motivo no se admite.
+/// La excepcion «No hay inspector»: la salida del Cargue la hace siempre un inspector (el conductor recibe 403) y, si no hay inspector, el conductor del viaje la activa en el momento trayendo el motivo (del
+/// catalogo <c>motivos-sin-inspector</c>) y crea la salida; queda el motivo en la inspeccion, una novedad de proceso visible en el detalle del viaje, el aviso al coordinador de calidad y al administrador del
+/// cliente y su registro en la auditoria. Fuera de ese caso el motivo no se admite.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-10-23T08:30:00-05:00";
@@ -26,7 +27,7 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
 
     private sealed record Sesion(string Token, Guid UsuarioId);
 
-    /// <summary>Un viaje con su conductor y su inspector, y el Cargue con personal de apoyo; el coordinador y el administrador son del cliente de la unidad.</summary>
+    /// <summary>Un viaje con su conductor y su inspector; el coordinador y el administrador son del cliente de la unidad.</summary>
     private sealed record Escenario(Guid Viaje, Guid Vehiculo, Guid[] Etapas, string Vin, Sesion Conductor, Sesion Inspector, Sesion Coordinador, Sesion Admin);
 
     public override async Task InitializeAsync()
@@ -47,18 +48,13 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
 
     private static JsonElement Errores(JsonElement cuerpo) => cuerpo.GetProperty("details").GetProperty("fieldErrors");
 
-    private async Task<Escenario> EscenarioAsync(bool conApoyo = true, string vin = "VIN-SIN-0001")
+    private async Task<Escenario> EscenarioAsync(string vin = "VIN-SIN-0001")
     {
         var conductor = await SesionAsync("conductor@ejemplo.com", clsRol.CONDUCTOR);
         var inspector = await SesionAsync("inspector@ejemplo.com", clsRol.INSPECTOR);
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
         var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
         var (vehiculo, etapas) = await Sembrador.VehiculoConRutaAsync(vin, conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
-        if (conApoyo)
-        {
-            await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET ConPersonalApoyo = 1 WHERE Id = @e", ("@e", etapas[0]));
-        }
-
         return new Escenario(await Sembrador.ViajeDeEtapaAsync(etapas[0]), vehiculo, etapas, vin, conductor, inspector, coordinador, admin);
     }
 
@@ -122,8 +118,7 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
         Assert.Equal("Nombre conductor@ejemplo.com", novedades[0].GetProperty("usuario_nombre").GetString());
         Assert.Equal(DateTimeOffset.Parse(FECHA), novedades[0].GetProperty("fecha").GetDateTimeOffset());
 
-        // La etapa conserva su personal de apoyo, el motivo queda en la inspeccion y la novedad, con la fecha, lat y lng del cuerpo.
-        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas WHERE Id = @e AND ConPersonalApoyo = 1", ("@e", e.Etapas[0])));
+        // El motivo queda en la inspeccion y la novedad, con la fecha, lat y lng del cuerpo.
         Assert.Equal(1, await Sembrador.ContarAsync(
             "SELECT COUNT(*) FROM dbo.tblInspecciones WHERE Id = @i AND MotivoSinInspector = 'inspector_no_llego' AND MotivoSinInspectorTexto IS NULL", ("@i", inspeccion.GetProperty("id").GetGuid())));
         Assert.Equal(1, await Sembrador.ContarAsync(
@@ -178,7 +173,7 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
         var enBlanco = await ConMotivoAsync(e.Conductor, e.Etapas[0], "  ");
 
         Assert.Equal(HttpStatusCode.Forbidden, sinMotivo.StatusCode);
-        Assert.Equal("Este cargue tiene personal de apoyo: el conductor solo firma el recibo", (await ComoJsonAsync(sinMotivo)).GetProperty("message").GetString());
+        Assert.Equal("La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción", (await ComoJsonAsync(sinMotivo)).GetProperty("message").GetString());
         Assert.Equal(HttpStatusCode.Forbidden, soloTexto.StatusCode);
         foreach (var r in new[] { inexistente, inactivo, enBlanco })
         {
@@ -191,18 +186,16 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
     }
 
     [Fact]
-    public async Task El_motivo_no_se_admite_para_el_inspector_ni_en_un_cargue_sin_apoyo_ni_en_otra_salida_o_llegada()
+    public async Task El_motivo_no_se_admite_para_el_inspector_ni_en_otra_salida_o_llegada_que_la_del_cargue_del_conductor()
     {
         var e = await EscenarioAsync();
         var delInspector = await ConMotivoAsync(e.Inspector, e.Etapas[0]);
         var enLlegada = await ConMotivoAsync(e.Conductor, e.Etapas[0], momento: "llegada");
         var soloTexto = await ConMotivoAsync(e.Inspector, e.Etapas[0], motivo: null, texto: "texto");
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET ConPersonalApoyo = 0 WHERE Id = @e", ("@e", e.Etapas[0]));
-        var sinApoyo = await ConMotivoAsync(e.Conductor, e.Etapas[0]);
         await Sembrador.InformeAsync(e.Etapas[0], e.Conductor.UsuarioId, cerrada: true, momento: "llegada");
         var deTransporte = await ConMotivoAsync(e.Conductor, e.Etapas[1]);
 
-        foreach (var r in new[] { delInspector, enLlegada, sinApoyo, deTransporte })
+        foreach (var r in new[] { delInspector, enLlegada, deTransporte })
         {
             Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
             Assert.Equal("Campo no admitido", Errores(await ComoJsonAsync(r)).GetProperty("motivo_sin_inspector")[0].GetString());
@@ -333,10 +326,103 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
         Assert.Equal(0, transporte.GetProperty("novedades_proceso").GetArrayLength());
     }
 
+    // ------------------------------------------------------------------------- la excepcion se activa en el momento (ESC-02 a ESC-05)
+
+    [Fact]
+    public async Task Sin_la_excepcion_el_conductor_es_rechazado_con_403_y_el_cargue_nace_listo_para_el_inspector()
+    {
+        var e = await EscenarioAsync();
+
+        var delConductor = await CrearAsync(e.Conductor, e.Etapas[0]);
+        var delInspector = await CrearAsync(e.Inspector, e.Etapas[0]);
+
+        Assert.Equal(HttpStatusCode.Forbidden, delConductor.StatusCode);
+        Assert.Equal(
+            "La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción",
+            (await ComoJsonAsync(delConductor)).GetProperty("message").GetString());
+        Assert.Equal(HttpStatusCode.Created, delInspector.StatusCode);
+        Assert.Equal(0, await NovedadesAsync());
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones"));
+    }
+
+    [Fact]
+    public async Task Al_activar_la_excepcion_la_novedad_de_proceso_queda_en_el_detalle_del_viaje_como_registro_aparte_y_avisa_con_urgencia_alta()
+    {
+        var e = await EscenarioAsync();
+
+        var r = await ConMotivoAsync(e.Conductor, e.Etapas[0], "otro", "El inspector no se presentó");
+
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+        var viaje = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/viajes/{e.Viaje}"));
+        var novedades = viaje.GetProperty("novedades_proceso").EnumerateArray().ToList();
+        Assert.Single(novedades);
+        Assert.Equal(["tipo", "motivo_codigo", "motivo", "texto", "usuario_nombre", "fecha", "vin", "inspeccion_id"], novedades[0].EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal("cargue_sin_inspector", novedades[0].GetProperty("tipo").GetString());
+        Assert.Equal("otro", novedades[0].GetProperty("motivo_codigo").GetString());
+        Assert.Equal("Otro", novedades[0].GetProperty("motivo").GetString());
+        Assert.Equal("El inspector no se presentó", novedades[0].GetProperty("texto").GetString());
+        Assert.Equal("Nombre conductor@ejemplo.com", novedades[0].GetProperty("usuario_nombre").GetString());
+        Assert.Equal(DateTimeOffset.Parse(FECHA), novedades[0].GetProperty("fecha").GetDateTimeOffset());
+        Assert.Equal(e.Vin, novedades[0].GetProperty("vin").GetString());
+        Assert.Equal((await ComoJsonAsync(r)).GetProperty("id").GetGuid(), novedades[0].GetProperty("inspeccion_id").GetGuid());
+        // El coordinador y el administrador reciben el aviso de urgencia alta del viaje; el conductor y el inspector no.
+        foreach (var destinatario in new[] { e.Coordinador, e.Admin })
+        {
+            Assert.Equal(1, await Sembrador.ContarAsync(
+                "SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'novedad_proceso' AND Urgencia = 'alta' AND Canal = 'bandeja' AND UsuarioId = @u AND ViajeId = @v", ("@u", destinatario.UsuarioId), ("@v", e.Viaje)));
+        }
+
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'novedad_proceso' AND UsuarioId IN (@c, @i)", ("@c", e.Conductor.UsuarioId), ("@i", e.Inspector.UsuarioId)));
+        // Un viaje sin excepcion no trae novedades; el detalle del conductor del viaje tambien las ve.
+        var delConductor = await ComoJsonAsync(await Como(e.Conductor).GetAsync($"/api/viajes/{e.Viaje}"));
+        Assert.Equal(1, delConductor.GetProperty("novedades_proceso").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Solo_el_conductor_del_viaje_activa_la_excepcion_con_un_motivo_activo_del_catalogo()
+    {
+        var e = await EscenarioAsync();
+        var otroConductor = await SesionAsync("juan@ejemplo.com", clsRol.CONDUCTOR);
+
+        var otro = await ConMotivoAsync(otroConductor, e.Etapas[0]);
+        var inspector = await ConMotivoAsync(e.Inspector, e.Etapas[0]);
+        var coordinador = await ConMotivoAsync(e.Coordinador, e.Etapas[0]);
+        var inexistente = await ConMotivoAsync(e.Conductor, e.Etapas[0], "no_existe");
+
+        Assert.Equal(HttpStatusCode.Forbidden, otro.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, inspector.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, coordinador.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, inexistente.StatusCode);
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones"));
+        Assert.Equal(0, await NovedadesAsync());
+        // El conductor del viaje la activa y puede registrar la inspeccion de salida del cargue.
+        Assert.Equal(HttpStatusCode.Created, (await ConMotivoAsync(e.Conductor, e.Etapas[0])).StatusCode);
+    }
+
+    [Fact]
+    public async Task La_novedad_de_proceso_no_cuenta_en_los_patrones_por_zona_ni_en_la_tasa_diaria_de_novedad()
+    {
+        var e = await EscenarioAsync();
+        Assert.Equal(HttpStatusCode.Created, (await ConMotivoAsync(e.Conductor, e.Etapas[0])).StatusCode);
+        var hoy = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).ToString("yyyy-MM-dd");
+        var desde = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).AddDays(-10).ToString("yyyy-MM-dd");
+
+        var patrones = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/reportes/patrones?desde={desde}&hasta={hoy}"));
+        var diario = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/reportes/indicador-diario?fecha={hoy}"));
+        var novedades = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/reportes/novedades-proceso?desde={desde}&hasta={hoy}"));
+
+        // El viaje aporta 0 a los dos indicadores de danos; la novedad aparece aparte, en su propio reporte.
+        Assert.Equal(0, patrones.GetProperty("total").GetInt32());
+        Assert.Equal(0, diario.GetProperty("con_novedad").GetInt32());
+        Assert.Equal(0m, diario.GetProperty("porcentaje").GetDecimal());
+        Assert.Equal(1, novedades.GetProperty("total").GetInt32());
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
+    }
+
     [Fact]
     public async Task Una_inspeccion_normal_trae_el_motivo_nulo_y_sin_novedades_de_proceso()
     {
-        var e = await EscenarioAsync(conApoyo: false);
+        var e = await EscenarioAsync();
 
         var r = await CrearAsync(e.Inspector, e.Etapas[0]);
 
@@ -353,7 +439,7 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
         var (ruta, hash) = await SubirAsync(conductor);
         var creado = await Como(conductor).PostAsJsonAsync($"/api/inspecciones/{inspeccion}/hallazgos", new
         {
-            zona_provisional = "frente",
+            cuadrante_numero = 50,
             clase_dano = "rotura",
             tamano_dano = "1_5cm",
             evidencia = new { storage_path = ruta, sello_fecha = FECHA, sello_lat = 4.6, sello_lng = -74.1, hash_sha256 = hash },
@@ -366,7 +452,7 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
     }
 
     private Task<HttpResponseMessage> RevisarAsync(Sesion quien, Guid hallazgo) =>
-        Como(quien).PostAsJsonAsync($"/api/hallazgos/{hallazgo}/revision", new { zona_provisional = "frente", clase_dano = "rotura", nivel_severidad = "v2" });
+        Como(quien).PostAsJsonAsync($"/api/hallazgos/{hallazgo}/revision", new { cuadrante_numero = 50, clase_dano = "rotura", nivel_severidad = "v2" });
 
     [Fact]
     public async Task El_coordinador_del_cliente_revisa_a_distancia_los_hallazgos_del_conductor_de_una_salida_hecha_con_la_excepcion_y_no_los_de_otro_cliente()

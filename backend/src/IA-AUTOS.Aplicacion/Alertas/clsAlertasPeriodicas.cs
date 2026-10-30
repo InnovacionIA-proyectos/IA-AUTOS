@@ -2,6 +2,8 @@ using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Aplicacion.Parametros;
+using IAAutos.Dominio.Catalogos;
+using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Notificaciones;
 using IAAutos.Dominio.Parametros;
@@ -16,7 +18,7 @@ public sealed record clsConteoPatron(Guid ClienteId, string Clave, string Nombre
 
 /// <summary>Una inspeccion en borrador de Cargue o Descargue que sigue abierta: quien la inicio, a que unidad y proceso, y si su creador es un conductor en un cargue sin personal de apoyo.</summary>
 public sealed record clsCapturaAbierta(
-    Guid InspeccionId, Guid EtapaId, Guid ViajeId, Guid VehiculoId, Guid ClienteId, string Vin, string Proceso, Guid UsuarioId, string RolCreador, bool ConPersonalApoyo, DateTimeOffset IniciadaAt);
+    Guid InspeccionId, Guid EtapaId, Guid ViajeId, Guid VehiculoId, Guid ClienteId, string Vin, string Proceso, Guid UsuarioId, string RolCreador, DateTimeOffset IniciadaAt);
 
 /// <summary>
 /// Una llegada cerrada cuya transferencia no tiene tipo de cierre: a quien le falta firmar (si la transferencia existe) o, si no existe, el conductor y el inspector del viaje y el proceso de la
@@ -26,10 +28,34 @@ public sealed record clsTransferenciaPendiente(
     Guid InspeccionId, Guid ViajeId, Guid VehiculoId, Guid ClienteId, string Vin, string Proceso, bool ExisteTransferencia,
     Guid? EntregaUsuarioId, bool FaltaEntrega, Guid? RecibeUsuarioId, bool FaltaRecibe, string? ProcesoSiguiente, Guid? ConductorId, Guid? InspectorId);
 
+/// <summary>Un camion reclamado (reclamo activo) por un inspector que aun no inicio ni cerro ninguna inspeccion del viaje despues de reclamarlo.</summary>
+public sealed record clsReclamoSinActividad(
+    Guid ReclamoId, Guid ViajeId, string? CodigoMtrack, string? Placa, string Proceso, Guid InspectorId, string? InspectorNombre, Guid? ClienteId, DateTimeOffset ReclamadoAt);
+
+/// <summary>Una foto sellada con ubicacion de una visita a un lugar sin ubicacion confirmada: de que lugar, de que viaje (la visita), de que cliente y sus coordenadas.</summary>
+public sealed record clsFotoDeLugar(Guid LugarId, string LugarNombre, Guid ViajeId, Guid ClienteId, double Lat, double Lng);
+
+/// <summary>Un cargue programado cuya hora ya paso y que nadie reclamo: el viaje, su lugar, su hora programada y el cliente de una de sus unidades.</summary>
+public sealed record clsCargueSinReclamar(Guid ViajeId, string? CodigoMtrack, string? Placa, DateTimeOffset FechaProgramada, string? Lugar, Guid ClienteId);
+
 /// <summary>Consultas de solo lectura de los procesos de alertas.</summary>
 public interface IConsultasAlertas
 {
-    /// <summary>Hallazgos de inspecciones cerradas desde <paramref name="desde"/>, contados por cliente y zona (lado + numero, o zona provisional).</summary>
+    /// <summary>
+    /// Las fotos selladas de Cargue y Descargue con ubicacion (no (0, 0)) y con precision menor que <paramref name="valvulaPrecisionM"/>, de los lugares activos cuya ubicacion no esta confirmada (el lugar de cargue
+    /// del viaje y el destino de la unidad), para la autocalibracion.
+    /// </summary>
+    Task<IReadOnlyList<clsFotoDeLugar>> FotosPorLugarAsync(double valvulaPrecisionM, int limite, CancellationToken ct = default);
+
+    /// <summary>Los viajes programados con fecha programada entre <paramref name="programadosDesde"/> y <paramref name="programadosAntesDe"/>, sin ningun reclamo activo del cargue ni ninguna inspeccion iniciada.</summary>
+    Task<IReadOnlyList<clsCargueSinReclamar>> CarguesSinReclamarAsync(DateTimeOffset programadosDesde, DateTimeOffset programadosAntesDe, int limite, CancellationToken ct = default);
+
+    /// <summary>
+    /// Los reclamos activos hechos antes de <paramref name="reclamadosAntesDe"/>, de viajes activos, sin ninguna inspeccion del viaje iniciada o cerrada despues del reclamo (la «actividad»).
+    /// </summary>
+    Task<IReadOnlyList<clsReclamoSinActividad>> ReclamosSinActividadAsync(DateTimeOffset reclamadosAntesDe, int limite, CancellationToken ct = default);
+
+    /// <summary>Hallazgos de inspecciones cerradas desde <paramref name="desde"/>, contados por cliente y zona (lado + numero).</summary>
     Task<IReadOnlyList<clsConteoPatron>> ConteoPorZonaAsync(DateTimeOffset desde, CancellationToken ct = default);
 
     /// <summary>Hallazgos de inspecciones cerradas desde <paramref name="desde"/>, contados por cliente y proceso.</summary>
@@ -53,6 +79,8 @@ public sealed class clsAlertasPeriodicas(
     IUsuarioRepository usuarios,
     IEtapaRepository etapas,
     IInspeccionRepository inspecciones,
+    IPropuestaUbicacionRepository propuestas,
+    IUnidadDeTrabajo unidadDeTrabajo,
     clsCalculadoraVistas calculadoraVistas,
     clsEmisorNotificaciones emisor,
     IReloj reloj,
@@ -62,6 +90,13 @@ public sealed class clsAlertasPeriodicas(
     public const int VENTANA_DIAS_POR_DEFECTO = 30;
     public const int CAPTURA_MINUTOS_POR_DEFECTO = 30;
     public const int TRANSFERENCIA_MINUTOS_POR_DEFECTO = 240;
+    public const int RECLAMO_MINUTOS_POR_DEFECTO = 30;
+    public const int CARGUE_SIN_RECLAMAR_MINUTOS_POR_DEFECTO = 30;
+    public const int VALVULA_PRECISION_POR_DEFECTO_M = 500;
+
+    /// <summary>Un cargue sin reclamar solo se avisa mientras su hora programada sea de las ultimas horas: un viaje programado hace dias que nadie reclamo ya no es un aviso operativo.</summary>
+    private const int VENTANA_CARGUE_SIN_RECLAMAR_HORAS = 24;
+    private const int LIMITE_FOTOS_AUTOCALIBRACION = 20000;
     private const int LIMITE_POR_EJECUCION = 500;
 
     /// <summary>
@@ -110,9 +145,159 @@ public sealed class clsAlertasPeriodicas(
         return emitidas;
     }
 
-    /// <summary>Corre los dos avisos operativos: captura incompleta y transferencia pendiente. Devuelve cuantos avisos intento crear.</summary>
+    /// <summary>Corre los avisos operativos: captura incompleta, transferencia pendiente y camion reclamado sin actividad. Devuelve cuantos avisos intento crear.</summary>
     public async Task<int> EjecutarAvisosAsync(CancellationToken ct = default) =>
-        await EjecutarCapturasIncompletasAsync(ct) + await EjecutarTransferenciasPendientesAsync(ct);
+        await EjecutarCapturasIncompletasAsync(ct) + await EjecutarTransferenciasPendientesAsync(ct) + await EjecutarReclamosSinActividadAsync(ct) + await EjecutarCarguesSinReclamarAsync(ct);
+
+    /// <summary>
+    /// Avisa a los coordinadores de calidad del cliente de un cargue programado que lleva <c>cargue_sin_reclamar_minutos</c> (30 por defecto, ajustable sin desplegar) pasada su hora programada sin que ningun inspector lo
+    /// haya reclamado ni iniciado. Un aviso por viaje: las corridas siguientes no lo repiten (urgencia media, bandeja y push).
+    /// </summary>
+    public async Task<int> EjecutarCarguesSinReclamarAsync(CancellationToken ct = default)
+    {
+        var minutos = Math.Max(await parametros.EnteroAsync(clsClavesParametros.CARGUE_SIN_RECLAMAR_MINUTOS, CARGUE_SIN_RECLAMAR_MINUTOS_POR_DEFECTO, ct), 1);
+        var ahora = reloj.Ahora;
+        var emitidas = 0;
+        foreach (var cargue in await consultas.CarguesSinReclamarAsync(ahora.AddHours(-VENTANA_CARGUE_SIN_RECLAMAR_HORAS), ahora.AddMinutes(-minutos), LIMITE_POR_EJECUCION, ct))
+        {
+            var destinatarios = (await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD], cargue.ClienteId, ct)).Select(u => u.Id).ToList();
+            if (destinatarios.Count == 0)
+            {
+                continue;
+            }
+
+            var hora = cargue.FechaProgramada.ToOffset(TimeSpan.FromHours(-5)).ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+            var viaje = cargue.CodigoMtrack ?? cargue.Placa ?? "sin código";
+            var lugar = cargue.Lugar is { } nombre ? $" en {nombre}" : string.Empty;
+            await emisor.EmitirAsync(
+                new clsAlerta(
+                    clsTipoNotificacion.CARGUE_SIN_RECLAMAR,
+                    clsUrgenciaNotificacion.MEDIA,
+                    destinatarios,
+                    cargue.ClienteId,
+                    cargue.ViajeId,
+                    null,
+                    null,
+                    null,
+                    $"Cargue sin reclamar: {viaje}",
+                    $"El cargue del viaje {viaje}{lugar} estaba programado para las {hora} y pasaron más de {minutos} minutos sin que ningún inspector lo reclame.",
+                    $"{clsTipoNotificacion.CARGUE_SIN_RECLAMAR}:{cargue.ViajeId}"),
+                ct);
+            emitidas += destinatarios.Count;
+        }
+
+        return emitidas;
+    }
+
+    /// <summary>
+    /// La autocalibracion de la ubicacion de los lugares: con las fotos selladas con ubicacion de al menos <see cref="IAAutos.Dominio.Catalogos.clsAutocalibracion.VISITAS_MINIMAS"/> visitas distintas a un lugar sin ubicacion confirmada
+    /// propone el centro (mediana de las coordenadas) y el radio (segun su dispersion), crea la propuesta pendiente y avisa al coordinador de calidad. El lugar NO cambia mientras la propuesta siga pendiente. No
+    /// repite una propuesta pendiente ni vuelve a proponer sin fotos nuevas despues de una decision. Devuelve cuantos avisos intento crear.
+    /// </summary>
+    public async Task<int> EjecutarAutocalibracionAsync(CancellationToken ct = default)
+    {
+        var valvula = await parametros.EnteroAsync(clsClavesParametros.VALVULA_PRECISION_M, VALVULA_PRECISION_POR_DEFECTO_M, ct);
+        var porLugar = (await consultas.FotosPorLugarAsync(valvula, LIMITE_FOTOS_AUTOCALIBRACION, ct)).GroupBy(f => f.LugarId).ToList();
+        if (porLugar.Count == 0)
+        {
+            return 0;
+        }
+
+        var previas = await propuestas.UltimaPorLugarAsync(porLugar.Select(g => g.Key).ToList(), ct);
+        var emitidas = 0;
+        foreach (var fotos in porLugar)
+        {
+            var calibracion = clsAutocalibracion.Proponer([.. fotos.Select(f => (f.Lat, f.Lng, f.ViajeId))]);
+            if (calibracion is null || (previas.TryGetValue(fotos.Key, out var previa) && (previa.EstaPendiente || calibracion.Fotos <= previa.Fotos)))
+            {
+                continue;
+            }
+
+            var propuesta = clsPropuestaUbicacion.Crear(fotos.Key, calibracion.CentroLat, calibracion.CentroLng, calibracion.RadioMetros, calibracion.Fotos, calibracion.Visitas, reloj.Ahora);
+            propuestas.Agregar(propuesta);
+            try
+            {
+                await unidadDeTrabajo.GuardarCambiosAsync(ct);
+            }
+            catch (Exception ex) when (ex is clsConflictoException)
+            {
+                // Otra instancia ya creo la propuesta pendiente de este lugar.
+                unidadDeTrabajo.DescartarCambios();
+                continue;
+            }
+
+            var lugar = fotos.First().LugarNombre;
+            foreach (var cliente in fotos.Select(f => f.ClienteId).Distinct())
+            {
+                var destinatarios = (await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD], cliente, ct)).Select(u => u.Id).ToList();
+                if (destinatarios.Count == 0)
+                {
+                    continue;
+                }
+
+                await emisor.EmitirAsync(
+                    new clsAlerta(
+                        clsTipoNotificacion.PROPUESTA_UBICACION,
+                        clsUrgenciaNotificacion.MEDIA,
+                        destinatarios,
+                        cliente,
+                        null,
+                        null,
+                        null,
+                        null,
+                        $"Propuesta de ubicación: {lugar}",
+                        $"La autocalibración propone para {lugar} el centro ({calibracion.CentroLat:0.00000}, {calibracion.CentroLng:0.00000}) y un radio de {calibracion.RadioMetros} m, con {calibracion.Fotos} fotos de {calibracion.Visitas} visitas. Confírmela o descártela: el lugar no cambia hasta que decida.",
+                        $"{clsTipoNotificacion.PROPUESTA_UBICACION}:{propuesta.Id}"),
+                    ct);
+                emitidas += destinatarios.Count;
+            }
+        }
+
+        return emitidas;
+    }
+
+    /// <summary>
+    /// Avisa a los coordinadores de calidad del cliente del inspector de un camion reclamado que lleva <c>reclamo_sin_actividad_minutos</c> sin ninguna inspeccion iniciada o cerrada del viaje despues del reclamo (urgencia
+    /// media). Un aviso por reclamo: el reclamo NO se libera, solo lo libera una persona.
+    /// </summary>
+    public async Task<int> EjecutarReclamosSinActividadAsync(CancellationToken ct = default)
+    {
+        var minutos = Math.Max(await parametros.EnteroAsync(clsClavesParametros.RECLAMO_SIN_ACTIVIDAD_MINUTOS, RECLAMO_MINUTOS_POR_DEFECTO, ct), 1);
+        var emitidas = 0;
+        foreach (var reclamo in await consultas.ReclamosSinActividadAsync(reloj.Ahora.AddMinutes(-minutos), LIMITE_POR_EJECUCION, ct))
+        {
+            if (reclamo.ClienteId is not { } clienteId)
+            {
+                continue;
+            }
+
+            var destinatarios = (await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD], clienteId, ct)).Select(u => u.Id).ToList();
+            if (destinatarios.Count == 0)
+            {
+                continue;
+            }
+
+            var camion = reclamo.Placa is { } placa ? $"el camión {placa}" : "el camión";
+            var viaje = reclamo.CodigoMtrack is { } codigo ? $" (viaje {codigo})" : string.Empty;
+            await emisor.EmitirAsync(
+                new clsAlerta(
+                    clsTipoNotificacion.RECLAMO_SIN_ACTIVIDAD,
+                    clsUrgenciaNotificacion.MEDIA,
+                    destinatarios,
+                    clienteId,
+                    reclamo.ViajeId,
+                    null,
+                    null,
+                    null,
+                    $"Camión reclamado sin actividad: {reclamo.Placa ?? reclamo.CodigoMtrack ?? "sin placa"}",
+                    $"{reclamo.InspectorNombre ?? "Un inspector"} reclamó {camion}{viaje} ({reclamo.Proceso}) hace más de {minutos} minutos y no ha iniciado ninguna inspección. El reclamo sigue vigente.",
+                    $"{clsTipoNotificacion.RECLAMO_SIN_ACTIVIDAD}:{reclamo.ReclamoId}"),
+                ct);
+            emitidas += destinatarios.Count;
+        }
+
+        return emitidas;
+    }
 
     /// <summary>
     /// Avisa a quien inicio una inspeccion de Cargue o Descargue que sigue en borrador, sin todas las vistas obligatorias, pasados los <c>captura_incompleta_minutos</c>: el inspector o, solo en un cargue
@@ -124,8 +309,8 @@ public sealed class clsAlertasPeriodicas(
         var emitidas = 0;
         foreach (var captura in await consultas.CapturasAbiertasAsync(reloj.Ahora.AddMinutes(-minutos), LIMITE_POR_EJECUCION, ct))
         {
-            // El conductor solo recibe el aviso de lo que el inicio en un cargue sin personal de apoyo.
-            if (captura.RolCreador == clsRol.CONDUCTOR && (captura.Proceso != clsCodigosEtapa.CARGUE || captura.ConPersonalApoyo))
+            // El conductor solo recibe el aviso de la salida de un cargue que el inicio (la unica que hace, con la excepcion «No hay inspector»).
+            if (captura.RolCreador == clsRol.CONDUCTOR && captura.Proceso != clsCodigosEtapa.CARGUE)
             {
                 continue;
             }

@@ -167,6 +167,8 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
         public DateTimeOffset? RecibeFecha { get; init; }
 
         public string? RecibeIp { get; init; }
+
+        public int Extras { get; init; }
     }
 
     public async Task<ResultadoExportacion<FilaExportInspeccion>> InspeccionesAsync(FiltrosInspecciones f, Guid? clienteId, int maximo, CancellationToken ct = default)
@@ -236,11 +238,12 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                            RecibeNombre = re.Nombre,
                            RecibeFecha = tr.FirmaRecibeAt,
                            RecibeIp = tr.FirmaRecibeIp,
+                           Extras = contexto.InspeccionExtras.Count(x => x.InspeccionId == i.Id),
                        };
 
         var filas = (await consulta.Take(maximo + 1).ToListAsync(ct)).Select(x => new FilaExportInspeccion(
             Contexto(x.Contexto), x.Inspeccion.Momento, x.Inspeccion.Version, x.Inspeccion.Estado, x.Inspeccion.IniciadaAt, x.Inspeccion.CerradaAt, x.Inspector,
-            x.TipoCierre, x.EntregaNombre, x.EntregaFecha, x.EntregaIp, x.RecibeNombre, x.RecibeFecha, x.RecibeIp)).ToList();
+            x.TipoCierre, x.EntregaNombre, x.EntregaFecha, x.EntregaIp, x.RecibeNombre, x.RecibeFecha, x.RecibeIp, x.Extras)).ToList();
         return Limitar(filas, maximo);
     }
 
@@ -259,6 +262,8 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
         public string? ZonaLado { get; init; }
 
         public string? ZonaNombre { get; init; }
+
+        public string? ZonaAiag { get; init; }
     }
 
     public async Task<ResultadoExportacion<FilaExportHallazgo>> HallazgosAsync(FiltrosHallazgos f, Guid? clienteId, int maximo, CancellationToken ct = default)
@@ -319,7 +324,8 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                            },
                            ZonaNumero = z.Numero,
                            ZonaLado = z.Lado,
-                           ZonaNombre = cu.Nombre ?? z.Nombre,
+                           ZonaNombre = cu.Nombre,
+                           ZonaAiag = z.AiagArea,
                        };
 
         var datos = await consulta.Take(maximo + 1).ToListAsync(ct);
@@ -344,7 +350,7 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
             var foto = fotos.TryGetValue(x.Hallazgo.Id, out var f2) ? f2 : default((DateTimeOffset Fecha, double? Lat, double? Lng)?);
             return new FilaExportHallazgo(
                 Contexto(x.Contexto), x.Inspeccion.Momento, x.Inspeccion.Version, x.Inspeccion.Estado, x.Inspeccion.IniciadaAt, x.Inspeccion.CerradaAt,
-                x.ZonaLado, x.ZonaNumero, x.ZonaNombre, x.Hallazgo.ClaseDano, x.Hallazgo.TamanoDano, x.Hallazgo.NivelSeveridad, x.Hallazgo.EsPreexistente, x.Hallazgo.Origen,
+                x.ZonaLado, x.ZonaNumero, x.ZonaNombre, x.ZonaAiag, x.Hallazgo.ClaseDano, x.Hallazgo.TamanoDano, x.Hallazgo.NivelSeveridad, x.Hallazgo.EsPreexistente, x.Hallazgo.Origen,
                 x.Hallazgo.EstadoSeguimiento, foto?.Fecha, foto?.Lat, foto?.Lng);
         }).ToList();
         return Limitar(filas, maximo);

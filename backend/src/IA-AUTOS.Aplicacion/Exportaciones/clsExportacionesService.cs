@@ -60,10 +60,10 @@ public sealed class clsExportacionesService(
             "Inspecciones",
             [
                 .. COLUMNAS_CONTEXTO, new("Momento", 10), new("Versión", 9), new("Estado", 10), new("Inicio", 20), new("Cierre", 20), new("Inspector", 24), new("Tipo de cierre", 14),
-                new("Entrega: quién", 24), new("Entrega: fecha", 20), new("Entrega: IP", 16), new("Recibe: quién", 24), new("Recibe: fecha", 20), new("Recibe: IP", 16),
+                new("Entrega: quién", 24), new("Entrega: fecha", 20), new("Entrega: IP", 16), new("Recibe: quién", 24), new("Recibe: fecha", 20), new("Recibe: IP", 16), new("Extras", 8),
             ],
             resultado,
-            f => [.. Contexto(f.Contexto, clientes), f.Momento, f.Version, f.Estado, f.Inicio, f.Cierre, f.Inspector, f.TipoCierre, f.EntregaNombre, f.EntregaFecha, f.EntregaIp, f.RecibeNombre, f.RecibeFecha, f.RecibeIp]);
+            f => [.. Contexto(f.Contexto, clientes), f.Momento, f.Version, f.Estado, f.Inicio, f.Cierre, f.Inspector, f.TipoCierre, f.EntregaNombre, f.EntregaFecha, f.EntregaIp, f.RecibeNombre, f.RecibeFecha, f.RecibeIp, f.Extras]);
     }
 
     // ---------------------------------------------------------------------------------------------- hallazgos
@@ -78,11 +78,11 @@ public sealed class clsExportacionesService(
             "Hallazgos",
             [
                 .. COLUMNAS_CONTEXTO, new("Momento", 10), new("Versión", 9), new("Estado de la inspección", 15), new("Inicio", 20), new("Cierre", 20),
-                new("Lado", 11), new("Número", 9), new("Zona", 24), new("Clase de daño", 16), new("Tamaño", 14), new("Nivel", 8), new("Preexistente", 12), new("Origen", 11),
+                new("Lado", 11), new("Número", 9), new("Zona", 24), new("Código AIAG", 16), new("Clase de daño", 16), new("Tamaño", 14), new("Nivel", 8), new("Preexistente", 12), new("Origen", 11),
                 new("Estado de seguimiento", 18), new("Foto: fecha y hora", 20), new("Foto: latitud", 12), new("Foto: longitud", 12),
             ],
             resultado,
-            f => [.. Contexto(f.Contexto, clientes), f.Momento, f.Version, f.EstadoInspeccion, f.Inicio, f.Cierre, f.ZonaLado, f.ZonaNumero, f.ZonaNombre, f.Clase, f.Tamano, f.Nivel, f.EsPreexistente, f.Origen, f.EstadoSeguimiento, f.FotoFecha, f.FotoLat, f.FotoLng]);
+            f => [.. Contexto(f.Contexto, clientes), f.Momento, f.Version, f.EstadoInspeccion, f.Inicio, f.Cierre, f.ZonaLado, f.ZonaNumero, f.ZonaNombre, f.ZonaAiag, f.Clase, f.Tamano, f.Nivel, f.EsPreexistente, f.Origen, f.EstadoSeguimiento, f.FotoFecha, f.FotoLat, f.FotoLng]);
     }
 
     // ------------------------------------------------------------------------------------------------ comunes

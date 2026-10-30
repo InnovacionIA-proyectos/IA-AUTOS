@@ -11,7 +11,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Reportes del tablero (GET /api/reportes/*): quien los ve (coordinador, comercial y administradores, con lo de su cliente), cada formula (cobertura, adopcion, tiempo de captura, averias, patrones
 /// e indicador diario), los filtros y los encabezados de las rutas obsoletas.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaTableroBase(bd)
 {
     private static readonly string[] RUTAS =
@@ -282,7 +282,7 @@ public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaT
         Assert.False(proceso.GetProperty("supera_umbral").GetBoolean());
         var regiones = Lista(r, "por_region");
         Assert.Equal(["cuadrante_numero", "lado", "nombre", "zona", "total", "supera_umbral"], regiones[0].EnumerateObject().Select(p => p.Name).ToList());
-        var izquierdo7 = regiones.Single(g => g.GetProperty("cuadrante_numero").ValueKind == JsonValueKind.Number);
+        var izquierdo7 = regiones.Single(g => g.GetProperty("cuadrante_numero").ValueKind == JsonValueKind.Number && g.GetProperty("cuadrante_numero").GetInt32() == 7);
         Assert.Equal(7, izquierdo7.GetProperty("cuadrante_numero").GetInt32());
         Assert.Equal("izquierdo", izquierdo7.GetProperty("lado").GetString());
         Assert.Equal("Puerta delantera", izquierdo7.GetProperty("nombre").GetString());

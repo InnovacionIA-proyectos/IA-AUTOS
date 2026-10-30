@@ -14,7 +14,7 @@ using static IAAutos.Tests.Integracion.Infraestructura.clsEscenario;
 
 namespace IAAutos.Tests.Integracion.Infraestructura;
 
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
 {
     public Task InitializeAsync() => bd.LimpiarAsync();
@@ -24,9 +24,9 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
     private ServiceProvider Proveedor() => CrearProveedor(bd.CadenaConexion);
 
     /// <summary>Crea usuario, vehiculo con su ruta estandar y devuelve los ids para armar inspecciones.</summary>
-    /// <summary>La zona provisional «frente» (la crea el ddl): una zona que siempre existe para los hallazgos de prueba.</summary>
+    /// <summary>La zona del cuadrante 50 «Frente» (sin lado, del dibujo base de las pruebas): una zona que siempre existe para los hallazgos de prueba.</summary>
     private static Task<Guid> ZonaFrenteAsync(IServiceProvider proveedor) =>
-        proveedor.GetRequiredService<clsAppDbContext>().ZonasDano.Where(z => z.Codigo == clsZonaProvisional.FRENTE).Select(z => z.Id).FirstAsync();
+        proveedor.GetRequiredService<clsAppDbContext>().ZonasDano.Where(z => z.Numero == 50).Select(z => z.Id).FirstAsync();
 
     private async Task<(Guid UsuarioId, Guid VehiculoId, IReadOnlyList<clsEtapa> Etapas)> SembrarRutaAsync(string email = "uno@ejemplo.com", string vin = "9FBHSR4E8PM000123")
     {
@@ -39,7 +39,7 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         var ruta = await contexto.EtapasCatalogo.OrderBy(e => e.Orden).Select(e => new clsEtapaDeRuta(e.Id, e.Codigo)).ToListAsync();
         var tipoUnidadId = await contexto.TiposUnidad.Select(t => t.Id).FirstAsync();
         var viaje = clsViaje.Crear("MTK-" + vin, tipoUnidadId, "ABC123", null, null, null, null, null, usuario.Id, AHORA);
-        var etapas = clsRutaCustodia.CrearEtapasEstandar(viaje.Id, vehiculo.Id, ruta, null, null, false, AHORA);
+        var etapas = clsRutaCustodia.CrearEtapasEstandar(viaje.Id, vehiculo.Id, ruta, null, null, AHORA);
 
         s.GetRequiredService<IUsuarioRepository>().Agregar(usuario);
         s.GetRequiredService<IVehiculoRepository>().Agregar(vehiculo);
@@ -273,7 +273,7 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         using (var alcance = proveedor.CreateScope())
         {
             var s = alcance.ServiceProvider;
-            s.GetRequiredService<IEtapaRepository>().Agregar(clsEtapa.Crear(vehiculoId, etapas[0].ViajeId, etapas[0].EtapaCatalogoId, null, 1, true, false, AHORA));
+            s.GetRequiredService<IEtapaRepository>().Agregar(clsEtapa.Crear(vehiculoId, etapas[0].ViajeId, etapas[0].EtapaCatalogoId, null, 1, true, AHORA));
             var ex = await Assert.ThrowsAsync<clsConflictoException>(() => s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync());
             Assert.Equal("Ya existe una etapa con ese orden para el vehículo en el viaje", ex.Message);
         }

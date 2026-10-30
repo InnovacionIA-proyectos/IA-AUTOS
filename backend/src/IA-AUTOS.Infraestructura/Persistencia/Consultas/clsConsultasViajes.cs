@@ -62,7 +62,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         string? Inspector,
         string? Origen,
         string? Destino,
-        bool ConPersonalApoyo,
+        string? LugarCargue,
         int TotalVehiculos,
         int VehiculosCompletos);
 
@@ -204,6 +204,8 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                 from o in origenes.DefaultIfEmpty()
                 join d in contexto.PuntosCustodia on v.DestinoId equals d.Id into destinos
                 from d in destinos.DefaultIfEmpty()
+                join lc in contexto.Lugares on v.LugarCargueId equals lc.Id into lugaresCargue
+                from lc in lugaresCargue.DefaultIfEmpty()
                 select new
                 {
                     Viaje = v,
@@ -212,11 +214,11 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                     Inspector = (string?)i.Nombre,
                     Origen = (string?)o.Nombre,
                     Destino = (string?)d.Nombre,
+                    LugarCargue = (string?)lc.Nombre,
                 }).ToListAsync(ct);
 
         // Los conteos de los viajes se piden aparte, una consulta por tabla agrupada por viaje (y no una subconsulta por cada fila). Completa es la regla de vwViajesCompletos guardada en cada VIN.
         var ids = filas.Select(f => f.Viaje.Id).ToList();
-        var conPersonalApoyo = (await contexto.Etapas.Where(e => ids.Contains(e.ViajeId) && e.ConPersonalApoyo).Select(e => e.ViajeId).Distinct().ToListAsync(ct)).ToHashSet();
         var conteos = (await (from vv in contexto.ViajeVehiculos
                               join h in contexto.Vehiculos on vv.VehiculoId equals h.Id
                               where ids.Contains(vv.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente)
@@ -225,7 +227,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
             .ToDictionary(x => x.ViajeId);
         return filas
             .Select(f => new FilaViaje(
-                f.Viaje, f.Unidad, f.Conductor, f.Inspector, f.Origen, f.Destino, conPersonalApoyo.Contains(f.Viaje.Id),
+                f.Viaje, f.Unidad, f.Conductor, f.Inspector, f.Origen, f.Destino, f.LugarCargue,
                 conteos.GetValueOrDefault(f.Viaje.Id)?.Total ?? 0, conteos.GetValueOrDefault(f.Viaje.Id)?.Completos ?? 0))
             .ToList();
     }
@@ -254,6 +256,8 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                from um in marcadores.DefaultIfEmpty()
                                join r in contexto.Vehiculos on vv.ReemplazoVehiculoId equals r.Id into reemplazos
                                from r in reemplazos.DefaultIfEmpty()
+                               join ld in contexto.Lugares on vv.LugarDestinoId equals ld.Id into lugaresDestino
+                               from ld in lugaresDestino.DefaultIfEmpty()
                                where ids.Contains(vv.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente)
                                orderby h.Vin
                                select new
@@ -270,6 +274,9 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                    MarcadoPorNombre = (string?)um.Nombre,
                                    vv.NoSaleAt,
                                    VinReemplazo = (string?)r.Vin,
+                                   vv.LugarDestinoId,
+                                   LugarDestino = (string?)ld.Nombre,
+                                   vv.Posicion,
                                    Novedades = contexto.Hallazgos.Count(x => x.TipoNovedad != null
                                        && contexto.Inspecciones.Any(i => i.Id == x.InspeccionId
                                            && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id))),
@@ -283,18 +290,33 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                 v.Vehiculo.Id, v.Vehiculo.Vin, v.Vehiculo.Marca, v.Vehiculo.Modelo, v.Vehiculo.Color, v.Vehiculo.Operacion, v.Etapas, v.Completas,
                 v.EstadoUnidad,
                 clsMapeadorViajes.ANoSale(v.EstadoUnidad, v.NoSaleMotivo, v.NoSaleHallazgoId, v.NoSaleMarcadoPor, v.MarcadoPorNombre, v.NoSaleAt, v.VinReemplazo),
-                clsEstadoTransporte.De(v.LlegadaCerrada, v.Novedades), v.Novedades));
+                clsEstadoTransporte.De(v.LlegadaCerrada, v.Novedades), v.Novedades, v.LugarDestinoId, v.LugarDestino, v.Posicion));
         var clientes = await ClientesPorViajeAsync(ids, soloDeCliente, ct);
-        return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id])).ToList();
+
+        // Las novedades de proceso de las unidades del viaje (las que quien consulta puede ver), de la mas antigua a la mas reciente.
+        var novedades = await (from n in contexto.NovedadesProceso.AsNoTracking()
+                               join h in contexto.Vehiculos.AsNoTracking() on n.VehiculoId equals h.Id
+                               join u in contexto.Usuarios.AsNoTracking() on n.UsuarioId equals u.Id into usuarios
+                               from u in usuarios.DefaultIfEmpty()
+                               join m in contexto.MotivosSinInspector.AsNoTracking() on n.MotivoCodigo equals m.Codigo into motivos
+                               from m in motivos.DefaultIfEmpty()
+                               where ids.Contains(n.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente)
+                               orderby n.Fecha, n.CreatedAt
+                               select new { n.ViajeId, n.Tipo, n.MotivoCodigo, Motivo = (string?)m.Nombre, Texto = n.MotivoTexto, Usuario = (string?)u.Nombre, n.Fecha, h.Vin, n.InspeccionId }).ToListAsync(ct);
+        var novedadesPorViaje = novedades.ToLookup(
+            n => n.ViajeId, n => new NovedadDelViajeDto(n.Tipo, n.MotivoCodigo, n.Motivo, n.Texto, n.Usuario, n.Fecha, n.Vin, n.InspeccionId));
+        return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id], novedadesPorViaje[f.Viaje.Id].ToList())).ToList();
     }
 
     private static ViajeResumenDto AResumen(FilaViaje f, IReadOnlyList<ClienteDto> clientes) => new(
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
-        f.Viaje.Estado, f.ConPersonalApoyo, f.TotalVehiculos, f.VehiculosCompletos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt);
+        f.Viaje.Estado, f.TotalVehiculos, f.VehiculosCompletos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt,
+        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue);
 
-    private static ViajeDto ADto(FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes) => new(
+    private static ViajeDto ADto(FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<NovedadDelViajeDto> novedades) => new(
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
-        f.Viaje.Estado, f.ConPersonalApoyo, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt);
+        f.Viaje.Estado, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt, novedades,
+        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue);
 }

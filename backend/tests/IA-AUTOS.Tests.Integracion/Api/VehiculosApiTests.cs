@@ -6,7 +6,7 @@ using IAAutos.Tests.Integracion.Infraestructura;
 
 namespace IAAutos.Tests.Integracion.Api;
 
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);
@@ -265,7 +265,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal([1, 2, 3], listaEtapas.EnumerateArray().Select(e => e.GetProperty("orden").GetInt32()).ToList());
         var viajeId = await Sembrador.ViajeDeEtapaAsync(etapas[0]);
         Assert.All(listaEtapas.EnumerateArray(), e => Assert.Equal(viajeId, e.GetProperty("viaje_id").GetGuid()));
-        Assert.False(listaEtapas[0].GetProperty("con_personal_apoyo").GetBoolean());
+        Assert.False(listaEtapas[0].TryGetProperty("con_personal_apoyo", out _));
         Assert.StartsWith("MTK-S", listaEtapas[0].GetProperty("codigo_mtrack").GetString());
         Assert.True(listaEtapas[0].GetProperty("requiere_inspeccion").GetBoolean());
         Assert.Equal(0, listaEtapas[1].GetProperty("inspecciones").GetArrayLength());
@@ -335,7 +335,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal(JsonValueKind.Null, lista[3].GetProperty("no_sale").ValueKind);
         // El hallazgo grave que la saco del viaje sigue en el historial de la unidad, con su zona y su nivel.
         var h = lista[0].GetProperty("inspecciones")[0].GetProperty("hallazgos")[0];
-        Assert.Equal("Frente", h.GetProperty("zona").GetString());
+        Assert.Equal("50 · Frente", h.GetProperty("zona").GetString());
         Assert.Equal("v1_plus", h.GetProperty("nivel_severidad").GetString());
         Assert.Equal("Se recupera antes del despacho", h.GetProperty("nivel_accion").GetString());
         Assert.Equal(["foto_hallazgo", "transferencia_sin_cierre"], h.GetProperty("evidencia_faltante").EnumerateArray().Select(x => x.GetString()).ToList());
@@ -448,10 +448,11 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var viaje = await Sembrador.ViajeAsync();
         await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0004");
 
-        var agregado = await Cliente(token).PostAsJsonAsync($"/api/viajes/{viaje}/vehiculos", new { vines = new[] { "VIN-BAJA-0004" } });
+        var destino = await LugarRealAsync(Cliente(token), "Destino de la baja");
+        var agregado = await Cliente(token).PostAsJsonAsync($"/api/viajes/{viaje}/vehiculos", new { unidades = new[] { new { vin = "VIN-BAJA-0004", lugar_destino_id = destino } } });
 
         Assert.Equal(HttpStatusCode.BadRequest, agregado.StatusCode);
-        Assert.Contains("VIN-BAJA-0004", (await ClonarAsync(agregado)).GetProperty("details").GetProperty("fieldErrors").GetProperty("vines")[0].GetString());
+        Assert.Contains("VIN-BAJA-0004", (await ClonarAsync(agregado)).GetProperty("details").GetProperty("fieldErrors").GetProperty("unidades")[0].GetString());
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajeVehiculos WHERE ViajeId = @v", ("@v", viaje)));
     }
 

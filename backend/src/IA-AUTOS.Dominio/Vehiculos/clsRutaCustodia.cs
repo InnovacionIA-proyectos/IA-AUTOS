@@ -27,7 +27,6 @@ public static class clsRutaCustodia
         IReadOnlyList<clsEtapaDeRuta> rutaOrdenada,
         Guid? origenId,
         Guid? destinoId,
-        bool conPersonalApoyo,
         DateTimeOffset ahora)
     {
         if (rutaOrdenada.Count == 0)
@@ -45,7 +44,7 @@ public static class clsRutaCustodia
                 clsCodigosEtapa.DESCARGUE => destinoId,
                 _ => null,
             };
-            etapas.Add(clsEtapa.Crear(vehiculoId, viajeId, rutaOrdenada[i].Id, lugar, i + 1, true, conPersonalApoyo && codigo == clsCodigosEtapa.CARGUE, ahora));
+            etapas.Add(clsEtapa.Crear(vehiculoId, viajeId, rutaOrdenada[i].Id, lugar, i + 1, true, ahora));
         }
 
         return etapas;

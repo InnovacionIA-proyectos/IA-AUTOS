@@ -33,8 +33,14 @@ se aplica en un minuto o menos sin desplegar y cada cambio queda en la auditoria
 | `umbral_patron_ventana_dias` | numero | 30 | dias de la ventana en la que se cuentan los hallazgos de un patron |
 | `captura_incompleta_minutos` | numero | 30 | minutos que una inspeccion de Cargue o Descargue puede seguir en borrador sin todas las fotos antes de avisar a quien la inicio (la inspeccion FLASH AVES dura maximo 5 minutos) |
 | `transferencia_pendiente_minutos` | numero | 240 | minutos que una llegada cerrada puede seguir con la transferencia sin cierre antes de avisar al firmante que falta |
+| `acomodacion_fotos_minimas` | numero | 1 | fotos de la acomodacion de las unidades en la ninera que exige el cierre de la segunda inspeccion del cargue (el valor definitivo lo confirma el negocio; script `30-parametro-fotos-de-acomodacion.sql`) |
+| `radio_lugar_cargue_m` | numero | 1000 | radio, en metros, alrededor de un lugar de cargue dentro del cual la primera foto sellada confirma que el inspector esta en sitio (el valor definitivo lo confirma el negocio; script `32-ubicacion-con-rango-y-confirmacion-en-sitio.sql`) |
+| `radio_destino_m` | numero | 500 | radio, en metros, alrededor de un destino dentro del cual la primera foto sellada confirma que se esta en sitio |
+| `valvula_precision_m` | numero | 500 | precision del GPS, en metros, a partir de la cual una foto no confirma ni acusa la ubicacion; es distinta de `gps_precision_minima_m` (30 m), que solo avisa de precision baja |
+| `cargue_sin_reclamar_minutos` | numero | 30 | minutos desde la hora programada de un cargue sin ningun reclamo antes de avisar al coordinador; el aviso no se repite |
+| `reclamo_sin_actividad_minutos` | numero | 30 | minutos que un camion reclamado puede seguir sin ninguna inspeccion iniciada o cerrada antes de avisar al coordinador; el reclamo no se libera solo (el valor definitivo lo confirma Calidad) |
 
-No hay filas de linea base de rechazo ni de fotos minimas (las vistas obligatorias estan en el catalogo `vistas-foto`). Una fila que ya existe **nunca se sobrescribe** al repetir los scripts.
+No hay filas de linea base de rechazo ni de fotos minimas por vista (las vistas obligatorias estan en el catalogo `vistas-foto`). Una fila que ya existe **nunca se sobrescribe** al repetir los scripts.
 
 ## Vista de la ventana de umbral
 
@@ -44,7 +50,7 @@ No hay filas de linea base de rechazo ni de fotos minimas (las vistas obligatori
 |---|---|
 | `HallazgoId`, `InspeccionId`, `ViajeId`, `VehiculoId` | el hallazgo y donde se registro |
 | `ClienteId` | el cliente del vehiculo |
-| `ZonaId`, `Numero`, `Lado`, `ZonaCodigo` | la zona: lado + numero, o el codigo de la zona provisional (nulos en un hallazgo historico sin zona) |
+| `ZonaId`, `Numero`, `Lado` | la zona: lado + numero (nulos en un hallazgo sin zona) |
 | `Proceso` | el codigo de la etapa (`cargue`, `transporte`, `descargue`) |
 | `Fecha` | cuando se cerro la inspeccion |
 

@@ -1,45 +1,53 @@
 # Zona del dano y hallazgo
 
 Un hallazgo se atribuye a una **zona** del vehiculo, con su clase de dano, su tamano y su nivel de severidad (V), en lugar de una parte en texto libre con un
-punto sobre una sola imagen. Este documento describe el modelo de datos y el mapeo de lo que ya existia. Los endpoints que lo exponen estan en
+punto sobre una sola imagen. Este documento describe el modelo de datos, el dibujo version 6 que lo siembra y el mapeo de lo que ya existia. Los endpoints que lo exponen estan en
 [CONTRATO.md](../CONTRATO.md).
+
+## El dibujo version 6
+
+El dibujo es el archivo `regiones-zonas-dano.json` (`version: 6`, copia en `database/dibujo/`), que es la **unica fuente** de la geometria, los numeros, los lados y los nombres de pieza: 7 paneles, 45 cuadrantes
+(35 laterales con lado, numeros 1 a 35, y 10 centrales sin lado, 50 a 59), 80 zonas y 251 regiones. **`izquierdo` es el lado del conductor, visto sentado al volante.** El catalogo del dibujo es de **solo lectura** por la API
+(`POST`, `PATCH` y `DELETE` responden `409`: «El dibujo se cambia con una versión nueva del archivo»); solo la imagen de cada panel se carga con `PUT .../imagen`.
+
+Lo siembra el guion [`34-resembrar-dibujo-v6.sql`](../database/cambios-esquema/34-resembrar-dibujo-v6.sql), con el archivo incrustado (se genera con
+`python database/herramientas/generar-resiembra-dibujo.py <archivo.json> <guion>`, que reemplaza el bloque `-- JSON-INICIO` / `-- JSON-FIN`). Compara la base con el **contenido** del archivo, no con su numero de version:
+
+| La base frente al archivo | Que hace |
+|---|---|
+| identica | nada (solo verifica los conteos) |
+| cambian solo textos (`NombreCompleto`, `AiagArea`, tamanos de referencia), por ejemplo cuando llega el archivo corregido con los codigos AIAG de un solo valor por fila, que sigue en la version 6 | actualiza en sitio; los hallazgos **conservan** su zona |
+| cambian numeros, lados, piezas, prioridades o poligonos (o la base es anterior a la version 6) | resiembra todo: los hallazgos que estaban en una zona del dibujo anterior quedan **sin zona** (`ZonaId` nulo, `MigracionPendiente = 1`, conservando `ParteVehiculo` y `CoordsDiagrama`) |
+
+No reubica hallazgos: la numeracion nueva significa otra cosa en los mismos numeros, y solo se reubicaran cuando Calidad apruebe una tabla de equivalencias entre la numeracion vieja y la nueva.
+Al borrar los cuadrantes viejos cae en cascada `tblCuadranteVistas` (el respaldo de la migracion vieja). Imprime los conteos (7, 45, 80 y 251) y falla, sin cambiar nada, si no coinciden con los del archivo.
+
+**Versionado del archivo.** Un dibujo distinto es una **version nueva del archivo**, no una edicion por la API: se reemplaza el archivo (y las imagenes de sus paneles, que deben ser de la misma version porque una imagen distinta
+desalinea los poligonos), se vuelve a generar el guion y se ejecuta. El catalogo cambia de version (`ETag`) con la resiembra.
 
 ## La zona
 
-Una zona es una de estas dos cosas:
+Una zona es un **cuadrante (numero) + lado**, o un cuadrante sin lado. Las zonas provisionales (`frente` y las cuatro llantas) **ya no existen**.
 
-| Tipo | Como se identifica | Dibujo |
-|---|---|---|
-| Zona numerada | cuadrante (numero) + lado | tiene region en uno o varios paneles |
-| Zona provisional | codigo: `frente`, `llanta_delantera_izquierda`, `llanta_delantera_derecha`, `llanta_trasera_izquierda`, `llanta_trasera_derecha` | sin region: se elige de una lista |
-
-- Los numeros **1 a 25** llevan lado (`izquierdo` o `derecho`); del **26 en adelante** no llevan lado. La base lo garantiza (`CK_tblZonasDano_Forma`).
+- Si un cuadrante lleva lado lo declara el cuadrante (`tblCuadrantes.LlevaLado`); **ninguna regla del codigo ni de la base usa numeros**. Un cuadrante que lleva lado tiene dos zonas (`izquierdo` y `derecho`) y uno que no, una sola sin lado.
+  La zona copia `LlevaLado` con una llave foranea compuesta `(CuadranteId, Numero, LlevaLado)`, y `CK_tblZonasDano_Forma` exige lado si lo lleva y lo prohibe si no: no pueden diferir.
 - La zona es unica por cuadrante y lado, y el hallazgo la guarda por **lado + numero**, no por el panel donde se toco: «izquierdo 7» es la misma zona se toque donde se toque.
-- Los numeros 4 y 12 no existen hasta que el negocio los defina. Las zonas provisionales no tienen numero y, el dia que el negocio les de uno, se migran.
-- Hay una fila por zona en `tblZonasDano`. Cada cuadrante nuevo trae sus zonas: el trigger `TR_tblCuadrantes_CrearZonas` crea dos (una por lado) del 1 al 25 y una del 26 en adelante;
+- Hay una fila por zona en `tblZonasDano`. Cada cuadrante nuevo trae sus zonas: el trigger `TR_tblCuadrantes_CrearZonas` crea dos (una por lado) si lleva lado y una sin lado si no;
   al borrar o renumerar un cuadrante sus zonas lo siguen. Una zona con hallazgos no se borra.
-- `tblCuadrantes` conserva `Numero`, `Nombre` y `TipoVehiculo` (36 zonas numeradas en la ficha del vehiculo generico). Los nombres son una lectura de la imagen y los valida calidad.
+- `tblZonasDano.NombreCompleto` («Guardafango delantero izquierdo») y `AiagArea` (el codigo AIAG, **texto sin formato fijo**) son de la **zona**, no del cuadrante: el nombre completo lleva el lado y el codigo se asigna por pieza y lado.
+  `tblCuadrantes.Nombre` es la pieza («Guardafango delantero»).
 
 ## Paneles y regiones
 
-El dibujo de danos son **5 paneles** de la ficha, separados del catalogo de vistas de foto:
+El dibujo de danos son los **7 paneles** del archivo (`costado_izquierdo`, `costado_derecho`, `frontal`, `posterior`, `superior`, `diagonal_delantera_derecha` y `diagonal_trasera_izquierda`), separados del catalogo de vistas de foto:
 
-| Panel (`tblPanelesDano.Codigo`) | Lado de sus regiones | Vista de foto de la que salen los poligonos ya cargados |
-|---|---|---|
-| `superior` | sin lado | `superior` |
-| `costado_izquierdo` | izquierdo | `lateral_izquierda` |
-| `costado_derecho` | derecho | `lateral_derecha` |
-| `perfil_posterior_izquierdo` | izquierdo | `diagonal_trasera_izquierda` |
-| `perfil_posterior_derecho` | derecho | `diagonal_delantera_derecha` |
+- Cada panel tiene su imagen de fondo (`ImagenPath`, el archivo en el almacen de imagenes; nula hasta que se carga desde el portal), el tamano de referencia de esa imagen (`AnchoRef`, `AltoRef`) y la `Version` del archivo con que se sembro.
+- Una **region** (`tblRegionesDano`) es el poligono de una zona en un panel, con geometria normalizada `{"puntos":[[x,y],...]}` (x e y entre 0 y 1 sobre la imagen del panel; relleno par-impar, evenOdd) y su `Prioridad`.
+  Una zona se dibuja a lo sumo una vez por panel. El lado de la region es el de su zona: un panel puede tener regiones de los dos lados.
 
-- Cada panel tiene su imagen de fondo (`ImagenPath`, el archivo en el almacen de imagenes). Es nula hasta que se carga la imagen de la ficha.
-- Una **region** (`tblRegionesDano`) es el poligono de una zona numerada en un panel, con geometria normalizada `{"puntos":[[x,y],...]}` (x e y entre 0 y 1 sobre la imagen del panel).
-  Una zona se dibuja a lo sumo una vez por panel; una zona provisional no tiene region (lo garantiza la base).
-- En los costados y perfiles el lado de la region sale del panel. En el panel superior cada numero del 1 al 25 necesita **dos** regiones (una por lado, segun la mitad de la imagen).
+### Migracion de los poligonos del dibujo anterior (script 10)
 
-### Migracion de los poligonos ya cargados
-
-Los 97 poligonos de `tblCuadranteVistas` pasan a `tblRegionesDano` con la correspondencia de la tabla anterior (`tblCuadranteVistas` no se modifica y queda como respaldo). Resultado con la ficha actual:
+Historico del dibujo de 5 paneles, que reemplaza el dibujo version 6: los 97 poligonos de `tblCuadranteVistas` pasan a `tblRegionesDano` con la correspondencia de la tabla anterior (`tblCuadranteVistas` no se modifica y queda como respaldo). Resultado con la ficha actual:
 
 | Panel | Regiones |
 |---|---|
@@ -102,12 +110,12 @@ conserve su trazabilidad cuando vuelva a otro viaje. Las reglas de quien puede m
 
 ## Cómo lo expone la API
 
-- `POST /api/inspecciones/{id}/hallazgos` recibe `cuadrante_numero` + `lado` (o `zona_provisional`), `clase_dano`, `tamano_dano`, `nivel_severidad`, `es_preexistente` + `hallazgo_origen_id` y `nota`. La API resuelve la zona
-  con el cuadrante del tipo de vehículo del VIN (o el genérico si no hay uno propio), valida el lado por número (obligatorio del 1 al 25, prohibido del 26 en adelante), exige el nivel al inspector y al administrador
+- `POST /api/inspecciones/{id}/hallazgos` recibe `cuadrante_numero` + `lado`, `clase_dano`, `tamano_dano`, `nivel_severidad`, `es_preexistente` + `hallazgo_origen_id` y `nota`. La API resuelve la zona
+  con el cuadrante del tipo de vehículo del VIN (o el genérico si no hay uno propio), valida el lado **segun el cuadrante** (`lleva_lado`: obligatorio si lo lleva, `400` si no lo lleva y se envia), exige el nivel al inspector y al administrador
   (el conductor no lo envía y su novedad queda sin nivel) y comprueba que un hallazgo preexistente apunte a un hallazgo de una **inspección cerrada anterior del mismo VIN** con la **misma zona y clase**.
 - `GET /api/inspecciones/{id}/hallazgos-previos` entrega esa lista (con el viaje, el proceso, el momento, el cierre y las fotos de cada hallazgo) para que la app proponga el preexistente comparando zona y clase.
-- `GET /api/catalogos` publica `paneles-dano` (con la URL de su imagen) y `cuadrante-regiones`, y las zonas provisionales dentro de `cuadrantes` (con su `codigo`, sin número ni región). `cuadrante-vistas` ya no existe y responde `404` como cualquier nombre desconocido.
-- El texto de la zona para mostrar se arma en la API: «Izquierdo 7 · Puerta delantera», «Techo 30», «Frente».
+- `GET /api/catalogos` publica `paneles-dano` (con la URL de su imagen, su tamaño de referencia y su versión), `cuadrante-regiones` (con su prioridad) y `cuadrantes` con `lleva_lado` y sus `zonas` (lado, nombre completo y código AIAG). `cuadrante-vistas` ya no existe y responde `404` como cualquier nombre desconocido.
+- El texto de la zona para mostrar se arma en la API: «Izquierdo 4 · Guardafango delantero» (con lado) o «54 · Parabrisas» (sin lado); el hallazgo trae además su `aiag_area`.
 - El inventario y el detalle del viaje traen `estado_unidad` y `no_sale` por unidad (la columna del viaje que dejó la migración 10). Marcar una unidad como «no sale» es de otra tarea.
 - Los reportes de patrones cuentan por la zona en texto; un hallazgo histórico sin ubicar cuenta por la parte que se escribió entonces.
 

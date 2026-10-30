@@ -21,7 +21,7 @@ no esté cerrada, no se puede crear la salida de la etapa siguiente. Los endpoin
 | `firmada` | ambas partes firman | las dos firmas |
 | `con_reservas` | quien recibe firma por `/transferencia/reservas` | las dos firmas y `ReservasTexto` (obligatorio, máximo 1 000 caracteres) |
 | `no_firma` | una parte se niega y la otra deja constancia por `/transferencia/no-firma` | `NoFirmaParte`, `MotivoNoFirma`, `TestigoUsuarioId` y `EvidenciaConstanciaId` |
-| `recibo_sin_entrega` | nadie de Botero Soto firma la entrega porque el conductor hizo la salida del Cargue; lo cierra el conductor por `POST …/transferencia/sin-entrega` | solo la firma de quien recibe con su fecha e IP; **sin** usuario, firma, fecha ni IP de entrega |
+| `recibo_sin_entrega` | una sola firma y su motivo. Hoy: nadie de Botero Soto firma la entrega porque el conductor hizo la salida del Cargue; lo cierra el conductor por `POST …/transferencia/sin-entrega`. La base admite también la forma inversa (firma solo quien entrega) para el descargue por punto de entrega | `NoFirmaParte` (la parte que NO firmó) y `MotivoNoFirma` (obligatorio), y solo la otra firma: si no firmó quien entrega, la firma de quien recibe con su fecha e IP y **sin** usuario, firma, fecha ni IP de entrega |
 | sin valor | falta una firma | la transferencia está **abierta** |
 
 - Solo **quien recibe** firma con reservas. Si quien recibe firma después normalmente, las reservas se descartan.
@@ -32,17 +32,25 @@ no esté cerrada, no se puede crear la salida de la etapa siguiente. Los endpoin
 - Cerrada, la transferencia es **inmutable**; solo se acepta repetir exactamente la misma firma (reintento idempotente).
 
 La base de datos refuerza lo mismo: `CK_tblTransferencias_Cierre` exige, según el tipo, las firmas, las reservas, la constancia completa o solo la firma de quien recibe, y `CK_tblTransferencias_Testigo` impide que el testigo sea
-una de las partes. `EntregaUsuarioId` admite nulo, pero solo en el cierre `recibo_sin_entrega` (`CK_tblTransferencias_Entrega`).
+una de las partes. `EntregaUsuarioId` admite nulo, pero solo en el cierre `recibo_sin_entrega` (`CK_tblTransferencias_Entrega`). El script [`25-destino-por-unidad-y-cierre-con-una-firma.sql`](../database/cambios-esquema/25-destino-por-unidad-y-cierre-con-una-firma.sql) generaliza ese cierre: exactamente una de las dos firmas, la parte que no firmó y el motivo (con las dos firmas, o sin motivo, el CHECK falla); los recibos sin entrega ya registrados quedan con `NoFirmaParte = entrega` y el motivo del cargue. `firmada`, `con_reservas` y `no_firma` no cambian.
 
 ## Recibo sin entrega
 
-Cuando el conductor hizo la salida del Cargue (sin personal de apoyo, o con la excepción «No hay inspector»; ver [conductor-en-ruta.md](conductor-en-ruta.md)) nadie de Botero Soto firma la entrega. El **conductor del viaje** (y nadie más: `403`) cierra la transferencia con `POST /api/inspecciones/{id}/transferencia/sin-entrega { firma }`.
+Cuando el conductor hizo la salida del Cargue (por la excepción «No hay inspector»; ver [conductor-en-ruta.md](conductor-en-ruta.md)) nadie de Botero Soto firma la entrega. El **conductor del viaje** (y nadie más: `403`) cierra la transferencia con `POST /api/inspecciones/{id}/transferencia/sin-entrega { firma }`.
 Solo vale en la salida del Cargue que él hizo (`409` si la hizo el inspector o la etapa es otra) y mientras la transferencia no tenga cierre ni la firma de quien entrega (`409`). Una transferencia abierta donde solo firmó quien recibe se cierra sin entrega: quien entrega deja de figurar.
 
 - **Desbloquea la etapa siguiente**, como cualquier cierre (el bloqueo solo mira si hay tipo de cierre).
 - **La evidencia de los hallazgos de esa inspección queda incompleta**: `evidencia_faltante` trae `transferencia_sin_entrega` (como `transferencia_no_firma`, solo firmó una parte), así que no cuentan en la tasa de rechazo.
-- **Novedad de proceso.** Si la salida se hizo con la excepción «No hay inspector» se crea además la novedad `recibo_sin_entrega` (con el motivo de la inspección, sin nueva notificación); en un cargue sin apoyo planeado no se crea ninguna. El conteo por tipo, punto, cliente y mes está en `GET /api/reportes/novedades-proceso`.
+- **Novedad de proceso.** Si la salida se hizo con la excepción «No hay inspector» se crea además la novedad `recibo_sin_entrega` (con el motivo de la inspección, sin nueva notificación). El conteo por tipo, punto, cliente y mes está en `GET /api/reportes/novedades-proceso`.
 - La constancia en PDF y el PDF del informe dicen «recibo sin entrega» y «Entrega: no hubo entrega». Es una decisión del equipo pendiente de confirmar por el negocio (P-080). En el descargue sin inspector sigue sin definir quién recibe.
+
+## Entrega por punto
+
+Con el destino por unidad cada unidad se entrega en su propio lugar. En cada punto del viaje se firma **una vez** (`POST /api/viajes/{id}/entregas/{lugar}/firma`): quien entrega (por defecto el conductor del viaje) y quien recibe (por defecto su inspector)
+firman, y la firma de cada uno se guarda en la transferencia **de cada unidad pendiente del punto** (sobre la inspección de llegada del Descargue) con la misma firma, fecha e IP; cada unidad conserva su transferencia propia, así que `UQ_tblTransferencias_Inspeccion` no cambia.
+Una sola firma no bloquea: `POST …/entregas/{lugar}/una-firma` cierra la entrega del punto con la firma de quien cierra y su motivo; cada unidad queda `recibo_sin_entrega` (con `NoFirmaParte`, la parte que no firmó, y `MotivoNoFirma`), se registra la novedad de proceso `recibo_sin_entrega`
+por unidad (con el motivo escrito como texto del motivo `otro`) y los coordinadores de calidad y administradores del cliente reciben un solo aviso `novedad_proceso` por entrega y punto (clave de dedupe con el viaje y el lugar). El viaje pasa a `finalizado` cuando todas sus unidades activas
+tienen el Descargue cerrado. Los endpoints y sus cuerpos están en [CONTRATO.md](../CONTRATO.md#entrega-por-punto).
 
 ## Qué bloquea
 

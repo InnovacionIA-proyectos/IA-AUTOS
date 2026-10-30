@@ -102,7 +102,7 @@ public sealed record UmbralPatronDto(int Cantidad, int VentanaDias);
 
 public sealed record PatronProcesoDto(string Proceso, int Total, bool SuperaUmbral);
 
-/// <summary>Una zona del vehiculo (lado + numero de cuadrante, o la zona provisional): <c>Nombre</c> es el del cuadrante y <c>Zona</c> el texto completo para mostrar.</summary>
+/// <summary>Una zona del vehiculo (lado + numero de cuadrante): <c>Nombre</c> es el del cuadrante y <c>Zona</c> el texto completo para mostrar.</summary>
 public sealed record PatronRegionDto(int? CuadranteNumero, string? Lado, string? Nombre, string? Zona, int Total, bool SuperaUmbral);
 
 public sealed record PatronRegionProcesoDto(int? CuadranteNumero, string? Lado, string? Nombre, string? Zona, string Proceso, int Total, bool SuperaUmbral);

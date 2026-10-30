@@ -18,13 +18,14 @@ El trigger de inmutabilidad sigue impidiendo modificar una cerrada y agregarle h
 | Etapa | Requisitos |
 |---|---|
 | **Cargue y Descargue** | la foto de **cada una de las 7 vistas obligatorias** (las vistas activas de `vistas-foto` con `obligatoria`, que no tienen tipo de vehículo o lo tienen igual al del vehículo); una foto propia por cada hallazgo; ubicación en toda foto |
+| **Cargue, segunda inspección (salida)** | la **acomodación en la niñera**, no las vistas de estado (esas quedan en la primera inspección): la posición de 1 a 7 de **cada unidad activa** del viaje (las que no salen no la exigen), al menos `acomodacion_fotos_minimas` fotos de la acomodación (fotos sin vista ni hallazgo, selladas como las demás) y la ubicación propia del cierre |
 | **Transporte** | no exige las 7 vistas: la salida y la llegada son el registro del conductor y exigen el **GPS y la hora del propio registro**; una novedad lleva su hallazgo con foto. Cuentan para la cobertura |
 | Cualquier otra etapa que agregue el catálogo | se trata como Transporte (no exige las vistas) |
 
 Las dos **vistas adicionales** (piezas en el baúl y cojinería) se toman solo cuando hay un faltante o daño, y su foto exige una **nota** con ese faltante o daño. Una inspección sin faltantes ni
-daños se cierra sin ellas. Si el cargue no tiene personal de apoyo, la inspección de salida la hace el conductor con exactamente las mismas reglas. Si lo tiene, el servidor no deja que el conductor la cree (403: «Este cargue tiene personal de apoyo: el conductor solo firma el recibo»): ya no depende de que la app lo bloquee.
+daños se cierra sin ellas. La inspección de salida del cargue la hace siempre un inspector: el servidor no deja que el conductor la cree (403: «La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción»); si no hay inspector, el conductor activa en el momento la excepción «No hay inspector» y la hace con exactamente las mismas reglas. No depende de que la app lo bloquee.
 
-Un cierre incompleto responde `400` con la lista de lo que falta, **una línea por cada vista, con su nombre** («Falta la foto de la vista «Frontal»»).
+Un cierre incompleto responde `400` con la lista de lo que falta, **una línea por cada vista, con su nombre** («Falta la foto de la vista «Frontal»»). En la segunda inspección del cargue, una línea por cada unidad sin posición («Falta la posición de la unidad {VIN}», en orden de VIN) y, si no alcanzan las fotos, «Faltan fotos de la acomodación: se exige al menos {n} y hay {k}». Las posiciones se registran con `PUT /api/viajes/{id}/vehiculos/{vin}/posicion` (ver [viajes.md](viajes.md)).
 
 ## El sello de cada foto
 

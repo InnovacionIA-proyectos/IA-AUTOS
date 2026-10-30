@@ -87,6 +87,10 @@ public static class clsDependenciasInfraestructura
         servicios.AddSingleton<IGeneradorExcel, clsGeneradorExcel>();
         servicios.AddScoped<INotaAclaratoriaRepository, clsNotaAclaratoriaRepository>();
         servicios.AddScoped<INovedadProcesoRepository, clsNovedadProcesoRepository>();
+        servicios.AddScoped<IReclamoRepository, clsRepositorioReclamos>();
+        servicios.AddScoped<ILugarRepository, clsRepositorioLugares>();
+        servicios.AddScoped<IPropuestaUbicacionRepository, clsRepositorioPropuestasUbicacion>();
+        servicios.AddScoped<IAAutos.Aplicacion.Viajes.DTOViajes.IConsultasPendientes, clsConsultasPendientes>();
         servicios.AddScoped<IAAutos.Aplicacion.Inspecciones.DTOInspecciones.IConsultasNovedadesProceso, clsConsultasNovedadesProceso>();
         servicios.AddScoped<IParametroRepository, clsParametroRepository>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();
@@ -154,9 +158,12 @@ public static class clsDependenciasInfraestructura
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.CLASES_DANO, clsClaseDano.Crear));
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsTamanoDano>(
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.TAMANOS_DANO, clsTamanoDano.Crear));
+        servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsTipoExtra>(
+            p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.TIPOS_EXTRA, clsTipoExtra.Crear));
         servicios.AddScoped<ICatalogo, clsCatalogoNiveles>();
         servicios.AddScoped<ICatalogo, clsCatalogoEstadosSofasa>();
         servicios.AddScoped<ICatalogo, clsCatalogoMotivosSinInspector>();
+        servicios.AddScoped<ICatalogo, clsCatalogoLugares>();
         servicios.AddScoped<ICatalogo, clsCatalogoVistas>();
         servicios.AddScoped<ICatalogo, clsCatalogoCuadrantes>();
         servicios.AddScoped<ICatalogo, clsCatalogoPanelesDano>();

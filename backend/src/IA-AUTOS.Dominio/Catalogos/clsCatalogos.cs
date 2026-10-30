@@ -58,6 +58,27 @@ public sealed class clsTipoUnidadTransportadora : clsCatalogoCodificado
     }
 }
 
+/// <summary>
+/// Tipo de extra del vehiculo, fuera del dibujo estandar (barras de techo, volco, platon, otro...). tblInspeccionExtras guarda el codigo; un tipo con extras reportados no se borra (409): se inactiva y los extras
+/// lo conservan. El tipo <see cref="OTRO"/> es el unico que admite un texto libre.
+/// </summary>
+public sealed class clsTipoExtra : clsCatalogoCodificado
+{
+    /// <summary>El codigo del tipo que se describe con un texto libre.</summary>
+    public const string OTRO = "otro";
+
+    private clsTipoExtra()
+    {
+    }
+
+    public static clsTipoExtra Crear(string? codigo, string? nombre, int? orden, bool? activo, DateTimeOffset ahora)
+    {
+        var tipo = new clsTipoExtra();
+        tipo.Iniciar(codigo, nombre, orden, activo, ahora);
+        return tipo;
+    }
+}
+
 /// <summary>Clase de dano de un hallazgo (deformacion, rotura, golpe...). tblHallazgos guarda el codigo.</summary>
 public sealed class clsClaseDano : clsCatalogoCodificado
 {

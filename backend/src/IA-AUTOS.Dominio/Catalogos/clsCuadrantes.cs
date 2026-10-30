@@ -18,9 +18,12 @@ public sealed class clsCuadrante : clsCatalogoBase
     /// <summary>Numero del cuadrante (1 en adelante); es unico por tipo de vehiculo.</summary>
     public int Numero { get; private set; }
 
-    public static clsCuadrante Crear(string? tipoVehiculo, int? numero, string? nombre, int? orden, bool? activo, DateTimeOffset ahora)
+    /// <summary>Si el cuadrante lleva lado (dos zonas: izquierdo y derecho) o es una sola zona sin lado. Lo declara el archivo del dibujo.</summary>
+    public bool LlevaLado { get; private set; } = true;
+
+    public static clsCuadrante Crear(string? tipoVehiculo, int? numero, string? nombre, int? orden, bool? activo, DateTimeOffset ahora, bool llevaLado = true)
     {
-        var cuadrante = new clsCuadrante { TipoVehiculo = clsVistaFoto.TipoVehiculoValido(tipoVehiculo), Numero = NumeroValido(numero) };
+        var cuadrante = new clsCuadrante { TipoVehiculo = clsVistaFoto.TipoVehiculoValido(tipoVehiculo), Numero = NumeroValido(numero), LlevaLado = llevaLado };
         cuadrante.Iniciar(nombre, orden, activo, ahora);
         return cuadrante;
     }

@@ -11,7 +11,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Auditoria: cada accion de escritura queda con quien la hizo, la IP y el dispositivo, el detalle antes y despues (sin contrasenas, PIN ni tokens), el viaje y el cliente; el administrador
 /// consulta la de su cliente y el super administrador la de todos, y nadie la modifica ni la borra.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class AuditoriaApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-07-17T12:30:15.123Z";
