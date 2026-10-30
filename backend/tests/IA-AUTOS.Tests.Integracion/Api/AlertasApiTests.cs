@@ -336,7 +336,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
     }
 
     [Fact]
-    public async Task El_conductor_solo_recibe_el_aviso_de_un_cargue_sin_personal_de_apoyo_que_el_inicio()
+    public async Task El_conductor_solo_recibe_el_aviso_de_la_salida_del_cargue_que_el_inicio()
     {
         var e = await EscenarioAsync();
         var delCargue = await BorradorAsync(e.Etapas[0], e.Conductor.UsuarioId);
@@ -348,11 +348,9 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
         Assert.Equal(1, await NotificacionesAsync("captura_incompleta", e.Conductor.UsuarioId));
         Assert.Equal(delCargue, (Guid)(await Sembrador.EscalarAsync("SELECT InspeccionId FROM dbo.tblNotificaciones WHERE Tipo = 'captura_incompleta' AND Canal = 'bandeja'"))!);
 
-        // Con personal de apoyo la salida del Cargue es del inspector: el conductor no recibe aviso.
-        await BorrarNotificacionesAsync();
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET ConPersonalApoyo = 1 WHERE Id = @e", ("@e", e.Etapas[0]));
+        // Ya avisado: volver a correr el proceso no repite el aviso.
         await ConProcesosAsync(p => p.EjecutarAvisosAsync());
-        Assert.Equal(0, await NotificacionesAsync("captura_incompleta", e.Conductor.UsuarioId));
+        Assert.Equal(1, await NotificacionesAsync("captura_incompleta", e.Conductor.UsuarioId));
     }
 
     [Fact]

@@ -35,9 +35,9 @@ public sealed class clsViajesService(
     public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "created_at", "updated_at", "codigo_mtrack", "estado", "placa", "trailer" };
 
     private static readonly string[] CAMPOS_EDITABLES =
-        ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "origen_id", "con_personal_apoyo", "fecha_programada", "lugar_cargue_id"];
+        ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "origen_id", "fecha_programada", "lugar_cargue_id"];
 
-    private static readonly string[] CAMPOS_SIN_NULO = ["codigo_mtrack", "tipo_unidad_id", "placa", "con_personal_apoyo"];
+    private static readonly string[] CAMPOS_SIN_NULO = ["codigo_mtrack", "tipo_unidad_id", "placa"];
 
     // ------------------------------------------------------------------------------------------------ alta
 
@@ -58,7 +58,7 @@ public sealed class clsViajesService(
         var vehiculosAAgregar = await ResolverVehiculosAsync(viaje, unidades.Select(u => u.Vin!).ToList(), new HashSet<Guid>(), ct);
         var destinos = DestinosPorVehiculo(vehiculosAAgregar, unidades);
         viajes.Agregar(viaje);
-        await ensamblaje.AgregarVehiculosAsync(viaje, vehiculosAAgregar, solicitud.ConPersonalApoyo ?? false, await catalogos.RutaEstandarAsync(ct), ct, destinos);
+        await ensamblaje.AgregarVehiculosAsync(viaje, vehiculosAAgregar, await catalogos.RutaEstandarAsync(ct), ct, destinos);
         await auditor.RegistrarDeViajeAsync(
             "viaje.crear",
             "viajes",
@@ -170,10 +170,9 @@ public sealed class clsViajesService(
             false, null,
             reloj.Ahora);
 
-        var personalApoyo = lector.Booleano("con_personal_apoyo");
-        if (lector.Tiene("origen_id") || personalApoyo is not null)
+        if (lector.Tiene("origen_id"))
         {
-            await PropagarAEtapasAsync(viaje, lector.Tiene("origen_id"), personalApoyo, ct);
+            await PropagarAEtapasAsync(viaje, ct);
         }
 
         await auditor.RegistrarDeViajeAsync(
@@ -207,10 +206,9 @@ public sealed class clsViajesService(
         var unidades = solicitud.Unidades!;
         await ValidarDestinosAsync(unidades, ct);
         var yaEnElViaje = (await viajes.ObtenerVehiculosAsync(id, ct)).Select(v => v.VehiculoId).ToHashSet();
-        var conPersonalApoyo = (await viajes.ObtenerEtapasAsync(id, null, ct)).Any(e => e.ConPersonalApoyo);
         var vehiculosAAgregar = await ResolverVehiculosAsync(viaje, unidades.Select(u => u.Vin!).ToList(), yaEnElViaje, ct);
         var destinos = DestinosPorVehiculo(vehiculosAAgregar, unidades);
-        await ensamblaje.AgregarVehiculosAsync(viaje, vehiculosAAgregar, conPersonalApoyo, await catalogos.RutaEstandarAsync(ct), ct, destinos);
+        await ensamblaje.AgregarVehiculosAsync(viaje, vehiculosAAgregar, await catalogos.RutaEstandarAsync(ct), ct, destinos);
         await auditor.RegistrarDeViajeAsync(
             "viaje.agregar_vin", "viajes", viaje.Id, viaje.Id,
             new DetalleAuditoria(null, new { vines = vehiculosAAgregar.Select(v => v.Vin).ToList(), destinos = destinos.Select(d => new { vehiculo_id = d.Key, lugar_destino_id = d.Value }).ToList() }), ct: ct);
@@ -466,8 +464,8 @@ public sealed class clsViajesService(
         return vehiculosResueltos.ToDictionary(v => v.Id, v => porVin[clsVin.Normalizar(v.Vin)]);
     }
 
-    /// <summary>Lleva a las etapas del viaje el cambio de origen o de personal de apoyo; las que ya tienen informe cerrado no cambian. El Descargue es de cada unidad y no se toca aqui.</summary>
-    private async Task PropagarAEtapasAsync(clsViaje viaje, bool cambiaOrigen, bool? personalApoyo, CancellationToken ct)
+    /// <summary>Lleva al Cargue de las etapas del viaje el cambio de origen; las que ya tienen informe cerrado no cambian. El Descargue es de cada unidad y no se toca aqui.</summary>
+    private async Task PropagarAEtapasAsync(clsViaje viaje, CancellationToken ct)
     {
         var codigosPorEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).ToDictionary(v => v.Id, v => v.Codigo);
         var cerradas = await viajes.EtapasConInformeCerradoAsync(viaje.Id, ct);
@@ -478,14 +476,9 @@ public sealed class clsViajesService(
                 continue;
             }
 
-            if (codigo == clsCodigosEtapa.CARGUE && cambiaOrigen)
+            if (codigo == clsCodigosEtapa.CARGUE)
             {
                 etapa.CambiarLugar(viaje.OrigenId, reloj.Ahora);
-            }
-
-            if (codigo == clsCodigosEtapa.CARGUE && personalApoyo is { } marca)
-            {
-                etapa.CambiarPersonalApoyo(marca, reloj.Ahora);
             }
         }
     }

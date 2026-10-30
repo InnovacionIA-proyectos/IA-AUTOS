@@ -76,13 +76,12 @@ public class VehiculosTests
         var catalogo = Ruta("cargue", "transporte", "descargue");
         var vehiculoId = Guid.NewGuid();
 
-        var etapas = clsRutaCustodia.CrearEtapasEstandar(VIAJE, vehiculoId, catalogo, null, null, false, AHORA);
+        var etapas = clsRutaCustodia.CrearEtapasEstandar(VIAJE, vehiculoId, catalogo, null, null, AHORA);
 
         Assert.Equal([1, 2, 3], etapas.Select(e => e.Orden));
         Assert.Equal(catalogo.Select(c => c.Id), etapas.Select(e => e.EtapaCatalogoId));
         Assert.All(etapas, e => Assert.Null(e.PuntoCustodiaId));
         Assert.All(etapas, e => Assert.True(e.RequiereInspeccion));
-        Assert.All(etapas, e => Assert.False(e.ConPersonalApoyo));
         Assert.All(etapas, e => Assert.Equal(vehiculoId, e.VehiculoId));
         Assert.All(etapas, e => Assert.Equal(VIAJE, e.ViajeId));
     }
@@ -92,7 +91,7 @@ public class VehiculosTests
     {
         Guid origen = Guid.NewGuid(), destino = Guid.NewGuid();
 
-        var etapas = clsRutaCustodia.CrearEtapasEstandar(VIAJE, Guid.NewGuid(), Ruta("cargue", "transporte", "descargue"), origen, destino, true, AHORA);
+        var etapas = clsRutaCustodia.CrearEtapasEstandar(VIAJE, Guid.NewGuid(), Ruta("cargue", "transporte", "descargue"), origen, destino, AHORA);
 
         Assert.Equal(origen, etapas[0].PuntoCustodiaId);
         Assert.Null(etapas[1].PuntoCustodiaId);
@@ -100,18 +99,10 @@ public class VehiculosTests
     }
 
     [Fact]
-    public void El_personal_de_apoyo_se_marca_solo_en_el_cargue()
-    {
-        var etapas = clsRutaCustodia.CrearEtapasEstandar(VIAJE, Guid.NewGuid(), Ruta("cargue", "transporte", "descargue"), null, null, true, AHORA);
-
-        Assert.Equal([true, false, false], etapas.Select(e => e.ConPersonalApoyo));
-    }
-
-    [Fact]
     public void La_ruta_sigue_el_catalogo_si_se_agrega_o_se_retira_una_etapa()
     {
-        var cuatro = clsRutaCustodia.CrearEtapasEstandar(VIAJE, Guid.NewGuid(), Ruta("cargue", "revision", "transporte", "descargue"), null, null, false, AHORA);
-        var una = clsRutaCustodia.CrearEtapasEstandar(VIAJE, Guid.NewGuid(), Ruta("cargue"), null, null, false, AHORA);
+        var cuatro = clsRutaCustodia.CrearEtapasEstandar(VIAJE, Guid.NewGuid(), Ruta("cargue", "revision", "transporte", "descargue"), null, null, AHORA);
+        var una = clsRutaCustodia.CrearEtapasEstandar(VIAJE, Guid.NewGuid(), Ruta("cargue"), null, null, AHORA);
 
         Assert.Equal([1, 2, 3, 4], cuatro.Select(e => e.Orden));
         Assert.Single(una);
@@ -120,7 +111,7 @@ public class VehiculosTests
     [Fact]
     public void Ruta_estandar_falla_como_error_interno_si_el_catalogo_no_tiene_etapas_activas()
     {
-        var ex = Assert.Throws<clsErrorInternoException>(() => clsRutaCustodia.CrearEtapasEstandar(VIAJE, Guid.NewGuid(), [], null, null, false, AHORA));
+        var ex = Assert.Throws<clsErrorInternoException>(() => clsRutaCustodia.CrearEtapasEstandar(VIAJE, Guid.NewGuid(), [], null, null, AHORA));
 
         Assert.Equal(clsCodigosError.INTERNAL_ERROR, ex.Codigo);
     }
@@ -128,7 +119,7 @@ public class VehiculosTests
     [Fact]
     public void Etapa_exige_orden_positivo()
     {
-        Assert.Throws<clsValidacionException>(() => clsEtapa.Crear(Guid.NewGuid(), VIAJE, Guid.NewGuid(), null, 0, true, false, AHORA));
+        Assert.Throws<clsValidacionException>(() => clsEtapa.Crear(Guid.NewGuid(), VIAJE, Guid.NewGuid(), null, 0, true, AHORA));
     }
 }
 

@@ -265,7 +265,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal([1, 2, 3], listaEtapas.EnumerateArray().Select(e => e.GetProperty("orden").GetInt32()).ToList());
         var viajeId = await Sembrador.ViajeDeEtapaAsync(etapas[0]);
         Assert.All(listaEtapas.EnumerateArray(), e => Assert.Equal(viajeId, e.GetProperty("viaje_id").GetGuid()));
-        Assert.False(listaEtapas[0].GetProperty("con_personal_apoyo").GetBoolean());
+        Assert.False(listaEtapas[0].TryGetProperty("con_personal_apoyo", out _));
         Assert.StartsWith("MTK-S", listaEtapas[0].GetProperty("codigo_mtrack").GetString());
         Assert.True(listaEtapas[0].GetProperty("requiere_inspeccion").GetBoolean());
         Assert.Equal(0, listaEtapas[1].GetProperty("inspecciones").GetArrayLength());

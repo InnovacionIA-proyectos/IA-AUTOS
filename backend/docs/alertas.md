@@ -48,7 +48,7 @@ El reporte `GET /api/reportes/patrones` marca `supera_umbral` con estos mismos p
 ## Captura incompleta
 
 Cada 10 minutos se buscan las inspecciones en **borrador** de **Cargue o Descargue** de viajes activos, iniciadas hace mas de `captura_incompleta_minutos`, a las que **aun les falta la foto de alguna vista obligatoria** (el mismo calculo que usa el cierre,
-`clsCalculadoraVistas`). Se avisa a quien la inicio, con las vistas que faltan: el inspector o, **solo en un Cargue sin personal de apoyo**, el conductor (un Descargue iniciado por el conductor no avisa). Un aviso por inspeccion.
+`clsCalculadoraVistas`). Se avisa a quien la inicio, con las vistas que faltan: el inspector o, **solo en la salida de un Cargue**, el conductor (un Descargue iniciado por el conductor no avisa). Un aviso por inspeccion.
 No avisa de una inspeccion cerrada, ni de Transporte, ni de un usuario retirado.
 
 ## Camión reclamado sin actividad

@@ -95,7 +95,6 @@ public sealed record InventarioEtapaDto(
     bool RequiereInspeccion,
     Guid ViajeId,
     string? CodigoMtrack,
-    bool ConPersonalApoyo,
     string EstadoUnidad,
     NoSaleDto? NoSale,
     IReadOnlyList<InventarioInspeccionDto> Inspecciones);

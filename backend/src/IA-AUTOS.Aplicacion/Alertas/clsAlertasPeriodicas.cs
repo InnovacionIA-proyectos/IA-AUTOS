@@ -16,7 +16,7 @@ public sealed record clsConteoPatron(Guid ClienteId, string Clave, string Nombre
 
 /// <summary>Una inspeccion en borrador de Cargue o Descargue que sigue abierta: quien la inicio, a que unidad y proceso, y si su creador es un conductor en un cargue sin personal de apoyo.</summary>
 public sealed record clsCapturaAbierta(
-    Guid InspeccionId, Guid EtapaId, Guid ViajeId, Guid VehiculoId, Guid ClienteId, string Vin, string Proceso, Guid UsuarioId, string RolCreador, bool ConPersonalApoyo, DateTimeOffset IniciadaAt);
+    Guid InspeccionId, Guid EtapaId, Guid ViajeId, Guid VehiculoId, Guid ClienteId, string Vin, string Proceso, Guid UsuarioId, string RolCreador, DateTimeOffset IniciadaAt);
 
 /// <summary>
 /// Una llegada cerrada cuya transferencia no tiene tipo de cierre: a quien le falta firmar (si la transferencia existe) o, si no existe, el conductor y el inspector del viaje y el proceso de la
@@ -177,8 +177,8 @@ public sealed class clsAlertasPeriodicas(
         var emitidas = 0;
         foreach (var captura in await consultas.CapturasAbiertasAsync(reloj.Ahora.AddMinutes(-minutos), LIMITE_POR_EJECUCION, ct))
         {
-            // El conductor solo recibe el aviso de lo que el inicio en un cargue sin personal de apoyo.
-            if (captura.RolCreador == clsRol.CONDUCTOR && (captura.Proceso != clsCodigosEtapa.CARGUE || captura.ConPersonalApoyo))
+            // El conductor solo recibe el aviso de la salida de un cargue que el inicio (la unica que hace, con la excepcion «No hay inspector»).
+            if (captura.RolCreador == clsRol.CONDUCTOR && captura.Proceso != clsCodigosEtapa.CARGUE)
             {
                 continue;
             }

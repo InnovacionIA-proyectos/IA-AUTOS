@@ -1192,6 +1192,15 @@ DELETE FROM dbo.tblLugares WHERE Id = @lugarRec;
 INSERT #r SELECT N'Reclamo: lo de prueba se limpio', CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.tblReclamos WHERE ViajeId = @vj) AND NOT EXISTS (SELECT 1 FROM dbo.tblInspectorLugares WHERE LugarId = @lugarRec)
     AND NOT EXISTS (SELECT 1 FROM dbo.tblLugares WHERE Id = @lugarRec) THEN 1 ELSE 0 END, NULL;
 
+-- 7p) Sin marca de personal de apoyo: el cargue no lleva ninguna marca previa y el catalogo de motivos de la excepcion esta sembrado
+INSERT #r SELECT N'Etapas: ya no existe la marca ConPersonalApoyo ni su restriccion por defecto',
+    CASE WHEN COL_LENGTH(N'dbo.tblEtapas', N'ConPersonalApoyo') IS NULL
+          AND NOT EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'DF_tblEtapas_ConPersonalApoyo') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Motivos de la excepcion: la siembra (inspector_no_llego, inspector_no_disponible y otro con texto) esta activa',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblMotivosSinInspector WHERE Codigo IN ('inspector_no_llego', 'inspector_no_disponible', 'otro') AND Activo = 1) = 3
+          AND EXISTS (SELECT 1 FROM dbo.tblMotivosSinInspector WHERE Codigo = 'otro' AND RequiereTexto = 1)
+          AND NOT EXISTS (SELECT 1 FROM dbo.tblMotivosSinInspector WHERE Codigo IN ('inspector_no_llego', 'inspector_no_disponible') AND RequiereTexto = 1) THEN 1 ELSE 0 END, NULL;
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';

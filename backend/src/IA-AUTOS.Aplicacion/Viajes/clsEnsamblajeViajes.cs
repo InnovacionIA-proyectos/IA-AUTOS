@@ -20,7 +20,6 @@ public sealed class clsEnsamblajeViajes(IViajeRepository viajes, IEtapaRepositor
     public async Task AgregarVehiculosAsync(
         clsViaje viaje,
         IReadOnlyCollection<clsVehiculo> vehiculos,
-        bool conPersonalApoyo,
         IReadOnlyList<clsEtapaDeRuta> ruta,
         CancellationToken ct,
         IReadOnlyDictionary<Guid, Guid?>? lugarDestinoPorVehiculo = null)
@@ -31,7 +30,7 @@ public sealed class clsEnsamblajeViajes(IViajeRepository viajes, IEtapaRepositor
             Guid? lugarDestino = lugarDestinoPorVehiculo is not null && lugarDestinoPorVehiculo.TryGetValue(vehiculo.Id, out var destino) ? destino : null;
             viajes.Agregar(clsViajeVehiculo.Crear(viaje.Id, vehiculo.Id, reloj.Ahora, lugarDestino));
             Guid? puntoDestino = lugarDestino is { } lugar && puntoDeLosLugares.TryGetValue(lugar, out var punto) ? punto : viaje.DestinoId;
-            foreach (var etapa in clsRutaCustodia.CrearEtapasEstandar(viaje.Id, vehiculo.Id, ruta, viaje.OrigenId, puntoDestino, conPersonalApoyo, reloj.Ahora))
+            foreach (var etapa in clsRutaCustodia.CrearEtapasEstandar(viaje.Id, vehiculo.Id, ruta, viaje.OrigenId, puntoDestino, reloj.Ahora))
             {
                 etapas.Agregar(etapa);
             }

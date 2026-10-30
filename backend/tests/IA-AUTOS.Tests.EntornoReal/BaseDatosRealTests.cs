@@ -176,7 +176,7 @@ public sealed class BaseDatosRealTests
             ("@t", tabla), ("@c", columna));
 
         Assert.True(await Columnas("tblEtapas", "ViajeId", obligatoria: true) == 1, $"tblEtapas.ViajeId debe existir y ser obligatoria. {ayuda}");
-        Assert.True(await Columnas("tblEtapas", "ConPersonalApoyo") == 1, $"Falta tblEtapas.ConPersonalApoyo. {ayuda}");
+        Assert.True(await Columnas("tblEtapas", "ConPersonalApoyo") == 0, $"Sobra tblEtapas.ConPersonalApoyo: ejecute database/cambios-esquema/28-sin-personal-de-apoyo.sql. {ayuda}");
         Assert.True(await Columnas("tblInspecciones", "ViajeId", obligatoria: true) == 1, $"tblInspecciones.ViajeId debe existir y ser obligatoria. {ayuda}");
         Assert.True(await Columnas("tblUsuarios", "Cedula") == 1, $"Falta tblUsuarios.Cedula. {ayuda}");
         Assert.True(await Columnas("tblOrdenesSofasa", "ViajeId") == 1, $"Falta tblOrdenesSofasa.ViajeId. {ayuda}");

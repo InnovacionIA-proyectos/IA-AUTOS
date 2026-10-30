@@ -61,7 +61,7 @@ Mejoran los listados de vehículos de movilizados (a la tercera parte), de pendi
 - **Listado de vehículos.** Los conteos de cada fila (etapas, etapas con informe cerrado y novedades) eran tres subconsultas correlacionadas por vehículo. Ahora se elige la página (solo los datos del vehículo) y después se piden los conteos de **esos** vehículos con una consulta agrupada por tabla
   (etapas, etapas con informe cerrado y hallazgos): tres consultas en total, sin importar el tamaño de la página. El filtro `tipo=novedad` pasó de un `EXISTS` anidado de tres tablas por vehículo a un `IN` con la lista de vehículos con hallazgos, y `estado_unidad` también usa `IN`.
 - **Movilizada.** El listado ya no calcula `vwViajesCompletos` sobre las 17 000 unidades: lee `tblViajeVehiculos.Completa`, que guardan los triggers con la misma regla de la vista (ver [viajes.md](viajes.md)). La vista sigue siendo la definición de referencia y la que usan los reportes.
-- **Listado de viajes.** Los conteos por viaje (unidades, unidades completas y si tiene personal de apoyo) también salen de consultas agrupadas sobre la página y de `Completa`.
+- **Listado de viajes.** Los conteos por viaje (unidades y unidades completas) también salen de consultas agrupadas sobre la página y de `Completa`.
 - **Inventario e informe.** Ya se resolvían con una consulta por tabla (etapas con sus lugares y viajes, inspecciones, datos del viaje, hallazgos, evidencias, transferencias y notas): no hay consultas por fila y solo se miden.
 
 ## Índices

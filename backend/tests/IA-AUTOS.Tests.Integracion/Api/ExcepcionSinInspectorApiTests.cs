@@ -47,18 +47,13 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
 
     private static JsonElement Errores(JsonElement cuerpo) => cuerpo.GetProperty("details").GetProperty("fieldErrors");
 
-    private async Task<Escenario> EscenarioAsync(bool conApoyo = true, string vin = "VIN-SIN-0001")
+    private async Task<Escenario> EscenarioAsync(string vin = "VIN-SIN-0001")
     {
         var conductor = await SesionAsync("conductor@ejemplo.com", clsRol.CONDUCTOR);
         var inspector = await SesionAsync("inspector@ejemplo.com", clsRol.INSPECTOR);
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
         var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
         var (vehiculo, etapas) = await Sembrador.VehiculoConRutaAsync(vin, conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
-        if (conApoyo)
-        {
-            await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET ConPersonalApoyo = 1 WHERE Id = @e", ("@e", etapas[0]));
-        }
-
         return new Escenario(await Sembrador.ViajeDeEtapaAsync(etapas[0]), vehiculo, etapas, vin, conductor, inspector, coordinador, admin);
     }
 
@@ -122,8 +117,7 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
         Assert.Equal("Nombre conductor@ejemplo.com", novedades[0].GetProperty("usuario_nombre").GetString());
         Assert.Equal(DateTimeOffset.Parse(FECHA), novedades[0].GetProperty("fecha").GetDateTimeOffset());
 
-        // La etapa conserva su personal de apoyo, el motivo queda en la inspeccion y la novedad, con la fecha, lat y lng del cuerpo.
-        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas WHERE Id = @e AND ConPersonalApoyo = 1", ("@e", e.Etapas[0])));
+        // El motivo queda en la inspeccion y la novedad, con la fecha, lat y lng del cuerpo.
         Assert.Equal(1, await Sembrador.ContarAsync(
             "SELECT COUNT(*) FROM dbo.tblInspecciones WHERE Id = @i AND MotivoSinInspector = 'inspector_no_llego' AND MotivoSinInspectorTexto IS NULL", ("@i", inspeccion.GetProperty("id").GetGuid())));
         Assert.Equal(1, await Sembrador.ContarAsync(
@@ -178,7 +172,7 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
         var enBlanco = await ConMotivoAsync(e.Conductor, e.Etapas[0], "  ");
 
         Assert.Equal(HttpStatusCode.Forbidden, sinMotivo.StatusCode);
-        Assert.Equal("Este cargue tiene personal de apoyo: el conductor solo firma el recibo", (await ComoJsonAsync(sinMotivo)).GetProperty("message").GetString());
+        Assert.Equal("La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción", (await ComoJsonAsync(sinMotivo)).GetProperty("message").GetString());
         Assert.Equal(HttpStatusCode.Forbidden, soloTexto.StatusCode);
         foreach (var r in new[] { inexistente, inactivo, enBlanco })
         {
@@ -191,18 +185,16 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
     }
 
     [Fact]
-    public async Task El_motivo_no_se_admite_para_el_inspector_ni_en_un_cargue_sin_apoyo_ni_en_otra_salida_o_llegada()
+    public async Task El_motivo_no_se_admite_para_el_inspector_ni_en_otra_salida_o_llegada_que_la_del_cargue_del_conductor()
     {
         var e = await EscenarioAsync();
         var delInspector = await ConMotivoAsync(e.Inspector, e.Etapas[0]);
         var enLlegada = await ConMotivoAsync(e.Conductor, e.Etapas[0], momento: "llegada");
         var soloTexto = await ConMotivoAsync(e.Inspector, e.Etapas[0], motivo: null, texto: "texto");
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET ConPersonalApoyo = 0 WHERE Id = @e", ("@e", e.Etapas[0]));
-        var sinApoyo = await ConMotivoAsync(e.Conductor, e.Etapas[0]);
         await Sembrador.InformeAsync(e.Etapas[0], e.Conductor.UsuarioId, cerrada: true, momento: "llegada");
         var deTransporte = await ConMotivoAsync(e.Conductor, e.Etapas[1]);
 
-        foreach (var r in new[] { delInspector, enLlegada, sinApoyo, deTransporte })
+        foreach (var r in new[] { delInspector, enLlegada, deTransporte })
         {
             Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
             Assert.Equal("Campo no admitido", Errores(await ComoJsonAsync(r)).GetProperty("motivo_sin_inspector")[0].GetString());
@@ -336,7 +328,7 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
     [Fact]
     public async Task Una_inspeccion_normal_trae_el_motivo_nulo_y_sin_novedades_de_proceso()
     {
-        var e = await EscenarioAsync(conApoyo: false);
+        var e = await EscenarioAsync();
 
         var r = await CrearAsync(e.Inspector, e.Etapas[0]);
 

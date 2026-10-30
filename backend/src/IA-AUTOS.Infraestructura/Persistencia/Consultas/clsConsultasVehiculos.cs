@@ -239,7 +239,6 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
             e.Etapa.RequiereInspeccion,
             e.Etapa.ViajeId,
             e.CodigoMtrack,
-            e.Etapa.ConPersonalApoyo,
             e.EstadoUnidad,
             clsMapeadorViajes.ANoSale(e.EstadoUnidad, e.NoSaleMotivo, e.NoSaleHallazgoId, e.NoSaleMarcadoPor, e.MarcadoPorNombre, e.NoSaleAt, e.VinReemplazo),
             inspecciones.Where(i => i.EtapaId == e.Etapa.Id).Select(AInspeccion).ToList()))

@@ -39,7 +39,7 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         var ruta = await contexto.EtapasCatalogo.OrderBy(e => e.Orden).Select(e => new clsEtapaDeRuta(e.Id, e.Codigo)).ToListAsync();
         var tipoUnidadId = await contexto.TiposUnidad.Select(t => t.Id).FirstAsync();
         var viaje = clsViaje.Crear("MTK-" + vin, tipoUnidadId, "ABC123", null, null, null, null, null, usuario.Id, AHORA);
-        var etapas = clsRutaCustodia.CrearEtapasEstandar(viaje.Id, vehiculo.Id, ruta, null, null, false, AHORA);
+        var etapas = clsRutaCustodia.CrearEtapasEstandar(viaje.Id, vehiculo.Id, ruta, null, null, AHORA);
 
         s.GetRequiredService<IUsuarioRepository>().Agregar(usuario);
         s.GetRequiredService<IVehiculoRepository>().Agregar(vehiculo);
@@ -273,7 +273,7 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
         using (var alcance = proveedor.CreateScope())
         {
             var s = alcance.ServiceProvider;
-            s.GetRequiredService<IEtapaRepository>().Agregar(clsEtapa.Crear(vehiculoId, etapas[0].ViajeId, etapas[0].EtapaCatalogoId, null, 1, true, false, AHORA));
+            s.GetRequiredService<IEtapaRepository>().Agregar(clsEtapa.Crear(vehiculoId, etapas[0].ViajeId, etapas[0].EtapaCatalogoId, null, 1, true, AHORA));
             var ex = await Assert.ThrowsAsync<clsConflictoException>(() => s.GetRequiredService<IUnidadDeTrabajo>().GuardarCambiosAsync());
             Assert.Equal("Ya existe una etapa con ese orden para el vehículo en el viaje", ex.Message);
         }

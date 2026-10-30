@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "2.9.0"
+    "version": "2.10.0"
   },
   "paths": {
     "/api/viajes": {
@@ -603,7 +603,6 @@
                         "destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "destino": "texto",
                         "estado": "borrador",
-                        "con_personal_apoyo": true,
                         "vehiculos": [
                           {
                             "vehiculo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -663,7 +662,6 @@
                         "destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "destino": "texto",
                         "estado": "borrador",
-                        "con_personal_apoyo": true,
                         "vehiculos": [
                           {
                             "vehiculo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -723,7 +721,6 @@
                         "destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "destino": "texto",
                         "estado": "borrador",
-                        "con_personal_apoyo": true,
                         "vehiculos": [
                           {
                             "vehiculo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -19226,7 +19223,6 @@
             "trailer": "TR-1",
             "conductor_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "origen_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "con_personal_apoyo": true,
             "fecha_programada": "2026-10-22T14:30:00.000Z",
             "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
@@ -19237,8 +19233,7 @@
           "placa",
           "trailer",
           "conductor_id",
-          "origen_id",
-          "con_personal_apoyo"
+          "origen_id"
         ],
         "type": "object",
         "properties": {
@@ -19280,12 +19275,6 @@
               "string"
             ],
             "format": "uuid"
-          },
-          "con_personal_apoyo": {
-            "type": [
-              "null",
-              "boolean"
-            ]
           },
           "fecha_programada": {},
           "lugar_cargue_id": {
@@ -21616,7 +21605,6 @@
             "conductor_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "inspector_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "origen_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "con_personal_apoyo": true,
             "unidades": [
               {
                 "vin": "9FBHSR4E8PM000001",
@@ -21633,7 +21621,6 @@
           "conductor_id",
           "inspector_id",
           "origen_id",
-          "con_personal_apoyo",
           "unidades"
         ],
         "type": "object",
@@ -21683,12 +21670,6 @@
               "string"
             ],
             "format": "uuid"
-          },
-          "con_personal_apoyo": {
-            "type": [
-              "null",
-              "boolean"
-            ]
           },
           "unidades": {
             "type": [
@@ -24853,7 +24834,6 @@
                 "requiere_inspeccion": true,
                 "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "codigo_mtrack": "MTK-0001",
-                "con_personal_apoyo": true,
                 "estado_unidad": "texto",
                 "no_sale": {
                   "motivo": "Mensaje de ejemplo",
@@ -24948,7 +24928,6 @@
             "requiere_inspeccion": true,
             "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "codigo_mtrack": "MTK-0001",
-            "con_personal_apoyo": true,
             "estado_unidad": "texto",
             "no_sale": {
               "motivo": "Mensaje de ejemplo",
@@ -25019,7 +24998,6 @@
           "requiere_inspeccion",
           "viaje_id",
           "codigo_mtrack",
-          "con_personal_apoyo",
           "estado_unidad",
           "no_sale",
           "inspecciones"
@@ -25055,9 +25033,6 @@
               "null",
               "string"
             ]
-          },
-          "con_personal_apoyo": {
-            "type": "boolean"
           },
           "estado_unidad": {
             "type": "string"
@@ -26873,7 +26848,6 @@
                 "destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "destino": "texto",
                 "estado": "borrador",
-                "con_personal_apoyo": true,
                 "total_vehiculos": 1,
                 "vehiculos_completos": 1,
                 "clientes": [],
@@ -29321,7 +29295,6 @@
             "destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "destino": "texto",
             "estado": "borrador",
-            "con_personal_apoyo": true,
             "vehiculos": [
               {
                 "vehiculo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -29377,7 +29350,6 @@
           "destino_id",
           "destino",
           "estado",
-          "con_personal_apoyo",
           "vehiculos",
           "clientes",
           "created_at",
@@ -29475,9 +29447,6 @@
           "estado": {
             "type": "string"
           },
-          "con_personal_apoyo": {
-            "type": "boolean"
-          },
           "vehiculos": {
             "type": "array",
             "items": {
@@ -29530,7 +29499,6 @@
             "destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "destino": "texto",
             "estado": "borrador",
-            "con_personal_apoyo": true,
             "total_vehiculos": 1,
             "vehiculos_completos": 1,
             "clientes": [
@@ -29563,7 +29531,6 @@
           "destino_id",
           "destino",
           "estado",
-          "con_personal_apoyo",
           "total_vehiculos",
           "vehiculos_completos",
           "clientes",
@@ -29661,9 +29628,6 @@
           },
           "estado": {
             "type": "string"
-          },
-          "con_personal_apoyo": {
-            "type": "boolean"
           },
           "total_vehiculos": {
             "type": "integer",
