@@ -12,7 +12,9 @@ public sealed partial class MigracionDibujoV6Tests : IAsyncLifetime
 {
     private const string HALLAZGO_NUMERADO = "77777777-7777-7777-7777-777777777771";
     private const string HALLAZGO_PROVISIONAL = "77777777-7777-7777-7777-777777777772";
+    private const string HALLAZGO_NOVEDAD = "77777777-7777-7777-7777-777777777773";
     private const string INSPECCION = "77777777-7777-7777-7777-777777777761";
+    private const string INSPECCION_TRANSPORTE = "77777777-7777-7777-7777-777777777762";
 
     private string _cadena = string.Empty;
 
@@ -48,6 +50,13 @@ public sealed partial class MigracionDibujoV6Tests : IAsyncLifetime
         INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad, ParteVehiculo) VALUES
             ('{{HALLAZGO_NUMERADO}}', '{{INSPECCION}}', @z7, 'golpe', '1_5cm', 'v1', N'Puerta'),
             ('{{HALLAZGO_PROVISIONAL}}', '{{INSPECCION}}', @frente, 'golpe', '1_5cm', 'v1', NULL);
+        -- Una novedad del conductor ya revisada (con zona, clase y nivel) en la salida de Transporte: la restriccion de las novedades revisadas exige zona.
+        DECLARE @transporte uniqueidentifier = (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'transporte');
+        DECLARE @et uniqueidentifier = NEWID();
+        INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@et, @v, @vj, @transporte, 2);
+        INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, Lat, Lng, Estado) VALUES ('{{INSPECCION_TRANSPORTE}}', @et, @vj, @u, 'salida', SYSDATETIMEOFFSET(), 4.6, -74.1, 'borrador');
+        INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad, Origen, TipoNovedad, RevisadoAt, RevisadoPor)
+        VALUES ('{{HALLAZGO_NOVEDAD}}', '{{INSPECCION_TRANSPORTE}}', @z7, 'golpe', '1_5cm', 'v2', 'conductor', 'golpe', SYSDATETIMEOFFSET(), @u);
         """;
 
     private async Task EjecutarAsync(string sql)
@@ -121,7 +130,10 @@ public sealed partial class MigracionDibujoV6Tests : IAsyncLifetime
         // Las ruedas: llanta en 6 y 26 y rin en 34 y 35.
         Assert.Equal(4, await ContarAsync("SELECT COUNT(DISTINCT Numero) FROM dbo.tblZonasDano WHERE Numero IN (6, 26, 34, 35)"));
         // Los hallazgos quedan sin zona y pendientes de ubicar, conservando su parte.
-        Assert.Equal(2, await ContarAsync($"SELECT COUNT(*) FROM dbo.tblHallazgos WHERE Id IN ('{HALLAZGO_NUMERADO}', '{HALLAZGO_PROVISIONAL}') AND ZonaId IS NULL AND MigracionPendiente = 1"));
+        Assert.Equal(3, await ContarAsync($"SELECT COUNT(*) FROM dbo.tblHallazgos WHERE Id IN ('{HALLAZGO_NUMERADO}', '{HALLAZGO_PROVISIONAL}', '{HALLAZGO_NOVEDAD}') AND ZonaId IS NULL AND MigracionPendiente = 1"));
+        // La novedad del conductor ya revisada tambien queda sin zona: la restriccion admite lo pendiente de ubicar, pero sigue exigiendo zona a una novedad revisada que no lo esta.
+        Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.check_constraints WHERE name = 'CK_tblHallazgos_NovedadRevisada' AND definition LIKE '%MigracionPendiente%'"));
+        Assert.Equal(547, await ErrorDeAsync($"UPDATE dbo.tblHallazgos SET MigracionPendiente = 0 WHERE Id = '{HALLAZGO_NOVEDAD}'"));
         Assert.Equal(1, await ContarAsync($"SELECT COUNT(*) FROM dbo.tblHallazgos WHERE Id = '{HALLAZGO_NUMERADO}' AND ParteVehiculo = N'Puerta'"));
     }
 

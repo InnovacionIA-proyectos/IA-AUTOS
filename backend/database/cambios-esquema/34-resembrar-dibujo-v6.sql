@@ -10,7 +10,8 @@
      2. Zonas: se van las zonas provisionales (frente y las cuatro llantas) y las columnas Codigo y Nombre que solo ellas usaban; ganan LlevaLado (copiado del cuadrante, con llave foranea que impide
         que no coincida), NombreCompleto y AiagArea (por lado, porque el nombre completo lleva el lado y el codigo AIAG se pide por pieza y lado). CK_tblZonasDano_Forma exige lado si el cuadrante
         lo lleva y prohibe lado si no. El disparador TR_tblCuadrantes_CrearZonas crea dos zonas (izquierdo y derecho) o una sin lado segun LlevaLado.
-     3. Paneles: AnchoRef, AltoRef y Version. Regiones: Prioridad (el orden en que se prueban al tocar el dibujo).
+     3. Paneles: AnchoRef, AltoRef y Version. Regiones: Prioridad (el orden en que se prueban al tocar el dibujo). CK_tblHallazgos_NovedadRevisada admite una novedad revisada sin zona cuando
+        el hallazgo esta pendiente de ubicar (MigracionPendiente = 1): sin eso no se podrian desvincular las novedades del conductor ya revisadas.
      4. Los hallazgos que referencian zonas del dibujo viejo quedan SIN zona (ZonaId = NULL, MigracionPendiente = 1), conservando ParteVehiculo y CoordsDiagrama. No se reubican: la numeracion nueva
         significa otra cosa en los mismos numeros, y solo se reubicaran cuando Calidad apruebe una tabla de equivalencias.
      5. Se borra el dibujo viejo completo (regiones, zonas, cuadrantes y paneles; al borrar los cuadrantes cae en cascada tblCuadranteVistas, el respaldo de la migracion vieja) y se siembra el del
@@ -195,7 +196,12 @@ IF COL_LENGTH(N~{S}.tblPanelesDano~, N~AltoRef~) IS NULL
 IF COL_LENGTH(N~{S}.tblPanelesDano~, N~Version~) IS NULL
     ALTER TABLE {S}.tblPanelesDano ADD Version int NULL;
 IF COL_LENGTH(N~{S}.tblRegionesDano~, N~Prioridad~) IS NULL
-    ALTER TABLE {S}.tblRegionesDano ADD Prioridad int NOT NULL CONSTRAINT DF_tblRegionesDano_Prioridad DEFAULT (1);'),
+    ALTER TABLE {S}.tblRegionesDano ADD Prioridad int NOT NULL CONSTRAINT DF_tblRegionesDano_Prioridad DEFAULT (1);
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N~CK_tblHallazgos_NovedadRevisada~ AND parent_object_id = OBJECT_ID(N~{S}.tblHallazgos~) AND definition NOT LIKE N~%MigracionPendiente%~)
+BEGIN
+    ALTER TABLE {S}.tblHallazgos DROP CONSTRAINT CK_tblHallazgos_NovedadRevisada;
+    ALTER TABLE {S}.tblHallazgos ADD CONSTRAINT CK_tblHallazgos_NovedadRevisada CHECK (TipoNovedad IS NULL OR RevisadoAt IS NULL OR MigracionPendiente = 1 OR (ZonaId IS NOT NULL AND ClaseDano IS NOT NULL AND NivelSeveridad IS NOT NULL));
+END'),
 (N'hallazgos: se desvinculan de las zonas del dibujo viejo', N'
 IF @sembrar = 1
 BEGIN

@@ -1085,7 +1085,7 @@ BEGIN
             TipoNovedad IS NULL OR RevisadoAt IS NOT NULL OR (ZonaId IS NULL AND ClaseDano IS NULL AND NivelSeveridad IS NULL AND Nota IS NULL))');
     IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_NovedadRevisada' AND parent_object_id = OBJECT_ID(N'dbo.tblHallazgos'))
         EXEC (N'ALTER TABLE dbo.tblHallazgos ADD CONSTRAINT CK_tblHallazgos_NovedadRevisada CHECK (
-            TipoNovedad IS NULL OR RevisadoAt IS NULL OR (ZonaId IS NOT NULL AND ClaseDano IS NOT NULL AND NivelSeveridad IS NOT NULL))');
+            TipoNovedad IS NULL OR RevisadoAt IS NULL OR MigracionPendiente = 1 OR (ZonaId IS NOT NULL AND ClaseDano IS NOT NULL AND NivelSeveridad IS NOT NULL))');
     IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_NivelDelConductor' AND parent_object_id = OBJECT_ID(N'dbo.tblHallazgos'))
         EXEC (N'ALTER TABLE dbo.tblHallazgos ADD CONSTRAINT CK_tblHallazgos_NivelDelConductor CHECK (Origen <> ''conductor'' OR RevisadoAt IS NOT NULL OR NivelSeveridad IS NULL)');
     EXEC (N'CREATE OR ALTER TRIGGER dbo.TR_tblHallazgos_NovedadDeTransporte
