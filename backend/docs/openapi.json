@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "2.16.0"
+    "version": "3.0.0"
   },
   "paths": {
     "/api/viajes": {
@@ -13672,9 +13672,9 @@
                         },
                         "cuadrante_numero": 1,
                         "lado": "izquierdo",
-                        "zona_provisional": "texto",
                         "cuadrante_nombre": "texto",
                         "zona": "texto",
+                        "aiag_area": "texto",
                         "tipo_novedad": "texto",
                         "nivel_severidad": "v1",
                         "nivel_nombre": "texto",
@@ -13748,9 +13748,9 @@
                         },
                         "cuadrante_numero": 1,
                         "lado": "izquierdo",
-                        "zona_provisional": "texto",
                         "cuadrante_nombre": "texto",
                         "zona": "texto",
+                        "aiag_area": "texto",
                         "tipo_novedad": "texto",
                         "nivel_severidad": "v1",
                         "nivel_nombre": "texto",
@@ -13824,9 +13824,9 @@
                         },
                         "cuadrante_numero": 1,
                         "lado": "izquierdo",
-                        "zona_provisional": "texto",
                         "cuadrante_nombre": "texto",
                         "zona": "texto",
+                        "aiag_area": "texto",
                         "tipo_novedad": "texto",
                         "nivel_severidad": "v1",
                         "nivel_nombre": "texto",
@@ -23019,7 +23019,6 @@
           {
             "cuadrante_numero": 1,
             "lado": "izquierdo",
-            "zona_provisional": "texto",
             "clase_dano": "golpe",
             "tamano_dano": "5_10cm",
             "nivel_severidad": "v1",
@@ -23041,7 +23040,6 @@
         "required": [
           "cuadrante_numero",
           "lado",
-          "zona_provisional",
           "clase_dano",
           "tamano_dano",
           "nivel_severidad",
@@ -23060,12 +23058,6 @@
             "format": "int32"
           },
           "lado": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "zona_provisional": {
             "type": [
               "null",
               "string"
@@ -24421,9 +24413,9 @@
             },
             "cuadrante_numero": 1,
             "lado": "izquierdo",
-            "zona_provisional": "texto",
             "cuadrante_nombre": "texto",
             "zona": "texto",
+            "aiag_area": "texto",
             "tipo_novedad": "texto",
             "nivel_severidad": "v1",
             "nivel_nombre": "texto",
@@ -24498,12 +24490,6 @@
               "string"
             ]
           },
-          "zona_provisional": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "cuadrante_nombre": {
             "type": [
               "null",
@@ -24511,6 +24497,12 @@
             ]
           },
           "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "aiag_area": {
             "type": [
               "null",
               "string"
@@ -24697,9 +24689,9 @@
             },
             "cuadrante_numero": 1,
             "lado": "izquierdo",
-            "zona_provisional": "texto",
             "cuadrante_nombre": "texto",
             "zona": "texto",
+            "aiag_area": "texto",
             "tipo_novedad": "texto",
             "nivel_severidad": "v1",
             "nivel_nombre": "texto",
@@ -24819,12 +24811,6 @@
               "string"
             ]
           },
-          "zona_provisional": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "cuadrante_nombre": {
             "type": [
               "null",
@@ -24832,6 +24818,12 @@
             ]
           },
           "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "aiag_area": {
             "type": [
               "null",
               "string"
@@ -24940,9 +24932,9 @@
             },
             "cuadrante_numero": 1,
             "lado": "izquierdo",
-            "zona_provisional": "texto",
             "cuadrante_nombre": "texto",
             "zona": "texto",
+            "aiag_area": "texto",
             "tipo_novedad": "texto",
             "nivel_severidad": "v1",
             "nivel_nombre": "texto",
@@ -24972,9 +24964,9 @@
           "coords_diagrama",
           "cuadrante_numero",
           "lado",
-          "zona_provisional",
           "cuadrante_nombre",
           "zona",
+          "aiag_area",
           "tipo_novedad",
           "nivel_severidad",
           "nivel_nombre",
@@ -25040,12 +25032,6 @@
               "string"
             ]
           },
-          "zona_provisional": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "cuadrante_nombre": {
             "type": [
               "null",
@@ -25053,6 +25039,12 @@
             ]
           },
           "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "aiag_area": {
             "type": [
               "null",
               "string"
@@ -25191,9 +25183,9 @@
             },
             "cuadrante_numero": 1,
             "lado": "izquierdo",
-            "zona_provisional": "texto",
             "cuadrante_nombre": "texto",
             "zona": "texto",
+            "aiag_area": "texto",
             "tipo_novedad": "texto",
             "nivel_severidad": "v1",
             "nivel_nombre": "texto",
@@ -25307,12 +25299,6 @@
               "string"
             ]
           },
-          "zona_provisional": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "cuadrante_nombre": {
             "type": [
               "null",
@@ -25320,6 +25306,12 @@
             ]
           },
           "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "aiag_area": {
             "type": [
               "null",
               "string"
@@ -25458,9 +25450,9 @@
             },
             "cuadrante_numero": 1,
             "lado": "izquierdo",
-            "zona_provisional": "texto",
             "cuadrante_nombre": "texto",
             "zona": "texto",
+            "aiag_area": "texto",
             "tipo_novedad": "texto",
             "nivel_severidad": "v1",
             "nivel_nombre": "texto",
@@ -25562,12 +25554,6 @@
               "string"
             ]
           },
-          "zona_provisional": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "cuadrante_nombre": {
             "type": [
               "null",
@@ -25575,6 +25561,12 @@
             ]
           },
           "zona": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "aiag_area": {
             "type": [
               "null",
               "string"
@@ -25859,9 +25851,9 @@
                 },
                 "cuadrante_numero": 1,
                 "lado": "izquierdo",
-                "zona_provisional": "texto",
                 "cuadrante_nombre": "texto",
                 "zona": "texto",
+                "aiag_area": "texto",
                 "tipo_novedad": "texto",
                 "nivel_severidad": "v1",
                 "nivel_nombre": "texto",
@@ -27030,9 +27022,9 @@
                 },
                 "cuadrante_numero": 1,
                 "lado": "izquierdo",
-                "zona_provisional": "texto",
                 "cuadrante_nombre": "texto",
                 "zona": "texto",
+                "aiag_area": "texto",
                 "tipo_novedad": "texto",
                 "nivel_severidad": "v1",
                 "nivel_nombre": "texto",
@@ -27417,9 +27409,9 @@
                 },
                 "cuadrante_numero": 1,
                 "lado": "izquierdo",
-                "zona_provisional": "texto",
                 "cuadrante_nombre": "texto",
                 "zona": "texto",
+                "aiag_area": "texto",
                 "tipo_novedad": "texto",
                 "nivel_severidad": "v1",
                 "nivel_nombre": "texto",
@@ -30472,7 +30464,6 @@
           {
             "cuadrante_numero": 1,
             "lado": "izquierdo",
-            "zona_provisional": "texto",
             "clase_dano": "golpe",
             "nivel_severidad": "v1",
             "tamano_dano": "5_10cm",
@@ -30484,7 +30475,6 @@
         "required": [
           "cuadrante_numero",
           "lado",
-          "zona_provisional",
           "clase_dano",
           "nivel_severidad",
           "tamano_dano",
@@ -30500,12 +30490,6 @@
             "format": "int32"
           },
           "lado": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "zona_provisional": {
             "type": [
               "null",
               "string"

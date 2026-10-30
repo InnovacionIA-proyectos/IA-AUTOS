@@ -43,7 +43,7 @@ El filtro `revisado` usa `RevisadoAt` y solo aplica al origen conductor. Ver [CO
 
 `vwPatronesPorCuadrante` alimenta el mapa de calor y los patrones. Devuelve una fila por zona, proceso, nivel, clase, cliente, operacion y fecha de cierre, con `Total` (cuantos hallazgos).
 
-- **Cuenta por zona (lado + numero), no solo por numero**: izquierdo 7 y derecho 7 son filas distintas. Una zona provisional (frente, llantas) sale con su nombre.
+- **Cuenta por zona (lado + numero), no solo por numero**: izquierdo 7 y derecho 7 son filas distintas. Un hallazgo sin zona no entra en este conteo.
 - `ZonaNombre` ya viene armado para mostrar: «Izquierdo 7 · Puerta delantera», «26 · Aleron / borde trasero del techo» o «Frente».
 - **Incluye los hallazgos de toda inspeccion cerrada**, aunque la unidad no haya terminado el viaje. La vista anterior de unidades movilizadas (`vwViajesCompletos`) exige las tres etapas
   cerradas, por eso el mapa de calor salia vacio con hallazgos reales; esta vista no depende de eso.

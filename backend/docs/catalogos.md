@@ -117,6 +117,19 @@ El script [`33-tipo-de-aviso-propuesta-de-ubicacion.sql`](../database/cambios-es
 
 `ddl.sql` ya trae la restricción nueva (y la reemplaza en una base antigua) y `tests/verificar-ddl.sql` cubre el tipo (387 comprobaciones).
 
+## Resiembra del dibujo version 6 (script 34)
+
+El script [`34-resembrar-dibujo-v6.sql`](../database/cambios-esquema/34-resembrar-dibujo-v6.sql) (ajustando `@esquema`, en una sola ejecucion de script y una transaccion; **antes de desplegar la API**, despues del 33) reemplaza el dibujo de danos
+completo con el archivo `regiones-zonas-dano.json` version 6 (incrustado; unos 190 KB: en DBeaver se abre con *File > Open File* y se ejecuta como script). Ver [zonas-dano.md](zonas-dano.md) para el modelo y para lo que hace segun la base
+sea identica al archivo, cambie solo en textos o cambie en estructura:
+
+- Cuadrantes: `LlevaLado`. Zonas: sin provisionales (se van las columnas `Codigo` y `Nombre`), con `LlevaLado` (llave foranea compuesta con el cuadrante), `NombreCompleto` y `AiagArea`; `CK_tblZonasDano_Forma` exige lado si el cuadrante lo lleva.
+- Paneles: `AnchoRef`, `AltoRef` y `Version`. Regiones: `Prioridad`.
+- Los hallazgos de las zonas viejas quedan sin zona (`MigracionPendiente = 1`); se borran regiones, zonas, cuadrantes (y en cascada `tblCuadranteVistas`) y paneles viejos y se siembran 7 paneles, 45 cuadrantes, 80 zonas y 251 regiones.
+- Se recrean `vwPatronesPorCuadrante`, `vwHallazgosVentanaUmbral` y `vwAveriasPorConfiguracion` (sin `ZonaCodigo`; la ultima trae `AiagArea`).
+
+`ddl.sql` ya trae el esquema nuevo (una base nueva no trae dibujo: se siembra con este guion) y `tests/verificar-ddl.sql` cubre sus restricciones. Las imagenes de fondo de los paneles no se cargan aqui: se cargan desde el portal.
+
 ## Cargar los cuadrantes y las acciones de los niveles
 
 Los cuadrantes de la ficha del vehículo genérico (36 zonas y 97 polígonos) se cargan con

@@ -80,7 +80,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     /// <summary>Una revision completa: el cuadrante 7 del lado izquierdo, golpe y nivel V2 (que no es critico), salvo lo que cada prueba cambie.</summary>
     private static Dictionary<string, object?> Cuerpo(Action<Dictionary<string, object?>>? cambiar = null)
     {
-        var cuerpo = new Dictionary<string, object?> { ["zona_provisional"] = "frente", ["clase_dano"] = "golpe", ["nivel_severidad"] = "v2" };
+        var cuerpo = new Dictionary<string, object?> { ["cuadrante_numero"] = 50, ["clase_dano"] = "golpe", ["nivel_severidad"] = "v2" };
         cambiar?.Invoke(cuerpo);
         return cuerpo;
     }
@@ -104,8 +104,8 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
         Assert.Equal(e.Novedad, h.GetProperty("id").GetGuid());
         Assert.Equal("golpe", h.GetProperty("tipo_novedad").GetString());
         Assert.Equal("conductor", h.GetProperty("origen").GetString());
-        Assert.Equal("frente", h.GetProperty("zona_provisional").GetString());
-        Assert.Equal("Frente", h.GetProperty("zona").GetString());
+        Assert.Equal(50, h.GetProperty("cuadrante_numero").GetInt32());
+        Assert.Equal("50 · Frente", h.GetProperty("zona").GetString());
         Assert.Equal("golpe", h.GetProperty("clase_dano").GetString());
         Assert.Equal("v2", h.GetProperty("nivel_severidad").GetString());
         Assert.Equal("5_10cm", h.GetProperty("tamano_dano").GetString());
@@ -130,7 +130,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
         Assert.Equal("Nombre inspector@ejemplo.com", fila.GetProperty("usuario_nombre").GetString());
         Assert.Equal("Revisada con la foto", fila.GetProperty("nota").GetString());
         var detalle = fila.GetProperty("detalle");
-        Assert.Equal("frente", detalle.GetProperty("zona_provisional").GetString());
+        Assert.Equal(50, detalle.GetProperty("cuadrante_numero").GetInt32());
         Assert.Equal("golpe", detalle.GetProperty("clase_dano").GetString());
         Assert.Equal("v2", detalle.GetProperty("nivel_severidad").GetString());
         Assert.Equal("10_20cm", detalle.GetProperty("tamano_dano").GetString());
@@ -263,7 +263,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     public async Task Un_hallazgo_que_no_es_del_conductor_responde_409()
     {
         var e = await EscenarioAsync();
-        var (_, delInspector) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[0], e.Inspector.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!, nivel: "v2");
+        var (_, delInspector) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[0], e.Inspector.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!, nivel: "v2");
 
         var r = await RevisarAsync(e.Inspector, delInspector, Cuerpo());
 
@@ -279,7 +279,6 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     [InlineData("nivel_severidad", "v9")]
     [InlineData("clase_dano", "inventada")]
     [InlineData("tamano_dano", "enorme")]
-    [InlineData("zona_provisional", "techo-volador")]
     public async Task Una_revision_sin_nivel_clase_o_con_valores_invalidos_responde_400_y_no_se_guarda(string campo, string? valor)
     {
         var e = await EscenarioAsync();
@@ -294,7 +293,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     [Theory]
     [InlineData("{}")]
     [InlineData("{\"clase_dano\":\"golpe\",\"nivel_severidad\":\"v2\"}")]
-    [InlineData("{\"cuadrante_numero\":7,\"zona_provisional\":\"frente\",\"clase_dano\":\"golpe\",\"nivel_severidad\":\"v2\"}")]
+    [InlineData("{\"zona_provisional\":\"frente\",\"clase_dano\":\"golpe\",\"nivel_severidad\":\"v2\"}")]
     [InlineData("{\"cuadrante_numero\":7,\"clase_dano\":\"golpe\",\"nivel_severidad\":\"v2\"}")]
     [InlineData("{\"cuadrante_numero\":30,\"lado\":\"izquierdo\",\"clase_dano\":\"golpe\",\"nivel_severidad\":\"v2\"}")]
     public async Task Una_revision_sin_zona_o_con_una_zona_mal_formada_responde_400(string cuerpo)
@@ -363,7 +362,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
         var (ruta, hash) = await SubirAsync(e.Conductor);
         var creado = await Como(e.Conductor).PostAsJsonAsync($"/api/inspecciones/{inspeccion.GetProperty("id").GetGuid()}/hallazgos", new
         {
-            zona_provisional = "frente",
+            cuadrante_numero = 50,
             clase_dano = "rotura",
             tamano_dano = "1_5cm",
             evidencia = new { storage_path = ruta, sello_fecha = FECHA, sello_lat = 4.6, sello_lng = -74.1, hash_sha256 = hash },
@@ -387,7 +386,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     {
         var e = await EscenarioAsync();
         var (_, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(
-            e.Etapas[0], e.Conductor.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!, nivel: null, origen: "conductor");
+            e.Etapas[0], e.Conductor.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!, nivel: null, origen: "conductor");
 
         var r = await RevisarAsync(e.Inspector, hallazgo, Cuerpo());
 

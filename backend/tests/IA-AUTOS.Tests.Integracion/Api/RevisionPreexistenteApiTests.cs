@@ -46,7 +46,7 @@ public sealed class RevisionPreexistenteApiTests(clsBaseDatosFixture bd) : clsPr
 
     private static JsonElement Errores(JsonElement cuerpo) => cuerpo.GetProperty("details").GetProperty("fieldErrors");
 
-    private async Task<Guid> ZonaAsync(string codigo) => (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = @c", ("@c", codigo)))!;
+    private async Task<Guid> ZonaAsync(int numero) => (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = @n", ("@n", numero)))!;
 
     /// <param name="antesDelActual">Siembra lo que debe estar cerrado ANTES de que empiece la inspeccion que se revisa (recibe las etapas, el inspector y la zona del frente).</param>
     private async Task<Escenario> EscenarioAsync(string vin = "VIN-PRE-0001", Func<Guid[], Sesion, Guid, Task>? antesDelActual = null)
@@ -56,7 +56,7 @@ public sealed class RevisionPreexistenteApiTests(clsBaseDatosFixture bd) : clsPr
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
         var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
         var (vehiculo, etapas) = await Sembrador.VehiculoConRutaAsync(vin, conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
-        var frente = await ZonaAsync("frente");
+        var frente = await ZonaAsync(50);
         var (previa, hallazgoPrevio) = await Sembrador.InformeCerradoConHallazgoAsync(etapas[0], inspector.UsuarioId, frente, "golpe", nivel: "v2", conFoto: true);
         if (antesDelActual is not null)
         {
@@ -71,7 +71,7 @@ public sealed class RevisionPreexistenteApiTests(clsBaseDatosFixture bd) : clsPr
 
     private static Dictionary<string, object?> Cuerpo(Action<Dictionary<string, object?>>? cambiar = null)
     {
-        var cuerpo = new Dictionary<string, object?> { ["zona_provisional"] = "frente", ["clase_dano"] = "golpe", ["nivel_severidad"] = "v2" };
+        var cuerpo = new Dictionary<string, object?> { ["cuadrante_numero"] = 50, ["clase_dano"] = "golpe", ["nivel_severidad"] = "v2" };
         cambiar?.Invoke(cuerpo);
         return cuerpo;
     }
@@ -136,7 +136,7 @@ public sealed class RevisionPreexistenteApiTests(clsBaseDatosFixture bd) : clsPr
         var e = await EscenarioAsync(antesDelActual: async (etapas, inspector, frente) =>
         {
             // Todo esto se cierra antes de empezar la inspeccion que se revisa: lo unico que falla en cada caso es la coincidencia con el VIN, la zona o la clase.
-            var otraZona = await ZonaAsync("llanta_delantera_izquierda");
+            var otraZona = await ZonaAsync(51);
             var (_, ajenas) = await Sembrador.VehiculoConRutaAsync("VIN-PRE-0099", inspectorId: inspector.UsuarioId);
             otroVin = (await Sembrador.InformeCerradoConHallazgoAsync(ajenas[0], inspector.UsuarioId, frente, "golpe")).HallazgoId;
             otraZonaPrevia = (await Sembrador.InformeCerradoConHallazgoAsync(etapas[0], inspector.UsuarioId, otraZona, "golpe", momento: "llegada")).HallazgoId;

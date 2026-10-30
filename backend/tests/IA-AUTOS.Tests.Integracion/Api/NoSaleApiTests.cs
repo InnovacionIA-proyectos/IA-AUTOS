@@ -33,7 +33,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var inspector = await SesionAsync("inspector@ejemplo.com", clsRol.INSPECTOR);
         var conductor = await SesionAsync("conductor@ejemplo.com", clsRol.CONDUCTOR);
         var (vehiculo, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-NS-A", conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
-        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
         var (inspeccion, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(etapas[0], inspector.UsuarioId, zona, nivel: nivel, cerrada: cerrada);
         return new Escenario(await Sembrador.ViajeDeEtapaAsync(etapas[0]), vehiculo, etapas, inspeccion, hallazgo, inspector, conductor, zona);
     }

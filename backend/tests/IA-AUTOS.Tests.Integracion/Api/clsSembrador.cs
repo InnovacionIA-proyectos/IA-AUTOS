@@ -128,13 +128,13 @@ public sealed class clsSembrador(string cadenaConexion)
         return id;
     }
 
-    /// <summary>Crea un cuadrante; la base le crea sus zonas (una por lado del 1 al 25, una sola del 26 en adelante).</summary>
-    public async Task<Guid> CuadranteAsync(int numero, string nombre, string? tipoVehiculo = null)
+    /// <summary>Crea un cuadrante; la base le crea sus zonas (una por lado si lleva lado, una sola sin lado si no). Por defecto lleva lado hasta el 25, como el dibujo de la mayoria de las pruebas.</summary>
+    public async Task<Guid> CuadranteAsync(int numero, string nombre, string? tipoVehiculo = null, bool? llevaLado = null)
     {
         var id = Guid.NewGuid();
         await EjecutarAsync(
-            "INSERT dbo.tblCuadrantes (Id, TipoVehiculo, Numero, Nombre, Orden) VALUES (@id, @tipo, @numero, @nombre, @numero)",
-            ("@id", id), ("@tipo", (object?)tipoVehiculo ?? DBNull.Value), ("@numero", numero), ("@nombre", nombre));
+            "INSERT dbo.tblCuadrantes (Id, TipoVehiculo, Numero, Nombre, Orden, LlevaLado) VALUES (@id, @tipo, @numero, @nombre, @numero, @lleva)",
+            ("@id", id), ("@tipo", (object?)tipoVehiculo ?? DBNull.Value), ("@numero", numero), ("@nombre", nombre), ("@lleva", llevaLado ?? numero <= 25));
         return id;
     }
 
@@ -143,7 +143,7 @@ public sealed class clsSembrador(string cadenaConexion)
     {
         var id = Guid.NewGuid();
         await EjecutarAsync(
-            "INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) SELECT @id, @i, z.Id, @c, '5_10cm', @n FROM dbo.tblZonasDano z WHERE z.Codigo = 'frente'",
+            "INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) SELECT @id, @i, z.Id, @c, '5_10cm', @n FROM dbo.tblZonasDano z WHERE z.Numero = 50",
             ("@id", id), ("@i", inspeccionId), ("@c", clase), ("@n", nivel));
         return id;
     }

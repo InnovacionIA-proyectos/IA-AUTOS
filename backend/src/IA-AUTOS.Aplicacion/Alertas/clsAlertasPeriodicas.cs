@@ -55,7 +55,7 @@ public interface IConsultasAlertas
     /// </summary>
     Task<IReadOnlyList<clsReclamoSinActividad>> ReclamosSinActividadAsync(DateTimeOffset reclamadosAntesDe, int limite, CancellationToken ct = default);
 
-    /// <summary>Hallazgos de inspecciones cerradas desde <paramref name="desde"/>, contados por cliente y zona (lado + numero, o zona provisional).</summary>
+    /// <summary>Hallazgos de inspecciones cerradas desde <paramref name="desde"/>, contados por cliente y zona (lado + numero).</summary>
     Task<IReadOnlyList<clsConteoPatron>> ConteoPorZonaAsync(DateTimeOffset desde, CancellationToken ct = default);
 
     /// <summary>Hallazgos de inspecciones cerradas desde <paramref name="desde"/>, contados por cliente y proceso.</summary>

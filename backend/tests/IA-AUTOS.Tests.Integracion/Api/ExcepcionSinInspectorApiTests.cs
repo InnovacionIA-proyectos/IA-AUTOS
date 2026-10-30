@@ -439,7 +439,7 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
         var (ruta, hash) = await SubirAsync(conductor);
         var creado = await Como(conductor).PostAsJsonAsync($"/api/inspecciones/{inspeccion}/hallazgos", new
         {
-            zona_provisional = "frente",
+            cuadrante_numero = 50,
             clase_dano = "rotura",
             tamano_dano = "1_5cm",
             evidencia = new { storage_path = ruta, sello_fecha = FECHA, sello_lat = 4.6, sello_lng = -74.1, hash_sha256 = hash },
@@ -452,7 +452,7 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
     }
 
     private Task<HttpResponseMessage> RevisarAsync(Sesion quien, Guid hallazgo) =>
-        Como(quien).PostAsJsonAsync($"/api/hallazgos/{hallazgo}/revision", new { zona_provisional = "frente", clase_dano = "rotura", nivel_severidad = "v2" });
+        Como(quien).PostAsJsonAsync($"/api/hallazgos/{hallazgo}/revision", new { cuadrante_numero = 50, clase_dano = "rotura", nivel_severidad = "v2" });
 
     [Fact]
     public async Task El_coordinador_del_cliente_revisa_a_distancia_los_hallazgos_del_conductor_de_una_salida_hecha_con_la_excepcion_y_no_los_de_otro_cliente()

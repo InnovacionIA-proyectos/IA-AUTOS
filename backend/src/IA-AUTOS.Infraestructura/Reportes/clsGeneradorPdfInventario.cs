@@ -44,7 +44,7 @@ internal sealed class clsGeneradorPdfInventario : IGeneradorPdfInventario
                 doc.Escribir($"  {inspeccion.MomentoNombre} — {inspeccion.Estado} — {fecha}", 11);
                 foreach (var hallazgo in inspeccion.Hallazgos)
                 {
-                    doc.Escribir($"    • {hallazgo.Zona ?? "Sin ubicar"}: {hallazgo.ClaseDano ?? "Sin clase"} ({hallazgo.TamanoDano})", 11);
+                    doc.Escribir($"    • {clsMapeadorInspecciones.ZonaConAiag(hallazgo.Zona, hallazgo.AiagArea) ?? "Sin ubicar"}: {hallazgo.ClaseDano ?? "Sin clase"} ({hallazgo.TamanoDano})", 11);
                 }
 
                 doc.Escribir($"    Evidencias: {inspeccion.Evidencias.Count}", 11);

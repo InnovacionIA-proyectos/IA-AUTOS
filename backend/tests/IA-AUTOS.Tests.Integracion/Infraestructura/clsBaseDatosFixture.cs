@@ -17,7 +17,24 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
     {
         CadenaConexion = await clsServidorSql.CrearBaseAsync(BASE);
         await clsServidorSql.EjecutarScriptAsync(CadenaConexion, Path.Combine(AppContext.BaseDirectory, "database", "ddl.sql"));
+        await EjecutarAsync(DIBUJO_BASE);
     }
+
+    /// <summary>
+    /// El dibujo minimo de las pruebas (una base nueva no trae dibujo: lo siembra el guion 34 desde el archivo): cinco paneles y dos cuadrantes sin lado, 50 «Frente» y 51 «Llanta», que dan a los hallazgos
+    /// de prueba una zona que siempre existe. Los cuadrantes con lado los crea cada prueba que los necesita.
+    /// </summary>
+    public const string DIBUJO_BASE = """
+        INSERT INTO dbo.tblPanelesDano (Id, Codigo, Nombre, Orden)
+        SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
+        FROM (VALUES ('superior', N'Superior', 1), ('perfil_posterior_izquierdo', N'Perfil posterior izquierdo', 2), ('perfil_posterior_derecho', N'Perfil posterior derecho', 3),
+                     ('costado_izquierdo', N'Costado izquierdo', 4), ('costado_derecho', N'Costado derecho', 5)) AS v (Codigo, Nombre, Orden)
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.tblPanelesDano p WHERE p.Codigo = v.Codigo);
+        INSERT INTO dbo.tblCuadrantes (Id, TipoVehiculo, Numero, Nombre, Orden, LlevaLado)
+        SELECT NEWID(), NULL, v.Numero, v.Nombre, v.Numero, 0
+        FROM (VALUES (50, N'Frente'), (51, N'Llanta')) AS v (Numero, Nombre)
+        WHERE NOT EXISTS (SELECT 1 FROM dbo.tblCuadrantes c WHERE c.TipoVehiculo IS NULL AND c.Numero = v.Numero);
+        """;
 
     public async Task DisposeAsync() => await clsServidorSql.EliminarBaseAsync(CadenaConexion);
 
@@ -136,6 +153,7 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
         await conexion.OpenAsync();
         await using var comando = new SqlCommand(SQL, conexion);
         await comando.ExecuteNonQueryAsync();
+        await EjecutarAsync(DIBUJO_BASE);
     }
 
     /// <summary>Ejecuta una sentencia suelta sobre la base de la prueba (para forzar estados, por ejemplo un token vencido).</summary>

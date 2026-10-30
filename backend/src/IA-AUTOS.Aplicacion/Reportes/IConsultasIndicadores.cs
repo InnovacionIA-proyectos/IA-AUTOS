@@ -48,7 +48,6 @@ public sealed record FilaConteoHallazgo(
     string Proceso,
     int? Numero,
     string? Lado,
-    string? ZonaCodigo,
     string? ZonaNombre,
     string? CuadranteNombre,
     string? Nivel,

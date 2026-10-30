@@ -325,7 +325,7 @@ public sealed partial class AcomodacionApiTests(clsBaseDatosFixture bd) : clsPru
         Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[0], 4)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[1], 3)).StatusCode);
         // La tercera unidad quedo marcada «no sale» por un hallazgo V1+ de su inspeccion cerrada.
-        var (_, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[2][2], e.Inspector.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!, nivel: "v1_plus");
+        var (_, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[2][2], e.Inspector.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!, nivel: "v1_plus");
         await Sembrador.UnidadNoSaleAsync(e.Viaje, e.Vehiculos[2], hallazgo, e.Coordinador.UsuarioId, "Golpe en el capó");
         Assert.Equal(HttpStatusCode.Created, (await FotoDeAcomodacionAsync(e.Inspector, e.Inspeccion)).StatusCode);
         Assert.Equal(HttpStatusCode.Created, (await FotoDeAcomodacionAsync(e.Inspector, e.Inspeccion)).StatusCode);
@@ -343,7 +343,7 @@ public sealed partial class AcomodacionApiTests(clsBaseDatosFixture bd) : clsPru
     {
         var e = await EscenarioAsync();
         Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[2], 6)).StatusCode);
-        var (_, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[2][2], e.Inspector.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!, nivel: "v1_plus");
+        var (_, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[2][2], e.Inspector.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!, nivel: "v1_plus");
 
         var r = await Como(e.Coordinador).PostAsync($"/api/viajes/{e.Viaje}/vehiculos/{VINES[2]}/no-sale", Cuerpo(new { motivo = "Golpe en el capó", hallazgo_id = hallazgo }));
 

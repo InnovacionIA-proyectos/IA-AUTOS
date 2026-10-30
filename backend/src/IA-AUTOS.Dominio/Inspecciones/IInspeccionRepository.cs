@@ -47,8 +47,8 @@ public interface IInspeccionRepository
     /// </summary>
     Task<clsZonaDano?> ObtenerZonaNumeradaAsync(int numero, string? lado, string? tipoVehiculo, CancellationToken ct = default);
 
-    /// <summary>La zona provisional activa con ese codigo (frente, llantas), o nulo.</summary>
-    Task<clsZonaDano?> ObtenerZonaProvisionalAsync(string codigo, CancellationToken ct = default);
+    /// <summary>Si el cuadrante activo con ese numero (el del tipo de vehiculo o, si no hay, el generico) lleva lado; nulo si no existe o esta inactivo.</summary>
+    Task<bool?> CuadranteLlevaLadoAsync(int numero, string? tipoVehiculo, CancellationToken ct = default);
 
     /// <summary>Tipo de vehiculo del vehiculo al que pertenece la inspeccion (nulo si no tiene).</summary>
     Task<string?> ObtenerTipoVehiculoAsync(Guid inspeccionId, CancellationToken ct = default);

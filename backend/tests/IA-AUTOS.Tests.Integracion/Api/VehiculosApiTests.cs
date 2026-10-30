@@ -335,7 +335,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal(JsonValueKind.Null, lista[3].GetProperty("no_sale").ValueKind);
         // El hallazgo grave que la saco del viaje sigue en el historial de la unidad, con su zona y su nivel.
         var h = lista[0].GetProperty("inspecciones")[0].GetProperty("hallazgos")[0];
-        Assert.Equal("Frente", h.GetProperty("zona").GetString());
+        Assert.Equal("50 · Frente", h.GetProperty("zona").GetString());
         Assert.Equal("v1_plus", h.GetProperty("nivel_severidad").GetString());
         Assert.Equal("Se recupera antes del despacho", h.GetProperty("nivel_accion").GetString());
         Assert.Equal(["foto_hallazgo", "transferencia_sin_cierre"], h.GetProperty("evidencia_faltante").EnumerateArray().Select(x => x.GetString()).ToList());

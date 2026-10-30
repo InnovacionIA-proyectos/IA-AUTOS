@@ -70,6 +70,7 @@ public sealed record FilaExportHallazgo(
     string? ZonaLado,
     int? ZonaNumero,
     string? ZonaNombre,
+    string? ZonaAiag,
     string? Clase,
     string Tamano,
     string? Nivel,

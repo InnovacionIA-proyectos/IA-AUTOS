@@ -352,7 +352,7 @@ public sealed class clsInspeccionesService(
         inspeccion.AsegurarEditable();
         var foto = solicitud.Evidencia!;
 
-        var zona = await resolutorZona.ResolverAsync(inspeccionId, solicitud.CuadranteNumero, solicitud.Lado, solicitud.ZonaProvisional, ct);
+        var zona = await resolutorZona.ResolverAsync(inspeccionId, solicitud.CuadranteNumero!.Value, solicitud.Lado, ct);
         var clase = solicitud.ClaseDano!.Trim();
         if (solicitud.HallazgoOrigenId is { } origenId
             && !await inspecciones.EsHallazgoPrevioDelVehiculoAsync(origenId, inspeccionId, zona.Id, clase, ct))

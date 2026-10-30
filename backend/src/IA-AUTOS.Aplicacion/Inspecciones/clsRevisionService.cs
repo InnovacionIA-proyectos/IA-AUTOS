@@ -16,14 +16,13 @@ using IAAutos.Dominio.Viajes;
 namespace IAAutos.Aplicacion.Inspecciones;
 
 /// <summary>
-/// La revision de un hallazgo que registro el conductor: la zona (<c>cuadrante_numero</c> y <c>lado</c>, o <c>zona_provisional</c>), la clase, el nivel V (los tres obligatorios), el tamano si hay
+/// La revision de un hallazgo que registro el conductor: la zona (<c>cuadrante_numero</c> y, si el cuadrante lleva lado, <c>lado</c>), la clase, el nivel V (los tres obligatorios), el tamano si hay
 /// que corregir el que eligio el conductor y una nota. Si el dano ya estaba registrado, <c>EsPreexistente</c> y <c>HallazgoOrigenId</c> (opcionales) lo unen al hallazgo previo del mismo VIN, con la misma
 /// validacion de cuando se crea un hallazgo.
 /// </summary>
 public sealed record RevisarHallazgoRequest(
     int? CuadranteNumero,
     string? Lado,
-    string? ZonaProvisional,
     string? ClaseDano,
     string? NivelSeveridad,
     string? TamanoDano,
@@ -35,7 +34,7 @@ public sealed class RevisarHallazgoRequestValidator : AbstractValidator<RevisarH
 {
     public RevisarHallazgoRequestValidator()
     {
-        clsReglasZona.Aplicar(this, x => x.CuadranteNumero, x => x.Lado, x => x.ZonaProvisional);
+        clsReglasZona.Aplicar(this, x => x.CuadranteNumero, x => x.Lado);
         RuleFor(x => x.ClaseDano).Must(c => !string.IsNullOrWhiteSpace(c)).WithMessage("Clase de daño inválida");
         RuleFor(x => x.NivelSeveridad).Must(n => !string.IsNullOrWhiteSpace(n)).WithMessage("El nivel de severidad es requerido");
         RuleFor(x => x.Nota).Must(n => n is null || n.Trim().Length <= clsHallazgo.NOTA_MAX)
@@ -89,7 +88,7 @@ public sealed class clsRevisionService(
         await AsegurarPermisoAsync(vehiculo, inspeccion, etapa, viaje, ct);
         hallazgo.AsegurarRevisable();
 
-        var zona = await resolutorZona.ResolverAsync(inspeccion.Id, solicitud.CuadranteNumero, solicitud.Lado, solicitud.ZonaProvisional, ct);
+        var zona = await resolutorZona.ResolverAsync(inspeccion.Id, solicitud.CuadranteNumero!.Value, solicitud.Lado, ct);
         var clase = solicitud.ClaseDano!.Trim();
         // El origen debe ser un hallazgo de una inspeccion cerrada anterior del mismo VIN con la misma zona y la misma clase que se asignan aqui.
         if (solicitud.HallazgoOrigenId is { } origenId && !await inspecciones.EsHallazgoPrevioDelVehiculoAsync(origenId, inspeccion.Id, zona.Id, clase, ct))
@@ -200,7 +199,6 @@ public sealed class clsRevisionService(
                 ["zona_id"] = zona.Id,
                 ["cuadrante_numero"] = zona.Numero,
                 ["lado"] = zona.Lado,
-                ["zona_provisional"] = zona.Codigo,
                 ["clase_dano"] = hallazgo.ClaseDano,
                 ["nivel_severidad"] = hallazgo.NivelSeveridad,
                 ["tamano_dano"] = hallazgo.TamanoDano,

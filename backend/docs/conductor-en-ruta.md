@@ -15,7 +15,7 @@ Las dos son **solo del `conductor` del viaje**: cualquier otro usuario (también
 
 ## Reglas
 
-- **Sin texto libre.** La novedad lleva `tipo_novedad`, `tamano_dano`, la foto sellada (`evidencia`) y el GPS; `nota`, `clase_dano`, `nivel_severidad`, `cuadrante_numero`, `lado` y `zona_provisional` responden `400` («Campo no admitido»). El cuadrante, la clase y el nivel V los pone el inspector al
+- **Sin texto libre.** La novedad lleva `tipo_novedad`, `tamano_dano`, la foto sellada (`evidencia`) y el GPS; `nota`, `clase_dano`, `nivel_severidad`, `cuadrante_numero`, `lado` y `zona_provisional` (que ya no existe) responden `400` («Campo no admitido»). El cuadrante, la clase y el nivel V los pone el inspector al
   **revisar** la novedad (ver [seguimiento-hallazgos.md](seguimiento-hallazgos.md) y «Revisión de la novedad» en el contrato); una novedad revisada no se vuelve a revisar (`409 HALLAZGO_YA_REVISADO`).
 - **Fecha, hora y GPS del momento.** El celular guarda el registro aunque no haya señal y lo envía al recuperarla: `fecha`, `lat` y `lng` son los del momento del registro, no los del envío. La llegada exige GPS (`400` sin él).
 - **Etapa anterior cerrada.** La primera novedad crea la salida de Transporte, y eso exige el Cargue de la unidad cerrado (`409 ETAPA_PREVIA_SIN_CIERRE`).
