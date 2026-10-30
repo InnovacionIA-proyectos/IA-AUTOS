@@ -33,6 +33,7 @@ public sealed class clsEntregasService(
     clsEvidenciaDeHallazgos evidenciaDeHallazgos,
     clsEmisorNotificaciones emisor,
     IReclamoRepository reclamos,
+    clsAccesoViajes acceso,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -171,7 +172,7 @@ public sealed class clsEntregasService(
     /// <summary>Conductor e inspector solo ven lo de sus viajes y, el inspector, las entregas que reclamo (403 si es de otro).</summary>
     private async Task AsegurarVisibleAsync(clsViaje viaje, CancellationToken ct)
     {
-        if (actual.SoloSusViajes() is { } usuarioId && !viaje.Participa(usuarioId) && await ReclamanteDeLaEntregaAsync(viaje, ct) != usuarioId)
+        if (actual.SoloSusViajes() is { } usuarioId && !await acceso.PuedeVerAsync(viaje, usuarioId, ct))
         {
             throw new clsProhibidoException("El viaje no está asignado a su usuario");
         }

@@ -200,6 +200,19 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
+    public async Task El_contrato_expone_la_lista_de_pendientes_del_inspector_con_su_estado()
+    {
+        var contrato = await ObtenerContratoAsync();
+        var esquemas = contrato["components"]!["schemas"]!.AsObject();
+        var rutas = contrato["paths"]!.AsObject();
+
+        Assert.Contains("PendienteDto", rutas["/api/viajes/pendientes"]!["get"]!["responses"]!["200"]!.ToJsonString());
+        Assert.Equal(
+            ["viaje_id", "codigo_mtrack", "placa", "proceso", "lugar_id", "lugar", "fecha_programada", "estado", "reclamado_por", "reclamado_por_nombre", "reclamado_at", "unidades"],
+            esquemas["PendienteDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList());
+    }
+
+    [Fact]
     public async Task El_contrato_no_cambia_sin_cambiar_la_version()
     {
         var generado = (await ObtenerContratoAsync()).ToJsonString(INDENTADO);

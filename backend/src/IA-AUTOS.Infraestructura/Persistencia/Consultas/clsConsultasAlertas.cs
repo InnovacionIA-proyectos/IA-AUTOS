@@ -38,6 +38,16 @@ internal sealed class clsParametroRepository(clsAppDbContext contexto) : IParame
 /// <summary>Lo que leen los procesos periodicos de alertas: conteos de patrones y las capturas y transferencias que siguen pendientes.</summary>
 internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultasAlertas
 {
+    public async Task<IReadOnlyList<clsReclamoSinActividad>> ReclamosSinActividadAsync(DateTimeOffset reclamadosAntesDe, int limite, CancellationToken ct = default) =>
+        await (from r in contexto.Reclamos.AsNoTracking()
+               join vj in contexto.Viajes.AsNoTracking() on r.ViajeId equals vj.Id
+               join u in contexto.Usuarios.AsNoTracking() on r.InspectorId equals u.Id
+               where r.LiberadoAt == null && r.ReclamadoAt < reclamadosAntesDe
+                  && (vj.Estado == clsEstadoViaje.PROGRAMADO || vj.Estado == clsEstadoViaje.EN_CURSO)
+                  && !contexto.Inspecciones.Any(i => i.ViajeId == r.ViajeId && (i.IniciadaAt > r.ReclamadoAt || i.CerradaAt > r.ReclamadoAt))
+               orderby r.ReclamadoAt
+               select new clsReclamoSinActividad(r.Id, vj.Id, vj.CodigoMtrack, vj.Placa, r.Proceso, r.InspectorId, u.Nombre, u.ClienteId, r.ReclamadoAt)).Take(limite).ToListAsync(ct);
+
     public async Task<IReadOnlyList<clsConteoPatron>> ConteoPorZonaAsync(DateTimeOffset desde, CancellationToken ct = default)
     {
         var filas = await contexto.Set<clsHallazgoVentana>().AsNoTracking()

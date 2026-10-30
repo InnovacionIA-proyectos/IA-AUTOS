@@ -16,12 +16,31 @@ public sealed class clsReclamosService(
     IViajeRepository viajes,
     IUsuarioRepository usuarios,
     IConsultasViajes consultas,
+    IConsultasPendientes pendientes,
+    clsAccesoViajes acceso,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
     IReloj reloj)
 {
     private static readonly TimeSpan COLOMBIA = TimeSpan.FromHours(-5);
+
+    /// <summary>
+    /// La lista de pendientes del inspector: los cargues programados para HOY en sus puntos y las entregas de viajes en curso que llegan a sus puntos, cada uno con su estado: <c>disponible</c>, <c>en_revision</c> (con el nombre del
+    /// otro inspector) o <c>mio</c>. Los cargues de otros dias y de otros puntos no salen. Un usuario sin puntos recibe la lista vacia.
+    /// </summary>
+    public async Task<IReadOnlyList<PendienteDto>> ListarPendientesAsync(CancellationToken ct = default)
+    {
+        var usuarioId = actual.IdObligatorio();
+        var puntos = await reclamos.LugaresDelInspectorAsync(usuarioId, ct);
+        if (puntos.Count == 0)
+        {
+            return [];
+        }
+
+        var inicioDelDia = new DateTimeOffset(acceso.Hoy().ToDateTime(TimeOnly.MinValue), COLOMBIA);
+        return await pendientes.ListarAsync(usuarioId, puntos, inicioDelDia, inicioDelDia.AddDays(1), ct);
+    }
 
     /// <summary>
     /// Reclama un cargue pendiente de hoy en un punto del inspector o la entrega de un viaje que llega a un punto suyo. Reclamar de nuevo lo que ya es suyo no cambia nada. Devuelve el reclamo y si se creo ahora.
@@ -125,7 +144,7 @@ public sealed class clsReclamosService(
         var delViaje = await reclamos.ObtenerDeViajeAsync(viajeId, ct);
         if (actual.SoloSusViajes() is { } usuarioId)
         {
-            if (!viaje.Participa(usuarioId) && !delViaje.Any(r => r.InspectorId == usuarioId))
+            if (!viaje.Participa(usuarioId) && !delViaje.Any(r => r.InspectorId == usuarioId) && !await acceso.PuedeVerAsync(viaje, usuarioId, ct))
             {
                 throw new clsProhibidoException("El viaje no está asignado a su usuario");
             }
@@ -146,7 +165,7 @@ public sealed class clsReclamosService(
 
     // ----------------------------------------------------------------------------------------------- internos
 
-    private DateOnly Hoy() => DateOnly.FromDateTime(reloj.Ahora.ToOffset(COLOMBIA).DateTime);
+    private DateOnly Hoy() => acceso.Hoy();
 
     private async Task<clsViaje> ObtenerViajeAsync(Guid viajeId, CancellationToken ct) =>
         await viajes.ObtenerPorIdAsync(viajeId, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {viajeId} no encontrado");

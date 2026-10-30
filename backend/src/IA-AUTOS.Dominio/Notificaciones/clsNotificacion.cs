@@ -15,6 +15,9 @@ public static class clsTipoNotificacion
     public const string UMBRAL_PATRON = "umbral_patron";
     public const string CAPTURA_INCOMPLETA = "captura_incompleta";
     public const string TRANSFERENCIA_PENDIENTE = "transferencia_pendiente";
+
+    /// <summary>Un camion reclamado por un inspector lleva <c>reclamo_sin_actividad_minutos</c> sin ninguna inspeccion iniciada o cerrada: aviso al coordinador de calidad. El reclamo no se libera.</summary>
+    public const string RECLAMO_SIN_ACTIVIDAD = "reclamo_sin_actividad";
     public const string REPORTE_DIARIO = "reporte_diario";
 
     /// <summary>Algo paso en el proceso y no es un dano (por ejemplo, un cargue sin inspector).</summary>
@@ -22,7 +25,7 @@ public static class clsTipoNotificacion
 
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string>
     {
-        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO,
+        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD,
     };
 }
 
