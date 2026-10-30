@@ -101,7 +101,7 @@ además de los suyos y los que reclamó; el conductor no cambia. Un camión recl
 
 **Registro y cierre de la acomodación.** `PUT /api/viajes/{id}/vehiculos/{vin}/posicion` con `{ "posicion": 1..7 }` (nulo la libera) lo hacen el inspector del viaje (o quien reclamó el cargue), el coordinador de calidad y los administradores, y solo mientras el viaje tiene su segunda inspección del cargue en borrador
 (409 si no). Fuera de 1 a 7 responde `400` «La posición debe estar entre 1 y 7»; una posición que ya tiene otra unidad del viaje, `409` «La posición N ya está ocupada por otra unidad de este viaje» (con varias solicitudes simultáneas por la misma gana exactamente una: lo resuelve el índice único); una unidad
-que no sale no admite posición (409). La respuesta es el viaje, cuyas unidades traen `posicion`. Cada cambio queda auditado (`viaje.posicion_unidad`). El cierre de la segunda inspección del cargue exige la posición de **cada unidad activa** y las fotos de la acomodación (ver [inspecciones.md](inspecciones.md)).
+que no sale no admite posición (409). La respuesta es el viaje, cuyas unidades traen `posicion`. Cada cambio queda auditado (`viaje.posicion_unidad`). El informe PDF de la segunda inspección del cargue lista cada unidad con su posición y trae las fotos de la acomodación con su sello, y el inventario del VIN (JSON y PDF) muestra «Posición en niñera: N» en las etapas de los viajes en que fue despachado con posición; un viaje sin posiciones genera ambos documentos igual, sin el dato. El cierre de la segunda inspección del cargue exige la posición de **cada unidad activa** y las fotos de la acomodación (ver [inspecciones.md](inspecciones.md)).
 
 ## Aplicar el cambio en una base existente
 

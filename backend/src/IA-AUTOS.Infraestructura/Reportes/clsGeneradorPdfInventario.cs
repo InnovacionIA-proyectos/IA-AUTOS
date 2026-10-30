@@ -33,6 +33,11 @@ internal sealed class clsGeneradorPdfInventario : IGeneradorPdfInventario
         foreach (var etapa in inv.Etapas)
         {
             doc.Escribir($"Proceso: {etapa.Proceso} (orden {etapa.Orden})", 12, true);
+            if (etapa.Posicion is { } posicion)
+            {
+                doc.Escribir($"  Posición en niñera: {posicion}", 11);
+            }
+
             foreach (var inspeccion in etapa.Inspecciones)
             {
                 var fecha = inspeccion.Fecha.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture);

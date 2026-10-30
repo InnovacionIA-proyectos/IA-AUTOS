@@ -189,6 +189,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                                  MarcadoPorNombre = (string?)um.Nombre,
                                  vv.NoSaleAt,
                                  VinReemplazo = (string?)r.Vin,
+                                 vv.Posicion,
                              };
         if (soloDeUsuario is { } usuarioId)
         {
@@ -241,7 +242,8 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
             e.CodigoMtrack,
             e.EstadoUnidad,
             clsMapeadorViajes.ANoSale(e.EstadoUnidad, e.NoSaleMotivo, e.NoSaleHallazgoId, e.NoSaleMarcadoPor, e.MarcadoPorNombre, e.NoSaleAt, e.VinReemplazo),
-            inspecciones.Where(i => i.EtapaId == e.Etapa.Id).Select(AInspeccion).ToList()))
+            inspecciones.Where(i => i.EtapaId == e.Etapa.Id).Select(AInspeccion).ToList(),
+            e.Posicion))
             .ToList();
 
         return new InventarioDto(

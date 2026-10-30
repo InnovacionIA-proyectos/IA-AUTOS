@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "2.12.0"
+    "version": "2.13.0"
   },
   "paths": {
     "/api/viajes": {
@@ -25107,7 +25107,8 @@
                   "fecha": "2026-10-22T14:30:00.000Z",
                   "vin_reemplazo": "texto"
                 },
-                "inspecciones": []
+                "inspecciones": [],
+                "posicion": 1
               }
             ]
           }
@@ -25251,7 +25252,8 @@
                 },
                 "novedades_proceso": []
               }
-            ]
+            ],
+            "posicion": 1
           }
         ],
         "required": [
@@ -25316,6 +25318,13 @@
             "items": {
               "$ref": "#/components/schemas/InventarioInspeccionDto"
             }
+          },
+          "posicion": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
           }
         }
       },
