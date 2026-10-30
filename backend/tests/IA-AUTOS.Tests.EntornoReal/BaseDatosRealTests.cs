@@ -806,6 +806,26 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_ubicacion_con_rango_y_la_confirmacion_en_sitio_estan_migradas()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/32-ubicacion-con-rango-y-confirmacion-en-sitio.sql.
+        await using var conexion = await AbrirAsync();
+
+        var parametros = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave IN (N'radio_lugar_cargue_m', N'radio_destino_m', N'valvula_precision_m', N'cargue_sin_reclamar_minutos') AND Tipo = N'numero'");
+        var lugar = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblLugares') AND name IN (N'EstadoUbicacion', N'UbicacionFijadaPor', N'UbicacionFijadaAt')");
+        var inspeccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblInspecciones') AND name IN (N'ConfirmacionSitio', N'ConfirmacionDistanciaM', N'ConfirmacionEvidenciaId')");
+        var notificacion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%cargue_sin_reclamar%' AND definition LIKE N'%fuera_de_rango%'");
+        var propuestas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblPropuestasUbicacion'");
+
+        const string AVISO = "Ejecute database/cambios-esquema/32-ubicacion-con-rango-y-confirmacion-en-sitio.sql.";
+        Assert.True(parametros == 4, "Faltan los parametros del rango y del cargue sin reclamar. " + AVISO);
+        Assert.True(lugar == 3, "Faltan las columnas del estado de la ubicacion del lugar. " + AVISO);
+        Assert.True(inspeccion == 3, "Faltan las columnas de la confirmacion en sitio de la inspeccion. " + AVISO);
+        Assert.True(notificacion == 1, "Faltan los tipos de notificacion fuera_de_rango y cargue_sin_reclamar. " + AVISO);
+        Assert.True(propuestas == 1, "Falta la tabla de propuestas de ubicacion. " + AVISO);
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

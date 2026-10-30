@@ -99,6 +99,18 @@ Los elementos que no están en el dibujo (barras de techo, volco, platón…) se
 
 **En la API:** el catálogo se sirve como `tipos-extra` (`GET|POST /api/catalogos/tipos-extra`, `PATCH|DELETE .../{id}`, con el mismo CRUD genérico, caché y versión de los demás; lo cambian `admin`, `super_admin` y `coordinador_calidad`). Borrar un tipo con extras responde `409` «El valor está en uso y no se puede borrar: solo puede inactivarlo». Los extras se reportan con `POST /api/inspecciones/{id}/extras` (ver CONTRATO.md); una foto de un extra es una evidencia con `extra_id`, no cuenta como foto de la acomodación, y el cierre de la inspección exige al menos una foto por extra.
 
+## Ubicación con rango y confirmación «en sitio» (script 32)
+
+El script [`32-ubicacion-con-rango-y-confirmacion-en-sitio.sql`](../database/cambios-esquema/32-ubicacion-con-rango-y-confirmacion-en-sitio.sql) (ajustando `@esquema`, en una sola ejecución, una transacción, repetible; antes de desplegar la API) prepara la base para confirmar que la evidencia sellada se tomó en el lugar:
+
+- **Parámetros** (de `tblParametros`, tipo número, nunca se sobrescriben): `radio_lugar_cargue_m` 1000, `radio_destino_m` 500, `valvula_precision_m` 500 y `cargue_sin_reclamar_minutos` 30. Son valores ilustrativos que confirma el negocio. No toca `gps_precision_minima_m` (30 m): ese es el aviso de precisión baja.
+- **`tblLugares`** gana `EstadoUbicacion` (`sin_ubicacion`, `pendiente_confirmar` o `confirmada`, con `CK_tblLugares_EstadoUbicacion`), `UbicacionFijadaPor` y `UbicacionFijadaAt` (quién y cuándo fijó la ubicación). Los lugares que ya tenían coordenadas quedan `confirmada` y los demás `sin_ubicacion`; al repetir el script no se vuelve a marcar nada.
+- **`tblInspecciones`** gana `ConfirmacionSitio` (`confirmado_en_sitio`, `fuera_de_rango` o `sin_confirmacion_posible`; nulo mientras no se determina), `ConfirmacionDistanciaM` (metros, no negativa) y `ConfirmacionEvidenciaId` (la foto que lo determinó, con llave foránea a `tblEvidencias`). La distancia y la foto solo existen con un resultado. Se escriben con la inspección en borrador: una cerrada es inmutable (trigger existente).
+- **`CK_tblNotificaciones_Tipo`** admite `fuera_de_rango` y `cargue_sin_reclamar` además de los nueve tipos existentes.
+- **`tblPropuestasUbicacion`**: las propuestas de autocalibración de un lugar (`CentroLat`, `CentroLng`, `RadioMetros`, `Fotos`, `Visitas`, `Estado` pendiente, confirmada o descartada, y la decisión con `DecididaPor` y `DecididaAt`). Un lugar tiene una sola propuesta pendiente a la vez (`UX_tblPropuestasUbicacion_Pendiente`) y una decidida no se modifica ni se borra (trigger, error 51010).
+
+`ddl.sql` ya trae el esquema nuevo y `tests/verificar-ddl.sql` cubre sus restricciones (386 comprobaciones). No cambia ningún dato existente salvo marcar como confirmada la ubicación de los lugares que ya tenían coordenadas.
+
 ## Cargar los cuadrantes y las acciones de los niveles
 
 Los cuadrantes de la ficha del vehículo genérico (36 zonas y 97 polígonos) se cargan con

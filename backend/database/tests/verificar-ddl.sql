@@ -1317,6 +1317,85 @@ CLOSE cExt;
 DEALLOCATE cExt;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_EXT';
 
+-- 7t) Ubicacion con rango y confirmacion en sitio: parametros, estado de la ubicacion del lugar, resultado de la confirmacion de la inspeccion, tipos de notificacion y propuestas de autocalibracion
+INSERT #r SELECT N'Parametros del rango: 4 sembrados como numero y la precision minima del GPS sigue en 30',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblParametros WHERE Tipo = 'numero' AND ((Clave = 'radio_lugar_cargue_m' AND Valor = N'1000') OR (Clave = 'radio_destino_m' AND Valor = N'500')
+                    OR (Clave = 'valvula_precision_m' AND Valor = N'500') OR (Clave = 'cargue_sin_reclamar_minutos' AND Valor = N'30'))) = 4
+          AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'gps_precision_minima_m' AND Valor = N'30') = 1 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Ubicacion: columnas del lugar y de la inspeccion, tabla de propuestas y trigger de las decididas',
+    CASE WHEN (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblLugares') AND name IN (N'EstadoUbicacion', N'UbicacionFijadaPor', N'UbicacionFijadaAt')) = 3
+          AND (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblInspecciones') AND name IN (N'ConfirmacionSitio', N'ConfirmacionDistanciaM', N'ConfirmacionEvidenciaId') AND is_nullable = 1) = 3
+          AND OBJECT_ID(N'dbo.tblPropuestasUbicacion', N'U') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.triggers WHERE name = N'TR_tblPropuestasUbicacion_NoModificarDecidida')
+          AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblPropuestasUbicacion_Pendiente' AND is_unique = 1 AND has_filter = 1) THEN 1 ELSE 0 END, NULL;
+
+DECLARE @vUbi uniqueidentifier = NEWID(), @eUbi uniqueidentifier = NEWID(), @iUbi uniqueidentifier = NEWID(), @evUbi uniqueidentifier = NEWID(), @lugUbi uniqueidentifier = NEWID(), @lugUbi2 uniqueidentifier = NEWID();
+INSERT dbo.tblLugares (Id, Nombre, TipoId, Ciudad, Latitud, Longitud, RadioMetros) SELECT @lugUbi, N'ZZ_TEST_LUGAR_UBICACION', Id, N'Medellin', 6.2, -75.5, 1000 FROM dbo.tblPuntosCustodia WHERE Codigo = 'origen';
+INSERT dbo.tblLugares (Id, Nombre, TipoId, Ciudad) SELECT @lugUbi2, N'ZZ_TEST_LUGAR_SIN_UBICACION', Id, N'Medellin' FROM dbo.tblPuntosCustodia WHERE Codigo = 'destino';
+INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion, ClienteId) VALUES (@vUbi, 'ZZ_TEST_VIN_UBI', N'Renault', 'nacional', @cli);
+INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vj, @vUbi);
+INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@eUbi, @vUbi, @vj, @pc, 1);
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@iUbi, @eUbi, @vj, @u1, 'llegada', SYSDATETIMEOFFSET());
+INSERT dbo.tblEvidencias (Id, InspeccionId, StoragePath, SelloFecha, SelloLat, SelloLng) VALUES (@evUbi, @iUbi, N'ubi.jpg', SYSDATETIMEOFFSET(), 6.2, -75.5);
+DECLARE @sI nvarchar(36) = CAST(@iUbi AS nvarchar(36)), @sEv nvarchar(36) = CAST(@evUbi AS nvarchar(36)), @sL nvarchar(36) = CAST(@lugUbi AS nvarchar(36)), @sL2 nvarchar(36) = CAST(@lugUbi2 AS nvarchar(36)), @sU nvarchar(36) = CAST(@u1 AS nvarchar(36));
+DECLARE @casosUbi TABLE (Orden int IDENTITY(1, 1) PRIMARY KEY, Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosUbi (Prueba, Sentencia, Esperado) VALUES
+ (N'Lugar: un lugar sin ubicacion nace sin_ubicacion', N'IF (SELECT EstadoUbicacion FROM dbo.tblLugares WHERE Id = ''' + @sL2 + N''') <> ''sin_ubicacion'' THROW 52002, ''El estado inicial no es sin_ubicacion'', 1', 0),
+ (N'CHECK lugar: un estado de ubicacion inventado', N'UPDATE dbo.tblLugares SET EstadoUbicacion = ''inventado'' WHERE Id = ''' + @sL + N'''', 547),
+ (N'Lugar: pendiente_confirmar con quien y cuando la fijo', N'UPDATE dbo.tblLugares SET EstadoUbicacion = ''pendiente_confirmar'', Latitud = 3.4, Longitud = -76.5, UbicacionFijadaPor = ''' + @sU + N''', UbicacionFijadaAt = SYSDATETIMEOFFSET() WHERE Id = ''' + @sL2 + N'''', 0),
+ (N'FK lugar: quien fijo la ubicacion debe existir', N'UPDATE dbo.tblLugares SET UbicacionFijadaPor = NEWID() WHERE Id = ''' + @sL + N'''', 547),
+ (N'Lugar: confirmada se guarda', N'UPDATE dbo.tblLugares SET EstadoUbicacion = ''confirmada'' WHERE Id = ''' + @sL2 + N'''', 0),
+ (N'CHECK inspeccion: un resultado de confirmacion inventado', N'UPDATE dbo.tblInspecciones SET ConfirmacionSitio = ''inventado'' WHERE Id = ''' + @sI + N'''', 547),
+ (N'CHECK inspeccion: la distancia o la foto exigen un resultado', N'UPDATE dbo.tblInspecciones SET ConfirmacionDistanciaM = 400 WHERE Id = ''' + @sI + N'''', 547),
+ (N'CHECK inspeccion: la distancia no es negativa', N'UPDATE dbo.tblInspecciones SET ConfirmacionSitio = ''confirmado_en_sitio'', ConfirmacionDistanciaM = -1 WHERE Id = ''' + @sI + N'''', 547),
+ (N'FK inspeccion: la foto que determino la confirmacion debe existir', N'UPDATE dbo.tblInspecciones SET ConfirmacionSitio = ''confirmado_en_sitio'', ConfirmacionDistanciaM = 400, ConfirmacionEvidenciaId = NEWID() WHERE Id = ''' + @sI + N'''', 547),
+ (N'Inspeccion: confirmado_en_sitio con su distancia y su foto', N'UPDATE dbo.tblInspecciones SET ConfirmacionSitio = ''confirmado_en_sitio'', ConfirmacionDistanciaM = 400, ConfirmacionEvidenciaId = ''' + @sEv + N''' WHERE Id = ''' + @sI + N'''', 0),
+ (N'Inspeccion: fuera_de_rango con su distancia', N'UPDATE dbo.tblInspecciones SET ConfirmacionSitio = ''fuera_de_rango'', ConfirmacionDistanciaM = 2500 WHERE Id = ''' + @sI + N'''', 0),
+ (N'Inspeccion: sin_confirmacion_posible sin distancia', N'UPDATE dbo.tblInspecciones SET ConfirmacionSitio = ''sin_confirmacion_posible'', ConfirmacionDistanciaM = NULL, ConfirmacionEvidenciaId = NULL WHERE Id = ''' + @sI + N'''', 0),
+ (N'Notificacion: el tipo fuera_de_rango se guarda', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''fuera_de_rango'',''alta'',''' + @sU + N''',N''T'',N''M'',''bandeja'',''zz_ubi_1'')', 0),
+ (N'Notificacion: el tipo cargue_sin_reclamar se guarda', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''cargue_sin_reclamar'',''alta'',''' + @sU + N''',N''T'',N''M'',''bandeja'',''zz_ubi_2'')', 0),
+ (N'Notificacion: un tipo existente sigue valido', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''reclamo_sin_actividad'',''alta'',''' + @sU + N''',N''T'',N''M'',''bandeja'',''zz_ubi_3'')', 0),
+ (N'Propuesta: una pendiente se guarda', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas) VALUES (NEWID(), ''' + @sL + N''', 6.25, -75.56, 300, 12, 5)', 0),
+ (N'UNIQUE filtrado propuesta: un lugar solo tiene una pendiente', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas) VALUES (NEWID(), ''' + @sL + N''', 6.26, -75.57, 350, 9, 4)', 2601),
+ (N'CHECK propuesta: el radio debe ser positivo', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas) VALUES (NEWID(), ''' + @sL2 + N''', 6.25, -75.56, 0, 12, 5)', 547),
+ (N'CHECK propuesta: las coordenadas estan en rango', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas) VALUES (NEWID(), ''' + @sL2 + N''', 91, -75.56, 300, 12, 5)', 547),
+ (N'CHECK propuesta: el estado es uno de los tres', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas, Estado) VALUES (NEWID(), ''' + @sL2 + N''', 6.25, -75.56, 300, 12, 5, ''inventada'')', 547),
+ (N'CHECK propuesta: una decidida trae su autor y su fecha', N'UPDATE dbo.tblPropuestasUbicacion SET Estado = ''confirmada'' WHERE LugarId = ''' + @sL + N'''', 547),
+ (N'FK propuesta: el lugar debe existir', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas) VALUES (NEWID(), NEWID(), 6.25, -75.56, 300, 12, 5)', 547),
+ (N'Propuesta: se decide con su autor y su fecha', N'UPDATE dbo.tblPropuestasUbicacion SET Estado = ''confirmada'', DecididaPor = ''' + @sU + N''', DecididaAt = SYSDATETIMEOFFSET(), UpdatedAt = SYSDATETIMEOFFSET() WHERE LugarId = ''' + @sL + N'''', 0),
+ (N'Trigger propuesta: una decidida no se modifica', N'UPDATE dbo.tblPropuestasUbicacion SET RadioMetros = 999 WHERE LugarId = ''' + @sL + N'''', 51010),
+ (N'Trigger propuesta: una decidida no se borra', N'DELETE FROM dbo.tblPropuestasUbicacion WHERE LugarId = ''' + @sL + N'''', 51010),
+ (N'Propuesta: decidida la anterior, el lugar admite otra pendiente', N'INSERT dbo.tblPropuestasUbicacion (Id, LugarId, CentroLat, CentroLng, RadioMetros, Fotos, Visitas) VALUES (NEWID(), ''' + @sL + N''', 6.3, -75.6, 400, 20, 8)', 0),
+ (N'Propuesta: una pendiente se puede borrar', N'DELETE FROM dbo.tblPropuestasUbicacion WHERE LugarId = ''' + @sL + N''' AND Estado = ''pendiente''', 0);
+DECLARE @pruebaUb nvarchar(200), @sentenciaUb nvarchar(max), @esperadoUb int, @obtenidoUb int, @mensajeUb nvarchar(4000);
+DECLARE cUbi CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosUbi ORDER BY Orden;
+OPEN cUbi;
+FETCH NEXT FROM cUbi INTO @pruebaUb, @sentenciaUb, @esperadoUb;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoUb = 0; SET @mensajeUb = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaUb);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoUb = ERROR_NUMBER(); SET @mensajeUb = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaUb, CASE WHEN @obtenidoUb = @esperadoUb THEN 1 ELSE 0 END, CASE WHEN @obtenidoUb = @esperadoUb THEN NULL ELSE CONCAT(N'esperaba ', @esperadoUb, N' y fue ', @obtenidoUb, N': ', @mensajeUb) END);
+    FETCH NEXT FROM cUbi INTO @pruebaUb, @sentenciaUb, @esperadoUb;
+END
+CLOSE cUbi;
+DEALLOCATE cUbi;
+-- Limpieza de lo que creo este bloque: las propuestas decididas se borran con su trigger apagado.
+ALTER TABLE dbo.tblPropuestasUbicacion DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblPropuestasUbicacion WHERE LugarId IN (@lugUbi, @lugUbi2);
+ALTER TABLE dbo.tblPropuestasUbicacion ENABLE TRIGGER ALL;
+ALTER TABLE dbo.tblNotificaciones DISABLE TRIGGER ALL;
+DELETE FROM dbo.tblNotificaciones WHERE ClaveDedupe LIKE 'zz_ubi_%';
+ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
+UPDATE dbo.tblInspecciones SET ConfirmacionSitio = NULL, ConfirmacionDistanciaM = NULL, ConfirmacionEvidenciaId = NULL WHERE Id = @iUbi;
+DELETE FROM dbo.tblLugares WHERE Id IN (@lugUbi, @lugUbi2);
+EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_UBI';
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';

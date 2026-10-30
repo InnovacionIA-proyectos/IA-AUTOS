@@ -1028,7 +1028,7 @@ BEGIN
         CONSTRAINT FK_tblNotificaciones_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
         CONSTRAINT FK_tblNotificaciones_RespondidaPor FOREIGN KEY (RespondidaPor) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT UQ_tblNotificaciones_ClaveDedupe UNIQUE (ClaveDedupe),
-        CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario', 'novedad_proceso', 'reclamo_sin_actividad')),
+        CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario', 'novedad_proceso', 'reclamo_sin_actividad', 'fuera_de_rango', 'cargue_sin_reclamar')),
         CONSTRAINT CK_tblNotificaciones_Urgencia CHECK (Urgencia IN ('alta', 'media')),
         CONSTRAINT CK_tblNotificaciones_Canal CHECK (Canal IN ('bandeja', 'push', 'correo')),
         CONSTRAINT CK_tblNotificaciones_RespuestaMedio CHECK (RespuestaMedio IS NULL OR RespuestaMedio IN ('app', 'llamada')),
@@ -1819,7 +1819,11 @@ FROM (VALUES
     ('captura_incompleta_minutos',         N'30',         'numero', N'Minutos que una inspeccion de Cargue o Descargue puede seguir en borrador sin todas las fotos antes de avisar a quien la inicio'),
     ('transferencia_pendiente_minutos',    N'240',        'numero', N'Minutos que una llegada cerrada puede seguir con la transferencia sin cierre antes de avisar al firmante que falta'),
     ('reclamo_sin_actividad_minutos',      N'30',         'numero', N'Minutos que un camion reclamado puede seguir sin ninguna inspeccion iniciada o cerrada antes de avisar al coordinador; el reclamo no se libera solo'),
-    ('acomodacion_fotos_minimas',          N'1',          'numero', N'Fotos de la acomodacion de las unidades en la ninera que exige el cierre de la segunda inspeccion del cargue (el valor definitivo lo confirma el negocio)')
+    ('acomodacion_fotos_minimas',          N'1',          'numero', N'Fotos de la acomodacion de las unidades en la ninera que exige el cierre de la segunda inspeccion del cargue (el valor definitivo lo confirma el negocio)'),
+    ('radio_lugar_cargue_m',               N'1000',       'numero', N'Radio, en metros, alrededor de un lugar de cargue dentro del cual la primera foto sellada confirma que el inspector esta en sitio (el valor definitivo lo confirma el negocio)'),
+    ('radio_destino_m',                    N'500',        'numero', N'Radio, en metros, alrededor de un destino dentro del cual la primera foto sellada confirma que se esta en sitio (el valor definitivo lo confirma el negocio)'),
+    ('valvula_precision_m',                N'500',        'numero', N'Precision del GPS, en metros, a partir de la cual una foto no confirma ni acusa la ubicacion (valvula; distinta de gps_precision_minima_m, que solo avisa de precision baja)'),
+    ('cargue_sin_reclamar_minutos',        N'30',         'numero', N'Minutos desde la hora programada de un cargue sin ningun reclamo antes de avisar al coordinador; no se repite (el valor definitivo lo confirma el negocio)')
 ) AS v (Clave, Valor, Tipo, Descripcion)
 WHERE NOT EXISTS (SELECT 1 FROM dbo.tblParametros p WHERE p.Clave = v.Clave);
 GO
@@ -2042,6 +2046,98 @@ IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblEvidenci
     EXEC (N'ALTER TABLE dbo.tblEvidencias ADD CONSTRAINT CK_tblEvidencias_Extra CHECK (ExtraId IS NULL OR (HallazgoId IS NULL AND VistaId IS NULL AND EsConstancia = 0 AND EsSello = 0))');
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblEvidencias_Extra' AND object_id = OBJECT_ID(N'dbo.tblEvidencias'))
     CREATE INDEX IX_tblEvidencias_Extra ON dbo.tblEvidencias (ExtraId) WHERE ExtraId IS NOT NULL;
+GO
+
+/* -----------------------------------------------------------------------------
+   Ubicacion con rango y confirmacion en sitio.
+   tblLugares.EstadoUbicacion (sin_ubicacion, pendiente_confirmar o confirmada) con quien y cuando fijo la ubicacion (UbicacionFijadaPor, UbicacionFijadaAt); los lugares que ya tienen coordenadas quedan
+   confirmada. tblInspecciones.ConfirmacionSitio (confirmado_en_sitio, fuera_de_rango o sin_confirmacion_posible; nulo mientras no se determina), ConfirmacionDistanciaM (metros) y
+   ConfirmacionEvidenciaId (la foto que lo determino): se escriben con la inspeccion en borrador. tblNotificaciones admite los tipos fuera_de_rango y cargue_sin_reclamar.
+   tblPropuestasUbicacion: las propuestas de autocalibracion de un lugar (centro y radio propuestos, fotos y visitas que los sustentan, estado y decision con autor y fecha); un lugar tiene una sola
+   propuesta pendiente y una decidida no se modifica ni se borra (error 51010).
+   ----------------------------------------------------------------------------- */
+IF COL_LENGTH(N'dbo.tblLugares', N'EstadoUbicacion') IS NULL
+BEGIN
+    ALTER TABLE dbo.tblLugares ADD EstadoUbicacion varchar(25) NOT NULL CONSTRAINT DF_tblLugares_EstadoUbicacion DEFAULT ('sin_ubicacion');
+    ALTER TABLE dbo.tblLugares ADD UbicacionFijadaPor uniqueidentifier NULL;
+    ALTER TABLE dbo.tblLugares ADD UbicacionFijadaAt datetimeoffset(3) NULL;
+    EXEC (N'UPDATE dbo.tblLugares SET EstadoUbicacion = ''confirmada'' WHERE Latitud IS NOT NULL');
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblLugares_EstadoUbicacion' AND parent_object_id = OBJECT_ID(N'dbo.tblLugares'))
+    ALTER TABLE dbo.tblLugares ADD CONSTRAINT CK_tblLugares_EstadoUbicacion CHECK (EstadoUbicacion IN ('sin_ubicacion', 'pendiente_confirmar', 'confirmada'));
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblLugares_UbicacionFijadaPor' AND parent_object_id = OBJECT_ID(N'dbo.tblLugares'))
+    ALTER TABLE dbo.tblLugares ADD CONSTRAINT FK_tblLugares_UbicacionFijadaPor FOREIGN KEY (UbicacionFijadaPor) REFERENCES dbo.tblUsuarios (Id);
+GO
+
+IF COL_LENGTH(N'dbo.tblInspecciones', N'ConfirmacionSitio') IS NULL
+BEGIN
+    ALTER TABLE dbo.tblInspecciones ADD ConfirmacionSitio varchar(25) NULL;
+    ALTER TABLE dbo.tblInspecciones ADD ConfirmacionDistanciaM float NULL;
+    ALTER TABLE dbo.tblInspecciones ADD ConfirmacionEvidenciaId uniqueidentifier NULL;
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_ConfirmacionSitio' AND parent_object_id = OBJECT_ID(N'dbo.tblInspecciones'))
+    ALTER TABLE dbo.tblInspecciones ADD CONSTRAINT CK_tblInspecciones_ConfirmacionSitio CHECK (ConfirmacionSitio IS NULL OR ConfirmacionSitio IN ('confirmado_en_sitio', 'fuera_de_rango', 'sin_confirmacion_posible'));
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_ConfirmacionDatos' AND parent_object_id = OBJECT_ID(N'dbo.tblInspecciones'))
+    ALTER TABLE dbo.tblInspecciones ADD CONSTRAINT CK_tblInspecciones_ConfirmacionDatos CHECK (ConfirmacionSitio IS NOT NULL OR (ConfirmacionDistanciaM IS NULL AND ConfirmacionEvidenciaId IS NULL));
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_ConfirmacionDistancia' AND parent_object_id = OBJECT_ID(N'dbo.tblInspecciones'))
+    ALTER TABLE dbo.tblInspecciones ADD CONSTRAINT CK_tblInspecciones_ConfirmacionDistancia CHECK (ConfirmacionDistanciaM IS NULL OR ConfirmacionDistanciaM >= 0);
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblInspecciones_ConfirmacionEvidencia' AND parent_object_id = OBJECT_ID(N'dbo.tblInspecciones'))
+    ALTER TABLE dbo.tblInspecciones ADD CONSTRAINT FK_tblInspecciones_ConfirmacionEvidencia FOREIGN KEY (ConfirmacionEvidenciaId) REFERENCES dbo.tblEvidencias (Id);
+GO
+
+-- Los tipos de notificacion de una base que ya tenia la tabla (en una nueva ya vienen en su CREATE).
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%cargue_sin_reclamar%')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones'))
+        ALTER TABLE dbo.tblNotificaciones DROP CONSTRAINT CK_tblNotificaciones_Tipo;
+    ALTER TABLE dbo.tblNotificaciones ADD CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario', 'novedad_proceso', 'reclamo_sin_actividad', 'fuera_de_rango', 'cargue_sin_reclamar'));
+END
+GO
+
+IF OBJECT_ID(N'dbo.tblPropuestasUbicacion', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblPropuestasUbicacion
+    (
+        Id           uniqueidentifier  NOT NULL CONSTRAINT PK_tblPropuestasUbicacion PRIMARY KEY,
+        LugarId      uniqueidentifier  NOT NULL,
+        CentroLat    float             NOT NULL,
+        CentroLng    float             NOT NULL,
+        RadioMetros  int               NOT NULL,
+        Fotos        int               NOT NULL,
+        Visitas      int               NOT NULL,
+        Estado       varchar(15)       NOT NULL CONSTRAINT DF_tblPropuestasUbicacion_Estado DEFAULT ('pendiente'),
+        DecididaPor  uniqueidentifier  NULL,
+        DecididaAt   datetimeoffset(3) NULL,
+        CreatedAt    datetimeoffset(3) NOT NULL CONSTRAINT DF_tblPropuestasUbicacion_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt    datetimeoffset(3) NOT NULL CONSTRAINT DF_tblPropuestasUbicacion_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblPropuestasUbicacion_Lugar FOREIGN KEY (LugarId) REFERENCES dbo.tblLugares (Id),
+        CONSTRAINT FK_tblPropuestasUbicacion_DecididaPor FOREIGN KEY (DecididaPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT CK_tblPropuestasUbicacion_Estado CHECK (Estado IN ('pendiente', 'confirmada', 'descartada')),
+        CONSTRAINT CK_tblPropuestasUbicacion_Lat CHECK (CentroLat BETWEEN -90 AND 90),
+        CONSTRAINT CK_tblPropuestasUbicacion_Lng CHECK (CentroLng BETWEEN -180 AND 180),
+        CONSTRAINT CK_tblPropuestasUbicacion_Radio CHECK (RadioMetros > 0),
+        CONSTRAINT CK_tblPropuestasUbicacion_Conteos CHECK (Fotos >= 0 AND Visitas >= 0),
+        -- Una propuesta pendiente no tiene decision; una decidida siempre trae su autor y su fecha.
+        CONSTRAINT CK_tblPropuestasUbicacion_Decision CHECK ((Estado = 'pendiente' AND DecididaPor IS NULL AND DecididaAt IS NULL) OR (Estado <> 'pendiente' AND DecididaPor IS NOT NULL AND DecididaAt IS NOT NULL))
+    );
+    CREATE INDEX IX_tblPropuestasUbicacion_Lugar ON dbo.tblPropuestasUbicacion (LugarId);
+    CREATE UNIQUE INDEX UX_tblPropuestasUbicacion_Pendiente ON dbo.tblPropuestasUbicacion (LugarId) WHERE Estado = 'pendiente';
+END
+GO
+
+CREATE OR ALTER TRIGGER dbo.TR_tblPropuestasUbicacion_NoModificarDecidida
+ON dbo.tblPropuestasUbicacion
+AFTER UPDATE, DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM deleted WHERE Estado <> 'pendiente')
+        THROW 51010, 'Una propuesta de ubicacion ya decidida no se modifica ni se borra', 1;
+END
 GO
 
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';
