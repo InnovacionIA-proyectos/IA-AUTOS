@@ -57,6 +57,7 @@
     <Content Include="..\..\database\cambios-esquema\26-reclamo-inspector.sql" Link="database\cambios-esquema\26-reclamo-inspector.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\27-aviso-reclamo-sin-actividad.sql" Link="database\cambios-esquema\27-aviso-reclamo-sin-actividad.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\cambios-esquema\28-sin-personal-de-apoyo.sql" Link="database\cambios-esquema\28-sin-personal-de-apoyo.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\cambios-esquema\29-posicion-de-la-unidad.sql" Link="database\cambios-esquema\29-posicion-de-la-unidad.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-indicadores.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-completa.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-estados-sofasa.sql" CopyToOutputDirectory="PreserveNewest" />
@@ -66,6 +67,7 @@
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-reclamo-inspector.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-aviso-reclamo.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\ddl-previo-a-sin-personal-de-apoyo.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Infraestructura\Esquemas\ddl-previo-a-posicion.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi-versiones.json" Link="docs\openapi-versiones.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\CONTRATO.md" Link="CONTRATO.md" CopyToOutputDirectory="PreserveNewest" />

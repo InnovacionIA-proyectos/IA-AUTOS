@@ -1201,6 +1201,48 @@ INSERT #r SELECT N'Motivos de la excepcion: la siembra (inspector_no_llego, insp
           AND EXISTS (SELECT 1 FROM dbo.tblMotivosSinInspector WHERE Codigo = 'otro' AND RequiereTexto = 1)
           AND NOT EXISTS (SELECT 1 FROM dbo.tblMotivosSinInspector WHERE Codigo IN ('inspector_no_llego', 'inspector_no_disponible') AND RequiereTexto = 1) THEN 1 ELSE 0 END, NULL;
 
+-- 7q) Posicion de la unidad en la ninera: de 1 a 7, unica dentro del viaje, nula mientras no se registra
+INSERT #r SELECT N'Posicion de la unidad: columna nula, restriccion de rango e indice unico filtrado por viaje',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND name = N'Posicion' AND is_nullable = 1 AND TYPE_NAME(user_type_id) = N'tinyint')
+          AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_Posicion' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
+          AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblViajeVehiculos_Posicion' AND object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND is_unique = 1 AND has_filter = 1) THEN 1 ELSE 0 END, NULL;
+
+DECLARE @vPos2 uniqueidentifier = NEWID();
+INSERT dbo.tblVehiculos (Id, Vin, Marca, Operacion, ClienteId) VALUES (@vPos2, 'ZZ_TEST_VIN_POS2', N'Renault', 'nacional', @cli);
+INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @vj, @vPos2);
+DECLARE @vjPos nvarchar(36) = CAST(@vj AS nvarchar(36)), @vjPosOtro nvarchar(36) = CAST(@vjProgLg AS nvarchar(36)), @vPosA nvarchar(36) = CAST(@v AS nvarchar(36)), @vPosB nvarchar(36) = CAST(@vPos2 AS nvarchar(36));
+DECLARE @casosPos TABLE (Orden int IDENTITY(1, 1) PRIMARY KEY, Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
+INSERT @casosPos (Prueba, Sentencia, Esperado) VALUES
+ (N'CHECK posicion: la 0 no es valida', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 0 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosA + N'''', 547),
+ (N'CHECK posicion: la 8 no es valida', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 8 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosA + N'''', 547),
+ (N'Posicion: la 4 se guarda', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 4 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosA + N'''', 0),
+ (N'UNIQUE filtrado posicion: la 4 ya esta ocupada en el mismo viaje', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 4 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosB + N'''', 2601),
+ (N'Posicion: la misma posicion en otro viaje es valida', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 4 WHERE ViajeId = ''' + @vjPosOtro + N''' AND VehiculoId = ''' + @vPosA + N'''', 0),
+ (N'Posicion: otra posicion libre del mismo viaje se guarda', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 7 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosB + N'''', 0),
+ (N'Posicion: liberar una posicion la deja disponible para otra unidad', N'UPDATE dbo.tblViajeVehiculos SET Posicion = NULL WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosA + N'''; UPDATE dbo.tblViajeVehiculos SET Posicion = 4 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosB + N'''', 0);
+DECLARE @pruebaPs nvarchar(200), @sentenciaPs nvarchar(max), @esperadoPs int, @obtenidoPs int, @mensajePs nvarchar(4000);
+DECLARE cPos CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosPos ORDER BY Orden;
+OPEN cPos;
+FETCH NEXT FROM cPos INTO @pruebaPs, @sentenciaPs, @esperadoPs;
+WHILE @@FETCH_STATUS = 0
+BEGIN
+    SET @obtenidoPs = 0; SET @mensajePs = NULL;
+    BEGIN TRY
+        EXEC (@sentenciaPs);
+    END TRY
+    BEGIN CATCH
+        SET @obtenidoPs = ERROR_NUMBER(); SET @mensajePs = ERROR_MESSAGE();
+    END CATCH
+    INSERT #r VALUES (@pruebaPs, CASE WHEN @obtenidoPs = @esperadoPs THEN 1 ELSE 0 END, CASE WHEN @obtenidoPs = @esperadoPs THEN NULL ELSE CONCAT(N'esperaba ', @esperadoPs, N' y fue ', @obtenidoPs, N': ', @mensajePs) END);
+    FETCH NEXT FROM cPos INTO @pruebaPs, @sentenciaPs, @esperadoPs;
+END
+CLOSE cPos;
+DEALLOCATE cPos;
+INSERT #r SELECT N'Posicion: varias unidades sin posicion en el mismo viaje no chocan',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND Posicion IS NULL) = 1
+          AND (SELECT COUNT(*) FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND Posicion IS NOT NULL) = 1 THEN 1 ELSE 0 END, NULL;
+EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_POS2';
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';
