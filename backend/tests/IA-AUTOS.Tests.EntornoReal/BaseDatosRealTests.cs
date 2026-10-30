@@ -133,32 +133,27 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
-    public async Task Los_cuadrantes_cargados_son_la_ficha_completa_con_geometria_valida()
+    public async Task Los_cuadrantes_cargados_son_el_dibujo_version_6_con_geometria_valida()
     {
-        // Los cuadrantes son zonas (36 numeros de la ficha; el 4 y el 12 no existen) y cada zona se dibuja en las vistas donde aparece.
-        // Se carga con database/cambios-esquema/04-cargar-cuadrantes-ficha.sql.
+        // El dibujo de danos (45 cuadrantes, 80 zonas) lo siembra database/cambios-esquema/34-resembrar-dibujo-v6.sql desde el archivo version 6: cada zona se dibuja en al menos un panel
+        // y todo poligono es valido (al menos 3 puntos con coordenadas entre 0 y 1).
         await using var conexion = await AbrirAsync();
-        var ayuda = "Ejecute database/cambios-esquema/03-cuadrantes-por-zona.sql y luego 04-cargar-cuadrantes-ficha.sql.";
+        const string AYUDA = "Ejecute database/cambios-esquema/34-resembrar-dibujo-v6.sql.";
 
-        var zonas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadrantes");
-        var poligonos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadranteVistas");
-        var vistasConPoligonos = await EscalarAsync<int>(conexion, "SELECT COUNT(DISTINCT VistaFotoId) FROM tblCuadranteVistas");
-        var sinPoligono = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadrantes c WHERE NOT EXISTS (SELECT 1 FROM tblCuadranteVistas p WHERE p.CuadranteId = c.Id)");
-        var enVistaAdicional = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadranteVistas p JOIN tblVistasFoto v ON v.Id = p.VistaFotoId WHERE v.Obligatoria = 0");
+        var cuadrantes = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadrantes");
+        var zonas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano");
+        var zonasSinRegion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano z WHERE NOT EXISTS (SELECT 1 FROM tblRegionesDano r WHERE r.ZonaId = z.Id)");
         var geometriaInvalida = await EscalarAsync<int>(conexion, """
-            SELECT COUNT(*) FROM tblCuadranteVistas p
-             WHERE ISJSON(p.Geometria) = 0
-                OR (SELECT COUNT(*) FROM OPENJSON(p.Geometria, '$.puntos')) < 3
-                OR EXISTS (SELECT 1 FROM OPENJSON(p.Geometria, '$.puntos') pt
+            SELECT COUNT(*) FROM tblRegionesDano r
+             WHERE ISJSON(r.Geometria) = 0
+                OR (SELECT COUNT(*) FROM OPENJSON(r.Geometria, '$.puntos')) < 3
+                OR EXISTS (SELECT 1 FROM OPENJSON(r.Geometria, '$.puntos') pt
                             WHERE TRY_CAST(JSON_VALUE(pt.value, '$[0]') AS float) IS NULL OR TRY_CAST(JSON_VALUE(pt.value, '$[0]') AS float) NOT BETWEEN 0 AND 1
                                OR TRY_CAST(JSON_VALUE(pt.value, '$[1]') AS float) IS NULL OR TRY_CAST(JSON_VALUE(pt.value, '$[1]') AS float) NOT BETWEEN 0 AND 1)
             """);
 
-        Assert.True(zonas == 36, $"Se esperaban 36 cuadrantes (zonas) y hay {zonas}. {ayuda}");
-        Assert.True(poligonos == 97, $"Se esperaban 97 poligonos por vista y hay {poligonos}. {ayuda}");
-        Assert.Equal(5, vistasConPoligonos);
-        Assert.Equal(0, sinPoligono);
-        Assert.Equal(0, enVistaAdicional);
+        Assert.True(cuadrantes == 45 && zonas == 80, $"Se esperaban 45 cuadrantes y 80 zonas y hay {cuadrantes} y {zonas}. {AYUDA}");
+        Assert.Equal(0, zonasSinRegion);
         Assert.Equal(0, geometriaInvalida);
     }
 
