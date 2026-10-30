@@ -6,7 +6,7 @@ using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 
 namespace IAAutos.Aplicacion.Inspecciones;
 
-/// <summary>Una zona del vehiculo con hallazgos: su numero y lado (o su nombre si es provisional) y la etiqueta que lleva en el panel.</summary>
+/// <summary>Una zona del vehiculo con hallazgos: su numero y lado y la etiqueta que lleva en el panel.</summary>
 public sealed record ZonaConHallazgos(int? CuadranteNumero, string? Lado, string Nombre, string Etiqueta);
 
 /// <summary>Lo que se dibuja de los paneles: los que tienen regiones de zonas con hallazgos y las zonas que no se pueden dibujar.</summary>
@@ -14,7 +14,7 @@ public sealed record PanelesDibujados(IReadOnlyList<PanelInforme> Paneles, IRead
 
 /// <summary>
 /// Arma los paneles del dibujo de danos para un PDF: de cada panel con imagen toma las regiones de las zonas con hallazgos (zona = lado + numero de cuadrante; una zona se ve desde varios paneles)
-/// y las deja listas para resaltar. Las zonas provisionales (frente y llantas) y las que no tienen region en ningun panel se listan aparte.
+/// y las deja listas para resaltar. Las zonas que no tienen region en ningun panel se listan aparte.
 /// </summary>
 public sealed class clsPanelesDeDano(ICatalogosLectura catalogos, IImagenesPanelDano imagenes, IAlmacenArchivos almacen)
 {

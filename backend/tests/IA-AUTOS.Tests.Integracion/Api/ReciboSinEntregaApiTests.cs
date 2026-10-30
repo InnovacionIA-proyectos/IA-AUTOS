@@ -239,7 +239,7 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
     public async Task Los_hallazgos_de_esa_inspeccion_quedan_con_la_evidencia_incompleta_por_transferencia_sin_entrega()
     {
         var e = await EscenarioAsync();
-        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
         var (inspeccion, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[0], e.Conductor.UsuarioId, zona, conFoto: true);
 
         var antes = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/hallazgos/{hallazgo}"));

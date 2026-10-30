@@ -50,7 +50,7 @@ No hay filas de linea base de rechazo ni de fotos minimas por vista (las vistas 
 |---|---|
 | `HallazgoId`, `InspeccionId`, `ViajeId`, `VehiculoId` | el hallazgo y donde se registro |
 | `ClienteId` | el cliente del vehiculo |
-| `ZonaId`, `Numero`, `Lado`, `ZonaCodigo` | la zona: lado + numero, o el codigo de la zona provisional (nulos en un hallazgo historico sin zona) |
+| `ZonaId`, `Numero`, `Lado` | la zona: lado + numero (nulos en un hallazgo sin zona) |
 | `Proceso` | el codigo de la etapa (`cargue`, `transporte`, `descargue`) |
 | `Fecha` | cuando se cerro la inspeccion |
 

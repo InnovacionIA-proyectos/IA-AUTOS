@@ -161,7 +161,7 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
     }
 
     /// <summary>
-    /// Guarda un hallazgo con su zona (<c>cuadrante_numero</c> + <c>lado</c>, o <c>zona_provisional</c>), clase, tamano, nivel de severidad y su foto propia
+    /// Guarda un hallazgo con su zona (<c>cuadrante_numero</c> + <c>lado</c>, el lado solo si el cuadrante lo lleva), clase, tamano, nivel de severidad y su foto propia
     /// (<c>evidencia</c>, obligatoria: sin ella 400). <c>parte_vehiculo</c> y <c>coords_diagrama</c> ya no se aceptan.
     /// </summary>
     [HttpPost("{id:guid}/hallazgos")]

@@ -140,8 +140,6 @@ internal sealed class clsFilaAveria : IFilaIndicador
 
     public string? Lado { get; set; }
 
-    public string? ZonaCodigo { get; set; }
-
     public string? ZonaNombre { get; set; }
 
     public string? CuadranteNombre { get; set; }
@@ -321,13 +319,13 @@ internal sealed class clsConsultasIndicadores(clsAppDbContext contexto) : IConsu
 
     public async Task<IReadOnlyList<FilaConteoHallazgo>> ConteoDeHallazgosAsync(FiltrosReporte filtros, CancellationToken ct = default) =>
         (await Averias(filtros)
-            .GroupBy(x => new { x.Proceso, x.Numero, x.Lado, x.ZonaCodigo, x.ZonaNombre, x.CuadranteNombre, x.NivelSeveridad, x.ClaseDano, x.TamanoDano })
+            .GroupBy(x => new { x.Proceso, x.Numero, x.Lado, x.ZonaNombre, x.CuadranteNombre, x.NivelSeveridad, x.ClaseDano, x.TamanoDano })
             .Select(g => new
             {
-                g.Key.Proceso, g.Key.Numero, g.Key.Lado, g.Key.ZonaCodigo, g.Key.ZonaNombre, g.Key.CuadranteNombre, g.Key.NivelSeveridad, g.Key.ClaseDano, g.Key.TamanoDano, Total = g.Count(),
+                g.Key.Proceso, g.Key.Numero, g.Key.Lado, g.Key.ZonaNombre, g.Key.CuadranteNombre, g.Key.NivelSeveridad, g.Key.ClaseDano, g.Key.TamanoDano, Total = g.Count(),
             })
             .ToListAsync(ct))
-        .Select(x => new FilaConteoHallazgo(x.Proceso, x.Numero, x.Lado, x.ZonaCodigo, x.ZonaNombre, x.CuadranteNombre, x.NivelSeveridad, x.ClaseDano, x.TamanoDano, x.Total))
+        .Select(x => new FilaConteoHallazgo(x.Proceso, x.Numero, x.Lado, x.ZonaNombre, x.CuadranteNombre, x.NivelSeveridad, x.ClaseDano, x.TamanoDano, x.Total))
         .ToList();
 
     public async Task<IReadOnlyList<FilaIndicador>> IndicadorDiarioAsync(FiltrosReporte filtros, CancellationToken ct = default) =>

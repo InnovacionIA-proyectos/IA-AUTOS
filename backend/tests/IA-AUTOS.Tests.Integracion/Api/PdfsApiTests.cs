@@ -104,12 +104,10 @@ public sealed partial class PdfsApiTests(clsBaseDatosFixture bd) : clsPruebaTabl
             """,
             ("@insp", Guid.Parse(INSPECCION_V3)), ("@foto", foto), ("@fotoH", fotoHallazgo), ("@inspector", inspector), ("@conductor", conductor), ("@coordinador", coordinador));
 
-        // La region de la zona izquierdo 7 en el panel y la imagen del panel, por la API del catalogo (renueva el cache de catalogos).
-        var cuadrante = (Guid)(await Sembrador.EscalarAsync("SELECT TOP 1 CuadranteId FROM dbo.tblZonasDano WHERE Numero = 7 AND Lado = 'izquierdo'"))!;
+        // La region de la zona izquierdo 7 en el panel (el dibujo es de solo lectura por la API: se siembra) y la imagen del panel, por la API del catalogo (renueva el cache de catalogos).
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblRegionesDano (Id, PanelId, ZonaId, CuadranteId, Geometria) SELECT NEWID(), p.Id, z.Id, z.CuadranteId, N'{\"puntos\":[[0.2,0.2],[0.6,0.2],[0.6,0.5],[0.2,0.5]]}' FROM dbo.tblPanelesDano p JOIN dbo.tblZonasDano z ON z.Numero = 7 AND z.Lado = 'izquierdo' WHERE p.Codigo = 'costado_izquierdo'");
         var superAdmin = await SesionAsync(clsRol.SUPER_ADMIN, "super-pdf@ejemplo.com");
-        var region = await Cliente(superAdmin.Token).PostAsJsonAsync(
-            "/api/catalogos/cuadrante-regiones", new { panel = "costado_izquierdo", cuadrante_id = cuadrante, lado = "izquierdo", geometria = new { puntos = new[] { new[] { 0.2, 0.2 }, new[] { 0.6, 0.2 }, new[] { 0.6, 0.5 }, new[] { 0.2, 0.5 } } } });
-        Assert.Equal(HttpStatusCode.Created, region.StatusCode);
         var imagen = await Cliente(superAdmin.Token).PutAsJsonAsync("/api/catalogos/paneles-dano/costado_izquierdo/imagen", new { archivo = imagenPanel });
         Assert.Equal(HttpStatusCode.NoContent, imagen.StatusCode);
     }

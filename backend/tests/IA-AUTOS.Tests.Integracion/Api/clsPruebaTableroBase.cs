@@ -65,7 +65,7 @@ public abstract class clsPruebaTableroBase(clsBaseDatosFixture bd) : clsPruebaAp
             DECLARE @cargue uniqueidentifier = (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'cargue');
             DECLARE @transporte uniqueidentifier = (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'transporte');
             DECLARE @descargue uniqueidentifier = (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'descargue');
-            DECLARE @frente uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente');
+            DECLARE @frente uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50);
             DECLARE @ninera uniqueidentifier = (SELECT Id FROM dbo.tblTiposUnidadTransportadora WHERE Codigo = 'ninera');
             DECLARE @nodriza uniqueidentifier = (SELECT Id FROM dbo.tblTiposUnidadTransportadora WHERE Codigo = 'nodriza');
 

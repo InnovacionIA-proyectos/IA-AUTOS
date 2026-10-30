@@ -20,8 +20,6 @@ internal sealed class clsHallazgoVentana
 
     public string? Lado { get; set; }
 
-    public string? ZonaCodigo { get; set; }
-
     public string Proceso { get; set; } = string.Empty;
 
     public DateTimeOffset Fecha { get; set; }
@@ -131,14 +129,15 @@ internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultas
     public async Task<IReadOnlyList<clsConteoPatron>> ConteoPorZonaAsync(DateTimeOffset desde, CancellationToken ct = default)
     {
         var filas = await contexto.Set<clsHallazgoVentana>().AsNoTracking()
-            .Where(h => h.Fecha >= desde && (h.Numero != null || h.ZonaCodigo != null))
-            .GroupBy(h => new { h.ClienteId, h.Numero, h.Lado, h.ZonaCodigo })
-            .Select(g => new { g.Key.ClienteId, g.Key.Numero, g.Key.Lado, g.Key.ZonaCodigo, Total = g.Count() })
+            .Where(h => h.Fecha >= desde && h.Numero != null)
+            .GroupBy(h => new { h.ClienteId, h.Numero, h.Lado })
+            .Select(g => new { g.Key.ClienteId, g.Key.Numero, g.Key.Lado, Total = g.Count() })
             .ToListAsync(ct);
         return filas.Select(f =>
         {
-            var clave = f.Numero is { } numero ? $"{f.Lado ?? "sin-lado"}-{numero}" : f.ZonaCodigo!;
-            var nombre = f.Numero is { } n ? (f.Lado is { Length: > 0 } lado ? $"{char.ToUpperInvariant(lado[0])}{lado[1..]} {n}" : $"{n}") : f.ZonaCodigo!;
+            var numero = f.Numero!.Value;
+            var clave = $"{f.Lado ?? "sin-lado"}-{numero}";
+            var nombre = f.Lado is { Length: > 0 } lado ? $"{char.ToUpperInvariant(lado[0])}{lado[1..]} {numero}" : $"{numero}";
             return new clsConteoPatron(f.ClienteId, clave, nombre, f.Total);
         }).ToList();
     }

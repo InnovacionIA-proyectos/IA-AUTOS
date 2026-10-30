@@ -77,7 +77,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
             $"ALTER TABLE dbo.tblInspecciones DISABLE TRIGGER ALL; UPDATE dbo.tblInspecciones SET {columna} = DATEADD(MINUTE, -@m, SYSDATETIMEOFFSET()) WHERE Id = @i; ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL",
             ("@m", minutos), ("@i", inspeccion));
 
-    private async Task<Guid> ZonaFrenteAsync() => (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+    private async Task<Guid> ZonaFrenteAsync() => (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
 
     // ------------------------------------------------------------------------------ hallazgo critico
 
@@ -92,7 +92,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
             var subida = await ComoJsonAsync(await Como(e.Inspector).PostAsJsonAsync("/api/uploads", new { data = Convert.ToBase64String(FIRMA_PNG.Concat(Guid.NewGuid().ToByteArray()).ToArray()), ext = "png" }));
             var creado = await Como(e.Inspector).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new
             {
-                zona_provisional = "frente",
+                cuadrante_numero = 50,
                 clase_dano = "golpe",
                 tamano_dano = "1_5cm",
                 nivel_severidad = nivel,
@@ -211,7 +211,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
 
         var mensajes = (await ComoJsonAsync(await Como(e.Coordinador).GetAsync("/api/notificaciones?tipo=umbral_patron"))).GetProperty("items").EnumerateArray()
             .Select(n => n.GetProperty("mensaje").GetString()).ToList();
-        Assert.Contains(mensajes, m => m!.StartsWith("La zona frente acumula 3 hallazgos en los últimos 30 días (umbral 2)", StringComparison.Ordinal));
+        Assert.Contains(mensajes, m => m!.StartsWith("La zona 50 acumula 3 hallazgos en los últimos 30 días (umbral 2)", StringComparison.Ordinal));
         Assert.Contains(mensajes, m => m!.StartsWith("El proceso cargue acumula 2 hallazgos", StringComparison.Ordinal));
         Assert.All(await ComoJsonListaAsync(e.Coordinador), n => Assert.Equal("media", n.GetProperty("urgencia").GetString()));
         Assert.Equal(0, await NotificacionesAsync("umbral_patron", e.Inspector.UsuarioId) + await NotificacionesAsync("umbral_patron", e.Conductor.UsuarioId));

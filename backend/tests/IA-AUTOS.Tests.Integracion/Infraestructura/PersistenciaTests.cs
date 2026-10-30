@@ -24,9 +24,9 @@ public sealed class PersistenciaTests(clsBaseDatosFixture bd) : IAsyncLifetime
     private ServiceProvider Proveedor() => CrearProveedor(bd.CadenaConexion);
 
     /// <summary>Crea usuario, vehiculo con su ruta estandar y devuelve los ids para armar inspecciones.</summary>
-    /// <summary>La zona provisional «frente» (la crea el ddl): una zona que siempre existe para los hallazgos de prueba.</summary>
+    /// <summary>La zona del cuadrante 50 «Frente» (sin lado, del dibujo base de las pruebas): una zona que siempre existe para los hallazgos de prueba.</summary>
     private static Task<Guid> ZonaFrenteAsync(IServiceProvider proveedor) =>
-        proveedor.GetRequiredService<clsAppDbContext>().ZonasDano.Where(z => z.Codigo == clsZonaProvisional.FRENTE).Select(z => z.Id).FirstAsync();
+        proveedor.GetRequiredService<clsAppDbContext>().ZonasDano.Where(z => z.Numero == 50).Select(z => z.Id).FirstAsync();
 
     private async Task<(Guid UsuarioId, Guid VehiculoId, IReadOnlyList<clsEtapa> Etapas)> SembrarRutaAsync(string email = "uno@ejemplo.com", string vin = "9FBHSR4E8PM000123")
     {

@@ -408,10 +408,14 @@ public sealed class BaseDatosRealTests
             Assert.True(await Columnas("tblViajeVehiculos", columna) == 1, $"Falta tblViajeVehiculos.{columna}. {ayuda}");
         }
 
-        var paneles = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblPanelesDano WHERE Codigo IN ('superior','perfil_posterior_izquierdo','perfil_posterior_derecho','costado_izquierdo','costado_derecho')");
-        var provisionales = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano WHERE CuadranteId IS NULL AND Codigo IN ('frente','llanta_delantera_izquierda','llanta_delantera_derecha','llanta_trasera_izquierda','llanta_trasera_derecha')");
-        var zonasEsperadas = await EscalarAsync<int>(conexion, "SELECT ISNULL(SUM(CASE WHEN Numero <= 25 THEN 2 ELSE 1 END), 0) FROM tblCuadrantes");
-        var zonas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano WHERE CuadranteId IS NOT NULL");
+        // El dibujo (paneles, cuadrantes y zonas) lo reemplaza 34-resembrar-dibujo-v6.sql: aqui solo se comprueba que haya paneles y que cada cuadrante tenga las zonas que su regla pide
+        // (con la columna LlevaLado si ya existe; antes del 34, del 1 al 25 con lado).
+        var paneles = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblPanelesDano");
+        var tieneLlevaLado = await Columnas("tblCuadrantes", "LlevaLado") == 1;
+        var zonasEsperadas = await EscalarAsync<int>(conexion, tieneLlevaLado
+            ? "SELECT ISNULL(SUM(CASE WHEN LlevaLado = 1 THEN 2 ELSE 1 END), 0) FROM tblCuadrantes"
+            : "SELECT ISNULL(SUM(CASE WHEN Numero <= 25 THEN 2 ELSE 1 END), 0) FROM tblCuadrantes");
+        var zonas = await EscalarAsync<int>(conexion, tieneLlevaLado ? "SELECT COUNT(*) FROM tblZonasDano" : "SELECT COUNT(*) FROM tblZonasDano WHERE CuadranteId IS NOT NULL");
         var restricciones = await EscalarAsync<int>(conexion, """
             SELECT COUNT(*) FROM sys.objects
              WHERE name IN (N'FK_tblZonasDano_Cuadrante', N'CK_tblZonasDano_Forma', N'FK_tblRegionesDano_Zona', N'FK_tblHallazgos_Zona', N'FK_tblHallazgos_Nivel',
@@ -421,9 +425,8 @@ public sealed class BaseDatosRealTests
         var disparador = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE name = N'TR_tblCuadrantes_CrearZonas' AND is_disabled = 0");
         var hallazgosSinUbicarSinMarca = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblHallazgos WHERE ZonaId IS NULL AND Origen = 'inspector' AND MigracionPendiente = 0");
 
-        Assert.True(paneles == 5, $"Faltan paneles del dibujo de danos. {ayuda}");
-        Assert.True(provisionales == 5, $"Faltan zonas provisionales. {ayuda}");
-        Assert.True(zonas == zonasEsperadas, $"Hay {zonas} zonas numeradas y los cuadrantes esperan {zonasEsperadas} (dos por lado del 1 al 25 y una del 26 en adelante). {ayuda}");
+        Assert.True(paneles > 0, $"Faltan paneles del dibujo de danos. {ayuda}");
+        Assert.True(zonas == zonasEsperadas, $"Hay {zonas} zonas numeradas y los cuadrantes esperan {zonasEsperadas} (dos por lado si lo llevan y una si no). {ayuda}");
         Assert.True(restricciones == 13, $"Faltan relaciones o restricciones de zonas, hallazgos o unidades del viaje. {ayuda}");
         Assert.True(disparador == 1, $"Falta el trigger que crea las zonas de un cuadrante nuevo. {ayuda}");
         Assert.Equal(0, hallazgosSinUbicarSinMarca);
@@ -834,6 +837,24 @@ public sealed class BaseDatosRealTests
         var notificacion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%propuesta_ubicacion%'");
 
         Assert.True(notificacion == 1, "Falta el tipo de notificacion propuesta_ubicacion. Ejecute database/cambios-esquema/33-tipo-de-aviso-propuesta-de-ubicacion.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task El_dibujo_de_danos_version_6_esta_sembrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/34-resembrar-dibujo-v6.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columnas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE (object_id = OBJECT_ID(N'tblCuadrantes') AND name = N'LlevaLado') OR (object_id = OBJECT_ID(N'tblZonasDano') AND name IN (N'LlevaLado', N'NombreCompleto', N'AiagArea')) OR (object_id = OBJECT_ID(N'tblPanelesDano') AND name IN (N'AnchoRef', N'AltoRef', N'Version')) OR (object_id = OBJECT_ID(N'tblRegionesDano') AND name = N'Prioridad')");
+        var provisionales = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblZonasDano') AND name IN (N'Codigo', N'Nombre')");
+
+        const string AVISO = "Ejecute database/cambios-esquema/34-resembrar-dibujo-v6.sql.";
+        Assert.True(columnas == 8 && provisionales == 0, "Faltan las columnas del dibujo version 6 o siguen las zonas provisionales. " + AVISO);
+        var paneles = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblPanelesDano");
+        var cuadrantes = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblCuadrantes");
+        var zonas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblZonasDano");
+        var regiones = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblRegionesDano");
+        Assert.True(paneles == 7 && cuadrantes == 45 && zonas == 80 && regiones == 251, $"El dibujo no es el de la version 6 (paneles {paneles}, cuadrantes {cuadrantes}, zonas {zonas}, regiones {regiones}; se esperan 7, 45, 80 y 251). " + AVISO);
     }
 
     [FactEntornoReal]

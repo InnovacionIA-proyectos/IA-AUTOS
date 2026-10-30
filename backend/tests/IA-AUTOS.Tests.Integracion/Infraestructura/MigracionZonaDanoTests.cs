@@ -195,10 +195,10 @@ public sealed partial class MigracionZonaDanoTests : IAsyncLifetime
     [Fact]
     public async Task El_ddl_nuevo_se_puede_ejecutar_sobre_la_base_anterior_y_la_migracion_se_completa_despues()
     {
-        // Antes de migrar: el ddl crea las tablas y semillas nuevas pero no toca los hallazgos ni las unidades de los viajes.
+        // Antes de migrar: el ddl no toca los hallazgos ni las unidades de los viajes ni crea el dibujo (en una base anterior lo crean los guiones 10 y 34).
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "database", "ddl.sql"));
         Assert.Equal(0, await ContarAsync("SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID('dbo.tblHallazgos') AND name = 'ZonaId'"));
-        Assert.Equal(5, await ContarAsync("SELECT COUNT(*) FROM dbo.tblPanelesDano"));
+        Assert.Equal(0, await ContarAsync("SELECT COUNT(*) FROM sys.tables WHERE name = 'tblPanelesDano'"));
 
         await EjecutarAsync(_cadena, await LeerScriptAsync("10-zona-dano-y-hallazgo.sql"));
 

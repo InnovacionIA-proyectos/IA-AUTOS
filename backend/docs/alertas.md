@@ -40,7 +40,7 @@ se crea **una** alerta por inspeccion que dice cuantos hay y de que nivel. Un se
 
 ## Patrones por umbral
 
-`clsAlertasPeriodicas.EjecutarUmbralesAsync` cuenta sobre `vwHallazgosVentanaUmbral` los hallazgos de inspecciones **cerradas** de los ultimos `umbral_patron_ventana_dias` dias, **por cliente** y por **zona** (lado + numero, o la zona provisional)
+`clsAlertasPeriodicas.EjecutarUmbralesAsync` cuenta sobre `vwHallazgosVentanaUmbral` los hallazgos de inspecciones **cerradas** de los ultimos `umbral_patron_ventana_dias` dias, **por cliente** y por **zona** (lado + numero)
 y por **proceso**. Cuando una cuenta **llega** a `umbral_patron_cantidad` (mayor o igual) avisa a los coordinadores de calidad y administradores de ese cliente, con la zona o el proceso y el total.
 
 - **Una vez por ventana.** La ventana es un bloque de `umbral_patron_ventana_dias` dias contado desde el 1 de enero de 2000: dentro de un bloque una zona o un proceso alerta una sola vez aunque siga creciendo; en el bloque siguiente, si sigue en el umbral, vuelve a alertar.

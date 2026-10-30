@@ -381,6 +381,8 @@ BEGIN
         Nombre        nvarchar(100)     NOT NULL,
         Orden         int               NOT NULL CONSTRAINT DF_tblCuadrantes_Orden DEFAULT (0),
         Activo        bit               NOT NULL CONSTRAINT DF_tblCuadrantes_Activo DEFAULT (1),
+        -- Si el cuadrante lleva lado (dos zonas: izquierdo y derecho) o es una sola zona sin lado. Lo declara el archivo del dibujo; ninguna regla usa numeros.
+        LlevaLado     bit               NOT NULL CONSTRAINT DF_tblCuadrantes_LlevaLado DEFAULT (1),
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblCuadrantes_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblCuadrantes_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT UQ_tblCuadrantes_Tipo_Numero UNIQUE (TipoVehiculo, Numero),
@@ -411,53 +413,55 @@ BEGIN
 END
 GO
 
--- Una zona numerada se identifica por (cuadrante, numero): este indice unico permite que las zonas lo referencien junto con su numero.
-IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblCuadrantes_Id_Numero' AND parent_object_id = OBJECT_ID(N'dbo.tblCuadrantes'))
+-- Una zona se identifica por (cuadrante, numero, lleva lado): este indice unico permite que las zonas lo referencien con su numero y con el LlevaLado del cuadrante, asi no pueden diferir.
+-- Una base anterior al dibujo version 6 no tiene LlevaLado: la actualiza el guion 34-resembrar-dibujo-v6.sql.
+IF COL_LENGTH(N'dbo.tblCuadrantes', N'LlevaLado') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblCuadrantes_Id_Numero_LlevaLado' AND parent_object_id = OBJECT_ID(N'dbo.tblCuadrantes'))
+    EXEC (N'ALTER TABLE dbo.tblCuadrantes ADD CONSTRAINT UQ_tblCuadrantes_Id_Numero_LlevaLado UNIQUE (Id, Numero, LlevaLado)');
+IF COL_LENGTH(N'dbo.tblCuadrantes', N'LlevaLado') IS NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblCuadrantes_Id_Numero' AND parent_object_id = OBJECT_ID(N'dbo.tblCuadrantes'))
     ALTER TABLE dbo.tblCuadrantes ADD CONSTRAINT UQ_tblCuadrantes_Id_Numero UNIQUE (Id, Numero);
 GO
 
 /* -----------------------------------------------------------------------------
-   Zona del dano. Un hallazgo se atribuye a una zona del vehiculo, que es UNA de estas dos cosas:
-     - una zona numerada: el cuadrante (numero) mas su lado. Los numeros 1 a 25 llevan lado (izquierdo o derecho); del 26 en adelante no.
-       Hay una fila por lado + numero, creada automaticamente al crear el cuadrante (TR_tblCuadrantes_CrearZonas);
-     - una zona provisional, sin numero ni lado y sin dibujo, que se elige de una lista (frente y cada llanta). Se identifica por su Codigo.
-   La zona se guarda por lado + numero, no por el panel donde se toco.
+   Zona del dano. Un hallazgo se atribuye a una zona numerada del vehiculo: el cuadrante (numero) mas su lado. Un cuadrante que lleva lado tiene dos zonas (izquierdo y derecho) y uno
+   que no, una sola sin lado; lo declara el cuadrante (LlevaLado) y la zona lo copia con una llave foranea compuesta, asi que no pueden diferir. Hay una fila por lado + numero, creada
+   automaticamente al crear el cuadrante (TR_tblCuadrantes_CrearZonas). NombreCompleto y AiagArea son de la zona (por pieza y lado): el nombre completo lleva el lado («Guardafango
+   delantero izquierdo») y el codigo AIAG se asigna por pieza y lado; se tratan como texto. La zona se guarda por lado + numero, no por el panel donde se toco.
    ----------------------------------------------------------------------------- */
-IF OBJECT_ID(N'dbo.tblZonasDano', N'U') IS NULL
+IF OBJECT_ID(N'dbo.tblZonasDano', N'U') IS NULL AND COL_LENGTH(N'dbo.tblCuadrantes', N'LlevaLado') IS NOT NULL
 BEGIN
     CREATE TABLE dbo.tblZonasDano
     (
         Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblZonasDano PRIMARY KEY,
-        CuadranteId   uniqueidentifier  NULL,
-        Numero        int               NULL,
+        CuadranteId   uniqueidentifier  NOT NULL,
+        Numero        int               NOT NULL,
+        LlevaLado     bit               NOT NULL CONSTRAINT DF_tblZonasDano_LlevaLado DEFAULT (1),
         Lado          varchar(10)       NULL,
-        Codigo        varchar(40)       NULL,
-        Nombre        nvarchar(100)     NULL,
+        NombreCompleto nvarchar(200)    NULL,
+        AiagArea      nvarchar(100)     NULL,
         Orden         int               NOT NULL CONSTRAINT DF_tblZonasDano_Orden DEFAULT (0),
         Activo        bit               NOT NULL CONSTRAINT DF_tblZonasDano_Activo DEFAULT (1),
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblZonasDano_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblZonasDano_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         -- Si el cuadrante se borra o cambia de numero, sus zonas lo siguen (un cuadrante con hallazgos no se puede borrar: ver tblHallazgos).
-        CONSTRAINT FK_tblZonasDano_Cuadrante FOREIGN KEY (CuadranteId, Numero) REFERENCES dbo.tblCuadrantes (Id, Numero) ON DELETE CASCADE ON UPDATE CASCADE,
+        CONSTRAINT FK_tblZonasDano_Cuadrante FOREIGN KEY (CuadranteId, Numero, LlevaLado) REFERENCES dbo.tblCuadrantes (Id, Numero, LlevaLado) ON DELETE CASCADE ON UPDATE CASCADE,
         CONSTRAINT UQ_tblZonasDano_Id_Cuadrante UNIQUE (Id, CuadranteId),
         CONSTRAINT CK_tblZonasDano_Lado CHECK (Lado IS NULL OR Lado IN ('izquierdo', 'derecho')),
-        -- Numerada: cuadrante y numero, con lado del 1 al 25 y sin lado del 26 en adelante. Provisional: sin cuadrante, numero ni lado, con codigo y nombre.
-        CONSTRAINT CK_tblZonasDano_Forma CHECK (
-            (CuadranteId IS NOT NULL AND Numero IS NOT NULL AND Codigo IS NULL
-                AND ((Numero BETWEEN 1 AND 25 AND Lado IS NOT NULL) OR (Numero > 25 AND Lado IS NULL)))
-            OR (CuadranteId IS NULL AND Numero IS NULL AND Lado IS NULL AND Codigo IS NOT NULL AND Nombre IS NOT NULL))
+        -- Si el cuadrante lleva lado, la zona tiene lado; si no, no lo tiene.
+        CONSTRAINT CK_tblZonasDano_Forma CHECK ((LlevaLado = 1 AND Lado IS NOT NULL) OR (LlevaLado = 0 AND Lado IS NULL))
     );
-    -- Una zona numerada es unica por cuadrante y lado; una provisional, por codigo.
-    CREATE UNIQUE INDEX UX_tblZonasDano_Cuadrante_Lado ON dbo.tblZonasDano (CuadranteId, Lado) WHERE CuadranteId IS NOT NULL;
-    CREATE UNIQUE INDEX UX_tblZonasDano_Codigo ON dbo.tblZonasDano (Codigo) WHERE Codigo IS NOT NULL;
+    -- Una zona es unica por cuadrante y lado.
+    CREATE UNIQUE INDEX UX_tblZonasDano_Cuadrante_Lado ON dbo.tblZonasDano (CuadranteId, Lado);
 END
 GO
 
 /* -----------------------------------------------------------------------------
-   Paneles del dibujo de danos: los 5 paneles de la ficha del vehiculo, separados del catalogo de vistas de foto. Cada uno tiene su imagen de
-   fondo (ImagenPath, el archivo en el almacen de imagenes; nulo hasta que se carga) y sus regiones tocables.
+   Paneles del dibujo de danos: las vistas de la ficha del vehiculo, separadas del catalogo de vistas de foto. Cada uno tiene su imagen de
+   fondo (ImagenPath, el archivo en el almacen de imagenes; nulo hasta que se carga), el tamano de referencia de esa imagen (AnchoRef y AltoRef, en pixeles), la version del
+   archivo del dibujo con que se sembro y sus regiones tocables.
    ----------------------------------------------------------------------------- */
-IF OBJECT_ID(N'dbo.tblPanelesDano', N'U') IS NULL
+IF OBJECT_ID(N'dbo.tblPanelesDano', N'U') IS NULL AND COL_LENGTH(N'dbo.tblCuadrantes', N'LlevaLado') IS NOT NULL
 BEGIN
     CREATE TABLE dbo.tblPanelesDano
     (
@@ -465,6 +469,9 @@ BEGIN
         Codigo        varchar(40)       NOT NULL,
         Nombre        nvarchar(100)     NOT NULL,
         ImagenPath    nvarchar(260)     NULL,
+        AnchoRef      int               NULL,
+        AltoRef       int               NULL,
+        Version       int               NULL,
         Orden         int               NOT NULL CONSTRAINT DF_tblPanelesDano_Orden DEFAULT (0),
         Activo        bit               NOT NULL CONSTRAINT DF_tblPanelesDano_Activo DEFAULT (1),
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblPanelesDano_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
@@ -475,11 +482,11 @@ END
 GO
 
 /* -----------------------------------------------------------------------------
-   Regiones tocables de un panel: el poligono de una zona numerada en un panel (las zonas provisionales no tienen region). Geometria =
-   poligono normalizado en JSON ({"puntos":[[x,y],...]} con x e y entre 0 y 1 sobre la imagen del panel). Una zona se dibuja a lo sumo una
-   vez por panel. Al borrar la zona (o su cuadrante) se borran sus regiones.
+   Regiones tocables de un panel: el poligono de una zona en un panel. Geometria = poligono normalizado en JSON ({"puntos":[[x,y],...]} con x e y entre 0 y 1 sobre
+   la imagen del panel). Prioridad ordena las regiones que se superponen al tocar. Una zona se dibuja a lo sumo una vez por panel. Al borrar la zona (o su cuadrante) se
+   borran sus regiones.
    ----------------------------------------------------------------------------- */
-IF OBJECT_ID(N'dbo.tblRegionesDano', N'U') IS NULL
+IF OBJECT_ID(N'dbo.tblRegionesDano', N'U') IS NULL AND COL_LENGTH(N'dbo.tblCuadrantes', N'LlevaLado') IS NOT NULL
 BEGIN
     CREATE TABLE dbo.tblRegionesDano
     (
@@ -488,10 +495,10 @@ BEGIN
         ZonaId        uniqueidentifier  NOT NULL,
         CuadranteId   uniqueidentifier  NOT NULL,
         Geometria     nvarchar(max)     NOT NULL,
+        Prioridad     int               NOT NULL CONSTRAINT DF_tblRegionesDano_Prioridad DEFAULT (1),
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblRegionesDano_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblRegionesDano_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblRegionesDano_Panel FOREIGN KEY (PanelId) REFERENCES dbo.tblPanelesDano (Id),
-        -- CuadranteId no es nulo: asi la zona de una region es siempre una zona numerada (una provisional no tiene cuadrante).
         CONSTRAINT FK_tblRegionesDano_Zona FOREIGN KEY (ZonaId, CuadranteId) REFERENCES dbo.tblZonasDano (Id, CuadranteId) ON DELETE CASCADE,
         CONSTRAINT UQ_tblRegionesDano_Panel_Zona UNIQUE (PanelId, ZonaId),
         CONSTRAINT CK_tblRegionesDano_Geometria CHECK (ISJSON(Geometria) = 1)
@@ -500,35 +507,21 @@ BEGIN
 END
 GO
 
--- Cada cuadrante nuevo trae sus zonas: dos (izquierdo y derecho) del 1 al 25 y una del 26 en adelante.
-CREATE OR ALTER TRIGGER dbo.TR_tblCuadrantes_CrearZonas
+-- Cada cuadrante nuevo trae sus zonas: dos (izquierdo y derecho) si lleva lado y una sin lado si no. Se crea con SQL dinamico y solo si la base ya tiene el dibujo version 6
+-- (una base anterior conserva su disparador hasta que corra 34-resembrar-dibujo-v6.sql). El dibujo (paneles, cuadrantes, zonas y regiones) lo siembra ese guion desde el archivo.
+IF COL_LENGTH(N'dbo.tblZonasDano', N'LlevaLado') IS NOT NULL
+    EXEC (N'CREATE OR ALTER TRIGGER dbo.TR_tblCuadrantes_CrearZonas
 ON dbo.tblCuadrantes
 AFTER INSERT
 AS
 BEGIN
     SET NOCOUNT ON;
-    INSERT INTO dbo.tblZonasDano (Id, CuadranteId, Numero, Lado, Orden)
-    SELECT NEWID(), i.Id, i.Numero, l.Lado, i.Numero
+    INSERT INTO dbo.tblZonasDano (Id, CuadranteId, Numero, LlevaLado, Lado, Orden)
+    SELECT NEWID(), i.Id, i.Numero, i.LlevaLado, l.Lado, i.Numero
     FROM inserted i
-    CROSS APPLY (SELECT Lado FROM (VALUES ('izquierdo'), ('derecho')) AS x (Lado) WHERE i.Numero <= 25
-                 UNION ALL SELECT NULL WHERE i.Numero > 25) AS l;
-END
-GO
-
--- Los 5 paneles de la ficha y las zonas provisionales (la lista que se ofrece para el frente y las llantas). Solo agregan lo que falta.
-INSERT INTO dbo.tblPanelesDano (Id, Codigo, Nombre, Orden)
-SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
-FROM (VALUES ('superior', N'Superior', 1), ('perfil_posterior_izquierdo', N'Perfil posterior izquierdo', 2),
-             ('perfil_posterior_derecho', N'Perfil posterior derecho', 3), ('costado_izquierdo', N'Costado izquierdo', 4),
-             ('costado_derecho', N'Costado derecho', 5)) AS v (Codigo, Nombre, Orden)
-WHERE NOT EXISTS (SELECT 1 FROM dbo.tblPanelesDano p WHERE p.Codigo = v.Codigo);
-
-INSERT INTO dbo.tblZonasDano (Id, Codigo, Nombre, Orden)
-SELECT NEWID(), v.Codigo, v.Nombre, v.Orden
-FROM (VALUES ('frente', N'Frente', 101), ('llanta_delantera_izquierda', N'Llanta delantera izquierda', 102),
-             ('llanta_delantera_derecha', N'Llanta delantera derecha', 103), ('llanta_trasera_izquierda', N'Llanta trasera izquierda', 104),
-             ('llanta_trasera_derecha', N'Llanta trasera derecha', 105)) AS v (Codigo, Nombre, Orden)
-WHERE NOT EXISTS (SELECT 1 FROM dbo.tblZonasDano z WHERE z.Codigo = v.Codigo);
+    CROSS APPLY (SELECT Lado FROM (VALUES (''izquierdo''), (''derecho'')) AS x (Lado) WHERE i.LlevaLado = 1
+                 UNION ALL SELECT NULL WHERE i.LlevaLado = 0) AS l;
+END');
 GO
 
 /* -----------------------------------------------------------------------------
@@ -1119,24 +1112,23 @@ GO
 IF COL_LENGTH(N'dbo.tblHallazgos', N'ZonaId') IS NOT NULL
     EXEC (N'CREATE OR ALTER VIEW dbo.vwPatronesPorCuadrante
 AS
-SELECT x.ZonaId, x.CuadranteId, x.Numero, x.Lado, x.ZonaCodigo, x.ZonaNombre, x.Proceso, x.NivelSeveridad, x.ClaseDano, x.ClienteId, x.Operacion, x.Fecha,
+SELECT x.ZonaId, x.CuadranteId, x.Numero, x.Lado, x.ZonaNombre, x.Proceso, x.NivelSeveridad, x.ClaseDano, x.ClienteId, x.Operacion, x.Fecha,
        COUNT(*) AS Total
 FROM (
-    SELECT z.Id AS ZonaId, z.CuadranteId, z.Numero, z.Lado, z.Codigo AS ZonaCodigo,
+    SELECT z.Id AS ZonaId, z.CuadranteId, z.Numero, z.Lado,
            CASE WHEN z.Lado IS NOT NULL THEN CONCAT(UPPER(LEFT(z.Lado, 1)), SUBSTRING(z.Lado, 2, 20), N'' '', z.Numero, N'' '', NCHAR(183), N'' '', c.Nombre)
-                WHEN z.Numero IS NOT NULL THEN CONCAT(z.Numero, N'' '', NCHAR(183), N'' '', c.Nombre)
-                ELSE z.Nombre END AS ZonaNombre,
+                ELSE CONCAT(z.Numero, N'' '', NCHAR(183), N'' '', c.Nombre) END AS ZonaNombre,
            ec.Codigo AS Proceso, h.NivelSeveridad, h.ClaseDano, v.ClienteId, v.Operacion, CAST(i.CerradaAt AS date) AS Fecha
     FROM dbo.tblHallazgos h
     JOIN dbo.tblZonasDano z ON z.Id = h.ZonaId
-    LEFT JOIN dbo.tblCuadrantes c ON c.Id = z.CuadranteId
+    JOIN dbo.tblCuadrantes c ON c.Id = z.CuadranteId
     JOIN dbo.tblInspecciones i ON i.Id = h.InspeccionId AND i.Estado = ''cerrada''
     JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
     JOIN dbo.tblEtapasCatalogo ec ON ec.Id = e.EtapaCatalogoId
     JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId
     WHERE NOT (h.Origen = ''conductor'' AND h.RevisadoAt IS NULL)
 ) AS x
-GROUP BY x.ZonaId, x.CuadranteId, x.Numero, x.Lado, x.ZonaCodigo, x.ZonaNombre, x.Proceso, x.NivelSeveridad, x.ClaseDano, x.ClienteId, x.Operacion, x.Fecha');
+GROUP BY x.ZonaId, x.CuadranteId, x.Numero, x.Lado, x.ZonaNombre, x.Proceso, x.NivelSeveridad, x.ClaseDano, x.ClienteId, x.Operacion, x.Fecha');
 GO
 
 /* -----------------------------------------------------------------------------
@@ -1829,7 +1821,7 @@ WHERE NOT EXISTS (SELECT 1 FROM dbo.tblParametros p WHERE p.Clave = v.Clave);
 GO
 
 /* -----------------------------------------------------------------------------
-   vwHallazgosVentanaUmbral: los hallazgos de inspecciones CERRADAS con su cliente, su zona (lado + numero, o la zona provisional), su proceso y la fecha de cierre, para contar patrones
+   vwHallazgosVentanaUmbral: los hallazgos de inspecciones CERRADAS con su cliente, su zona (lado + numero), su proceso y la fecha de cierre, para contar patrones
    por zona o por proceso dentro de una ventana de dias. Una fila por hallazgo. Excluye las novedades del conductor aun sin revisar (no tienen zona, clase ni nivel); un hallazgo historico sin
    zona si esta (cuenta por proceso, con la zona nula).
    ----------------------------------------------------------------------------- */
@@ -1837,7 +1829,7 @@ IF COL_LENGTH(N'dbo.tblHallazgos', N'ZonaId') IS NOT NULL
     EXEC (N'CREATE OR ALTER VIEW dbo.vwHallazgosVentanaUmbral
 AS
 SELECT h.Id AS HallazgoId, h.InspeccionId, i.ViajeId, e.VehiculoId, v.ClienteId,
-       z.Id AS ZonaId, z.Numero, z.Lado, z.Codigo AS ZonaCodigo,
+       z.Id AS ZonaId, z.Numero, z.Lado,
        ec.Codigo AS Proceso, i.CerradaAt AS Fecha
 FROM dbo.tblHallazgos h
 JOIN dbo.tblInspecciones i ON i.Id = h.InspeccionId AND i.Estado = ''cerrada''
@@ -1861,6 +1853,8 @@ IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'EstadoUnidad') IS NOT NULL
    AND COL_LENGTH(N'dbo.tblHallazgos', N'ZonaId') IS NOT NULL
    AND COL_LENGTH(N'dbo.tblHallazgos', N'RevisadoAt') IS NOT NULL
 BEGIN
+    -- El codigo AIAG es de la zona del dibujo version 6; una base anterior lo trae nulo hasta que corra 34-resembrar-dibujo-v6.sql.
+    DECLARE @aiagZona nvarchar(100) = CASE WHEN COL_LENGTH(N'dbo.tblZonasDano', N'AiagArea') IS NOT NULL THEN N'z.AiagArea' ELSE N'CAST(NULL AS nvarchar(100))' END;
     EXEC (N'CREATE OR ALTER VIEW dbo.vwCobertura
 AS
 SELECT vv.ViajeId, vv.VehiculoId, v.Vin, v.ClienteId, v.Operacion, vj.OrigenId, vj.DestinoId, v.Marca, vj.Placa, vj.Trailer, vj.TipoUnidadId, vj.ConductorId,
@@ -1924,10 +1918,10 @@ AS
 SELECT h.Id AS HallazgoId, h.InspeccionId, i.ViajeId, e.VehiculoId, v.Vin, v.ClienteId, v.Operacion, vj.OrigenId, vj.DestinoId, v.Marca, vj.Placa, vj.Trailer,
        vj.TipoUnidadId, tu.Codigo AS UnidadCodigo, tu.Nombre AS Unidad, vj.ConductorId, cu.Nombre AS ConductorNombre, cu.Cedula AS ConductorCedula,
        ec.Codigo AS Proceso, i.Momento, h.ClaseDano, h.TamanoDano, h.NivelSeveridad,
-       z.Id AS ZonaId, z.Numero, z.Lado, z.Codigo AS ZonaCodigo, c.Nombre AS CuadranteNombre,
+       z.Id AS ZonaId, z.Numero, z.Lado, ' + @aiagZona + N' AS AiagArea, c.Nombre AS CuadranteNombre,
        CASE WHEN z.Lado IS NOT NULL THEN CONCAT(UPPER(LEFT(z.Lado, 1)), SUBSTRING(z.Lado, 2, 20), N'' '', z.Numero, N'' '', NCHAR(183), N'' '', c.Nombre)
             WHEN z.Numero IS NOT NULL THEN CONCAT(z.Numero, N'' '', NCHAR(183), N'' '', c.Nombre)
-            ELSE z.Nombre END AS ZonaNombre,
+            ELSE NULL END AS ZonaNombre,
        CAST(SWITCHOFFSET(i.CerradaAt, N''-05:00'') AS date) AS Fecha
 FROM dbo.tblHallazgos h
 JOIN dbo.tblInspecciones i ON i.Id = h.InspeccionId AND i.Estado = ''cerrada''

@@ -87,7 +87,7 @@ public sealed class ConductorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
     private Task<HttpResponseMessage> LlegadaAsync(Sesion quien, Guid viaje, string vin, object? cuerpo = null) =>
         Como(quien).PostAsJsonAsync($"/api/viajes/{viaje}/vehiculos/{vin}/llegada", cuerpo ?? new { fecha = FECHA, lat = 4.9, lng = -74.4 });
 
-    private async Task<Guid> ZonaFrenteAsync() => (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+    private async Task<Guid> ZonaFrenteAsync() => (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
 
     private static JsonElement Errores(JsonElement cuerpo) => cuerpo.GetProperty("details").GetProperty("fieldErrors");
 
@@ -114,7 +114,7 @@ public sealed class ConductorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal("granizo", novedad.GetProperty("tipo_novedad").GetString());
         Assert.Equal("mas_20cm", novedad.GetProperty("tamano_dano").GetString());
         Assert.Equal("conductor", novedad.GetProperty("origen").GetString());
-        foreach (var vacio in new[] { "clase_dano", "cuadrante_numero", "lado", "zona_provisional", "nivel_severidad", "nota", "revisado_at" })
+        foreach (var vacio in new[] { "clase_dano", "cuadrante_numero", "lado", "aiag_area", "nivel_severidad", "nota", "revisado_at" })
         {
             Assert.Equal(JsonValueKind.Null, novedad.GetProperty(vacio).ValueKind);
         }
@@ -587,7 +587,7 @@ public sealed class ConductorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var h = informeConductor.GetProperty("hallazgos").EnumerateArray().Single();
         Assert.Equal(hallazgo, h.GetProperty("id").GetGuid());
         // Lo que ve en lectura: zona, clase, tamano, origen, si es preexistente y la fecha.
-        Assert.Equal("Frente", h.GetProperty("zona").GetString());
+        Assert.Equal("50 · Frente", h.GetProperty("zona").GetString());
         Assert.Equal("golpe", h.GetProperty("clase_dano").GetString());
         Assert.Equal("inspector", h.GetProperty("origen").GetString());
         Assert.False(h.GetProperty("es_preexistente").GetBoolean());

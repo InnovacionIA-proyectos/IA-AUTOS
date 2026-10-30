@@ -33,8 +33,8 @@ public sealed record InspeccionDto(
     IReadOnlyList<NovedadProcesoDto> NovedadesProceso);
 
 /// <summary>
-/// Un hallazgo con su zona: <c>CuadranteNumero</c> y <c>Lado</c> (o <c>ZonaProvisional</c>), <c>CuadranteNombre</c> y <c>Zona</c> ya armada para mostrar
-/// («Izquierdo 7 · Puerta delantera», «Frente»). <c>NivelNombre</c> y <c>NivelAccion</c> salen del catalogo de niveles. <c>EvidenciaFaltante</c> dice que
+/// Un hallazgo con su zona: <c>CuadranteNumero</c> y <c>Lado</c> (sin lado en los cuadrantes que no lo llevan), <c>CuadranteNombre</c> (la pieza) y <c>Zona</c> ya armada para mostrar
+/// («Izquierdo 7 · Puerta delantera», «54 · Parabrisas») con su codigo <c>AiagArea</c>. <c>NivelNombre</c> y <c>NivelAccion</c> salen del catalogo de niveles. <c>EvidenciaFaltante</c> dice que
 /// le falta para tener la evidencia completa (<c>foto_hallazgo</c>, <c>transferencia_sin_cierre</c> o <c>transferencia_no_firma</c>) y
 /// <c>EvidenciaCompleta</c> es verdadera cuando no falta nada. <c>ParteVehiculo</c> y <c>CoordsDiagrama</c> solo vienen en los hallazgos historicos. Al conductor solo se le muestra lo que ve en lectura (zona, clase, tamano, tipo de
 /// novedad, origen, si es preexistente, fecha y foto): <c>EstadoSeguimiento</c>, <c>EvidenciaCompleta</c> y <c>EvidenciaFaltante</c> llegan nulos, y tambien el nivel, la nota, la revision y el origen.
@@ -48,9 +48,9 @@ public record HallazgoDto(
     CoordsDiagramaDto? CoordsDiagrama,
     int? CuadranteNumero,
     string? Lado,
-    string? ZonaProvisional,
     string? CuadranteNombre,
     string? Zona,
+    string? AiagArea,
     string? TipoNovedad,
     string? NivelSeveridad,
     string? NivelNombre,

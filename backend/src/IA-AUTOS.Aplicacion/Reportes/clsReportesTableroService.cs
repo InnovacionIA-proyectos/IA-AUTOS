@@ -232,9 +232,9 @@ public sealed class clsReportesTableroService(
             new UmbralPatronDto(cantidad, ventana));
     }
 
-    /// <summary>La zona de un hallazgo: lado + numero del cuadrante, o el codigo de la zona provisional (sin zona, un grupo aparte).</summary>
+    /// <summary>La zona de un hallazgo: lado + numero del cuadrante (sin zona, un grupo aparte).</summary>
     private static string ClaveRegion(FilaConteoHallazgo c) =>
-        c.Numero is { } numero ? $"{c.Lado ?? "sin-lado"}-{numero.ToString(CultureInfo.InvariantCulture)}" : c.ZonaCodigo ?? "sin-zona";
+        c.Numero is { } numero ? $"{c.Lado ?? "sin-lado"}-{numero.ToString(CultureInfo.InvariantCulture)}" : "sin-zona";
 
     // ------------------------------------------------------------------------------------ indicador diario
 

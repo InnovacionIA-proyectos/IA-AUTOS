@@ -50,7 +50,7 @@ public sealed class SeguimientoHallazgosApiTests(clsBaseDatosFixture bd) : clsPr
         var inspector = await SesionAsync(email, clsRol.INSPECTOR);
         var conductor = await SesionAsync(emailConductor, clsRol.CONDUCTOR);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync(vin, conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
-        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
         var (inspeccion, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(etapas[0], inspector.UsuarioId, zona, nivel: nivel, conFoto: conFoto, origen: origen, cerrada: cerrada);
         return new Escenario(await Sembrador.ViajeDeEtapaAsync(etapas[0]), etapas, inspeccion, hallazgo, inspector, conductor, zona);
     }

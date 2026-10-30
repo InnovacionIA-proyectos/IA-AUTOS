@@ -200,8 +200,14 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
         return candidatas.OrderBy(x => x.TipoVehiculo is null ? 1 : 0).Select(x => x.Zona).FirstOrDefault();
     }
 
-    public Task<clsZonaDano?> ObtenerZonaProvisionalAsync(string codigo, CancellationToken ct = default) =>
-        contexto.ZonasDano.AsNoTracking().Where(z => z.CuadranteId == null && z.Activo && z.Codigo == codigo).FirstOrDefaultAsync(ct);
+    public async Task<bool?> CuadranteLlevaLadoAsync(int numero, string? tipoVehiculo, CancellationToken ct = default)
+    {
+        var candidatos = await contexto.Cuadrantes.AsNoTracking()
+            .Where(c => c.Activo && c.Numero == numero && (c.TipoVehiculo == null || c.TipoVehiculo == tipoVehiculo))
+            .Select(c => new { c.LlevaLado, c.TipoVehiculo }).ToListAsync(ct);
+        // El cuadrante propio del tipo de vehiculo gana sobre el generico.
+        return candidatos.OrderBy(c => c.TipoVehiculo is null ? 1 : 0).Select(c => (bool?)c.LlevaLado).FirstOrDefault();
+    }
 
     public Task<string?> ObtenerTipoVehiculoAsync(Guid inspeccionId, CancellationToken ct = default) =>
         (from i in contexto.Inspecciones.AsNoTracking()

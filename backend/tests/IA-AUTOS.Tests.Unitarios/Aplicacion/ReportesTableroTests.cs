@@ -308,8 +308,8 @@ public sealed class ReportesTableroTests
     public async Task Los_patrones_marcan_el_umbral_con_los_hallazgos_de_la_ventana_y_traen_el_umbral_del_parametro()
     {
         var (servicio, consultas) = Crear(parametros: new() { [IAAutos.Dominio.Parametros.clsClavesParametros.UMBRAL_PATRON_CANTIDAD] = "3", [IAAutos.Dominio.Parametros.clsClavesParametros.UMBRAL_PATRON_VENTANA_DIAS] = "7" });
-        consultas.Hallazgos.Add(new FilaConteoHallazgo("cargue", 7, "izquierdo", null, "Izquierdo 7", "Puerta", "v1", "golpe", "5_10cm", 2));
-        consultas.Hallazgos.Add(new FilaConteoHallazgo("descargue", null, null, "frente", "Frente", null, "v3", "rotura", "1_5cm", 1));
+        consultas.Hallazgos.Add(new FilaConteoHallazgo("cargue", 7, "izquierdo", "Izquierdo 7", "Puerta", "v1", "golpe", "5_10cm", 2));
+        consultas.Hallazgos.Add(new FilaConteoHallazgo("descargue", null, null, "Sin ubicar", null, "v3", "rotura", "1_5cm", 1));
 
         var r = await servicio.PatronesAsync(new FiltrosReporteRequest("2026-10-01", "2026-10-15", null, null, null, null, null, null, null));
 
@@ -322,7 +322,7 @@ public sealed class ReportesTableroTests
         Assert.Equal(new DateOnly(2026, 10, 1), consultas.Recibidos.First().Desde);
         var region = r.PorRegion.First();
         Assert.Equal((7, "izquierdo", "Puerta", 2), (region.CuadranteNumero, region.Lado, region.Nombre, region.Total));
-        Assert.Equal("Frente", r.PorRegion.Last().Nombre);
+        Assert.Equal("Sin ubicar", r.PorRegion.Last().Nombre);
         Assert.Equal(["golpe", "rotura"], r.PorClase.Select(c => c.Clase).ToList());
     }
 
@@ -330,9 +330,9 @@ public sealed class ReportesTableroTests
     public async Task Un_grupo_supera_el_umbral_si_sus_hallazgos_en_la_ventana_llegan_a_la_cantidad()
     {
         var (servicio, consultas) = Crear(parametros: new() { [IAAutos.Dominio.Parametros.clsClavesParametros.UMBRAL_PATRON_CANTIDAD] = "3" });
-        consultas.Hallazgos.Add(new FilaConteoHallazgo("cargue", 7, "izquierdo", null, "Izquierdo 7", "Puerta", "v1", "golpe", "5_10cm", 1));
-        consultas.HallazgosEnVentana.Add(new FilaConteoHallazgo("cargue", 7, "izquierdo", null, "Izquierdo 7", "Puerta", "v1", "golpe", "5_10cm", 3));
-        consultas.HallazgosEnVentana.Add(new FilaConteoHallazgo("cargue", 8, "derecho", null, "Derecho 8", "Puerta", "v1", "golpe", "5_10cm", 2));
+        consultas.Hallazgos.Add(new FilaConteoHallazgo("cargue", 7, "izquierdo", "Izquierdo 7", "Puerta", "v1", "golpe", "5_10cm", 1));
+        consultas.HallazgosEnVentana.Add(new FilaConteoHallazgo("cargue", 7, "izquierdo", "Izquierdo 7", "Puerta", "v1", "golpe", "5_10cm", 3));
+        consultas.HallazgosEnVentana.Add(new FilaConteoHallazgo("cargue", 8, "derecho", "Derecho 8", "Puerta", "v1", "golpe", "5_10cm", 2));
 
         var r = await servicio.PatronesAsync(new FiltrosReporteRequest(null, null, null, null, null, null, null, null, null));
 

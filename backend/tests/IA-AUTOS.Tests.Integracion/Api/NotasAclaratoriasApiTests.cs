@@ -35,7 +35,7 @@ public sealed class NotasAclaratoriasApiTests(clsBaseDatosFixture bd) : clsPrueb
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
         var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-NOTA-0001", conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
-        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
         var (inspeccion, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(etapas[0], inspector.UsuarioId, zona);
         if (conTransferencia)
         {

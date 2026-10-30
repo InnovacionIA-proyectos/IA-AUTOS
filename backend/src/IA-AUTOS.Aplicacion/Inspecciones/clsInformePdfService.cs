@@ -109,7 +109,7 @@ public sealed class clsInformePdfService(
 
             hallazgos.Add(new HallazgoInforme(
                 numero,
-                h.Zona ?? h.ParteVehiculo ?? "Sin ubicar",
+                clsMapeadorInspecciones.ZonaConAiag(h.Zona, h.AiagArea) ?? h.ParteVehiculo ?? "Sin ubicar",
                 h.ClaseDano,
                 h.TamanoDano,
                 h.NivelNombre ?? h.NivelSeveridad,

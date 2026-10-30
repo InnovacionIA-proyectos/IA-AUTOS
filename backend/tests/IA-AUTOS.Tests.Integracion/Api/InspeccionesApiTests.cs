@@ -306,7 +306,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(id, h.GetProperty("inspeccion_id").GetGuid());
         Assert.Equal(7, h.GetProperty("cuadrante_numero").GetInt32());
         Assert.Equal("izquierdo", h.GetProperty("lado").GetString());
-        Assert.Equal(JsonValueKind.Null, h.GetProperty("zona_provisional").ValueKind);
+        Assert.False(h.TryGetProperty("zona_provisional", out _));
+        Assert.Equal(JsonValueKind.Null, h.GetProperty("aiag_area").ValueKind);
         Assert.Equal("Puerta delantera", h.GetProperty("cuadrante_nombre").GetString());
         Assert.Equal("Izquierdo 7 · Puerta delantera", h.GetProperty("zona").GetString());
         Assert.Equal("golpe", h.GetProperty("clase_dano").GetString());
@@ -338,21 +339,22 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
-    public async Task Un_hallazgo_en_una_zona_provisional_se_guarda_con_su_nombre_y_sin_cuadrante()
+    public async Task Un_hallazgo_en_un_cuadrante_sin_lado_se_guarda_sin_lado_con_su_numero_su_pieza_y_su_codigo_aiag()
     {
         var (sesion, etapas) = await EscenarioAsync();
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblZonasDano SET NombreCompleto = N'Frente', AiagArea = N'20' WHERE Numero = 50");
         var id = await CrearInspeccionAsync(sesion, etapas[0]);
         var (ruta, _) = await SubirAsync(sesion);
 
-        var r = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { zona_provisional = "llanta_trasera_derecha" }, nivel: "v1"));
+        var r = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 50 }, nivel: "v1"));
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var h = await ClonarAsync(r);
-        Assert.Equal("llanta_trasera_derecha", h.GetProperty("zona_provisional").GetString());
-        Assert.Equal("Llanta trasera derecha", h.GetProperty("zona").GetString());
-        Assert.Equal(JsonValueKind.Null, h.GetProperty("cuadrante_numero").ValueKind);
+        Assert.Equal(50, h.GetProperty("cuadrante_numero").GetInt32());
         Assert.Equal(JsonValueKind.Null, h.GetProperty("lado").ValueKind);
-        Assert.Equal(JsonValueKind.Null, h.GetProperty("cuadrante_nombre").ValueKind);
+        Assert.Equal("Frente", h.GetProperty("cuadrante_nombre").GetString());
+        Assert.Equal("50 · Frente", h.GetProperty("zona").GetString());
+        Assert.Equal("20", h.GetProperty("aiag_area").GetString());
         Assert.Equal("Se rechaza el vehículo", h.GetProperty("nivel_accion").GetString());
     }
 
@@ -371,17 +373,20 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(HttpStatusCode.BadRequest, malo.StatusCode);
         var campos = (await ClonarAsync(malo)).GetProperty("details").GetProperty("fieldErrors").EnumerateObject().Select(p => p.Name).ToList();
         // El orden de los errores no importa: llegan los del cuerpo y los del catalogo juntos.
-        Assert.Equal(["clase_dano", "lado", "nivel_severidad", "tamano_dano"], campos.Order().ToList());
+        Assert.Equal(["clase_dano", "nivel_severidad", "tamano_dano"], campos.Order().ToList());
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEvidencias"));
     }
 
     [Fact]
-    public async Task El_lado_es_obligatorio_del_1_al_25_y_no_se_admite_del_26_en_adelante()
+    public async Task El_lado_lo_decide_el_cuadrante_si_lo_lleva_es_obligatorio_y_si_no_se_rechaza_sin_importar_su_numero()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        await Sembrador.CuadranteAsync(7, "Puerta delantera");
-        await Sembrador.CuadranteAsync(30, "Techo");
+        await Sembrador.CuadranteAsync(7, "Puerta delantera", llevaLado: true);
+        await Sembrador.CuadranteAsync(30, "Techo", llevaLado: false);
+        // La regla no usa numeros: un cuadrante del 40 puede llevar lado y uno del 5 no.
+        await Sembrador.CuadranteAsync(40, "Pieza nueva con lado", llevaLado: true);
+        await Sembrador.CuadranteAsync(5, "Pieza central", llevaLado: false);
         var id = await CrearInspeccionAsync(sesion, etapas[0]);
         var (ruta, _) = await SubirAsync(sesion);
 
@@ -389,19 +394,28 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var ladoInvalido = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 7, lado = "arriba" }));
         var conLadoEn30 = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 30, lado = "derecho" }));
         var sin30 = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 30 }));
+        var sinLadoEn40 = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 40 }));
+        var con40 = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 40, lado = "derecho" }));
+        var conLadoEn5 = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 5, lado = "izquierdo" }));
+        var sin5 = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 5 }));
 
-        Assert.Contains("lado es requerido", await ErrorDeCampoAsync(sinLado, "lado"));
+        Assert.Contains("lleva lado", await ErrorDeCampoAsync(sinLado, "lado"));
         Assert.NotNull(await ErrorDeCampoAsync(ladoInvalido, "lado"));
-        Assert.Contains("26 en adelante", await ErrorDeCampoAsync(conLadoEn30, "lado"));
+        Assert.Equal("Este cuadrante no lleva lado", await ErrorDeCampoAsync(conLadoEn30, "lado"));
         Assert.Equal(HttpStatusCode.Created, sin30.StatusCode);
         var h = await ClonarAsync(sin30);
         Assert.Equal(JsonValueKind.Null, h.GetProperty("lado").ValueKind);
-        Assert.Equal("Techo 30", h.GetProperty("zona").GetString());
-        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
+        Assert.Equal("30 · Techo", h.GetProperty("zona").GetString());
+        Assert.Contains("lleva lado", await ErrorDeCampoAsync(sinLadoEn40, "lado"));
+        Assert.Equal(HttpStatusCode.Created, con40.StatusCode);
+        Assert.Equal("Derecho 40 · Pieza nueva con lado", (await ClonarAsync(con40)).GetProperty("zona").GetString());
+        Assert.Equal("Este cuadrante no lleva lado", await ErrorDeCampoAsync(conLadoEn5, "lado"));
+        Assert.Equal(HttpStatusCode.Created, sin5.StatusCode);
+        Assert.Equal(3, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
     }
 
     [Fact]
-    public async Task La_zona_es_un_cuadrante_o_una_zona_provisional_exactamente_una_de_las_dos()
+    public async Task La_zona_exige_un_cuadrante_existente_y_una_zona_provisional_del_esquema_viejo_se_rechaza()
     {
         var (sesion, etapas) = await EscenarioAsync();
         await Sembrador.CuadranteAsync(7, "Puerta delantera");
@@ -409,16 +423,15 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var (ruta, _) = await SubirAsync(sesion);
 
         var ninguna = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { }));
-        var ambas = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 7, lado = "izquierdo", zona_provisional = "frente" }));
-        var provisionalConLado = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { zona_provisional = "frente", lado = "izquierdo" }));
-        var provisionalInvalida = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { zona_provisional = "techo" }));
+        var provisional = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }));
+        var llanta = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { zona_provisional = "llanta_trasera_derecha" }));
         var cuadranteInexistente = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 9, lado = "izquierdo" }));
         var numeroInvalido = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 0 }));
 
-        Assert.Contains("no ambos ni ninguno", await ErrorDeCampoAsync(ninguna, "cuadrante_numero"));
-        Assert.Contains("no ambos ni ninguno", await ErrorDeCampoAsync(ambas, "cuadrante_numero"));
-        Assert.Contains("no lleva lado", await ErrorDeCampoAsync(provisionalConLado, "lado"));
-        Assert.Equal("Zona provisional inválida", await ErrorDeCampoAsync(provisionalInvalida, "zona_provisional"));
+        Assert.Equal("La zona indicada no existe", await ErrorDeCampoAsync(ninguna, "cuadrante_numero"));
+        Assert.Equal(HttpStatusCode.BadRequest, provisional.StatusCode);
+        Assert.Equal("La zona indicada no existe", await ErrorDeCampoAsync(provisional, "cuadrante_numero"));
+        Assert.Equal("La zona indicada no existe", await ErrorDeCampoAsync(llanta, "cuadrante_numero"));
         Assert.Contains("no existe o está inactivo", await ErrorDeCampoAsync(cuadranteInexistente, "cuadrante_numero"));
         Assert.NotNull(await ErrorDeCampoAsync(numeroInvalido, "cuadrante_numero"));
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
@@ -468,14 +481,14 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var idAdmin = await CrearInspeccionAsync(admin, etapas[0], "llegada");
         var (ruta, _) = await SubirAsync(sesion);
 
-        var inspectorSinNivel = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }, nivel: null));
-        var adminSinNivel = await PostHallazgoAsync(admin, idAdmin, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }, nivel: null));
-        var nivelInexistente = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }, nivel: "v9"));
+        var inspectorSinNivel = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 50 }, nivel: null));
+        var adminSinNivel = await PostHallazgoAsync(admin, idAdmin, CuerpoHallazgo(ruta, new { cuadrante_numero = 50 }, nivel: null));
+        var nivelInexistente = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 50 }, nivel: "v9"));
         var niveles = await ClonarAsync(await Cliente(admin.Token).GetAsync("/api/catalogos/niveles-severidad"));
         var nivelV3 = niveles.GetProperty("items").EnumerateArray().Single(n => n.GetProperty("codigo").GetString() == "v3").GetProperty("id").GetGuid();
         Assert.Equal(HttpStatusCode.OK, (await Cliente(admin.Token).PatchAsync($"/api/catalogos/niveles-severidad/{nivelV3}", JsonContent.Create(new { activo = false }))).StatusCode);
-        var nivelInactivo = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }, nivel: "v3"));
-        var adminConNivel = await PostHallazgoAsync(admin, idAdmin, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }, nivel: "v1_plus"));
+        var nivelInactivo = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 50 }, nivel: "v3"));
+        var adminConNivel = await PostHallazgoAsync(admin, idAdmin, CuerpoHallazgo(ruta, new { cuadrante_numero = 50 }, nivel: "v1_plus"));
 
         Assert.Equal("El nivel de severidad es requerido", await ErrorDeCampoAsync(inspectorSinNivel, "nivel_severidad"));
         Assert.Equal("El nivel de severidad es requerido", await ErrorDeCampoAsync(adminSinNivel, "nivel_severidad"));
@@ -494,8 +507,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var id = await CrearInspeccionAsync(conductor, etapas[0], motivo: "inspector_no_llego");
         var (ruta, _) = await SubirAsync(conductor);
 
-        var conNivel = await PostHallazgoAsync(conductor, id, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }, nivel: "v2"));
-        var sinNivel = await PostHallazgoAsync(conductor, id, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }, nivel: null));
+        var conNivel = await PostHallazgoAsync(conductor, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 50 }, nivel: "v2"));
+        var sinNivel = await PostHallazgoAsync(conductor, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 50 }, nivel: null));
 
         Assert.Contains("lo asigna el inspector", await ErrorDeCampoAsync(conNivel, "nivel_severidad"));
         Assert.Equal(HttpStatusCode.Created, sinNivel.StatusCode);
@@ -513,7 +526,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var (sesion, etapas) = await EscenarioAsync();
         var id = await CrearInspeccionAsync(sesion, etapas[0]);
         var (ruta, _) = await SubirAsync(sesion);
-        var cuerpo = CuerpoHallazgo(ruta, new { zona_provisional = "frente" });
+        var cuerpo = CuerpoHallazgo(ruta, new { cuadrante_numero = 50 });
         cuerpo["parte_vehiculo"] = "Capot";
         cuerpo["coords_diagrama"] = new { x = 0.25, y = 0.75 };
 
@@ -546,8 +559,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var otraZona = await PostHallazgoAsync(sesion, llegada, Preexistente(new { cuadrante_numero = 7, lado = "derecho" }));
         var otraClase = await PostHallazgoAsync(sesion, llegada, Preexistente(ZONA_IZQUIERDO_7, clase: "rotura"));
         var inexistente = await PostHallazgoAsync(sesion, llegada, Preexistente(ZONA_IZQUIERDO_7, hallazgoOrigen: Guid.NewGuid()));
-        var abierto = (await ClonarAsync(await PostHallazgoAsync(sesion, llegada, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }, nivel: "v1")))).GetProperty("id").GetGuid();
-        var deInspeccionAbierta = await PostHallazgoAsync(sesion, llegada, Preexistente(new { zona_provisional = "frente" }, hallazgoOrigen: abierto));
+        var abierto = (await ClonarAsync(await PostHallazgoAsync(sesion, llegada, CuerpoHallazgo(ruta, new { cuadrante_numero = 50 }, nivel: "v1")))).GetProperty("id").GetGuid();
+        var deInspeccionAbierta = await PostHallazgoAsync(sesion, llegada, Preexistente(new { cuadrante_numero = 50 }, hallazgoOrigen: abierto));
         var ok = await PostHallazgoAsync(sesion, llegada, Preexistente(ZONA_IZQUIERDO_7));
 
         Assert.Contains("mismo vehículo", await ErrorDeCampoAsync(otraZona, "hallazgo_origen_id"));
@@ -567,7 +580,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Un_hallazgo_preexistente_de_otro_vin_se_rechaza_y_es_preexistente_exige_su_origen()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var zonaFrente = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var zonaFrente = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
         var (_, etapasAjenas) = await Sembrador.VehiculoConRutaAsync("VIN-INSP-0002", inspectorId: sesion.UsuarioId);
         var ajena = await Sembrador.InformeAsync(etapasAjenas[0], sesion.UsuarioId, cerrada: false);
         var hallazgoAjeno = Guid.NewGuid();
@@ -577,12 +590,12 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var id = await CrearInspeccionAsync(sesion, etapas[0]);
         var (ruta, _) = await SubirAsync(sesion);
 
-        var otroVin = CuerpoHallazgo(ruta, new { zona_provisional = "frente" });
+        var otroVin = CuerpoHallazgo(ruta, new { cuadrante_numero = 50 });
         otroVin["es_preexistente"] = true;
         otroVin["hallazgo_origen_id"] = hallazgoAjeno;
-        var sinOrigen = CuerpoHallazgo(ruta, new { zona_provisional = "frente" });
+        var sinOrigen = CuerpoHallazgo(ruta, new { cuadrante_numero = 50 });
         sinOrigen["es_preexistente"] = true;
-        var origenSinMarca = CuerpoHallazgo(ruta, new { zona_provisional = "frente" });
+        var origenSinMarca = CuerpoHallazgo(ruta, new { cuadrante_numero = 50 });
         origenSinMarca["hallazgo_origen_id"] = hallazgoAjeno;
 
         Assert.Contains("mismo vehículo", await ErrorDeCampoAsync(await PostHallazgoAsync(sesion, id, otroVin), "hallazgo_origen_id"));
@@ -597,7 +610,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var (sesion, etapas) = await EscenarioAsync();
         var id = await CrearInspeccionAsync(sesion, etapas[0]);
         var (ruta, _) = await SubirAsync(sesion);
-        var zona = new { zona_provisional = "frente" };
+        var zona = new { cuadrante_numero = 50 };
 
         var noSubida = await PostHallazgoAsync(sesion, id, CuerpoHallazgo("3f2b6c1e-0000-4000-8000-123456789abc.png", zona));
         var hashAjeno = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, zona, hash: new string('a', 64)));
@@ -614,7 +627,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var id = Guid.NewGuid();
         var (ruta, _) = await SubirAsync(sesion);
 
-        var r = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { zona_provisional = "frente" }));
+        var r = await PostHallazgoAsync(sesion, id, CuerpoHallazgo(ruta, new { cuadrante_numero = 50 }));
 
         Assert.Equal(HttpStatusCode.NotFound, r.StatusCode);
         Assert.Equal($"Inspección {id} no encontrada", (await ClonarAsync(r)).GetProperty("message").GetString());
@@ -628,7 +641,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var (sesion, etapas) = await EscenarioAsync();
         await Sembrador.CuadranteAsync(7, "Puerta delantera");
         var izquierdo7 = await Sembrador.ZonaAsync(7, "izquierdo");
-        var frente = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var frente = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
         var vehiculo = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblVehiculos WHERE Vin = 'VIN-INSP-0001'"))!;
 
         // Un viaje anterior del que la unidad no salio, con su hallazgo grave.
@@ -666,7 +679,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal("llegada", llegada.GetProperty("momento").GetString());
         Assert.Equal(JsonValueKind.String, llegada.GetProperty("cerrada_at").ValueKind);
         Assert.Equal(JsonValueKind.Array, llegada.GetProperty("evidencias").ValueKind);
-        Assert.Equal("Frente", llegada.GetProperty("zona").GetString());
+        Assert.Equal("50 · Frente", llegada.GetProperty("zona").GetString());
         Assert.Equal("v2", llegada.GetProperty("nivel_severidad").GetString());
         Assert.Equal("Izquierdo 7 · Puerta delantera", lista[1].GetProperty("zona").GetString());
         Assert.Equal(inspeccionSalida, lista[1].GetProperty("inspeccion_id").GetGuid());
@@ -680,7 +693,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Los_hallazgos_previos_traen_las_fotos_del_hallazgo_con_su_url()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var frente = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var frente = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
         var inspeccion = await Sembrador.InformeAsync(etapas[0], sesion.UsuarioId, cerrada: false);
         var hallazgo = Guid.NewGuid();
         await Sembrador.EjecutarAsync(
@@ -916,7 +929,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var (rutaHallazgo, _) = await SubirAsync(sesion);
         var hallazgo = (await ClonarAsync(await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{propia}/hallazgos", new
         {
-            zona_provisional = "frente",
+            cuadrante_numero = 50,
             clase_dano = "golpe",
             tamano_dano = "1_5cm",
             nivel_severidad = "v2",
@@ -1107,7 +1120,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var (ruta, _) = await SubirAsync(sesion);
         await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new
         {
-            zona_provisional = "frente",
+            cuadrante_numero = 50,
             clase_dano = "golpe",
             tamano_dano = "1_5cm",
             nivel_severidad = "v2",
@@ -1150,7 +1163,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var otraVez = await CerrarAsync(sesion, id);
         var hallazgo = await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new
         {
-            zona_provisional = "frente",
+            cuadrante_numero = 50,
             clase_dano = "golpe",
             tamano_dano = "1_5cm",
             nivel_severidad = "v2",
@@ -1197,7 +1210,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var (ruta, _) = await SubirAsync(sesion);
         var novedad = await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new
         {
-            zona_provisional = "frente",
+            cuadrante_numero = 50,
             clase_dano = "golpe",
             tamano_dano = "1_5cm",
             nivel_severidad = "v2",
@@ -1697,7 +1710,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var (ruta, _) = await SubirAsync(inspector);
         Assert.Equal(HttpStatusCode.Created, (await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new
         {
-            zona_provisional = "frente",
+            cuadrante_numero = 50,
             clase_dano = "golpe",
             tamano_dano = "1_5cm",
             nivel_severidad = "v2",
@@ -1783,7 +1796,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var (ruta, _) = await SubirAsync(sesion);
         await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new
         {
-            zona_provisional = "frente",
+            cuadrante_numero = 50,
             clase_dano = "golpe",
             tamano_dano = "1_5cm",
             nivel_severidad = "v2",
@@ -1803,7 +1816,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.True(inf.GetProperty("requiere_inspeccion").GetBoolean());
         Assert.Equal("Nombre insp@ejemplo.com", inf.GetProperty("inspector_nombre").GetString());
         Assert.Equal(1, inf.GetProperty("hallazgos").GetArrayLength());
-        Assert.Equal("Frente", inf.GetProperty("hallazgos")[0].GetProperty("zona").GetString());
+        Assert.Equal("50 · Frente", inf.GetProperty("hallazgos")[0].GetProperty("zona").GetString());
         Assert.Equal("v2", inf.GetProperty("hallazgos")[0].GetProperty("nivel_severidad").GetString());
         Assert.StartsWith($"http://localhost/api/uploads/{ruta}?exp=", inf.GetProperty("evidencias")[0].GetProperty("url").GetString());
         Assert.Equal(1, inf.GetProperty("version").GetInt32());

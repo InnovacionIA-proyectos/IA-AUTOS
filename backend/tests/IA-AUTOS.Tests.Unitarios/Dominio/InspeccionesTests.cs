@@ -333,14 +333,12 @@ public class HallazgosYEvidenciasTests
         Assert.Equal(clsHallazgo.NOTA_MAX, HallazgoDeInspector(nota: new string('n', clsHallazgo.NOTA_MAX)).Nota!.Length);
     }
 
-    [Theory]
-    [InlineData(1, true)]
-    [InlineData(25, true)]
-    [InlineData(26, false)]
-    [InlineData(38, false)]
-    public void Los_numeros_del_1_al_25_llevan_lado_y_del_26_en_adelante_no(int numero, bool llevaLado)
+    [Fact]
+    public void Los_lados_validos_son_izquierdo_y_derecho_y_la_regla_de_si_un_cuadrante_lleva_lado_la_da_el_catalogo()
     {
-        Assert.Equal(llevaLado, clsLado.LlevaLado(numero));
+        Assert.Equal(["derecho", "izquierdo"], clsLado.VALORES.Order().ToList());
+        Assert.True(clsCuadrante.Crear(null, 4, "Guardafango delantero", null, null, AHORA).LlevaLado);
+        Assert.False(clsCuadrante.Crear(null, 54, "Parabrisas", null, null, AHORA, llevaLado: false).LlevaLado);
     }
 
     [Theory]

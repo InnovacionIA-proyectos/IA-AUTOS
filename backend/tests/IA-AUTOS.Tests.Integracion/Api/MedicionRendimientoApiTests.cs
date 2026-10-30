@@ -43,7 +43,7 @@ public sealed class MedicionRendimientoApiTests(clsBaseDatosFixture bd, ITestOut
         DECLARE @cargue uniqueidentifier = (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'cargue');
         DECLARE @transporte uniqueidentifier = (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'transporte');
         DECLARE @descargue uniqueidentifier = (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'descargue');
-        DECLARE @zona uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente');
+        DECLARE @zona uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50);
         DECLARE @insp uniqueidentifier = NEWID(), @cond uniqueidentifier = NEWID();
         INSERT dbo.tblUsuarios (Id, Nombre, Email, Rol, ClienteId, PasswordHash) VALUES (@insp, N'Ines Inspectora', 'medicion-insp@ejemplo.com', 'inspector', @cli, 'h');
         INSERT dbo.tblUsuarios (Id, Nombre, Rol, ClienteId, Cedula, TipoCredencial, PinHash) VALUES (@cond, N'Carlos Conductor', 'conductor', @cli, '1032456789', 'pin', 'h');

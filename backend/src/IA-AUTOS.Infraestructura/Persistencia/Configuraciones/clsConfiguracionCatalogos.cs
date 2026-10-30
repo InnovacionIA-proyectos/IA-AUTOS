@@ -158,7 +158,7 @@ internal sealed class clsConfiguracionCuadranteVista : IEntityTypeConfiguration<
     }
 }
 
-/// <summary>Los cinco paneles de la ficha del vehiculo donde se toca la region del dano; cada uno con su imagen de fondo.</summary>
+/// <summary>Los paneles de la ficha del vehiculo donde se toca la region del dano; cada uno con su imagen de fondo, su tamano de referencia y la version del archivo del dibujo.</summary>
 internal sealed class clsConfiguracionPanelDano : IEntityTypeConfiguration<clsPanelDano>
 {
     public void Configure(EntityTypeBuilder<clsPanelDano> builder)
@@ -169,7 +169,7 @@ internal sealed class clsConfiguracionPanelDano : IEntityTypeConfiguration<clsPa
     }
 }
 
-/// <summary>Las zonas del dano: cada cuadrante numerado con su lado, mas las zonas provisionales. Solo lectura desde la aplicacion (las crea la base).</summary>
+/// <summary>Las zonas del dano: cada cuadrante numerado con su lado (o sin lado si no lo lleva). Solo lectura desde la aplicacion (las crea la base).</summary>
 internal sealed class clsConfiguracionZonaDano : IEntityTypeConfiguration<clsZonaDano>
 {
     public void Configure(EntityTypeBuilder<clsZonaDano> builder)
@@ -177,14 +177,13 @@ internal sealed class clsConfiguracionZonaDano : IEntityTypeConfiguration<clsZon
         builder.ToTable("tblZonasDano");
         clsConfiguracionBase.Base(builder);
         builder.Property(z => z.Lado).HasColumnType("varchar(10)");
-        builder.Property(z => z.Codigo).HasColumnType("varchar(40)");
-        builder.Property(z => z.Nombre).HasMaxLength(clsCatalogoBase.NOMBRE_MAX);
+        builder.Property(z => z.NombreCompleto).HasMaxLength(200);
+        builder.Property(z => z.AiagArea).HasMaxLength(100);
         builder.HasIndex(z => new { z.CuadranteId, z.Lado }).IsUnique().HasDatabaseName("UX_tblZonasDano_Cuadrante_Lado");
-        builder.HasIndex(z => z.Codigo).IsUnique().HasDatabaseName("UX_tblZonasDano_Codigo");
     }
 }
 
-/// <summary>El poligono de una zona numerada en un panel: una zona se dibuja una vez por panel y al borrar la zona se borran sus regiones.</summary>
+/// <summary>El poligono de una zona en un panel: una zona se dibuja una vez por panel y al borrar la zona se borran sus regiones.</summary>
 internal sealed class clsConfiguracionRegionDano : IEntityTypeConfiguration<clsRegionDano>
 {
     public void Configure(EntityTypeBuilder<clsRegionDano> builder)

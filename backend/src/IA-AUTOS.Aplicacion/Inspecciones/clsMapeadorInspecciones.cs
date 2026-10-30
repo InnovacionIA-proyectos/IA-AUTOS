@@ -29,8 +29,8 @@ public static class clsMapeadorInspecciones
     public static HallazgoDto AHallazgo(clsHallazgo h, clsZonaDano? zona, string? cuadranteNombre, clsNivelSeveridad? nivel, IReadOnlyList<string> evidenciaFaltante) => new(
         h.Id, h.InspeccionId, h.ParteVehiculo, h.ClaseDano, h.TamanoDano,
         h.CoordsDiagrama is null ? null : new CoordsDiagramaDto(h.CoordsDiagrama.X, h.CoordsDiagrama.Y),
-        zona?.Numero, zona?.Lado, zona is { Codigo: not null } ? zona.Codigo : null,
-        cuadranteNombre, TextoDeZona(zona, cuadranteNombre) ?? h.ParteVehiculo,
+        zona?.Numero, zona?.Lado,
+        cuadranteNombre, TextoDeZona(zona, cuadranteNombre) ?? h.ParteVehiculo, zona?.AiagArea,
         h.TipoNovedad, h.NivelSeveridad, nivel?.Nombre, nivel?.Accion,
         h.Origen, h.Nota, h.EsPreexistente, h.HallazgoOrigenId, h.ConfirmadoPor, h.EstadoSeguimiento,
         evidenciaFaltante.Count == 0, evidenciaFaltante,
@@ -39,8 +39,7 @@ public static class clsMapeadorInspecciones
     public static HallazgoCreadoDto AHallazgoCreado(HallazgoDto hallazgo, clsEvidencia foto) => new(hallazgo, AEvidencia(foto));
 
     /// <summary>
-    /// El texto de una zona para mostrar: «Izquierdo 7 · Puerta delantera» (con lado), «Techo 30» (sin lado) o el nombre de una zona provisional
-    /// («Frente»). Nulo si no hay zona.
+    /// El texto de una zona para mostrar: «Izquierdo 7 · Puerta delantera» (con lado) o «54 · Parabrisas» (sin lado). Nulo si no hay zona.
     /// </summary>
     public static string? TextoDeZona(clsZonaDano? zona, string? cuadranteNombre)
     {
@@ -49,15 +48,14 @@ public static class clsMapeadorInspecciones
             return null;
         }
 
-        if (zona.EsProvisional)
-        {
-            return zona.Nombre;
-        }
-
         return zona.Lado is { Length: > 0 } lado
             ? $"{char.ToUpperInvariant(lado[0])}{lado[1..]} {zona.Numero} · {cuadranteNombre}"
-            : $"{cuadranteNombre} {zona.Numero}";
+            : $"{zona.Numero} · {cuadranteNombre}";
     }
+
+    /// <summary>La zona para un informe impreso con su codigo AIAG: «Izquierdo 4 · Guardafango delantero (AIAG 14/16)». Sin codigo, la zona sola.</summary>
+    public static string? ZonaConAiag(string? zona, string? aiagArea) =>
+        zona is not null && !string.IsNullOrWhiteSpace(aiagArea) ? $"{zona} (AIAG {aiagArea.Trim()})" : zona;
 
     public static EvidenciaDto AEvidencia(clsEvidencia e) => new(
         e.Id, e.InspeccionId, e.HallazgoId, e.SelloFecha, e.SelloLat, e.SelloLng,
