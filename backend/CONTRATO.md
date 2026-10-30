@@ -1058,7 +1058,7 @@ No cuenta lo que aún no se cerró, ni las inspecciones de otro VIN, ni la inspe
 Al crear el hallazgo el servidor valida que el origen sea de esa lista, con la misma zona y clase.
 
 ### `POST /api/inspecciones/{id}/evidencias`
-Campo (creador o administrador). Registra una foto **ya subida** con `POST /api/uploads`: de una **vista** (`vista_id`) o de un **hallazgo** (`hallazgo_id`), no de ambos. `201` con el `EvidenciaDto`.
+Campo (creador o administrador). Registra una foto **ya subida** con `POST /api/uploads`: de una **vista** (`vista_id`), de un **hallazgo** (`hallazgo_id`) o de un **extra del vehículo** (`extra_id`), de **una sola** de las tres cosas (`400` en `vista_id` si vienen varias; `404` si el hallazgo o el extra no son de esta inspección). `201` con el `EvidenciaDto`, que trae `extra_id` (nulo en las demás fotos).
 
 ```json
 {
@@ -1097,6 +1097,23 @@ Es lo que hace la app cuando una foto quedó «sin ubicación».
 
 `sin_ubicacion` es `true` cuando la foto se tomó sin señal de GPS (`sello_lat` y `sello_lng` valen 0): muéstrela marcada y pida repetirla antes de cerrar. `es_constancia` es `true` en la foto de
 una constancia de no firma (se registra con `POST /api/inspecciones/{id}/transferencia/no-firma`, no con este endpoint) y esa foto no cuenta como foto de una vista.
+
+### Extras del vehículo: `POST|PUT|DELETE /api/inspecciones/{id}/extras`
+Un **extra** es un elemento del vehículo fuera del dibujo estándar (barras de techo, volco, platón…) que reporta una inspección **en borrador**, con su tipo, sus fotos selladas y una observación. No es un hallazgo: no toca el dibujo ni cuenta en los patrones, el mapa de calor ni la tasa de rechazo. Lo hacen `inspector`, `conductor` y `admin` (el creador del informe o un administrador); `409` si la inspección está cerrada (los extras quedan inmutables al cierre).
+
+```json
+{ "tipo": "otro", "texto": "portabicicletas", "observacion": "en el techo" }
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `tipo` | sí | el `codigo` de un tipo **activo** de `tipos-extra` (`400` en `tipo` si no existe o está inactivo) |
+| `texto` | solo con `otro` | obligatorio con el tipo `otro` (máximo 100 caracteres) y **no se admite** con los demás (`400` en `texto`) |
+| `observacion` | no | máximo 500 caracteres |
+
+`POST` responde `201` con el `ExtraDto`: `{ id, inspeccion_id, tipo, tipo_nombre, texto, nombre, observacion, created_at, updated_at, fotos: [EvidenciaDto] }`; `nombre` es cómo se muestra («Platón», «Otro: portabicicletas»). `PUT /api/inspecciones/{id}/extras/{extra_id}` reemplaza los tres campos (`200` con el `ExtraDto`; el tipo actual de un extra se conserva aunque se haya inactivado después). `DELETE` responde `204`; un extra **con fotos no se quita** (`409`: la foto es evidencia y no se borra). `404` si el extra no es de esta inspección. Las **fotos** del extra se envían a `POST /api/inspecciones/{id}/evidencias` con `extra_id`, selladas como las demás (fecha, ubicación, precisión, dispositivo, hash y sello del servidor). Cada cambio queda auditado (`extra.crear|actualizar|quitar`).
+
+El detalle de la inspección (`GET /api/inspecciones/{id}`) y el inventario del VIN (`GET /api/vehiculos/{vin}/inventario`, en cada inspección) traen `extras` con el `ExtraDto` de cada uno y sus fotos. El informe PDF y el PDF del inventario los presentan en una sección propia («Extras del vehículo») con su galería sellada, dentro del máximo de 60 fotos. `inspecciones.xlsx` gana la columna **Extras** (cuántos reportó cada inspección); las demás exportaciones, el mapa de calor y los indicadores no los cuentan.
 
 ### `POST /api/inspecciones/{id}/cerrar`
 Campo (creador o administrador). Cierra el informe; después ya no admite cambios. Sin cuerpo. `200`:
@@ -1702,6 +1719,7 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | `cuadrante-regiones` | La **región tocable** de cada zona numerada en cada panel (una fila por aparición). Las zonas provisionales no tienen región | `id`, `panel` (código), `cuadrante_id`, `numero`, `nombre`, `lado` (`izquierdo`, `derecho` o `null` del 26 en adelante), `geometria` |
 | `clientes` | Las empresas a las que pertenecen los usuarios y los vehículos (hoy `sofasa`). El primero activo por `orden` es el cliente por defecto de lo que se crea sin cliente explícito | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `estados-sofasa` | Los estados de las órdenes Sofasa: el `codigo` es el `status_code` **real** de la orden y el `nombre`, su etiqueta (ver «Estados Sofasa» abajo). Empieza con los `status_code` que ya tienen las órdenes | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `tipos-extra` | Los tipos de extra del vehículo fuera del dibujo estándar: `barras_techo` «Barras de techo», `volco` «Volco», `platon` «Platón» y `otro` «Otro» (el único que admite un texto libre). Lo administra Calidad: lo crean y editan `admin`, `super_admin` y `coordinador_calidad` (`403` los demás); un tipo con extras reportados **no se borra** (`409`): se inactiva y los extras conservan su tipo, pero ya no se ofrece para extras nuevos | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `motivos-sin-inspector` | Los motivos por los que no hay inspector en un cargue (la excepción «No hay inspector», que activa el conductor en el momento): `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto) | `id`, `codigo`, `nombre`, `orden`, `activo`, `requiere_texto` |
 
 **Estados Sofasa (`estados-sofasa`).** `GET /api/sofasa/ordenes` sigue devolviendo `status_code` **sin traducir**; el portal lo traduce con este catálogo (`items.find(i => i.codigo === orden.status_code)?.nombre`; si el estado no está, muestra el código). A diferencia de los demás

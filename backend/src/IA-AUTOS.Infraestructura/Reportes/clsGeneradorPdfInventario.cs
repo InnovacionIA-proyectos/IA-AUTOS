@@ -48,10 +48,26 @@ internal sealed class clsGeneradorPdfInventario : IGeneradorPdfInventario
                 }
 
                 doc.Escribir($"    Evidencias: {inspeccion.Evidencias.Count}", 11);
-                var fotos = inspeccion.Evidencias.Where(e => datos.Fotos.ContainsKey(e.Id)).Select(e => datos.Fotos[e.Id]).ToList();
+                var fotos = inspeccion.Evidencias.Where(e => e.ExtraId is null && datos.Fotos.ContainsKey(e.Id)).Select(e => datos.Fotos[e.Id]).ToList();
                 if (fotos.Count > 0)
                 {
                     doc.Galeria(fotos.Select(AFoto).ToList(), 2, FOTO_ALTO);
+                }
+
+                // Los extras del vehiculo, cada uno con su observacion y su galeria de fotos selladas.
+                foreach (var extra in inspeccion.Extras ?? [])
+                {
+                    doc.Escribir($"    Extra: {extra.Nombre}", 11, true);
+                    if (!string.IsNullOrWhiteSpace(extra.Observacion))
+                    {
+                        doc.Escribir($"      Observación: {extra.Observacion}", 11);
+                    }
+
+                    var fotosDelExtra = extra.Fotos.Where(e => datos.Fotos.ContainsKey(e.Id)).Select(e => datos.Fotos[e.Id]).ToList();
+                    if (fotosDelExtra.Count > 0)
+                    {
+                        doc.Galeria(fotosDelExtra.Select(AFoto).ToList(), 2, FOTO_ALTO);
+                    }
                 }
             }
 

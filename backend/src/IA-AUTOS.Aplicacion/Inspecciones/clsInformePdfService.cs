@@ -125,9 +125,25 @@ public sealed class clsInformePdfService(
 
         // La segunda inspeccion del cargue (salida de la etapa Cargue) documenta la acomodacion: sus fotos sin vista son las de la acomodacion y el informe lista cada unidad con su posicion.
         var esAcomodacion = informe.Proceso == clsCodigosEtapa.CARGUE && informe.Momento == clsMomento.SALIDA;
+        // Los extras del vehiculo, con sus fotos: despues de las de los hallazgos y antes de las de las vistas.
+        var extras = new List<ExtraInforme>();
+        foreach (var extra in informe.Extras)
+        {
+            var fotosDelExtra = new List<FotoInforme>();
+            foreach (var foto in extra.Fotos.OrderBy(e => e.CreatedAt))
+            {
+                if (await CargarAsync(foto, $"Foto del extra: {extra.Nombre}", presupuesto, ct) is { } cargada)
+                {
+                    fotosDelExtra.Add(cargada);
+                }
+            }
+
+            extras.Add(new ExtraInforme(extra.Nombre, extra.Observacion, fotosDelExtra));
+        }
+
         var fotosDeVistas = new List<FotoInforme>();
         var fotosDeAcomodacion = new List<FotoInforme>();
-        foreach (var foto in informe.Evidencias.Where(e => e.HallazgoId is null && !e.EsConstancia && !e.EsSello).OrderBy(e => e.CreatedAt))
+        foreach (var foto in informe.Evidencias.Where(e => e.HallazgoId is null && e.ExtraId is null && !e.EsConstancia && !e.EsSello).OrderBy(e => e.CreatedAt))
         {
             var deAcomodacion = esAcomodacion && foto.VistaId is null;
             var titulo = foto.VistaId is { } vistaId ? $"Vista: {vistas.GetValueOrDefault(vistaId) ?? "sin nombre"}" : deAcomodacion ? "Foto de la acomodación" : "Foto adicional";
@@ -175,7 +191,8 @@ public sealed class clsInformePdfService(
             informe.NotasAclaratorias.Select(AInforme).ToList(),
             presupuesto.Omitidas,
             reloj.Ahora,
-            esAcomodacion ? new AcomodacionInforme(await UnidadesDeAcomodacionAsync(informe.ViajeId, ct), fotosDeAcomodacion) : null);
+            esAcomodacion ? new AcomodacionInforme(await UnidadesDeAcomodacionAsync(informe.ViajeId, ct), fotosDeAcomodacion) : null,
+            extras);
         var momento = informe.Momento;
         return new InformePdf(generador.Generar(datos), $"informe-{informe.Vin}-{informe.Proceso}-{momento}-v{informe.Version}.pdf");
     }

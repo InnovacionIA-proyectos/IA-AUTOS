@@ -131,6 +131,36 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
     }
 
     /// <summary>
+    /// Agrega un extra del vehiculo (fuera del dibujo estandar) a una inspeccion en borrador: <c>tipo</c> (codigo de un tipo activo de <c>tipos-extra</c>), <c>texto</c> (obligatorio con «otro», no se admite en los
+    /// demas) y <c>observacion</c> (opcional, hasta 500 caracteres). Sus fotos se envian despues a <c>POST /api/inspecciones/{id}/evidencias</c> con <c>extra_id</c>. El cierre exige al menos una foto por extra
+    /// («El extra 'Barras de techo' no tiene foto»). 409 si la inspeccion esta cerrada.
+    /// </summary>
+    [HttpPost("{id:guid}/extras")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
+    [ProducesResponseType<ExtraDto>(StatusCodes.Status201Created)]
+    [CuerpoSolicitud(typeof(CrearExtraRequest))]
+    public async Task<IActionResult> AgregarExtra(Guid id, CancellationToken ct) =>
+        Creado(await servicio.AgregarExtraAsync(id, await LeerCuerpoAsync<CrearExtraRequest>(ct), ct));
+
+    /// <summary>Cambia el tipo, el texto y la observacion de un extra de una inspeccion en borrador (los tres reemplazan a los guardados). 404 si el extra no es de esta inspeccion; 409 si esta cerrada.</summary>
+    [HttpPut("{id:guid}/extras/{extra_id:guid}")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
+    [ProducesResponseType<ExtraDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(ActualizarExtraRequest))]
+    public async Task<IActionResult> ActualizarExtra(Guid id, [FromRoute(Name = "extra_id")] Guid extraId, CancellationToken ct) =>
+        Ok(await servicio.ActualizarExtraAsync(id, extraId, await LeerCuerpoAsync<ActualizarExtraRequest>(ct), ct));
+
+    /// <summary>Quita un extra de una inspeccion en borrador. 409 si tiene fotos (la foto es evidencia y no se borra) o si la inspeccion esta cerrada.</summary>
+    [HttpDelete("{id:guid}/extras/{extra_id:guid}")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> QuitarExtra(Guid id, [FromRoute(Name = "extra_id")] Guid extraId, CancellationToken ct)
+    {
+        await servicio.QuitarExtraAsync(id, extraId, ct);
+        return NoContent();
+    }
+
+    /// <summary>
     /// Guarda un hallazgo con su zona (<c>cuadrante_numero</c> + <c>lado</c>, o <c>zona_provisional</c>), clase, tamano, nivel de severidad y su foto propia
     /// (<c>evidencia</c>, obligatoria: sin ella 400). <c>parte_vehiculo</c> y <c>coords_diagrama</c> ya no se aceptan.
     /// </summary>

@@ -97,6 +97,8 @@ Los elementos que no están en el dibujo (barras de techo, volco, platón…) se
 
 `ddl.sql` ya trae el esquema nuevo y `tests/verificar-ddl.sql` cubre sus restricciones. No cambia ningún dato existente.
 
+**En la API:** el catálogo se sirve como `tipos-extra` (`GET|POST /api/catalogos/tipos-extra`, `PATCH|DELETE .../{id}`, con el mismo CRUD genérico, caché y versión de los demás; lo cambian `admin`, `super_admin` y `coordinador_calidad`). Borrar un tipo con extras responde `409` «El valor está en uso y no se puede borrar: solo puede inactivarlo». Los extras se reportan con `POST /api/inspecciones/{id}/extras` (ver CONTRATO.md); una foto de un extra es una evidencia con `extra_id`, no cuenta como foto de la acomodación, y el cierre de la inspección exige al menos una foto por extra.
+
 ## Cargar los cuadrantes y las acciones de los niveles
 
 Los cuadrantes de la ficha del vehículo genérico (36 zonas y 97 polígonos) se cargan con

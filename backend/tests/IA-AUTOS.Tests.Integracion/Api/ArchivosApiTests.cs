@@ -34,7 +34,7 @@ public sealed class clsAlmacenS3Fixture : IAsyncLifetime
     public async Task DisposeAsync() => await _contenedor.DisposeAsync();
 }
 
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private static readonly byte[] JPEG = [0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, .. Enumerable.Range(0, 200).Select(i => (byte)i)];
@@ -246,7 +246,7 @@ public sealed class ArchivosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
     }
 }
 
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class ArchivosS3ApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private readonly clsAlmacenS3Fixture _almacen = new();

@@ -39,6 +39,11 @@ internal sealed class clsConfiguracionCliente : IEntityTypeConfiguration<clsClie
     public void Configure(EntityTypeBuilder<clsCliente> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblClientes");
 }
 
+internal sealed class clsConfiguracionTipoExtra : IEntityTypeConfiguration<clsTipoExtra>
+{
+    public void Configure(EntityTypeBuilder<clsTipoExtra> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblTiposExtra");
+}
+
 internal sealed class clsConfiguracionClaseDano : IEntityTypeConfiguration<clsClaseDano>
 {
     public void Configure(EntityTypeBuilder<clsClaseDano> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblClasesDano");

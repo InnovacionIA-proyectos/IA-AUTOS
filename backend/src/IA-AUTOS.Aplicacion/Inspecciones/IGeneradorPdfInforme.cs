@@ -50,6 +50,9 @@ public sealed record NotaInforme(DateTimeOffset Fecha, string Autor, string Text
 /// <summary>Una unidad del viaje con su posicion en la ninera (nula si no la tiene), para el informe de la segunda inspeccion del cargue; <c>NoSale</c> marca la que no sale del viaje.</summary>
 public sealed record UnidadAcomodacionInforme(string Vin, int? Posicion, bool NoSale);
 
+/// <summary>Un extra del vehiculo del informe: como se nombra («Barras de techo», «Otro: portabicicletas»), su observacion y sus fotos selladas.</summary>
+public sealed record ExtraInforme(string Nombre, string? Observacion, IReadOnlyList<FotoInforme> Fotos);
+
 /// <summary>La acomodacion en la ninera del informe de la segunda inspeccion del cargue: cada unidad con su posicion y las fotos de la acomodacion.</summary>
 public sealed record AcomodacionInforme(IReadOnlyList<UnidadAcomodacionInforme> Unidades, IReadOnlyList<FotoInforme> Fotos);
 
@@ -85,7 +88,8 @@ public sealed record DatosInforme(
     IReadOnlyList<NotaInforme> NotasAclaratorias,
     int FotosOmitidas,
     DateTimeOffset GeneradaAt,
-    AcomodacionInforme? Acomodacion = null);
+    AcomodacionInforme? Acomodacion = null,
+    IReadOnlyList<ExtraInforme>? Extras = null);
 
 /// <summary>Genera el informe de una inspeccion en PDF, con las fotos y los paneles incrustados.</summary>
 public interface IGeneradorPdfInforme

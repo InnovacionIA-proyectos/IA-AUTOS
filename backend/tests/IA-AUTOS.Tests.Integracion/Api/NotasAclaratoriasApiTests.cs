@@ -10,7 +10,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Notas aclaratorias: una aclaracion de una inspeccion, un hallazgo o una transferencia es un registro nuevo (tambien con la inspeccion cerrada) que agrega su autor, el administrador o el
 /// coordinador de calidad; nadie la edita ni la borra y queda en la auditoria.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed class NotasAclaratoriasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);

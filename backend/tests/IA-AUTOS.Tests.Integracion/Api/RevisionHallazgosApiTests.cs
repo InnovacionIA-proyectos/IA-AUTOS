@@ -12,7 +12,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// La revision de un hallazgo del conductor: el inspector (de un VIN de sus viajes) y los administradores lo ubican en su zona y le asignan clase y nivel V; el coordinador de calidad tambien lo hace con
 /// los de la salida de un Cargue sin personal de apoyo. Queda en el historial, el hallazgo pasa al seguimiento y un nivel critico alerta al cliente.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-10-21T08:30:00-05:00";

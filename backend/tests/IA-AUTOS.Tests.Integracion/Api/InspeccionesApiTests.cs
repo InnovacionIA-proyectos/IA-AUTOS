@@ -11,7 +11,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Inspeccion de salida y de llegada: las 7 vistas obligatorias con su sello, las fotos adicionales, la foto propia de cada hallazgo, la
 /// etapa anterior cerrada y las correcciones por version. Las etapas del escenario son Cargue (0), Transporte (1) y Descargue (2).
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-07-17T12:30:15.123Z";
@@ -787,7 +787,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(
             [
                 "id", "inspeccion_id", "hallazgo_id", "sello_fecha", "sello_lat", "sello_lng", "url", "url_expira_at", "created_at", "updated_at", "vista_id", "hash_sha256",
-                "sello_servidor_at", "precision", "dispositivo_id", "nota", "sin_ubicacion", "es_constancia", "es_sello",
+                "sello_servidor_at", "precision", "dispositivo_id", "nota", "sin_ubicacion", "es_constancia", "es_sello", "extra_id",
             ],
             e.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal(vista, e.GetProperty("vista_id").GetGuid());

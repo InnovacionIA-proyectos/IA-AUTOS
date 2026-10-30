@@ -11,7 +11,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Reportes del tablero (GET /api/reportes/*): quien los ve (coordinador, comercial y administradores, con lo de su cliente), cada formula (cobertura, adopcion, tiempo de captura, averias, patrones
 /// e indicador diario), los filtros y los encabezados de las rutas obsoletas.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaTableroBase(bd)
 {
     private static readonly string[] RUTAS =

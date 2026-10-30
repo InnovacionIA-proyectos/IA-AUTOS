@@ -13,7 +13,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// catalogo <c>motivos-sin-inspector</c>) y crea la salida; queda el motivo en la inspeccion, una novedad de proceso visible en el detalle del viaje, el aviso al coordinador de calidad y al administrador del
 /// cliente y su registro en la auditoria. Fuera de ese caso el motivo no se admite.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-10-23T08:30:00-05:00";

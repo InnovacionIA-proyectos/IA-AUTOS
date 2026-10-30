@@ -7,7 +7,7 @@ using IAAutos.Tests.Integracion.Infraestructura;
 
 namespace IAAutos.Tests.Integracion.Api;
 
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class ReportesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);

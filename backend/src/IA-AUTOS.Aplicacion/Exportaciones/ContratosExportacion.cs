@@ -41,7 +41,7 @@ public sealed record FilaExportViaje(
     DateTimeOffset? Inicio,
     DateTimeOffset? Cierre);
 
-/// <summary>Una inspeccion (cada version) con quien la hizo y las firmas de su transferencia.</summary>
+/// <summary>Una inspeccion (cada version) con quien la hizo, las firmas de su transferencia y cuantos extras del vehiculo reporto.</summary>
 public sealed record FilaExportInspeccion(
     ContextoExportacion Contexto,
     string Momento,
@@ -56,7 +56,8 @@ public sealed record FilaExportInspeccion(
     string? EntregaIp,
     string? RecibeNombre,
     DateTimeOffset? RecibeFecha,
-    string? RecibeIp);
+    string? RecibeIp,
+    int Extras = 0);
 
 /// <summary>Un hallazgo con la inspeccion donde se registro, su zona (lado + numero + nombre) y la fecha, hora y ubicacion de su foto.</summary>
 public sealed record FilaExportHallazgo(

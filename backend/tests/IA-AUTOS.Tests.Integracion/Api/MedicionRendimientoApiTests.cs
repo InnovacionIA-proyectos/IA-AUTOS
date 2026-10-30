@@ -27,7 +27,7 @@ public sealed class FactMedicionAttribute : FactAttribute
 /// cinco veces; el resultado (mediana y maximo, en milisegundos) se escribe en la consola y, si se define <c>RENDIMIENTO_SALIDA</c>, en ese archivo en formato de tabla de Markdown. Las cotas son
 /// holgadas: la prueba avisa de una regresion grande, no de una variacion normal de la maquina.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed class MedicionRendimientoApiTests(clsBaseDatosFixture bd, ITestOutputHelper salida) : clsPruebaApiBase(bd)
 {
     private const int VEHICULOS = 17_000;

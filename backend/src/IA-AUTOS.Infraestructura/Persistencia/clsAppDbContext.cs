@@ -67,6 +67,10 @@ public sealed class clsAppDbContext : DbContext
 
     public DbSet<clsEvidencia> Evidencias => Set<clsEvidencia>();
 
+    public DbSet<clsInspeccionExtra> InspeccionExtras => Set<clsInspeccionExtra>();
+
+    public DbSet<clsTipoExtra> TiposExtra => Set<clsTipoExtra>();
+
     public DbSet<clsTransferenciaCustodia> Transferencias => Set<clsTransferenciaCustodia>();
 
     public DbSet<clsViaje> Viajes => Set<clsViaje>();

@@ -13,7 +13,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Parametros editables: quien administra los catalogos los consulta y cambia el valor (sin crear ni borrar claves), un valor que no cumple su tipo se rechaza en el campo valor, el cambio se aplica
 /// de inmediato en los procesos que lo leen y queda en la auditoria con el valor antes y despues.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class ParametrosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);

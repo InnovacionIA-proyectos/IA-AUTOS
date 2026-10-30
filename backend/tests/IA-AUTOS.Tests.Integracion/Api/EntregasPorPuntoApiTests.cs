@@ -14,7 +14,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// se firma una vez entre quien entrega y quien recibe y la firma queda en la transferencia de cada unidad (ESC-02, ESC-05), una sola firma no bloquea y avisa al coordinador (ESC-03), y el viaje se finaliza cuando
 /// todas sus unidades tienen el Descargue cerrado.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private readonly clsEnviadorPushFalso _push = new();

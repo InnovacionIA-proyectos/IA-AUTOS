@@ -24,6 +24,7 @@ internal sealed class clsGeneradorPdfInforme : IGeneradorPdfInforme
         Etapa(doc, d);
         Acomodacion(doc, d);
         FotosDeVistas(doc, d);
+        Extras(doc, d);
         Hallazgos(doc, d);
         Paneles(doc, d);
         Transferencia(doc, d.Transferencia);
@@ -104,6 +105,30 @@ internal sealed class clsGeneradorPdfInforme : IGeneradorPdfInforme
         }
 
         doc.Galeria(acomodacion.Fotos.Select(AFoto).ToList(), 2, FOTO_ALTO);
+    }
+
+    /// <summary>Los extras del vehiculo fuera del dibujo estandar, cada uno con su observacion y su galeria de fotos selladas; la seccion solo sale si la inspeccion reporto alguno.</summary>
+    private static void Extras(clsDocumentoPdf doc, DatosInforme d)
+    {
+        if (d.Extras is not { Count: > 0 } extras)
+        {
+            return;
+        }
+
+        Seccion(doc, "Extras del vehículo");
+        foreach (var extra in extras)
+        {
+            doc.Escribir($"• {extra.Nombre}", 11, true);
+            if (!string.IsNullOrWhiteSpace(extra.Observacion))
+            {
+                doc.Escribir($"  Observación: {extra.Observacion}", 11);
+            }
+
+            if (extra.Fotos.Count > 0)
+            {
+                doc.Galeria(extra.Fotos.Select(AFoto).ToList(), 2, FOTO_ALTO);
+            }
+        }
     }
 
     private static void FotosDeVistas(clsDocumentoPdf doc, DatosInforme d)

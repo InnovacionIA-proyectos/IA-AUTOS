@@ -9,7 +9,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// archivo versionado (docs/openapi.json) no se desvie de lo que genera la API.
 /// Para regenerarlo tras un cambio intencional: definir ACTUALIZAR_OPENAPI=1 y OPENAPI_DESTINO=&lt;ruta de docs/openapi.json&gt;.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private static readonly JsonSerializerOptions INDENTADO = new() { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };

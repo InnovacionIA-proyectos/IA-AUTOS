@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
-using Testcontainers.MsSql;
 
 namespace IAAutos.Tests.Integracion.Infraestructura;
 
@@ -17,20 +16,16 @@ public sealed partial class MigracionPosicionTests : IAsyncLifetime
     private const string VEHICULO_2 = "22222222-2222-2222-2222-222222222222";
     private const string VEHICULO_3 = "22222222-2222-2222-2222-222222222223";
 
-    private readonly MsSqlContainer _contenedor = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2019-latest").Build();
     private string _cadena = string.Empty;
 
     public async Task InitializeAsync()
     {
-        await _contenedor.StartAsync();
-        var maestra = _contenedor.GetConnectionString();
-        await EjecutarAsync(maestra, "CREATE DATABASE IAAutosMigracionPosicion");
-        _cadena = new SqlConnectionStringBuilder(maestra) { InitialCatalog = "IAAutosMigracionPosicion" }.ConnectionString;
+        _cadena = await clsServidorSql.CrearBaseAsync("IAAutosMigracionPosicion");
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "Infraestructura", "Esquemas", "ddl-previo-a-posicion.sql"));
         await EjecutarAsync(_cadena, DATOS_PREVIOS);
     }
 
-    public async Task DisposeAsync() => await _contenedor.DisposeAsync();
+    public async Task DisposeAsync() => await clsServidorSql.EliminarBaseAsync(_cadena);
 
     private static async Task EjecutarAsync(string cadena, string sql)
     {

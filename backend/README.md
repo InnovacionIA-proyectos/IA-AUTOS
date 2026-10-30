@@ -88,6 +88,7 @@ Las pruebas de integracion levantan contenedores (SQL Server 2019 y un almacen S
 - `docs/arquitectura.md`: capas, modulos, reglas de negocio y decisiones.
 - `docs/api.md`: endpoints, roles y formato de errores.
 - `docs/configuracion.md`: variables de entorno y como obtenerlas.
+- `docs/pruebas.md`: cómo están armadas las pruebas de integración, cómo se ejecutan y por qué se comportan como producción.
 - `docs/seguridad.md`: controles aplicados y riesgos aceptados.
 - `docs/migracion-backend.md`: corte desde el sistema anterior, ETL y reversa.
 - `database/migracion/README.md`: traslado de datos PostgreSQL a SQL Server.

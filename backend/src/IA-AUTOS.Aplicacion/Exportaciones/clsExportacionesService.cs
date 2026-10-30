@@ -60,10 +60,10 @@ public sealed class clsExportacionesService(
             "Inspecciones",
             [
                 .. COLUMNAS_CONTEXTO, new("Momento", 10), new("Versión", 9), new("Estado", 10), new("Inicio", 20), new("Cierre", 20), new("Inspector", 24), new("Tipo de cierre", 14),
-                new("Entrega: quién", 24), new("Entrega: fecha", 20), new("Entrega: IP", 16), new("Recibe: quién", 24), new("Recibe: fecha", 20), new("Recibe: IP", 16),
+                new("Entrega: quién", 24), new("Entrega: fecha", 20), new("Entrega: IP", 16), new("Recibe: quién", 24), new("Recibe: fecha", 20), new("Recibe: IP", 16), new("Extras", 8),
             ],
             resultado,
-            f => [.. Contexto(f.Contexto, clientes), f.Momento, f.Version, f.Estado, f.Inicio, f.Cierre, f.Inspector, f.TipoCierre, f.EntregaNombre, f.EntregaFecha, f.EntregaIp, f.RecibeNombre, f.RecibeFecha, f.RecibeIp]);
+            f => [.. Contexto(f.Contexto, clientes), f.Momento, f.Version, f.Estado, f.Inicio, f.Cierre, f.Inspector, f.TipoCierre, f.EntregaNombre, f.EntregaFecha, f.EntregaIp, f.RecibeNombre, f.RecibeFecha, f.RecibeIp, f.Extras]);
     }
 
     // ---------------------------------------------------------------------------------------------- hallazgos

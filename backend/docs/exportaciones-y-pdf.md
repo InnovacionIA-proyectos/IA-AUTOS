@@ -17,7 +17,7 @@ Escribe un paquete OpenXML minimo (un libro de una hoja) con `System.IO.Compress
 | Archivo | Una fila por | Origen de los filtros |
 |---|---|---|
 | `viajes.xlsx` | unidad (VIN), etapa y momento (salida o llegada) de cada viaje: los seis registros de la unidad, con su estado (`sin_inspeccion`, `borrador` o `cerrada`) | listado de viajes |
-| `inspecciones.xlsx` | inspeccion (cada version), con el inspector y las firmas de la transferencia | listado de inspecciones |
+| `inspecciones.xlsx` | inspeccion (cada version), con el inspector, las firmas de la transferencia y la columna `Extras` (cuantos extras del vehiculo reporto) | listado de inspecciones |
 | `hallazgos.xlsx` | hallazgo, con su zona y la fecha, hora y ubicacion de su foto | listado de hallazgos |
 
 Cada exportacion reutiliza el analisis de filtros de su listado (mismos nombres, misma validacion y mismo `400`) y solo trae los datos del cliente del usuario: el cliente de cada fila es el del **vehiculo**.

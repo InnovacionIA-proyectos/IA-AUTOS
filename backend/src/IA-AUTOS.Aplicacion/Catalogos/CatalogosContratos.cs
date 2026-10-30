@@ -20,6 +20,7 @@ public static class clsNombresCatalogo
     public const string CLIENTES = "clientes";
     public const string ESTADOS_SOFASA = "estados-sofasa";
     public const string MOTIVOS_SIN_INSPECTOR = "motivos-sin-inspector";
+    public const string TIPOS_EXTRA = "tipos-extra";
     public const string LUGARES = "lugares";
 }
 

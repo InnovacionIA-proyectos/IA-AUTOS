@@ -3,7 +3,7 @@ using IAAutos.Tests.Integracion.Infraestructura;
 
 namespace IAAutos.Tests.Integracion.Api;
 
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed class TransversalesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     [Fact]

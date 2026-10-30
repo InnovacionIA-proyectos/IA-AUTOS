@@ -167,6 +167,8 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
         public DateTimeOffset? RecibeFecha { get; init; }
 
         public string? RecibeIp { get; init; }
+
+        public int Extras { get; init; }
     }
 
     public async Task<ResultadoExportacion<FilaExportInspeccion>> InspeccionesAsync(FiltrosInspecciones f, Guid? clienteId, int maximo, CancellationToken ct = default)
@@ -236,11 +238,12 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                            RecibeNombre = re.Nombre,
                            RecibeFecha = tr.FirmaRecibeAt,
                            RecibeIp = tr.FirmaRecibeIp,
+                           Extras = contexto.InspeccionExtras.Count(x => x.InspeccionId == i.Id),
                        };
 
         var filas = (await consulta.Take(maximo + 1).ToListAsync(ct)).Select(x => new FilaExportInspeccion(
             Contexto(x.Contexto), x.Inspeccion.Momento, x.Inspeccion.Version, x.Inspeccion.Estado, x.Inspeccion.IniciadaAt, x.Inspeccion.CerradaAt, x.Inspector,
-            x.TipoCierre, x.EntregaNombre, x.EntregaFecha, x.EntregaIp, x.RecibeNombre, x.RecibeFecha, x.RecibeIp)).ToList();
+            x.TipoCierre, x.EntregaNombre, x.EntregaFecha, x.EntregaIp, x.RecibeNombre, x.RecibeFecha, x.RecibeIp, x.Extras)).ToList();
         return Limitar(filas, maximo);
     }
 

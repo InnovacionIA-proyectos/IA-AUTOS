@@ -13,7 +13,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Las alertas preventivas (hallazgo critico al cerrar, patron por umbral) y los avisos operativos (captura incompleta, transferencia pendiente): a quien llega cada una, una sola vez, con los
 /// parametros vigentes y sin correo.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-10-21T08:30:00-05:00";
