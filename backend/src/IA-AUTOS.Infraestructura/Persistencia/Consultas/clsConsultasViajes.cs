@@ -291,7 +291,20 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                 clsMapeadorViajes.ANoSale(v.EstadoUnidad, v.NoSaleMotivo, v.NoSaleHallazgoId, v.NoSaleMarcadoPor, v.MarcadoPorNombre, v.NoSaleAt, v.VinReemplazo),
                 clsEstadoTransporte.De(v.LlegadaCerrada, v.Novedades), v.Novedades, v.LugarDestinoId, v.LugarDestino));
         var clientes = await ClientesPorViajeAsync(ids, soloDeCliente, ct);
-        return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id])).ToList();
+
+        // Las novedades de proceso de las unidades del viaje (las que quien consulta puede ver), de la mas antigua a la mas reciente.
+        var novedades = await (from n in contexto.NovedadesProceso.AsNoTracking()
+                               join h in contexto.Vehiculos.AsNoTracking() on n.VehiculoId equals h.Id
+                               join u in contexto.Usuarios.AsNoTracking() on n.UsuarioId equals u.Id into usuarios
+                               from u in usuarios.DefaultIfEmpty()
+                               join m in contexto.MotivosSinInspector.AsNoTracking() on n.MotivoCodigo equals m.Codigo into motivos
+                               from m in motivos.DefaultIfEmpty()
+                               where ids.Contains(n.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente)
+                               orderby n.Fecha, n.CreatedAt
+                               select new { n.ViajeId, n.Tipo, n.MotivoCodigo, Motivo = (string?)m.Nombre, Texto = n.MotivoTexto, Usuario = (string?)u.Nombre, n.Fecha, h.Vin, n.InspeccionId }).ToListAsync(ct);
+        var novedadesPorViaje = novedades.ToLookup(
+            n => n.ViajeId, n => new NovedadDelViajeDto(n.Tipo, n.MotivoCodigo, n.Motivo, n.Texto, n.Usuario, n.Fecha, n.Vin, n.InspeccionId));
+        return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id], novedadesPorViaje[f.Viaje.Id].ToList())).ToList();
     }
 
     private static ViajeResumenDto AResumen(FilaViaje f, IReadOnlyList<ClienteDto> clientes) => new(
@@ -300,9 +313,9 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         f.Viaje.Estado, f.TotalVehiculos, f.VehiculosCompletos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt,
         f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue);
 
-    private static ViajeDto ADto(FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes) => new(
+    private static ViajeDto ADto(FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<NovedadDelViajeDto> novedades) => new(
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
-        f.Viaje.Estado, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt,
+        f.Viaje.Estado, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt, novedades,
         f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue);
 }

@@ -213,6 +213,25 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
+    public async Task El_contrato_ya_no_tiene_la_marca_de_personal_de_apoyo_y_el_viaje_trae_sus_novedades_de_proceso()
+    {
+        var contrato = await ObtenerContratoAsync();
+        var esquemas = contrato["components"]!["schemas"]!.AsObject();
+
+        // El cargue no lleva ninguna marca previa: con_personal_apoyo no esta en ningun esquema (crear viaje, PATCH, viaje, listado ni inventario).
+        foreach (var (nombre, esquema) in esquemas)
+        {
+            Assert.False(esquema!["properties"] is JsonObject propiedades && propiedades.ContainsKey("con_personal_apoyo"), $"El esquema {nombre} todavia trae con_personal_apoyo");
+        }
+
+        Assert.DoesNotContain("con_personal_apoyo", contrato.ToJsonString());
+        Assert.Contains("novedades_proceso", esquemas["ViajeDto"]!["properties"]!.AsObject().Select(p => p.Key));
+        Assert.Equal(
+            ["tipo", "motivo_codigo", "motivo", "texto", "usuario_nombre", "fecha", "vin", "inspeccion_id"],
+            esquemas["NovedadDelViajeDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList());
+    }
+
+    [Fact]
     public async Task El_contrato_no_cambia_sin_cambiar_la_version()
     {
         var generado = (await ObtenerContratoAsync()).ToJsonString(INDENTADO);

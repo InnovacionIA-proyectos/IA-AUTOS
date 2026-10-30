@@ -9,8 +9,9 @@ using Microsoft.Extensions.DependencyInjection;
 namespace IAAutos.Tests.Integracion.Api;
 
 /// <summary>
-/// La excepcion «No hay inspector»: en un Cargue con personal de apoyo el conductor del viaje crea la salida cuando trae el motivo (del catalogo <c>motivos-sin-inspector</c>); queda el motivo en la
-/// inspeccion, una novedad de proceso, el aviso al coordinador de calidad y al administrador del cliente y su registro en la auditoria. Fuera de ese caso el motivo no se admite.
+/// La excepcion «No hay inspector»: la salida del Cargue la hace siempre un inspector (el conductor recibe 403) y, si no hay inspector, el conductor del viaje la activa en el momento trayendo el motivo (del
+/// catalogo <c>motivos-sin-inspector</c>) y crea la salida; queda el motivo en la inspeccion, una novedad de proceso visible en el detalle del viaje, el aviso al coordinador de calidad y al administrador del
+/// cliente y su registro en la auditoria. Fuera de ese caso el motivo no se admite.
 /// </summary>
 [Collection(clsColeccionBaseDatos.NOMBRE)]
 public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
@@ -26,7 +27,7 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
 
     private sealed record Sesion(string Token, Guid UsuarioId);
 
-    /// <summary>Un viaje con su conductor y su inspector, y el Cargue con personal de apoyo; el coordinador y el administrador son del cliente de la unidad.</summary>
+    /// <summary>Un viaje con su conductor y su inspector; el coordinador y el administrador son del cliente de la unidad.</summary>
     private sealed record Escenario(Guid Viaje, Guid Vehiculo, Guid[] Etapas, string Vin, Sesion Conductor, Sesion Inspector, Sesion Coordinador, Sesion Admin);
 
     public override async Task InitializeAsync()
@@ -323,6 +324,99 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
         var transporte = inventario.GetProperty("etapas").EnumerateArray().Single(et => et.GetProperty("orden").GetInt32() == 2).GetProperty("inspecciones")[0];
         Assert.Equal(JsonValueKind.Null, transporte.GetProperty("motivo_sin_inspector").ValueKind);
         Assert.Equal(0, transporte.GetProperty("novedades_proceso").GetArrayLength());
+    }
+
+    // ------------------------------------------------------------------------- la excepcion se activa en el momento (ESC-02 a ESC-05)
+
+    [Fact]
+    public async Task Sin_la_excepcion_el_conductor_es_rechazado_con_403_y_el_cargue_nace_listo_para_el_inspector()
+    {
+        var e = await EscenarioAsync();
+
+        var delConductor = await CrearAsync(e.Conductor, e.Etapas[0]);
+        var delInspector = await CrearAsync(e.Inspector, e.Etapas[0]);
+
+        Assert.Equal(HttpStatusCode.Forbidden, delConductor.StatusCode);
+        Assert.Equal(
+            "La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción",
+            (await ComoJsonAsync(delConductor)).GetProperty("message").GetString());
+        Assert.Equal(HttpStatusCode.Created, delInspector.StatusCode);
+        Assert.Equal(0, await NovedadesAsync());
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones"));
+    }
+
+    [Fact]
+    public async Task Al_activar_la_excepcion_la_novedad_de_proceso_queda_en_el_detalle_del_viaje_como_registro_aparte_y_avisa_con_urgencia_alta()
+    {
+        var e = await EscenarioAsync();
+
+        var r = await ConMotivoAsync(e.Conductor, e.Etapas[0], "otro", "El inspector no se presentó");
+
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+        var viaje = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/viajes/{e.Viaje}"));
+        var novedades = viaje.GetProperty("novedades_proceso").EnumerateArray().ToList();
+        Assert.Single(novedades);
+        Assert.Equal(["tipo", "motivo_codigo", "motivo", "texto", "usuario_nombre", "fecha", "vin", "inspeccion_id"], novedades[0].EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal("cargue_sin_inspector", novedades[0].GetProperty("tipo").GetString());
+        Assert.Equal("otro", novedades[0].GetProperty("motivo_codigo").GetString());
+        Assert.Equal("Otro", novedades[0].GetProperty("motivo").GetString());
+        Assert.Equal("El inspector no se presentó", novedades[0].GetProperty("texto").GetString());
+        Assert.Equal("Nombre conductor@ejemplo.com", novedades[0].GetProperty("usuario_nombre").GetString());
+        Assert.Equal(DateTimeOffset.Parse(FECHA), novedades[0].GetProperty("fecha").GetDateTimeOffset());
+        Assert.Equal(e.Vin, novedades[0].GetProperty("vin").GetString());
+        Assert.Equal((await ComoJsonAsync(r)).GetProperty("id").GetGuid(), novedades[0].GetProperty("inspeccion_id").GetGuid());
+        // El coordinador y el administrador reciben el aviso de urgencia alta del viaje; el conductor y el inspector no.
+        foreach (var destinatario in new[] { e.Coordinador, e.Admin })
+        {
+            Assert.Equal(1, await Sembrador.ContarAsync(
+                "SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'novedad_proceso' AND Urgencia = 'alta' AND Canal = 'bandeja' AND UsuarioId = @u AND ViajeId = @v", ("@u", destinatario.UsuarioId), ("@v", e.Viaje)));
+        }
+
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'novedad_proceso' AND UsuarioId IN (@c, @i)", ("@c", e.Conductor.UsuarioId), ("@i", e.Inspector.UsuarioId)));
+        // Un viaje sin excepcion no trae novedades; el detalle del conductor del viaje tambien las ve.
+        var delConductor = await ComoJsonAsync(await Como(e.Conductor).GetAsync($"/api/viajes/{e.Viaje}"));
+        Assert.Equal(1, delConductor.GetProperty("novedades_proceso").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Solo_el_conductor_del_viaje_activa_la_excepcion_con_un_motivo_activo_del_catalogo()
+    {
+        var e = await EscenarioAsync();
+        var otroConductor = await SesionAsync("juan@ejemplo.com", clsRol.CONDUCTOR);
+
+        var otro = await ConMotivoAsync(otroConductor, e.Etapas[0]);
+        var inspector = await ConMotivoAsync(e.Inspector, e.Etapas[0]);
+        var coordinador = await ConMotivoAsync(e.Coordinador, e.Etapas[0]);
+        var inexistente = await ConMotivoAsync(e.Conductor, e.Etapas[0], "no_existe");
+
+        Assert.Equal(HttpStatusCode.Forbidden, otro.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, inspector.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, coordinador.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, inexistente.StatusCode);
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones"));
+        Assert.Equal(0, await NovedadesAsync());
+        // El conductor del viaje la activa y puede registrar la inspeccion de salida del cargue.
+        Assert.Equal(HttpStatusCode.Created, (await ConMotivoAsync(e.Conductor, e.Etapas[0])).StatusCode);
+    }
+
+    [Fact]
+    public async Task La_novedad_de_proceso_no_cuenta_en_los_patrones_por_zona_ni_en_la_tasa_diaria_de_novedad()
+    {
+        var e = await EscenarioAsync();
+        Assert.Equal(HttpStatusCode.Created, (await ConMotivoAsync(e.Conductor, e.Etapas[0])).StatusCode);
+        var hoy = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).ToString("yyyy-MM-dd");
+        var desde = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).AddDays(-10).ToString("yyyy-MM-dd");
+
+        var patrones = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/reportes/patrones?desde={desde}&hasta={hoy}"));
+        var diario = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/reportes/indicador-diario?fecha={hoy}"));
+        var novedades = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/reportes/novedades-proceso?desde={desde}&hasta={hoy}"));
+
+        // El viaje aporta 0 a los dos indicadores de danos; la novedad aparece aparte, en su propio reporte.
+        Assert.Equal(0, patrones.GetProperty("total").GetInt32());
+        Assert.Equal(0, diario.GetProperty("con_novedad").GetInt32());
+        Assert.Equal(0m, diario.GetProperty("porcentaje").GetDecimal());
+        Assert.Equal(1, novedades.GetProperty("total").GetInt32());
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
     }
 
     [Fact]

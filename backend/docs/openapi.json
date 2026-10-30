@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "2.10.0"
+    "version": "2.11.0"
   },
   "paths": {
     "/api/viajes": {
@@ -630,6 +630,18 @@
                         ],
                         "created_at": "2026-10-22T14:30:00.000Z",
                         "updated_at": "2026-10-22T14:30:00.000Z",
+                        "novedades_proceso": [
+                          {
+                            "tipo": "texto",
+                            "motivo_codigo": "texto",
+                            "motivo": "Mensaje de ejemplo",
+                            "texto": "texto",
+                            "usuario_nombre": "texto",
+                            "fecha": "2026-10-22T14:30:00.000Z",
+                            "vin": "9FBHSR4E8PM000001",
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                          }
+                        ],
                         "fecha_programada": "2026-10-22T14:30:00.000Z",
                         "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "lugar_cargue": "texto"
@@ -689,6 +701,18 @@
                         ],
                         "created_at": "2026-10-22T14:30:00.000Z",
                         "updated_at": "2026-10-22T14:30:00.000Z",
+                        "novedades_proceso": [
+                          {
+                            "tipo": "texto",
+                            "motivo_codigo": "texto",
+                            "motivo": "Mensaje de ejemplo",
+                            "texto": "texto",
+                            "usuario_nombre": "texto",
+                            "fecha": "2026-10-22T14:30:00.000Z",
+                            "vin": "9FBHSR4E8PM000001",
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                          }
+                        ],
                         "fecha_programada": "2026-10-22T14:30:00.000Z",
                         "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "lugar_cargue": "texto"
@@ -748,6 +772,18 @@
                         ],
                         "created_at": "2026-10-22T14:30:00.000Z",
                         "updated_at": "2026-10-22T14:30:00.000Z",
+                        "novedades_proceso": [
+                          {
+                            "tipo": "texto",
+                            "motivo_codigo": "texto",
+                            "motivo": "Mensaje de ejemplo",
+                            "texto": "texto",
+                            "usuario_nombre": "texto",
+                            "fecha": "2026-10-22T14:30:00.000Z",
+                            "vin": "9FBHSR4E8PM000001",
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                          }
+                        ],
                         "fecha_programada": "2026-10-22T14:30:00.000Z",
                         "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "lugar_cargue": "texto"
@@ -26244,6 +26280,70 @@
           }
         }
       },
+      "NovedadDelViajeDto": {
+        "examples": [
+          {
+            "tipo": "texto",
+            "motivo_codigo": "texto",
+            "motivo": "Mensaje de ejemplo",
+            "texto": "texto",
+            "usuario_nombre": "texto",
+            "fecha": "2026-10-22T14:30:00.000Z",
+            "vin": "9FBHSR4E8PM000001",
+            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "required": [
+          "tipo",
+          "motivo_codigo",
+          "motivo",
+          "texto",
+          "usuario_nombre",
+          "fecha",
+          "vin",
+          "inspeccion_id"
+        ],
+        "type": "object",
+        "properties": {
+          "tipo": {
+            "type": "string"
+          },
+          "motivo_codigo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "texto": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "usuario_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fecha": {
+            "format": "date-time"
+          },
+          "vin": {
+            "type": "string"
+          },
+          "inspeccion_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "NovedadesProcesoDto": {
         "examples": [
           {
@@ -29329,6 +29429,18 @@
             ],
             "created_at": "2026-10-22T14:30:00.000Z",
             "updated_at": "2026-10-22T14:30:00.000Z",
+            "novedades_proceso": [
+              {
+                "tipo": "texto",
+                "motivo_codigo": "texto",
+                "motivo": "Mensaje de ejemplo",
+                "texto": "texto",
+                "usuario_nombre": "texto",
+                "fecha": "2026-10-22T14:30:00.000Z",
+                "vin": "9FBHSR4E8PM000001",
+                "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              }
+            ],
             "fecha_programada": "2026-10-22T14:30:00.000Z",
             "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "lugar_cargue": "texto"
@@ -29353,7 +29465,8 @@
           "vehiculos",
           "clientes",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "novedades_proceso"
         ],
         "type": "object",
         "properties": {
@@ -29464,6 +29577,12 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "novedades_proceso": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NovedadDelViajeDto"
+            }
           },
           "fecha_programada": {},
           "lugar_cargue_id": {

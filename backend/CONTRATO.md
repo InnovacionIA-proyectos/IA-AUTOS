@@ -595,6 +595,7 @@ Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viaj
 `fecha_programada` es el día y la hora en que se programó el cargue (UTC), `lugar_cargue_id` / `lugar_cargue` el lugar **real** del cargue (catálogo `lugares`) y `lugar_destino_id` / `lugar_destino`
 el lugar de entrega de **cada unidad**; los tres pueden ser `null` en los viajes que no vienen de la carga por Excel. El listado trae `fecha_programada`, `lugar_cargue_id` y `lugar_cargue`.
 
+`novedades_proceso` son las novedades de proceso de las unidades del viaje (la excepción «No hay inspector» que activó el conductor y el recibo sin entrega), de la más antigua a la más reciente, cada una con `{ tipo, motivo_codigo, motivo, texto, usuario_nombre, fecha, vin, inspeccion_id }`: es un registro aparte, que no cuenta en los patrones por zona ni en la tasa diaria de novedad.
 `codigo_mtrack`, `tipo_unidad_id` y `placa` pueden ser `null` solo en los viajes migrados desde las asignaciones anteriores. `etapas` y `completas`
 de cada VIN cuentan sus etapas del viaje y las que ya tienen informe cerrado. `estado_unidad` es `activa` o `no_sale` y `no_sale` trae el motivo, el hallazgo, quién la marcó y
 cuándo (el mismo objeto del inventario); una unidad que no sale **sigue en la lista de VIN del viaje**. `estado_transporte` (`sin_registro`, `con_novedad`, `sin_novedad` o `llegada_con_novedad`) y `novedades`
