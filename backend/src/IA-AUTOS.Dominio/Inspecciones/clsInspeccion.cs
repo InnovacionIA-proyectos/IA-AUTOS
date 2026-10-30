@@ -176,7 +176,7 @@ public sealed class clsInspeccion : clsEntidadBase
     /// Las fotos adicionales (piezas en el baul y cojineria) nunca bloquean el cierre. Donde no hay vistas obligatorias (Transporte) el registro
     /// del conductor es su propia hora y ubicacion: con <paramref name="exigeUbicacionPropia"/> la inspeccion debe traer su GPS.
     /// </summary>
-    public void Cerrar(clsResumenCierre resumen, IReadOnlyList<string> vistasFaltantes, bool exigeUbicacionPropia, DateTimeOffset ahora)
+    public void Cerrar(clsResumenCierre resumen, IReadOnlyList<string> vistasFaltantes, bool exigeUbicacionPropia, DateTimeOffset ahora, IReadOnlyList<string>? otrosFaltantes = null)
     {
         if (EstaCerrada)
         {
@@ -185,6 +185,10 @@ public sealed class clsInspeccion : clsEntidadBase
 
         var errores = new List<string>();
         errores.AddRange(vistasFaltantes.Select(vista => $"Falta la foto de la vista «{vista}»"));
+        if (otrosFaltantes is not null)
+        {
+            errores.AddRange(otrosFaltantes);
+        }
 
         if (exigeUbicacionPropia && (Lat is null || Lng is null))
         {

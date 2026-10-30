@@ -25,6 +25,7 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
     private static readonly (string Restriccion, string Mensaje)[] CONFLICTOS_UNICOS =
     [
         ("UX_tblReclamos_Activo", "Ya fue tomado por otro inspector"),
+        ("UX_tblViajeVehiculos_Posicion", "La posición ya está ocupada por otra unidad de este viaje"),
         ("UX_tblUsuarios_Email", "Ya existe un usuario con ese correo"),
         ("UQ_tblVehiculos_Vin", "Ya existe un vehículo con ese VIN"),
         ("UQ_tblEtapas_Viaje_Vehiculo_Orden", "Ya existe una etapa con ese orden para el vehículo en el viaje"),

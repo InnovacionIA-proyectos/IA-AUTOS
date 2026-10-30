@@ -149,6 +149,9 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
         return new clsResumenCierre(evidencias.Count, sinUbicacion, hallazgos.Count, hallazgos.Count(h => !conFoto.Contains(h)), vistas);
     }
 
+    public Task<int> ContarFotosLibresAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        contexto.Evidencias.CountAsync(e => e.InspeccionId == inspeccionId && e.VistaId == null && e.HallazgoId == null && !e.EsConstancia && !e.EsSello, ct);
+
     public Task<bool> TieneLlegadaCerradaAsync(Guid etapaId, CancellationToken ct = default) =>
         contexto.Inspecciones.AnyAsync(i => i.EtapaId == etapaId && i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA, ct);
 

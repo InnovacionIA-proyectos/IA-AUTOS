@@ -833,7 +833,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Una_foto_exige_vista_o_hallazgo_y_no_ambos()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         var vista = (await Sembrador.VistasAsync(obligatoria: true))[0].Id;
         var (ruta, _) = await SubirAsync(sesion);
 
@@ -940,7 +940,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task No_se_cierra_sin_las_7_vistas_y_el_error_nombra_la_que_falta()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         await TomarVistasObligatoriasAsync(sesion, id, salvo: 1);
         var faltante = (await Sembrador.VistasAsync(obligatoria: true)).Last().Nombre;
 
@@ -957,7 +957,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Sin_ninguna_foto_el_cierre_nombra_las_siete_vistas()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
 
         var r = await CerrarAsync(sesion, id);
 
@@ -969,7 +969,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Con_las_7_vistas_se_cierra_con_su_hora_de_cierre_y_las_adicionales_no_bloquean()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         await TomarVistasObligatoriasAsync(sesion, id);
 
         var r = await CerrarAsync(sesion, id);
@@ -991,7 +991,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var vistas = await Sembrador.VistasAsync(obligatoria: true);
         // Una vista obligatoria solo de camiones: no se exige a un vehiculo sin tipo, y se exige a un camion.
         await CambiarVistaAsync(vistas[0].Id, new { tipo_vehiculo = "camion" });
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         foreach (var (vistaId, _) in vistas.Skip(1))
         {
             await FotoDeVistaAsync(sesion, id, vistaId);
@@ -1002,7 +1002,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
 
         var (_, etapasCamion) = await Sembrador.VehiculoConRutaAsync("VIN-CAMION-001", inspectorId: sesion.UsuarioId);
         await Sembrador.EjecutarAsync("UPDATE dbo.tblVehiculos SET TipoVehiculo = 'camion' WHERE Vin = 'VIN-CAMION-001'");
-        var idCamion = await CrearInspeccionAsync(sesion, etapasCamion[0]);
+        var idCamion = await CrearInspeccionAsync(sesion, etapasCamion[0], "llegada");
         foreach (var (vistaId, _) in vistas.Skip(1))
         {
             await FotoDeVistaAsync(sesion, idCamion, vistaId);
@@ -1018,7 +1018,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (sesion, etapas) = await EscenarioAsync();
         var vistas = await Sembrador.VistasAsync(obligatoria: true);
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         foreach (var (vistaId, _) in vistas.Skip(1))
         {
             await FotoDeVistaAsync(sesion, id, vistaId);
@@ -1059,7 +1059,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Una_inspeccion_sin_faltantes_ni_danos_en_baul_y_cojineria_se_cierra_sin_esas_fotos()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         await TomarVistasObligatoriasAsync(sesion, id);
 
         var r = await CerrarAsync(sesion, id);
@@ -1074,7 +1074,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Una_foto_sin_ubicacion_aparece_marcada_y_bloquea_el_cierre_hasta_repetirla()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         var vistas = await Sembrador.VistasAsync(obligatoria: true);
         foreach (var (vistaId, _) in vistas.Skip(1))
         {
@@ -1102,7 +1102,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Una_novedad_con_su_foto_se_cierra_y_cuenta_en_el_resumen()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         await TomarVistasObligatoriasAsync(sesion, id);
         var (ruta, _) = await SubirAsync(sesion);
         await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new
@@ -1126,7 +1126,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Un_hallazgo_historico_sin_foto_bloquea_el_cierre()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         await TomarVistasObligatoriasAsync(sesion, id);
         await Sembrador.EjecutarAsync("INSERT dbo.tblHallazgos (Id, InspeccionId, ParteVehiculo, ClaseDano, TamanoDano) VALUES (NEWID(), @i, N'Capot', 'golpe', '1_5cm')", ("@i", id));
 
@@ -1140,7 +1140,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Una_inspeccion_cerrada_es_inmutable_y_cerrarla_de_nuevo_es_409()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         await TomarVistasObligatoriasAsync(sesion, id);
         var cierre = await CerrarAsync(sesion, id);
         Assert.Equal(HttpStatusCode.OK, cierre.StatusCode);
@@ -1252,24 +1252,23 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
-    public async Task Con_la_excepcion_el_conductor_hace_la_salida_del_cargue_con_las_mismas_reglas_del_inspector()
+    public async Task Con_la_excepcion_el_conductor_hace_la_salida_del_cargue_con_las_reglas_de_la_acomodacion()
     {
         var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-COND-0001", conductorId: conductor.UsuarioId);
         var id = await CrearInspeccionAsync(conductor, etapas[0], motivo: "inspector_no_llego");
-        await TomarVistasObligatoriasAsync(conductor, id, salvo: 2);
 
         var incompleta = await CerrarAsync(conductor, id);
-        var faltantes = (await Sembrador.VistasAsync(obligatoria: true)).TakeLast(2).Select(v => (string?)$"Falta la foto de la vista «{v.Nombre}»").ToList();
-        foreach (var (vistaId, _) in (await Sembrador.VistasAsync(obligatoria: true)).TakeLast(2))
-        {
-            await FotoDeVistaAsync(conductor, id, vistaId);
-        }
-
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblViajeVehiculos SET Posicion = 3 WHERE ViajeId = @v", ("@v", await Sembrador.ViajeDeEtapaAsync(etapas[0])));
+        var (ruta, hash) = await SubirAsync(conductor);
+        var foto = await Cliente(conductor.Token).PostAsJsonAsync(
+            $"/api/inspecciones/{id}/evidencias", new { storage_path = ruta, sello_fecha = FECHA, sello_lat = 4.6, sello_lng = -74.1, precision = 4.5, dispositivo_id = "tablet-1", hash_sha256 = hash });
         var completa = await CerrarAsync(conductor, id);
 
         Assert.Equal(HttpStatusCode.BadRequest, incompleta.StatusCode);
-        Assert.Equal(faltantes, (await ClonarAsync(incompleta)).GetProperty("details").EnumerateArray().Select(d => d.GetString()).ToList());
+        var faltantes = (await ClonarAsync(incompleta)).GetProperty("details").EnumerateArray().Select(d => d.GetString()).ToList();
+        Assert.Equal(["Falta la posición de la unidad VIN-COND-0001", "Faltan fotos de la acomodación: se exige al menos 1 y hay 0"], faltantes);
+        Assert.Equal(HttpStatusCode.Created, foto.StatusCode);
         Assert.Equal(HttpStatusCode.OK, completa.StatusCode);
     }
 
@@ -1279,7 +1278,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Corregir_crea_una_version_nueva_que_referencia_a_la_anterior_y_la_anterior_no_cambia()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         await TomarVistasObligatoriasAsync(sesion, id);
         await CerrarAsync(sesion, id);
         var antes = await ClonarAsync(await Cliente(sesion.Token).GetAsync($"/api/inspecciones/{id}"));
@@ -1291,7 +1290,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(2, v2.GetProperty("version").GetInt32());
         Assert.Equal(id, v2.GetProperty("corrige_inspeccion_id").GetGuid());
         Assert.Equal("borrador", v2.GetProperty("estado").GetString());
-        Assert.Equal("salida", v2.GetProperty("momento").GetString());
+        Assert.Equal("llegada", v2.GetProperty("momento").GetString());
         Assert.Equal(etapas[0], v2.GetProperty("etapa_id").GetGuid());
         Assert.Equal(JsonValueKind.Null, v2.GetProperty("cerrada_at").ValueKind);
         Assert.Equal("Se repiten las fotos", v2.GetProperty("notas").GetString());
@@ -1311,7 +1310,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task La_correccion_es_una_inspeccion_nueva_con_sus_propias_reglas_de_cierre()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         await TomarVistasObligatoriasAsync(sesion, id);
         await CerrarAsync(sesion, id);
         var v2 = (await ClonarAsync(await Cliente(sesion.Token).PostAsync($"/api/inspecciones/{id}/corregir", null))).GetProperty("id").GetGuid();
@@ -1331,7 +1330,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Una_version_solo_se_corrige_una_vez_y_solo_se_corrige_lo_cerrado()
     {
         var (sesion, etapas) = await EscenarioAsync();
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
 
         var enBorrador = await Cliente(sesion.Token).PostAsync($"/api/inspecciones/{id}/corregir", null);
         await TomarVistasObligatoriasAsync(sesion, id);
@@ -1526,7 +1525,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Una_transferencia_firmada_es_inmutable_pero_acepta_el_reintento_identico()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionAsync(inspector, etapas[0], "llegada");
         await TomarVistasObligatoriasAsync(inspector, id);
         Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(inspector, id)).StatusCode);
 
@@ -1650,7 +1649,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
         var testigo = await SesionAsync("testigo@ejemplo.com");
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionAsync(inspector, etapas[0], "llegada");
         await TomarVistasObligatoriasAsync(inspector, id);
         Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(inspector, id)).StatusCode);
 
@@ -1867,7 +1866,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
         var (_, etapas2) = await Sembrador.VehiculoConRutaAsync("9FBHSR4E8PM000999", inspectorId: otra.UsuarioId);
         await LlegadaCerradaAsync(etapas2[0], otra.UsuarioId);
-        var a = await CrearInspeccionAsync(sesion, etapas[0]);
+        var a = await CrearInspeccionAsync(sesion, etapas[0], "llegada");
         await TomarVistasObligatoriasAsync(sesion, a);
         await CerrarAsync(sesion, a);
         await Task.Delay(20);
@@ -1886,8 +1885,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(["vin", "proceso"], todas[0].EnumerateObject().Select(p => p.Name).Skip(15).Take(2).ToList());
         Assert.Equal(2, porUsuario.GetArrayLength());
         Assert.Contains(porUsuario.EnumerateArray(), i => i.GetProperty("id").GetGuid() == b);
-        Assert.Equal(a, porEstado.EnumerateArray().Single(i => i.GetProperty("momento").GetString() == "salida").GetProperty("id").GetGuid());
-        Assert.Equal(1, porMomento.EnumerateArray().Count(i => i.GetProperty("momento_nombre").GetString() == "Inspección de llegada"));
+        Assert.Contains(porEstado.EnumerateArray(), i => i.GetProperty("id").GetGuid() == a);
+        Assert.Equal(2, porMomento.EnumerateArray().Count(i => i.GetProperty("momento_nombre").GetString() == "Inspección de llegada"));
         Assert.Equal("transporte", porProceso[0].GetProperty("proceso").GetString());
         Assert.Equal("9FBHSR4E8PM000999", porVin[0].GetProperty("vin").GetString());
         // Solo las dos creadas por la API llevan la fecha del dispositivo (julio de 2026); la llegada sembrada lleva la de hoy.

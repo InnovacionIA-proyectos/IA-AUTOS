@@ -1067,8 +1067,10 @@ Campo (creador o administrador). Registra una foto **ya subida** con `POST /api/
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
-| `vista_id` | sí, si no hay `hallazgo_id` | UUID de una vista **activa** del catálogo `vistas-foto` (una de las 7 obligatorias o de las 2 adicionales) |
-| `hallazgo_id` | sí, si no hay `vista_id` | UUID de un hallazgo **de esta inspección** (`404` si es de otra) |
+| `vista_id` | sí, si no hay `hallazgo_id` (salvo en la acomodación) | UUID de una vista **activa** del catálogo `vistas-foto` (una de las 7 obligatorias o de las 2 adicionales) |
+| `hallazgo_id` | sí, si no hay `vista_id` (salvo en la acomodación) | UUID de un hallazgo **de esta inspección** (`404` si es de otra) |
+
+En la **segunda inspección del cargue** (la salida de la etapa Cargue) la foto se envía **sin** `vista_id` ni `hallazgo_id`: es una foto de la acomodación en la niñera y cuenta para el mínimo `acomodacion_fotos_minimas` del cierre. En cualquier otra inspección esa foto responde `400` en `vista_id`.
 | `storage_path` | sí | el `storage_path` que devolvió la subida (nombre plano, sin carpetas). **El archivo debe existir**: si no se subió, `400` |
 | `sello_fecha` | sí | ISO 8601 con zona horaria: fecha y hora de la foto según el dispositivo |
 | `sello_lat` / `sello_lng` | no | −90 a 90 / −180 a 180. Si falta alguna, la foto queda **sin ubicación** (`sin_ubicacion: true`) |
@@ -1268,6 +1270,23 @@ Responde `200` con el `ViajeDto`: la unidad queda con `estado_unidad: "no_sale"`
 (un VIN que no salió puede volver a entrar como reemplazo solo cuando ese hallazgo esté en estado `recuperado`). `404` si el viaje o el VIN no existen o el VIN no está en el viaje.
 
 Una unidad que no sale no cuenta en `vehiculos_completos` ni en `vwViajesCompletos`, y su vínculo no cuenta como «viaje activo» del VIN: se puede asignar a otro viaje, y su inventario muestra el historial completo, incluido el viaje del que no salió y su hallazgo V1+.
+
+### `PUT /api/viajes/{id}/vehiculos/{vin}/posicion`
+Registra la **posición de la unidad en la niñera** durante la segunda inspección del cargue. Lo hacen el inspector del viaje (o quien reclamó el cargue), el `coordinador_calidad` y los administradores; `403` a los demás.
+
+```json
+{ "posicion": 4 }
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `posicion` | sí | un entero de **1 a 7**; `null` libera la posición de la unidad |
+
+Responde `200` con el `ViajeDto`: cada unidad trae `posicion` (nulo si no la tiene). `400` en `posicion` («La posición debe estar entre 1 y 7») si está fuera de rango.
+
+`409` si la posición **ya la ocupa otra unidad del viaje** («La posición N ya está ocupada por otra unidad de este viaje»; con solicitudes simultáneas por la misma gana exactamente una), si la unidad **no sale** del viaje o si el viaje **no tiene su segunda inspección del cargue en curso** (la de momento `salida` de la etapa Cargue, en borrador). `404` si el viaje o el VIN no existen o el VIN no está en el viaje.
+
+El cierre de esa inspección (`POST /api/inspecciones/{id}/cerrar`) deja de exigir las fotos de las vistas de estado y exige la posición de **cada unidad activa** y al menos `acomodacion_fotos_minimas` fotos de la acomodación (fotos sin vista ni hallazgo). Si falta algo responde `400` con una línea por cada unidad sin posición («Falta la posición de la unidad {VIN}») y, si no alcanzan las fotos, «Faltan fotos de la acomodación: se exige al menos {n} y hay {k}». Las unidades que no salen no exigen posición.
 
 ## Conductor en ruta
 

@@ -252,6 +252,53 @@ public sealed class clsViajesService(
         return await ObtenerDtoAsync(id, ct);
     }
 
+    /// <summary>
+    /// Registra la posicion de una unidad en la ninera (<c>posicion</c> de 1 a 7; nulo la libera) durante la segunda inspeccion del cargue. 400 «La posicion debe estar entre 1 y 7»; 409 «La posicion N ya esta ocupada
+    /// por otra unidad de este viaje» (si dos solicitudes piden la misma a la vez, gana exactamente una), 409 si la unidad no sale del viaje o si el viaje no tiene su segunda inspeccion del cargue en curso.
+    /// El inspector del viaje (o quien reclamo el cargue), el coordinador y los administradores la registran.
+    /// </summary>
+    public async Task<ViajeDto> AsignarPosicionAsync(Guid id, string vin, AsignarPosicionRequest solicitud, CancellationToken ct = default)
+    {
+        var viaje = await ObtenerViajeAsync(id, ct);
+        viaje.AsegurarActivo();
+        if (actual.SoloSusViajes() is { } usuarioId && !await acceso.ParticipaOReclamaAsync(viaje, usuarioId, ct))
+        {
+            throw new clsProhibidoException("El viaje no está asignado a su usuario");
+        }
+
+        var vehiculo = await vehiculos.ObtenerPorVinAsync(vin, ct)
+            ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
+        var enlace = await viajes.ObtenerVehiculoAsync(id, vehiculo.Id, ct)
+            ?? throw new clsEntidadNoEncontradaException($"El VIN {vehiculo.Vin} no está en este viaje");
+        if (solicitud.Posicion is { } posicion)
+        {
+            // Primero el rango (400) y despues lo demas.
+            if (posicion < clsViajeVehiculo.POSICION_MINIMA || posicion > clsViajeVehiculo.POSICION_MAXIMA)
+            {
+                throw clsErroresCampos.De("posicion", $"La posición debe estar entre {clsViajeVehiculo.POSICION_MINIMA} y {clsViajeVehiculo.POSICION_MAXIMA}");
+            }
+
+            if (!await viajes.TieneSegundaInspeccionDelCargueEnCursoAsync(id, ct))
+            {
+                throw new clsConflictoException("El viaje no tiene su segunda inspección del cargue en curso: la posición se registra durante ella");
+            }
+
+            if ((await viajes.ObtenerVehiculosAsync(id, ct)).Any(v => v.VehiculoId != vehiculo.Id && v.Posicion == posicion))
+            {
+                throw new clsConflictoException($"La posición {posicion} ya está ocupada por otra unidad de este viaje");
+            }
+        }
+
+        var antes = enlace.Posicion;
+        enlace.AsignarPosicion(solicitud.Posicion, reloj.Ahora);
+        await auditor.RegistrarDeViajeAsync(
+            "viaje.posicion_unidad", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(new { vin = vehiculo.Vin, posicion = antes }, new { vin = vehiculo.Vin, posicion = enlace.Posicion }), vehiculo.ClienteId, ct);
+
+        // Dos solicitudes simultaneas por la misma posicion: el indice unico de la base deja pasar una y la otra se traduce a 409 al guardar.
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        return await ObtenerDtoAsync(id, ct);
+    }
+
     /// <summary>Quita un VIN de un viaje activo (se borran sus etapas). No se puede si ya tiene inspecciones en el viaje.</summary>
     public async Task<ViajeDto> QuitarVinAsync(Guid id, string vin, CancellationToken ct = default)
     {

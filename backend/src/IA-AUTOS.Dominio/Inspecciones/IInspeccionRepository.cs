@@ -12,6 +12,9 @@ public interface IInspeccionRepository
     /// <summary>True si la etapa tiene una inspeccion de llegada cerrada (de cualquiera de sus versiones).</summary>
     Task<bool> TieneLlegadaCerradaAsync(Guid etapaId, CancellationToken ct = default);
 
+    /// <summary>Las fotos de la inspeccion que no son de una vista, de un hallazgo, de una constancia ni de un sello: las fotos libres, como las de la acomodacion de la segunda inspeccion del cargue.</summary>
+    Task<int> ContarFotosLibresAsync(Guid inspeccionId, CancellationToken ct = default);
+
     /// <summary>True si alguna inspeccion de la etapa tiene una transferencia sin tipo de cierre (abierta): bloquea iniciar la etapa siguiente.</summary>
     Task<bool> TieneTransferenciaSinCierreAsync(Guid etapaId, CancellationToken ct = default);
 

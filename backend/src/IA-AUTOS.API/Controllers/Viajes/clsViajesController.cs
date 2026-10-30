@@ -203,6 +203,17 @@ public sealed class clsViajesController(
     }
 
     /// <summary>
+    /// Registra la posicion de la unidad en la ninera (<c>posicion</c> de 1 a 7; <c>null</c> la libera) durante la segunda inspeccion del cargue. 400 «La posicion debe estar entre 1 y 7»; 409 «La posicion N ya esta
+    /// ocupada por otra unidad de este viaje» (con dos solicitudes simultaneas por la misma, gana una), si la unidad no sale o si el viaje no tiene su segunda inspeccion del cargue en curso. Responde con el viaje.
+    /// </summary>
+    [HttpPut("{id:guid}/vehiculos/{vin}/posicion")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(AsignarPosicionRequest))]
+    public async Task<IActionResult> AsignarPosicion(Guid id, string vin, CancellationToken ct) =>
+        Ok(await servicio.AsignarPosicionAsync(id, vin, await LeerCuerpoAsync<AsignarPosicionRequest>(ct), ct));
+
+    /// <summary>
     /// Marca que la unidad no sale del viaje por un hallazgo V1+ de una inspeccion cerrada (<c>motivo</c>, <c>hallazgo_id</c> y, si ya lo hay, <c>vin_reemplazo</c>). Solo el inspector del viaje
     /// y el coordinador de calidad (403 a los demas, incluidos admin y comercial). La unidad conserva sus etapas e inspecciones y el viaje sigue; responde con el viaje.
     /// </summary>

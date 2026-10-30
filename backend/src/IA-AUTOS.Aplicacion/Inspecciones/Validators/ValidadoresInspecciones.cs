@@ -109,9 +109,7 @@ public sealed class CrearEvidenciaRequestValidator : AbstractValidator<CrearEvid
             .WithMessage(clsReglasComunes.MENSAJE_UUID);
         RuleFor(x => x.VistaId).Must(clsReglasComunes.UuidValido).When(x => x.VistaId is not null)
             .WithMessage(clsReglasComunes.MENSAJE_UUID);
-        // Toda foto es de una vista o de un hallazgo.
-        RuleFor(x => x.VistaId).Must((x, vista) => vista is not null || x.HallazgoId is not null)
-            .WithMessage("Indique la vista de la foto (vista_id) o el hallazgo al que pertenece (hallazgo_id)");
+        // Que toda foto sea de una vista o de un hallazgo (salvo las de la acomodacion de la segunda inspeccion del cargue) lo comprueba el servicio, que conoce la inspeccion.
     }
 }
 

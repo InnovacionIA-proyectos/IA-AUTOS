@@ -549,7 +549,7 @@ public sealed class BaseDatosRealTests
                              'retencion_dias', 'gps_precision_minima_m', 'url_firmada_minutos')
             """);
         var invalidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Tipo NOT IN ('numero', 'porcentaje', 'texto', 'lista', 'hora', 'correos')");
-        var lineaBase = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR Clave LIKE '%fotos_minimas%'");
+        var lineaBase = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR (Clave LIKE '%fotos_minimas%' AND Clave <> 'acomodacion_fotos_minimas')");
 
         Assert.True(iniciales == 8, $"Faltan parametros iniciales (hay {iniciales} de 8). {ayuda}");
         Assert.Equal(0, invalidos);
@@ -771,6 +771,17 @@ public sealed class BaseDatosRealTests
 
         Assert.True(restriccion == 1, "Falta la restriccion de rango de la posicion. Ejecute database/cambios-esquema/29-posicion-de-la-unidad.sql.");
         Assert.True(indice == 1, "Falta el indice unico de la posicion por viaje. Ejecute database/cambios-esquema/29-posicion-de-la-unidad.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task El_parametro_de_las_fotos_de_la_acomodacion_esta_migrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/30-parametro-fotos-de-acomodacion.sql.
+        await using var conexion = await AbrirAsync();
+
+        var parametro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave = N'acomodacion_fotos_minimas' AND Tipo = N'numero'");
+
+        Assert.True(parametro == 1, "Falta el parametro acomodacion_fotos_minimas. Ejecute database/cambios-esquema/30-parametro-fotos-de-acomodacion.sql.");
     }
 
     [FactEntornoReal]

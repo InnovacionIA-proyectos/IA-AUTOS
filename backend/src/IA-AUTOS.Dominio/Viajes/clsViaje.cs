@@ -327,7 +327,32 @@ public sealed class clsViajeVehiculo : clsEntidadBase
     /// <summary>El lugar real de destino de ESTA unidad (cada VIN del viaje puede ir a uno distinto). Nulo en lo anterior.</summary>
     public Guid? LugarDestinoId { get; private set; }
 
+    /// <summary>
+    /// La posicion de la unidad en la ninera (1 a 7, unica dentro del viaje; nula mientras no se registra). La registra la segunda inspeccion del cargue y se libera al marcar la unidad «no sale».
+    /// </summary>
+    public byte? Posicion { get; private set; }
+
+    public const int POSICION_MINIMA = 1;
+    public const int POSICION_MAXIMA = 7;
+
     public bool NoSale => EstadoUnidad == clsEstadoUnidad.NO_SALE;
+
+    /// <summary>Registra la posicion de la unidad (400 si no esta entre 1 y 7; nulo la libera). Una unidad que no sale del viaje no tiene posicion (409).</summary>
+    public void AsignarPosicion(int? posicion, DateTimeOffset ahora)
+    {
+        if (posicion is { } valor && (valor < POSICION_MINIMA || valor > POSICION_MAXIMA))
+        {
+            throw clsErroresCampos.De("posicion", $"La posición debe estar entre {POSICION_MINIMA} y {POSICION_MAXIMA}");
+        }
+
+        if (posicion is not null && NoSale)
+        {
+            throw new clsConflictoException("La unidad no sale del viaje: no tiene posición");
+        }
+
+        Posicion = (byte?)posicion;
+        Tocar(ahora);
+    }
 
     /// <summary>
     /// El VIN ya completo su ruta en este viaje (todas sus etapas con informe cerrado y la unidad no esta marcada <c>no_sale</c>): la misma regla de <c>vwViajesCompletos</c>. La mantienen los triggers
@@ -353,6 +378,7 @@ public sealed class clsViajeVehiculo : clsEntidadBase
         }
 
         EstadoUnidad = clsEstadoUnidad.NO_SALE;
+        Posicion = null;
         NoSaleMotivo = texto;
         NoSaleHallazgoId = hallazgoId;
         NoSaleMarcadoPor = marcadoPor;

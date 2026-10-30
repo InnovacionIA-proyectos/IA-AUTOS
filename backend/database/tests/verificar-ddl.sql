@@ -1075,7 +1075,7 @@ INSERT #r SELECT N'Parametros: la tabla existe con sus 8 filas iniciales (6 con 
           AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'objetivo_diario_novedad' AND Valor = N'1.2' AND Tipo = 'porcentaje') = 1
           AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'reporte_diario_hora' AND Valor = N'06:00' AND Tipo = 'hora') = 1
           AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'gps_precision_minima_m' AND Valor = N'30' AND Tipo = 'numero') = 1
-          AND NOT EXISTS (SELECT 1 FROM dbo.tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR Clave LIKE '%fotos_minimas%') THEN 1 ELSE 0 END, NULL;
+          AND NOT EXISTS (SELECT 1 FROM dbo.tblParametros WHERE Clave LIKE 'linea_base_rechazo%' OR (Clave LIKE '%fotos_minimas%' AND Clave <> 'acomodacion_fotos_minimas')) THEN 1 ELSE 0 END, NULL;
 DECLARE @casosParam TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
 INSERT @casosParam VALUES
  (N'Parametro: uno valido se guarda', N'INSERT dbo.tblParametros (Clave, Valor, Tipo, Descripcion) VALUES (''zz_param_1'', N''5'', ''numero'', N''prueba'')', 0),
@@ -1242,6 +1242,10 @@ INSERT #r SELECT N'Posicion: varias unidades sin posicion en el mismo viaje no c
     CASE WHEN (SELECT COUNT(*) FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND Posicion IS NULL) = 1
           AND (SELECT COUNT(*) FROM dbo.tblViajeVehiculos WHERE ViajeId = @vj AND Posicion IS NOT NULL) = 1 THEN 1 ELSE 0 END, NULL;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_POS2';
+
+-- 7r) Parametro del minimo de fotos de la acomodacion
+INSERT #r SELECT N'Parametros: acomodacion_fotos_minimas existe como numero con valor 1',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'acomodacion_fotos_minimas' AND Valor = N'1' AND Tipo = 'numero') = 1 THEN 1 ELSE 0 END, NULL;
 
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;

@@ -76,6 +76,20 @@ public sealed partial class clsEvidencia : clsEntidadBase
         DateTimeOffset ahora) =>
         Construir(inspeccionId, hallazgoId, vistaId, esConstancia: false, esSello: false, storagePath, selloFecha, selloLat, selloLng, precision, dispositivoId, hashSha256, nota, ahora);
 
+    /// <summary>La foto de la acomodacion de las unidades en la ninera (segunda inspeccion del cargue): pertenece a la inspeccion pero no a una vista ni a un hallazgo.</summary>
+    public static clsEvidencia CrearDeAcomodacion(
+        Guid inspeccionId,
+        string storagePath,
+        DateTimeOffset selloFecha,
+        double? selloLat,
+        double? selloLng,
+        double? precision,
+        string? dispositivoId,
+        string? hashSha256,
+        string? nota,
+        DateTimeOffset ahora) =>
+        Construir(inspeccionId, null, null, esConstancia: false, esSello: false, storagePath, selloFecha, selloLat, selloLng, precision, dispositivoId, hashSha256, nota, ahora, deAcomodacion: true);
+
     /// <summary>La foto de una constancia de no firma: pertenece a la inspeccion de la transferencia pero no a una vista ni a un hallazgo.</summary>
     public static clsEvidencia CrearConstancia(
         Guid inspeccionId,
@@ -118,11 +132,12 @@ public sealed partial class clsEvidencia : clsEntidadBase
         string? dispositivoId,
         string? hashSha256,
         string? nota,
-        DateTimeOffset ahora)
+        DateTimeOffset ahora,
+        bool deAcomodacion = false)
     {
         clsValidador.Latitud(selloLat, "sello_lat");
         clsValidador.Longitud(selloLng, "sello_lng");
-        if (!esConstancia && !esSello && hallazgoId is null && vistaId is null)
+        if (!esConstancia && !esSello && !deAcomodacion && hallazgoId is null && vistaId is null)
         {
             throw clsErroresCampos.De("vista_id", "Indique la vista de la foto o el hallazgo al que pertenece");
         }

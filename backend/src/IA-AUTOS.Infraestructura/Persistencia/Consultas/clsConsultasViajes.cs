@@ -276,6 +276,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                    VinReemplazo = (string?)r.Vin,
                                    vv.LugarDestinoId,
                                    LugarDestino = (string?)ld.Nombre,
+                                   vv.Posicion,
                                    Novedades = contexto.Hallazgos.Count(x => x.TipoNovedad != null
                                        && contexto.Inspecciones.Any(i => i.Id == x.InspeccionId
                                            && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id))),
@@ -289,7 +290,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                 v.Vehiculo.Id, v.Vehiculo.Vin, v.Vehiculo.Marca, v.Vehiculo.Modelo, v.Vehiculo.Color, v.Vehiculo.Operacion, v.Etapas, v.Completas,
                 v.EstadoUnidad,
                 clsMapeadorViajes.ANoSale(v.EstadoUnidad, v.NoSaleMotivo, v.NoSaleHallazgoId, v.NoSaleMarcadoPor, v.MarcadoPorNombre, v.NoSaleAt, v.VinReemplazo),
-                clsEstadoTransporte.De(v.LlegadaCerrada, v.Novedades), v.Novedades, v.LugarDestinoId, v.LugarDestino));
+                clsEstadoTransporte.De(v.LlegadaCerrada, v.Novedades), v.Novedades, v.LugarDestinoId, v.LugarDestino, v.Posicion));
         var clientes = await ClientesPorViajeAsync(ids, soloDeCliente, ct);
 
         // Las novedades de proceso de las unidades del viaje (las que quien consulta puede ver), de la mas antigua a la mas reciente.
