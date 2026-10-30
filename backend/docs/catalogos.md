@@ -87,6 +87,16 @@ valor en uso no se borra.
 
 `tblMotivosSinInspector` (`Codigo`, `Nombre`, `RequiereTexto`, `Orden`, `Activo`) la crea [`23-novedad-de-proceso.sql`](../database/cambios-esquema/23-novedad-de-proceso.sql) con tres valores iniciales: `inspector_no_llego` «El inspector no llegó», `inspector_no_disponible` «El inspector no está disponible» y `otro` «Otro» (`RequiereTexto = 1`: quien lo elige escribe cuál es). **Calidad confirma los valores** y se editan como los demás catálogos. Repetir el script no toca los que ya existen. El script también agrega `MotivoSinInspector` y `MotivoSinInspectorTexto` a `tblInspecciones`, la tabla `tblNovedadesProceso` (ver [evidencia-inmutable.md](evidencia-inmutable.md)), el tipo de notificación `novedad_proceso` y el cierre `recibo_sin_entrega` de la transferencia (ver [transferencias.md](transferencias.md)). La API lo publica como el catálogo `motivos-sin-inspector` (`codigo`, `nombre`, `requiere_texto`, `orden` y `activo`, con su `ETag`) y lo administran `admin`, `super_admin` y `coordinador_calidad`. Resultado esperado: `Tablas = 2`, `Motivos = 3`, `Triggers = 3`, `ColumnasInspeccion = 2`, `CierreNuevo = 1`, `EntregaNula = 1`, `TipoNotificacion = 1` y `NovedadesProceso = 0`.
 
+## Extras del vehículo fuera del dibujo estándar
+
+Los elementos que no están en el dibujo (barras de techo, volco, platón…) se reportan como **extras** de una inspección, con su tipo, sus fotos selladas y una observación, sin tocar el dibujo ni los hallazgos. El script [`31-extras-del-vehiculo.sql`](../database/cambios-esquema/31-extras-del-vehiculo.sql) (ajustando `@esquema`, en una sola ejecución, una transacción, repetible; antes de desplegar la API) crea:
+
+- `tblTiposExtra` (`Codigo` único, `Nombre`, `Orden`, `Activo`, con el patrón de los demás catálogos), sembrada con `barras_techo` «Barras de techo», `volco` «Volco», `platon` «Platón» y `otro` «Otro». La lista se amplía desde el portal sin cambiar el esquema; una fila que ya existe nunca se sobrescribe. Un tipo con extras reportados **no se borra** (la llave foránea lo impide): se inactiva y los extras conservan su tipo.
+- `tblInspeccionExtras`: el extra de una inspección. Exige la inspección y el tipo (`Tipo` guarda el `Codigo` y lo referencia con una llave foránea); `Texto` (hasta 100 caracteres) es el texto libre y **solo se admite cuando el tipo es `otro`** (`CK_tblInspeccionExtras_Texto`); `Observacion` admite hasta 500 caracteres y no puede quedar en blanco. Un extra no se agrega, cambia ni quita en una inspección cerrada (trigger, error 51009); el de un borrador sin fotos sí se cambia y se quita.
+- `tblEvidencias.ExtraId` (nula, llave foránea a `tblInspeccionExtras`): la foto de un extra. `CK_tblEvidencias_Extra` impide que una foto de extra sea a la vez de una vista, de un hallazgo, una constancia o un sello. Como toda evidencia, la foto de un extra no se borra, y por eso un extra con fotos tampoco.
+
+`ddl.sql` ya trae el esquema nuevo y `tests/verificar-ddl.sql` cubre sus restricciones. No cambia ningún dato existente.
+
 ## Cargar los cuadrantes y las acciones de los niveles
 
 Los cuadrantes de la ficha del vehículo genérico (36 zonas y 97 polígonos) se cargan con

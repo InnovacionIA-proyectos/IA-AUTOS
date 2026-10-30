@@ -50,6 +50,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblNotasAclaratorias DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNovedadesProceso DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblReclamos DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblInspeccionExtras DISABLE TRIGGER ALL;
             DELETE FROM dbo.tblNovedadesProceso;
             DELETE FROM dbo.tblReclamos;
             DELETE FROM dbo.tblInspectorLugares;
@@ -62,6 +63,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             DELETE FROM dbo.tblOrdenesSofasa;
             DELETE FROM dbo.tblTransferenciasCustodia;
             DELETE FROM dbo.tblEvidencias;
+            DELETE FROM dbo.tblInspeccionExtras;
             DELETE FROM dbo.tblViajeVehiculos;
             DELETE FROM dbo.tblHallazgos;
             DELETE FROM dbo.tblInspecciones;
@@ -80,6 +82,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblNotasAclaratorias ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblReclamos ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblInspeccionExtras ENABLE TRIGGER ALL;
             END TRY
             BEGIN CATCH
             ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
@@ -92,6 +95,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblNotasAclaratorias ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblReclamos ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblInspeccionExtras ENABLE TRIGGER ALL;
             THROW;
             END CATCH
 
@@ -99,6 +103,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             DELETE FROM dbo.tblCuadrantes;
             DELETE FROM dbo.tblLugares;
             DELETE FROM dbo.tblEstadosSofasa;
+            DELETE FROM dbo.tblTiposExtra WHERE Codigo NOT IN ('barras_techo', 'volco', 'platon', 'otro');
             DELETE FROM dbo.tblMotivosSinInspector WHERE Codigo NOT IN ('inspector_no_llego', 'inspector_no_disponible', 'otro');
             DELETE FROM dbo.tblEtapasCatalogo WHERE Codigo NOT IN ('cargue', 'transporte', 'descargue');
             DELETE FROM dbo.tblPuntosCustodia WHERE Codigo NOT IN ('cedi_1', 'origen', 'certificadora', 'destino', 'cedi_2', 'concesionario');
@@ -113,6 +118,7 @@ public sealed partial class clsBaseDatosFixture : IAsyncLifetime
             UPDATE dbo.tblTiposUnidadTransportadora SET Activo = 1;
             UPDATE dbo.tblClientes SET Activo = 1, Orden = 1;
             UPDATE dbo.tblMotivosSinInspector SET Activo = 1;
+            UPDATE dbo.tblTiposExtra SET Activo = 1;
             UPDATE dbo.tblClasesDano SET Activo = 1;
             UPDATE dbo.tblTamanosDano SET Activo = 1;
             UPDATE dbo.tblNivelesSeveridad SET Activo = 1, Accion = CASE Codigo

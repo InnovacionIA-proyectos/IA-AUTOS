@@ -785,6 +785,27 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Los_extras_del_vehiculo_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/31-extras-del-vehiculo.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tablas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name IN (N'tblTiposExtra', N'tblInspeccionExtras')");
+        Assert.True(tablas == 2, "Faltan las tablas de los extras. Ejecute database/cambios-esquema/31-extras-del-vehiculo.sql.");
+
+        var tipos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblTiposExtra WHERE Codigo IN (N'barras_techo', N'volco', N'platon', N'otro')");
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblEvidencias') AND name = N'ExtraId' AND is_nullable = 1");
+        var restriccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblEvidencias_Extra' AND parent_object_id = OBJECT_ID(N'tblEvidencias')");
+        var textoLibre = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblInspeccionExtras_Texto' AND parent_object_id = OBJECT_ID(N'tblInspeccionExtras')");
+        var trigger = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.triggers WHERE name = N'TR_tblInspeccionExtras_NoEnCerrada'");
+
+        Assert.True(tipos == 4, "Falta sembrar los tipos de extra. Ejecute database/cambios-esquema/31-extras-del-vehiculo.sql.");
+        Assert.True(columna == 1, "Falta tblEvidencias.ExtraId. Ejecute database/cambios-esquema/31-extras-del-vehiculo.sql.");
+        Assert.True(restriccion == 1 && textoLibre == 1, "Faltan las restricciones de los extras. Ejecute database/cambios-esquema/31-extras-del-vehiculo.sql.");
+        Assert.True(trigger == 1, "Falta el trigger de inmutabilidad de los extras. Ejecute database/cambios-esquema/31-extras-del-vehiculo.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();
