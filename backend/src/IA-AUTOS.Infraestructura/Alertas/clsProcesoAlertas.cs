@@ -39,6 +39,7 @@ public sealed class clsProcesoAlertas(IServiceScopeFactory alcances, IOptions<cl
             {
                 ultimoUmbral = ahora;
                 await EjecutarAsync("los patrones por umbral", p => p.EjecutarUmbralesAsync(parada), parada);
+                await EjecutarAsync("la autocalibración de ubicaciones", p => p.EjecutarAutocalibracionAsync(parada), parada);
             }
         }
         while (await SiguienteLatidoAsync(temporizador, parada));

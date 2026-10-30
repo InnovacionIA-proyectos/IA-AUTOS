@@ -39,6 +39,13 @@ public sealed class clsLugar : clsCatalogoBase
     /// <summary>El estado de la ubicacion (<see cref="clsEstadoUbicacion"/>): sin ubicacion, pendiente de confirmar (la fijo alguien en el momento) o confirmada.</summary>
     public string EstadoUbicacion { get; private set; } = clsEstadoUbicacion.SIN_UBICACION;
 
+    /// <summary>Quien fijo la ubicacion (quien la cargo, la fijo en el momento o confirmo la propuesta); nulo en los lugares cuya ubicacion ya existia antes.</summary>
+    public Guid? UbicacionFijadaPor { get; private set; }
+
+    public DateTimeOffset? UbicacionFijadaAt { get; private set; }
+
+    public const int RADIO_MAXIMO_M = 100_000;
+
     /// <summary>True mientras el lugar no tiene coordenadas.</summary>
     public bool SinUbicacion => Latitud is null || Longitud is null;
 
@@ -63,6 +70,85 @@ public sealed class clsLugar : clsCatalogoBase
         }
 
         Tocar(ahora);
+    }
+
+    /// <summary>
+    /// Fija la ubicacion CONFIRMADA del lugar (la carga manual de quien administra el catalogo o la propuesta de autocalibracion que el coordinador confirma): las coordenadas van juntas o ninguna, el radio es
+    /// mayor que cero y necesita coordenadas. Sin coordenadas ni radio quita la ubicacion (el lugar queda «sin ubicacion»).
+    /// </summary>
+    public void FijarUbicacionConfirmada(double? latitud, double? longitud, int? radioMetros, Guid usuarioId, DateTimeOffset ahora)
+    {
+        if ((latitud is null) != (longitud is null))
+        {
+            throw clsErroresCampos.De(latitud is null ? "latitud" : "longitud", "La latitud y la longitud van juntas: envíe las dos o ninguna");
+        }
+
+        if (latitud is null)
+        {
+            if (radioMetros is not null)
+            {
+                throw clsErroresCampos.De("radio_metros", "El radio necesita las coordenadas del lugar");
+            }
+
+            Latitud = null;
+            Longitud = null;
+            RadioMetros = null;
+            EstadoUbicacion = clsEstadoUbicacion.SIN_UBICACION;
+            UbicacionFijadaPor = null;
+            UbicacionFijadaAt = null;
+            Tocar(ahora);
+            return;
+        }
+
+        ValidarCoordenadas(latitud.Value, longitud!.Value);
+        if (radioMetros is { } radio && (radio <= 0 || radio > RADIO_MAXIMO_M))
+        {
+            throw clsErroresCampos.De("radio_metros", $"El radio debe estar entre 1 y {RADIO_MAXIMO_M} metros");
+        }
+
+        Latitud = latitud;
+        Longitud = longitud;
+        RadioMetros = radioMetros;
+        EstadoUbicacion = clsEstadoUbicacion.CONFIRMADA;
+        UbicacionFijadaPor = usuarioId;
+        UbicacionFijadaAt = ahora;
+        Tocar(ahora);
+    }
+
+    /// <summary>
+    /// «Fijar ubicacion aqui»: quien esta en el lugar y el lugar no tiene ubicacion deja la suya, que queda PENDIENTE DE CONFIRMAR (todavia no genera marcas de «fuera del rango» para nadie). 409 si el lugar ya tiene
+    /// ubicacion (pendiente o confirmada): una ubicacion existente la cambia quien administra el catalogo.
+    /// </summary>
+    public void FijarUbicacionAqui(double latitud, double longitud, Guid usuarioId, DateTimeOffset ahora)
+    {
+        if (EstadoUbicacion != clsEstadoUbicacion.SIN_UBICACION)
+        {
+            throw new clsConflictoException(EstadoUbicacion == clsEstadoUbicacion.CONFIRMADA
+                ? "El lugar ya tiene su ubicación confirmada: solo quien administra los catálogos la cambia"
+                : "El lugar ya tiene una ubicación pendiente de confirmar");
+        }
+
+        ValidarCoordenadas(latitud, longitud);
+        Latitud = latitud;
+        Longitud = longitud;
+        RadioMetros = null;
+        EstadoUbicacion = clsEstadoUbicacion.PENDIENTE_CONFIRMAR;
+        UbicacionFijadaPor = usuarioId;
+        UbicacionFijadaAt = ahora;
+        Tocar(ahora);
+    }
+
+    private static void ValidarCoordenadas(double latitud, double longitud)
+    {
+        if (!double.IsFinite(latitud) || latitud is < -90 or > 90)
+        {
+            throw clsErroresCampos.De("latitud", "La latitud debe estar entre -90 y 90");
+        }
+
+        if (!double.IsFinite(longitud) || longitud is < -180 or > 180)
+        {
+            throw clsErroresCampos.De("longitud", "La longitud debe estar entre -180 y 180");
+        }
     }
 
     private static string CiudadValida(string? ciudad)

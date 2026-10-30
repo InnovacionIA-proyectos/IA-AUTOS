@@ -162,6 +162,9 @@ public sealed class clsCatalogosService(
 
     private void Invalidar() => cache.Remove(CLAVE_CACHE);
 
+    /// <summary>Renueva la cache de los catalogos: quien cambia un valor por otro camino que el CRUD (por ejemplo, «fijar ubicacion aqui» de un lugar) la llama para que lo ve la siguiente lectura.</summary>
+    public void InvalidarCache() => Invalidar();
+
     private async Task<InstantaneaCatalogos> ConstruirAsync(CancellationToken ct)
     {
         var resultado = new SortedDictionary<string, CatalogoDto>(StringComparer.Ordinal);
