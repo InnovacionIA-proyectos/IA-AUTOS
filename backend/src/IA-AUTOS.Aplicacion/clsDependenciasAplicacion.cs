@@ -54,6 +54,9 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsSeguimientoService>();
         servicios.AddScoped<clsHallazgosService>();
         servicios.AddScoped<clsNoSaleService>();
+        servicios.AddScoped<clsEntregasService>();
+        servicios.AddScoped<clsReclamosService>();
+        servicios.AddScoped<clsAccesoViajes>();
         servicios.AddScoped<clsAuditoriaService>();
         servicios.AddScoped<clsReportesTableroService>();
         servicios.AddScoped<clsExportacionesService>();
@@ -73,6 +76,8 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsCargaViajesService>();
         servicios.AddScoped<clsSofasaService>();
         servicios.AddScoped<clsReportesService>();
+        servicios.AddScoped<clsConfirmacionEnSitioService>();
+        servicios.AddScoped<clsLugaresService>();
         servicios.AddScoped<clsInspeccionesService>();
         servicios.AddScoped<clsArchivosService>();
         return servicios;

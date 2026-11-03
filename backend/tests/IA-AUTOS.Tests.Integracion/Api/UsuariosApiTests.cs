@@ -6,7 +6,7 @@ using IAAutos.Tests.Integracion.Infraestructura;
 
 namespace IAAutos.Tests.Integracion.Api;
 
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed class UsuariosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private async Task<string> TokenSuperAdminAsync(string email = "super@ejemplo.com")

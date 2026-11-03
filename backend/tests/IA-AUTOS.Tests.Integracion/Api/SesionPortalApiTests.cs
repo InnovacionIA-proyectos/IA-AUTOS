@@ -14,7 +14,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Sesion del portal: login-portal, refresh rotativo y logout, con access y refresh en el cuerpo (mismo esquema que EmbarQA). La
 /// base de TI se simula (no hay credenciales de TI en estas pruebas); todo lo demas es la API real contra SQL Server 2019.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class SesionPortalApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private sealed class PortalFalso : IPortalUsuarios

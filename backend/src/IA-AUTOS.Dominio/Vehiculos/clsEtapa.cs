@@ -28,12 +28,6 @@ public sealed class clsEtapa : clsEntidadBase
     /// <summary>Si la etapa exige informe nuevo (re-inspeccion) o solo firma.</summary>
     public bool RequiereInspeccion { get; private set; }
 
-    /// <summary>
-    /// Solo tiene sentido en la etapa de Cargue: con personal de apoyo la inspeccion de salida la hace un inspector; sin el, la hace
-    /// el conductor.
-    /// </summary>
-    public bool ConPersonalApoyo { get; private set; }
-
     public static clsEtapa Crear(
         Guid vehiculoId,
         Guid viajeId,
@@ -41,7 +35,6 @@ public sealed class clsEtapa : clsEntidadBase
         Guid? puntoCustodiaId,
         int orden,
         bool requiereInspeccion,
-        bool conPersonalApoyo,
         DateTimeOffset ahora)
     {
         if (orden < 1)
@@ -57,7 +50,6 @@ public sealed class clsEtapa : clsEntidadBase
             PuntoCustodiaId = puntoCustodiaId,
             Orden = orden,
             RequiereInspeccion = requiereInspeccion,
-            ConPersonalApoyo = conPersonalApoyo,
         };
         etapa.Inicializar(ahora);
         return etapa;
@@ -66,12 +58,6 @@ public sealed class clsEtapa : clsEntidadBase
     public void CambiarLugar(Guid? puntoCustodiaId, DateTimeOffset ahora)
     {
         PuntoCustodiaId = puntoCustodiaId;
-        Tocar(ahora);
-    }
-
-    public void CambiarPersonalApoyo(bool conPersonalApoyo, DateTimeOffset ahora)
-    {
-        ConPersonalApoyo = conPersonalApoyo;
         Tocar(ahora);
     }
 }

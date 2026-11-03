@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
-using Testcontainers.MsSql;
 
 namespace IAAutos.Tests.Integracion.Infraestructura;
 
@@ -17,20 +16,16 @@ public sealed partial class MigracionEvidenciaSinBorradoTests : IAsyncLifetime
     private static readonly Guid BORRADOR_VACIO = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid BORRADOR_CON_HALLAZGO = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
-    private readonly MsSqlContainer _contenedor = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2019-latest").Build();
     private string _cadena = string.Empty;
 
     public async Task InitializeAsync()
     {
-        await _contenedor.StartAsync();
-        var maestra = _contenedor.GetConnectionString();
-        await EjecutarAsync(maestra, "CREATE DATABASE IAAutosMigracionEvidencia");
-        _cadena = new SqlConnectionStringBuilder(maestra) { InitialCatalog = "IAAutosMigracionEvidencia" }.ConnectionString;
+        _cadena = await clsServidorSql.CrearBaseAsync("IAAutosMigracionEvidencia");
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "Infraestructura", "Esquemas", "ddl-previo-a-evidencia.sql"));
         await EjecutarAsync(_cadena, DATOS_PREVIOS);
     }
 
-    public async Task DisposeAsync() => await _contenedor.DisposeAsync();
+    public async Task DisposeAsync() => await clsServidorSql.EliminarBaseAsync(_cadena);
 
     private static async Task EjecutarAsync(string cadena, string sql)
     {
@@ -144,7 +139,7 @@ public sealed partial class MigracionEvidenciaSinBorradoTests : IAsyncLifetime
         Assert.Equal(0, await ContarAsync("SELECT COUNT(*) FROM sys.foreign_keys WHERE delete_referential_action = 1 AND name IN (N'FK_tblViajeVehiculos_Vehiculo', N'FK_tblEtapas_Vehiculo', N'FK_tblInspecciones_Etapa', N'FK_tblHallazgos_Inspeccion', N'FK_tblEvidencias_Inspeccion', N'FK_tblTransferencias_Inspeccion')"));
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.foreign_keys WHERE delete_referential_action = 1 AND name = N'FK_tblViajeVehiculos_Viaje'"));
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.foreign_keys WHERE delete_referential_action = 1 AND name = N'FK_tblCuadranteVistas_Cuadrante'"));
-        Assert.Equal(5, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name LIKE N'TR[_]%[_]NoBorrar' AND is_instead_of_trigger = 1 AND OBJECT_NAME(parent_id) NOT IN (N'tblHallazgoSeguimiento', N'tblNotificaciones', N'tblNotasAclaratorias', N'tblNovedadesProceso')"));
+        Assert.Equal(5, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name LIKE N'TR[_]%[_]NoBorrar' AND is_instead_of_trigger = 1 AND OBJECT_NAME(parent_id) NOT IN (N'tblHallazgoSeguimiento', N'tblNotificaciones', N'tblNotasAclaratorias', N'tblNovedadesProceso', N'tblReclamos')"));
 
         // Repetir el script no cambia nada (ya esta aplicado).
         await EjecutarAsync(_cadena, await ScriptMigracionAsync());
@@ -188,7 +183,7 @@ public sealed partial class MigracionEvidenciaSinBorradoTests : IAsyncLifetime
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "database", "ddl.sql"));
 
         Assert.Equal(2, await ContarAsync("SELECT COUNT(*) FROM dbo.tblVehiculos WHERE Activo = 1"));
-        Assert.Equal(5, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name LIKE N'TR[_]%[_]NoBorrar' AND is_instead_of_trigger = 1 AND OBJECT_NAME(parent_id) NOT IN (N'tblHallazgoSeguimiento', N'tblNotificaciones', N'tblNotasAclaratorias', N'tblNovedadesProceso')"));
+        Assert.Equal(5, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name LIKE N'TR[_]%[_]NoBorrar' AND is_instead_of_trigger = 1 AND OBJECT_NAME(parent_id) NOT IN (N'tblHallazgoSeguimiento', N'tblNotificaciones', N'tblNotasAclaratorias', N'tblNovedadesProceso', N'tblReclamos')"));
         Assert.Equal(51003, await ErrorDeAsync("DELETE FROM dbo.tblEvidencias"));
     }
 
@@ -199,7 +194,7 @@ public sealed partial class MigracionEvidenciaSinBorradoTests : IAsyncLifetime
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "database", "ddl.sql"));
 
         Assert.Equal(2, await ContarAsync("SELECT COUNT(*) FROM dbo.tblVehiculos WHERE Activo = 1"));
-        Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name LIKE N'TR[_]%[_]NoBorrar' AND is_instead_of_trigger = 1 AND OBJECT_NAME(parent_id) NOT IN (N'tblHallazgoSeguimiento', N'tblNotificaciones', N'tblNotasAclaratorias', N'tblNovedadesProceso')"));
+        Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name LIKE N'TR[_]%[_]NoBorrar' AND is_instead_of_trigger = 1 AND OBJECT_NAME(parent_id) NOT IN (N'tblHallazgoSeguimiento', N'tblNotificaciones', N'tblNotasAclaratorias', N'tblNovedadesProceso', N'tblReclamos')"));
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.triggers WHERE name = N'TR_tblAuditLog_NoBorrar'"));
     }
 }

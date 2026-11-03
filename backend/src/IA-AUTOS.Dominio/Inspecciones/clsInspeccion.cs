@@ -63,6 +63,15 @@ public sealed class clsInspeccion : clsEntidadBase
     /// <summary>El texto del motivo, obligatorio solo cuando el motivo lo requiere.</summary>
     public string? MotivoSinInspectorTexto { get; private set; }
 
+    /// <summary>El resultado de confirmar «en sitio» la evidencia sellada (<see cref="clsResultadoConfirmacionSitio"/>). Nulo mientras no se determina y en las inspecciones que no son de Cargue ni de Descargue.</summary>
+    public string? ConfirmacionSitio { get; private set; }
+
+    /// <summary>La distancia, en metros, de la foto que determino la confirmacion al centro del lugar; nula cuando no se pudo calcular.</summary>
+    public double? ConfirmacionDistanciaM { get; private set; }
+
+    /// <summary>La foto que determino la confirmacion.</summary>
+    public Guid? ConfirmacionEvidenciaId { get; private set; }
+
     public bool EstaCerrada => Estado == clsEstadoInspeccion.CERRADA;
 
     public static clsInspeccion Crear(
@@ -162,6 +171,23 @@ public sealed class clsInspeccion : clsEntidadBase
     }
 
     /// <summary>Una inspeccion cerrada es inmutable: no admite hallazgos ni evidencias nuevos.</summary>
+    /// <summary>
+    /// Guarda el resultado de la confirmacion «en sitio» y la foto (y su distancia) que lo determino. Se escribe mientras la inspeccion esta en borrador: una cerrada es inmutable (409).
+    /// </summary>
+    public void RegistrarConfirmacionSitio(string resultado, double? distanciaM, Guid evidenciaId, DateTimeOffset ahora)
+    {
+        AsegurarEditable();
+        if (!clsResultadoConfirmacionSitio.VALORES.Contains(resultado))
+        {
+            throw new ArgumentException($"Resultado de confirmación desconocido: {resultado}", nameof(resultado));
+        }
+
+        ConfirmacionSitio = resultado;
+        ConfirmacionDistanciaM = distanciaM;
+        ConfirmacionEvidenciaId = evidenciaId;
+        Tocar(ahora);
+    }
+
     public void AsegurarEditable()
     {
         if (EstaCerrada)
@@ -176,7 +202,7 @@ public sealed class clsInspeccion : clsEntidadBase
     /// Las fotos adicionales (piezas en el baul y cojineria) nunca bloquean el cierre. Donde no hay vistas obligatorias (Transporte) el registro
     /// del conductor es su propia hora y ubicacion: con <paramref name="exigeUbicacionPropia"/> la inspeccion debe traer su GPS.
     /// </summary>
-    public void Cerrar(clsResumenCierre resumen, IReadOnlyList<string> vistasFaltantes, bool exigeUbicacionPropia, DateTimeOffset ahora)
+    public void Cerrar(clsResumenCierre resumen, IReadOnlyList<string> vistasFaltantes, bool exigeUbicacionPropia, DateTimeOffset ahora, IReadOnlyList<string>? otrosFaltantes = null)
     {
         if (EstaCerrada)
         {
@@ -185,6 +211,10 @@ public sealed class clsInspeccion : clsEntidadBase
 
         var errores = new List<string>();
         errores.AddRange(vistasFaltantes.Select(vista => $"Falta la foto de la vista «{vista}»"));
+        if (otrosFaltantes is not null)
+        {
+            errores.AddRange(otrosFaltantes);
+        }
 
         if (exigeUbicacionPropia && (Lat is null || Lng is null))
         {

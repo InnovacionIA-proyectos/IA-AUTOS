@@ -38,6 +38,9 @@ public sealed class clsTransferenciaCustodia : clsEntidadBase
 {
     public const int RESERVAS_MAX = 1000;
     public const int MOTIVO_MAX = 1000;
+
+    /// <summary>El motivo del recibo sin entrega del cargue: el conductor hizo la salida porque el inspector previsto no estaba, asi que nadie de Botero Soto entrego.</summary>
+    public const string MOTIVO_SIN_ENTREGA_CARGUE = "El conductor hizo la salida del cargue y nadie de Botero Soto entregó la unidad";
     public const int IP_MAX = 45;
 
     private clsTransferenciaCustodia()
@@ -72,7 +75,7 @@ public sealed class clsTransferenciaCustodia : clsEntidadBase
     /// <summary>Observaciones de quien recibe cuando firma «con reservas».</summary>
     public string? ReservasTexto { get; private set; }
 
-    /// <summary>La parte que se nego a firmar (<see cref="clsParteFirmante"/>) en una constancia de no firma.</summary>
+    /// <summary>La parte que NO firmo (<see cref="clsParteFirmante"/>): en una constancia de no firma, la que se nego; en un recibo sin entrega, la otra firma sola (quien entrega si firma quien recibe).</summary>
     public string? NoFirmaParte { get; private set; }
 
     public string? MotivoNoFirma { get; private set; }
@@ -108,13 +111,15 @@ public sealed class clsTransferenciaCustodia : clsEntidadBase
 
     /// <summary>
     /// Crea la transferencia ya cerrada como «recibo sin entrega»: nadie de Botero Soto firma la entrega porque el conductor hizo la salida del cargue, asi que solo queda la firma de quien
-    /// recibe, con su fecha e IP. No lleva usuario, firma, fecha ni IP de entrega y no se sella como firmada por ambas partes.
+    /// recibe, con su fecha e IP. No lleva usuario, firma, fecha ni IP de entrega y no se sella como firmada por ambas partes. Queda con la parte que no firmo (quien entrega) y su motivo.
     /// </summary>
     public static clsTransferenciaCustodia CrearReciboSinEntrega(Guid inspeccionId, Guid recibeUsuarioId, string? firma, string? ip, DateTimeOffset ahora)
     {
         var transferencia = new clsTransferenciaCustodia { InspeccionId = inspeccionId, RecibeUsuarioId = recibeUsuarioId };
         transferencia.PonerFirma(clsParteFirmante.RECIBE, FirmaValida(firma), ip, ahora);
         transferencia.TipoCierre = clsTipoCierre.RECIBO_SIN_ENTREGA;
+        transferencia.NoFirmaParte = clsParteFirmante.ENTREGA;
+        transferencia.MotivoNoFirma = MOTIVO_SIN_ENTREGA_CARGUE;
         transferencia.Inicializar(ahora);
         return transferencia;
     }
@@ -143,6 +148,63 @@ public sealed class clsTransferenciaCustodia : clsEntidadBase
         PonerFirma(clsParteFirmante.RECIBE, FirmaValida(firma), ip, ahora);
         ReservasTexto = null;
         EntregaUsuarioId = null;
+        TipoCierre = clsTipoCierre.RECIBO_SIN_ENTREGA;
+        NoFirmaParte = clsParteFirmante.ENTREGA;
+        MotivoNoFirma = MOTIVO_SIN_ENTREGA_CARGUE;
+        Tocar(ahora);
+    }
+
+    /// <summary>
+    /// Cierra como «recibo sin entrega» con UNA sola firma y su motivo (obligatorio): la del propio usuario, que es quien entrega o quien recibe (403 si no es ninguna de las dos partes). Si firma quien recibe, quien
+    /// entrega no firmo (<c>NoFirmaParte = entrega</c>: sin usuario, firma, fecha ni IP de entrega); si firma quien entrega, quien recibe no firmo (<c>NoFirmaParte = recibe</c>). 409 si la otra parte ya firmo o si la
+    /// transferencia ya esta cerrada. Si el usuario ya habia firmado su parte, la firma no hace falta; si no, es obligatoria.
+    /// </summary>
+    public void CerrarConUnaFirma(Guid usuarioId, string? firma, string? motivo, string? ip, DateTimeOffset ahora)
+    {
+        if (EstaCerrada)
+        {
+            throw ConflictoPorCierre();
+        }
+
+        var parte = ParteObligatoria(usuarioId, "cerrar con una sola firma");
+        var texto = clsValidador.Opcional(motivo) ?? throw clsErroresCampos.De("motivo", "El motivo es obligatorio");
+        if (texto.Length > MOTIVO_MAX)
+        {
+            throw clsErroresCampos.De("motivo", $"El motivo admite máximo {MOTIVO_MAX} caracteres");
+        }
+
+        if (parte == clsParteFirmante.ENTREGA)
+        {
+            if (!string.IsNullOrEmpty(FirmaRecibe))
+            {
+                throw new clsConflictoException("Quien recibe ya firmó: la entrega no puede cerrarse con una sola firma");
+            }
+
+            if (!string.IsNullOrEmpty(firma) || string.IsNullOrEmpty(FirmaEntrega))
+            {
+                PonerFirma(clsParteFirmante.ENTREGA, FirmaValida(firma), ip, ahora);
+            }
+
+            NoFirmaParte = clsParteFirmante.RECIBE;
+        }
+        else
+        {
+            if (!string.IsNullOrEmpty(FirmaEntrega))
+            {
+                throw new clsConflictoException("Quien entrega ya firmó: la entrega no puede cerrarse con una sola firma");
+            }
+
+            if (!string.IsNullOrEmpty(firma) || string.IsNullOrEmpty(FirmaRecibe))
+            {
+                PonerFirma(clsParteFirmante.RECIBE, FirmaValida(firma), ip, ahora);
+            }
+
+            ReservasTexto = null;
+            EntregaUsuarioId = null;
+            NoFirmaParte = clsParteFirmante.ENTREGA;
+        }
+
+        MotivoNoFirma = texto;
         TipoCierre = clsTipoCierre.RECIBO_SIN_ENTREGA;
         Tocar(ahora);
     }

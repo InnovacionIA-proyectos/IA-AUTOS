@@ -45,7 +45,7 @@ public sealed record ErrorApiDto(string Error, string Code, string Message, stri
 internal static class clsOpenApi
 {
     public const string ESQUEMA_BEARER = "bearerAuth";
-    public const string VERSION = "2.5.0";
+    public const string VERSION = "3.0.0";
 
     /// <summary>Lo que se publica en <c>info.description</c>: la regla de nombres y sus excepciones.</summary>
     public const string DESCRIPCION =

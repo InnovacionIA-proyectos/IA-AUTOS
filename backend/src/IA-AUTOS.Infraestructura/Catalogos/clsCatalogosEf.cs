@@ -141,6 +141,97 @@ internal sealed class clsCatalogoEstadosSofasa(clsAppDbContext contexto, IReloj 
 }
 
 /// <summary>
+/// Los lugares reales (CEDI Envigado, Concesionario Autolarte Medellin...): <c>nombre</c> (unico), <c>tipo</c> (el codigo de un tipo de lugar de <c>puntos-custodia</c>), <c>ciudad</c>, <c>orden</c> y
+/// <c>activo</c>. Salen ademas el nombre del tipo, la ubicacion (<c>latitud</c>, <c>longitud</c> y <c>radio_metros</c>, nulos mientras no se fijan) y <c>sin_ubicacion</c>. Un lugar que un viaje o una unidad usa
+/// no se borra (409): se inactiva.
+/// </summary>
+internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj, IUsuarioActual actual) : clsCatalogoEf<clsLugar>(contexto, reloj, clsNombresCatalogo.LUGARES)
+{
+    protected override IReadOnlyList<string> CamposPermitidos { get; } = ["nombre", "tipo", "ciudad", "orden", "activo", "latitud", "longitud", "radio_metros"];
+
+    private async Task<Dictionary<Guid, (string Codigo, string Nombre)>> TiposAsync(CancellationToken ct) =>
+        (await Contexto.PuntosCustodia.AsNoTracking().Select(p => new { p.Id, p.Codigo, p.Nombre }).ToListAsync(ct)).ToDictionary(p => p.Id, p => (p.Codigo, p.Nombre));
+
+    private static ValorCatalogo Armar(clsLugar l, IReadOnlyDictionary<Guid, (string Codigo, string Nombre)> tipos) => new()
+    {
+        ["id"] = l.Id,
+        ["nombre"] = l.Nombre,
+        ["tipo"] = tipos.TryGetValue(l.TipoId, out var tipo) ? tipo.Codigo : null,
+        ["tipo_nombre"] = tipos.TryGetValue(l.TipoId, out var tipoNombre) ? tipoNombre.Nombre : null,
+        ["ciudad"] = l.Ciudad,
+        ["orden"] = l.Orden,
+        ["activo"] = l.Activo,
+        ["latitud"] = l.Latitud,
+        ["longitud"] = l.Longitud,
+        ["radio_metros"] = l.RadioMetros,
+        ["sin_ubicacion"] = l.SinUbicacion,
+        ["estado_ubicacion"] = l.EstadoUbicacion,
+        ["ubicacion_fijada_por"] = l.UbicacionFijadaPor,
+        ["ubicacion_fijada_at"] = l.UbicacionFijadaAt,
+    };
+
+    protected override ValorCatalogo Mapear(clsLugar l) => Armar(l, new Dictionary<Guid, (string, string)>());
+
+    protected override async Task<ValorCatalogo> MapearAsync(clsLugar entidad, CancellationToken ct) => Armar(entidad, await TiposAsync(ct));
+
+    public override async Task<IReadOnlyList<ValorCatalogo>> ListarAsync(CancellationToken ct = default)
+    {
+        var tipos = await TiposAsync(ct);
+        var filas = await Conjunto.AsNoTracking().OrderBy(l => l.Orden).ThenBy(l => l.Nombre).ToListAsync(ct);
+        return filas.Select(l => Armar(l, tipos)).ToList();
+    }
+
+    protected override async Task<clsLugar> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct)
+    {
+        var lugar = clsLugar.Crear(campos.Texto("nombre"), await TipoActivoAsync(campos.Texto("tipo"), requerido: true, ct) ?? Guid.Empty, campos.Texto("ciudad"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora);
+        AplicarUbicacion(lugar, campos);
+        return lugar;
+    }
+
+    protected override async Task AplicarAsync(clsLugar entidad, clsCamposCatalogo campos, CancellationToken ct)
+    {
+        if (campos.Tiene("tipo") || campos.Tiene("ciudad"))
+        {
+            entidad.CambiarLugar(campos.Tiene("tipo") ? await TipoActivoAsync(campos.Texto("tipo"), requerido: true, ct) : null, campos.Texto("ciudad"), Reloj.Ahora);
+        }
+
+        AplicarUbicacion(entidad, campos);
+    }
+
+    /// <summary>
+    /// La carga manual de la ubicacion: quien administra el catalogo (admin, super_admin y coordinador_calidad, como en todos los catalogos) fija latitud, longitud y radio, y la ubicacion queda
+    /// CONFIRMADA con su autor y su fecha. Lo que no se envia se conserva; sin coordenadas la ubicacion se quita.
+    /// </summary>
+    private void AplicarUbicacion(clsLugar lugar, clsCamposCatalogo campos)
+    {
+        if (!campos.Tiene("latitud") && !campos.Tiene("longitud") && !campos.Tiene("radio_metros"))
+        {
+            return;
+        }
+
+        lugar.FijarUbicacionConfirmada(
+            campos.Tiene("latitud") ? campos.Numero("latitud") : lugar.Latitud,
+            campos.Tiene("longitud") ? campos.Numero("longitud") : lugar.Longitud,
+            campos.Tiene("radio_metros") ? campos.Entero("radio_metros") : lugar.RadioMetros,
+            actual.IdObligatorio(),
+            Reloj.Ahora);
+    }
+
+    /// <summary>El id del tipo de lugar con ese codigo (activo); 400 si falta o no existe.</summary>
+    private async Task<Guid?> TipoActivoAsync(string? codigo, bool requerido, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(codigo))
+        {
+            return requerido ? throw clsErroresCampos.De("tipo", "El tipo de lugar es requerido: use el código de uno de puntos-custodia") : null;
+        }
+
+        var limpio = codigo.Trim();
+        var tipo = await Contexto.PuntosCustodia.AsNoTracking().Where(p => p.Codigo == limpio && p.Activo).Select(p => (Guid?)p.Id).FirstOrDefaultAsync(ct);
+        return tipo ?? throw clsErroresCampos.De("tipo", "El tipo de lugar no existe en puntos-custodia o está inactivo");
+    }
+}
+
+/// <summary>
 /// Los motivos por los que no esta el inspector previsto: codigo, nombre, orden, activo y <c>requiere_texto</c> (el motivo «otro» exige escribir cual es). Un motivo que una inspeccion o una
 /// novedad de proceso usa no se borra (409): se inactiva.
 /// </summary>

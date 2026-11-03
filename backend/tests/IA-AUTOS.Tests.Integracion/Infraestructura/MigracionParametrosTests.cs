@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
-using Testcontainers.MsSql;
 
 namespace IAAutos.Tests.Integracion.Infraestructura;
 
@@ -10,19 +9,15 @@ namespace IAAutos.Tests.Integracion.Infraestructura;
 /// </summary>
 public sealed partial class MigracionParametrosTests : IAsyncLifetime
 {
-    private readonly MsSqlContainer _contenedor = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2019-latest").Build();
     private string _cadena = string.Empty;
 
     public async Task InitializeAsync()
     {
-        await _contenedor.StartAsync();
-        var maestra = _contenedor.GetConnectionString();
-        await EjecutarAsync(maestra, "CREATE DATABASE IAAutosMigracionParametros");
-        _cadena = new SqlConnectionStringBuilder(maestra) { InitialCatalog = "IAAutosMigracionParametros" }.ConnectionString;
+        _cadena = await clsServidorSql.CrearBaseAsync("IAAutosMigracionParametros");
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "Infraestructura", "Esquemas", "ddl-previo-a-parametros.sql"));
     }
 
-    public async Task DisposeAsync() => await _contenedor.DisposeAsync();
+    public async Task DisposeAsync() => await clsServidorSql.EliminarBaseAsync(_cadena);
 
     private static async Task EjecutarAsync(string cadena, string sql)
     {

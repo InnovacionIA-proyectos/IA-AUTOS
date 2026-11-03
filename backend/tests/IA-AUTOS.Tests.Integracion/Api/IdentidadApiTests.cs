@@ -7,7 +7,7 @@ using IAAutos.Tests.Integracion.Infraestructura;
 namespace IAAutos.Tests.Integracion.Api;
 
 /// <summary>Cedula y PIN, bloqueo, cambio obligatorio del PIN, permisos por rol y clientes, contra la API y la base reales.</summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed class IdentidadApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string CEDULA = "1234567";

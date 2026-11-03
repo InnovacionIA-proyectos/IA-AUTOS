@@ -1,6 +1,5 @@
 using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
-using Testcontainers.MsSql;
 
 namespace IAAutos.Tests.Integracion.Infraestructura;
 
@@ -12,20 +11,16 @@ namespace IAAutos.Tests.Integracion.Infraestructura;
 /// </summary>
 public sealed partial class MigracionViajesTests : IAsyncLifetime
 {
-    private readonly MsSqlContainer _contenedor = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2019-latest").Build();
     private string _cadena = string.Empty;
 
     public async Task InitializeAsync()
     {
-        await _contenedor.StartAsync();
-        var maestra = _contenedor.GetConnectionString();
-        await EjecutarAsync(maestra, "CREATE DATABASE IAAutosMigracionViajes");
-        _cadena = new SqlConnectionStringBuilder(maestra) { InitialCatalog = "IAAutosMigracionViajes" }.ConnectionString;
+        _cadena = await clsServidorSql.CrearBaseAsync("IAAutosMigracionViajes");
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "Infraestructura", "Esquemas", "ddl-previo-a-viajes.sql"));
         await EjecutarAsync(_cadena, DATOS_PREVIOS);
     }
 
-    public async Task DisposeAsync() => await _contenedor.DisposeAsync();
+    public async Task DisposeAsync() => await clsServidorSql.EliminarBaseAsync(_cadena);
 
     private static async Task EjecutarAsync(string cadena, string sql)
     {
@@ -77,7 +72,7 @@ public sealed partial class MigracionViajesTests : IAsyncLifetime
     /// V6 tiene dos asignaciones (gana la reciente); V4 tiene informes y ninguna asignacion; V5 no tiene nada. V1 y V3 tienen todos sus
     /// informes cerrados; V2 solo el de cargue; V4 el de cargue cerrado y el de transporte en borrador.
     /// </summary>
-    private const string DATOS_PREVIOS = """
+    internal const string DATOS_PREVIOS = """
         DECLARE @insp uniqueidentifier = NEWID(), @cond1 uniqueidentifier = NEWID(), @cond2 uniqueidentifier = NEWID(), @adm uniqueidentifier = NEWID();
         INSERT dbo.tblUsuarios (Id, Nombre, Email, Rol) VALUES
          (@insp, N'Ines Inspectora', 'insp@e.com', 'inspector'), (@cond1, N'Carlos Conductor', 'c1@e.com', 'conductor'),

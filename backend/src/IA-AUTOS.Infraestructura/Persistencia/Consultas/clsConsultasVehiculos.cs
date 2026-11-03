@@ -189,6 +189,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                                  MarcadoPorNombre = (string?)um.Nombre,
                                  vv.NoSaleAt,
                                  VinReemplazo = (string?)r.Vin,
+                                 vv.Posicion,
                              };
         if (soloDeUsuario is { } usuarioId)
         {
@@ -213,6 +214,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
             .Where(t => inspeccionIds.Contains(t.InspeccionId)).ToListAsync(ct);
         var notas = await new clsConsultasNotas(contexto).ListarPorEntidadesAsync(clsEntidadNota.INSPECCION, inspeccionIds, ct);
         var novedadesProceso = await new clsConsultasNovedadesProceso(contexto).DeInspeccionesAsync(inspeccionIds, ct);
+        var extras = await clsConsultasExtras.CargarAsync(contexto, inspeccionIds, ct);
 
         // La placa, el trailer y el conductor son los del viaje; lo capturado a mano antes de los viajes tiene prioridad.
         InventarioInspeccionDto AInspeccion(clsInspeccion i)
@@ -228,7 +230,8 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                 transferencias.Where(t => t.InspeccionId == i.Id).Select(clsMapeadorInspecciones.ATransferencia).FirstOrDefault(),
                 notas.GetValueOrDefault(i.Id) ?? [],
                 novedadesProceso.GetValueOrDefault(i.Id)?.Motivo,
-                novedadesProceso.GetValueOrDefault(i.Id)?.Novedades ?? []);
+                novedadesProceso.GetValueOrDefault(i.Id)?.Novedades ?? [],
+                extras.GetValueOrDefault(i.Id) ?? []);
         }
 
         var etapasDto = etapas.Select(e => new InventarioEtapaDto(
@@ -239,10 +242,10 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
             e.Etapa.RequiereInspeccion,
             e.Etapa.ViajeId,
             e.CodigoMtrack,
-            e.Etapa.ConPersonalApoyo,
             e.EstadoUnidad,
             clsMapeadorViajes.ANoSale(e.EstadoUnidad, e.NoSaleMotivo, e.NoSaleHallazgoId, e.NoSaleMarcadoPor, e.MarcadoPorNombre, e.NoSaleAt, e.VinReemplazo),
-            inspecciones.Where(i => i.EtapaId == e.Etapa.Id).Select(AInspeccion).ToList()))
+            inspecciones.Where(i => i.EtapaId == e.Etapa.Id).Select(AInspeccion).ToList(),
+            e.Posicion))
             .ToList();
 
         return new InventarioDto(

@@ -68,6 +68,14 @@ internal sealed class clsViajeRepository(clsAppDbContext contexto) : IViajeRepos
     public async Task<IReadOnlyList<clsEtapa>> ObtenerEtapasAsync(Guid viajeId, Guid? vehiculoId, CancellationToken ct = default) =>
         await contexto.Etapas.Where(e => e.ViajeId == viajeId && (vehiculoId == null || e.VehiculoId == vehiculoId)).ToListAsync(ct);
 
+    public Task<bool> TieneSegundaInspeccionDelCargueEnCursoAsync(Guid viajeId, CancellationToken ct = default) =>
+        (from i in contexto.Inspecciones.AsNoTracking()
+         join e in contexto.Etapas.AsNoTracking() on i.EtapaId equals e.Id
+         join c in contexto.EtapasCatalogo.AsNoTracking() on e.EtapaCatalogoId equals c.Id
+         where i.ViajeId == viajeId && i.Momento == IAAutos.Dominio.Inspecciones.clsMomento.SALIDA
+            && i.Estado == IAAutos.Dominio.Inspecciones.clsEstadoInspeccion.BORRADOR && c.Codigo == IAAutos.Dominio.Vehiculos.clsCodigosEtapa.CARGUE
+         select i.Id).AnyAsync(ct);
+
     public Task<bool> TieneInspeccionesAsync(Guid viajeId, Guid? vehiculoId, CancellationToken ct = default) =>
         contexto.Inspecciones.AsNoTracking().AnyAsync(
             i => i.ViajeId == viajeId

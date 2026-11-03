@@ -66,7 +66,7 @@ public sealed class clsHallazgosController(clsSeguimientoService seguimiento, cl
     public async Task<IActionResult> ListarNotas(Guid id, CancellationToken ct) => Ok(await notas.ListarDeHallazgoAsync(id, ct));
 
     /// <summary>
-    /// Revisa el hallazgo que registro el conductor: <c>cuadrante_numero</c> + <c>lado</c> (o <c>zona_provisional</c>), <c>clase_dano</c> y <c>nivel_severidad</c> son obligatorios, <c>tamano_dano</c> corrige el que
+    /// Revisa el hallazgo que registro el conductor: <c>cuadrante_numero</c> + <c>lado</c> (el lado solo si el cuadrante lo lleva), <c>clase_dano</c> y <c>nivel_severidad</c> son obligatorios, <c>tamano_dano</c> corrige el que
     /// eligio el conductor y <c>nota</c> es opcional. Lo hacen el inspector (de un VIN de sus viajes) y los administradores, y el coordinador de calidad solo con los de la salida de un Cargue sin personal de
     /// apoyo. 409 si el hallazgo no es del conductor y 409 HALLAZGO_YA_REVISADO si ya se reviso. Queda en el historial y, si el nivel es critico, alerta al coordinador y al administrador del cliente.
     /// </summary>

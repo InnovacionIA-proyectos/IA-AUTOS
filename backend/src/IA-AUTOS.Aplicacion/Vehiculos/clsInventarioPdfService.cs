@@ -29,10 +29,15 @@ public sealed class clsInventarioPdfService(
 
         // Primero las fotos de los hallazgos (las mas importantes) y despues las de las vistas, hasta llenar el PDF.
         var candidatas = inspecciones.SelectMany(i => i.Evidencias).Where(e => !e.EsSello && !e.EsConstancia).OrderBy(e => e.HallazgoId is null ? 1 : 0).ToList();
+        var nombresDeExtras = inspecciones.SelectMany(i => i.Extras ?? []).ToDictionary(x => x.Id, x => x.Nombre);
         var fotos = new Dictionary<Guid, FotoInforme>();
         foreach (var foto in candidatas.Take(MAXIMO_FOTOS))
         {
-            var titulo = foto.HallazgoId is not null ? "Foto del hallazgo" : foto.VistaId is { } vistaId ? $"Vista: {vistas.GetValueOrDefault(vistaId) ?? "sin nombre"}" : "Foto adicional";
+            var titulo = foto.HallazgoId is not null
+                ? "Foto del hallazgo"
+                : foto.ExtraId is { } extraId
+                    ? $"Foto del extra: {nombresDeExtras.GetValueOrDefault(extraId) ?? "sin nombre"}"
+                    : foto.VistaId is { } vistaId ? $"Vista: {vistas.GetValueOrDefault(vistaId) ?? "sin nombre"}" : "Foto adicional";
             fotos[foto.Id] = new FotoInforme(foto.RutaArchivo is null ? null : await almacen.LeerAsync(foto.RutaArchivo, ct), titulo, clsPieDeFoto.De(titulo, foto));
         }
 

@@ -1,6 +1,5 @@
 using System.Text.Json;
 using IAAutos.Aplicacion.Catalogos;
-using IAAutos.Aplicacion.Comun;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Comun;
 using IAAutos.Infraestructura.Persistencia;
@@ -8,56 +7,44 @@ using Microsoft.EntityFrameworkCore;
 
 namespace IAAutos.Infraestructura.Catalogos;
 
-/// <summary>
-/// Cuadrantes: las zonas numeradas de la carroceria. Donde se dibujan en cada panel lo administra cuadrante-regiones. Junto a ellos se publican las
-/// zonas provisionales (frente, llantas) con su codigo, sin numero y sin region; esas filas se leen aqui pero no se editan.
-/// </summary>
-internal sealed class clsCatalogoCuadrantes(clsAppDbContext contexto, IReloj reloj)
-    : clsCatalogoEf<clsCuadrante>(contexto, reloj, clsNombresCatalogo.CUADRANTES)
+/// <summary>El dibujo de danos (cuadrantes, paneles y regiones) es de solo lectura por la API: un dibujo distinto es una version nueva del archivo, que se siembra con un guion.</summary>
+internal static class clsDibujoSoloLectura
 {
-    protected override IReadOnlyList<string> CamposPermitidos { get; } = ["tipo_vehiculo", "numero", "nombre", "orden", "activo"];
+    public const string MENSAJE = "El dibujo se cambia con una versión nueva del archivo";
 
-    public override async Task<IReadOnlyList<ValorCatalogo>> ListarAsync(CancellationToken ct = default)
+    public static clsConflictoException Conflicto() => new(MENSAJE);
+}
+
+/// <summary>
+/// Cuadrantes: las piezas numeradas de la carroceria. Cada uno declara si lleva lado (<c>lleva_lado</c>) y trae sus zonas: una por lado (izquierdo y derecho) o una sola sin lado, con el
+/// <c>nombre_completo</c> de la pieza en ese lado y su codigo <c>aiag_area</c>. Donde se dibujan en cada panel lo dice cuadrante-regiones. Solo lectura: el archivo del dibujo manda.
+/// </summary>
+internal sealed class clsCatalogoCuadrantes(clsAppDbContext contexto) : ICatalogo
+{
+    public string Nombre => clsNombresCatalogo.CUADRANTES;
+
+    public async Task<IReadOnlyList<ValorCatalogo>> ListarAsync(CancellationToken ct = default)
     {
-        var filas = await Conjunto.AsNoTracking().OrderBy(c => c.Orden).ThenBy(c => c.Numero).ToListAsync(ct);
-        var provisionales = await Contexto.ZonasDano.AsNoTracking().Where(z => z.CuadranteId == null).OrderBy(z => z.Orden).ToListAsync(ct);
-        return filas.Select(Mapear).Concat(provisionales.Select(MapearProvisional)).ToList();
+        var cuadrantes = await contexto.Cuadrantes.AsNoTracking().OrderBy(c => c.Orden).ThenBy(c => c.Numero).ToListAsync(ct);
+        var zonas = (await contexto.ZonasDano.AsNoTracking().ToListAsync(ct)).ToLookup(z => z.CuadranteId);
+        return cuadrantes.Select(c => new ValorCatalogo
+        {
+            ["id"] = c.Id,
+            ["codigo"] = null,
+            ["tipo_vehiculo"] = c.TipoVehiculo,
+            ["numero"] = c.Numero,
+            ["nombre"] = c.Nombre,
+            ["lleva_lado"] = c.LlevaLado,
+            ["zonas"] = zonas[c.Id].OrderBy(z => z.Lado == clsLado.DERECHO ? 1 : 0)
+                .Select(z => new Dictionary<string, object?> { ["id"] = z.Id, ["lado"] = z.Lado, ["nombre_completo"] = z.NombreCompleto, ["aiag_area"] = z.AiagArea }).ToList(),
+            ["orden"] = c.Orden,
+            ["activo"] = c.Activo,
+        }).ToList();
     }
 
-    private static ValorCatalogo MapearProvisional(clsZonaDano z) => new()
-    {
-        ["id"] = z.Id,
-        ["codigo"] = z.Codigo,
-        ["tipo_vehiculo"] = null,
-        ["numero"] = null,
-        ["nombre"] = z.Nombre,
-        ["orden"] = z.Orden,
-        ["activo"] = z.Activo,
-    };
+    public Task<ValorCatalogo> CrearAsync(IReadOnlyDictionary<string, JsonElement> campos, CancellationToken ct = default) => throw clsDibujoSoloLectura.Conflicto();
 
-    protected override ValorCatalogo Mapear(clsCuadrante c) => new()
-    {
-        ["id"] = c.Id,
-        ["codigo"] = null,
-        ["tipo_vehiculo"] = c.TipoVehiculo,
-        ["numero"] = c.Numero,
-        ["nombre"] = c.Nombre,
-        ["orden"] = c.Orden,
-        ["activo"] = c.Activo,
-    };
+    public Task<ValorCatalogo> ActualizarAsync(Guid id, IReadOnlyDictionary<string, JsonElement> campos, CancellationToken ct = default) => throw clsDibujoSoloLectura.Conflicto();
 
-    protected override Task<clsCuadrante> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct) =>
-        Task.FromResult(clsCuadrante.Crear(
-            campos.Texto("tipo_vehiculo"),
-            campos.Entero("numero"),
-            campos.Texto("nombre"),
-            campos.Entero("orden"),
-            campos.Booleano("activo"),
-            Reloj.Ahora));
-
-    protected override Task AplicarAsync(clsCuadrante entidad, clsCamposCatalogo campos, CancellationToken ct)
-    {
-        entidad.Cambiar(campos.Texto("tipo_vehiculo"), campos.Tiene("tipo_vehiculo"), campos.Entero("numero"), Reloj.Ahora);
-        return Task.CompletedTask;
-    }
+    public Task EliminarAsync(Guid id, CancellationToken ct = default) => throw clsDibujoSoloLectura.Conflicto();
 }

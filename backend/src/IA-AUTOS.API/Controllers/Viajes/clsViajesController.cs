@@ -1,6 +1,7 @@
 using IAAutos.API.Configuracion;
 using IAAutos.API.Controllers.Comun;
 using IAAutos.API.Seguridad;
+using IAAutos.Aplicacion.Auth;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Conductor;
 using IAAutos.Aplicacion.Conductor.DTOConductor;
@@ -23,16 +24,21 @@ public sealed class clsViajesController(
     clsCargaViajesService carga,
     clsTransferenciasService transferencias,
     clsNoSaleService noSale,
+    clsEntregasService entregas,
+    clsReclamosService reclamos,
     clsConductorService conductor) : clsControladorBase
 {
-    /// <summary>Crea un viaje con su unidad, placa, trailer, conductor, codigo MTrack y, opcionalmente, sus VIN (se crean sus etapas). 409 si el codigo MTrack ya existe.</summary>
+    /// <summary>
+    /// Crea un viaje con su unidad, placa, trailer, conductor, codigo MTrack y, opcionalmente, sus unidades (cada una con su <c>vin</c> y su <c>lugar_destino_id</c>; se crean sus etapas con el Descargue en el
+    /// destino de la unidad). 400 si una unidad no trae destino; <c>destino_id</c> y <c>vines</c> ya no se aceptan. 409 si el codigo MTrack ya existe.
+    /// </summary>
     [HttpPost]
     [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
     [ProducesResponseType<ViajeDto>(StatusCodes.Status201Created)]
     [CuerpoSolicitud(typeof(CrearViajeRequest))]
     public async Task<IActionResult> Crear(CancellationToken ct)
     {
-        var solicitud = await LeerCuerpoAsync<CrearViajeRequest>(ct);
+        var solicitud = await LeerCuerpoAsync<CrearViajeRequest>(ct, "destino_id", "vines");
         return Creado(await servicio.CrearAsync(solicitud, ct));
     }
 
@@ -61,11 +67,84 @@ public sealed class clsViajesController(
         Ok(await servicio.ListarAsync(
             new FiltrosViajesRequest(estado, codigoMtrack, vin, conductorId, inspectorId, clienteId, origenId, destinoId, desde, hasta, pagina, tamano, orden), ct));
 
+    /// <summary>
+    /// La lista de pendientes del inspector: los cargues programados para HOY en sus puntos y las entregas de viajes en curso que llegan a sus puntos, cada uno con su estado (<c>disponible</c>, <c>en_revision</c> con el nombre del
+    /// otro inspector, o <c>mio</c>). Los de otros dias y otros puntos no salen. De ahi se reclama con <c>POST /api/viajes/{id}/reclamos</c>.
+    /// </summary>
+    [HttpGet("pendientes")]
+    [RolesPermitidos(clsRol.INSPECTOR)]
+    [ProducesResponseType<IReadOnlyList<PendienteDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Pendientes(CancellationToken ct) => Ok(await reclamos.ListarPendientesAsync(ct));
+
     /// <summary>Los viajes del usuario autenticado (como conductor o inspector) con sus VIN. Sin estado: los programados y en curso.</summary>
     [HttpGet("mios")]
     [ProducesResponseType<IReadOnlyList<ViajeDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Mios([FromQuery] string? estado, CancellationToken ct) =>
         Ok(await servicio.MiosAsync(estado, ct));
+
+    /// <summary>
+    /// Las entregas del viaje, una por lugar de destino: las unidades que se entregan en cada punto y lo que falta de cada una (<c>sin_inspeccion</c>, <c>pendiente</c> o <c>cerrada</c>). Conductor e inspector
+    /// solo ven las de sus viajes (403).
+    /// </summary>
+    [HttpGet("{id:guid}/entregas")]
+    [ProducesResponseType<EntregasDelViajeDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListarEntregas(Guid id, CancellationToken ct) => Ok(await entregas.ListarAsync(id, ct));
+
+    /// <summary>Las unidades que se entregan en un lugar del viaje y lo que falta de cada una (<c>pendientes</c> es «Aquí entregas estas N unidades»). 404 si ninguna unidad activa del viaje va a ese lugar.</summary>
+    [HttpGet("{id:guid}/entregas/{lugar:guid}")]
+    [ProducesResponseType<EntregaPuntoDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ObtenerEntrega(Guid id, Guid lugar, CancellationToken ct) => Ok(await entregas.ObtenerPuntoAsync(id, lugar, ct));
+
+    /// <summary>
+    /// Firma la entrega del punto: la firma del usuario autenticado (quien entrega o quien recibe) se guarda en la transferencia de cada unidad pendiente del punto, con la misma firma, fecha e IP. Quien entrega es por
+    /// defecto el conductor del viaje y quien recibe su inspector (se pueden indicar otros usuarios del viaje). 403 si no es el conductor ni el inspector del viaje; 409 si no hay unidades pendientes o alguna aun no tiene
+    /// la inspeccion de llegada del Descargue.
+    /// </summary>
+    [HttpPost("{id:guid}/entregas/{lugar:guid}/firma")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR)]
+    [ProducesResponseType<EntregaPuntoDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(FirmarEntregaRequest))]
+    public async Task<IActionResult> FirmarEntrega(Guid id, Guid lugar, CancellationToken ct) =>
+        Ok(await entregas.FirmarAsync(id, lugar, await LeerCuerpoAsync<FirmarEntregaRequest>(ct), Cliente(), ct));
+
+    /// <summary>
+    /// Cierra la entrega del punto con una sola firma y su <c>motivo</c> (obligatorio, hasta 300 caracteres): cada unidad pendiente queda como «recibo_sin_entrega» con la parte que no firmo, deja su novedad de proceso y
+    /// los coordinadores de calidad reciben un aviso por entrega y punto. La <c>firma</c> solo hace falta si quien cierra aun no habia firmado. 403 si no es el conductor ni el inspector del viaje; 409 si la otra parte ya firmo.
+    /// </summary>
+    [HttpPost("{id:guid}/entregas/{lugar:guid}/una-firma")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR)]
+    [ProducesResponseType<EntregaPuntoDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(CerrarEntregaUnaFirmaRequest))]
+    public async Task<IActionResult> CerrarEntregaConUnaFirma(Guid id, Guid lugar, CancellationToken ct) =>
+        Ok(await entregas.CerrarConUnaFirmaAsync(id, lugar, await LeerCuerpoAsync<CerrarEntregaUnaFirmaRequest>(ct), Cliente(), ct));
+
+    /// <summary>
+    /// El inspector reclama la revision del viaje («revisar este»): <c>proceso</c> <c>cargue</c> (un cargue programado para hoy en uno de sus puntos; queda como inspector del viaje) o <c>entrega</c> (un viaje que llega
+    /// a uno de sus puntos). <c>201</c> con el reclamo; <c>200</c> si ya era suyo. 403 si el viaje no es de ninguno de sus puntos; 409 «Ya fue tomado por otro inspector» si otro lo reclamo antes (si dos lo hacen a la vez, gana uno).
+    /// </summary>
+    [HttpPost("{id:guid}/reclamos")]
+    [RolesPermitidos(clsRol.INSPECTOR)]
+    [ProducesResponseType<ReclamoDto>(StatusCodes.Status201Created)]
+    [CuerpoSolicitud(typeof(ReclamarViajeRequest))]
+    public async Task<IActionResult> Reclamar(Guid id, CancellationToken ct)
+    {
+        var (reclamo, creado) = await reclamos.ReclamarAsync(id, await LeerCuerpoAsync<ReclamarViajeRequest>(ct), ct);
+        return creado ? Creado(reclamo) : Ok(reclamo);
+    }
+
+    /// <summary>
+    /// Libera el reclamo activo del proceso (<c>cargue</c> o <c>entrega</c>): lo libera el inspector que lo reclamo, el coordinador de calidad o un administrador (403 cualquier otro). El viaje queda sin inspector y lo
+    /// capturado conserva su autor; queda registrado quien libero. 404 si no hay un reclamo activo. Ningun proceso libera reclamos por tiempo.
+    /// </summary>
+    [HttpDelete("{id:guid}/reclamos/{proceso}")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType<ReclamoDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> LiberarReclamo(Guid id, string proceso, CancellationToken ct) => Ok(await reclamos.LiberarAsync(id, proceso, ct));
+
+    /// <summary>Los reclamos del viaje (activos y liberados), del mas reciente al mas antiguo, con quien reclamo y quien libero.</summary>
+    [HttpGet("{id:guid}/reclamos")]
+    [ProducesResponseType<IReadOnlyList<ReclamoDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListarReclamos(Guid id, CancellationToken ct) => Ok(await reclamos.ListarAsync(id, ct));
 
     /// <summary>Los usuarios del viaje que pueden firmar una transferencia (su conductor y su inspector activos): solo ellos aparecen al elegir los firmantes.</summary>
     [HttpGet("{id:guid}/firmantes")]
@@ -95,16 +174,44 @@ public sealed class clsViajesController(
         return Ok(await servicio.CambiarEstadoAsync(id, solicitud, ct));
     }
 
-    /// <summary>Asigna VIN al viaje (se crean sus etapas). Todo o nada: si alguno no existe o ya esta en otro viaje activo, no se agrega ninguno.</summary>
+    /// <summary>
+    /// Asigna unidades al viaje, cada una con su <c>vin</c> y su <c>lugar_destino_id</c> (400 «La unidad requiere un destino» si falta): se crean sus etapas, con el Descargue en el destino de la unidad. Todo o
+    /// nada: si alguna no existe o ya esta en otro viaje activo, no se agrega ninguna. <c>vines</c> ya no se acepta.
+    /// </summary>
     [HttpPost("{id:guid}/vehiculos")]
     [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
     [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]
-    [CuerpoSolicitud(typeof(AgregarVinesRequest))]
-    public async Task<IActionResult> AgregarVines(Guid id, CancellationToken ct)
+    [CuerpoSolicitud(typeof(AgregarUnidadesRequest))]
+    public async Task<IActionResult> AgregarUnidades(Guid id, CancellationToken ct)
     {
-        var solicitud = await LeerCuerpoAsync<AgregarVinesRequest>(ct);
-        return Ok(await servicio.AgregarVinesAsync(id, solicitud, ct));
+        var solicitud = await LeerCuerpoAsync<AgregarUnidadesRequest>(ct, "vines");
+        return Ok(await servicio.AgregarUnidadesAsync(id, solicitud, ct));
     }
+
+    /// <summary>
+    /// Cambia el lugar de destino de una unidad del viaje (<c>lugar_destino_id</c>, un lugar activo del catalogo <c>lugares</c>): solo se mueve el Descargue de esa unidad. 409 si la unidad no sale del viaje o si su
+    /// Descargue ya tiene informe cerrado.
+    /// </summary>
+    [HttpPatch("{id:guid}/vehiculos/{vin}")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(CambiarDestinoUnidadRequest))]
+    public async Task<IActionResult> CambiarDestinoDeUnidad(Guid id, string vin, CancellationToken ct)
+    {
+        var solicitud = await LeerCuerpoAsync<CambiarDestinoUnidadRequest>(ct);
+        return Ok(await servicio.CambiarDestinoDeUnidadAsync(id, vin, solicitud, ct));
+    }
+
+    /// <summary>
+    /// Registra la posicion de la unidad en la ninera (<c>posicion</c> de 1 a 7; <c>null</c> la libera) durante la segunda inspeccion del cargue. 400 «La posicion debe estar entre 1 y 7»; 409 «La posicion N ya esta
+    /// ocupada por otra unidad de este viaje» (con dos solicitudes simultaneas por la misma, gana una), si la unidad no sale o si el viaje no tiene su segunda inspeccion del cargue en curso. Responde con el viaje.
+    /// </summary>
+    [HttpPut("{id:guid}/vehiculos/{vin}/posicion")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(AsignarPosicionRequest))]
+    public async Task<IActionResult> AsignarPosicion(Guid id, string vin, CancellationToken ct) =>
+        Ok(await servicio.AsignarPosicionAsync(id, vin, await LeerCuerpoAsync<AsignarPosicionRequest>(ct), ct));
 
     /// <summary>
     /// Marca que la unidad no sale del viaje por un hallazgo V1+ de una inspeccion cerrada (<c>motivo</c>, <c>hallazgo_id</c> y, si ya lo hay, <c>vin_reemplazo</c>). Solo el inspector del viaje
@@ -186,4 +293,7 @@ public sealed class clsViajesController(
         var solicitud = await LeerCuerpoAsync<CargarViajesRequest>(ct);
         return Creado(await carga.CargarAsync(solicitud, ct));
     }
+
+    private ContextoCliente Cliente() =>
+        new(HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString());
 }

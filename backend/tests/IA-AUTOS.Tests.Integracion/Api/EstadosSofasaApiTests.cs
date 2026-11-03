@@ -10,7 +10,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// El catalogo <c>estados-sofasa</c>: el codigo es el StatusCode real de la orden (con sus mayusculas), el nombre su etiqueta; sale en <c>GET /api/catalogos</c>, se administra con las reglas de los demas
 /// catalogos (codigo fijo, unico, un valor en uso no se borra) y el listado de ordenes sigue devolviendo <c>status_code</c> sin traducir.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class EstadosSofasaApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string RUTA = "/api/catalogos/estados-sofasa";

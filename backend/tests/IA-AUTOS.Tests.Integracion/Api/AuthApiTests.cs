@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace IAAutos.Tests.Integracion.Api;
 
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed class AuthApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     // Token generado con la libreria jose (la del sistema anterior): HS256, claims user_role/email/sub, vigencia 3650 dias.

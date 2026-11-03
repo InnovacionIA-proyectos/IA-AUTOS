@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace IAAutos.Tests.Integracion.Api;
 
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed class ComandosCliTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private async Task<(int Codigo, string Salida)> EjecutarAsync(string[] argumentos, string? password)

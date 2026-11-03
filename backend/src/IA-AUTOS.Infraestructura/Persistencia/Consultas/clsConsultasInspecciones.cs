@@ -142,6 +142,9 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
             .ToList();
     }
 
+    public async Task<IReadOnlyList<ExtraDto>> ObtenerExtrasAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        (await clsConsultasExtras.CargarAsync(contexto, [inspeccionId], ct)).GetValueOrDefault(inspeccionId) ?? [];
+
     public async Task<InformeDetalleDto?> ObtenerInformeAsync(Guid id, CancellationToken ct = default)
     {
         var fila = await (from i in contexto.Inspecciones.AsNoTracking()
@@ -242,6 +245,8 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
             clsMomento.Nombre(insp.Momento),
             await consultaNotas.ListarAsync(clsEntidadNota.INSPECCION, insp.Id, ct),
             novedadesProceso.Motivo,
-            novedadesProceso.Novedades);
+            novedadesProceso.Novedades,
+            await ObtenerExtrasAsync(insp.Id, ct),
+            insp.ConfirmacionSitio is { } resultado ? new ConfirmacionSitioDto(resultado, clsResultadoConfirmacionSitio.Nombre(resultado), insp.ConfirmacionDistanciaM, insp.ConfirmacionEvidenciaId) : null);
     }
 }

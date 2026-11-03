@@ -20,10 +20,15 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
     private const int ERROR_TRIGGER_EVIDENCIA_NO_SE_BORRA = 51003;
     private const int ERROR_TRIGGER_NOTIFICACION_SOLO_LECTURA = 51006;
     private const int ERROR_TRIGGER_NOVEDAD_DE_TRANSPORTE = 51007;
+    private const int ERROR_TRIGGER_EXTRA_EN_CERRADA = 51009;
+    private const int ERROR_TRIGGER_PROPUESTA_DECIDIDA = 51010;
 
     // Mensajes por restriccion: coinciden con los de la API original.
     private static readonly (string Restriccion, string Mensaje)[] CONFLICTOS_UNICOS =
     [
+        ("UX_tblReclamos_Activo", "Ya fue tomado por otro inspector"),
+        ("UX_tblViajeVehiculos_Posicion", "La posición ya está ocupada por otra unidad de este viaje"),
+        ("UX_tblPropuestasUbicacion_Pendiente", "El lugar ya tiene una propuesta de ubicación pendiente"),
         ("UX_tblUsuarios_Email", "Ya existe un usuario con ese correo"),
         ("UQ_tblVehiculos_Vin", "Ya existe un vehículo con ese VIN"),
         ("UQ_tblEtapas_Viaje_Vehiculo_Orden", "Ya existe una etapa con ese orden para el vehículo en el viaje"),
@@ -56,6 +61,7 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         "FK_tblUsuarios_Cliente",
         "FK_tblVehiculos_Cliente",
         "FK_tblEvidencias_Vista",
+        "FK_tblInspeccionExtras_Tipo",
     ];
 
     private static readonly (string Restriccion, string Mensaje)[] REFERENCIAS_INVALIDAS =
@@ -80,7 +86,10 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         ("FK_tblTransferencias_", "Algún usuario (entrega/recibe) no existe"),
         ("FK_tblAsignaciones_", "Referencia inválida (vehículo o usuario)"),
         ("FK_tblEvidencias_Vista", "La vista de foto no existe en el catálogo"),
+        ("FK_tblEvidencias_Extra", "El extra indicado no pertenece a esta inspección"),
         ("FK_tblEvidencias_", "El hallazgo indicado no pertenece a esta inspección"),
+        ("FK_tblInspeccionExtras_Tipo", "El tipo de extra no existe en el catálogo"),
+        ("FK_tblInspeccionExtras_", "La inspección indicada no existe"),
         ("FK_tblHallazgos_ClaseDano", "La clase de daño no existe en el catálogo"),
         ("FK_tblHallazgos_TamanoDano", "El tamaño de daño no existe en el catálogo"),
         ("FK_tblHallazgos_", "La inspección indicada no existe"),
@@ -149,8 +158,11 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
 
                 return new clsEntidadNoEncontradaException("Referencia inválida");
 
-            case ERROR_TRIGGER_INSPECCION_CERRADA or ERROR_TRIGGER_HALLAZGO_EN_CERRADA or ERROR_TRIGGER_EVIDENCIA_EN_CERRADA:
+            case ERROR_TRIGGER_INSPECCION_CERRADA or ERROR_TRIGGER_HALLAZGO_EN_CERRADA or ERROR_TRIGGER_EVIDENCIA_EN_CERRADA or ERROR_TRIGGER_EXTRA_EN_CERRADA:
                 return new clsConflictoException("La inspección está cerrada y es inmutable; no admite cambios");
+
+            case ERROR_TRIGGER_PROPUESTA_DECIDIDA:
+                return new clsConflictoException("Una propuesta de ubicación ya decidida no se modifica ni se borra");
 
             case ERROR_TRIGGER_EVIDENCIA_NO_SE_BORRA:
                 return new clsConflictoException("El registro es evidencia y no se puede borrar");

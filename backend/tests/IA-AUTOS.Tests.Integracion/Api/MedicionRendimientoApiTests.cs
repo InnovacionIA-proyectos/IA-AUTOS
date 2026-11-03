@@ -27,7 +27,7 @@ public sealed class FactMedicionAttribute : FactAttribute
 /// cinco veces; el resultado (mediana y maximo, en milisegundos) se escribe en la consola y, si se define <c>RENDIMIENTO_SALIDA</c>, en ese archivo en formato de tabla de Markdown. Las cotas son
 /// holgadas: la prueba avisa de una regresion grande, no de una variacion normal de la maquina.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_1)]
 public sealed class MedicionRendimientoApiTests(clsBaseDatosFixture bd, ITestOutputHelper salida) : clsPruebaApiBase(bd)
 {
     private const int VEHICULOS = 17_000;
@@ -43,7 +43,7 @@ public sealed class MedicionRendimientoApiTests(clsBaseDatosFixture bd, ITestOut
         DECLARE @cargue uniqueidentifier = (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'cargue');
         DECLARE @transporte uniqueidentifier = (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'transporte');
         DECLARE @descargue uniqueidentifier = (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'descargue');
-        DECLARE @zona uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente');
+        DECLARE @zona uniqueidentifier = (SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50);
         DECLARE @insp uniqueidentifier = NEWID(), @cond uniqueidentifier = NEWID();
         INSERT dbo.tblUsuarios (Id, Nombre, Email, Rol, ClienteId, PasswordHash) VALUES (@insp, N'Ines Inspectora', 'medicion-insp@ejemplo.com', 'inspector', @cli, 'h');
         INSERT dbo.tblUsuarios (Id, Nombre, Rol, ClienteId, Cedula, TipoCredencial, PinHash) VALUES (@cond, N'Carlos Conductor', 'conductor', @cli, '1032456789', 'pin', 'h');
