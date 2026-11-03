@@ -30,6 +30,7 @@ class ClienteApi {
     required this.token,
     this.alNoAutorizado,
     this.alRequerirCambioDePin,
+    Map<String, String> encabezadosBase = const {},
     Dio? dio,
   }) : _dio = dio ?? Dio() {
     _dio.options
@@ -37,7 +38,9 @@ class ClienteApi {
       ..connectTimeout = const Duration(seconds: 15)
       ..receiveTimeout = const Duration(seconds: 30)
       ..sendTimeout = const Duration(seconds: 60)
-      ..headers = {'Content-Type': 'application/json', 'Accept': 'application/json'};
+      // encabezadosBase: los de enrutamiento de la pasarela (X-Forwarded-Host), que van en todas las peticiones,
+      // incluido el login.
+      ..headers = {'Content-Type': 'application/json', 'Accept': 'application/json', ...encabezadosBase};
   }
 
   final Dio _dio;

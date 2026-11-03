@@ -8,7 +8,7 @@ import 'data/gateway_informes_api.dart';
 import 'domain/procesador_cola.dart';
 import 'domain/puertos.dart';
 
-final estadoRedProvider = Provider<EstadoRed>((ref) => EstadoRedConectividad(apiUrl: ref.watch(entornoProvider).apiUrl));
+final estadoRedProvider = Provider<EstadoRed>((ref) => EstadoRedConectividad(apiUrl: ref.watch(entornoProvider).apiUrl, encabezados: ref.watch(entornoProvider).encabezadosEnrutamiento));
 
 final colaRepositorioProvider = Provider<ColaRepositorio>((ref) => ColaDrift(ref.watch(appDatabaseProvider)));
 

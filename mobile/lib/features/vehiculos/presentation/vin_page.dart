@@ -20,11 +20,22 @@ final inventarioProvider = FutureProvider.autoDispose.family<Inventario, String>
   (ref, vin) => ref.watch(vehiculosRepositorioProvider).inventario(vin),
 );
 
-/// URL absoluta de una imagen servida por la API (las evidencias vienen con ruta relativa).
+/// URL absoluta de una imagen servida por la API (las evidencias vienen con ruta relativa o con URL firmada).
+///
+/// La API arma las URL firmadas (`/api/uploads/{archivo}?exp=&firma=`) con el host que ella ve, que detrás de la
+/// pasarela de IIS es el interno del cluster (inalcanzable desde el teléfono y sin el prefijo `/contenedores`). La
+/// firma solo depende del archivo y del vencimiento, así que se rearma la URL sobre [apiUrl] conservando ruta y query.
 String? resolverUrlImagen(String apiUrl, String? relativa) {
   if (relativa == null || relativa.isEmpty) return null;
-  return relativa.startsWith('http') ? relativa : '$apiUrl$relativa';
+  if (!relativa.startsWith('http')) return '$apiUrl$relativa';
+  final uri = Uri.tryParse(relativa);
+  if (uri == null) return relativa;
+  final i = uri.path.indexOf(_rutaArchivos);
+  if (i < 0) return relativa;
+  return '$apiUrl${uri.path.substring(i)}${uri.hasQuery ? '?${uri.query}' : ''}';
 }
+
+const _rutaArchivos = '/api/uploads/';
 
 class VinPage extends ConsumerWidget {
   const VinPage({super.key, required this.vin});
@@ -144,6 +155,11 @@ class _UltimoInforme extends ConsumerWidget {
     final catalogos = ref.watch(catalogosProvider);
     final apiUrl = ref.watch(entornoProvider).apiUrl;
     final token = ref.watch(authControllerProvider.select((e) => e.sesion?.token));
+    // Enrutamiento de la pasarela (X-Forwarded-Host) más la sesión, por si la API no sirve las imágenes públicamente.
+    final encabezadosImagen = {
+      ...ref.watch(entornoProvider).encabezadosEnrutamiento,
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
     final yo = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario));
     final fotos = [for (final e in inspeccion.evidencias) if (resolverUrlImagen(apiUrl, e.url) != null) resolverUrlImagen(apiUrl, e.url)!];
     // El conductor recibe el vehículo y firma su recibo. Si antes ve lo que marcó el inspector, su recibo ya
@@ -184,7 +200,7 @@ class _UltimoInforme extends ConsumerWidget {
                 itemBuilder: (_, i) => GestureDetector(
                   onTap: () => mostrarVisorImagen(
                     context,
-                    imagen: NetworkImage(fotos[i], headers: token == null ? null : {'Authorization': 'Bearer $token'}),
+                    imagen: NetworkImage(fotos[i], headers: encabezadosImagen.isEmpty ? null : encabezadosImagen),
                     titulo: 'Evidencia ${i + 1} de ${fotos.length}',
                   ),
                   child: ClipRRect(
@@ -194,8 +210,7 @@ class _UltimoInforme extends ConsumerWidget {
                       width: 88,
                       height: 88,
                       fit: BoxFit.cover,
-                      // Si la API no sirve las imágenes públicamente, se piden con la sesión.
-                      headers: token == null ? null : {'Authorization': 'Bearer $token'},
+                      headers: encabezadosImagen.isEmpty ? null : encabezadosImagen,
                       semanticLabel: 'Foto de evidencia del informe',
                       errorBuilder: (_, _, _) => Container(width: 88, height: 88, color: Colores.borde, child: const Icon(Icons.broken_image_outlined)),
                     ),

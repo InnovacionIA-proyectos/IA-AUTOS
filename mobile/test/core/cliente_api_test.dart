@@ -221,6 +221,35 @@ void main() {
       expect(const Entorno(flavor: Flavor.dev, apiUrl: '').configurado, isFalse);
       expect(const Entorno(flavor: Flavor.prod, apiUrl: 'https://x').esProduccion, isTrue);
     });
+
+    test('con host de destino pide X-Forwarded-Host para la pasarela; sin él, ningún encabezado', () {
+      expect(const Entorno(flavor: Flavor.qa, apiUrl: 'https://x').encabezadosEnrutamiento, isEmpty);
+      expect(
+        const Entorno(flavor: Flavor.qa, apiUrl: 'https://x', hostDestino: 'interno.sslip.io').encabezadosEnrutamiento,
+        {'X-Forwarded-Host': 'interno.sslip.io'},
+      );
+    });
+  });
+
+  group('pasarela', () {
+    test('los encabezados base van en todas las peticiones, incluido el login', () async {
+      final adaptador = AdaptadorFalso((_) => json(200, {}));
+      final api = ClienteApi(
+        baseUrl: 'https://servicios.test/contenedores',
+        token: () async => null,
+        encabezadosBase: const {'X-Forwarded-Host': 'interno.sslip.io'},
+        dio: Dio()..httpClientAdapter = adaptador,
+      );
+
+      await api.post('/api/auth/login', cuerpo: {'email': 'a'});
+      await api.get('/api/viajes/mios');
+
+      expect(adaptador.peticiones.map((p) => p.uri.toString()), [
+        'https://servicios.test/contenedores/api/auth/login',
+        'https://servicios.test/contenedores/api/viajes/mios',
+      ]);
+      expect(adaptador.peticiones.map((p) => p.headers['X-Forwarded-Host']), everyElement('interno.sslip.io'));
+    });
   });
 
   group('el detalle del servidor', () {
