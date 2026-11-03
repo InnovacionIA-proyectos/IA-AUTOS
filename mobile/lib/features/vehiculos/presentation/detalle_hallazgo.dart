@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/http/urls_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/foto_evidencia.dart';
 import '../../../core/ui/visor_imagen.dart';
@@ -91,7 +92,7 @@ class _DetalleHallazgo extends StatelessWidget {
                         // El enlace va firmado: el visor lo abre igual, sin encabezados.
                         onTap: () => mostrarVisorImagen(
                           context,
-                          imagen: NetworkImage(urlFoto!),
+                          imagen: imagenApi(urlFoto!),
                           titulo: hallazgo.zona,
                         ),
                         child: FotoEvidencia(

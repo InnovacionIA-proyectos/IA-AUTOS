@@ -497,7 +497,7 @@ class _UltimoInforme extends ConsumerWidget {
                   // El enlace va firmado: el visor lo abre igual, sin encabezados.
                   onTap: () => mostrarVisorImagen(
                     context,
-                    imagen: NetworkImage(resolverUrlImagen(apiUrl, fotos[i].url)!),
+                    imagen: imagenApi(resolverUrlImagen(apiUrl, fotos[i].url)!),
                     titulo: 'Evidencia ${i + 1} de ${fotos.length}',
                   ),
                   child: FotoEvidencia(

@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../http/urls_api.dart';
 import '../tema/tema.dart';
 
 /// Una foto de evidencia servida por la API.
 ///
 /// El enlace ya viene **firmado y con vencimiento**, así que va tal cual, sin `Authorization`: mandar además el
-/// token no autoriza nada y hace creer que la foto se abre con la sesión, cuando lo que la abre es la firma.
+/// token no autoriza nada y hace creer que la foto se abre con la sesión, cuando lo que la abre es la firma. Solo
+/// lleva los encabezados de enrutamiento de la pasarela ([encabezadosImagenesApi]), si la hay.
 ///
 /// Cuando el enlace vence o el servidor lo rechaza, la imagen no se reintenta —el mismo enlace volvería a
 /// fallar— : se avisa con [alVencer] para que quien la muestra vuelva a pedir su fuente, que es la que trae
@@ -97,6 +99,7 @@ class _EstadoFotoEvidencia extends State<FotoEvidencia> {
         width: widget.ancho,
         height: widget.alto,
         fit: BoxFit.cover,
+        headers: encabezadosImagenesApi.isEmpty ? null : encabezadosImagenesApi,
         semanticLabel: widget.semanticLabel,
         errorBuilder: (_, _, _) {
           // 403 por enlace vencido o firma inválida: el mismo enlace no va a servir, hay que pedir otro.
