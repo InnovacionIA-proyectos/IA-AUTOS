@@ -24,8 +24,9 @@ class NovedadesRepositorio {
 
   /// Completa la novedad: su zona, su clase, su nivel y el tamaño ya corregido.
   ///
-  /// Las siete primeras claves van presentes aunque sean nulas, que es lo que el contrato exige; las dos de
-  /// preexistencia solo cuando quien revisa confirma que el daño ya venía de antes.
+  /// Las claves de la zona, la clase, el nivel, el tamaño y la nota van presentes aunque sean nulas, que es lo
+  /// que el contrato exige; las dos de preexistencia solo cuando quien revisa confirma que el daño ya venía de
+  /// antes. La zona provisional ya no existe: con el dibujo v6 el frente y las ruedas son cuadrantes (3.0.0).
   Future<void> revisar(
     String hallazgoId, {
     required int? cuadranteNumero,
@@ -40,7 +41,6 @@ class NovedadesRepositorio {
     await _api.post('/api/hallazgos/${Uri.encodeComponent(hallazgoId)}/revision', cuerpo: {
       'cuadrante_numero': cuadranteNumero,
       'lado': lado,
-      'zona_provisional': null,
       'clase_dano': clase,
       'nivel_severidad': nivel,
       'tamano_dano': tamano,

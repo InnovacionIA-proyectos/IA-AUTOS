@@ -57,8 +57,9 @@ void main() {
       expect((cuerpo['cuadrante_numero'], cuerpo['lado'], cuerpo['clase_dano'], cuerpo['nivel_severidad'], cuerpo['tamano_dano']),
           (7, 'izquierdo', 'golpe', 'v2', 'mas_20cm'));
       // El contrato las exige presentes aunque vayan nulas.
-      expect(cuerpo.containsKey('zona_provisional'), isTrue);
       expect(cuerpo.containsKey('nota'), isTrue);
+      // La zona provisional se retiró en 3.0.0: mandarla sería un campo no admitido.
+      expect(cuerpo.containsKey('zona_provisional'), isFalse);
       // Sin preexistencia, el origen no se manda.
       expect(cuerpo['es_preexistente'], false);
       expect(cuerpo.containsKey('hallazgo_origen_id'), isFalse);

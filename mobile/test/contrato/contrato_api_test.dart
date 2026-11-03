@@ -50,7 +50,10 @@ void main() {
     // `lugar` se pinta en la tarjeta de la etapa y `viaje_id` es lo que lleva a la captura los datos del
     // transporte: sin él la captura no tiene de dónde sacar la placa ni el conductor.
     'InventarioEtapaDto': [
-      'id', 'orden', 'proceso', 'lugar', 'requiere_inspeccion', 'viaje_id', 'con_personal_apoyo', 'inspecciones',
+      // `con_personal_apoyo` ya no viene: desde el contrato 3.0.0 la salida del cargue la hace siempre un
+      // inspector, y el conductor solo por la excepción «No hay inspector». La app lo soporta con y sin la
+      // marca, porque un celular puede quedar contra una API vieja.
+      'id', 'orden', 'proceso', 'lugar', 'requiere_inspeccion', 'viaje_id', 'inspecciones',
     ],
     'ViajeDto': [
       'id', 'codigo_mtrack', 'placa', 'estado', 'unidad', 'trailer', 'conductor_nombre', 'inspector_nombre',
@@ -128,7 +131,7 @@ void main() {
     // Revisar la novedad del conductor: se la ubica, se la clasifica y se le pone el nivel, y el tamaño que
     // eligió el conductor se puede corregir.
     'RevisarHallazgoRequest': [
-      'cuadrante_numero', 'lado', 'zona_provisional', 'clase_dano', 'nivel_severidad', 'tamano_dano', 'nota',
+      'cuadrante_numero', 'lado', 'clase_dano', 'nivel_severidad', 'tamano_dano', 'nota',
       'es_preexistente', 'hallazgo_origen_id',
     ],
     // La unidad que no sale del viaje: su motivo, el hallazgo V1+ que lo causa y el VIN que la reemplaza.
