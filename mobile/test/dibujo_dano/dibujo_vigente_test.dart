@@ -18,9 +18,9 @@ import '../support/dobles_dibujo.dart';
 Catalogos catalogos(Map<String, List<Map<String, dynamic>>> porNombre, {String version = 'v1'}) =>
     Catalogos.desdeRespuesta({'version': version, 'catalogos': porNombre}, usuarioId: 'u1');
 
-/// Lo que publica hoy la API de QA: 5 paneles sin tamaño de referencia ni zonas con lado, y regiones de la ficha
-/// anterior.
-final catalogoDeHoy = catalogos({
+/// La publicación anterior: paneles sin tamaño de referencia y cuadrantes sin sus zonas. Sigue valiendo como
+/// prueba porque un servidor viejo o a medio cargar la devuelve, y ahí la app debe quedarse con los assets.
+final catalogoIncompleto = catalogos({
   Catalogo.panelesDano: [
     {'id': 'p1', 'codigo': 'superior', 'nombre': 'Superior', 'orden': 1, 'activo': true, 'imagen_url': null},
   ],
@@ -58,8 +58,8 @@ class AssetsDePrueba extends CachingAssetBundle {
 
 void main() {
   group('dibujoDesdeCatalogos', () {
-    test('con lo que publica hoy la API no hay dibujo del servidor', () {
-      expect(dibujoDesdeCatalogos(catalogoDeHoy, const {}), isNull);
+    test('con un catálogo sin tamaños ni zonas no hay dibujo del servidor', () {
+      expect(dibujoDesdeCatalogos(catalogoIncompleto, const {}), isNull);
     });
 
     test('con el catálogo completo y todas las imágenes, arma el mismo dibujo que los assets', () {
@@ -92,7 +92,7 @@ void main() {
 
     test('sin dibujo en el servidor usa los assets y no baja nada', () async {
       final api = ApiDeImagenes();
-      final dibujo = await repositorio(api: api).vigente(catalogoDeHoy);
+      final dibujo = await repositorio(api: api).vigente(catalogoIncompleto);
 
       expect(dibujo.origen, OrigenDibujo.assets);
       expect(dibujo.paneles.first.imagen.rutaAsset, startsWith(DibujoDanoRepositorio.carpetaImagenes));

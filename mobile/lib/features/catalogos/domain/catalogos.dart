@@ -15,17 +15,15 @@ abstract final class Catalogo {
   static const tamanosDano = 'tamanos-dano';
   static const nivelesSeveridad = 'niveles-severidad';
   static const vistasFoto = 'vistas-foto';
+  /// Las piezas numeradas del vehículo. No traen `codigo`: la clave es `numero` más el lado. Cada una trae
+  /// `lleva_lado` y un arreglo `zonas` con una entrada por lado (`lado`, `nombre_completo`, `aiag_area`), y de ahí
+  /// salen las 80 zonas del dibujo de daños.
   static const cuadrantes = 'cuadrantes';
 
   /// Dibujo de daños: los paneles (con `imagen_url`) y el polígono de cada zona en cada panel. `cuadrante-vistas`
   /// ya no existe en la API (responde 404); lo reemplazan estos dos.
   static const panelesDano = 'paneles-dano';
   static const cuadranteRegiones = 'cuadrante-regiones';
-
-  /// Las zonas numeradas (cuadrante + lado) con su nombre completo y su área AIAG. **Todavía no lo publica la API**:
-  /// es la propuesta para el backend (ver la guía de integración del dibujo de daños). Mientras no llegue, la app
-  /// dibuja con la copia de los assets.
-  static const zonasDano = 'zonas-dano';
 
   /// Tipos de extra: `barras_techo`, `volco`, `platon` y `otro`. Los administra Calidad. Sin ellos, la captura ofrece
   /// solo «Otro».

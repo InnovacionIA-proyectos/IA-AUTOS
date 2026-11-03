@@ -4,15 +4,16 @@ import '../domain/dibujo_dano.dart';
 /// Arma el dibujo con lo que publica `GET /api/catalogos`, o devuelve null si el servidor todavía no publica un
 /// dibujo completo. Con null la app usa la copia de los assets.
 ///
-/// **Forma esperada (pendiente del backend; ver la guía de integración).** Hoy el servidor publica `paneles-dano`
-/// (5 paneles sin tamaño de referencia) y `cuadrante-regiones` con la numeración anterior, y no publica las zonas
-/// con su lado ni su nombre completo. Con eso esta función devuelve null, que es lo correcto: esos polígonos no son
-/// los de las imágenes de la app. Cuando el backend cargue la versión 6, cada catálogo debe traer:
+/// **De dónde sale cada cosa** (comprobado contra la API el 3-nov-2026, catálogo versión 6):
 ///
-/// - `paneles-dano`: `codigo`, `nombre`, `orden`, `activo`, `imagen_url`, **`ancho_ref`** y **`alto_ref`**.
-/// - `zonas-dano` (catálogo nuevo, de solo lectura, una fila por zona numerada de `tblZonasDano`): `numero`,
-///   **`lado`** (`izquierdo`, `derecho` o null), `nombre`, **`nombre_completo`**, **`aiag_area`**, `orden`, `activo`.
-/// - `cuadrante-regiones`: `panel`, `numero`, `lado`, `geometria` y **`prioridad`**.
+/// - `paneles-dano`: `codigo`, `nombre`, `orden`, `activo`, `imagen_url`, `ancho_ref` y `alto_ref`.
+/// - `cuadrantes`: `numero`, `nombre`, `lleva_lado` y **`zonas`**, un arreglo con una entrada por lado
+///   (`lado`, `nombre_completo`, `aiag_area`). Las zonas no son un catálogo aparte: viven dentro de su cuadrante,
+///   y de ahí salen las 80 que usa el dibujo (45 números, 35 con los dos lados y 10 centrales).
+/// - `cuadrante-regiones`: `panel`, `numero`, `lado`, `geometria` y `prioridad`.
+///
+/// Un cuadrante inactivo se lleva sus zonas y, con ellas, sus regiones: es como el portal retira una pieza sin
+/// borrar lo ya registrado con ella.
 ///
 /// Si al backend le conviene otra forma, solo cambia esta función: el resto de la app recibe un [DibujoDano].
 ///
@@ -36,15 +37,17 @@ DibujoDano? dibujoDesdeCatalogos(Catalogos catalogos, Map<String, ImagenPanel> i
   }
 
   final zonas = <ZonaDano>[
-    for (final z in catalogos.opciones(Catalogo.zonasDano))
-      if (z.campo<num>('numero') case final numero?)
-        ZonaDano(
-          numero: numero.toInt(),
-          lado: z.campo<String>('lado'),
-          nombre: z.nombre,
-          nombreCompleto: z.campo<String>('nombre_completo') ?? z.nombre,
-          aiagArea: z.campo<String>('aiag_area'),
-        ),
+    for (final c in catalogos.opciones(Catalogo.cuadrantes))
+      if (c.campo<num>('numero') case final numero?)
+        for (final z in zonasDelCuadrante(c))
+          ZonaDano(
+            numero: numero.toInt(),
+            // El lado sale del dato, nunca del número: la numeración la decide Calidad y ya cambió una vez.
+            lado: z['lado'] as String?,
+            nombre: c.nombre,
+            nombreCompleto: z['nombre_completo'] as String? ?? c.nombre,
+            aiagArea: z['aiag_area'] as String?,
+          ),
   ];
   if (paneles.isEmpty || zonas.isEmpty) return null;
 
@@ -83,3 +86,9 @@ DibujoDano? dibujoDesdeCatalogos(Catalogos catalogos, Map<String, ImagenPanel> i
     return null;
   }
 }
+
+/// Las zonas que trae un cuadrante del catálogo, o vacío si no las trae. Un cuadrante con `lleva_lado` debería
+/// traer dos; no se comprueba aquí, porque eso lo decide el portal y la app dibuja lo que haya.
+List<Map<String, dynamic>> zonasDelCuadrante(ValorCatalogo cuadrante) => [
+      for (final z in cuadrante.campo<List<dynamic>>('zonas') ?? const []) if (z is Map<String, dynamic>) z,
+    ];

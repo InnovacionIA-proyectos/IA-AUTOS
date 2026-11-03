@@ -98,10 +98,10 @@ class DibujoDanoRepositorio {
 
   Future<DibujoDano?> _desdeServidor(Catalogos catalogos) async {
     final paneles = catalogos.opciones(Catalogo.panelesDano);
-    // Antes de bajar nada: si el catálogo no trae el tamaño de referencia de cada panel ni las zonas con su lado,
-    // es la publicación anterior y no hay nada que hacer con ella.
+    // Antes de bajar nada: si el catálogo no trae el tamaño de referencia de cada panel, o los cuadrantes no traen
+    // sus zonas con el lado, es la publicación anterior y no hay nada que hacer con ella.
     final completo = paneles.isNotEmpty &&
-        catalogos.opciones(Catalogo.zonasDano).isNotEmpty &&
+        catalogos.opciones(Catalogo.cuadrantes).any((c) => zonasDelCuadrante(c).isNotEmpty) &&
         paneles.every((p) => p.campo<num>('ancho_ref') != null && p.campo<num>('alto_ref') != null);
     if (!completo) return null;
 

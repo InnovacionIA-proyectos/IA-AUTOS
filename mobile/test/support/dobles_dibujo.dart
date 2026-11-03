@@ -25,8 +25,11 @@ class AlmacenImagenesEnMemoria implements AlmacenImagenesPanel {
   Future<void> guardar(String clave, Uint8List bytes) async => guardadas[clave] = bytes;
 }
 
-/// Los catálogos `paneles-dano`, `zonas-dano` y `cuadrante-regiones` con la forma que se le propone al backend,
-/// armados desde el JSON de los assets. Es lo que el servidor publicaría al cargar esa misma versión.
+/// Los catálogos `paneles-dano`, `cuadrantes` y `cuadrante-regiones` **con la forma exacta que publica la API**,
+/// armados desde el JSON de los assets. Es lo que responde `GET /api/catalogos` al cargar esa misma versión.
+///
+/// La diferencia que importa: las zonas no son un catálogo aparte, van anidadas en su cuadrante. El JSON de los
+/// assets las trae planas (una fila por número y lado), así que aquí se agrupan por número, que es como viajan.
 Map<String, List<Map<String, dynamic>>> catalogosDibujoDelServidor(Map<String, dynamic> json) => {
       'paneles-dano': [
         for (final (i, p) in (json['paneles'] as List).indexed)
@@ -41,16 +44,25 @@ Map<String, List<Map<String, dynamic>>> catalogosDibujoDelServidor(Map<String, d
             'alto_ref': p['alto_ref'],
           },
       ],
-      'zonas-dano': [
-        for (final (i, c) in (json['cuadrantes'] as List).indexed)
+      'cuadrantes': [
+        for (final (i, grupo) in _porNumero(json['cuadrantes'] as List).indexed)
           {
-            'id': 'z$i',
-            'numero': c['numero'],
-            'lado': c['lado'],
-            'nombre': c['nombre'],
-            'nombre_completo': c['nombre_completo'],
-            'aiag_area': c['aiag_area'],
-            'orden': i,
+            'id': 'c$i',
+            'codigo': null,
+            'tipo_vehiculo': null,
+            'numero': grupo.first['numero'],
+            'nombre': grupo.first['nombre'],
+            'lleva_lado': grupo.first['lado'] != null,
+            'zonas': [
+              for (final (j, z) in grupo.indexed)
+                {
+                  'id': 'z$i-$j',
+                  'lado': z['lado'],
+                  'nombre_completo': z['nombre_completo'],
+                  'aiag_area': z['aiag_area'],
+                },
+            ],
+            'orden': i + 1,
             'activo': true,
           },
       ],
@@ -66,3 +78,12 @@ Map<String, List<Map<String, dynamic>>> catalogosDibujoDelServidor(Map<String, d
           },
       ],
     };
+
+/// Las zonas del JSON de los assets agrupadas por número, conservando el orden en que vienen.
+List<List<Map<String, dynamic>>> _porNumero(List<dynamic> cuadrantes) {
+  final porNumero = <int, List<Map<String, dynamic>>>{};
+  for (final c in cuadrantes.cast<Map<String, dynamic>>()) {
+    porNumero.putIfAbsent(c['numero'] as int, () => []).add(c);
+  }
+  return [...porNumero.values];
+}
