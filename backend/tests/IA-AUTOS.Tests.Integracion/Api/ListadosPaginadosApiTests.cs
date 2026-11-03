@@ -15,7 +15,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// El formato unico de los listados (vehiculos, inspecciones, viajes, ordenes Sofasa y usuarios): <c>{items, total, pagina, tamano}</c>, 50 por defecto y maximo 200, orden <c>campo:asc|desc</c> solo por los
 /// campos permitidos, los filtros en snake_case y la regla unica del VIN, todo con 400 y su motivo cuando esta mal formado.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class ListadosPaginadosApiTests(clsBaseDatosFixture bd) : clsPruebaTableroBase(bd)
 {
     private const string VIN_CON_O = "9FBHSR4E8PM0O0001";

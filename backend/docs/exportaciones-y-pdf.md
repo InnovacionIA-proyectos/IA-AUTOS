@@ -17,7 +17,7 @@ Escribe un paquete OpenXML minimo (un libro de una hoja) con `System.IO.Compress
 | Archivo | Una fila por | Origen de los filtros |
 |---|---|---|
 | `viajes.xlsx` | unidad (VIN), etapa y momento (salida o llegada) de cada viaje: los seis registros de la unidad, con su estado (`sin_inspeccion`, `borrador` o `cerrada`) | listado de viajes |
-| `inspecciones.xlsx` | inspeccion (cada version), con el inspector y las firmas de la transferencia | listado de inspecciones |
+| `inspecciones.xlsx` | inspeccion (cada version), con el inspector, las firmas de la transferencia y la columna `Extras` (cuantos extras del vehiculo reporto) | listado de inspecciones |
 | `hallazgos.xlsx` | hallazgo, con su zona y la fecha, hora y ubicacion de su foto | listado de hallazgos |
 
 Cada exportacion reutiliza el analisis de filtros de su listado (mismos nombres, misma validacion y mismo `400`) y solo trae los datos del cliente del usuario: el cliente de cada fila es el del **vehiculo**.
@@ -30,4 +30,4 @@ Constructor comun de los PDF (constancia de la transferencia, informe de la insp
 - Una imagen en otro formato (por ejemplo, un PNG con canal alfa) o cuyo archivo ya no esta en el almacen se indica en su lugar en vez de omitirse.
 - Las imagenes salen del almacen (`IAlmacenArchivos`); no se reescalan (no hay libreria de imagenes), asi que el tamano del PDF depende del de las fotos. Por eso un PDF lleva **hasta 60 fotos**, primero las de los hallazgos, y avisa cuantas dejo fuera.
 - El **panel de danos** dibuja, sobre la imagen de cada panel (`paneles-dano`), el poligono de la region (`cuadrante-regiones`) de cada zona con hallazgos y escribe en su centro el numero del hallazgo (informe) o cuantos hay (inventario). Una zona es lado + numero de
-  cuadrante y se dibuja en todos los paneles donde aparece; las zonas provisionales (frente y llantas) no tienen region y se listan aparte. Los hallazgos historicos con un punto sobre la imagen anterior (`coords_diagrama`) no se dibujan.
+  cuadrante y se dibuja en todos los paneles donde aparece; las zonas que no tienen region en ningun panel se listan aparte. El informe y el inventario muestran la zona como lado + numero + pieza con su codigo AIAG («Izquierdo 4 · Guardafango delantero (AIAG 14/16)») y la exportacion de hallazgos trae la columna «Codigo AIAG». Los hallazgos historicos con un punto sobre la imagen anterior (`coords_diagrama`) no se dibujan.

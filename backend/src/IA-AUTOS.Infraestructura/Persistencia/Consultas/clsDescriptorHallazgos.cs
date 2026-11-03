@@ -20,7 +20,7 @@ internal sealed class clsDescriptorHallazgos(clsAppDbContext contexto) : IDescri
 
         var zonaIds = hallazgos.Where(h => h.ZonaId is not null).Select(h => h.ZonaId!.Value).Distinct().ToList();
         var zonas = await contexto.ZonasDano.AsNoTracking().Where(z => zonaIds.Contains(z.Id)).ToDictionaryAsync(z => z.Id, ct);
-        var cuadranteIds = zonas.Values.Where(z => z.CuadranteId is not null).Select(z => z.CuadranteId!.Value).Distinct().ToList();
+        var cuadranteIds = zonas.Values.Select(z => z.CuadranteId).Distinct().ToList();
         var cuadrantes = await contexto.Cuadrantes.AsNoTracking().Where(c => cuadranteIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id, c => c.Nombre, ct);
         var codigosNivel = hallazgos.Where(h => h.NivelSeveridad is not null).Select(h => h.NivelSeveridad!).Distinct().ToList();
         var niveles = await contexto.NivelesSeveridad.AsNoTracking().Where(n => codigosNivel.Contains(n.Codigo)).ToDictionaryAsync(n => n.Codigo, ct);
@@ -35,7 +35,7 @@ internal sealed class clsDescriptorHallazgos(clsAppDbContext contexto) : IDescri
         return hallazgos.Select(h =>
         {
             var zona = h.ZonaId is { } zonaId ? zonas.GetValueOrDefault(zonaId) : null;
-            var cuadranteNombre = zona?.CuadranteId is { } cuadranteId ? cuadrantes.GetValueOrDefault(cuadranteId) : null;
+            var cuadranteNombre = zona is not null ? cuadrantes.GetValueOrDefault(zona.CuadranteId) : null;
             var nivel = h.NivelSeveridad is { } codigo ? niveles.GetValueOrDefault(codigo) : null;
             var faltante = clsEvidenciaHallazgo.Faltante(conFoto.Contains(h.Id), cierres.GetValueOrDefault(h.InspeccionId));
             return clsMapeadorInspecciones.AHallazgo(h, zona, cuadranteNombre, nivel, faltante);

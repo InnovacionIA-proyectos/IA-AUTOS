@@ -9,7 +9,7 @@ los endpoints que lo usan estan en [CONTRATO.md](../CONTRATO.md) («Conductor en
 
 | Columna | Contenido |
 |---|---|
-| `Tipo` | `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario` o `novedad_proceso` (el conductor hizo el cargue sin inspector) |
+| `Tipo` | `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso` (el conductor hizo el cargue sin inspector o se cerró una entrega con una sola firma) o `reclamo_sin_actividad` (un camión reclamado sin ninguna inspección en `reclamo_sin_actividad_minutos`; al coordinador de calidad) |
 | `Urgencia` | `alta` o `media` |
 | `UsuarioId` | el destinatario; nulo solo en `reporte_diario` (el reporte diario no tiene un destinatario propio) |
 | `ClienteId`, `ViajeId`, `VehiculoId`, `HallazgoId`, `InspeccionId` | a que se refiere la notificacion (todos opcionales) |
@@ -41,7 +41,7 @@ inspeccion de **salida de Transporte** del VIN en el viaje. La base garantiza:
 | El conductor nunca trae el nivel V (lo asigna quien revisa) | `CK_tblHallazgos_NivelDelConductor`, para todo hallazgo de origen conductor |
 | Una novedad solo es de la salida de Transporte | trigger `TR_tblHallazgos_NovedadDeTransporte`, error **51007** |
 
-Los hallazgos que el conductor registra en un Cargue sin personal de apoyo no son novedades (no llevan `TipoNovedad`): conservan su zona y su clase y quedan sin nivel hasta que se revisan.
+Los hallazgos que el conductor registra en la salida de un Cargue que hizo por la excepción «No hay inspector» no son novedades (no llevan `TipoNovedad`): conservan su zona y su clase y quedan sin nivel hasta que se revisan.
 Que haya foto, que el tamano sea un codigo activo y que existan el GPS y la fecha lo valida la API al crear la novedad.
 
 ## Como se crean y se envian

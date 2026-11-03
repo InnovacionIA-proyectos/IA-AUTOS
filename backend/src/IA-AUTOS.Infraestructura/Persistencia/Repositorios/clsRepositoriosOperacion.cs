@@ -149,6 +149,22 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
         return new clsResumenCierre(evidencias.Count, sinUbicacion, hallazgos.Count, hallazgos.Count(h => !conFoto.Contains(h)), vistas);
     }
 
+    public Task<int> ContarFotosLibresAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        contexto.Evidencias.CountAsync(e => e.InspeccionId == inspeccionId && e.VistaId == null && e.HallazgoId == null && e.ExtraId == null && !e.EsConstancia && !e.EsSello, ct);
+
+    public async Task<IReadOnlyList<clsInspeccionExtra>> ObtenerExtrasAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        await contexto.InspeccionExtras.Where(e => e.InspeccionId == inspeccionId).OrderBy(e => e.CreatedAt).ToListAsync(ct);
+
+    public Task<clsInspeccionExtra?> ObtenerExtraAsync(Guid extraId, CancellationToken ct = default) =>
+        contexto.InspeccionExtras.FirstOrDefaultAsync(e => e.Id == extraId, ct);
+
+    public async Task<IReadOnlySet<Guid>> ExtrasConFotoAsync(IReadOnlyCollection<Guid> extraIds, CancellationToken ct = default) =>
+        (await contexto.Evidencias.AsNoTracking().Where(e => e.ExtraId != null && extraIds.Contains(e.ExtraId.Value)).Select(e => e.ExtraId!.Value).Distinct().ToListAsync(ct)).ToHashSet();
+
+    public void Agregar(clsInspeccionExtra extra) => contexto.InspeccionExtras.Add(extra);
+
+    public void Quitar(clsInspeccionExtra extra) => contexto.InspeccionExtras.Remove(extra);
+
     public Task<bool> TieneLlegadaCerradaAsync(Guid etapaId, CancellationToken ct = default) =>
         contexto.Inspecciones.AnyAsync(i => i.EtapaId == etapaId && i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA, ct);
 
@@ -184,8 +200,14 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
         return candidatas.OrderBy(x => x.TipoVehiculo is null ? 1 : 0).Select(x => x.Zona).FirstOrDefault();
     }
 
-    public Task<clsZonaDano?> ObtenerZonaProvisionalAsync(string codigo, CancellationToken ct = default) =>
-        contexto.ZonasDano.AsNoTracking().Where(z => z.CuadranteId == null && z.Activo && z.Codigo == codigo).FirstOrDefaultAsync(ct);
+    public async Task<bool?> CuadranteLlevaLadoAsync(int numero, string? tipoVehiculo, CancellationToken ct = default)
+    {
+        var candidatos = await contexto.Cuadrantes.AsNoTracking()
+            .Where(c => c.Activo && c.Numero == numero && (c.TipoVehiculo == null || c.TipoVehiculo == tipoVehiculo))
+            .Select(c => new { c.LlevaLado, c.TipoVehiculo }).ToListAsync(ct);
+        // El cuadrante propio del tipo de vehiculo gana sobre el generico.
+        return candidatos.OrderBy(c => c.TipoVehiculo is null ? 1 : 0).Select(c => (bool?)c.LlevaLado).FirstOrDefault();
+    }
 
     public Task<string?> ObtenerTipoVehiculoAsync(Guid inspeccionId, CancellationToken ct = default) =>
         (from i in contexto.Inspecciones.AsNoTracking()

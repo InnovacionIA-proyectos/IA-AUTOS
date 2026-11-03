@@ -12,6 +12,18 @@ public interface IInspeccionRepository
     /// <summary>True si la etapa tiene una inspeccion de llegada cerrada (de cualquiera de sus versiones).</summary>
     Task<bool> TieneLlegadaCerradaAsync(Guid etapaId, CancellationToken ct = default);
 
+    /// <summary>Las fotos de la inspeccion que no son de una vista, de un hallazgo, de una constancia ni de un sello: las fotos libres, como las de la acomodacion de la segunda inspeccion del cargue.</summary>
+    Task<int> ContarFotosLibresAsync(Guid inspeccionId, CancellationToken ct = default);
+
+    /// <summary>Los extras del vehiculo que reporta la inspeccion, en el orden en que se agregaron.</summary>
+    Task<IReadOnlyList<clsInspeccionExtra>> ObtenerExtrasAsync(Guid inspeccionId, CancellationToken ct = default);
+
+    /// <summary>Un extra por id (para cambiarlo o quitarlo), o nulo si no existe.</summary>
+    Task<clsInspeccionExtra?> ObtenerExtraAsync(Guid extraId, CancellationToken ct = default);
+
+    /// <summary>De los extras recibidos, los que tienen al menos una foto.</summary>
+    Task<IReadOnlySet<Guid>> ExtrasConFotoAsync(IReadOnlyCollection<Guid> extraIds, CancellationToken ct = default);
+
     /// <summary>True si alguna inspeccion de la etapa tiene una transferencia sin tipo de cierre (abierta): bloquea iniciar la etapa siguiente.</summary>
     Task<bool> TieneTransferenciaSinCierreAsync(Guid etapaId, CancellationToken ct = default);
 
@@ -35,8 +47,8 @@ public interface IInspeccionRepository
     /// </summary>
     Task<clsZonaDano?> ObtenerZonaNumeradaAsync(int numero, string? lado, string? tipoVehiculo, CancellationToken ct = default);
 
-    /// <summary>La zona provisional activa con ese codigo (frente, llantas), o nulo.</summary>
-    Task<clsZonaDano?> ObtenerZonaProvisionalAsync(string codigo, CancellationToken ct = default);
+    /// <summary>Si el cuadrante activo con ese numero (el del tipo de vehiculo o, si no hay, el generico) lleva lado; nulo si no existe o esta inactivo.</summary>
+    Task<bool?> CuadranteLlevaLadoAsync(int numero, string? tipoVehiculo, CancellationToken ct = default);
 
     /// <summary>Tipo de vehiculo del vehiculo al que pertenece la inspeccion (nulo si no tiene).</summary>
     Task<string?> ObtenerTipoVehiculoAsync(Guid inspeccionId, CancellationToken ct = default);
@@ -63,4 +75,8 @@ public interface IInspeccionRepository
     void Agregar(clsEvidencia evidencia);
 
     void Agregar(clsHallazgoSeguimiento seguimiento);
+
+    void Agregar(clsInspeccionExtra extra);
+
+    void Quitar(clsInspeccionExtra extra);
 }

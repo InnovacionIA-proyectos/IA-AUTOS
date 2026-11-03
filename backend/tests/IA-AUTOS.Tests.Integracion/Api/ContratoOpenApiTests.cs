@@ -9,7 +9,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// archivo versionado (docs/openapi.json) no se desvie de lo que genera la API.
 /// Para regenerarlo tras un cambio intencional: definir ACTUALIZAR_OPENAPI=1 y OPENAPI_DESTINO=&lt;ruta de docs/openapi.json&gt;.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private static readonly JsonSerializerOptions INDENTADO = new() { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
@@ -71,7 +71,7 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
             ["/api/viajes|post"] = "CrearViajeRequest",
             ["/api/viajes/{id}|patch"] = "ActualizarViajeRequest",
             ["/api/viajes/{id}/estado|patch"] = "CambiarEstadoViajeRequest",
-            ["/api/viajes/{id}/vehiculos|post"] = "AgregarVinesRequest",
+            ["/api/viajes/{id}/vehiculos|post"] = "AgregarUnidadesRequest",
             ["/api/viajes/cargar/previsualizar|post"] = "CargarViajesRequest",
             ["/api/viajes/cargar|post"] = "CargarViajesRequest",
             ["/api/inspecciones|post"] = "CrearInspeccionRequest",
@@ -144,6 +144,91 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.True(
             versionado == generado,
             "docs/openapi.json no coincide con el contrato generado. Si el cambio es intencional, suba info.version (clsOpenApi.VERSION) y regenere el archivo con ACTUALIZAR_OPENAPI=1, OPENAPI_PUBLICAR=1 y OPENAPI_DESTINO.");
+    }
+
+    [Fact]
+    public async Task El_contrato_exige_el_destino_por_unidad_y_ya_no_tiene_el_destino_unico_del_viaje()
+    {
+        var contrato = await ObtenerContratoAsync();
+        var esquemas = contrato["components"]!["schemas"]!.AsObject();
+        var rutas = contrato["paths"]!.AsObject();
+        static List<string> Propiedades(JsonNode esquema) => esquema["properties"]!.AsObject().Select(p => p.Key).ToList();
+
+        // El viaje se crea con sus unidades, cada una con su VIN y su lugar de destino; el cuerpo viejo (destino unico y lista de VIN) ya no esta.
+        var crear = Propiedades(esquemas["CrearViajeRequest"]!);
+        Assert.Contains("unidades", crear);
+        Assert.DoesNotContain("destino_id", crear);
+        Assert.DoesNotContain("vines", crear);
+        var unidad = esquemas["CrearViajeRequest"]!["properties"]!["unidades"]!["items"]!;
+        Assert.Equal(["vin", "lugar_destino_id"], Propiedades(unidad));
+        Assert.Equal(["vin", "lugar_destino_id"], unidad["required"]!.AsArray().Select(r => r!.GetValue<string>()).ToList());
+        Assert.Equal(["unidades"], Propiedades(esquemas["AgregarUnidadesRequest"]!));
+        Assert.Equal(["vin", "lugar_destino_id"], esquemas["AgregarUnidadesRequest"]!["properties"]!["unidades"]!["items"]!["required"]!.AsArray().Select(r => r!.GetValue<string>()).ToList());
+        Assert.DoesNotContain("destino_id", Propiedades(esquemas["ActualizarViajeRequest"]!));
+        Assert.Null(esquemas["AgregarVinesRequest"]);
+
+        // Cambiar el destino de una unidad y la entrega por punto.
+        Assert.Contains("CambiarDestinoUnidadRequest", rutas["/api/viajes/{id}/vehiculos/{vin}"]!["patch"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
+        Assert.Contains("EntregasDelViajeDto", rutas["/api/viajes/{id}/entregas"]!["get"]!["responses"]!["200"]!.ToJsonString());
+        Assert.Contains("EntregaPuntoDto", rutas["/api/viajes/{id}/entregas/{lugar}"]!["get"]!["responses"]!["200"]!.ToJsonString());
+        Assert.Contains("FirmarEntregaRequest", rutas["/api/viajes/{id}/entregas/{lugar}/firma"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
+        Assert.Contains("CerrarEntregaUnaFirmaRequest", rutas["/api/viajes/{id}/entregas/{lugar}/una-firma"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
+        Assert.Equal(["vehiculo_id", "vin", "estado", "inspeccion_id", "tipo_cierre", "entrega_firmada_at", "recibe_firmada_at", "no_firma_parte"], Propiedades(esquemas["EntregaUnidadDto"]!));
+    }
+
+    [Fact]
+    public async Task El_contrato_expone_reclamar_y_liberar_y_el_inspector_del_viaje_ya_no_se_cambia_por_patch()
+    {
+        var contrato = await ObtenerContratoAsync();
+        var esquemas = contrato["components"]!["schemas"]!.AsObject();
+        var rutas = contrato["paths"]!.AsObject();
+
+        Assert.Contains("ReclamarViajeRequest", rutas["/api/viajes/{id}/reclamos"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
+        Assert.Contains("ReclamoDto", rutas["/api/viajes/{id}/reclamos"]!["post"]!["responses"]!["201"]!.ToJsonString());
+        Assert.Contains("ReclamoDto", rutas["/api/viajes/{id}/reclamos"]!["get"]!["responses"]!["200"]!.ToJsonString());
+        Assert.Contains("ReclamoDto", rutas["/api/viajes/{id}/reclamos/{proceso}"]!["delete"]!["responses"]!["200"]!.ToJsonString());
+        Assert.Equal(
+            ["id", "viaje_id", "proceso", "inspector_id", "inspector_nombre", "reclamado_at", "activo", "liberado_at", "liberado_por", "liberado_por_nombre"],
+            esquemas["ReclamoDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList());
+        // El 409 «Ya fue tomado por otro inspector» y el 403 de otro punto estan documentados en reclamar.
+        var respuestas = rutas["/api/viajes/{id}/reclamos"]!["post"]!["responses"]!.AsObject().Select(r => r.Key).ToList();
+        Assert.Contains("403", respuestas);
+        Assert.Contains("409", respuestas);
+        // El inspector lo llena el reclamo del cargue: ya no se cambia por PATCH (al crear el viaje sigue admitiendose).
+        Assert.DoesNotContain("inspector_id", esquemas["ActualizarViajeRequest"]!["properties"]!.AsObject().Select(p => p.Key));
+        Assert.Contains("inspector_id", esquemas["CrearViajeRequest"]!["properties"]!.AsObject().Select(p => p.Key));
+    }
+
+    [Fact]
+    public async Task El_contrato_expone_la_lista_de_pendientes_del_inspector_con_su_estado()
+    {
+        var contrato = await ObtenerContratoAsync();
+        var esquemas = contrato["components"]!["schemas"]!.AsObject();
+        var rutas = contrato["paths"]!.AsObject();
+
+        Assert.Contains("PendienteDto", rutas["/api/viajes/pendientes"]!["get"]!["responses"]!["200"]!.ToJsonString());
+        Assert.Equal(
+            ["viaje_id", "codigo_mtrack", "placa", "proceso", "lugar_id", "lugar", "fecha_programada", "estado", "reclamado_por", "reclamado_por_nombre", "reclamado_at", "unidades"],
+            esquemas["PendienteDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList());
+    }
+
+    [Fact]
+    public async Task El_contrato_ya_no_tiene_la_marca_de_personal_de_apoyo_y_el_viaje_trae_sus_novedades_de_proceso()
+    {
+        var contrato = await ObtenerContratoAsync();
+        var esquemas = contrato["components"]!["schemas"]!.AsObject();
+
+        // El cargue no lleva ninguna marca previa: con_personal_apoyo no esta en ningun esquema (crear viaje, PATCH, viaje, listado ni inventario).
+        foreach (var (nombre, esquema) in esquemas)
+        {
+            Assert.False(esquema!["properties"] is JsonObject propiedades && propiedades.ContainsKey("con_personal_apoyo"), $"El esquema {nombre} todavia trae con_personal_apoyo");
+        }
+
+        Assert.DoesNotContain("con_personal_apoyo", contrato.ToJsonString());
+        Assert.Contains("novedades_proceso", esquemas["ViajeDto"]!["properties"]!.AsObject().Select(p => p.Key));
+        Assert.Equal(
+            ["tipo", "motivo_codigo", "motivo", "texto", "usuario_nombre", "fecha", "vin", "inspeccion_id"],
+            esquemas["NovedadDelViajeDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList());
     }
 
     [Fact]

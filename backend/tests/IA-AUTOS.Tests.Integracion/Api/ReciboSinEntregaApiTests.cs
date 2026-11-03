@@ -13,10 +13,11 @@ namespace IAAutos.Tests.Integracion.Api;
 /// El recibo sin entrega: cuando el conductor hizo la salida del Cargue (sin personal de apoyo, o con la excepcion «No hay inspector») nadie de Botero Soto firma la entrega y el conductor del viaje cierra
 /// la transferencia solo con su firma. Desbloquea la etapa siguiente, deja la evidencia de los hallazgos incompleta, crea la novedad de proceso solo si hubo excepcion y aparece en el PDF y en el reporte.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-10-23T08:30:00-05:00";
+    private const string AUTOMATICO = "(segun quien la hace)";
 
     private readonly clsEnviadorPushFalso _push = new();
     private clsFabricaApi _api = null!;
@@ -43,23 +44,21 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
 
     private static async Task<JsonElement> ComoJsonAsync(HttpResponseMessage r) => (await r.Content.ReadFromJsonAsync<JsonElement>()).Clone();
 
-    private async Task<Escenario> EscenarioAsync(bool conApoyo = false, string vin = "VIN-REC-0001")
+    private async Task<Escenario> EscenarioAsync(string vin = "VIN-REC-0001")
     {
         var conductor = await SesionAsync("conductor@ejemplo.com", clsRol.CONDUCTOR);
         var inspector = await SesionAsync("inspector@ejemplo.com", clsRol.INSPECTOR);
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
         var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
         var (vehiculo, etapas) = await Sembrador.VehiculoConRutaAsync(vin, conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
-        if (conApoyo)
-        {
-            await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET ConPersonalApoyo = 1 WHERE Id = @e", ("@e", etapas[0]));
-        }
-
         return new Escenario(await Sembrador.ViajeDeEtapaAsync(etapas[0]), vehiculo, etapas, vin, conductor, inspector, coordinador, admin);
     }
 
-    private async Task<Guid> SalidaDelCargueAsync(Sesion quien, Guid etapa, string? motivo = null)
+    /// <summary>La salida del cargue: la hace el inspector o, si no hay inspector, el conductor activando la excepcion con su motivo (por defecto «el inspector no llego»).</summary>
+    private async Task<Guid> SalidaDelCargueAsync(Sesion quien, Guid etapa, string? motivo = AUTOMATICO)
     {
+        var esConductor = (string?)(await Sembrador.EscalarAsync("SELECT Rol FROM dbo.tblUsuarios WHERE Id = @u", ("@u", quien.UsuarioId))) == clsRol.CONDUCTOR;
+        motivo = motivo == AUTOMATICO ? (esConductor ? "inspector_no_llego" : null) : motivo;
         var r = await Como(quien).PostAsJsonAsync("/api/inspecciones", new Dictionary<string, object?>
         {
             ["etapa_id"] = etapa, ["momento"] = "salida", ["fecha"] = FECHA, ["lat"] = 4.6, ["lng"] = -74.1, ["motivo_sin_inspector"] = motivo,
@@ -76,7 +75,7 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
     // ----------------------------------------------------------------------------------------------- el cierre
 
     [Fact]
-    public async Task El_conductor_cierra_la_transferencia_de_su_cargue_sin_apoyo_solo_con_su_firma_y_no_se_crea_novedad_de_proceso()
+    public async Task El_conductor_cierra_la_transferencia_de_su_cargue_por_excepcion_solo_con_su_firma_y_quedan_las_dos_novedades_de_proceso()
     {
         var e = await EscenarioAsync();
         var inspeccion = await SalidaDelCargueAsync(e.Conductor, e.Etapas[0]);
@@ -88,14 +87,17 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
         Assert.Equal("recibo_sin_entrega", t.GetProperty("tipo_cierre").GetString());
         Assert.Equal(JsonValueKind.Null, t.GetProperty("entrega_usuario_id").ValueKind);
         Assert.Equal(e.Conductor.UsuarioId, t.GetProperty("recibe_usuario_id").GetGuid());
+        // Queda registrado que quien entrega no firmo y por que (lo exige el cierre en la base).
+        Assert.Equal("entrega", t.GetProperty("no_firma_parte").GetString());
+        Assert.Equal("El conductor hizo la salida del cargue y nadie de Botero Soto entregó la unidad", t.GetProperty("motivo_no_firma").GetString());
         Assert.Equal(JsonValueKind.Null, t.GetProperty("entrega_firmada_at").ValueKind);
         Assert.NotEqual(JsonValueKind.Null, t.GetProperty("recibe_firmada_at").ValueKind);
         Assert.False(t.GetProperty("firmada").GetBoolean());
         Assert.Equal(1, await Sembrador.ContarAsync(
             "SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @i AND TipoCierre = 'recibo_sin_entrega' AND EntregaUsuarioId IS NULL AND FirmaEntrega IS NULL AND FirmaEntregaAt IS NULL AND FirmaEntregaIp IS NULL AND FirmaRecibe = N'M10,10 L50,50' AND FirmaRecibeAt IS NOT NULL AND RecibeUsuarioId = @u",
             ("@i", inspeccion), ("@u", e.Conductor.UsuarioId)));
-        // El cargue sin apoyo estaba planeado: no es una novedad de proceso.
-        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNovedadesProceso"));
+        // El cargue lo hizo el conductor por la excepcion: queda la novedad del cargue sin inspector y la del recibo sin entrega.
+        Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNovedadesProceso"));
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'transferencia.sin_entrega' AND EntidadId = @t AND UsuarioId = @u AND ViajeId = @v", ("@t", t.GetProperty("id").GetGuid()), ("@u", e.Conductor.UsuarioId), ("@v", e.Viaje)));
     }
 
@@ -200,7 +202,7 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
         var e = await EscenarioAsync();
         var delInspector = await SalidaDelCargueAsync(e.Inspector, e.Etapas[0]);
         await Sembrador.InformeAsync(e.Etapas[0], e.Conductor.UsuarioId, cerrada: true, momento: "llegada");
-        var transporte = await SalidaDelCargueAsync(e.Conductor, e.Etapas[1]);
+        var transporte = await SalidaDelCargueAsync(e.Conductor, e.Etapas[1], motivo: null);
 
         var salidaDelInspector = await SinEntregaAsync(e.Conductor, delInspector);
         var deTransporte = await SinEntregaAsync(e.Conductor, transporte);
@@ -237,7 +239,7 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
     public async Task Los_hallazgos_de_esa_inspeccion_quedan_con_la_evidencia_incompleta_por_transferencia_sin_entrega()
     {
         var e = await EscenarioAsync();
-        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
         var (inspeccion, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[0], e.Conductor.UsuarioId, zona, conFoto: true);
 
         var antes = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/hallazgos/{hallazgo}"));
@@ -255,7 +257,7 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
     [Fact]
     public async Task Con_la_excepcion_queda_ademas_la_novedad_de_proceso_recibo_sin_entrega_sin_nuevo_aviso()
     {
-        var e = await EscenarioAsync(conApoyo: true);
+        var e = await EscenarioAsync();
         var inspeccion = await SalidaDelCargueAsync(e.Conductor, e.Etapas[0], motivo: "inspector_no_llego");
         var avisosAntes = await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones");
         var pushAntes = _push.Enviados.Count;
@@ -281,7 +283,7 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
     [Fact]
     public async Task El_reporte_cuenta_las_novedades_de_proceso_por_tipo_punto_cliente_y_mes_con_los_filtros_del_tablero()
     {
-        var e = await EscenarioAsync(conApoyo: true);
+        var e = await EscenarioAsync();
         var inspeccion = await SalidaDelCargueAsync(e.Conductor, e.Etapas[0], motivo: "inspector_no_llego");
         Assert.Equal(HttpStatusCode.Created, (await SinEntregaAsync(e.Conductor, inspeccion)).StatusCode);
         var hoy = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).ToString("yyyy-MM-dd");
@@ -312,7 +314,7 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
     [Fact]
     public async Task El_reporte_es_del_cliente_de_quien_consulta_y_el_inspector_y_el_conductor_no_lo_ven()
     {
-        var e = await EscenarioAsync(conApoyo: true);
+        var e = await EscenarioAsync();
         await SalidaDelCargueAsync(e.Conductor, e.Etapas[0], motivo: "inspector_no_llego");
         var otroCliente = Guid.NewGuid();
         await Sembrador.EjecutarAsync("INSERT dbo.tblClientes (Id, Codigo, Nombre, Orden) VALUES (@id, 'otro', N'Otro cliente', 2)", ("@id", otroCliente));

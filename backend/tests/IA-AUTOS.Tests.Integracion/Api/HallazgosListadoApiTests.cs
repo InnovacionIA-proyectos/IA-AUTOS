@@ -10,7 +10,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Listado y detalle de los hallazgos: paginado, con filtros, con el contexto de su inspeccion, y visible solo para el inspector de sus viajes y para quien se limita a su
 /// cliente; el conductor no los consulta.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed class HallazgosListadoApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);
@@ -41,7 +41,7 @@ public sealed class HallazgosListadoApiTests(clsBaseDatosFixture bd) : clsPrueba
         await Sembrador.EjecutarAsync("INSERT dbo.tblClientes (Id, Codigo, Nombre, Orden) VALUES (@id, 'otro', N'Otro cliente', 2)", ("@id", otro));
         await Sembrador.CuadranteAsync(7, "Puerta delantera");
         var izquierdo7 = await Sembrador.ZonaAsync(7, "izquierdo");
-        var frente = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var frente = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
 
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-L-1", conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
         var (inspeccionH1, h1) = await Sembrador.InformeCerradoConHallazgoAsync(etapas[0], inspector.UsuarioId, frente, nivel: "v1", conFoto: true);
@@ -90,7 +90,7 @@ public sealed class HallazgosListadoApiTests(clsBaseDatosFixture bd) : clsPrueba
         var nombres = fila.EnumerateObject().Select(p => p.Name).ToList();
         foreach (var campo in new[]
         {
-            "id", "inspeccion_id", "clase_dano", "tamano_dano", "cuadrante_numero", "lado", "zona_provisional", "zona", "nivel_severidad", "nivel_nombre", "nivel_accion", "origen", "nota",
+            "id", "inspeccion_id", "clase_dano", "tamano_dano", "cuadrante_numero", "lado", "zona", "aiag_area", "nivel_severidad", "nivel_nombre", "nivel_accion", "origen", "nota",
             "es_preexistente", "estado_seguimiento", "evidencia_completa", "evidencia_faltante", "vin", "viaje_id", "codigo_mtrack", "proceso", "momento", "inspeccion_estado", "cerrada_at", "evidencia",
         })
         {
@@ -105,7 +105,7 @@ public sealed class HallazgosListadoApiTests(clsBaseDatosFixture bd) : clsPrueba
         Assert.Equal("cerrada", fila.GetProperty("inspeccion_estado").GetString());
         Assert.Equal(JsonValueKind.String, fila.GetProperty("cerrada_at").ValueKind);
         Assert.Equal(e.InspeccionH1, fila.GetProperty("inspeccion_id").GetGuid());
-        Assert.Equal("Frente", fila.GetProperty("zona").GetString());
+        Assert.Equal("50 · Frente", fila.GetProperty("zona").GetString());
         // La foto propia viene como una evidencia con su URL; un hallazgo sin foto trae nulo.
         Assert.Equal(e.H1, fila.GetProperty("evidencia").GetProperty("hallazgo_id").GetGuid());
         Assert.StartsWith("http://localhost/api/uploads/hallazgo-", fila.GetProperty("evidencia").GetProperty("url").GetString());

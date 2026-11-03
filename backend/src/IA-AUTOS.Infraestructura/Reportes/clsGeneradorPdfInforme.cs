@@ -22,7 +22,9 @@ internal sealed class clsGeneradorPdfInforme : IGeneradorPdfInforme
         Unidad(doc, d);
         Viaje(doc, d);
         Etapa(doc, d);
+        Acomodacion(doc, d);
         FotosDeVistas(doc, d);
+        Extras(doc, d);
         Hallazgos(doc, d);
         Paneles(doc, d);
         Transferencia(doc, d.Transferencia);
@@ -77,6 +79,55 @@ internal sealed class clsGeneradorPdfInforme : IGeneradorPdfInforme
         if (!string.IsNullOrWhiteSpace(d.Observaciones))
         {
             doc.Escribir($"Observaciones: {d.Observaciones}", 11);
+        }
+    }
+
+    /// <summary>Cada unidad del viaje con su posicion en la ninera; solo en el informe de la segunda inspeccion del cargue.</summary>
+    private static void Acomodacion(clsDocumentoPdf doc, DatosInforme d)
+    {
+        if (d.Acomodacion is not { } acomodacion)
+        {
+            return;
+        }
+
+        Seccion(doc, "Acomodación en la niñera");
+        foreach (var u in acomodacion.Unidades)
+        {
+            var posicion = u.Posicion is { } p ? $"Posición {p}" : u.NoSale ? "No sale del viaje" : "Sin posición";
+            doc.Escribir($"{posicion} — VIN {u.Vin}", 11);
+        }
+
+        Seccion(doc, "Fotos de la acomodación");
+        if (acomodacion.Fotos.Count == 0)
+        {
+            doc.Escribir("Sin fotos de la acomodación.", 11);
+            return;
+        }
+
+        doc.Galeria(acomodacion.Fotos.Select(AFoto).ToList(), 2, FOTO_ALTO);
+    }
+
+    /// <summary>Los extras del vehiculo fuera del dibujo estandar, cada uno con su observacion y su galeria de fotos selladas; la seccion solo sale si la inspeccion reporto alguno.</summary>
+    private static void Extras(clsDocumentoPdf doc, DatosInforme d)
+    {
+        if (d.Extras is not { Count: > 0 } extras)
+        {
+            return;
+        }
+
+        Seccion(doc, "Extras del vehículo");
+        foreach (var extra in extras)
+        {
+            doc.Escribir($"• {extra.Nombre}", 11, true);
+            if (!string.IsNullOrWhiteSpace(extra.Observacion))
+            {
+                doc.Escribir($"  Observación: {extra.Observacion}", 11);
+            }
+
+            if (extra.Fotos.Count > 0)
+            {
+                doc.Galeria(extra.Fotos.Select(AFoto).ToList(), 2, FOTO_ALTO);
+            }
         }
     }
 

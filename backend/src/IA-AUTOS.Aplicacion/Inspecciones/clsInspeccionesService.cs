@@ -1,12 +1,15 @@
 using FluentValidation;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
+using IAAutos.Aplicacion.Viajes;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Notificaciones;
+using IAAutos.Aplicacion.Parametros;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Notificaciones;
+using IAAutos.Dominio.Parametros;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
@@ -36,6 +39,9 @@ public interface IConsultasInspecciones
 
     Task<InformeDetalleDto?> ObtenerInformeAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>Los extras del vehiculo de la inspeccion con el nombre de su tipo y sus fotos selladas, en el orden en que se agregaron.</summary>
+    Task<IReadOnlyList<ExtraDto>> ObtenerExtrasAsync(Guid inspeccionId, CancellationToken ct = default);
+
     /// <summary>
     /// Los hallazgos de las inspecciones cerradas anteriores del mismo VIN (de cualquier viaje, incluido uno del que la unidad no salio), del cierre mas reciente
     /// al mas antiguo. Una inspeccion corregida cuenta con su ultima version cerrada y no con la que reemplazo.
@@ -59,6 +65,7 @@ public sealed class clsInspeccionesService(
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
     clsFabricaEvidencias fabricaEvidencias,
+    clsConfirmacionEnSitioService confirmacionEnSitio,
     clsVerificadorEtapaPrevia etapaPrevia,
     clsResolutorZona resolutorZona,
     clsCalculadoraVistas calculadoraVistas,
@@ -69,6 +76,8 @@ public sealed class clsInspeccionesService(
     INovedadProcesoRepository novedades,
     clsEmisorNotificaciones emisor,
     IDescriptorHallazgos descriptorHallazgos,
+    clsAccesoViajes acceso,
+    IParametros parametros,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -93,7 +102,7 @@ public sealed class clsInspeccionesService(
             ?? throw new clsEntidadNoEncontradaException("El viaje de la etapa no existe");
 
         // Inspectores y conductores solo inspeccionan los viajes en los que participan, y solo mientras el viaje siga activo.
-        if (actual.SoloSusViajes() is { } usuarioViaje && !viaje.Participa(usuarioViaje))
+        if (actual.SoloSusViajes() is { } usuarioViaje && !await acceso.ParticipaOReclamaAsync(viaje, usuarioViaje, ct))
         {
             throw new clsProhibidoException("El viaje de esta etapa no está asignado a su usuario");
         }
@@ -103,9 +112,9 @@ public sealed class clsInspeccionesService(
             throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite inspecciones nuevas");
         }
 
-        // En un Cargue con personal de apoyo la salida la hace el inspector: el conductor solo firma el recibo. Si el inspector previsto no esta, el conductor del viaje la hace con el motivo
-        // (la excepcion «No hay inspector»); sin motivo sigue siendo 403 y en cualquier otro caso el motivo no se admite (400).
-        var porExcepcion = actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && etapa.ConPersonalApoyo && await EsCargueAsync(etapa, ct);
+        // La salida de un Cargue la hace siempre el inspector: el conductor solo firma el recibo. Si no hay inspector, el conductor del viaje la hace activando en el momento la excepcion
+        // «No hay inspector» (con su motivo); sin motivo es 403 y en cualquier otro caso el motivo no se admite (400).
+        var porExcepcion = actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && await EsCargueAsync(etapa, ct);
         var motivo = await ResolverMotivoAsync(solicitud, porExcepcion, ct);
 
         // La salida de una etapa solo se crea cuando la etapa anterior del VIN ya termino (su llegada esta cerrada).
@@ -193,7 +202,7 @@ public sealed class clsInspeccionesService(
         var codigo = clsValidador.Opcional(solicitud.MotivoSinInspector);
         if (codigo is null)
         {
-            throw new clsProhibidoException("Este cargue tiene personal de apoyo: el conductor solo firma el recibo");
+            throw new clsProhibidoException("La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción");
         }
 
         var motivo = (await catalogos.ValoresAsync(clsNombresCatalogo.MOTIVOS_SIN_INSPECTOR, ct)).FirstOrDefault(m => m.Codigo == codigo && m.Activo)
@@ -248,7 +257,7 @@ public sealed class clsInspeccionesService(
         var viaje = await viajes.ObtenerPorIdAsync(original.ViajeId, ct)
             ?? throw new clsEntidadNoEncontradaException("El viaje de la inspección no existe");
 
-        if (actual.SoloSusViajes() is { } usuarioViaje && !viaje.Participa(usuarioViaje))
+        if (actual.SoloSusViajes() is { } usuarioViaje && !await acceso.ParticipaOReclamaAsync(viaje, usuarioViaje, ct))
         {
             throw new clsProhibidoException("El viaje de esta inspección no está asignado a su usuario");
         }
@@ -301,7 +310,7 @@ public sealed class clsInspeccionesService(
         if (actual.SoloSusViajes() is { } usuarioViaje)
         {
             var viaje = await viajes.ObtenerPorIdAsync(inspeccion.ViajeId, ct);
-            if (viaje is null || !viaje.Participa(usuarioViaje))
+            if (viaje is null || !await acceso.ParticipaOReclamaAsync(viaje, usuarioViaje, ct))
             {
                 throw new clsProhibidoException("La inspección pertenece a un viaje que no está asignado a su usuario");
             }
@@ -323,7 +332,7 @@ public sealed class clsInspeccionesService(
         if (actual.SoloSusViajes() is { } usuarioViaje)
         {
             var viaje = await viajes.ObtenerPorIdAsync(informe.ViajeId, ct);
-            if (viaje is null || !viaje.Participa(usuarioViaje))
+            if (viaje is null || !await acceso.ParticipaOReclamaAsync(viaje, usuarioViaje, ct))
             {
                 throw new clsProhibidoException("La inspección pertenece a un viaje que no está asignado a su usuario");
             }
@@ -343,7 +352,7 @@ public sealed class clsInspeccionesService(
         inspeccion.AsegurarEditable();
         var foto = solicitud.Evidencia!;
 
-        var zona = await resolutorZona.ResolverAsync(inspeccionId, solicitud.CuadranteNumero, solicitud.Lado, solicitud.ZonaProvisional, ct);
+        var zona = await resolutorZona.ResolverAsync(inspeccionId, solicitud.CuadranteNumero!.Value, solicitud.Lado, ct);
         var clase = solicitud.ClaseDano!.Trim();
         if (solicitud.HallazgoOrigenId is { } origenId
             && !await inspecciones.EsHallazgoPrevioDelVehiculoAsync(origenId, inspeccionId, zona.Id, clase, ct))
@@ -368,12 +377,90 @@ public sealed class clsInspeccionesService(
             foto.DispositivoId, foto.Nota, foto.HashSha256, ct);
         inspecciones.Agregar(hallazgo);
         inspecciones.Agregar(evidencia);
+        var avisoDeRango = await confirmacionEnSitio.EvaluarAsync(inspeccion, evidencia, reloj.Ahora, ct);
         await auditor.RegistrarDeViajeAsync(
             "hallazgo.crear", "hallazgos", hallazgo.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(hallazgo)), ct: ct);
         await auditor.RegistrarDeViajeAsync(
             "evidencia.crear", "evidencias", evidencia.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(evidencia)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        if (avisoDeRango is not null)
+        {
+            await confirmacionEnSitio.AvisarAsync(avisoDeRango, ct);
+        }
+
         return clsMapeadorInspecciones.AHallazgoCreado((await descriptorHallazgos.DescribirAsync([hallazgo], ct))[0], evidencia);
+    }
+
+    /// <summary>
+    /// Agrega un extra del vehiculo (fuera del dibujo estandar) a una inspeccion en borrador: <c>tipo</c> es el codigo de un tipo activo de <c>tipos-extra</c>; con «otro» el <c>texto</c> es obligatorio y en los demas no
+    /// se admite; <c>observacion</c> es opcional. Sus fotos van aparte, con <c>extra_id</c> en la evidencia. 409 si la inspeccion esta cerrada.
+    /// </summary>
+    public async Task<ExtraDto> AgregarExtraAsync(Guid inspeccionId, CrearExtraRequest solicitud, CancellationToken ct = default)
+    {
+        var inspeccion = await ObtenerParaEscrituraAsync(inspeccionId, ct);
+        inspeccion.AsegurarEditable();
+        await ValidarTipoDeExtraAsync(solicitud.Tipo, null, ct);
+        var extra = clsInspeccionExtra.Crear(inspeccionId, solicitud.Tipo, solicitud.Texto, solicitud.Observacion, reloj.Ahora);
+        inspecciones.Agregar(extra);
+        await auditor.RegistrarDeViajeAsync("extra.crear", "extras", extra.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(extra)), ct: ct);
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        return await ExtraAsync(inspeccionId, extra.Id, ct);
+    }
+
+    /// <summary>Cambia el tipo, el texto y la observacion de un extra de una inspeccion en borrador (reemplazan a los guardados). Un tipo inactivado desde que se reporto el extra se puede conservar.</summary>
+    public async Task<ExtraDto> ActualizarExtraAsync(Guid inspeccionId, Guid extraId, ActualizarExtraRequest solicitud, CancellationToken ct = default)
+    {
+        var inspeccion = await ObtenerParaEscrituraAsync(inspeccionId, ct);
+        inspeccion.AsegurarEditable();
+        var extra = await ObtenerExtraDeInspeccionAsync(inspeccionId, extraId, ct);
+        await ValidarTipoDeExtraAsync(solicitud.Tipo, extra.Tipo, ct);
+        var antes = clsInstantaneasAuditoria.De(extra);
+        extra.Actualizar(solicitud.Tipo, solicitud.Texto, solicitud.Observacion, reloj.Ahora);
+        await auditor.RegistrarDeViajeAsync("extra.actualizar", "extras", extra.Id, inspeccion.ViajeId, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(extra)), ct: ct);
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        return await ExtraAsync(inspeccionId, extra.Id, ct);
+    }
+
+    /// <summary>Quita un extra de una inspeccion en borrador. Un extra con fotos no se quita (409): la foto es evidencia y no se borra.</summary>
+    public async Task QuitarExtraAsync(Guid inspeccionId, Guid extraId, CancellationToken ct = default)
+    {
+        var inspeccion = await ObtenerParaEscrituraAsync(inspeccionId, ct);
+        inspeccion.AsegurarEditable();
+        var extra = await ObtenerExtraDeInspeccionAsync(inspeccionId, extraId, ct);
+        if ((await inspecciones.ExtrasConFotoAsync([extra.Id], ct)).Count > 0)
+        {
+            throw new clsConflictoException("El extra tiene fotos, que son evidencia y no se pueden borrar");
+        }
+
+        inspecciones.Quitar(extra);
+        await auditor.RegistrarDeViajeAsync("extra.quitar", "extras", extra.Id, inspeccion.ViajeId, new DetalleAuditoria(clsInstantaneasAuditoria.De(extra), null), ct: ct);
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+    }
+
+    private async Task<clsInspeccionExtra> ObtenerExtraDeInspeccionAsync(Guid inspeccionId, Guid extraId, CancellationToken ct) =>
+        await inspecciones.ObtenerExtraAsync(extraId, ct) is { } extra && extra.InspeccionId == inspeccionId
+            ? extra
+            : throw new clsEntidadNoEncontradaException($"El extra {extraId} no existe en esta inspección");
+
+    private async Task<ExtraDto> ExtraAsync(Guid inspeccionId, Guid extraId, CancellationToken ct) =>
+        (await consultas.ObtenerExtrasAsync(inspeccionId, ct)).Single(e => e.Id == extraId);
+
+    /// <summary>
+    /// El tipo debe ser el codigo de un tipo activo del catalogo <c>tipos-extra</c> (400 si no). Al cambiar un extra ya reportado, su tipo actual se admite aunque se haya inactivado despues
+    /// (<paramref name="tipoActual"/>): inactivar un tipo no deja sus extras sin poder editarse.
+    /// </summary>
+    private async Task ValidarTipoDeExtraAsync(string? tipo, string? tipoActual, CancellationToken ct)
+    {
+        var codigo = tipo?.Trim();
+        if (string.IsNullOrEmpty(codigo) || codigo == tipoActual)
+        {
+            return;
+        }
+
+        if (!(await catalogos.CodigosAsync(clsNombresCatalogo.TIPOS_EXTRA, soloActivos: true, ct)).Contains(codigo))
+        {
+            throw clsErroresCampos.De("tipo", "Tipo de extra inválido: use el código de un tipo activo de tipos-extra");
+        }
     }
 
     public async Task<EvidenciaDto> AgregarEvidenciaAsync(Guid inspeccionId, CrearEvidenciaRequest solicitud, CancellationToken ct = default)
@@ -382,10 +469,15 @@ public sealed class clsInspeccionesService(
         var inspeccion = await ObtenerParaEscrituraAsync(inspeccionId, ct);
         inspeccion.AsegurarEditable();
 
-        // Una foto es de una vista o de un hallazgo, no de las dos cosas.
-        if (solicitud.HallazgoId is not null && solicitud.VistaId is not null)
+        // Una foto es de una vista, de un hallazgo o de un extra: de una sola de las tres cosas.
+        if (new[] { solicitud.HallazgoId, solicitud.VistaId, solicitud.ExtraId }.Count(x => x is not null) > 1)
         {
-            throw clsErroresCampos.De("vista_id", "Una foto es de una vista o de un hallazgo, no de ambos");
+            throw clsErroresCampos.De("vista_id", "Una foto es de una vista, de un hallazgo o de un extra, no de varios a la vez");
+        }
+
+        if (solicitud.ExtraId is { } extraId && !(await inspecciones.ObtenerExtraAsync(extraId, ct) is { } delExtra && delExtra.InspeccionId == inspeccionId))
+        {
+            throw new clsEntidadNoEncontradaException("El extra indicado no pertenece a esta inspección");
         }
 
         if (solicitud.HallazgoId is { } hallazgoId
@@ -399,13 +491,33 @@ public sealed class clsInspeccionesService(
             await ValidarVistaAsync(vistaId, solicitud.Nota, ct);
         }
 
-        var evidencia = await fabricaEvidencias.CrearAsync(
-            inspeccionId, solicitud.HallazgoId, solicitud.VistaId, esConstancia: false, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat,
-            solicitud.SelloLng, solicitud.Precision, solicitud.DispositivoId, solicitud.Nota, solicitud.HashSha256, ct);
+        // Toda foto es de una vista, de un hallazgo o de un extra; la unica sin ninguno de los tres es la de la acomodacion de la segunda inspeccion del cargue.
+        var deAcomodacion = solicitud.HallazgoId is null && solicitud.VistaId is null && solicitud.ExtraId is null;
+        if (deAcomodacion && !await EsAcomodacionAsync(inspeccion, ct))
+        {
+            throw clsErroresCampos.De("vista_id", "Indique la vista de la foto (vista_id) o el hallazgo al que pertenece (hallazgo_id)");
+        }
+
+        var evidencia = solicitud.ExtraId is { } extra
+            ? await fabricaEvidencias.CrearDeExtraAsync(
+                inspeccionId, extra, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat, solicitud.SelloLng, solicitud.Precision, solicitud.DispositivoId, solicitud.Nota, solicitud.HashSha256, ct)
+            : deAcomodacion
+            ? await fabricaEvidencias.CrearDeAcomodacionAsync(
+                inspeccionId, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat, solicitud.SelloLng, solicitud.Precision, solicitud.DispositivoId, solicitud.Nota, solicitud.HashSha256, ct)
+            : await fabricaEvidencias.CrearAsync(
+                inspeccionId, solicitud.HallazgoId, solicitud.VistaId, esConstancia: false, solicitud.StoragePath!, solicitud.SelloFecha!.Value, solicitud.SelloLat,
+                solicitud.SelloLng, solicitud.Precision, solicitud.DispositivoId, solicitud.Nota, solicitud.HashSha256, ct);
         inspecciones.Agregar(evidencia);
+        // Con la primera foto con ubicacion se confirma «en sitio» (solo marca: nunca bloquea ni cambia la captura).
+        var avisoDeRango = await confirmacionEnSitio.EvaluarAsync(inspeccion, evidencia, reloj.Ahora, ct);
         await auditor.RegistrarDeViajeAsync(
             "evidencia.crear", "evidencias", evidencia.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(evidencia)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        if (avisoDeRango is not null)
+        {
+            await confirmacionEnSitio.AvisarAsync(avisoDeRango, ct);
+        }
+
         return clsMapeadorInspecciones.AEvidencia(evidencia);
     }
 
@@ -421,10 +533,20 @@ public sealed class clsInspeccionesService(
         var etapa = await etapas.ObtenerPorIdAsync(inspeccion.EtapaId, ct)
             ?? throw new clsEntidadNoEncontradaException("La etapa de la inspección no existe");
         var codigoEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
-        var exigeVistas = clsEtapaCatalogo.ExigeVistas(codigoEtapa);
+        // La segunda inspeccion del cargue (la salida del Cargue) documenta la acomodacion en la ninera: no exige las fotos de las vistas de estado (quedan solo en la primera) sino la posicion de cada
+        // unidad activa del viaje y las fotos de la acomodacion.
+        var esAcomodacion = EsSegundaInspeccionDelCargue(codigoEtapa, inspeccion);
+        var exigeVistas = clsEtapaCatalogo.ExigeVistas(codigoEtapa) && !esAcomodacion;
         var faltantes = exigeVistas && !inspeccion.EstaCerrada ? await calculadoraVistas.FaltantesAsync(etapa, resumen, ct) : [];
+        var otrosFaltantes = new List<string>();
+        if (!inspeccion.EstaCerrada)
+        {
+            otrosFaltantes.AddRange(esAcomodacion ? await FaltantesDeAcomodacionAsync(inspeccion, ct) : []);
+            otrosFaltantes.AddRange(await ExtrasSinFotoAsync(inspeccionId, ct));
+        }
+
         var antes = clsInstantaneasAuditoria.De(inspeccion);
-        inspeccion.Cerrar(resumen, faltantes, exigeUbicacionPropia: !exigeVistas, reloj.Ahora);
+        inspeccion.Cerrar(resumen, faltantes, exigeUbicacionPropia: !exigeVistas, reloj.Ahora, otrosFaltantes);
         await auditor.RegistrarDeViajeAsync(
             "inspeccion.cerrar", "inspecciones", inspeccion.Id, inspeccion.ViajeId, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(inspeccion)), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -432,6 +554,57 @@ public sealed class clsInspeccionesService(
         return new CerrarInspeccionResponse(
             clsMapeadorInspecciones.AInspeccion(inspeccion, await consultasNovedades.DeInspeccionAsync(inspeccion.Id, ct)),
             new ResumenCierreDto(resumen.TotalEvidencias, resumen.TotalHallazgos));
+    }
+
+    /// <summary>
+    /// Lo que le falta a la acomodacion para cerrar la segunda inspeccion del cargue: «Falta la posicion de la unidad {VIN}» por cada unidad activa del viaje sin posicion (las que no salen no la exigen) y las fotos de
+    /// la acomodacion que faltan para llegar al minimo del parametro <c>acomodacion_fotos_minimas</c>.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> FaltantesDeAcomodacionAsync(clsInspeccion inspeccion, CancellationToken ct)
+    {
+        var errores = new List<string>();
+        var sinPosicion = new List<string>();
+        foreach (var enlace in (await viajes.ObtenerVehiculosAsync(inspeccion.ViajeId, ct)).Where(v => !v.NoSale && v.Posicion is null))
+        {
+            var vehiculo = await vehiculos.ObtenerPorIdAsync(enlace.VehiculoId, ct);
+            sinPosicion.Add(vehiculo?.Vin ?? enlace.VehiculoId.ToString());
+        }
+
+        errores.AddRange(sinPosicion.Order(StringComparer.Ordinal).Select(vin => $"Falta la posición de la unidad {vin}"));
+        var minimas = Math.Max(await parametros.EnteroAsync(clsClavesParametros.ACOMODACION_FOTOS_MINIMAS, 1, ct), 0);
+        var fotos = await inspecciones.ContarFotosLibresAsync(inspeccion.Id, ct);
+        if (fotos < minimas)
+        {
+            errores.Add($"Faltan fotos de la acomodación: se exige al menos {minimas} y hay {fotos}");
+        }
+
+        return errores;
+    }
+
+    /// <summary>«El extra 'Barras de techo' no tiene foto» por cada extra de la inspeccion sin ninguna foto: un extra se reporta con sus fotos.</summary>
+    private async Task<IReadOnlyList<string>> ExtrasSinFotoAsync(Guid inspeccionId, CancellationToken ct)
+    {
+        var extras = await inspecciones.ObtenerExtrasAsync(inspeccionId, ct);
+        if (extras.Count == 0)
+        {
+            return [];
+        }
+
+        var conFoto = await inspecciones.ExtrasConFotoAsync(extras.Select(e => e.Id).ToList(), ct);
+        var nombres = await NombresDeTiposDeExtraAsync(ct);
+        return [.. extras.Where(e => !conFoto.Contains(e.Id)).Select(e => $"El extra '{clsInspeccionExtra.NombreParaMostrar(e.Tipo, nombres.GetValueOrDefault(e.Tipo) ?? e.Tipo, e.Texto)}' no tiene foto")];
+    }
+
+    private async Task<Dictionary<string, string>> NombresDeTiposDeExtraAsync(CancellationToken ct) =>
+        (await catalogos.ValoresAsync(clsNombresCatalogo.TIPOS_EXTRA, ct)).Where(v => v.Codigo is not null && v.TryGetValue("nombre", out var n) && n is string).ToDictionary(v => v.Codigo!, v => (string)v["nombre"]!);
+
+    private static bool EsSegundaInspeccionDelCargue(string? codigoEtapa, clsInspeccion inspeccion) => codigoEtapa == clsCodigosEtapa.CARGUE && inspeccion.Momento == clsMomento.SALIDA;
+
+    private async Task<bool> EsAcomodacionAsync(clsInspeccion inspeccion, CancellationToken ct)
+    {
+        var etapa = await etapas.ObtenerPorIdAsync(inspeccion.EtapaId, ct);
+        var codigo = etapa is null ? null : (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
+        return EsSegundaInspeccionDelCargue(codigo, inspeccion);
     }
 
     /// <summary>True si la etapa es el Cargue (la etapa del catalogo con ese codigo).</summary>

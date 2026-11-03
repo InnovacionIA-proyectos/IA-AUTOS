@@ -3,41 +3,21 @@ using IAAutos.Dominio.Comun;
 namespace IAAutos.Dominio.Catalogos;
 
 /// <summary>
-/// Lado de una zona numerada. Los numeros del 1 al 25 llevan lado (izquierdo o derecho); del 26 en adelante la zona no tiene lado. La zona se
-/// guarda por lado + numero, no por el panel donde se toco.
+/// Lado de una zona. Que un cuadrante lleve lado (zonas izquierdo y derecho) o no (una sola zona) lo declara el cuadrante en el catalogo (<c>LlevaLado</c>): ninguna regla usa numeros.
+/// «Izquierdo» es el lado del conductor, visto sentado al volante. La zona se guarda por lado + numero, no por el panel donde se toco.
 /// </summary>
 public static class clsLado
 {
     public const string IZQUIERDO = "izquierdo";
     public const string DERECHO = "derecho";
 
-    /// <summary>Ultimo numero de zona que lleva lado.</summary>
-    public const int ULTIMO_NUMERO_CON_LADO = 25;
-
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { IZQUIERDO, DERECHO };
-
-    /// <summary>True si una zona con ese numero lleva lado (del 1 al 25).</summary>
-    public static bool LlevaLado(int numero) => numero <= ULTIMO_NUMERO_CON_LADO;
-}
-
-/// <summary>Zonas provisionales: sin numero, lado ni dibujo, se eligen de una lista. El dia que el negocio les de numero se migran.</summary>
-public static class clsZonaProvisional
-{
-    public const string FRENTE = "frente";
-    public const string LLANTA_DELANTERA_IZQUIERDA = "llanta_delantera_izquierda";
-    public const string LLANTA_DELANTERA_DERECHA = "llanta_delantera_derecha";
-    public const string LLANTA_TRASERA_IZQUIERDA = "llanta_trasera_izquierda";
-    public const string LLANTA_TRASERA_DERECHA = "llanta_trasera_derecha";
-
-    public static readonly IReadOnlySet<string> VALORES = new HashSet<string>
-    {
-        FRENTE, LLANTA_DELANTERA_IZQUIERDA, LLANTA_DELANTERA_DERECHA, LLANTA_TRASERA_IZQUIERDA, LLANTA_TRASERA_DERECHA,
-    };
 }
 
 /// <summary>
-/// Zona del dano a la que se atribuye un hallazgo: un cuadrante numerado con su lado, o una zona provisional (con codigo). Las zonas numeradas las crea
-/// la base de datos al crear el cuadrante (una por lado del 1 al 25, una sola del 26 en adelante); aqui solo se leen.
+/// Zona del dano a la que se atribuye un hallazgo: un cuadrante numerado con su lado (o sin lado si el cuadrante no lo lleva). Las crea la base de datos al crear el cuadrante (dos si lleva lado, una si no)
+/// y las siembra el archivo del dibujo; aqui solo se leen. <see cref="NombreCompleto"/> y <see cref="AiagArea"/> son de la zona (por pieza y lado): el nombre completo lleva el lado
+/// («Guardafango delantero izquierdo») y el codigo AIAG se trata como texto, sin validar su formato.
 /// </summary>
 public sealed class clsZonaDano : clsEntidadBase
 {
@@ -45,28 +25,28 @@ public sealed class clsZonaDano : clsEntidadBase
     {
     }
 
-    public Guid? CuadranteId { get; private set; }
+    public Guid CuadranteId { get; private set; }
 
-    public int? Numero { get; private set; }
+    public int Numero { get; private set; }
+
+    /// <summary>Copia de <c>LlevaLado</c> del cuadrante (la base impide que difieran).</summary>
+    public bool LlevaLado { get; private set; }
 
     public string? Lado { get; private set; }
 
-    /// <summary>Codigo de una zona provisional; nulo en las numeradas.</summary>
-    public string? Codigo { get; private set; }
+    public string? NombreCompleto { get; private set; }
 
-    /// <summary>Nombre de una zona provisional; en las numeradas el nombre es el de su cuadrante.</summary>
-    public string? Nombre { get; private set; }
+    public string? AiagArea { get; private set; }
 
     public int Orden { get; private set; }
 
     public bool Activo { get; private set; }
-
-    public bool EsProvisional => CuadranteId is null;
 }
 
 /// <summary>
-/// Panel del dibujo de danos: una de las cinco imagenes de la ficha del vehiculo donde se toca la region del dano (superior, perfiles posteriores y
-/// costados), separado del catalogo de vistas de foto. <see cref="ImagenPath"/> es el archivo de fondo en el almacen de imagenes (nulo hasta que se carga).
+/// Panel del dibujo de danos: una de las imagenes de la ficha del vehiculo donde se toca la region del dano (costados, frontal, posterior, superior y diagonales), separado del catalogo de vistas
+/// de foto. <see cref="ImagenPath"/> es el archivo de fondo en el almacen de imagenes (nulo hasta que se carga); <see cref="AnchoRef"/> y <see cref="AltoRef"/> son el tamano de referencia de esa
+/// imagen y <see cref="Version"/> la version del archivo del dibujo con que se sembro. Una imagen distinta de la de su version desalinea los poligonos.
 /// </summary>
 public sealed class clsPanelDano : clsCatalogoCodificado
 {
@@ -78,18 +58,11 @@ public sealed class clsPanelDano : clsCatalogoCodificado
 
     public string? ImagenPath { get; private set; }
 
-    /// <summary>Lado que corresponde a las regiones de este panel: el de los costados y perfiles; nulo en el panel superior (alli el lado lo da la region).</summary>
-    public string? LadoDelPanel =>
-        Codigo.EndsWith("_izquierdo", StringComparison.Ordinal) ? clsLado.IZQUIERDO
-        : Codigo.EndsWith("_derecho", StringComparison.Ordinal) ? clsLado.DERECHO
-        : null;
+    public int? AnchoRef { get; private set; }
 
-    public static clsPanelDano Crear(string? codigo, string? nombre, int? orden, bool? activo, DateTimeOffset ahora)
-    {
-        var panel = new clsPanelDano();
-        panel.Iniciar(codigo, nombre, orden, activo, ahora);
-        return panel;
-    }
+    public int? AltoRef { get; private set; }
+
+    public int? Version { get; private set; }
 
     /// <summary>Fija el archivo de la imagen de fondo (el nombre que devolvio el almacen).</summary>
     public void CambiarImagen(string imagenPath, DateTimeOffset ahora)
@@ -105,8 +78,8 @@ public sealed class clsPanelDano : clsCatalogoCodificado
 }
 
 /// <summary>
-/// Region tocable de un panel: el poligono de una zona numerada en ese panel, con geometria normalizada (coordenadas entre 0 y 1 sobre la imagen del
-/// panel). Una zona se dibuja a lo sumo una vez por panel. El lado de la region es el de su zona: en un costado o un perfil debe coincidir con el del panel.
+/// Region tocable de un panel: el poligono de una zona en ese panel, con geometria normalizada (coordenadas entre 0 y 1 sobre la imagen del panel). Una zona se dibuja a lo sumo una vez por panel.
+/// <see cref="Prioridad"/> ordena las regiones que se superponen al tocar.
 /// </summary>
 public sealed class clsRegionDano : clsEntidadBase
 {
@@ -123,16 +96,5 @@ public sealed class clsRegionDano : clsEntidadBase
     /// <summary>Poligono en JSON: {"puntos":[[x,y],...]}.</summary>
     public string Geometria { get; private set; } = string.Empty;
 
-    public static clsRegionDano Crear(Guid panelId, Guid zonaId, Guid cuadranteId, string? geometria, DateTimeOffset ahora)
-    {
-        var region = new clsRegionDano { PanelId = panelId, ZonaId = zonaId, CuadranteId = cuadranteId, Geometria = clsCuadranteVista.GeometriaValida(geometria) };
-        region.Inicializar(ahora);
-        return region;
-    }
-
-    public void CambiarGeometria(string? geometria, DateTimeOffset ahora)
-    {
-        Geometria = clsCuadranteVista.GeometriaValida(geometria);
-        Tocar(ahora);
-    }
+    public int Prioridad { get; private set; }
 }

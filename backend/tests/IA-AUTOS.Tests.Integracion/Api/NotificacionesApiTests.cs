@@ -12,7 +12,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// La bandeja de notificaciones: cada usuario ve y lee las suyas, el coordinador de calidad y los administradores responden la novedad del conductor (solo la primera respuesta se guarda y le
 /// llega al conductor del viaje) y cada usuario registra los dispositivos donde recibe el push.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_3)]
 public sealed class NotificacionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-10-21T08:30:00-05:00";

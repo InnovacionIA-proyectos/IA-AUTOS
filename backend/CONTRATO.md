@@ -504,6 +504,8 @@ incluidos los que aún no están en un viaje. Inspector y conductor solo ven los
 Autenticado. Inventario completo de un VIN: etapas (de todos sus viajes), y dentro de cada una sus inspecciones con hallazgos, evidencias y
 transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus viajes (`404` si no existe) y, del VIN, ve solo las etapas de sus viajes.
 
+Cada etapa trae `posicion`: la posición (de 1 a 7) que tuvo el VIN en la niñera de ese viaje, o `null` si no se registró (los viajes anteriores al cambio y las unidades que no salen).
+
 ```json
 {
   "id": "uuid", "vin": "…", "marca": "…", "tipo_vehiculo": null, "modelo": null, "chasis": null, "color": null,
@@ -511,8 +513,8 @@ transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus v
   "etapas": [
     {
       "id": "uuid", "orden": 1, "proceso": "cargue", "lugar": "CEDI 1", "requiere_inspeccion": true,
-      "viaje_id": "uuid", "codigo_mtrack": "MTK-001", "con_personal_apoyo": false,
-      "estado_unidad": "activa", "no_sale": null,
+      "viaje_id": "uuid", "codigo_mtrack": "MTK-001",
+      "estado_unidad": "activa", "no_sale": null, "posicion": 4,
       "inspecciones": [
         { "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "salida", "fecha": "…", "lat": 6.2, "lng": -75.5,
           "estado": "cerrada", "conductor_nombre": null, "placa": null, "trailer": null, "notas": null,
@@ -548,7 +550,7 @@ descarga binaria, no JSON; en errores sí devuelve el JSON de error. La solicitu
 use `fetch` con el token y descargue el `blob` (un enlace directo no lo envía).
 
 El PDF trae el inventario (cada proceso con sus inspecciones, hallazgos y evidencias) **más las fotos de cada inspección con su sello** (fecha y hora, ubicación, sello del servidor y hash SHA-256) y, al final, los **paneles del dibujo de daños**
-con la imagen del panel y cada zona con hallazgos resaltada y marcada con **cuántos hallazgos tiene**; las zonas sin dibujo en los paneles (el frente, las llantas) se listan aparte. Un vehículo dado de baja lo dice. Un PDF lleva hasta **60 fotos**
+con la imagen del panel y cada zona con hallazgos resaltada y marcada con **cuántos hallazgos tiene**; las zonas sin dibujo en los paneles (el frente, las llantas) se listan aparte. Un vehículo dado de baja lo dice. Cada proceso trae «Posición en niñera: N» cuando el VIN fue despachado con posición registrada. Un PDF lleva hasta **60 fotos**
 (primero las de los hallazgos): si hay más, el PDF avisa cuántas dejó fuera. Lo ve quien ve el inventario.
 
 ---
@@ -564,8 +566,8 @@ Las lecturas son para cualquier usuario autenticado, filtradas por la visibilida
 
 Los VIN **no se crean aquí**: deben existir ya en el inventario (`POST /api/vehiculos/cargar` o la ingesta Sofasa). Al agregar un VIN a un viaje se
 crean sus etapas, una por cada valor **activo** del catálogo `etapas` (hoy Cargue, Transporte y Descargue): el **Cargue** se hace en el
-`origen` del viaje, el **Descargue** en su `destino` y el Transporte no tiene lugar. Si el viaje tiene `con_personal_apoyo`, el Cargue queda marcado
-(con personal de apoyo la inspección de salida la hace un inspector; sin él, la hace el conductor).
+`origen` del viaje, el **Descargue** en el destino de la unidad y el Transporte no tiene lugar. El Cargue nace **sin ninguna marca previa**: la inspección de salida la hace siempre un inspector y, si no hay inspector,
+el conductor activa en el momento la excepción «No hay inspector».
 
 Estados: `programado` → `en_curso` → `finalizado`; un viaje `programado` o `en_curso` también puede pasar a `cancelado`. `finalizado` y `cancelado`
 son finales: el viaje ya no admite cambios ni inspecciones nuevas. La primera inspección de un viaje `programado` lo pasa a `en_curso`. Un viaje
@@ -580,16 +582,22 @@ Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viaj
   "id": "uuid", "codigo_mtrack": "MTK-001", "tipo_unidad_id": "uuid", "unidad": "Niñera", "placa": "ABC123", "trailer": "T-9",
   "conductor_id": "uuid", "conductor_nombre": "Carlos Gómez", "inspector_id": null, "inspector_nombre": null,
   "origen_id": "uuid", "origen": "CEDI 1", "destino_id": "uuid", "destino": "Concesionario",
-  "estado": "programado", "con_personal_apoyo": false,
+  "estado": "programado",
   "vehiculos": [
     { "vehiculo_id": "uuid", "vin": "9BWZZZ377VT004251", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional",
-      "etapas": 3, "completas": 0, "estado_unidad": "activa", "no_sale": null, "estado_transporte": "sin_registro", "novedades": 0 }
+      "etapas": 3, "completas": 0, "estado_unidad": "activa", "no_sale": null, "estado_transporte": "sin_registro", "novedades": 0,
+      "lugar_destino_id": "uuid", "lugar_destino": "Concesionario Autolarte Medellín" }
   ],
   "clientes": [ { "id": "uuid", "codigo": "sofasa", "nombre": "Sofasa" } ],
-  "created_at": "…", "updated_at": "…"
+  "created_at": "…", "updated_at": "…",
+  "fecha_programada": "2026-11-03T11:00:00.000Z", "lugar_cargue_id": "uuid", "lugar_cargue": "CEDI Envigado"
 }
 ```
 
+`fecha_programada` es el día y la hora en que se programó el cargue (UTC), `lugar_cargue_id` / `lugar_cargue` el lugar **real** del cargue (catálogo `lugares`) y `lugar_destino_id` / `lugar_destino`
+el lugar de entrega de **cada unidad**; los tres pueden ser `null` en los viajes que no vienen de la carga por Excel. El listado trae `fecha_programada`, `lugar_cargue_id` y `lugar_cargue`.
+
+`novedades_proceso` son las novedades de proceso de las unidades del viaje (la excepción «No hay inspector» que activó el conductor y el recibo sin entrega), de la más antigua a la más reciente, cada una con `{ tipo, motivo_codigo, motivo, texto, usuario_nombre, fecha, vin, inspeccion_id }`: es un registro aparte, que no cuenta en los patrones por zona ni en la tasa diaria de novedad.
 `codigo_mtrack`, `tipo_unidad_id` y `placa` pueden ser `null` solo en los viajes migrados desde las asignaciones anteriores. `etapas` y `completas`
 de cada VIN cuentan sus etapas del viaje y las que ya tienen informe cerrado. `estado_unidad` es `activa` o `no_sale` y `no_sale` trae el motivo, el hallazgo, quién la marcó y
 cuándo (el mismo objeto del inventario); una unidad que no sale **sigue en la lista de VIN del viaje**. `estado_transporte` (`sin_registro`, `con_novedad`, `sin_novedad` o `llegada_con_novedad`) y `novedades`
@@ -613,10 +621,15 @@ Gestión de viajes. `201` con el `ViajeDto`.
 ```json
 {
   "codigo_mtrack": "MTK-001", "tipo_unidad_id": "uuid", "placa": "ABC123", "trailer": "T-9",
-  "conductor_id": "uuid", "inspector_id": null, "origen_id": "uuid", "destino_id": "uuid",
-  "con_personal_apoyo": false, "vines": ["9BWZZZ377VT004251", "9BWZZZ377VT004252"]
+  "conductor_id": "uuid", "inspector_id": null, "origen_id": "uuid",
+  "unidades": [
+    { "vin": "9BWZZZ377VT004251", "lugar_destino_id": "uuid" },
+    { "vin": "9BWZZZ377VT004252", "lugar_destino_id": "uuid" }
+  ]
 }
 ```
+
+El destino es de **cada unidad**: el viaje ya no lleva un destino único, así que `destino_id` y `vines` **ya no se aceptan** (`400` «Campo no admitido»).
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
@@ -626,12 +639,14 @@ Gestión de viajes. `201` con el `ViajeDto`.
 | `trailer` | no | máximo 50 caracteres |
 | `conductor_id` | no | usuario activo con rol `conductor` |
 | `inspector_id` | no | usuario activo con rol `inspector` |
-| `origen_id`, `destino_id` | no | `id` de un lugar **activo** del catálogo `puntos-custodia` |
-| `con_personal_apoyo` | no | por defecto `false` |
-| `vines` | no | hasta 500 VIN que ya existan; sin repetidos |
+| `origen_id` | no | `id` de un lugar **activo** del catálogo `puntos-custodia` |
+| `unidades` | no | hasta 500; cada una con su `vin` (que ya exista) y su `lugar_destino_id` (obligatorio: un lugar **activo** del catálogo `lugares`); sin VIN repetidos |
+
+El Descargue de cada unidad se crea en el tipo (`puntos-custodia`) de **su** lugar de destino.
 
 Errores: `409` si el `codigo_mtrack` ya existe (el viaje **no se crea**) o si algún VIN ya está en otro viaje activo; `400` con `details.fieldErrors` si un
-campo es inválido, una referencia no existe, está inactiva o es de otro rol, o algún VIN no existe (`vines`). Todo o nada: si algo falla no se crea el viaje ni
+campo es inválido, una referencia no existe, está inactiva o es de otro rol, o alguna unidad no existe (`unidades`). Una unidad sin destino responde `400` con
+`fieldErrors.unidades`: «La unidad requiere un destino»; un lugar que no existe o está inactivo, o un VIN con dos destinos distintos, también. Todo o nada: si algo falla no se crea el viaje ni
 ninguna etapa.
 
 ### `GET /api/viajes`
@@ -659,11 +674,14 @@ quién entrega y quién recibe. `403` si es un inspector o conductor y el viaje 
 
 ### `PATCH /api/viajes/{id}`
 Gestión de viajes. Cambia **solo los campos enviados** de un viaje `programado` o `en_curso`; responde `200` con el `ViajeDto`. Campos: `codigo_mtrack`,
-`tipo_unidad_id`, `placa`, `trailer`, `conductor_id`, `inspector_id`, `origen_id`, `destino_id`, `con_personal_apoyo` (mismas reglas que al crear).
-`trailer`, `conductor_id`, `inspector_id`, `origen_id` y `destino_id` admiten `null` para quitarlos; `codigo_mtrack`, `tipo_unidad_id`, `placa` y
-`con_personal_apoyo` no. Un campo que no existe responde `400`; un `codigo_mtrack` repetido, `409`; un viaje finalizado o cancelado, `409`.
+`tipo_unidad_id`, `placa`, `trailer`, `conductor_id`, `origen_id` (mismas reglas que al crear).
+`trailer`, `conductor_id` y `origen_id` admiten `null` para quitarlos; `inspector_id` **ya no se acepta** (lo llena el reclamo del cargue: ver «Reclamo del camión»); `destino_id` **ya no se acepta** (el destino es de cada unidad: ver `PATCH /api/viajes/{id}/vehiculos/{vin}`); `con_personal_apoyo` **ya no existe** (el cargue no lleva ninguna marca previa); `codigo_mtrack`, `tipo_unidad_id` y `placa` no admiten `null`. Un campo que no existe responde `400`; un `codigo_mtrack` repetido, `409`; un viaje finalizado o cancelado, `409`.
 
-Al cambiar `origen_id` o `destino_id` se actualiza el lugar del Cargue o del Descargue de los VIN del viaje, y `con_personal_apoyo` marca el Cargue; las etapas que
+Mientras el viaje está `programado` también se corrige su programación: `fecha_programada` (ISO 8601 **con zona horaria**, por ejemplo `2026-11-03T06:00:00-05:00`; `null` la quita) y
+`lugar_cargue_id` (un lugar **activo** del catálogo `lugares`; `null` lo quita). Una fecha sin zona o un lugar inexistente o inactivo responde `400` con `details.fieldErrors`;
+en un viaje `en_curso` cambiarlos responde `409` (lo demás del viaje sí se sigue editando).
+
+Al cambiar `origen_id` se actualiza el lugar del Cargue de los VIN del viaje; las etapas que
 ya tienen un informe cerrado no cambian.
 
 ### `PATCH /api/viajes/{id}/estado`
@@ -671,8 +689,48 @@ Gestión de viajes. Cuerpo `{ "estado": "en_curso" }`. `200` con el `ViajeDto`. 
 (por ejemplo `programado` a `finalizado`, o salir de `finalizado`), `409`.
 
 ### `POST /api/viajes/{id}/vehiculos`
-Gestión de viajes. Asigna VIN a un viaje activo y crea sus etapas. Cuerpo `{ "vines": ["…"] }` (de 1 a 500). `200` con el `ViajeDto`. **Todo o nada:** `400`
-si algún VIN no existe; `409` si alguno ya está en este viaje o en otro viaje activo (el mensaje dice cuáles).
+Gestión de viajes. Asigna unidades a un viaje activo y crea sus etapas, con el Descargue en el destino de cada una. Cuerpo `{ "unidades": [ { "vin": "…", "lugar_destino_id": "uuid" } ] }` (de 1 a 500; `vines` **ya
+no se acepta**). `200` con el `ViajeDto`. **Todo o nada:** `400` si alguna unidad no trae destino («La unidad requiere un destino»), si el lugar no existe o está inactivo o si algún VIN no existe; `409` si alguno ya está
+en este viaje o en otro viaje activo (el mensaje dice cuáles). Una unidad que reemplaza a otra que no sale hereda el destino de la reemplazada.
+
+### `PATCH /api/viajes/{id}/vehiculos/{vin}`
+Gestión de viajes. Cambia el destino de **una** unidad: cuerpo `{ "lugar_destino_id": "uuid" }` (un lugar **activo** del catálogo `lugares`; `400` si falta). Solo se mueve el Descargue de esa unidad al tipo del lugar nuevo; las demás
+unidades del viaje no se tocan. `200` con el `ViajeDto`. `404` si el VIN no está en el viaje; `409` si el viaje no está activo, si la unidad no sale del viaje o si su Descargue ya tiene un informe cerrado.
+
+### Reclamo del camión
+El inspector reclama el camión que va a revisar («revisar este»). Los puntos de cada inspector (lugares del catálogo `lugares`) los asigna Datos; el inspector solo reclama lo de sus puntos.
+
+- `POST /api/viajes/{id}/reclamos` con `{ "proceso": "cargue" | "entrega" }` (solo `inspector`) → `201` con el `ReclamoDto`, o `200` si el reclamo ya era suyo. `cargue`: un cargue **programado para hoy** (hora de Colombia) en uno de sus puntos (`lugar_cargue_id`); el inspector queda como
+  **inspector del viaje** (de ahí salen los firmantes de la transferencia). `entrega`: un viaje cuyas unidades se entregan en uno de sus puntos (revisión de la llegada del Descargue); no cambia el inspector del cargue, y quien la reclama ve y firma las entregas del viaje
+  (`/api/viajes/{id}/entregas`) y es quien recibe por defecto. `403` si el viaje no es de ninguno de sus puntos; `400` con un `proceso` inválido; `409` si el viaje no está activo, el cargue no es de hoy («El cargue no está programado para hoy») o **ya lo tomó otro inspector**
+  («Ya fue tomado por otro inspector»). Si dos inspectores reclaman a la vez gana exactamente uno (lo decide un índice único de la base) y el otro recibe ese `409`.
+- `DELETE /api/viajes/{id}/reclamos/{proceso}` → `200` con el reclamo ya liberado. Lo libera el inspector que lo reclamó, el coordinador de calidad o un administrador (`403` cualquier otro; el coordinador y el administrador, solo de viajes de su cliente). El viaje queda sin inspector (si era el del
+  cargue), el cargue vuelve a estar pendiente y lo que el inspector capturó (inspecciones cerradas, hallazgos) **conserva su autor**. `404` si no hay un reclamo activo. **No hay caducidad automática**: ningún proceso libera reclamos por tiempo.
+- `GET /api/viajes/{id}/reclamos` → lista de `ReclamoDto`, del más reciente al más antiguo (activos y liberados): `{ id, viaje_id, proceso, inspector_id, inspector_nombre, reclamado_at, activo, liberado_at, liberado_por, liberado_por_nombre }`. Es donde queda registrado quién liberó. Conductor e
+  inspector solo lo ven de sus viajes o de los que reclamaron (`403`); coordinador y administrador, de su cliente.
+- Reclamar y liberar quedan en la auditoría (`viaje.reclamar` y `viaje.liberar_reclamo`) con el usuario, la fecha y el viaje.
+- `GET /api/viajes/pendientes` (solo `inspector`) → lista de `PendienteDto`: los camiones pendientes de **sus puntos**. Son los **cargues programados para hoy** (hora de Colombia) en un punto suyo y las **entregas** de viajes `en_curso` con unidades por entregar en un punto suyo
+  (sin las ya cerradas). Cada fila: `{ viaje_id, codigo_mtrack, placa, proceso, lugar_id, lugar, fecha_programada, estado, reclamado_por, reclamado_por_nombre, reclamado_at, unidades }`. `estado` es `disponible` (nadie lo reclamó), `en_revision` (lo tiene otro inspector:
+  «En revisión por» `reclamado_por_nombre`) o `mio`. Los cargues de otros días o de otros puntos no salen; un inspector sin puntos recibe `[]`. Desde ahí se reclama con `POST /api/viajes/{id}/reclamos`.
+- **Visibilidad del inspector.** Ve los viajes en los que es el inspector, los que **reclamó** (reclamo activo) y los **pendientes de sus puntos** (un cargue de hoy en su punto o una entrega en curso que llega a su punto): el detalle de un pendiente de su punto responde `200` aunque no lo haya
+  reclamado y el de otro punto, `403`. Ver no es actuar: para iniciar inspecciones o firmar hay que participar en el viaje o haberlo reclamado (`403` si no). La visibilidad del **conductor no cambia**: solo ve sus viajes.
+- **Aviso de camión reclamado sin actividad.** Si un camión reclamado lleva `reclamo_sin_actividad_minutos` (parámetro, 30 por defecto; ver «Parámetros») sin ninguna inspección del viaje **iniciada o cerrada** después del reclamo, los `coordinador_calidad` del cliente del inspector reciben **una** notificación
+  `reclamo_sin_actividad` (urgencia `media`, bandeja y push) con la placa, el viaje, el proceso y el nombre del inspector. Un aviso por reclamo; **el reclamo no se libera**.
+
+### Entrega por punto
+Cada unidad se entrega en **su** lugar de destino. En cada punto se firma **una vez** entre quien entrega (por defecto el conductor del viaje) y quien recibe (por defecto su inspector): la firma se guarda en la transferencia
+de **cada unidad pendiente del punto** (la del Descargue, sobre su inspección de llegada), con la misma firma, fecha e IP, y cada unidad conserva su transferencia propia. Las unidades que no salen del viaje no se entregan.
+
+- `GET /api/viajes/{id}/entregas` → `{ viaje_id, viaje_estado, unidades_sin_destino, puntos: [ EntregaPuntoDto ] }`: una entrega por lugar de destino. `unidades_sin_destino` cuenta las unidades de viajes anteriores al destino por unidad.
+- `GET /api/viajes/{id}/entregas/{lugar}` → `EntregaPuntoDto`: `{ viaje_id, viaje_estado, lugar_id, lugar, ciudad, unidades_total, unidades_pendientes, entregada, unidades: [ { vehiculo_id, vin, estado, inspeccion_id, tipo_cierre, entrega_firmada_at, recibe_firmada_at, no_firma_parte } ] }`.
+  `unidades_pendientes` es el «Aquí entregas estas N unidades»; `estado` de cada unidad es `sin_inspeccion` (aún no tiene la inspección de llegada del Descargue, donde se firma), `pendiente` o `cerrada`. `404` si ninguna unidad activa del viaje va a ese lugar.
+- `POST /api/viajes/{id}/entregas/{lugar}/firma` con `{ "firma": "…", "entrega_usuario_id"?, "recibe_usuario_id"? }` → `200` con la entrega: la firma del usuario autenticado (quien entrega o quien recibe) se guarda en cada unidad pendiente; con
+  las dos firmas cada transferencia queda `firmada`. Solo el conductor o el inspector del viaje (`403` el resto; `entrega_usuario_id` y `recibe_usuario_id` deben ser usuarios del viaje, distintos entre sí); `409` si no hay unidades pendientes en el punto o alguna aún no tiene la inspección
+  de llegada del Descargue; `400` sin `firma`.
+- `POST /api/viajes/{id}/entregas/{lugar}/una-firma` con `{ "motivo": "…", "firma"? }` → `200` con la entrega: **una sola firma no bloquea**. Cada unidad pendiente queda `recibo_sin_entrega` con la parte que no firmó (`no_firma_parte`) y el `motivo`
+  (obligatorio, hasta 300 caracteres), se crea su **novedad de proceso** `recibo_sin_entrega` y los coordinadores de calidad y administradores del cliente reciben **un solo aviso** por entrega y punto (`novedad_proceso`, con clave de dedupe del viaje y el lugar).
+  La `firma` solo hace falta si quien cierra aún no había firmado; `409` si la otra parte ya firmó. Quien cierra es quien entrega o quien recibe (`403` el resto).
+- **El viaje se finaliza** solo: cuando todas sus unidades activas tienen el Descargue cerrado (inspección de llegada cerrada y transferencia con cierre) y estaba `en_curso`, pasa a `finalizado` (auditoría `viaje.estado.finalizado`); con entregas pendientes sigue en curso.
 
 ### `DELETE /api/viajes/{id}/vehiculos/{vin}`
 Gestión de viajes. Quita un VIN del viaje y borra sus etapas. `200` con el `ViajeDto`. `404` si el VIN no está en el viaje; `409` si el VIN ya tiene inspecciones
@@ -682,15 +740,17 @@ en este viaje.
 Gestión de viajes. Borra el viaje con sus VIN y etapas, solo si **no tiene inspecciones** (`204`); si las tiene, `409` y debe cancelarse con el cambio de estado.
 
 ### Carga de viajes por Excel
-El archivo tiene **una fila por VIN**: VIN, placa, tráiler, cédula del conductor, unidad y código MTrack. El cliente lee el Excel y envía las filas como JSON; las filas con el
+El archivo tiene **una fila por VIN**: VIN, placa, tráiler, cédula del conductor, unidad, código MTrack, fecha y hora programada del cargue, lugar de cargue (origen) y lugar de destino de esa unidad. El cliente lee el Excel y envía las filas como JSON; las filas con el
 mismo `codigo_mtrack` forman **un solo viaje**. Son dos pasos: primero una **vista previa** con el error de cada fila (no guarda nada) y, al confirmar,
 **solo se guardan los viajes de las filas válidas**.
 
 ```json
 {
   "filas": [
-    { "fila": 2, "vin": "9BWZZZ377VT004251", "placa": "ABC123", "trailer": "T-9", "cedula_conductor": "1.234.567", "unidad": "Niñera", "codigo_mtrack": "MTK-001" },
-    { "fila": 3, "vin": "9BWZZZ377VT004252", "placa": "ABC123", "trailer": "T-9", "cedula_conductor": "1.234.567", "unidad": "Niñera", "codigo_mtrack": "MTK-001" }
+    { "fila": 2, "vin": "9BWZZZ377VT004251", "placa": "ABC123", "trailer": "T-9", "cedula_conductor": "1.234.567", "unidad": "Niñera", "codigo_mtrack": "MTK-001",
+      "fecha_programada": "2026-11-03 06:00", "origen": "CEDI Envigado", "destino": "Concesionario Autolarte Medellín" },
+    { "fila": 3, "vin": "9BWZZZ377VT004252", "placa": "ABC123", "trailer": "T-9", "cedula_conductor": "1.234.567", "unidad": "Niñera", "codigo_mtrack": "MTK-001",
+      "fecha_programada": "2026-11-03 06:00", "origen": "CEDI Envigado", "destino": "Concesionario Caminos Cali" }
   ]
 }
 ```
@@ -704,9 +764,14 @@ mismo `codigo_mtrack` forman **un solo viaje**. Son dos pasos: primero una **vis
 | `cedula_conductor` | no | con o sin puntos; debe ser la de un usuario activo con rol `conductor`. Vacía = viaje sin conductor |
 | `unidad` | sí | el `codigo` o el nombre de un valor **activo** de `tipos-unidad` (sin distinguir tildes ni mayúsculas) |
 | `codigo_mtrack` | sí | formato y unicidad como en `POST /api/viajes` |
+| `fecha_programada` | sí | día y hora del cargue: `2026-11-03 06:00` (también `AAAA-MM-DDTHH:mm`); **sin zona horaria es hora de Colombia (UTC-5)** y con zona (`Z`, `-05:00`) se respeta |
+| `origen` | sí | nombre de un lugar **activo** del catálogo `lugares` (sin distinguir tildes ni mayúsculas): el lugar de cargue del viaje |
+| `destino` | sí | nombre de un lugar **activo** del catálogo `lugares`: el destino de **esa** unidad (cada VIN del viaje puede ir a uno distinto) |
+
+Un lugar que no existe o está inactivo marca solo su fila («El lugar X no existe en el catálogo»); el coordinador lo crea con `POST /api/catalogos/lugares` y vuelve a previsualizar.
 
 Una fila es inválida si falla un campo, si su `codigo_mtrack` ya existe, si su VIN ya está en un viaje activo, si repite un VIN dentro de su viaje, si el mismo VIN
-aparece bajo dos códigos del archivo, o si no coincide en placa, tráiler, conductor o unidad con la primera fila válida de su mismo `codigo_mtrack`. Máximo **5000** filas;
+aparece bajo dos códigos del archivo, o si no coincide en placa, tráiler, conductor, unidad, fecha programada o lugar de cargue con la primera fila válida de su mismo `codigo_mtrack` (el destino es de cada unidad y no se compara). Máximo **5000** filas;
 una lista vacía o más grande responde `400`.
 
 - `POST /api/viajes/cargar/previsualizar` (gestión de viajes) → `200`, sin guardar nada.
@@ -765,14 +830,14 @@ versión nueva (`POST /api/inspecciones/{id}/corregir`).
 | Cargue y Descargue | la foto de **cada una de las 7 vistas obligatorias** (las activas de `vistas-foto` con `obligatoria: true` para el tipo del vehículo); una foto propia por hallazgo; ubicación en toda foto. Las 2 vistas adicionales (piezas en el baúl y cojinería) **no bloquean** el cierre |
 | Transporte (registro del conductor) | no exige las 7 vistas, pero sí la **ubicación (GPS) y la hora del propio registro** (`lat`/`lng` de la inspección); si hay una novedad, el hallazgo lleva su foto. Cuenta para la cobertura |
 
-Las mismas reglas valen para quien haga la inspección: cuando el cargue no tiene personal de apoyo la hace el conductor, con las mismas 7 vistas, sello y hallazgos.
+Las mismas reglas valen para quien haga la inspección: cuando el conductor hace la salida del cargue por la excepción «No hay inspector», con las mismas 7 vistas, sello y hallazgos.
 
 ### `POST /api/inspecciones`
 Campo. `201` con la inspección. El usuario sale del token (no se envía) y **la placa, el tráiler y el conductor salen del viaje de la etapa**: ya no se piden como texto.
 Inspector y conductor reciben `403` si la etapa es de un viaje que no es suyo; un viaje finalizado o cancelado responde `409`; una etapa inexistente, `404`.
 
-**El conductor no crea la salida de un Cargue con personal de apoyo… salvo que el inspector no esté.** Si la etapa es el Cargue y tiene `con_personal_apoyo: true`, la salida la crea el inspector: el conductor recibe `403` con «Este cargue tiene personal de apoyo: el conductor solo firma el recibo».
-Con `con_personal_apoyo: false`, y en Transporte y Descargue, el conductor sí la crea. La regla es de la salida del Cargue; la llegada y el resto no cambian. La excepción «No hay inspector» está en [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso) (decisión del equipo, pendiente de confirmar por el negocio, P-073).
+**El conductor no crea la salida de un Cargue… salvo que active la excepción.** Si la etapa es el Cargue, la salida la crea el inspector: el conductor recibe `403` con «La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción» (no hay ninguna marca previa en el cargue).
+En Transporte y Descargue el conductor sí la crea. La regla es de la salida del Cargue; la llegada y el resto no cambian. La excepción «No hay inspector» está en [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso) (decisión del equipo, pendiente de confirmar por el negocio, P-073).
 
 **La salida exige la etapa anterior terminada.** Si el VIN tiene una etapa anterior en el viaje (por su `orden`) y esa etapa no tiene su **llegada cerrada**, o tiene una
 **transferencia sin tipo de cierre**, la salida responde `409` con `code: "ETAPA_PREVIA_SIN_CIERRE"` y `details` con `motivo` (`etapa_previa_sin_cierre` si falta cerrar la llegada,
@@ -814,7 +879,7 @@ son la hora del servidor al crear y al cerrar (`cerrada_at` es `null` en borrado
 
 ### Excepción «No hay inspector» y novedades de proceso
 
-Si el inspector previsto no está en el Cargue de una unidad con `con_personal_apoyo: true`, el **conductor del viaje** crea la salida con `motivo_sin_inspector`:
+Si no hay inspector en el Cargue de una unidad, el **conductor del viaje** activa en el momento la excepción y crea la salida con `motivo_sin_inspector`:
 
 ```json
 { "etapa_id": "uuid", "momento": "salida", "fecha": "2026-10-23T08:30:00-05:00", "lat": 6.2442, "lng": -75.5812, "motivo_sin_inspector": "otro", "motivo_sin_inspector_texto": "El inspector se enfermó" }
@@ -829,7 +894,7 @@ Si el inspector previsto no está en el Cargue de una unidad con `con_personal_a
 | conductor de otro viaje | `403` |
 | el inspector ya creó esa salida | `409`, como hoy |
 
-La etapa **conserva** `con_personal_apoyo: true` y la inspección sigue las reglas de la salida sin apoyo (las 7 vistas con sello, hallazgos del conductor sin nivel V). Al crearla, en la misma confirmación:
+La inspección sigue las reglas de la salida que hace el conductor (las 7 vistas con sello, hallazgos del conductor sin nivel V). Al crearla, en la misma confirmación:
 
 - la inspección guarda `motivo_sin_inspector` y su texto (los conserva también la versión que la corrija);
 - se crea la **novedad de proceso** `cargue_sin_inspector` con el motivo, quién la registró y la `fecha`, `lat` y `lng` **del cuerpo** (los del momento en que el conductor eligió el motivo, aunque la envíe después por falta de señal);
@@ -881,7 +946,7 @@ Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es e
 Autenticado. El **informe de la inspección en PDF** (`Content-Type: application/pdf`, nombre `informe-{vin}-{proceso}-{momento}-v{version}.pdf`), como descarga binaria (use `fetch` con el token y descargue el `blob`). Lleva:
 
 - los datos de la **unidad** (VIN, marca, modelo, tipo de vehículo, color, operación y cliente), del **viaje** (código MTrack, placa, tráiler, unidad, conductor y cédula) y de la **etapa** (proceso, lugar, momento, versión, inicio, cierre e inspector);
-- las **fotos de cada vista** con su sello: fecha y hora, ubicación (y precisión), sello del servidor y hash SHA-256;
+- las **fotos de cada vista** con su sello: fecha y hora, ubicación (y precisión), sello del servidor y hash SHA-256; en el informe de la segunda inspección del cargue (la salida de la etapa Cargue) la sección «Acomodación en la niñera» lista cada unidad del viaje con su posición («Posición N — VIN …»; «Sin posición» o «No sale del viaje» si no la tiene) y las fotos van como «Fotos de la acomodación»;
 - los **hallazgos** con su zona (lado + número + nombre), clase, tamaño, nivel (con su acción), origen, si es preexistente, su estado de seguimiento, su nota y su foto, con las notas aclaratorias de cada uno;
 - el **panel de daños**: la imagen de cada panel con las zonas de los hallazgos resaltadas y marcadas con el número del hallazgo (las zonas sin dibujo se listan aparte);
 - la **transferencia** con las dos firmas (imagen o trazo, con su fecha e IP), las reservas o la constancia de no firma (motivo, testigo y foto) y sus notas aclaratorias;
@@ -903,9 +968,18 @@ Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de
   "evidencias": [ /* EvidenciaDto, cada una con su propio sello */ ],
   "transferencia": { /* TransferenciaDetalleDto o null */ },
   "iniciada_at": "…", "cerrada_at": "…", "version": 1, "corrige_inspeccion_id": null, "momento_nombre": "Inspección de salida",
-  "notas_aclaratorias": [], "motivo_sin_inspector": null, "novedades_proceso": []
+  "notas_aclaratorias": [], "motivo_sin_inspector": null, "novedades_proceso": [], "extras": [],
+  "confirmacion_sitio": { "resultado": "confirmado_en_sitio", "nombre": "Confirmado en sitio", "distancia_m": 400.0, "evidencia_id": "uuid" }
 }
 ```
+
+**Confirmación «en sitio» (`confirmacion_sitio`).** Con la **primera foto con ubicación** de una inspección de **Cargue o Descargue** el servidor calcula la distancia (círculo máximo) al centro del lugar de la etapa (el lugar de cargue del viaje o el destino de la unidad) y guarda el resultado en la inspección mientras está en borrador; es `null` mientras no se determina y en el Transporte. Es una **marca: nunca bloquea ni cambia la captura** (la foto se guarda y se sella igual). `resultado` es:
+
+- `confirmado_en_sitio`: la distancia no supera el radio **más la precisión de la foto** (la duda del GPS juega a favor: a 1.200 m con precisión de 200 m y radio de 1.000 m queda confirmada; a 1.201 m, no).
+- `fuera_de_rango`: la supera. Avisa **una sola vez por inspección** al `coordinador_calidad` del cliente por bandeja y push (tipo `fuera_de_rango`, urgencia alta, con el viaje, el VIN, el lugar y la distancia).
+- `sin_confirmacion_posible`, sin marca ni aviso: la foto no trae ubicación (0, 0), el lugar no tiene ubicación o su ubicación sigue **pendiente de confirmar** (`estado_ubicacion` distinto de `confirmada`), el viaje o la unidad no tienen lugar, la precisión no se reportó o es de `valvula_precision_m` (500 m) o más, o el cálculo falló. Una foto con ubicación posterior sí puede determinarlo; una vez `confirmado_en_sitio` o `fuera_de_rango`, no cambia.
+
+`distancia_m` es la distancia de la foto que lo determinó (`evidencia_id`); es `null` en `sin_confirmacion_posible`. El radio es el `radio_metros` del lugar y, si no lo tiene, el parámetro `radio_lugar_cargue_m` (1.000 m) en el cargue o `radio_destino_m` (500 m) en el descargue; se leen en cada evaluación.
 
 La placa, el conductor y el tráiler son los **del viaje**; en un informe anterior a los viajes, lo que se capturó a mano tiene prioridad. `ninera` es la placa del viaje (nombre heredado, igual a `placa`).
 
@@ -920,13 +994,12 @@ Campo (creador de la inspección o administrador). **Un hallazgo exige su foto p
 }
 ```
 
-Una zona provisional va sin cuadrante ni lado: `{ "zona_provisional": "frente", "clase_dano": "golpe", "tamano_dano": "1_5cm", "nivel_severidad": "v1", "evidencia": { … } }`.
+Un cuadrante que **no lleva lado** (por ejemplo el 54 «Parabrisas») va sin `lado`: `{ "cuadrante_numero": 54, "clase_dano": "golpe", "tamano_dano": "1_5cm", "nivel_severidad": "v1", "evidencia": { … } }`.
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
-| `cuadrante_numero` | uno de los dos | número de un cuadrante **activo** del catálogo `cuadrantes` (el del tipo de vehículo del VIN; si no hay, el genérico). Excluye a `zona_provisional` |
-| `lado` | con `cuadrante_numero` de 1 a 25 | `izquierdo` o `derecho`. Del 26 en adelante **no se envía** (`400` en `lado`); tampoco con `zona_provisional` |
-| `zona_provisional` | uno de los dos | `frente`, `llanta_delantera_izquierda`, `llanta_delantera_derecha`, `llanta_trasera_izquierda` o `llanta_trasera_derecha`. Excluye a `cuadrante_numero` |
+| `cuadrante_numero` | sí | número de un cuadrante **activo** del catálogo `cuadrantes` (el del tipo de vehículo del VIN; si no hay, el genérico). Sin él, o si el cuadrante no existe, `400` en `cuadrante_numero` («La zona indicada no existe» si falta; «El cuadrante indicado no existe o está inactivo») |
+| `lado` | si el cuadrante lleva lado | `izquierdo` o `derecho`, según `lleva_lado` del cuadrante en el catálogo (**ninguna regla usa números**). Si el cuadrante lleva lado y falta, `400` en `lado`; si no lo lleva y se envía, `400` en `lado` («Este cuadrante no lleva lado») |
 | `clase_dano` | sí | `codigo` **activo** del catálogo `clases-dano` |
 | `tamano_dano` | sí | `codigo` **activo** del catálogo `tamanos-dano` |
 | `nivel_severidad` | inspector y administrador | `codigo` **activo** de `niveles-severidad` (`v1_plus`, `v1`, `v2`, `v3`). El conductor **no lo envía** (`400`): queda vacío hasta que un inspector revise su novedad |
@@ -935,13 +1008,13 @@ Una zona provisional va sin cuadrante ni lado: `{ "zona_provisional": "frente", 
 | `nota` | no | máximo 500 caracteres |
 | `evidencia` | sí | la foto del hallazgo, con los mismos campos y reglas que una evidencia (sin `vista_id` ni `hallazgo_id`) |
 
-`parte_vehiculo` y `coords_diagrama` **ya no se aceptan**: si llegan, `400` con «Campo no admitido» en cada uno. El `origen` del hallazgo (`inspector` o `conductor`) sale del rol de quien lo registra.
+`parte_vehiculo` y `coords_diagrama` **ya no se aceptan**: si llegan, `400` con «Campo no admitido» en cada uno. Las **zonas provisionales** (`zona_provisional`: `frente` y las cuatro llantas) **desaparecieron**: un hallazgo que llega con `zona_provisional` y sin `cuadrante_numero` responde `400` con «La zona indicada no existe». El `origen` del hallazgo (`inspector` o `conductor`) sale del rol de quien lo registra.
 
 Respuesta (`HallazgoCreadoDto`): el `HallazgoDto` más su `evidencia` (`EvidenciaDto`):
 
 ```json
 { "id": "uuid", "inspeccion_id": "uuid", "parte_vehiculo": null, "clase_dano": "rotura", "tamano_dano": "5_10cm", "coords_diagrama": null,
-  "cuadrante_numero": 7, "lado": "izquierdo", "zona_provisional": null, "cuadrante_nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera",
+  "cuadrante_numero": 7, "lado": "izquierdo", "cuadrante_nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera", "aiag_area": "10/12",
   "tipo_novedad": null, "nivel_severidad": "v2", "nivel_nombre": "V2", "nivel_accion": "Validación por Sofasa",
   "origen": "inspector", "nota": "Rayón largo sobre la puerta", "es_preexistente": false, "hallazgo_origen_id": null, "confirmado_por": null,
   "estado_seguimiento": "pendiente", "evidencia_completa": false, "evidencia_faltante": [], "revisado_por": null, "revisado_at": null,
@@ -951,14 +1024,14 @@ Respuesta (`HallazgoCreadoDto`): el `HallazgoDto` más su `evidencia` (`Evidenci
 En el informe y el inventario, los hallazgos llegan como `HallazgoDto` (el mismo objeto sin `evidencia`) y sus fotos en `evidencias`, con `hallazgo_id`.
 
 ### Hallazgo por región
-Un hallazgo se atribuye a una **zona** del vehículo, no a una parte en texto libre. La zona es **lado + número** de un cuadrante (`izquierdo 7`) o una **zona provisional**; se guarda por lado + número, no por el panel donde se tocó: «izquierdo 7» es la misma zona se toque donde se toque. Los números 1 a 25 llevan lado y del 26 en adelante no. Las zonas provisionales son una lista de cinco (`frente` y las cuatro llantas) y no tienen número ni dibujo.
+Un hallazgo se atribuye a una **zona** del vehículo, no a una parte en texto libre. La zona es **lado + número** de un cuadrante (`izquierdo 7`); se guarda por lado + número, no por el panel donde se tocó: «izquierdo 7» es la misma zona se toque donde se toque. Que un cuadrante lleve lado o no lo declara el catálogo (`lleva_lado`): los laterales (por ejemplo del 1 al 35) llevan lado y las piezas centrales (50 a 59) no. **`izquierdo` es el lado del conductor, visto sentado al volante.** Ya no existen las zonas provisionales: los hallazgos de ese tipo se desvincularon (ver «Cuadrantes, regiones y paneles de daño»).
 
 Campos del `HallazgoDto`:
 
 | Campo | Significado |
 |---|---|
-| `cuadrante_numero`, `lado`, `zona_provisional` | la zona; con una zona provisional los dos primeros son `null`, y del 26 en adelante `lado` es `null` |
-| `cuadrante_nombre`, `zona` | el nombre del cuadrante y el texto listo para mostrar: «Izquierdo 7 · Puerta delantera», «Techo 30», «Frente», «Llanta trasera derecha». En un hallazgo histórico sin ubicar, `zona` es la parte que se escribió entonces |
+| `cuadrante_numero`, `lado` | la zona; en un cuadrante que no lleva lado `lado` es `null`. Ambos son `null` en un hallazgo sin ubicar |
+| `cuadrante_nombre`, `zona`, `aiag_area` | el nombre de la pieza (del cuadrante), el texto listo para mostrar («Izquierdo 4 · Guardafango delantero», «54 · Parabrisas») y el código AIAG de esa zona («14/16»; texto, sin formato fijo; `null` si no tiene). En un hallazgo histórico sin ubicar, `zona` es la parte que se escribió entonces |
 | `nivel_severidad`, `nivel_nombre`, `nivel_accion` | el nivel V (`v1_plus`…`v3`), su nombre («V1+») y la acción del catálogo («Se rechaza el vehículo»). Los tres son `null` mientras la novedad de un conductor no se revise |
 | `origen` | `inspector` o `conductor` |
 | `tipo_novedad` | solo en una novedad del conductor: `golpe`, `piedra`, `granizo` o `incidente_vial`; si no, `null` |
@@ -969,7 +1042,7 @@ Campos del `HallazgoDto`:
 | `revisado_por`, `revisado_at` | quién revisó el hallazgo y cuándo; `null` mientras no se revise |
 | `parte_vehiculo`, `coords_diagrama` | **solo en los hallazgos históricos** (anteriores a este modelo): la parte en texto y el punto sobre la imagen anterior. En los nuevos son `null` |
 
-Los hallazgos anteriores se ubicaron por el texto de su parte solo cuando la equivalencia era segura (`Fachada delantera`, `Parachoque delantero` y las llantas); los demás tienen `zona` con la parte escrita y `cuadrante_numero`, `lado` y `zona_provisional` en `null` hasta que se ubiquen a mano.
+Los hallazgos anteriores se ubicaron por el texto de su parte solo cuando la equivalencia era segura (`Fachada delantera`, `Parachoque delantero` y las llantas); los demás, y todos los que estaban en una zona del dibujo anterior, tienen `zona` con la parte escrita (si la tienen) y `cuadrante_numero` y `lado` en `null` hasta que Calidad apruebe una equivalencia entre la numeración vieja y la nueva.
 
 ### `GET /api/inspecciones/{id}/hallazgos-previos`
 `inspector`, `coordinador_calidad`, `admin` y `super_admin` (`403` al conductor y al comercial). El inspector solo la pide de inspecciones de **sus viajes** y quien se limita a su cliente (el `coordinador_calidad` y el `admin`), de VIN de **su cliente** (`403` si es de otro); `404` si la inspección no existe. El coordinador la usa para proponer el preexistente al revisar a distancia.
@@ -988,12 +1061,12 @@ Devuelve los hallazgos de todas las **inspecciones cerradas anteriores del mismo
 No cuenta lo que aún no se cerró, ni las inspecciones de otro VIN, ni la inspección que se consulta; una inspección corregida aporta su última versión cerrada y no la que reemplazó. Las `evidencias` traen la `url` actual de cada foto
 (la URL firmada llegará con la tarea de las fotos privadas). Sin hallazgos previos, `[]`.
 
-**La propuesta de preexistente la hace el cliente.** La app descarga esta lista y, al registrar un hallazgo, la compara por **zona (lado + número, o zona provisional) y clase**: si hay uno igual, lo propone como preexistente y el inspector lo confirma
+**La propuesta de preexistente la hace el cliente.** La app descarga esta lista y, al registrar un hallazgo, la compara por **zona (lado + número) y clase**: si hay uno igual, lo propone como preexistente y el inspector lo confirma
 (`es_preexistente: true` con `hallazgo_origen_id` de esa lista) o lo corrige (queda nuevo). En una revisión de un hallazgo del conductor, `POST /api/hallazgos/{id}/revision` admite además `es_preexistente` y `hallazgo_origen_id` con la misma regla. Funciona sin señal con la lista ya descargada; un hallazgo en `derecho 7` no se propone como preexistente de uno en `izquierdo 7`.
 Al crear el hallazgo el servidor valida que el origen sea de esa lista, con la misma zona y clase.
 
 ### `POST /api/inspecciones/{id}/evidencias`
-Campo (creador o administrador). Registra una foto **ya subida** con `POST /api/uploads`: de una **vista** (`vista_id`) o de un **hallazgo** (`hallazgo_id`), no de ambos. `201` con el `EvidenciaDto`.
+Campo (creador o administrador). Registra una foto **ya subida** con `POST /api/uploads`: de una **vista** (`vista_id`), de un **hallazgo** (`hallazgo_id`) o de un **extra del vehículo** (`extra_id`), de **una sola** de las tres cosas (`400` en `vista_id` si vienen varias; `404` si el hallazgo o el extra no son de esta inspección). `201` con el `EvidenciaDto`, que trae `extra_id` (nulo en las demás fotos).
 
 ```json
 {
@@ -1004,8 +1077,10 @@ Campo (creador o administrador). Registra una foto **ya subida** con `POST /api/
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
-| `vista_id` | sí, si no hay `hallazgo_id` | UUID de una vista **activa** del catálogo `vistas-foto` (una de las 7 obligatorias o de las 2 adicionales) |
-| `hallazgo_id` | sí, si no hay `vista_id` | UUID de un hallazgo **de esta inspección** (`404` si es de otra) |
+| `vista_id` | sí, si no hay `hallazgo_id` (salvo en la acomodación) | UUID de una vista **activa** del catálogo `vistas-foto` (una de las 7 obligatorias o de las 2 adicionales) |
+| `hallazgo_id` | sí, si no hay `vista_id` (salvo en la acomodación) | UUID de un hallazgo **de esta inspección** (`404` si es de otra) |
+
+En la **segunda inspección del cargue** (la salida de la etapa Cargue) la foto se envía **sin** `vista_id` ni `hallazgo_id`: es una foto de la acomodación en la niñera y cuenta para el mínimo `acomodacion_fotos_minimas` del cierre. En cualquier otra inspección esa foto responde `400` en `vista_id`.
 | `storage_path` | sí | el `storage_path` que devolvió la subida (nombre plano, sin carpetas). **El archivo debe existir**: si no se subió, `400` |
 | `sello_fecha` | sí | ISO 8601 con zona horaria: fecha y hora de la foto según el dispositivo |
 | `sello_lat` / `sello_lng` | no | −90 a 90 / −180 a 180. Si falta alguna, la foto queda **sin ubicación** (`sin_ubicacion: true`) |
@@ -1030,6 +1105,23 @@ Es lo que hace la app cuando una foto quedó «sin ubicación».
 
 `sin_ubicacion` es `true` cuando la foto se tomó sin señal de GPS (`sello_lat` y `sello_lng` valen 0): muéstrela marcada y pida repetirla antes de cerrar. `es_constancia` es `true` en la foto de
 una constancia de no firma (se registra con `POST /api/inspecciones/{id}/transferencia/no-firma`, no con este endpoint) y esa foto no cuenta como foto de una vista.
+
+### Extras del vehículo: `POST|PUT|DELETE /api/inspecciones/{id}/extras`
+Un **extra** es un elemento del vehículo fuera del dibujo estándar (barras de techo, volco, platón…) que reporta una inspección **en borrador**, con su tipo, sus fotos selladas y una observación. No es un hallazgo: no toca el dibujo ni cuenta en los patrones, el mapa de calor ni la tasa de rechazo. Lo hacen `inspector`, `conductor` y `admin` (el creador del informe o un administrador); `409` si la inspección está cerrada (los extras quedan inmutables al cierre).
+
+```json
+{ "tipo": "otro", "texto": "portabicicletas", "observacion": "en el techo" }
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `tipo` | sí | el `codigo` de un tipo **activo** de `tipos-extra` (`400` en `tipo` si no existe o está inactivo) |
+| `texto` | solo con `otro` | obligatorio con el tipo `otro` (máximo 100 caracteres) y **no se admite** con los demás (`400` en `texto`) |
+| `observacion` | no | máximo 500 caracteres |
+
+`POST` responde `201` con el `ExtraDto`: `{ id, inspeccion_id, tipo, tipo_nombre, texto, nombre, observacion, created_at, updated_at, fotos: [EvidenciaDto] }`; `nombre` es cómo se muestra («Platón», «Otro: portabicicletas»). `PUT /api/inspecciones/{id}/extras/{extra_id}` reemplaza los tres campos (`200` con el `ExtraDto`; el tipo actual de un extra se conserva aunque se haya inactivado después). `DELETE` responde `204`; un extra **con fotos no se quita** (`409`: la foto es evidencia y no se borra). `404` si el extra no es de esta inspección. Las **fotos** del extra se envían a `POST /api/inspecciones/{id}/evidencias` con `extra_id`, selladas como las demás (fecha, ubicación, precisión, dispositivo, hash y sello del servidor). Cada cambio queda auditado (`extra.crear|actualizar|quitar`).
+
+El detalle de la inspección (`GET /api/inspecciones/{id}`) y el inventario del VIN (`GET /api/vehiculos/{vin}/inventario`, en cada inspección) traen `extras` con el `ExtraDto` de cada uno y sus fotos. El informe PDF y el PDF del inventario los presentan en una sección propia («Extras del vehículo») con su galería sellada, dentro del máximo de 60 fotos. `inspecciones.xlsx` gana la columna **Extras** (cuántos reportó cada inspección); las demás exportaciones, el mapa de calor y los indicadores no los cuentan.
 
 ### `POST /api/inspecciones/{id}/cerrar`
 Campo (creador o administrador). Cierra el informe; después ya no admite cambios. Sin cuerpo. `200`:
@@ -1085,7 +1177,7 @@ La misma fila más `seguimiento` (el historial, como en `GET /api/hallazgos/{id}
 ## Revisión de la novedad
 
 La novedad que registra el conductor nace sin zona, clase ni nivel V: un inspector la revisa, la ubica y le asigna el nivel, que el conductor nunca asigna. A partir de la revisión el hallazgo entra al seguimiento y a los patrones. También se revisan
-así los hallazgos que el conductor registra en la salida de un Cargue sin personal de apoyo, en la de un Cargue con apoyo que él hizo con la excepción «No hay inspector» y en la **llegada del Descargue que hace él** sin inspector en destino (que tampoco traen nivel).
+así los hallazgos que el conductor registra en la salida de un Cargue que él hizo con la excepción «No hay inspector» y en la **llegada del Descargue que hace él** sin inspector en destino (que tampoco traen nivel).
 Al revisar se puede confirmar que el daño **ya estaba registrado** (`es_preexistente` y `hallazgo_origen_id`); si el conductor lo anotó otra vez en la llegada, no queda como un daño del transporte.
 
 ### `POST /api/hallazgos/{id}/revision`
@@ -1098,15 +1190,15 @@ Con «ya estaba registrado»: `{ …, "es_preexistente": true, "hallazgo_origen_
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
-| `cuadrante_numero` + `lado`, o `zona_provisional` | sí, una de las dos formas | las mismas reglas de la zona de `POST /api/inspecciones/{id}/hallazgos` (lado del 1 al 25, sin lado del 26 en adelante; cuadrante o zona provisional **activos**) |
+| `cuadrante_numero` (+ `lado` si el cuadrante lo lleva) | sí | las mismas reglas de la zona de `POST /api/inspecciones/{id}/hallazgos` (el lado lo decide el cuadrante; cuadrante **activo**) |
 | `clase_dano` | sí | un código **activo** de `clases-dano` |
 | `nivel_severidad` | sí | un código **activo** de `niveles-severidad` (`v1_plus`, `v1`, `v2`, `v3`) |
 | `tamano_dano` | no | corrige el que eligió el conductor (un código activo de `tamanos-dano`); sin él se conserva el del conductor |
 | `nota` | no | máximo 500 caracteres |
-| `es_preexistente` + `hallazgo_origen_id` | no | la misma validación de cuando se crea un hallazgo (S6-HU-01.3): `es_preexistente: true` exige `hallazgo_origen_id`, y `hallazgo_origen_id` solo se envía con `es_preexistente: true` (`400` si no). El origen debe ser un hallazgo de una **inspección cerrada anterior del mismo VIN** (cerrada antes de que empezara la que se revisa) con **la misma zona (lado + número, o zona provisional) y la misma clase** que se asignan en esa revisión; si no, `400` con `details.fieldErrors.hallazgo_origen_id` |
+| `es_preexistente` + `hallazgo_origen_id` | no | la misma validación de cuando se crea un hallazgo (S6-HU-01.3): `es_preexistente: true` exige `hallazgo_origen_id`, y `hallazgo_origen_id` solo se envía con `es_preexistente: true` (`400` si no). El origen debe ser un hallazgo de una **inspección cerrada anterior del mismo VIN** (cerrada antes de que empezara la que se revisa) con **la misma zona (lado + número) y la misma clase** que se asignan en esa revisión; si no, `400` con `details.fieldErrors.hallazgo_origen_id` |
 
 Responde `200` con el `HallazgoDto` ya completo: `revisado_por` y `revisado_at` quedan guardados y `estado_seguimiento` sigue `pendiente`. Queda una fila `revision` en el historial del hallazgo (`GET /api/hallazgos/{id}/seguimiento`) con quién la hizo, su `nota` y en
-`detalle` lo asignado: `zona_id`, `cuadrante_numero`, `lado`, `zona_provisional`, `clase_dano`, `nivel_severidad`, `tamano_dano` y `tamano_dano_anterior` (solo si se corrigió el tamaño); si se confirmó como ya registrado, también `es_preexistente: true`, `hallazgo_origen_id` y `confirmado_por`. El hallazgo queda con `es_preexistente: true`, su `hallazgo_origen_id` y `confirmado_por` (quien revisó) y **no cuenta como daño del transporte**. Queda en la auditoría (`hallazgo.revision`). Sin la revisión, el seguimiento del hallazgo responde `409`.
+`detalle` lo asignado: `zona_id`, `cuadrante_numero`, `lado`, `clase_dano`, `nivel_severidad`, `tamano_dano` y `tamano_dano_anterior` (solo si se corrigió el tamaño); si se confirmó como ya registrado, también `es_preexistente: true`, `hallazgo_origen_id` y `confirmado_por`. El hallazgo queda con `es_preexistente: true`, su `hallazgo_origen_id` y `confirmado_por` (quien revisó) y **no cuenta como daño del transporte**. Queda en la auditoría (`hallazgo.revision`). Sin la revisión, el seguimiento del hallazgo responde `409`.
 
 **Quién revisa.**
 
@@ -1114,7 +1206,7 @@ Responde `200` con el `HallazgoDto` ya completo: `revisado_por` y `revisado_at` 
 |---|---|
 | `inspector` | hallazgos de un VIN que está en alguno de sus viajes (`403` si no) |
 | `admin` y `super_admin` | los de su cliente (el `super_admin`, los de cualquiera) |
-| `coordinador_calidad` | **solo** los hallazgos del conductor de la salida de un Cargue **sin personal de apoyo**, de la salida de un Cargue con apoyo que el conductor hizo con la excepción «No hay inspector» o de la **llegada del Descargue que hizo el conductor** (`403` en cualquier otro caso): los revisa a distancia con las fotos y les asigna el nivel V antes de que salga el viaje, de modo que un V1+ todavía se puede recuperar o marcar «no sale». Propuesta pendiente de confirmar por el negocio |
+| `coordinador_calidad` | **solo** los hallazgos del conductor de la salida de un Cargue que el conductor hizo con la excepción «No hay inspector» o de la **llegada del Descargue que hizo el conductor** (`403` en cualquier otro caso): los revisa a distancia con las fotos y les asigna el nivel V antes de que salga el viaje, de modo que un V1+ todavía se puede recuperar o marcar «no sale». Propuesta pendiente de confirmar por el negocio |
 | los demás roles | `403` |
 
 Quien se limita a su cliente recibe `403` con un hallazgo de otro cliente.
@@ -1206,6 +1298,23 @@ Responde `200` con el `ViajeDto`: la unidad queda con `estado_unidad: "no_sale"`
 
 Una unidad que no sale no cuenta en `vehiculos_completos` ni en `vwViajesCompletos`, y su vínculo no cuenta como «viaje activo» del VIN: se puede asignar a otro viaje, y su inventario muestra el historial completo, incluido el viaje del que no salió y su hallazgo V1+.
 
+### `PUT /api/viajes/{id}/vehiculos/{vin}/posicion`
+Registra la **posición de la unidad en la niñera** durante la segunda inspección del cargue. Lo hacen el inspector del viaje (o quien reclamó el cargue), el `coordinador_calidad` y los administradores; `403` a los demás.
+
+```json
+{ "posicion": 4 }
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `posicion` | sí | un entero de **1 a 7**; `null` libera la posición de la unidad |
+
+Responde `200` con el `ViajeDto`: cada unidad trae `posicion` (nulo si no la tiene). `400` en `posicion` («La posición debe estar entre 1 y 7») si está fuera de rango.
+
+`409` si la posición **ya la ocupa otra unidad del viaje** («La posición N ya está ocupada por otra unidad de este viaje»; con solicitudes simultáneas por la misma gana exactamente una), si la unidad **no sale** del viaje o si el viaje **no tiene su segunda inspección del cargue en curso** (la de momento `salida` de la etapa Cargue, en borrador). `404` si el viaje o el VIN no existen o el VIN no está en el viaje.
+
+El cierre de esa inspección (`POST /api/inspecciones/{id}/cerrar`) deja de exigir las fotos de las vistas de estado y exige la posición de **cada unidad activa** y al menos `acomodacion_fotos_minimas` fotos de la acomodación (fotos sin vista ni hallazgo). Si falta algo responde `400` con una línea por cada unidad sin posición («Falta la posición de la unidad {VIN}») y, si no alcanzan las fotos, «Faltan fotos de la acomodación: se exige al menos {n} y hay {k}». Las unidades que no salen no exigen posición.
+
 ## Conductor en ruta
 
 El conductor responde por lo que pasa en el recorrido de cada unidad de **su** viaje: registra las **novedades** (golpe, piedra, granizo o incidente vial) y confirma la **llegada**. Las dos viven en la etapa de **Transporte** del VIN:
@@ -1238,7 +1347,7 @@ Si el VIN no tiene inspección de **salida de Transporte** en ese viaje, la crea
 `code: "ETAPA_PREVIA_SIN_CIERRE"` si no tiene su llegada cerrada o su transferencia no tiene tipo de cierre (la app deja la novedad en espera hasta que el inventario muestre el Cargue cerrado). Las novedades siguientes van a la misma salida.
 Un viaje `programado` pasa a `en_curso`. Todo queda en la auditoría (`novedad.crear`, `evidencia.crear`).
 
-Responde `201` con el `HallazgoCreadoDto`: `origen: "conductor"`, `tipo_novedad`, `tamano_dano`, `clase_dano`, `cuadrante_numero`, `lado`, `zona_provisional`, `nivel_severidad`, `nota` y `revisado_at` en `null`, `estado_seguimiento: "pendiente"` y la `evidencia` con su `url`.
+Responde `201` con el `HallazgoCreadoDto`: `origen: "conductor"`, `tipo_novedad`, `tamano_dano`, `clase_dano`, `cuadrante_numero`, `lado`, `nivel_severidad`, `nota` y `revisado_at` en `null`, `estado_seguimiento: "pendiente"` y la `evidencia` con su `url`.
 
 `409` más con `code: "UNIDAD_NO_SALE"` si la unidad se marcó «no sale» del viaje, y `409` (`CONFLICT`) si la salida de Transporte ya está cerrada (por la llegada): ya no se agregan novedades.
 
@@ -1285,7 +1394,7 @@ Nada de otros viajes del mismo VIN: el inventario solo trae las etapas de sus vi
 
 | Endpoint | Para el conductor |
 |---|---|
-| `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` | los hallazgos de las inspecciones de **sus viajes**, con `zona` (texto y `cuadrante_numero` + `lado`, o `zona_provisional`), `clase_dano`, `tamano_dano`, `tipo_novedad`, `origen`, `es_preexistente` y `created_at`, y su foto (`evidencias` con `hallazgo_id` y su URL firmada). Llegan en `null`: `nivel_severidad`, `nivel_nombre`, `nivel_accion`, `estado_seguimiento`, `evidencia_completa`, `evidencia_faltante`, `revisado_por`, `revisado_at`, `nota`, `hallazgo_origen_id` y `confirmado_por`; y sin la foto del sello de quien valida (`es_sello: true`) |
+| `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` | los hallazgos de las inspecciones de **sus viajes**, con `zona` (texto y `cuadrante_numero` + `lado`) y `aiag_area`, `clase_dano`, `tamano_dano`, `tipo_novedad`, `origen`, `es_preexistente` y `created_at`, y su foto (`evidencias` con `hallazgo_id` y su URL firmada). Llegan en `null`: `nivel_severidad`, `nivel_nombre`, `nivel_accion`, `estado_seguimiento`, `evidencia_completa`, `evidencia_faltante`, `revisado_por`, `revisado_at`, `nota`, `hallazgo_origen_id` y `confirmado_por`; y sin la foto del sello de quien valida (`es_sello: true`) |
 | `GET /api/inspecciones/{id}/pdf` | el PDF lleva esos hallazgos sin nivel, sin seguimiento, sin historial y sin notas aclaratorias de hallazgos |
 | `GET /api/inspecciones` | el listado no trae hallazgos |
 | `GET /api/inspecciones/{id}/hallazgos-previos`, `GET /api/hallazgos` y `GET /api/hallazgos/{id}` | `403` |
@@ -1294,7 +1403,7 @@ Nada de otros viajes del mismo VIN: el inventario solo trae las etapas de sus vi
 
 Las alertas y los avisos llegan a una **bandeja** (el portal y la app) y, las urgentes, también por **push** al celular. La capacidad `ver_alertas` de `GET /api/auth/me` la tienen `coordinador_calidad`, `admin` y `super_admin` (las alertas preventivas
 de su cliente), `inspector` (solo los avisos operativos dirigidos a él: `captura_incompleta` de una inspección que inició y `transferencia_pendiente` de su firma) y `conductor` (solo `respuesta_conductor`, `captura_incompleta` de una inspección que
-él inició en un cargue sin personal de apoyo y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
+él inició en la salida de un cargue y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente`, `cargue_sin_reclamar` y `propuesta_ubicacion` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
 Todo lo que se hace aquí queda en la auditoría.
 
 `NotificacionDto`:
@@ -1366,6 +1475,39 @@ El push sale por **Firebase Cloud Messaging** a cada dispositivo activo del dest
 la alerta responde igual y la notificación de push guarda el motivo en `ErrorEnvio` (un token que FCM ya no reconoce deja el dispositivo inactivo). Una misma alerta no se repite: su clave (alerta, destinatario y canal) es única. Se configura con
 `Notificaciones__FcmProyectoId`, `Notificaciones__FcmClientEmail` y `Notificaciones__FcmClavePrivada` (ver [docs/configuracion.md](docs/configuracion.md)).
 
+## Ubicación de los lugares
+
+La ubicación de un lugar (`latitud`, `longitud`, `radio_metros`) tiene un estado, `estado_ubicacion`, que el catálogo `lugares` devuelve junto con quién la fijó (`ubicacion_fijada_por`) y cuándo (`ubicacion_fijada_at`):
+
+| `estado_ubicacion` | Qué significa | Cómo se llega |
+|---|---|---|
+| `sin_ubicacion` | el lugar no tiene coordenadas | estado inicial; también al quitar las coordenadas |
+| `pendiente_confirmar` | alguien en el sitio dejó su posición con «fijar ubicación aquí»; **todavía no genera marcas de «fuera del rango»** | `POST /api/lugares/{id}/ubicacion` |
+| `confirmada` | la ubicación es la oficial: la «confirmación en sitio» la usa | la carga manual por el catálogo o confirmar una propuesta de autocalibración |
+
+**Carga manual.** `PATCH /api/catalogos/lugares/{id}` (y el `POST` de creación) aceptan `latitud` (−90 a 90), `longitud` (−180 a 180) y `radio_metros` (1 a 100.000); los pueden cambiar `admin`, `super_admin` y `coordinador_calidad`, como el resto del catálogo. Las coordenadas van **juntas o ninguna** (`400`), el radio necesita coordenadas (`400`) y lo que no se envía se conserva. Con coordenadas la ubicación queda `confirmada` con el autor y la fecha; enviando `latitud`, `longitud` y `radio_metros` en `null` el lugar vuelve a `sin_ubicacion`.
+
+### `POST /api/lugares/{id}/ubicacion`
+«Fijar ubicación aquí»: quien está en un lugar **sin ubicación** deja la suya. Roles: `inspector`, `conductor`, `coordinador_calidad`, `admin` y `super_admin` (`comercial` recibe `403`).
+
+```json
+{ "lat": 6.1706, "lng": -75.5874, "precision": 18.5 }
+```
+`lat` y `lng` son obligatorios (`400` si faltan o están fuera de rango); `precision` (metros, opcional, no negativa) es la del GPS y queda en la auditoría (`lugar.fijar_ubicacion`). `200` con el lugar: `{ "id", "nombre", "latitud", "longitud", "radio_metros": null, "estado_ubicacion": "pendiente_confirmar", "ubicacion_fijada_por", "ubicacion_fijada_at", "precision_m" }`. `404` si el lugar no existe. `409` si el lugar ya tiene ubicación (pendiente o confirmada): una ubicación existente la cambia quien administra el catálogo.
+
+### Autocalibración: propuestas de ubicación
+Cada hora el servidor toma las fotos selladas de las vistas de Cargue y Descargue (lugar de cargue del viaje y destino de la unidad) con ubicación y con precisión menor que `valvula_precision_m`, de los lugares **activos cuya ubicación no está confirmada**. Si un lugar reúne fotos de **al menos 3 visitas distintas** (viajes), propone el **centro** en la mediana de las coordenadas y el **radio** que cubre al 90 % de las fotos (redondeado hacia arriba a 10 m, entre 100 y 5.000 m), crea una propuesta `pendiente` y avisa al `coordinador_calidad` del cliente (`propuesta_ubicacion`, urgencia media, bandeja y push). **El lugar no cambia** mientras la propuesta esté pendiente. No se repite una propuesta pendiente ni se vuelve a proponer tras una decisión sin fotos nuevas.
+
+`PropuestaUbicacionDto`: `{ "id", "lugar_id", "lugar", "centro_lat", "centro_lng", "radio_metros", "fotos", "visitas", "estado", "decidida_por", "decidida_at", "created_at" }`.
+
+| Endpoint | Roles | Qué hace |
+|---|---|---|
+| `GET /api/lugares/propuestas?estado=pendiente` | `coordinador_calidad`, `admin`, `super_admin` | lista, las más recientes primero; `estado` (`pendiente`, `confirmada` o `descartada`) es opcional (`400` si es otro) |
+| `POST /api/lugares/propuestas/{id}/confirmar` | los mismos | el lugar queda con ese centro y radio como ubicación `confirmada` (auditoría `lugar.confirmar_propuesta`) |
+| `POST /api/lugares/propuestas/{id}/descartar` | los mismos | la propuesta queda `descartada` y el lugar no cambia (auditoría `lugar.descartar_propuesta`) |
+
+`404` si la propuesta no existe; `409` si ya estaba decidida (una propuesta decidida no se decide otra vez, ni se modifica ni se borra).
+
 ## Alertas
 
 El sistema avisa de lo que requiere atención sin que nadie revise listados. Las alertas y los avisos **no tienen endpoints propios**: se guardan como notificaciones y se leen en la bandeja (`GET /api/notificaciones`, ver «Notificaciones»); aquí está qué genera cada una y a quién llega. El detalle de los procesos está en
@@ -1375,8 +1517,10 @@ El sistema avisa de lo que requiere atención sin que nadie revise listados. Las
 |---|---|---|---|---|
 | `hallazgo_critico` | preventiva | `alta` | `coordinador_calidad` y `admin` activos del cliente de la unidad | al **cerrar** una inspección con un hallazgo de nivel crítico y al **revisar** una novedad del conductor con ese nivel; una por inspección |
 | `umbral_patron` | preventiva | `media` | `coordinador_calidad` y `admin` activos del cliente | cada hora, cuando los hallazgos de una zona (lado + número) o de un proceso, de ese cliente, llegan al umbral dentro de la ventana; una vez por ventana |
-| `captura_incompleta` | operativo | `media` | quien inició la inspección (el inspector o, solo en un Cargue sin personal de apoyo, el conductor) | cada 10 minutos, si una inspección de Cargue o Descargue sigue en borrador y le faltan fotos de vistas obligatorias; una por inspección |
+| `captura_incompleta` | operativo | `media` | quien inició la inspección (el inspector o, solo en la salida de un Cargue, el conductor) | cada 10 minutos, si una inspección de Cargue o Descargue sigue en borrador y le faltan fotos de vistas obligatorias; una por inspección |
 | `transferencia_pendiente` | operativo | `media` | el firmante que falta (o, si aún no hay transferencia, el conductor o el inspector del viaje) | cada 10 minutos, si una llegada cerrada sigue sin transferencia con tipo de cierre; una por inspección y destinatario |
+| `cargue_sin_reclamar` | operativo | `media` | `coordinador_calidad` activos del cliente de las unidades del viaje | cada 10 minutos, si un cargue programado lleva `cargue_sin_reclamar_minutos` (30) pasada su hora programada, sin reclamo activo ni inspección iniciada (solo si esa hora fue en las últimas 24 horas); uno por viaje |
+| `propuesta_ubicacion` | operativo | `media` | `coordinador_calidad` activos del cliente | cada hora, cuando la autocalibración propone el centro y el radio de un lugar (ver «Ubicación de los lugares»); uno por propuesta |
 
 Los umbrales y los tiempos de espera son **parámetros** que se cambian sin desplegar (`niveles_criticos`, `umbral_patron_cantidad`, `umbral_patron_ventana_dias`, `captura_incompleta_minutos` y `transferencia_pendiente_minutos`; ver «Parámetros»). Las alertas preventivas nunca llegan a un usuario de otro cliente
 (ver «Visibilidad por cliente»). Cada una lleva su clave de dedupe: correr un proceso otra vez, o dos instancias a la vez, no repite nada. Llegan por **bandeja** y, por **push**, a los dispositivos activos del destinatario; **nunca por correo** (el único correo es el reporte diario).
@@ -1497,7 +1641,7 @@ identidad sale del token y **nadie firma por otro** (`403`). Cada firma guarda s
 | `firmada` | ambas partes firman |
 | `con_reservas` | ambas firman y quien recibe dejó sus observaciones (`reservas`) |
 | `no_firma` | una parte se negó a firmar: se deja la constancia (motivo, testigo con usuario y foto) |
-| `recibo_sin_entrega` | el conductor hizo la salida del Cargue y nadie de Botero Soto firma la entrega: solo firma quien recibe (ver `POST …/transferencia/sin-entrega`) |
+| `recibo_sin_entrega` | el conductor hizo la salida del Cargue y nadie de Botero Soto firma la entrega: solo firma quien recibe (ver `POST …/transferencia/sin-entrega`). Trae `no_firma_parte: "entrega"` (la parte que no firmó) y `motivo_no_firma`: «El conductor hizo la salida del cargue y nadie de Botero Soto entregó la unidad». La base ya admite también la forma inversa (firma solo quien entrega, `no_firma_parte: "recibe"`), que usará el descargue por punto de entrega |
 | `null` | abierta: falta una firma (o ninguna se ha enviado) |
 
 La primera llamada (sea cual sea la firma) crea la transferencia y exige `entrega_usuario_id` y `recibe_usuario_id`; en las siguientes pueden omitirse y, si se envían, deben ser los mismos
@@ -1552,7 +1696,7 @@ Campo. **Constancia de no firma**: una parte se negó a firmar y la **otra parte
 La foto se guarda como una evidencia marcada `es_constancia: true`, que **se admite aunque la inspección ya esté cerrada** y no cuenta como foto de una vista ni de un hallazgo.
 
 ### `POST /api/inspecciones/{id}/transferencia/sin-entrega`
-Campo, **solo el conductor del viaje** (decisión del equipo, pendiente de confirmar por el negocio, P-080). Cuando el conductor hizo la salida del Cargue (sin personal de apoyo, o con la excepción «No hay inspector») nadie de Botero Soto firma la entrega: el conductor cierra la transferencia solo con su firma. `201`.
+Campo, **solo el conductor del viaje** (decisión del equipo, pendiente de confirmar por el negocio, P-080). Cuando el conductor hizo la salida del Cargue (por la excepción «No hay inspector») nadie de Botero Soto firma la entrega: el conductor cierra la transferencia solo con su firma. `201`.
 
 ```json
 { "firma": "<trazo SVG o ruta>" }
@@ -1606,18 +1750,20 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | Nombre (ruta y clave) | Qué contiene | Campos de cada valor |
 |---|---|---|
 | `etapas` | Etapas del proceso: `cargue`, `transporte`, `descargue`. Es el `proceso` de un informe o de un tramo de la ruta | `id`, `codigo`, `nombre`, `orden`, `activo` |
-| `puntos-custodia` | Lugares donde se hace una etapa: CEDI 1, Origen, Certificadora, Destino, CEDI 2, Concesionario | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `puntos-custodia` | Los **tipos** de lugar: CEDI 1, Origen, Certificadora, Destino, CEDI 2, Concesionario | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `lugares` | Los lugares **reales** donde se carga y se entrega (CEDI Envigado, Concesionario Autolarte Medellín…). Empieza vacío: lo llena el negocio | `id`, `nombre` (único), `tipo` (el `codigo` de un valor activo de `puntos-custodia`), `tipo_nombre`, `ciudad`, `orden`, `activo`, `latitud`, `longitud`, `radio_metros` y `sin_ubicacion` (los tres primeros `null` mientras no tenga ubicación), más `estado_ubicacion` (`sin_ubicacion`, `pendiente_confirmar` o `confirmada`: solo una ubicación confirmada sirve para la confirmación «en sitio») |
 | `tipos-unidad` | Tipos de unidad transportadora: niñera, nodriza, quintinaria, planchón grúa | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `clases-dano` | Clases de daño de un hallazgo (10 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `tamanos-dano` | Tamaños de daño de un hallazgo (6 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `niveles-severidad` | Niveles V1+, V1, V2 y V3 con su acción: «Se recupera antes del despacho», «Se rechaza el vehículo», «Validación por Sofasa» y «Se deroga (se acepta el defecto)» | `id`, `codigo`, `nombre`, `orden`, `activo`, `accion` (texto o `null`, máx. 500) |
 | `vistas-foto` | Las 9 vistas de foto: 7 obligatorias y 2 adicionales (`piezas_baul`, `cojineria`) que solo se toman con faltante o daño | `id`, `codigo`, `nombre`, `orden`, `activo`, `obligatoria`, `tipo_vehiculo` (`null` = cualquier tipo) |
-| `cuadrantes` | Las **zonas** numeradas de la carrocería (puerta delantera, pilar central, capó…) y las **zonas provisionales** (`frente` y las cuatro llantas). Una zona es la misma aunque se vea desde varios paneles | `id`, `codigo` (solo las provisionales; las numeradas `null`), `tipo_vehiculo` (`null` = cualquier tipo), `numero` (`null` en las provisionales), `nombre`, `orden`, `activo` |
-| `paneles-dano` | Los **5 paneles** del dibujo de daños (`superior`, `perfil_posterior_izquierdo`, `perfil_posterior_derecho`, `costado_izquierdo`, `costado_derecho`), separados de las vistas de foto | `id`, `codigo`, `nombre`, `orden`, `activo`, `imagen_url` (la imagen de fondo del panel o `null` si aún no se cargó) |
-| `cuadrante-regiones` | La **región tocable** de cada zona numerada en cada panel (una fila por aparición). Las zonas provisionales no tienen región | `id`, `panel` (código), `cuadrante_id`, `numero`, `nombre`, `lado` (`izquierdo`, `derecho` o `null` del 26 en adelante), `geometria` |
+| `cuadrantes` | Las **piezas** numeradas de la carrocería (guardafango delantero, parabrisas…) del dibujo versión 6: 45 cuadrantes, 80 zonas. **Solo lectura** | `id`, `codigo` (siempre `null`), `tipo_vehiculo` (`null` = cualquier tipo), `numero`, `nombre` (la pieza), `lleva_lado`, `zonas` (una por lado, o una sola sin lado: `id`, `lado`, `nombre_completo`, `aiag_area`), `orden`, `activo` |
+| `paneles-dano` | Los **7 paneles** del dibujo de daños (costados izquierdo y derecho, frontal, posterior, superior y las diagonales delantera derecha y trasera izquierda), separados de las vistas de foto. **Solo lectura**, salvo la imagen | `id`, `codigo`, `nombre`, `orden`, `activo`, `ancho_ref`, `alto_ref` (tamaño de referencia de la imagen, en píxeles), `version` (del archivo del dibujo) e `imagen_url` (la imagen de fondo del panel o `null` si aún no se cargó) |
+| `cuadrante-regiones` | La **región tocable** de cada zona en cada panel (una fila por aparición; 251 en la versión 6). **Solo lectura** | `id`, `panel` (código), `cuadrante_id`, `numero`, `nombre`, `lado` (`izquierdo`, `derecho` o `null` en los cuadrantes sin lado), `prioridad`, `geometria` |
 | `clientes` | Las empresas a las que pertenecen los usuarios y los vehículos (hoy `sofasa`). El primero activo por `orden` es el cliente por defecto de lo que se crea sin cliente explícito | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `estados-sofasa` | Los estados de las órdenes Sofasa: el `codigo` es el `status_code` **real** de la orden y el `nombre`, su etiqueta (ver «Estados Sofasa» abajo). Empieza con los `status_code` que ya tienen las órdenes | `id`, `codigo`, `nombre`, `orden`, `activo` |
-| `motivos-sin-inspector` | Los motivos por los que no está el inspector previsto en un cargue con personal de apoyo: `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto) | `id`, `codigo`, `nombre`, `orden`, `activo`, `requiere_texto` |
+| `tipos-extra` | Los tipos de extra del vehículo fuera del dibujo estándar: `barras_techo` «Barras de techo», `volco` «Volco», `platon` «Platón» y `otro` «Otro» (el único que admite un texto libre). Lo administra Calidad: lo crean y editan `admin`, `super_admin` y `coordinador_calidad` (`403` los demás); un tipo con extras reportados **no se borra** (`409`): se inactiva y los extras conservan su tipo, pero ya no se ofrece para extras nuevos | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `motivos-sin-inspector` | Los motivos por los que no hay inspector en un cargue (la excepción «No hay inspector», que activa el conductor en el momento): `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto) | `id`, `codigo`, `nombre`, `orden`, `activo`, `requiere_texto` |
 
 **Estados Sofasa (`estados-sofasa`).** `GET /api/sofasa/ordenes` sigue devolviendo `status_code` **sin traducir**; el portal lo traduce con este catálogo (`items.find(i => i.codigo === orden.status_code)?.nombre`; si el estado no está, muestra el código). A diferencia de los demás
 catálogos, su `codigo` **no se limita a minúsculas y `_`**: es el texto que trae la orden del origen, y se guarda tal cual (recortado, con sus mayúsculas, hasta 100 caracteres y sin saltos de línea); es único sin distinguir mayúsculas, así que `ENTREGADA` y `entregada` son el mismo. Las demás
@@ -1640,12 +1786,15 @@ Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inacti
     "niveles-severidad": [ { "id": "uuid", "codigo": "v1", "nombre": "V1", "orden": 2, "activo": true, "accion": "Se rechaza el vehículo" } ],
     "vistas-foto": [ { "id": "uuid", "codigo": "piezas_baul", "nombre": "Piezas en el baúl", "orden": 8, "activo": true, "obligatoria": false, "tipo_vehiculo": null } ],
     "cuadrantes": [
-      { "id": "uuid", "codigo": null, "tipo_vehiculo": null, "numero": 1, "nombre": "Puerta delantera: parte alta", "orden": 1, "activo": true },
-      { "id": "uuid", "codigo": "frente", "tipo_vehiculo": null, "numero": null, "nombre": "Frente", "orden": 101, "activo": true }
+      { "id": "uuid", "codigo": null, "tipo_vehiculo": null, "numero": 4, "nombre": "Guardafango delantero", "lleva_lado": true, "orden": 4, "activo": true,
+        "zonas": [ { "id": "uuid", "lado": "izquierdo", "nombre_completo": "Guardafango delantero izquierdo", "aiag_area": "14/16" },
+                   { "id": "uuid", "lado": "derecho", "nombre_completo": "Guardafango delantero derecho", "aiag_area": "14/16" } ] },
+      { "id": "uuid", "codigo": null, "tipo_vehiculo": null, "numero": 54, "nombre": "Parabrisas", "lleva_lado": false, "orden": 54, "activo": true,
+        "zonas": [ { "id": "uuid", "lado": null, "nombre_completo": "Parabrisas", "aiag_area": "20" } ] }
     ],
     "motivos-sin-inspector": [ { "id": "uuid", "codigo": "otro", "nombre": "Otro", "orden": 3, "activo": true, "requiere_texto": true } ],
-    "paneles-dano": [ { "id": "uuid", "codigo": "costado_izquierdo", "nombre": "Costado izquierdo", "orden": 4, "activo": true, "imagen_url": "/api/catalogos/paneles-dano/costado_izquierdo/imagen?v=3f2b…c1" } ],
-    "cuadrante-regiones": [ { "id": "uuid", "panel": "costado_izquierdo", "cuadrante_id": "uuid", "numero": 1, "nombre": "Puerta delantera: parte alta", "lado": "izquierdo", "geometria": { "puntos": [ [0.34, 0.30], [0.59, 0.30], [0.59, 0.48] ] } } ],
+    "paneles-dano": [ { "id": "uuid", "codigo": "costado_izquierdo", "nombre": "Costado izquierdo", "orden": 1, "activo": true, "ancho_ref": 1071, "alto_ref": 491, "version": 6, "imagen_url": "/api/catalogos/paneles-dano/costado_izquierdo/imagen?v=3f2b…c1" } ],
+    "cuadrante-regiones": [ { "id": "uuid", "panel": "costado_izquierdo", "cuadrante_id": "uuid", "numero": 1, "nombre": "Esquina del parachoques delantero", "lado": "izquierdo", "prioridad": 1, "geometria": { "puntos": [ [0.34, 0.30], [0.59, 0.30], [0.59, 0.48] ] } } ],
     "puntos-custodia": [], "tipos-unidad": [], "tamanos-dano": [], "clientes": []
   }
 }
@@ -1657,6 +1806,10 @@ disponibles). `cuadrante-vistas` (el catálogo anterior de polígonos por vista 
 
 `motivos-sin-inspector` trae los motivos por los que no está el inspector: `inspector_no_llego` «El inspector no llegó», `inspector_no_disponible` «El inspector no está disponible» y `otro` «Otro» (`requiere_texto: true`: quien lo elige escribe cuál es). Los valores los confirma Calidad y los administran
 `admin`, `super_admin` y `coordinador_calidad` como los demás catálogos; el `codigo` no cambia y un motivo que alguna inspección usa no se borra (`409`): se inactiva.
+
+`lugares` es el catálogo de los sitios reales que usa la carga de cargues por Excel (`origen` y `destino`, por nombre) y que muestra el viaje. Se crea con `nombre`, `tipo` y `ciudad` (los tres obligatorios; `orden` y
+`activo` opcionales), lo cambian los mismos roles de los demás catálogos y cualquier usuario autenticado lo lee. Un nombre repetido (sin distinguir mayúsculas) responde `409`, y un lugar que algún viaje usa no se borra (`409`): se inactiva.
+La ubicación (`latitud`, `longitud`, `radio_metros`) la cargan los mismos roles por este catálogo (el lugar queda `confirmada`) y también se fija «aquí» o se calibra sola: ver «Ubicación de los lugares». Mientras no se fija, queda `null` con `sin_ubicacion: true`; `estado_ubicacion`, `ubicacion_fijada_por` y `ubicacion_fijada_at` salen en cada lugar.
 
 ### Versión y copia sin conexión
 Cada respuesta trae la versión en el encabezado `ETag` (por ejemplo `"9f2c4a7b1d3e5f60"`) y también en el cuerpo. La versión es una
@@ -1673,32 +1826,31 @@ Un catálogo cambia al instante cuando se edita; si hay varias instancias de la 
 muestre solo los activos; para dibujar informes viejos use todos (un hallazgo antiguo puede tener una clase hoy inactiva).
 
 ### Cuadrantes, regiones y paneles de daño
-Un cuadrante es una **zona** de la carrocería con un número (`cuadrantes`). Esa misma zona se ve desde varios paneles, así que **dónde se dibuja** en cada panel va aparte, en
+El dibujo de daños es el archivo `regiones-zonas-dano.json` (**versión 6**), que es la **única fuente** de la geometría y de los nombres de pieza. Un cuadrante es una **pieza** de la carrocería con un número (`cuadrantes`) y trae
+sus **zonas** (`zonas`): una por lado (`izquierdo` y `derecho`) si `lleva_lado` es `true`, o una sola sin lado si es `false`. Cada zona trae `nombre_completo` («Guardafango delantero izquierdo») y `aiag_area` (el código AIAG
+de esa pieza y lado, **texto sin formato fijo**: puede traer varios códigos, como `72-73 / 78-79`). Esa misma zona se ve desde varios paneles, así que **dónde se dibuja** en cada panel va aparte, en
 `cuadrante-regiones`: una fila por cada panel donde aparece. Para dibujar un panel, la app y el portal toman las `cuadrante-regiones` de ese `panel` y le ponen a cada región el
-`numero` y el nombre de su zona (`cuadrante_id` → `cuadrantes`).
+`numero` y el nombre de su zona (`cuadrante_id` → `cuadrantes`), ordenadas por `prioridad`.
 
 Para que la app y el portal dibujen las mismas regiones, `geometria` es un **polígono normalizado**: un objeto con la lista de puntos,
-cada uno `[x, y]` con `x` e `y` entre 0 y 1, medidos sobre la imagen del panel (el origen es la esquina superior izquierda).
+cada uno `[x, y]` con `x` e `y` entre 0 y 1, medidos sobre la imagen del panel (el origen es la esquina superior izquierda). El relleno usa la regla **par-impar (evenOdd)**: los huecos de una región son parte de su polígono.
 
 ```json
 { "puntos": [ [0.10, 0.10], [0.55, 0.10], [0.55, 0.48], [0.10, 0.48] ] }
 ```
 
-Debe tener al menos 3 puntos y llega como objeto JSON (no como texto). Es obligatoria en cada región. `numero` es único por `tipo_vehiculo`
-(con `tipo_vehiculo: null` el número es único entre las zonas sin tipo) y una zona tiene como máximo **una región por panel**.
+Llega como objeto JSON (no como texto). `numero` es único por `tipo_vehiculo` (con `tipo_vehiculo: null` el número es único entre los cuadrantes sin tipo) y una zona tiene como máximo **una región por panel**.
 
-**El lado.** Los números **1 a 25** llevan lado (`izquierdo` o `derecho`); del **26 en adelante** no. Una región es de la zona «lado + número»: en un panel de costado o de perfil el lado
-es el del panel (`costado_izquierdo`, `perfil_posterior_izquierdo`…), y en el panel `superior` cada número del 1 al 25 necesita **dos** regiones, una por lado.
+**El lado.** Si un cuadrante lleva lado lo declara el catálogo (`lleva_lado`); **ninguna regla del servidor usa números**. En la versión 6 los números 1 a 35 llevan lado y del 50 al 59 (piezas centrales) no, pero la próxima versión del dibujo puede
+cambiarlo sin cambiar el código. **`izquierdo` es el lado del conductor, visto sentado al volante.** Una región es de la zona «lado + número»; un panel puede tener regiones de los dos lados.
 
-**Zonas provisionales.** `frente`, `llanta_delantera_izquierda`, `llanta_delantera_derecha`, `llanta_trasera_izquierda` y `llanta_trasera_derecha` se publican en `cuadrantes` con su `codigo`, **sin
-`numero`** y **sin región**: no se dibujan, se eligen de una lista. Son una propuesta pendiente de confirmar por el negocio y no se editan por la API; el día que se les dé un número se migran.
-
-Hoy están cargadas las 36 zonas de la ficha del vehículo genérico (los números 4 y 12 no existen en la ficha) con 97 regiones en los 5 paneles: `superior` (13, del número 26 al 38), `costado_izquierdo` (19),
-`costado_derecho` (19), `perfil_posterior_izquierdo` (23) y `perfil_posterior_derecho` (23).
+**Solo lectura.** `POST`, `PATCH` y `DELETE` sobre `cuadrantes`, `paneles-dano` y `cuadrante-regiones` responden `409` con el mensaje «El dibujo se cambia con una versión nueva del archivo». Un dibujo distinto es una **versión nueva del archivo**,
+que se siembra con el guion `database/cambios-esquema/34-resembrar-dibujo-v6.sql` (generado con `database/herramientas/generar-resiembra-dibujo.py`): reemplaza el catálogo del dibujo completo (7 paneles, 45 cuadrantes, 80 zonas y 251 regiones) y los
+hallazgos que estaban en una zona del dibujo anterior quedan **sin zona** (`cuadrante_numero` y `lado` en `null`) hasta que Calidad apruebe una tabla de equivalencias. El catálogo cambia de versión (`ETag`) con la resiembra. Las zonas provisionales (`frente` y las cuatro llantas) **ya no existen**.
 
 ### Paneles de daño
-Los 5 paneles del dibujo de daños son la ficha donde se toca la región del daño; están separados del catálogo `vistas-foto` (las vistas de foto son otra cosa: lo que se fotografía). Cada panel trae
-`imagen_url`: la imagen de fondo sobre la que se dibujan sus regiones, o `null` si aún no se cargó.
+Los 7 paneles del dibujo de daños son la ficha donde se toca la región del daño; están separados del catálogo `vistas-foto` (las vistas de foto son otra cosa: lo que se fotografía). Cada panel trae
+`imagen_url`: la imagen de fondo sobre la que se dibujan sus regiones, o `null` si aún no se cargó. La imagen debe ser la de la **misma versión del archivo** (`version`, con el tamaño de referencia `ancho_ref` × `alto_ref`): una imagen distinta desalinea los polígonos.
 
 - `GET /api/catalogos/paneles-dano/{codigo}/imagen`: la imagen del panel. **Pública** (una etiqueta de imagen no envía token) y con caché larga (`Cache-Control: public, max-age=31536000, immutable`):
   la URL de `imagen_url` lleva el nombre del archivo (`?v=…`), así que cambia cuando se cambia la imagen. `404` si el panel no existe o aún no tiene imagen.
@@ -1716,10 +1868,7 @@ Solo `admin`, `super_admin` y `coordinador_calidad`; los demás roles reciben `4
 | Borrar | `DELETE /api/catalogos/{nombre}/{id}` | `204`; `409` si algo lo usa |
 
 Cuerpo de **crear**: `codigo` y `nombre` obligatorios; `orden` (entero ≥ 0, por defecto 0) y `activo` (por defecto `true`) opcionales, más
-los campos propios del catálogo. En **cuadrantes** no hay `codigo`: son obligatorios `numero` y `nombre`, y opcionales `tipo_vehiculo`, `orden` y `activo` (las zonas provisionales se leen pero no se crean ni se editan). En
-**paneles-dano** valen los campos comunes (`codigo`, `nombre`, `orden`, `activo`); la imagen se cambia con `PUT …/imagen`. En
-**cuadrante-regiones** (no tiene `codigo`, `nombre`, `orden` ni `activo`) son obligatorios `panel` (código), `cuadrante_id` y `geometria`, y `lado` según el número y el panel (ver arriba);
-al editar solo se cambia la `geometria` (el panel, el cuadrante y el lado no se pueden cambiar: se crea la región en el otro panel y se borra esta). En **vistas** `obligatoria` es opcional (por defecto `true`).
+los campos propios del catálogo. **`cuadrantes`, `paneles-dano` y `cuadrante-regiones` no se crean, editan ni borran** (`409`, ver arriba); de `paneles-dano` solo se cambia la imagen con `PUT …/imagen`. En **vistas** `obligatoria` es opcional (por defecto `true`).
 
 ```json
 { "codigo": "oxidacion", "nombre": "Oxidación", "orden": 11 }
@@ -1729,8 +1878,7 @@ Reglas:
 - `400` con `details.fieldErrors` si un campo es inválido, **si llega un campo que ese catálogo no admite** (por ejemplo `accion` en
   `etapas`) o si se envía `null` en `nombre`, `orden` o `activo`.
 - El **`codigo` no se puede cambiar** (`400`); se puede reenviar igual. Para reemplazar un código, cree un valor nuevo e inactive el viejo.
-- `409` si el `codigo` ya existe en ese catálogo, o si el `numero` de cuadrante ya existe para ese tipo de vehículo, o si la zona (cuadrante + lado) ya tiene una región en ese panel.
-- `400` en `lado` si una región tiene un lado incoherente: falta en un número del 1 al 25 (panel superior), sobra del 26 en adelante, no es `izquierdo` ni `derecho` o no coincide con el del panel.
+- `409` si el `codigo` ya existe en ese catálogo.
 - **Un valor en uso no se borra:** `409` con el mensaje «El valor está en uso y no se puede borrar: solo puede inactivarlo». Está en uso una clase
   o tamaño usado por algún hallazgo, una etapa o un lugar usado por algún tramo de la ruta, un cliente con usuarios o vehículos, y una vista que tiene polígonos del modelo anterior. Borrar un cuadrante borra también sus regiones (salvo que un hallazgo ya use una de sus zonas).
 - Una vista **con polígonos del modelo anterior** no puede pasar a `obligatoria: false` (`409`).
@@ -1933,7 +2081,7 @@ Las **novedades de proceso** del periodo (cargue sin inspector y recibo sin entr
 ```
 
 ### `GET /api/reportes/patrones`
-El mapa de calor: los hallazgos por proceso, por **zona (lado + número de cuadrante, o la zona provisional)** y por zona y proceso, y por nivel, clase y tamaño. `supera_umbral` es `true` si los hallazgos del grupo **en la ventana del umbral** (los `ventana_dias`
+El mapa de calor: los hallazgos por proceso, por **zona (lado + número de cuadrante)** y por zona y proceso, y por nivel, clase y tamaño. `supera_umbral` es `true` si los hallazgos del grupo **en la ventana del umbral** (los `ventana_dias`
 días que terminan en `hasta`, con los mismos filtros) llegan a `umbral.cantidad`; el umbral sale de los parámetros `umbral_patron_cantidad` y `umbral_patron_ventana_dias`. Reemplaza a `GET /api/patrones` y `GET /api/patrones/analisis`, que se retiraron en la versión 2.1.0 (responden `404`).
 
 ```json
@@ -1949,7 +2097,7 @@ días que terminan en `hasta`, con los mismos filtros) llegan a `umbral.cantidad
 }
 ```
 
-Una zona provisional (sin cuadrante) trae `cuadrante_numero` y `lado` en `null` y su nombre en `nombre` y `zona`.
+Un hallazgo sin ubicar (histórico o desvinculado del dibujo anterior) no entra en el mapa de zonas y sí cuenta por proceso, nivel, clase y tamaño.
 
 ### `GET /api/reportes/indicador-diario?fecha=`
 De las unidades **despachadas el día `fecha`** (`AAAA-MM-DD`; por defecto `hasta` o, si tampoco llega, hoy), el porcentaje de **vehículos con novedad**: los que tuvieron **al menos un hallazgo de nivel V1** ese día (no cualquier hallazgo; los de nivel V1+ también cuentan, como

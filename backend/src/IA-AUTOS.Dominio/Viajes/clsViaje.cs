@@ -55,6 +55,12 @@ public sealed partial class clsViaje : clsEntidadBase
 
     public Guid? DestinoId { get; private set; }
 
+    /// <summary>Cuando esta programado el cargue (con zona horaria). Nulo en los viajes anteriores a la programacion.</summary>
+    public DateTimeOffset? FechaProgramada { get; private set; }
+
+    /// <summary>El lugar real de cargue (catalogo <c>lugares</c>). Nulo en los viajes anteriores; <see cref="OrigenId"/> y <see cref="DestinoId"/> (tipos de lugar) quedan para el historico.</summary>
+    public Guid? LugarCargueId { get; private set; }
+
     public string Estado { get; private set; } = clsEstadoViaje.PROGRAMADO;
 
     public Guid? CreadoPor { get; private set; }
@@ -71,7 +77,9 @@ public sealed partial class clsViaje : clsEntidadBase
         Guid? origenId,
         Guid? destinoId,
         Guid? creadoPor,
-        DateTimeOffset ahora)
+        DateTimeOffset ahora,
+        DateTimeOffset? fechaProgramada = null,
+        Guid? lugarCargueId = null)
     {
         var viaje = new clsViaje
         {
@@ -84,6 +92,8 @@ public sealed partial class clsViaje : clsEntidadBase
             OrigenId = origenId,
             DestinoId = destinoId,
             CreadoPor = creadoPor,
+            FechaProgramada = fechaProgramada,
+            LugarCargueId = lugarCargueId,
         };
         viaje.Inicializar(ahora);
         return viaje;
@@ -150,6 +160,36 @@ public sealed partial class clsViaje : clsEntidadBase
             DestinoId = destinoId;
         }
 
+        Tocar(ahora);
+    }
+
+    /// <summary>
+    /// Corrige la fecha programada y el lugar de cargue (solo lo indicado). Solo mientras el viaje esta <c>programado</c>: despues el cargue ya empezo o termino y la programacion no se toca (409).
+    /// </summary>
+    public void Reprogramar(bool cambiaFecha, DateTimeOffset? fechaProgramada, bool cambiaLugar, Guid? lugarCargueId, DateTimeOffset ahora)
+    {
+        if (Estado != clsEstadoViaje.PROGRAMADO)
+        {
+            throw new clsConflictoException($"El viaje está {Estado.Replace('_', ' ')}: la fecha programada y el lugar de cargue solo se corrigen mientras está programado");
+        }
+
+        if (cambiaFecha)
+        {
+            FechaProgramada = fechaProgramada;
+        }
+
+        if (cambiaLugar)
+        {
+            LugarCargueId = lugarCargueId;
+        }
+
+        Tocar(ahora);
+    }
+
+    /// <summary>El inspector del viaje: lo llena el reclamo del cargue y lo vacia su liberacion (nulo = sin inspector).</summary>
+    public void AsignarInspector(Guid? inspectorId, DateTimeOffset ahora)
+    {
+        InspectorId = inspectorId;
         Tocar(ahora);
     }
 
@@ -284,7 +324,35 @@ public sealed class clsViajeVehiculo : clsEntidadBase
     /// <summary>El vehiculo que reemplaza a la unidad que no sale, si ya se asigno.</summary>
     public Guid? ReemplazoVehiculoId { get; private set; }
 
+    /// <summary>El lugar real de destino de ESTA unidad (cada VIN del viaje puede ir a uno distinto). Nulo en lo anterior.</summary>
+    public Guid? LugarDestinoId { get; private set; }
+
+    /// <summary>
+    /// La posicion de la unidad en la ninera (1 a 7, unica dentro del viaje; nula mientras no se registra). La registra la segunda inspeccion del cargue y se libera al marcar la unidad «no sale».
+    /// </summary>
+    public byte? Posicion { get; private set; }
+
+    public const int POSICION_MINIMA = 1;
+    public const int POSICION_MAXIMA = 7;
+
     public bool NoSale => EstadoUnidad == clsEstadoUnidad.NO_SALE;
+
+    /// <summary>Registra la posicion de la unidad (400 si no esta entre 1 y 7; nulo la libera). Una unidad que no sale del viaje no tiene posicion (409).</summary>
+    public void AsignarPosicion(int? posicion, DateTimeOffset ahora)
+    {
+        if (posicion is { } valor && (valor < POSICION_MINIMA || valor > POSICION_MAXIMA))
+        {
+            throw clsErroresCampos.De("posicion", $"La posición debe estar entre {POSICION_MINIMA} y {POSICION_MAXIMA}");
+        }
+
+        if (posicion is not null && NoSale)
+        {
+            throw new clsConflictoException("La unidad no sale del viaje: no tiene posición");
+        }
+
+        Posicion = (byte?)posicion;
+        Tocar(ahora);
+    }
 
     /// <summary>
     /// El VIN ya completo su ruta en este viaje (todas sus etapas con informe cerrado y la unidad no esta marcada <c>no_sale</c>): la misma regla de <c>vwViajesCompletos</c>. La mantienen los triggers
@@ -310,6 +378,7 @@ public sealed class clsViajeVehiculo : clsEntidadBase
         }
 
         EstadoUnidad = clsEstadoUnidad.NO_SALE;
+        Posicion = null;
         NoSaleMotivo = texto;
         NoSaleHallazgoId = hallazgoId;
         NoSaleMarcadoPor = marcadoPor;
@@ -318,9 +387,21 @@ public sealed class clsViajeVehiculo : clsEntidadBase
         Tocar(ahora);
     }
 
-    public static clsViajeVehiculo Crear(Guid viajeId, Guid vehiculoId, DateTimeOffset ahora)
+    /// <summary>Cambia el lugar de destino de esta unidad (solo la suya: las demas unidades del viaje no se tocan). La unidad que no sale ya no tiene entrega: 409.</summary>
+    public void CambiarLugarDestino(Guid lugarDestinoId, DateTimeOffset ahora)
     {
-        var vinEnViaje = new clsViajeVehiculo { ViajeId = viajeId, VehiculoId = vehiculoId };
+        if (NoSale)
+        {
+            throw new clsConflictoException("La unidad está marcada como que no sale del viaje: su destino ya no se cambia");
+        }
+
+        LugarDestinoId = lugarDestinoId;
+        Tocar(ahora);
+    }
+
+    public static clsViajeVehiculo Crear(Guid viajeId, Guid vehiculoId, DateTimeOffset ahora, Guid? lugarDestinoId = null)
+    {
+        var vinEnViaje = new clsViajeVehiculo { ViajeId = viajeId, VehiculoId = vehiculoId, LugarDestinoId = lugarDestinoId };
         vinEnViaje.Inicializar(ahora);
         return vinEnViaje;
     }

@@ -10,7 +10,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Notas aclaratorias: una aclaracion de una inspeccion, un hallazgo o una transferencia es un registro nuevo (tambien con la inspeccion cerrada) que agrega su autor, el administrador o el
 /// coordinador de calidad; nadie la edita ni la borra y queda en la auditoria.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed class NotasAclaratoriasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);
@@ -35,7 +35,7 @@ public sealed class NotasAclaratoriasApiTests(clsBaseDatosFixture bd) : clsPrueb
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
         var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-NOTA-0001", conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
-        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
         var (inspeccion, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(etapas[0], inspector.UsuarioId, zona);
         if (conTransferencia)
         {

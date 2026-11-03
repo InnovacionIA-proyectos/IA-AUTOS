@@ -22,6 +22,8 @@ public class TransferenciaCustodiaTests
         var t = clsTransferenciaCustodia.CrearReciboSinEntrega(inspeccion, _recibe, "trazo", "10.0.0.5", AHORA);
 
         Assert.Equal(clsTipoCierre.RECIBO_SIN_ENTREGA, t.TipoCierre);
+        Assert.Equal(clsParteFirmante.ENTREGA, t.NoFirmaParte);
+        Assert.Equal(clsTransferenciaCustodia.MOTIVO_SIN_ENTREGA_CARGUE, t.MotivoNoFirma);
         Assert.True(t.EstaCerrada);
         Assert.False(t.EstaCompleta);
         Assert.Null(t.EntregaUsuarioId);

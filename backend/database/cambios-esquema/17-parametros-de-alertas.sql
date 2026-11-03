@@ -73,7 +73,11 @@ BEGIN TRY
     WHILE @@FETCH_STATUS = 0
     BEGIN
         SET @sql = REPLACE(REPLACE(@sql, N'{S}', @q), N'~', N'''');
-        EXEC (@sql);
+        -- Con el dibujo version 6 ya sembrado esa vista es la de 34-resembrar-dibujo-v6.sql (sin la zona provisional): no se vuelve a la vieja.
+        IF @descripcion = N'vwHallazgosVentanaUmbral' AND COL_LENGTH(@q + N'.tblZonasDano', N'LlevaLado') IS NOT NULL
+            PRINT N'    (omitida: la vista ya es la del dibujo version 6)';
+        ELSE
+            EXEC (@sql);
         PRINT CONCAT(N'OK  ', @n, N'. ', @descripcion);
         FETCH NEXT FROM c INTO @n, @descripcion, @sql;
     END

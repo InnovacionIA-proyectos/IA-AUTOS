@@ -12,7 +12,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// La revision de un hallazgo del conductor: el inspector (de un VIN de sus viajes) y los administradores lo ubican en su zona y le asignan clase y nivel V; el coordinador de calidad tambien lo hace con
 /// los de la salida de un Cargue sin personal de apoyo. Queda en el historial, el hallazgo pasa al seguimiento y un nivel critico alerta al cliente.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_4)]
 public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private const string FECHA = "2026-10-21T08:30:00-05:00";
@@ -80,7 +80,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     /// <summary>Una revision completa: el cuadrante 7 del lado izquierdo, golpe y nivel V2 (que no es critico), salvo lo que cada prueba cambie.</summary>
     private static Dictionary<string, object?> Cuerpo(Action<Dictionary<string, object?>>? cambiar = null)
     {
-        var cuerpo = new Dictionary<string, object?> { ["zona_provisional"] = "frente", ["clase_dano"] = "golpe", ["nivel_severidad"] = "v2" };
+        var cuerpo = new Dictionary<string, object?> { ["cuadrante_numero"] = 50, ["clase_dano"] = "golpe", ["nivel_severidad"] = "v2" };
         cambiar?.Invoke(cuerpo);
         return cuerpo;
     }
@@ -104,8 +104,8 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
         Assert.Equal(e.Novedad, h.GetProperty("id").GetGuid());
         Assert.Equal("golpe", h.GetProperty("tipo_novedad").GetString());
         Assert.Equal("conductor", h.GetProperty("origen").GetString());
-        Assert.Equal("frente", h.GetProperty("zona_provisional").GetString());
-        Assert.Equal("Frente", h.GetProperty("zona").GetString());
+        Assert.Equal(50, h.GetProperty("cuadrante_numero").GetInt32());
+        Assert.Equal("50 · Frente", h.GetProperty("zona").GetString());
         Assert.Equal("golpe", h.GetProperty("clase_dano").GetString());
         Assert.Equal("v2", h.GetProperty("nivel_severidad").GetString());
         Assert.Equal("5_10cm", h.GetProperty("tamano_dano").GetString());
@@ -130,7 +130,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
         Assert.Equal("Nombre inspector@ejemplo.com", fila.GetProperty("usuario_nombre").GetString());
         Assert.Equal("Revisada con la foto", fila.GetProperty("nota").GetString());
         var detalle = fila.GetProperty("detalle");
-        Assert.Equal("frente", detalle.GetProperty("zona_provisional").GetString());
+        Assert.Equal(50, detalle.GetProperty("cuadrante_numero").GetInt32());
         Assert.Equal("golpe", detalle.GetProperty("clase_dano").GetString());
         Assert.Equal("v2", detalle.GetProperty("nivel_severidad").GetString());
         Assert.Equal("10_20cm", detalle.GetProperty("tamano_dano").GetString());
@@ -263,7 +263,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     public async Task Un_hallazgo_que_no_es_del_conductor_responde_409()
     {
         var e = await EscenarioAsync();
-        var (_, delInspector) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[0], e.Inspector.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!, nivel: "v2");
+        var (_, delInspector) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[0], e.Inspector.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!, nivel: "v2");
 
         var r = await RevisarAsync(e.Inspector, delInspector, Cuerpo());
 
@@ -279,7 +279,6 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     [InlineData("nivel_severidad", "v9")]
     [InlineData("clase_dano", "inventada")]
     [InlineData("tamano_dano", "enorme")]
-    [InlineData("zona_provisional", "techo-volador")]
     public async Task Una_revision_sin_nivel_clase_o_con_valores_invalidos_responde_400_y_no_se_guarda(string campo, string? valor)
     {
         var e = await EscenarioAsync();
@@ -294,7 +293,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     [Theory]
     [InlineData("{}")]
     [InlineData("{\"clase_dano\":\"golpe\",\"nivel_severidad\":\"v2\"}")]
-    [InlineData("{\"cuadrante_numero\":7,\"zona_provisional\":\"frente\",\"clase_dano\":\"golpe\",\"nivel_severidad\":\"v2\"}")]
+    [InlineData("{\"zona_provisional\":\"frente\",\"clase_dano\":\"golpe\",\"nivel_severidad\":\"v2\"}")]
     [InlineData("{\"cuadrante_numero\":7,\"clase_dano\":\"golpe\",\"nivel_severidad\":\"v2\"}")]
     [InlineData("{\"cuadrante_numero\":30,\"lado\":\"izquierdo\",\"clase_dano\":\"golpe\",\"nivel_severidad\":\"v2\"}")]
     public async Task Una_revision_sin_zona_o_con_una_zona_mal_formada_responde_400(string cuerpo)
@@ -353,17 +352,17 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     }
 
     [Fact]
-    public async Task El_coordinador_no_revisa_una_novedad_de_transporte_pero_si_la_de_un_cargue_sin_apoyo()
+    public async Task El_coordinador_no_revisa_una_novedad_de_transporte_pero_si_la_de_un_cargue_hecho_por_excepcion()
     {
         var e = await EscenarioAsync();
         var deTransporte = await RevisarAsync(e.Coordinador, e.Novedad, Cuerpo());
 
-        // El conductor registra un hallazgo en la salida del Cargue (sin personal de apoyo): queda sin zona confirmada ni nivel.
-        var inspeccion = await ComoJsonAsync(await Como(e.Conductor).PostAsJsonAsync("/api/inspecciones", new { etapa_id = e.Etapas[0], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 }));
+        // El conductor registra un hallazgo en la salida del Cargue que hizo por la excepcion «No hay inspector»: queda sin zona confirmada ni nivel.
+        var inspeccion = await ComoJsonAsync(await Como(e.Conductor).PostAsJsonAsync("/api/inspecciones", new { etapa_id = e.Etapas[0], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1, motivo_sin_inspector = "inspector_no_llego" }));
         var (ruta, hash) = await SubirAsync(e.Conductor);
         var creado = await Como(e.Conductor).PostAsJsonAsync($"/api/inspecciones/{inspeccion.GetProperty("id").GetGuid()}/hallazgos", new
         {
-            zona_provisional = "frente",
+            cuadrante_numero = 50,
             clase_dano = "rotura",
             tamano_dano = "1_5cm",
             evidencia = new { storage_path = ruta, sello_fecha = FECHA, sello_lat = 4.6, sello_lng = -74.1, hash_sha256 = hash },
@@ -383,24 +382,11 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
     }
 
     [Fact]
-    public async Task El_coordinador_no_revisa_el_hallazgo_del_conductor_de_un_cargue_con_personal_de_apoyo()
-    {
-        var e = await EscenarioAsync();
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblEtapas SET ConPersonalApoyo = 1 WHERE Id = @e", ("@e", e.Etapas[0]));
-        var (_, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(
-            e.Etapas[0], e.Conductor.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!, nivel: null, origen: "conductor");
-
-        var r = await RevisarAsync(e.Coordinador, hallazgo, Cuerpo());
-
-        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
-    }
-
-    [Fact]
-    public async Task El_inspector_tambien_revisa_el_hallazgo_del_conductor_de_un_cargue_sin_personal_de_apoyo()
+    public async Task El_inspector_tambien_revisa_el_hallazgo_del_conductor_de_un_cargue_hecho_por_excepcion()
     {
         var e = await EscenarioAsync();
         var (_, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(
-            e.Etapas[0], e.Conductor.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!, nivel: null, origen: "conductor");
+            e.Etapas[0], e.Conductor.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!, nivel: null, origen: "conductor");
 
         var r = await RevisarAsync(e.Inspector, hallazgo, Cuerpo());
 

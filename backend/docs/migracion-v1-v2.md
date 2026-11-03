@@ -35,9 +35,9 @@ La transferencia tiene tipo de cierre (`firmada`, `con_reservas`, `no_firma`) y 
 
 | v1 | v2 |
 |---|---|
-| `POST /api/inspecciones/{id}/hallazgos` con `parte_vehiculo` (texto libre) y `coords_diagrama` (punto sobre la imagen) | `cuadrante_numero` + `lado` (o `zona_provisional`), `clase_dano`, `tamano_dano`, `nivel_severidad`, `es_preexistente`, `hallazgo_origen_id`, `nota` y la `evidencia` |
+| `POST /api/inspecciones/{id}/hallazgos` con `parte_vehiculo` (texto libre) y `coords_diagrama` (punto sobre la imagen) | `cuadrante_numero` + `lado` (solo si el cuadrante lo lleva), `clase_dano`, `tamano_dano`, `nivel_severidad`, `es_preexistente`, `hallazgo_origen_id`, `nota` y la `evidencia` |
 
-`parte_vehiculo` y `coords_diagrama` **ya no se envían**; en las respuestas solo aparecen (con valor) en los hallazgos históricos. El hallazgo se ubica en una zona (lado + número de un cuadrante, o una zona provisional) y lleva nivel de severidad y estado de seguimiento. Ver [zonas-dano.md](zonas-dano.md).
+`parte_vehiculo` y `coords_diagrama` **ya no se envían**; en las respuestas solo aparecen (con valor) en los hallazgos históricos. El hallazgo se ubica en una zona (lado + número de un cuadrante) y lleva nivel de severidad y estado de seguimiento. Ver [zonas-dano.md](zonas-dano.md).
 
 ### 4. `cuadrante-vistas` → `paneles-dano` + `cuadrante-regiones`
 
@@ -45,7 +45,7 @@ La transferencia tiene tipo de cierre (`firmada`, `con_reservas`, `no_firma`) y 
 |---|---|
 | Catálogo `cuadrante-vistas`: el polígono de cada cuadrante por vista de foto | Catálogos **`paneles-dano`** (los 5 paneles del dibujo de daños, con su imagen) y **`cuadrante-regiones`** (la región tocable de cada zona en cada panel) |
 
-`GET /api/catalogos/cuadrante-vistas` responde `404`. Los paneles ya no son vistas de foto. El catálogo `cuadrantes` describe las zonas (numeradas y provisionales). Se agrega además el catálogo **`estados-sofasa`** (el `status_code` real de las órdenes Sofasa con su etiqueta). Ver [catalogos.md](catalogos.md).
+`GET /api/catalogos/cuadrante-vistas` responde `404`. Los paneles ya no son vistas de foto. El catálogo `cuadrantes` describe las piezas y sus zonas (nombre completo y código AIAG; las zonas provisionales ya no existen). Se agrega además el catálogo **`estados-sofasa`** (el `status_code` real de las órdenes Sofasa con su etiqueta). Ver [catalogos.md](catalogos.md).
 
 ### 5. Listados con `{items, total, pagina, tamano}` y filtros en `snake_case`
 

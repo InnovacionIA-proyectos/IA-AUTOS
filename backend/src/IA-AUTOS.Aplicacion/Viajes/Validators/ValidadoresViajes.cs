@@ -11,8 +11,14 @@ internal static class clsReglasViajes
 
     public static bool UuidOpcionalValido(Guid? valor) => valor is null || valor != Guid.Empty;
 
-    public static bool VinesValidos(IReadOnlyList<string>? vines) =>
-        vines is null || (vines.Count <= MAXIMO_VINES && vines.All(v => !string.IsNullOrWhiteSpace(v)));
+    public const string MENSAJE_SIN_DESTINO = "La unidad requiere un destino";
+
+    public static bool UnidadesValidas(IReadOnlyList<UnidadDelViajeRequest>? unidades) =>
+        unidades is null || (unidades.Count <= MAXIMO_VINES && unidades.All(u => u is not null && !string.IsNullOrWhiteSpace(u.Vin)));
+
+    /// <summary>Cada unidad trae su destino: un lugar (no nulo ni vacio).</summary>
+    public static bool UnidadesConDestino(IReadOnlyList<UnidadDelViajeRequest>? unidades) =>
+        unidades is null || unidades.All(u => u?.LugarDestinoId is { } destino && destino != Guid.Empty);
 }
 
 public sealed class CrearViajeRequestValidator : AbstractValidator<CrearViajeRequest>
@@ -25,18 +31,27 @@ public sealed class CrearViajeRequestValidator : AbstractValidator<CrearViajeReq
         RuleFor(x => x.ConductorId).Must(clsReglasViajes.UuidOpcionalValido).WithMessage(clsReglasViajes.MENSAJE_UUID);
         RuleFor(x => x.InspectorId).Must(clsReglasViajes.UuidOpcionalValido).WithMessage(clsReglasViajes.MENSAJE_UUID);
         RuleFor(x => x.OrigenId).Must(clsReglasViajes.UuidOpcionalValido).WithMessage(clsReglasViajes.MENSAJE_UUID);
-        RuleFor(x => x.DestinoId).Must(clsReglasViajes.UuidOpcionalValido).WithMessage(clsReglasViajes.MENSAJE_UUID);
-        RuleFor(x => x.Vines).Must(clsReglasViajes.VinesValidos)
-            .WithMessage($"Máximo {clsReglasViajes.MAXIMO_VINES} VIN por solicitud y ninguno vacío");
+        RuleFor(x => x.Unidades).Must(clsReglasViajes.UnidadesValidas)
+            .WithMessage($"Máximo {clsReglasViajes.MAXIMO_VINES} unidades por solicitud y ninguna sin VIN")
+            .Must(clsReglasViajes.UnidadesConDestino).WithMessage(clsReglasViajes.MENSAJE_SIN_DESTINO);
     }
 }
 
-public sealed class AgregarVinesRequestValidator : AbstractValidator<AgregarVinesRequest>
+public sealed class AgregarUnidadesRequestValidator : AbstractValidator<AgregarUnidadesRequest>
 {
-    public AgregarVinesRequestValidator()
+    public AgregarUnidadesRequestValidator()
     {
-        RuleFor(x => x.Vines).Must(v => v is { Count: > 0 }).WithMessage("Se requiere al menos un VIN")
-            .Must(clsReglasViajes.VinesValidos).WithMessage($"Máximo {clsReglasViajes.MAXIMO_VINES} VIN por solicitud y ninguno vacío");
+        RuleFor(x => x.Unidades).Must(v => v is { Count: > 0 }).WithMessage("Se requiere al menos una unidad")
+            .Must(clsReglasViajes.UnidadesValidas).WithMessage($"Máximo {clsReglasViajes.MAXIMO_VINES} unidades por solicitud y ninguna sin VIN")
+            .Must(clsReglasViajes.UnidadesConDestino).WithMessage(clsReglasViajes.MENSAJE_SIN_DESTINO);
+    }
+}
+
+public sealed class CambiarDestinoUnidadRequestValidator : AbstractValidator<CambiarDestinoUnidadRequest>
+{
+    public CambiarDestinoUnidadRequestValidator()
+    {
+        RuleFor(x => x.LugarDestinoId).Must(d => d is not null && d != Guid.Empty).WithMessage(clsReglasViajes.MENSAJE_SIN_DESTINO);
     }
 }
 

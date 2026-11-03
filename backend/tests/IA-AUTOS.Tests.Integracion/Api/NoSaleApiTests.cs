@@ -10,7 +10,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// Una unidad con un hallazgo V1+ puede no salir del viaje sin bloquearlo: la marcan el inspector del viaje o el coordinador de calidad con su motivo y el hallazgo que lo causa,
 /// conserva su trazabilidad y puede quedar reemplazada por otro VIN.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd)
 {
     private clsSembrador Sembrador => new(BaseDatos.CadenaConexion);
@@ -33,7 +33,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var inspector = await SesionAsync("inspector@ejemplo.com", clsRol.INSPECTOR);
         var conductor = await SesionAsync("conductor@ejemplo.com", clsRol.CONDUCTOR);
         var (vehiculo, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-NS-A", conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
-        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Codigo = 'frente'"))!;
+        var zona = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!;
         var (inspeccion, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(etapas[0], inspector.UsuarioId, zona, nivel: nivel, cerrada: cerrada);
         return new Escenario(await Sembrador.ViajeDeEtapaAsync(etapas[0]), vehiculo, etapas, inspeccion, hallazgo, inspector, conductor, zona);
     }
@@ -310,7 +310,8 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
         var otroViaje = await Sembrador.ViajeAsync();
 
-        var asignada = await Cliente(coordinador.Token).PostAsJsonAsync($"/api/viajes/{otroViaje}/vehiculos", new { vines = new[] { "VIN-NS-A" } });
+        var destino = await LugarRealAsync(Cliente(coordinador.Token), "Destino de la unidad");
+        var asignada = await Cliente(coordinador.Token).PostAsJsonAsync($"/api/viajes/{otroViaje}/vehiculos", new { unidades = new[] { new { vin = "VIN-NS-A", lugar_destino_id = destino } } });
 
         Assert.Equal(HttpStatusCode.OK, asignada.StatusCode);
         var inventario = await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/vehiculos/VIN-NS-A/inventario"));

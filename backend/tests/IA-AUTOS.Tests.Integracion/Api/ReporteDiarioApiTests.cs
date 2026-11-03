@@ -20,7 +20,7 @@ namespace IAAutos.Tests.Integracion.Api;
 /// El reporte diario por correo: se envia a la hora configurada (hora de Colombia) con la tabla en el cuerpo y el Excel de hallazgos del dia, trae las mismas cifras que el indicador del tablero,
 /// queda registrado como notificacion de correo (enviado, fallido o sin destinatarios) y no se repite el mismo dia.
 /// </summary>
-[Collection(clsColeccionBaseDatos.NOMBRE)]
+[Collection(clsColecciones.BASE_DE_DATOS_2)]
 public sealed partial class ReporteDiarioApiTests(clsBaseDatosFixture bd) : clsPruebaTableroBase(bd)
 {
     private sealed class RelojFijo(DateTimeOffset ahora) : IReloj
