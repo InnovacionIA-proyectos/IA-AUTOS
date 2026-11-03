@@ -1,8 +1,12 @@
-# Qué hay hecho de las 27 issues de mobile
+# Qué hay hecho de las 28 issues de mobile
 
 Revisión del 28-oct-2026 sobre la rama `299-dibujo-v6-y-extras`, contrastando los criterios de
 aceptación de cada issue contra el código. Cada veredicto dice **qué se comprobó**, para que quien
 cierre la issue pueda verificarlo en un minuto.
+
+**Al día del 3-nov-2026.** Las diez que el 28-oct estaban sin empezar se construyeron entre el 29-oct
+y el 3-nov, y #299 dejó de estar bloqueada: #297 y #298 están cerradas. El detalle de cada una está
+en «Construidas después de la auditoría». Se agrega #308, que no existía cuando se escribió esto.
 
 Lo que no se comprobó aquí: el comportamiento en dispositivo de lo que ya se probó en sprints
 anteriores. Donde el criterio pide una prueba de campo (instalar un APK, revisar con el negocio),
@@ -10,10 +14,12 @@ se dice.
 
 | | Issues | Qué hacer |
 |---|---|---|
-| Listas | #163, #164, #165, #166, #167, #168, #170, #187, #188, #199, #216, #240, #296 | Cerrar |
+| Listas | #163, #164, #165, #166, #167, #168, #170, #187, #188, #193, #199, #216, #240, #296, #299 | Cerrar |
 | Lista salvo un criterio fuera de alcance | #208 | Cerrar; su CA-5 es de #212 |
-| Hechas, bloqueadas por backend | #193, #299 | Esperar a #297 y #298 |
-| Sin empezar | #159, #201, #207, #212, #218, #273, #286, #291, #304, #313 | Pendientes |
+| Construidas después de la auditoría | #159, #201, #207, #212, #218, #273, #286, #291, #304, #308, #313 | Probar en dispositivo y cerrar |
+
+Ninguna queda sin empezar. A la fecha `flutter analyze` deja un aviso (`procesador_cola.dart:101`,
+`unawaited_return_in_try_block`) y las 772 pruebas pasan.
 
 ---
 
@@ -135,15 +141,15 @@ pubspec solo empaqueta el JSON y la carpeta de imágenes). CA-7 a CA-9 son de pr
 
 ---
 
-## Hechas, pero bloqueadas por el backend
+## Estaban bloqueadas por el backend, ya no
 
-Las dos tienen el mismo CA-9: «no sale a campo antes de que S6-HU-14.2 y S6-HU-14.3 estén cerradas»,
-que son **#297** (resiembra del catálogo con la v6) y **#298** (dominio y contrato), las dos
-abiertas.
+Las dos tenían el mismo CA-9: «no sale a campo antes de que S6-HU-14.2 y S6-HU-14.3 estén cerradas»,
+que son **#297** (resiembra del catálogo con la v6) y **#298** (dominio y contrato). **Las dos están
+cerradas desde el 30-oct**, así que el CA-9 se cumple.
 
-Medido el 28-oct contra la API local: de las 80 zonas del dibujo v6, **34 no existen** en el catálogo
-del servidor y las **46 restantes significan otra pieza** con el mismo número. Hasta que se siembre
-la v6, lo que se marca se guarda mal o se rechaza con 400.
+Lo que medía el bloqueo el 28-oct —de las 80 zonas del dibujo v6, 34 no existían en el catálogo del
+servidor y las 46 restantes significaban otra pieza con el mismo número— ya no se da: el catálogo
+resembrado trae los 45 cuadrantes con sus 80 zonas y las 251 regiones, y la app las lee de ahí.
 
 ### #193 — Panel de daño en la app
 
@@ -163,45 +169,110 @@ mezclar nunca polígonos de uno con imágenes del otro, las imágenes descargada
 tolerancia dividida por la escala, la pregunta cuando el toque cae en un borde, y ningún rango de
 números escrito en la app.
 
+**Corrección del 3-nov:** el CA-1 no se estaba cumpliendo aunque el código existiera. La app buscaba
+las zonas en un catálogo `zonas-dano` que el servidor nunca publicó: el backend las sirve **dentro de
+`cuadrantes[].zonas[]`**, con su `lado`, `nombre_completo` y `aiag_area`. Como la lista salía vacía,
+la comprobación de «catálogo completo» fallaba siempre y el dibujo caía a los assets sin decir nada.
+Los dobles de prueba repetían la forma supuesta, así que todo pasaba en verde.
+
+Qué se hizo: `dibujo_desde_catalogos.dart` arma las zonas desde `cuadrantes`, el repositorio exige
+que al menos un cuadrante traiga zonas antes de bajar imágenes, se retiró `Catalogo.zonasDano`, y
+`test/contrato/catalogos_dibujo_test.dart` fija la forma contra un recorte **literal** de una
+respuesta real (`test/contrato/fixtures/catalogos-dibujo.json`).
+
+Qué se comprobó en el teléfono, sobre su propia copia de la base (`traza_autos.sqlite`): las 7
+imágenes de panel bajadas del servidor con el `?v=` de la publicación, el catálogo guardado con 45
+cuadrantes y cero `zonas-dano`, y el parser de producción corriendo sobre esa copia da
+`origen=servidor`, 7 paneles, 80 zonas y 251 regiones, con `35I = Rin trasero izquierdo` y
+`26D = Llanta trasera derecha`.
+
 ---
 
-## A medias
+## Notas sobre dos que pasaron a listas
+
+#165 y #216 quedaron como listas el mismo 28-oct, después de cerrar lo que faltaba. Se anotan sus
+salvedades porque siguen vigentes y conviene revisarlas al cerrar la issue.
 
 ### #165 — Mis viajes y captura: mensajes y reglas nuevas
 
-Está CA-5: `faltaTransporte` ya no existe.
-
-Faltan:
-- **CA-1:** un 403 al abrir un VIN o un informe no muestra «Esta unidad no está en tus viajes».
-- **CA-4:** los viajes terminados no se consultan con `?estado=finalizado`.
-
-CA-2 y CA-3 quedan por verificar en dispositivo.
+CA-1 (un 403 dice «Esta unidad no está en tus viajes») y CA-4 (los viajes terminados se consultan
+con `?estado=finalizado`) se cerraron en `cb3b926`. CA-2 y CA-3 quedan por verificar en dispositivo.
 
 ### #216 — Alinear la app a v2
 
 El grueso está: los modelos, el gateway, los repositorios y `contrato_api_test.dart` siguen el
-contrato v2, y la prueba de contrato pasa contra `backend/docs/openapi.json`.
+contrato, y la prueba pasa contra `backend/docs/openapi.json` (hoy en 3.0.0, absorbido en `185e0ad`).
 
-Falta CA-4 al pie de la letra:
-- `selector_dano.dart` sigue existiendo (se usa, y #193 pide reutilizarlo: puede que el criterio haya
-  quedado viejo).
+Dos salvedades del CA-4, que conviene corregir en el criterio y no en el código:
+- `selector_dano.dart` sigue existiendo porque se usa, y #193 pide reutilizarlo.
 - `etiquetas.dart` conserva más de los tres mapas que el criterio nombra: también momento, tipo de
   cierre, estado de viaje y tipo de novedad. Todos son valores fijos del contrato que la API no
-  traduce, así que están donde deben; conviene corregir el criterio.
+  traduce, así que están donde deben.
 
 ---
 
-## Sin empezar
+## Construidas después de la auditoría
 
-| Issue | Qué falta |
-|---|---|
-| #159 | La app no lee `version` ni `corrige_inspeccion_id`: no hay cadena de versiones |
-| #201 | No existen `NovedadJob` ni `LlegadaJob` |
-| #207 | No existe la pantalla del conductor |
-| #212 | No existe la bandeja «Avisos» |
-| #218 | Es despliegue, no código: APK firmado al piloto y corte del APK actual |
-| #273 | No existen «No hay inspector» ni el recibo sin entrega |
-| #286 | No existe la entrega agrupada por punto |
-| #291 | No existe la lista de reclamo |
-| #304 | No existe el flujo de acomodación |
-| #313 | No existe «fijar ubicación aquí» |
+Entre el 29-oct y el 3-nov. Cada una con el commit que la trae y lo que se comprobó en el código;
+lo que falta en todas es la prueba en dispositivo.
+
+### #159 — Cadena de versiones de una inspección corregida
+
+`c5aafa4`. `InspeccionVista` y `InspeccionResumen` leen `version` y `corrige_inspeccion_id`;
+`textoDeVersion()` arma «Versión N · corrige la versión N-1» y, del otro lado, «ya fue corregida»
+con `EtapaVista.fueCorregida()`. Se ve en la tarjeta del VIN, en el inventario y en el listado.
+
+### #201 — Cola offline del conductor
+
+`72796f0`. `NovedadJob` (kind `novedad`) y `LlegadaJob` (kind `llegada`) en `sync/domain/job.dart`,
+con su `fromJson` en el despachador. Entran a la misma cola FIFO reanudable, con sus 8 intentos.
+
+### #207 — Pantalla del conductor
+
+`72796f0` y `e7678fb`. `AccionesConductor` en la ficha de la unidad, con el inventario sin señal, y
+la vista de la niñera. El conductor ve los hallazgos de su viaje sin el nivel de severidad.
+
+### #212 — Bandeja «Avisos»
+
+`e7678fb`. Feature `avisos` completa (dominio, repositorio y página) con su ruta `/avisos`: lista
+por urgencia, se marca leído al abrir y desde ahí se responde la novedad.
+
+### #218 — APK al piloto y corte del actual
+
+`2791641`. Es despliegue, no código: quedó el checklist de instalación y el procedimiento por
+celular. Cerrar cuando el grupo piloto tenga el APK firmado.
+
+### #273 — «No hay inspector» y recibo sin entrega
+
+`52df157`. El catálogo `motivos-sin-inspector` alimenta la hoja de la captura, la etapa se cierra
+con el motivo, y la ficha ofrece «Firmar recibo sin entrega» (`reciboSinEntrega`) solo al conductor
+y solo si la salida se hizo sin inspector. Cubierto por `test/widgets/sin_inspector_test.dart`.
+
+### #286 — Entrega agrupada por punto
+
+`81e6bc2`. `entrega_punto_page.dart` agrupa las unidades por `LugarDestinoId` y firma por punto, o
+cierra con una sola firma y su motivo. El botón de fijar ubicación de #313 vive en esta pantalla.
+
+### #291 — Lista de reclamo del inspector
+
+`1b04d97`. `ReclamosRepositorio` con `pendientes()`, `reclamar()` y `liberar()` contra
+`/api/viajes/pendientes` y `/api/viajes/{id}/reclamos`; `seccion_pendientes.dart` y
+`detalle_pendiente_page.dart` muestran los estados y el 409 cuando otro inspector se adelantó.
+
+### #304 — Acomodación en la niñera
+
+`fdcde6d`. `seccion_acomodacion.dart` en la segunda inspección del cargue: la posición de cada
+unidad activa y al menos una foto libre, sin fotos de vista.
+
+### #308 — Extras en la captura
+
+`699a016`. `seccion_extras.dart` con el catálogo `tipos-extra`; los extras salen con el informe y
+con sus fotos. **Pendiente de negocio:** hoy un extra no lleva clasificación de daño; está anotado
+como duda 1 en [dudas-proceso-mobile.md](dudas-proceso-mobile.md).
+
+### #313 — «Fijar ubicación aquí»
+
+`bff9999`. El botón aparece en la entrega por punto, sobre un lugar activo sin ubicación. Deja el
+lugar en `pendiente_confirmar`; quien confirma es coordinador de calidad o administrador, no el
+conductor. **Pendiente de negocio:** si el inspector también debería poder fijarla (el backend ya lo
+permite); está anotado como duda 8 en [dudas-proceso-mobile.md](dudas-proceso-mobile.md).
