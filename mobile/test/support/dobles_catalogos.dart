@@ -9,6 +9,8 @@ Catalogos catalogosCon(
   List<Map<String, dynamic>> vistas = const [],
   /// Etapas con su nombre para mostrar. Importan donde se distingue el código de su etiqueta («cargue» / «Cargue»).
   List<Map<String, dynamic>> etapas = const [],
+  /// Los motivos de «No hay inspector». Vacío = no se descargaron.
+  List<Map<String, dynamic>> motivos = const [],
 }) =>
     Catalogos.desdeRespuesta(
       {
@@ -20,12 +22,24 @@ Catalogos catalogosCon(
           Catalogo.tamanosDano: [
             {'id': 'i2', 'codigo': 'mas_20cm', 'nombre': 'Más de 20 cm', 'orden': 1, 'activo': true},
           ],
+          // El inspector no puede registrar un daño sin nivel (el servidor responde 400), así que sin este catálogo
+          // la captura no deja cerrar el informe.
+          Catalogo.nivelesSeveridad: [
+            {'id': 'i3', 'codigo': 'v1', 'nombre': 'V1', 'orden': 1, 'activo': true, 'accion': 'Se rechaza el vehículo'},
+          ],
           Catalogo.vistasFoto: vistas,
           Catalogo.etapas: etapas,
+          Catalogo.motivosSinInspector: motivos,
         },
       },
       usuarioId: usuarioId,
     );
+
+/// Los motivos de «No hay inspector» como los sirve la API.
+const motivosDePrueba = [
+  {'id': 'm1', 'codigo': 'inspector_no_llego', 'nombre': 'El inspector no llegó', 'orden': 1, 'activo': true, 'requiere_texto': false},
+  {'id': 'm2', 'codigo': 'otro', 'nombre': 'Otro', 'orden': 3, 'activo': true, 'requiere_texto': true},
+];
 
 /// Las etapas como las sirve la API: el código en minúscula y el nombre capitalizado.
 const etapasDePrueba = [

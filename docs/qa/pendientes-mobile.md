@@ -61,6 +61,77 @@ funciona; `HallazgoDto` no cambió.
 - **El almacén S3 local**: `adobe/s3mock` no es compatible con el SDK nuevo («response ended prematurely»)
   aunque la cabecera del compose lo recomiende; en las pruebas se usó almacenamiento en disco.
 
+## Lo que el conductor no ve del hallazgo (aclarado el 29-oct)
+
+`GET /api/vehiculos/{vin}/inventario` devuelve `nivel_severidad`, `estado_seguimiento` y `evidencia_completa`
+en **null cuando quien pregunta es el conductor**. No es un defecto: lo hace a propósito
+`clsVisibilidadConductor.ParaConductor`, que además le oculta la nota, el hallazgo de origen, quién confirmó y
+quién revisó. Es la regla de S5-HU-25.4: el conductor revisa en lectura los hallazgos del inspector (zona,
+clase, tamaño y foto) **sin nivel V ni seguimiento**.
+
+Con el mismo hallazgo y la misma compilación:
+
+| Rol | `nivel_severidad` | `estado_seguimiento` | `evidencia_completa` |
+|---|---|---|---|
+| super_admin | `v2` | `pendiente` | `false` |
+| conductor | `null` | `null` | `null` |
+
+Es reciente: la imagen de la API de hace unos días no ocultaba nada en el inventario, y por eso al
+reconstruirla pareció una regresión. Lo era al revés: la redacción es lo nuevo.
+
+**Qué significa para la app:** cuando mira el conductor, sus propios hallazgos se pintan azules «por revisar»
+aunque un inspector ya les haya puesto nivel. Es lo que el contrato quiere, pero «Por revisar» dice algo que
+no es: no es que nadie lo haya clasificado, es que a él no se le muestra.
+
+La ficha ya distingue los dos casos: dice **«Revisado»** cuando el hallazgo trae fecha de revisión y no trae
+nivel. Hoy eso solo lo ve el inspector o el administrador, porque `ParaConductor` también pone `RevisadoAt` y
+`RevisadoPor` en null.
+
+**Lo que falta, y es una línea de backend:** dejar pasar `revisado_at` (o un `revisado` booleano) al conductor,
+sin soltar el nivel. Con eso el conductor sabría que su novedad ya se revisó, sin saber con qué nivel, que es
+justo la regla. La app no necesita ningún cambio: el día que llegue el campo, la etiqueta cambia sola.
+
+Queda para Calidad el color: el azul «por revisar» en el dibujo sigue diciendo lo mismo que la etiqueta vieja.
+Si molesta, se le puede dar un color propio a «revisado sin nivel a la vista».
+
+## Lo que viene del backend y nos va a tocar (revisado el 29-oct)
+
+`origin/QA` **no se ha movido** desde que salió `299-dibujo-v6-y-extras`: no hay nada que traer. Pero hay una
+pila de ramas de backend sin fusionar que lleva el contrato de **2.5.0 a 2.13.0**. Cuando entren, esto es lo
+que cambia para mobile.
+
+### Desaparece `con_personal_apoyo`
+
+Sale de `ViajeDto` y de `InventarioEtapaDto`. El commit lo explica: «la salida la hace siempre un inspector y
+el conductor solo la hace activando la excepción» (contrato 2.10.0).
+
+Es un cambio de regla, no de nombre. Hoy la app bloquea al conductor **solo** si la etapa trae la marca
+(`puedeCapturar` en `vehiculos/domain/inventario.dart`). Con la regla nueva se invierte: el conductor **nunca**
+captura la salida del cargue, salvo que active la excepción, que es **#273** y está sin empezar.
+
+Lo que hay que tocar cuando llegue:
+- `EtapaVista.conPersonalApoyo` y `puedeCapturar`: la condición ya no es la marca.
+- `mensajeCargueConApoyo`: el texto queda obsoleto.
+- La prueba de contrato, que hoy exige `con_personal_apoyo` en `InventarioEtapaDto`.
+- **#167 CA-3** quedará describiendo una regla que ya no existe; conviene avisarlo al cerrarla.
+
+### Campos nuevos que la app podrá leer
+
+- `ViajeVehiculoDto` e `InventarioEtapaDto`: `posicion` (es **#304**).
+- `ViajeVehiculoDto`: `lugar_destino` y `lugar_destino_id` (**#286**).
+- `ViajeDto`: `fecha_programada`, `lugar_cargue`, `novedades_proceso`.
+
+### Rutas nuevas
+
+`/api/viajes/pendientes`, `/api/viajes/{id}/entregas` y sus tres de firma (**#286**),
+`/api/viajes/{id}/reclamos` y `/reclamos/{proceso}` (**#291**), y
+`/api/viajes/{id}/vehiculos/{vin}/posicion` (**#304**). Ninguna la usa la app todavía.
+
+### Lo que **no** viene en esa pila
+
+Ni `zonas-dano` ni el catálogo de extras. Es decir, lo que bloquea a **#193** y **#299** (la siembra del v6,
+issues #297 y #298) y a **#308** (#306 y #307) sigue sin aparecer.
+
 ## Cómo se probó
 
 Con la API local y tres VIN en un viaje, un usuario por rol (Ana inspectora, Luis conductor, Marta

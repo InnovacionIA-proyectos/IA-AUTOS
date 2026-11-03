@@ -1,7 +1,7 @@
 # Traza Autos 360 - App móvil (Flutter)
 
 App de campo para inspectores y conductores: entra por sus viajes, abre una de sus unidades, revisa el último informe,
-captura informes con novedades sobre el diagrama del vehículo, fotos selladas con fecha y ubicación, y firma el cambio
+captura informes con novedades sobre el dibujo de daños del vehículo, fotos selladas con fecha y ubicación, y firma el cambio
 de responsabilidad. Reemplaza a la app Expo (React Native) y consume la API .NET de [../backend](../backend).
 
 Funciona **sin señal**: los informes y las firmas se guardan en una cola persistente (SQLite) y se envían solos cuando
@@ -17,8 +17,8 @@ hay una conexión estable.
 | Mis viajes | entrada principal: los viajes donde la persona es conductor o inspector, con sus unidades y caché local |
 | Buscar VIN | búsqueda dentro de mis viajes por VIN, marca, modelo o código del viaje |
 | Mis inspecciones | listado con caché local (se ve sin señal) y barra de sincronización |
-| VIN | inventario, último informe con fotos y diagrama, y el estado de cada etapa de la ruta de custodia |
-| Captura | por momento (salida o llegada): datos del transporte tomados del viaje, checklist de fotos por vista con guía de cámara, novedades sobre el diagrama con su foto, notas y cierre del informe, que dice si quedó enviado, en cola o rechazado |
+| VIN | inventario, último informe con fotos y dibujo de daños, y el estado de cada etapa de la ruta de custodia |
+| Captura | por momento (salida o llegada): datos del transporte tomados del viaje, checklist de fotos por vista con guía de cámara, novedades sobre el dibujo de daños (7 vistas; la zona es cuadrante + lado) con su nivel y su foto, notas y cierre del informe, que dice si quedó enviado, en cola o rechazado |
 | Firma | firma de quien entrega y de quien recibe (parcial o completa) |
 | Envíos pendientes | lo que espera señal; los envíos con error se ven aquí con su motivo, y se reintentan o descartan a mano |
 | Sofasa | órdenes de carga sincronizadas por el ETL (solo lectura) |
@@ -35,7 +35,8 @@ lib/
   features/
     auth/         sesión, login y almacén seguro del token
     viajes/       mis viajes con caché, búsqueda de VIN y datos del transporte para la captura
-    vehiculos/    inventario, catálogo de partes del diagrama, etiquetas
+    vehiculos/    inventario y etiquetas
+    dibujo_dano/  dibujo de daños: paneles, zonas y regiones (servidor o copia en assets), toque y selector
     inspecciones/ listado con caché, captura, reglas de cierre, fotos y hallazgos
     custodia/     firma
     sofasa/

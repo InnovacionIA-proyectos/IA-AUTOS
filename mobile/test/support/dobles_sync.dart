@@ -3,7 +3,6 @@ import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/sync/domain/puertos.dart';
-import 'package:traza_autos/features/vehiculos/domain/coords_diagrama.dart';
 
 class ColaEnMemoria implements ColaRepositorio {
   final List<Job> jobs = [];
@@ -100,7 +99,10 @@ class GatewayFalso implements GatewayInformes {
     String? placa,
     String? trailer,
     String? notas,
+    String? motivoSinInspector,
+    String? motivoSinInspectorTexto,
   }) async {
+    motivosEnviados.add((motivoSinInspector, motivoSinInspectorTexto));
     await _paso('crearInspeccion');
     return 'insp-${++_inspecciones}';
   }
@@ -125,6 +127,7 @@ class GatewayFalso implements GatewayInformes {
     String? dispositivoId,
     String? nota,
     String? hash,
+    String? extraId,
   }) async {
     await _paso('agregarEvidencia');
     evidencias.add({
@@ -139,11 +142,85 @@ class GatewayFalso implements GatewayInformes {
       'dispositivo_id': dispositivoId,
       'nota': nota,
       'hash_sha256': hash,
+      'extra_id': extraId,
     });
+  }
+
+  /// Cada extra que se creó: (inspección, tipo, texto, observación).
+  final List<(String, String, String?, String?)> extrasCreados = [];
+
+  @override
+  Future<String> crearExtra(String inspeccionId, {required String tipo, String? texto, String? observacion}) async {
+    await _paso('crearExtra');
+    extrasCreados.add((inspeccionId, tipo, texto, observacion));
+    return 'extra-${extrasCreados.length}';
   }
 
   @override
   Future<void> agregarHallazgo(String inspeccionId, HallazgoLocal hallazgo) => _paso('agregarHallazgo');
+
+  /// Cada posicion que se mando, en orden: (viaje, VIN, posicion; null es liberar).
+  final List<(String, String, int?)> posicionesEnviadas = [];
+
+  @override
+  Future<void> registrarPosicion(String viajeId, String vin, int? posicion) {
+    posicionesEnviadas.add((viajeId, vin, posicion));
+    return _paso('registrarPosicion');
+  }
+
+  /// Cada novedad del conductor que salió: (viaje, VIN, tipo, tamaño, fecha, lat, lng, ruta de la foto subida).
+  final List<(String, String, String, String, String, double, double, String?)> novedadesEnviadas = [];
+
+  @override
+  Future<void> crearNovedad(
+    String viajeId,
+    String vin, {
+    required String tipoNovedad,
+    required String tamanoDano,
+    required String fecha,
+    required double lat,
+    required double lng,
+    required FotoLocal foto,
+  }) {
+    novedadesEnviadas.add((viajeId, vin, tipoNovedad, tamanoDano, fecha, lat, lng, foto.storagePath));
+    return _paso('crearNovedad');
+  }
+
+  /// Cada llegada que salió: (viaje, VIN, fecha, lat, lng).
+  final List<(String, String, String, double, double)> llegadasEnviadas = [];
+
+  @override
+  Future<void> confirmarLlegada(String viajeId, String vin, {required String fecha, required double lat, required double lng}) {
+    llegadasEnviadas.add((viajeId, vin, fecha, lat, lng));
+    return _paso('confirmarLlegada');
+  }
+
+  /// El motivo «No hay inspector» con que se creó cada inspección: (código, texto); (null, null) en las normales.
+  final List<(String?, String?)> motivosEnviados = [];
+
+  /// Las inspecciones sobre las que se firmó el recibo sin entrega, con el trazo.
+  final List<(String, String)> recibosSinEntrega = [];
+
+  @override
+  Future<void> firmarReciboSinEntrega(String inspeccionId, {required String firma}) {
+    recibosSinEntrega.add((inspeccionId, firma));
+    return _paso('firmarReciboSinEntrega');
+  }
+
+  /// Cada firma de una entrega por punto que salió: (viaje, lugar, motivo si es una sola firma, firma).
+  final List<(String, String, String?, String?)> entregasEnviadas = [];
+
+  @override
+  Future<void> firmarEntregaPunto(String viajeId, String lugarId, {required String firma}) {
+    entregasEnviadas.add((viajeId, lugarId, null, firma));
+    return _paso('firmarEntregaPunto');
+  }
+
+  @override
+  Future<void> cerrarEntregaConUnaFirma(String viajeId, String lugarId, {required String motivo, String? firma}) {
+    entregasEnviadas.add((viajeId, lugarId, motivo, firma));
+    return _paso('cerrarEntregaConUnaFirma');
+  }
 
   @override
   Future<void> cerrarInspeccion(String inspeccionId) => _paso('cerrarInspeccion');
@@ -189,6 +266,15 @@ class GatewayFalso implements GatewayInformes {
     return _paso('registrarNoFirma');
   }
 
+  @override
+  Future<void> agregarNota({required String entidad, required String entidadId, required String texto}) {
+    notasEnviadas.add((entidad: entidad, entidadId: entidadId, texto: texto));
+    return _paso('agregarNota');
+  }
+
+  /// Las notas aclaratorias que se enviaron, con a qué registro iban.
+  final List<({String entidad, String entidadId, String texto})> notasEnviadas = [];
+
   /// Las observaciones de cada recibo con reservas.
   final List<String> reservasEnviadas = [];
 
@@ -212,6 +298,12 @@ InformeJob informe({
   String? inspeccionId,
   int hallazgosEnviados = 0,
   bool cerrada = false,
+  String? viajeId,
+  Map<String, int> posiciones = const {},
+  Map<String, int> posicionesPrevias = const {},
+  bool posicionesEnviadas = false,
+  String? motivoSinInspector,
+  String? motivoSinInspectorTexto,
 }) => InformeJob(
   id: id,
   etiqueta: 'Informe $id',
@@ -229,9 +321,23 @@ InformeJob informe({
   inspeccionId: inspeccionId,
   hallazgosEnviados: hallazgosEnviados,
   cerrada: cerrada,
+  viajeId: viajeId,
+  posiciones: posiciones,
+  posicionesPrevias: posicionesPrevias,
+  posicionesEnviadas: posicionesEnviadas,
+  motivoSinInspector: motivoSinInspector,
+  motivoSinInspectorTexto: motivoSinInspectorTexto,
 );
 
 FotoLocal foto(String ruta, {String fecha = '2026-01-02T10:01:00.000Z', double? lat = 6.21, double? lng = -75.51, String? storagePath, bool enviada = false}) =>
     FotoLocal(ruta: ruta, selloFecha: fecha, selloLat: lat, selloLng: lng, storagePath: storagePath, enviada: enviada);
 
-const hallazgoEjemplo = HallazgoLocal(parte: 'Capot', clase: 'golpe', tamano: '1_5cm', coords: CoordsDiagrama(0.5, 0.66));
+const hallazgoEjemplo = HallazgoLocal(
+  cuadranteNumero: 26,
+  lado: 'derecho',
+  zona: 'Llanta trasera derecha',
+  clase: 'golpe',
+  tamano: '1_5cm',
+  nivel: 'v2',
+  nota: 'rayón en el costado',
+);

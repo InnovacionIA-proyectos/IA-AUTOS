@@ -3,29 +3,40 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/core/ui/widgets.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
+import 'package:traza_autos/features/inspecciones/domain/novedad_pendiente.dart';
+import 'package:traza_autos/features/dibujo_dano/presentation/selector_zona_dano.dart';
 import 'package:traza_autos/features/vehiculos/data/vehiculos_repositorio.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
-import 'package:traza_autos/features/vehiculos/presentation/diagrama_vehiculo.dart';
 import 'package:traza_autos/features/vehiculos/presentation/vin_page.dart';
 import 'package:traza_autos/features/vehiculos/providers.dart';
+import 'package:traza_autos/features/viajes/domain/viaje.dart';
+import 'package:traza_autos/features/viajes/providers.dart';
 
 import '../support/arnes.dart';
 import '../support/dobles_catalogos.dart';
+import '../support/dobles_viajes.dart';
 
 /// La pantalla del VIN con su ruta de custodia. Es la que abre el inspector en el patio: si revienta, no hay
 /// informe, y en una compilación de release revienta en blanco, sin decir nada.
 
 class VehiculosRepositorioFalso implements VehiculosRepositorio {
-  VehiculosRepositorioFalso(this.respuesta);
+  VehiculosRepositorioFalso(this.respuesta, {this.error});
 
   final Map<String, dynamic> respuesta;
 
+  /// Lo que lanza en vez de responder; un 403 es el VIN de un viaje ajeno.
+  final Object? error;
+
   @override
-  Future<Inventario> inventario(String vin) async => Inventario.fromJson(respuesta);
+  Future<Inventario> inventario(String vin) async {
+    if (error != null) throw error!;
+    return Inventario.fromJson(respuesta);
+  }
 }
 
 /// El inventario tal como lo sirve la API: dos etapas, la primera con su salida cerrada.
@@ -55,6 +66,9 @@ Map<String, dynamic> inventarioJson() => {
               // Lo registró el inspector del viaje, no quien mira.
               'usuario_id': 'inspector-1',
               'notas': 'Llovía al cargar',
+              'notas_aclaratorias': [
+                {'id': 'n1', 'texto': 'El golpe del capó resultó ser V1+', 'autor_nombre': 'Ana Pérez'},
+              ],
               'hallazgos': [
                 {'id': 'h1', 'parte_vehiculo': 'Capot', 'clase_dano': 'golpe', 'tamano_dano': 'mas_20cm'},
               ],
@@ -82,16 +96,25 @@ const conductor = Sesion(
   usuario: Usuario(id: 'conductor-1', nombre: 'Luis Gómez', email: '', rol: 'conductor'),
 );
 
-Future<void> abrir(WidgetTester tester, {Map<String, dynamic>? inventario, Sesion? sesion}) async {
+Future<void> abrir(
+  WidgetTester tester, {
+  Map<String, dynamic>? inventario,
+  Sesion? sesion,
+  ViajesRepositorioFalso? viajes,
+  List<NovedadPendiente> novedades = const [],
+  Object? error,
+}) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   await tester.pumpWidget(
     ProviderScope(
       retry: (_, _) => null,
       overrides: [
-        ...Arnes(sesion: sesion ?? sesionPrueba).overrides,
+        ...(Arnes(sesion: sesion ?? sesionPrueba)..novedades.lista = novedades).overrides,
         catalogosRepositorioProvider.overrideWithValue(CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe')),
-        vehiculosRepositorioProvider.overrideWithValue(VehiculosRepositorioFalso(inventario ?? inventarioJson())),
+        vehiculosRepositorioProvider
+            .overrideWithValue(VehiculosRepositorioFalso(inventario ?? inventarioJson(), error: error)),
+        viajesRepositorioProvider.overrideWithValue(viajes ?? ViajesRepositorioFalso()),
       ],
       child: MaterialApp(theme: crearTema(), home: const VinPage(vin: 'VIN00000000000001')),
     ),
@@ -121,12 +144,16 @@ void main() {
   // S5-HU-25.4: el conductor recibe el vehículo y firma su recibo. Si antes ve lo que marcó el inspector, su
   // recibo deja de decir lo que él encontró y pasa a confirmar lo del otro.
   group('la tarjeta del informe cuando mira un conductor', () {
-    testWidgets('no muestra los hallazgos del inspector ni su diagrama', (tester) async {
+    testWidgets('no muestra los hallazgos del inspector ni su dibujo de daños', (tester) async {
       await abrir(tester, sesion: conductor);
 
       expect(find.textContaining('Capot'), findsNothing);
-      expect(find.byType(DiagramaVehiculo), findsNothing);
+      expect(find.byType(SelectorZonaDano), findsNothing);
       expect(find.text('Llovía al cargar'), findsNothing);
+      // Una nota aclaratoria puede decir justo lo que se le oculta antes de firmar.
+      expect(find.text('Notas aclaratorias'), findsNothing);
+      expect(find.textContaining('resultó ser V1+'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Agregar nota aclaratoria'), findsNothing);
       expect(find.textContaining('queda en tu firma'), findsOneWidget, reason: 'se dice por qué, no se calla');
     });
 
@@ -146,7 +173,7 @@ void main() {
       await abrir(tester);
 
       expect(find.textContaining('Capot'), findsOneWidget);
-      expect(find.byType(DiagramaVehiculo), findsOneWidget);
+      expect(find.byType(SelectorZonaDano), findsOneWidget);
     });
   });
 
@@ -192,5 +219,148 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(abiertas.single.queryParameters['proceso'], 'cargue', reason: 'el código, no «Cargue»');
+  });
+
+  group('la unidad no sale', () {
+    /// Inventario con un V1+ en una inspección cerrada del viaje: la única forma de que el servidor lo acepte.
+    Map<String, dynamic> conV1Plus() {
+      final json = inventarioJson();
+      final etapa = (json['etapas'] as List).first as Map<String, dynamic>;
+      final inspeccion = (etapa['inspecciones'] as List).first as Map<String, dynamic>;
+      inspeccion['hallazgos'] = <Map<String, dynamic>>[
+        {'id': 'h1', 'zona': 'Izquierdo 7 · Espejo retrovisor', 'cuadrante_numero': 7, 'lado': 'izquierdo',
+         'clase_dano': 'golpe', 'tamano_dano': 'mas_20cm', 'nivel_severidad': 'v1_plus'},
+      ];
+      return json;
+    }
+
+    ViajesRepositorioFalso delInspector(String inspectorId, {bool noSale = false}) => ViajesRepositorioFalso()
+      ..viajeDeEtapa = Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: 'en_curso',
+        inspectorId: inspectorId,
+        vehiculos: [
+          ViajeVehiculo(
+            vin: 'VIN00000000000001',
+            estadoUnidad: noSale ? 'no_sale' : estadoUnidadActiva,
+            noSale: noSale ? const NoSale(motivo: 'Golpe profundo en el capó', vinReemplazo: 'VIN00000000000002') : null,
+          ),
+        ],
+      );
+
+    testWidgets('se le ofrece al inspector del viaje con un V1+ cerrado', (tester) async {
+      await abrir(tester, inventario: conV1Plus(), viajes: delInspector('u1'));
+
+      expect(find.text('La unidad no sale'), findsOneWidget);
+    });
+
+    testWidgets('a un inspector que no es el del viaje, no', (tester) async {
+      await abrir(tester, inventario: conV1Plus(), viajes: delInspector('otro-inspector'));
+
+      expect(find.text('La unidad no sale'), findsNothing);
+    });
+
+    testWidgets('al conductor, nunca', (tester) async {
+      await abrir(tester, inventario: conV1Plus(), sesion: conductor, viajes: delInspector('conductor-1'));
+
+      expect(find.text('La unidad no sale'), findsNothing);
+    });
+
+    testWidgets('sin un V1+ no hay nada que marcar', (tester) async {
+      await abrir(tester, viajes: delInspector('u1'));
+
+      expect(find.text('La unidad no sale'), findsNothing);
+    });
+
+    testWidgets('una unidad ya marcada dice por qué, en vez del botón', (tester) async {
+      await abrir(tester, inventario: conV1Plus(), viajes: delInspector('u1', noSale: true));
+
+      expect(find.text('La unidad no sale'), findsNothing);
+      expect(find.text('Esta unidad no sale'), findsOneWidget);
+      expect(find.text('Golpe profundo en el capó'), findsOneWidget);
+      expect(find.text('La reemplaza VIN00000000000002'), findsOneWidget);
+    });
+  });
+
+  group('las novedades del conductor por revisar', () {
+    // Como la registra el conductor: con su clase y su tamaño, sin nivel y, en este caso, sin GPS.
+    const sinClasificar = NovedadPendiente(
+      id: 'n1',
+      vin: 'VIN00000000000001',
+      proceso: 'transporte',
+      momento: 'llegada',
+      clase: 'golpe',
+      tamano: 'mas_20cm',
+      foto: FotoNovedad(tomadaEn: null, sinUbicacion: true),
+    );
+
+    testWidgets('quien inspecciona las ve, con lo que el conductor alcanzó a decir', (tester) async {
+      await abrir(tester, novedades: const [sinClasificar]);
+
+      expect(find.text('Novedades por revisar'), findsOneWidget);
+      // Lo que el conductor alcanzó a decir: la clase que eligió y el tamaño. Sin la clase, la fila no decía qué
+      // tipo de daño era y había que abrirla para saberlo.
+      expect(find.text('Golpe · Más de 20 cm'), findsOneWidget);
+      expect(find.text('Sin hora · Sin ubicación'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Revisar'), findsOneWidget);
+    });
+
+    testWidgets('el conductor no revisa la suya: el nivel lo pone otra persona', (tester) async {
+      await abrir(tester, sesion: conductor, novedades: const [sinClasificar]);
+
+      expect(find.text('Novedades por revisar'), findsNothing);
+    });
+
+    testWidgets('sin novedades pendientes no se ocupa espacio', (tester) async {
+      await abrir(tester);
+
+      expect(find.text('Novedades por revisar'), findsNothing);
+    });
+  });
+
+  group('un VIN que no es de mis viajes', () {
+    testWidgets('un 403 lo dice y no ofrece reintentar', (tester) async {
+      await abrir(tester, error: const ErrorApi(message: 'Prohibido', code: 'FORBIDDEN', status: 403));
+
+      expect(find.text(mensajeFueraDeMisViajes), findsOneWidget);
+      // Reintentar un 403 da otro 403: ofrecerlo manda a la persona a golpear una puerta cerrada.
+      expect(find.widgetWithText(FilledButton, 'Reintentar'), findsNothing);
+    });
+
+    testWidgets('un 404 sí se puede reintentar y dice otra cosa', (tester) async {
+      await abrir(tester, error: const ErrorApi(message: 'No existe', code: 'NOT_FOUND', status: 404));
+
+      expect(find.text(mensajeFueraDeMisViajes), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Reintentar'), findsOneWidget);
+    });
+  });
+
+  // Lo que se vio en el celular: desde un viaje ya terminado la app ofrecía capturar, y el envío habría muerto
+  // con «El viaje está finalizado y no admite inspecciones nuevas» después de tomar las siete fotos.
+  group('un viaje que ya terminó', () {
+    ViajesRepositorioFalso enEstado(String estado) => ViajesRepositorioFalso()
+      ..viajeDeEtapa = Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: estado,
+        inspectorId: 'u1',
+        vehiculos: const [ViajeVehiculo(vin: 'VIN00000000000001')],
+      );
+
+    testWidgets('lo dice y no ofrece capturar', (tester) async {
+      await abrir(tester, viajes: enEstado('finalizado'));
+
+      expect(find.text(mensajeViajeTerminado), findsWidgets);
+      expect(find.widgetWithText(FilledButton, 'Capturar'), findsNothing);
+    });
+
+    testWidgets('en curso sí se trabaja', (tester) async {
+      await abrir(tester, viajes: enEstado('en_curso'));
+
+      expect(find.text(mensajeViajeTerminado), findsNothing);
+    });
   });
 }

@@ -31,6 +31,9 @@ final _firmantesProvider =
 
 /// Firma de la transferencia: quien entrega y quien recibe, cada uno con su trazo. Se puede firmar solo una parte;
 /// la otra firma desde su dispositivo. El servidor valida que quien firma sea el usuario autenticado.
+/// Lo que el servidor admite en las observaciones de un recibo con reservas.
+const reservasMax = 1000;
+
 class FirmaPage extends ConsumerStatefulWidget {
   const FirmaPage({
     super.key,
@@ -199,9 +202,14 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
         (AsyncError(:final error), _) || (_, AsyncError(:final error)) => EstadoMensaje(
             icono: Icons.warning_amber_rounded,
             colorIcono: Colores.peligro,
-            titulo: 'No se pudo cargar la transferencia',
-            descripcion: mensajeDeError(error),
-            accion: FilledButton(onPressed: recargar, child: const Text('Reintentar')),
+            titulo: esFueraDeMisViajes(error) ? mensajeFueraDeMisViajes : 'No se pudo cargar la transferencia',
+            descripcion: esFueraDeMisViajes(error)
+                ? 'Solo se abren los informes de los viajes en los que estás.'
+                : mensajeDeError(error),
+            // Reintentar un 403 da otro 403.
+            accion: esFueraDeMisViajes(error)
+                ? null
+                : FilledButton(onPressed: recargar, child: const Text('Reintentar')),
           ),
         (AsyncData(value: final lista), AsyncData(value: final t)) => Builder(
             builder: (context) {
@@ -275,6 +283,8 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
                 onChanged: (_) => setState(() {}),
                 minLines: 2,
                 maxLines: 4,
+                // Lo mismo que admite el servidor: se corta aquí en vez de dejar escribir y que lo rechace al enviar.
+                maxLength: reservasMax,
                 textCapitalization: TextCapitalization.sentences,
                 decoration: const InputDecoration(
                   labelText: 'Observaciones',

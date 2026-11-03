@@ -1,5 +1,8 @@
 import '../../sync/domain/job.dart';
+import '../../viajes/domain/viaje.dart';
+import 'acomodacion.dart';
 import 'checklist_vistas.dart';
+import 'extra_local.dart';
 import 'foto_local.dart';
 import 'hallazgo_local.dart';
 
@@ -7,8 +10,12 @@ import 'hallazgo_local.dart';
 ///
 /// Una foto sellada con 200 metros de margen no prueba dónde se tomó. No impide cerrar porque en un patio
 /// techado el GPS siempre es malo y bloquear dejaría a la gente sin poder trabajar; se avisa para que, si se
-/// puede, salgan a cielo abierto. **Valor inicial, pendiente de confirmar con Calidad.**
-const precisionBajaMetros = 30.0;
+/// puede, salgan a cielo abierto.
+///
+/// Es el valor inicial, el mismo que el backend trae en el parámetro `gps_precision_minima_m`. Mientras Calidad
+/// no lo confirme, cada entorno puede ajustarlo al compilar (`GPS_PRECISION_MINIMA_M`, ver `Entorno`): la API no
+/// publica sus parámetros a quien está en el patio, solo a administradores y al coordinador.
+const precisionBajaMetrosPorDefecto = 30.0;
 
 /// Por qué todavía no se puede cerrar un informe.
 ///
@@ -63,12 +70,51 @@ class FotosSinUbicacion extends BloqueoCierre {
 
 /// Una novedad sin su foto es la palabra de alguien contra la del siguiente, y el servidor la rechaza.
 class HallazgoSinFoto extends BloqueoCierre {
-  const HallazgoSinFoto(this.parte);
+  const HallazgoSinFoto(this.zona);
 
-  final String parte;
+  final String zona;
 
   @override
-  String get mensaje => 'La novedad de «$parte» necesita su foto.';
+  String get mensaje => 'La novedad de «$zona» necesita su foto.';
+}
+
+/// Un extra sin foto no prueba nada: es la misma regla que impone el servidor al cerrar.
+class ExtraSinFoto extends BloqueoCierre {
+  const ExtraSinFoto(this.nombre);
+
+  final String nombre;
+
+  @override
+  String get mensaje => "El extra '$nombre' no tiene foto";
+}
+
+/// No se sabe qué unidades tiene el viaje, y sin ellas no se puede comprobar que cada una tenga su lugar.
+class SinUnidadesDelViaje extends BloqueoCierre {
+  const SinUnidadesDelViaje();
+
+  @override
+  String get mensaje => 'No se pudieron cargar las unidades del viaje. Conéctate e inténtalo de nuevo.';
+}
+
+/// Una unidad que sigue en el viaje y no tiene lugar en la niñera. Es la regla del servidor al cerrar la segunda
+/// inspección del cargue, con sus mismas palabras.
+class FaltaPosicion extends BloqueoCierre {
+  const FaltaPosicion(this.vin);
+
+  final String vin;
+
+  @override
+  String get mensaje => 'Falta la posición de la unidad $vin';
+}
+
+class FaltanFotosDeAcomodacion extends BloqueoCierre {
+  const FaltanFotosDeAcomodacion({required this.minimas, required this.hay});
+
+  final int minimas;
+  final int hay;
+
+  @override
+  String get mensaje => 'Faltan fotos de la acomodación: se exige al menos $minimas y hay $hay';
 }
 
 /// Reglas de cierre, en el mismo orden en que conviene resolverlas. Devuelve null si se puede cerrar.
@@ -79,8 +125,10 @@ BloqueoCierre? bloqueoDeCierre({
   required bool hayUbicacion,
   required List<FotoLocal> fotos,
   required List<HallazgoLocal> hallazgos,
+  List<ExtraLocal> extras = const [],
   List<VistaChecklist> checklist = const [],
   bool catalogosListos = true,
+  Acomodacion? acomodacion,
 }) {
   if (!catalogosListos) return const SinCatalogos();
   if (!hayUbicacion) return const SinUbicacion();
@@ -88,20 +136,43 @@ BloqueoCierre? bloqueoDeCierre({
   final faltan = vistasObligatoriasSinFoto(checklist, fotos);
   if (faltan.isNotEmpty) return FaltanVistas(faltan);
 
+  if (acomodacion != null) {
+    if (acomodacion.unidades == null) return const SinUnidadesDelViaje();
+    final sin = vinesSinPosicion(acomodacion.unidades!, acomodacion.posiciones);
+    if (sin.isNotEmpty) return FaltaPosicion(sin.first);
+    final hay = fotosDeAcomodacion(fotos).length;
+    if (hay < acomodacion.fotosMinimas) return FaltanFotosDeAcomodacion(minimas: acomodacion.fotosMinimas, hay: hay);
+  }
+
   for (final hallazgo in hallazgos) {
-    if (hallazgo.foto == null) return HallazgoSinFoto(hallazgo.parte);
+    if (hallazgo.foto == null) return HallazgoSinFoto(hallazgo.zona);
+  }
+  for (final extra in extras) {
+    if (extra.fotos.isEmpty) return ExtraSinFoto(extra.nombre);
   }
 
   // Se cuentan todas, incluidas las de los hallazgos: cualquier evidencia sin sello es evidencia floja.
-  final sinSello = [...fotos, ...hallazgos.map((h) => h.foto)].whereType<FotoLocal>().where((f) => f.sinUbicacion);
+  final sinSello = [...fotos, ...hallazgos.map((h) => h.foto), for (final e in extras) ...e.fotos]
+      .whereType<FotoLocal>()
+      .where((f) => f.sinUbicacion);
   if (sinSello.isNotEmpty) return FotosSinUbicacion(sinSello.length);
 
   return null;
 }
 
+/// Lo que la segunda inspección del cargue exige además de la ubicación: cada unidad con su lugar y las fotos de la
+/// acomodación. [unidades] es null mientras no se conozca el viaje.
+class Acomodacion {
+  const Acomodacion({required this.unidades, required this.posiciones, required this.fotosMinimas});
+
+  final List<ViajeVehiculo>? unidades;
+  final Map<String, int> posiciones;
+  final int fotosMinimas;
+}
+
 /// Fotos cuyo sello tiene poca precisión. No bloquean: se avisa.
-List<FotoLocal> fotosConPrecisionBaja(List<FotoLocal> fotos) =>
-    [...fotos.where((f) => (f.precision ?? 0) > precisionBajaMetros)];
+List<FotoLocal> fotosConPrecisionBaja(List<FotoLocal> fotos, {double? umbral}) =>
+    [...fotos.where((f) => (f.precision ?? 0) > (umbral ?? precisionBajaMetrosPorDefecto))];
 
 /// Arma el job de un informe cerrado a partir de lo capturado. El sello de cada foto ya viene en [fotos].
 InformeJob construirInformeJob({
@@ -118,6 +189,12 @@ InformeJob construirInformeJob({
   String notas = '',
   required List<FotoLocal> fotos,
   required List<HallazgoLocal> hallazgos,
+  List<ExtraLocal> extras = const [],
+  String? viajeId,
+  Map<String, int> posiciones = const {},
+  Map<String, int> posicionesPrevias = const {},
+  String? motivoSinInspector,
+  String? motivoSinInspectorTexto,
 }) {
   String? opcional(String valor) => valor.trim().isEmpty ? null : valor.trim();
   return InformeJob(
@@ -133,6 +210,12 @@ InformeJob construirInformeJob({
     notas: opcional(notas),
     fotos: fotos,
     hallazgos: hallazgos,
+    extras: extras,
+    viajeId: viajeId,
+    posiciones: posiciones,
+    posicionesPrevias: posicionesPrevias,
+    motivoSinInspector: motivoSinInspector,
+    motivoSinInspectorTexto: motivoSinInspectorTexto,
   );
 }
 

@@ -48,17 +48,31 @@ List<String> etiquetas(WidgetTester tester) => tester
     .toList();
 
 void main() {
-  testWidgets('el conductor no ve Sofasa: le toca su viaje y sus unidades', (tester) async {
+  // S6-HU-02.4: lo del conductor es su viaje y sus avisos. No ve la lista de informes ni Sofasa.
+  testWidgets('el conductor no ve Sofasa ni Inspecciones: le toca su viaje y sus avisos', (tester) async {
     await abrir(tester, sesionCon('conductor', capacidadesDeRol('conductor')));
 
-    expect(etiquetas(tester), ['Mis viajes', 'Inspecciones']);
-    expect(find.text('Sofasa'), findsNothing);
+    expect(find.byType(MisViajesPage), findsOneWidget);
+    expect(etiquetas(tester), ['Mis viajes', 'Avisos']);
+  });
+
+  // S6-HU-02.11: el comercial no tiene bandeja de alertas.
+  testWidgets('el comercial no ve Avisos', (tester) async {
+    await abrir(tester, sesionCon('comercial', capacidadesDeRol('comercial')));
+
+    expect(etiquetas(tester), isNot(contains('Avisos')));
+  });
+
+  testWidgets('el inspector ve Avisos con sus dos pestañas de siempre', (tester) async {
+    await abrir(tester, sesionCon('inspector', capacidadesDeRol('inspector')));
+
+    expect(etiquetas(tester), ['Mis viajes', 'Inspecciones', 'Avisos']);
   });
 
   testWidgets('el coordinador de calidad sí la ve', (tester) async {
     await abrir(tester, sesionCon('coordinador_calidad', capacidadesDeRol('coordinador_calidad')));
 
-    expect(etiquetas(tester), ['Mis viajes', 'Inspecciones', 'Sofasa']);
+    expect(etiquetas(tester), ['Mis viajes', 'Inspecciones', 'Sofasa', 'Avisos']);
   });
 
   testWidgets('entra por su primera pestaña', (tester) async {
@@ -84,7 +98,8 @@ void main() {
     tester.element(find.byType(MisViajesPage)).go('/sofasa');
     await avanzar(tester);
 
-    expect(find.textContaining('Mis viajes, Inspecciones'), findsOneWidget);
+    expect(find.textContaining('Mis viajes'), findsWidgets);
+    expect(find.textContaining('Mis viajes, Inspecciones'), findsNothing, reason: 'al conductor no se le ofrece Inspecciones');
   });
 
   // Lo que manda el servidor pesa más que el rol: un inspector al que le quitaron registrar_inspecciones ve los

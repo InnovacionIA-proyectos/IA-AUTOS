@@ -2,6 +2,15 @@ import '../../../core/errores/error_api.dart';
 import 'job.dart';
 import 'puertos.dart';
 
+/// Códigos con que el servidor explica un 409 del conductor en ruta.
+const codigoEtapaPreviaSinCierre = 'ETAPA_PREVIA_SIN_CIERRE';
+const codigoLlegadaYaCerrada = 'LLEGADA_YA_CERRADA';
+
+enum _Desenlace { hecho, espera }
+
+/// Lo que responde el servidor a la firma de un punto que ya no tiene unidades por entregar.
+const mensajeSinPendientes = 'No hay unidades pendientes de entrega';
+
 /// Resultado de una pasada de sincronización.
 class ResultadoSync {
   const ResultadoSync({required this.enviados, required this.pendientes, required this.fallidos});
@@ -91,9 +100,11 @@ class ProcesadorCola {
       // No empezar a drenar si la señal no es estable o la API no responde.
       if (!await red.redEstable() || !await red.apiAlcanzable()) return _resultado(0, usuarioId);
 
+      final esperando = <String>{};
       while (true) {
         if (!await red.redEstable()) break;
-        final job = (await _suyos(usuarioId)).where((j) => !j.fallido).firstOrNull;
+        // Los que esperan a que se cierre la etapa anterior se saltan en esta pasada: no bloquean a los demás.
+        final job = (await _suyos(usuarioId)).where((j) => !j.fallido && !esperando.contains(j.id)).firstOrNull;
         if (job == null) break;
 
         try {
@@ -104,6 +115,22 @@ class ProcesadorCola {
               await _ejecutarFirma(job);
             case NoFirmaJob():
               await _ejecutarNoFirma(job);
+            case NotaJob():
+              await gateway.agregarNota(entidad: job.entidad, entidadId: job.entidadId, texto: job.texto);
+            case EntregaPuntoJob():
+              await _ejecutarEntregaPunto(job);
+            case ReciboSinEntregaJob():
+              await gateway.firmarReciboSinEntrega(job.inspeccionId, firma: job.firma);
+            case NovedadJob():
+              if (await _ejecutarNovedad(job) == _Desenlace.espera) {
+                esperando.add(job.id);
+                continue;
+              }
+            case LlegadaJob():
+              if (await _ejecutarLlegada(job) == _Desenlace.espera) {
+                esperando.add(job.id);
+                continue;
+              }
           }
           await cola.eliminar(job.id);
           enviados++;
@@ -164,11 +191,32 @@ class ProcesadorCola {
         lat: job.lat,
         lng: job.lng,
         notas: job.notas,
+        motivoSinInspector: job.motivoSinInspector,
+        motivoSinInspectorTexto: job.motivoSinInspectorTexto,
       );
       job = job.conProgreso(inspeccionId: id);
       await cola.guardar(job);
     }
     final inspeccionId = job.inspeccionId!;
+
+    // 1b) Posiciones de la niñera (solo la segunda inspección del cargue). Van después de crearla porque el
+    //     servidor solo las admite mientras esa inspección está en curso, y antes de cerrar porque el cierre las exige.
+    if (!job.posicionesEnviadas && job.viajeId != null && job.posiciones.isNotEmpty) {
+      final cambiadas = [
+        for (final e in job.posiciones.entries)
+          if (job.posicionesPrevias[e.key] != e.value) e,
+      ];
+      // Primero se liberan las que cambian y después se asignan: un intercambio (la 4 pasa a la 3 y la 3 a la 4)
+      // chocaría con la que todavía ocupa el lugar.
+      for (final e in cambiadas) {
+        await gateway.registrarPosicion(job.viajeId!, e.key, null);
+      }
+      for (final e in cambiadas) {
+        await gateway.registrarPosicion(job.viajeId!, e.key, e.value);
+      }
+      job = job.conProgreso(posicionesEnviadas: true);
+      await cola.guardar(job);
+    }
 
     // 2) Fotos: subir (si falta) y crear la evidencia con el sello PROPIO de cada foto (si falta).
     for (var i = 0; i < job.fotos.length; i++) {
@@ -214,6 +262,51 @@ class ProcesadorCola {
       await gateway.agregarHallazgo(inspeccionId, hallazgo);
       job = job.conProgreso(hallazgosEnviados: i + 1);
       await cola.guardar(job);
+    }
+
+    // 3b) Extras: se crea cada uno (y se guarda el id que le dio el servidor) y después se mandan sus fotos. Va antes
+    //     de cerrar porque el cierre exige la foto de cada extra. Es reanudable por extra y por foto.
+    for (var i = 0; i < job.extras.length; i++) {
+      var extra = job.extras[i];
+      if (extra.extraId == null) {
+        final id = await gateway.crearExtra(
+          inspeccionId,
+          tipo: extra.tipo,
+          texto: extra.textoOtro,
+          observacion: extra.observacion,
+        );
+        extra = extra.conId(id);
+        job = job.conProgreso(extras: _reemplazar(job.extras, i, extra));
+        await cola.guardar(job);
+      }
+      for (var k = 0; k < extra.fotos.length; k++) {
+        var foto = extra.fotos[k];
+        if (foto.storagePath == null) {
+          final subido = await gateway.subirImagen(await archivos.leerBytes(foto.ruta), nombre: 'extra-$i-$k.jpg');
+          foto = foto.copyWith(storagePath: subido.storagePath, hash: subido.hash);
+          extra = extra.conFotos(_reemplazar(extra.fotos, k, foto));
+          job = job.conProgreso(extras: _reemplazar(job.extras, i, extra));
+          await cola.guardar(job);
+        }
+        if (!foto.enviada) {
+          await gateway.agregarEvidencia(
+            inspeccionId,
+            storagePath: foto.storagePath!,
+            selloFecha: foto.selloFecha,
+            selloLat: foto.selloLat,
+            selloLng: foto.selloLng,
+            precision: foto.precision,
+            dispositivoId: foto.dispositivoId,
+            nota: foto.nota,
+            hash: foto.hash,
+            extraId: extra.extraId,
+          );
+          foto = foto.copyWith(enviada: true);
+          extra = extra.conFotos(_reemplazar(extra.fotos, k, foto));
+          job = job.conProgreso(extras: _reemplazar(job.extras, i, extra));
+          await cola.guardar(job);
+        }
+      }
     }
 
     // 4) Cerrar (idempotente: 409 "ya cerrada" cuenta como éxito).
@@ -276,8 +369,82 @@ class ProcesadorCola {
     );
   }
 
+  /// La novedad del conductor: primero la foto (y se guarda su ruta, para no volver a subirla si se corta), después la
+  /// novedad. Un 409 `ETAPA_PREVIA_SIN_CIERRE` no es un fallo: el Cargue todavía no está cerrado, la novedad queda en
+  /// espera con el aviso «Falta cerrar …» y se reintenta en la próxima pasada.
+  Future<_Desenlace> _ejecutarNovedad(NovedadJob inicial) async {
+    var job = inicial;
+    if (job.foto.storagePath == null) {
+      final subido = await gateway.subirImagen(await archivos.leerBytes(job.foto.ruta), nombre: 'novedad.jpg');
+      job = job.conFoto(job.foto.copyWith(storagePath: subido.storagePath, hash: subido.hash));
+      await cola.guardar(job);
+    }
+    try {
+      await gateway.crearNovedad(
+        job.viajeId,
+        job.vin,
+        tipoNovedad: job.tipoNovedad,
+        tamanoDano: job.tamanoDano,
+        fecha: job.fecha,
+        lat: job.lat,
+        lng: job.lng,
+        foto: job.foto,
+      );
+    } on ErrorApi catch (e) {
+      if (await _enEspera(job, e)) return _Desenlace.espera;
+      rethrow;
+    }
+    try {
+      await archivos.borrar(job.foto.ruta);
+    } catch (_) {
+      // Un archivo que no se pudo borrar no invalida una novedad ya registrada.
+    }
+    return _Desenlace.hecho;
+  }
+
+  /// «Llegué». Un 409 `LLEGADA_YA_CERRADA` es un éxito para un reintento: la primera confirmación ya quedó y el
+  /// servidor no repite nada. Con `ETAPA_PREVIA_SIN_CIERRE` espera, igual que la novedad.
+  Future<_Desenlace> _ejecutarLlegada(LlegadaJob job) async {
+    try {
+      await gateway.confirmarLlegada(job.viajeId, job.vin, fecha: job.fecha, lat: job.lat, lng: job.lng);
+    } on ErrorApi catch (e) {
+      if (e.status == 409 && e.code == codigoLlegadaYaCerrada) return _Desenlace.hecho;
+      if (await _enEspera(job, e)) return _Desenlace.espera;
+      rethrow;
+    }
+    return _Desenlace.hecho;
+  }
+
+  /// Si el error es que falta cerrar la etapa anterior: deja el job en la cola, sin gastar un intento ni marcarlo
+  /// fallido, con el mensaje de lo que falta.
+  Future<bool> _enEspera(Job job, ErrorApi e) async {
+    if (e.status != 409 || e.code != codigoEtapaPreviaSinCierre) return false;
+    final etapa = switch (e.details) { final Map m => m['etapa_previa'] as String?, _ => null };
+    await cola.guardar(job.conIntento(
+      intentos: job.intentos,
+      error: etapa == null ? 'Falta cerrar la etapa anterior' : 'Falta cerrar $etapa',
+      codigo: e.code,
+      fallido: false,
+    ));
+    return true;
+  }
+
+  /// Un 409 «No hay unidades pendientes» es que la entrega ya quedó cerrada: lo más probable es que el envío anterior
+  /// sí llegó y solo se perdió la respuesta. Se toma como hecho, así reintentar no deja nada a medias ni firma dos veces.
+  Future<void> _ejecutarEntregaPunto(EntregaPuntoJob job) async {
+    try {
+      if (job.motivo case final motivo?) {
+        await gateway.cerrarEntregaConUnaFirma(job.viajeId, job.lugarId, motivo: motivo, firma: job.firma);
+      } else {
+        await gateway.firmarEntregaPunto(job.viajeId, job.lugarId, firma: job.firma!);
+      }
+    } on ErrorApi catch (e) {
+      if (e.status != 409 || !e.message.startsWith(mensajeSinPendientes)) rethrow;
+    }
+  }
+
   Future<void> _borrarFotos(InformeJob job) async {
-    for (final foto in job.fotos) {
+    for (final foto in [...job.fotos, for (final e in job.extras) ...e.fotos]) {
       try {
         await archivos.borrar(foto.ruta);
       } catch (_) {

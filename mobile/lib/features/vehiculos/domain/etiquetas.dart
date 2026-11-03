@@ -32,6 +32,21 @@ const etiquetaTipoCierre = <String, String>{
   'firmada': 'Transferencia firmada',
   'con_reservas': 'Recibida con reservas',
   'no_firma': 'Constancia de no firma',
+  'recibo_sin_entrega': 'Recibo sin entrega',
+};
+
+/// Qué ha registrado el conductor de una unidad en el transporte.
+const etiquetaEstadoTransporte = <String, String>{
+  'sin_registro': 'Sin registro',
+  'con_novedad': 'Con novedad',
+  'sin_novedad': 'Sin novedad',
+  'llegada_con_novedad': 'Llegada con novedad',
+};
+
+/// Las novedades de proceso: lo que pasó alrededor de una inspección y no es un daño.
+const etiquetaNovedadProceso = <String, String>{
+  'cargue_sin_inspector': 'Cargue sin inspector',
+  'recibo_sin_entrega': 'Recibo sin entrega',
 };
 
 const etiquetaEstadoViaje = <String, String>{
@@ -48,6 +63,15 @@ const etiquetaRol = <String, String>{
   'comercial': 'Comercial',
   'admin': 'Administrador',
   'super_admin': 'Super administrador',
+};
+
+/// Qué causó la novedad que registró el conductor en ruta. No es la clase del daño: la clase dice qué quedó en
+/// la lata (golpe, rayón), esto dice qué pasó.
+const etiquetaTipoNovedad = <String, String>{
+  'golpe': 'Golpe',
+  'piedra': 'Piedra',
+  'granizo': 'Granizo',
+  'incidente_vial': 'Incidente vial',
 };
 
 /// Devuelve la etiqueta del valor o, si es uno nuevo, el valor tal cual.

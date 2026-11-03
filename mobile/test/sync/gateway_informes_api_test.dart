@@ -3,8 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/core/http/cliente_api.dart';
 import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
+import 'package:traza_autos/features/inspecciones/domain/nota_aclaratoria.dart';
 import 'package:traza_autos/features/sync/data/gateway_informes_api.dart';
-import 'package:traza_autos/features/vehiculos/domain/coords_diagrama.dart';
 
 import '../support/dio_falso.dart';
 
@@ -35,16 +35,26 @@ void main() {
     await api.agregarHallazgo(
       'insp-1',
       const HallazgoLocal(
-        parte: 'Capot',
+        cuadranteNumero: 26,
+        lado: 'derecho',
+        zona: 'Llanta trasera derecha',
         clase: 'golpe',
         tamano: '1_5cm',
-        coords: CoordsDiagrama(0.5, 0.66),
+        nivel: 'v2',
         foto: fotoDelDano,
       ),
     );
 
     final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
-    expect(cuerpo['parte_vehiculo'], 'Capot');
+    expect(
+      (cuerpo['cuadrante_numero'], cuerpo['lado'], cuerpo['clase_dano'], cuerpo['tamano_dano'], cuerpo['nivel_severidad']),
+      (26, 'derecho', 'golpe', '1_5cm', 'v2'),
+    );
+    // El servidor responde 400 «Campo no admitido» si llegan, aunque sea en null.
+    expect(cuerpo.keys, isNot(contains('parte_vehiculo')));
+    expect(cuerpo.keys, isNot(contains('coords_diagrama')));
+    // La zona provisional no se usa desde el dibujo.
+    expect(cuerpo.keys, isNot(contains('zona_provisional')));
     final evidencia = cuerpo['evidencia'] as Map<String, dynamic>;
     expect(evidencia['storage_path'], 'uploads/dano.jpg');
     expect(evidencia['sello_fecha'], '2026-01-02T10:01:00.000Z');
@@ -52,6 +62,74 @@ void main() {
     expect(evidencia['precision'], 9.5);
     expect(evidencia['dispositivo_id'], 'equipo-1');
     expect(evidencia['hash_sha256'], 'hash-abc');
+    // Sin observación no se manda la clave: el servidor la trata igual que nula.
+    expect(cuerpo.keys, isNot(contains('nota')));
+  });
+
+  test('un daño confirmado como ya registrado viaja con su origen', () async {
+    final (api, adaptador) = gateway((_) => json(201, {'id': 'h1'}));
+
+    await api.agregarHallazgo(
+      'insp-1',
+      const HallazgoLocal(
+        cuadranteNumero: 7,
+        lado: 'izquierdo',
+        zona: 'Izquierdo 7 · Espejo retrovisor',
+        clase: 'golpe',
+        tamano: '1_5cm',
+        nivel: 'v2',
+        esPreexistente: true,
+        hallazgoOrigenId: 'h-previo',
+        foto: fotoDelDano,
+      ),
+    );
+
+    final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
+    expect((cuerpo['es_preexistente'], cuerpo['hallazgo_origen_id']), (true, 'h-previo'));
+  });
+
+  test('un daño nuevo dice que no es preexistente y no manda origen', () async {
+    final (api, adaptador) = gateway((_) => json(201, {'id': 'h1'}));
+
+    await api.agregarHallazgo(
+      'insp-1',
+      const HallazgoLocal(
+        cuadranteNumero: 7,
+        lado: 'izquierdo',
+        zona: 'Izquierdo 7 · Espejo retrovisor',
+        clase: 'golpe',
+        tamano: '1_5cm',
+        nivel: 'v2',
+        foto: fotoDelDano,
+      ),
+    );
+
+    final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
+    expect(cuerpo['es_preexistente'], false);
+    // El servidor exige que el origen falte cuando no es preexistente.
+    expect(cuerpo.keys, isNot(contains('hallazgo_origen_id')));
+  });
+
+  test('la observación del daño viaja como nota del hallazgo, no de la foto', () async {
+    final (api, adaptador) = gateway((_) => json(201, {'id': 'h1'}));
+
+    await api.agregarHallazgo(
+      'insp-1',
+      const HallazgoLocal(
+        cuadranteNumero: 26,
+        lado: 'derecho',
+        zona: 'Llanta trasera derecha',
+        clase: 'golpe',
+        tamano: '1_5cm',
+        nivel: 'v2',
+        nota: 'rayón en el costado de la llanta',
+        foto: fotoDelDano,
+      ),
+    );
+
+    final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
+    expect(cuerpo['nota'], 'rayón en el costado de la llanta');
+    expect((cuerpo['evidencia'] as Map<String, dynamic>)['nota'], isNull);
   });
 
   test('la evidencia de una vista lleva las diez claves, aunque alguna vaya nula', () async {
@@ -100,5 +178,22 @@ void main() {
     );
 
     expect((adaptador.peticiones.single.data as Map<String, dynamic>)['momento'], 'llegada');
+  });
+
+  // Cada registro tiene su propia ruta; el servidor no admite una sola con el tipo adentro.
+  test('la nota aclaratoria va a la ruta del registro que aclara', () async {
+    for (final caso in [
+      (EntidadNota.inspeccion, '/api/inspecciones/i1/notas'),
+      (EntidadNota.hallazgo, '/api/hallazgos/i1/notas'),
+      (EntidadNota.transferencia, '/api/inspecciones/i1/transferencia/notas'),
+    ]) {
+      final (entidad, ruta) = caso;
+      final (api, adaptador) = gateway((_) => json(201, {'id': 'n1'}));
+
+      await api.agregarNota(entidad: entidad, entidadId: 'i1', texto: 'La placa estaba mal escrita');
+
+      expect(adaptador.peticiones.single.uri.path, ruta, reason: entidad);
+      expect((adaptador.peticiones.single.data as Map)['texto'], 'La placa estaba mal escrita');
+    }
   });
 }

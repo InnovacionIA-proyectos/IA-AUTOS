@@ -2,8 +2,8 @@
 /// los lleva fijos en el código: guarda la última copia y la usa aunque no haya señal.
 ///
 /// Los valores son heterogéneos (`vistas-foto` trae `obligatoria` y `tipo_vehiculo`, `niveles-severidad` trae
-/// `accion`, `cuadrantes` trae `numero` y no trae `codigo`), por eso se guarda el ítem completo y no un mapa de
-/// código a texto: cada pantalla lee los campos que necesita.
+/// `accion`, `cuadrantes` trae `numero` y no trae `codigo`, `cuadrante-regiones` trae `geometria`), por eso se
+/// guarda el ítem completo y no un mapa de código a texto: cada pantalla lee los campos que necesita.
 library;
 
 /// Nombres de los catálogos tal como los sirve la API y como se usan de clave.
@@ -15,9 +15,23 @@ abstract final class Catalogo {
   static const tamanosDano = 'tamanos-dano';
   static const nivelesSeveridad = 'niveles-severidad';
   static const vistasFoto = 'vistas-foto';
+  /// Las piezas numeradas del vehículo. No traen `codigo`: la clave es `numero` más el lado. Cada una trae
+  /// `lleva_lado` y un arreglo `zonas` con una entrada por lado (`lado`, `nombre_completo`, `aiag_area`), y de ahí
+  /// salen las 80 zonas del dibujo de daños.
   static const cuadrantes = 'cuadrantes';
-  static const cuadranteVistas = 'cuadrante-vistas';
+
+  /// Dibujo de daños: los paneles (con `imagen_url`) y el polígono de cada zona en cada panel. `cuadrante-vistas`
+  /// ya no existe en la API (responde 404); lo reemplazan estos dos.
+  static const panelesDano = 'paneles-dano';
+  static const cuadranteRegiones = 'cuadrante-regiones';
+
+  /// Tipos de extra: `barras_techo`, `volco`, `platon` y `otro`. Los administra Calidad. Sin ellos, la captura ofrece
+  /// solo «Otro».
+  static const tiposExtra = 'tipos-extra';
   static const clientes = 'clientes';
+
+  /// Por qué no hay inspector en un cargue: `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto).
+  static const motivosSinInspector = 'motivos-sin-inspector';
 }
 
 /// Catálogos que hoy la API sirve iguales para todos, pero que podría pasar a filtrar por el cliente del usuario.
@@ -33,7 +47,8 @@ class ValorCatalogo {
 
   String get id => campos['id'] as String? ?? '';
 
-  /// Clave estable del valor (lo que viaja en el resto de la API). `cuadrantes` y `cuadrante-vistas` no la tienen.
+  /// Clave estable del valor (lo que viaja en el resto de la API). Las zonas numeradas de `cuadrantes` y las
+  /// `cuadrante-regiones` no la tienen.
   String? get codigo => campos['codigo'] as String?;
 
   /// Etiqueta para mostrar. Puede cambiar; nunca se usa como clave.
@@ -64,7 +79,7 @@ class Catalogos {
         _porNombre = porNombre,
         _porCodigo = {
           for (final entrada in porNombre.entries)
-            // Los valores sin código (cuadrantes, cuadrante-vistas) quedan fuera del índice: no se buscan así.
+            // Los valores sin código (cuadrantes numerados, cuadrante-regiones) quedan fuera del índice: no se buscan así.
             entrada.key: {for (final valor in entrada.value) ?valor.codigo: valor},
         };
 
@@ -118,7 +133,7 @@ class Catalogos {
   List<ValorCatalogo> opciones(String catalogo) => _ordenados(todos(catalogo).where((v) => v.activo));
 
   /// Opciones que además sirven como respuesta: las que tienen `codigo`, que es lo que se guarda en un hallazgo.
-  /// `cuadrantes` y `cuadrante-vistas` no lo traen, y sin esto dos valores sin código se tratarían como el mismo.
+  /// Los cuadrantes numerados y las regiones no lo traen, y sin esto dos valores sin código se tratarían como el mismo.
   List<ValorCatalogo> seleccionables(String catalogo) => [...opciones(catalogo).where((v) => v.codigo != null)];
 
   /// Todos los valores, activos e inactivos. Es lo que hay que usar para dibujar informes viejos: un hallazgo
