@@ -67,7 +67,8 @@ public record HallazgoDto(
     DateTimeOffset? RevisadoAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    bool SinCalificar = false);
+    bool SinCalificar = false,
+    Guid? ExtraId = null);
 
 /// <summary>El hallazgo recien guardado junto con la foto propia que se guardo con el.</summary>
 public sealed record HallazgoCreadoDto : HallazgoDto
@@ -162,7 +163,11 @@ public sealed record ExtraDto(
     string? Observacion,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<EvidenciaDto> Fotos);
+    IReadOnlyList<EvidenciaDto> Fotos,
+    ExtraDanoDto? Dano = null);
+
+/// <summary>El dano de un extra: el hallazgo que nacio de el (<c>HallazgoId</c>) con su clase, su tamano y su nivel de severidad.</summary>
+public sealed record ExtraDanoDto(Guid HallazgoId, string ClaseDano, string TamanoDano, string? NivelSeveridad);
 
 /// <summary>
 /// Las firmas dibujadas no se exponen en los listados. <c>Firmada</c> es true cuando estan las dos firmas (tambien si fue con reservas);

@@ -97,4 +97,42 @@ public class InspeccionExtraTests
         Assert.Equal("barras_techo", tipo.Codigo);
         Assert.Equal("Barras de techo", tipo.Nombre);
     }
+
+    // ------------------------------------------------------------------------------------ dano de un extra (S7-HU-04)
+
+    [Fact]
+    public void El_dano_de_un_extra_es_un_hallazgo_del_inspector_sin_zona_con_el_nombre_del_extra_como_parte()
+    {
+        var inspeccion = Guid.NewGuid();
+        var extra = Guid.NewGuid();
+
+        var h = clsHallazgo.CrearDeExtra(inspeccion, extra, "Platón", "golpe", "5_10cm", "v3", new DateTimeOffset(2026, 11, 3, 12, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(extra, h.ExtraId);
+        Assert.Null(h.ZonaId);
+        Assert.Equal("Platón", h.ParteVehiculo);
+        Assert.Equal("golpe", h.ClaseDano);
+        Assert.Equal("5_10cm", h.TamanoDano);
+        Assert.Equal("v3", h.NivelSeveridad);
+        Assert.Equal(clsOrigenHallazgo.INSPECTOR, h.Origen);
+        Assert.False(h.EsPreexistente);
+    }
+
+    [Theory]
+    [InlineData(null, "5_10cm", "v3")]
+    [InlineData("golpe", null, "v3")]
+    [InlineData("golpe", "5_10cm", null)]
+    [InlineData("golpe", "5_10cm", "  ")]
+    public void El_dano_de_un_extra_exige_clase_tamano_y_nivel(string? clase, string? tamano, string? nivel)
+    {
+        Assert.ThrowsAny<clsValidacionException>(() => clsHallazgo.CrearDeExtra(Guid.NewGuid(), Guid.NewGuid(), "Platón", clase!, tamano!, nivel, DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public void Un_nombre_de_extra_muy_largo_se_recorta_a_la_parte_del_vehiculo()
+    {
+        var h = clsHallazgo.CrearDeExtra(Guid.NewGuid(), Guid.NewGuid(), new string('x', 300), "golpe", "5_10cm", "v1", DateTimeOffset.UtcNow);
+
+        Assert.Equal(200, h.ParteVehiculo!.Length);
+    }
 }

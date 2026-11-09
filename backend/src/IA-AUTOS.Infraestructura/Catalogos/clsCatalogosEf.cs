@@ -108,6 +108,39 @@ internal sealed class clsCatalogoSimple<T>(
 }
 
 /// <summary>
+/// Los tipos de extra del vehiculo. El tipo «otro» esta protegido: es el que describe un extra con texto libre y no tiene reemplazo, asi que no se inactiva, no se borra y no cambia de nombre (409).
+/// </summary>
+internal sealed class clsCatalogoTiposExtra(clsAppDbContext contexto, IReloj reloj) : clsCatalogoEf<clsTipoExtra>(contexto, reloj, clsNombresCatalogo.TIPOS_EXTRA)
+{
+    protected override IReadOnlyList<string> CamposPermitidos => clsCamposCatalogo.COMUNES;
+
+    protected override ValorCatalogo Mapear(clsTipoExtra entidad) => Comunes(entidad);
+
+    protected override Task<clsTipoExtra> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct) =>
+        Task.FromResult(clsTipoExtra.Crear(campos.Texto("codigo"), campos.Texto("nombre"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora));
+
+    protected override Task AplicarAsync(clsTipoExtra entidad, clsCamposCatalogo campos, CancellationToken ct)
+    {
+        if (entidad.Codigo == clsTipoExtra.OTRO && (!entidad.Activo || !string.Equals(entidad.Nombre, clsTipoExtra.NOMBRE_OTRO, StringComparison.Ordinal)))
+        {
+            throw new clsConflictoException("El tipo «otro» está protegido: no se puede inactivar ni cambiar de nombre");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public override async Task EliminarAsync(Guid id, CancellationToken ct = default)
+    {
+        if (await Conjunto.AnyAsync(t => t.Id == id && t.Codigo == clsTipoExtra.OTRO, ct))
+        {
+            throw new clsConflictoException("El tipo «otro» está protegido: no se puede borrar");
+        }
+
+        await base.EliminarAsync(id, ct);
+    }
+}
+
+/// <summary>
 /// Los estados de las ordenes Sofasa: codigo (el <c>StatusCode</c> real), nombre (la etiqueta), orden y activo. Un estado que alguna orden usa no se borra (409): se inactiva.
 /// </summary>
 internal sealed class clsCatalogoEstadosSofasa(clsAppDbContext contexto, IReloj reloj) : clsCatalogoEf<clsEstadoSofasa>(contexto, reloj, clsNombresCatalogo.ESTADOS_SOFASA)

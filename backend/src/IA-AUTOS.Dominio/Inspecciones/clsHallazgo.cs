@@ -63,8 +63,11 @@ public sealed class clsHallazgo : clsEntidadBase
     /// <summary>Solo en los hallazgos historicos.</summary>
     public clsCoordsDiagrama? CoordsDiagrama { get; private set; }
 
-    /// <summary>La zona del dano; nula solo en una novedad del conductor sin revisar o en un hallazgo historico aun sin ubicar.</summary>
+    /// <summary>La zona del dano; nula solo en una novedad del conductor sin revisar, en un hallazgo historico aun sin ubicar o en el dano de un extra (<see cref="ExtraId"/>).</summary>
     public Guid? ZonaId { get; private set; }
+
+    /// <summary>El extra del vehiculo del que nace este hallazgo (un extra marcado como danado); nulo en los demas. El dano de un extra no tiene zona: <see cref="ParteVehiculo"/> trae el nombre del extra.</summary>
+    public Guid? ExtraId { get; private set; }
 
     public string? TipoNovedad { get; private set; }
 
@@ -161,6 +164,27 @@ public sealed class clsHallazgo : clsEntidadBase
             EsPreexistente = hallazgoOrigenId is not null,
             HallazgoOrigenId = hallazgoOrigenId,
             ConfirmadoPor = hallazgoOrigenId is not null ? confirmadoPor : null,
+        };
+        hallazgo.Inicializar(ahora);
+        return hallazgo;
+    }
+
+    /// <summary>
+    /// El hallazgo que nace de un extra marcado como danado: su clase, su tamano y su nivel de severidad (los tres obligatorios), sin zona del dibujo y de origen inspector. <paramref name="nombreDelExtra"/> es como se
+    /// muestra el extra («Platon») y queda como la parte del vehiculo, para que las pantallas no lean la ausencia de zona como un error. Cuenta como cualquier otro hallazgo.
+    /// </summary>
+    public static clsHallazgo CrearDeExtra(Guid inspeccionId, Guid extraId, string nombreDelExtra, string claseDano, string tamanoDano, string? nivelSeveridad, DateTimeOffset ahora)
+    {
+        var nombre = clsValidador.Requerido(nombreDelExtra, "El nombre del extra es requerido");
+        var hallazgo = new clsHallazgo
+        {
+            InspeccionId = inspeccionId,
+            ExtraId = extraId,
+            ParteVehiculo = nombre.Length <= 200 ? nombre : nombre[..200],
+            ClaseDano = clsValidador.Requerido(claseDano, "clase_dano es requerida"),
+            TamanoDano = clsValidador.Requerido(tamanoDano, "tamano_dano es requerido"),
+            NivelSeveridad = clsValidador.Opcional(nivelSeveridad) ?? throw clsErroresCampos.De("nivel_severidad", "El nivel de severidad es requerido"),
+            Origen = clsOrigenHallazgo.INSPECTOR,
         };
         hallazgo.Inicializar(ahora);
         return hallazgo;

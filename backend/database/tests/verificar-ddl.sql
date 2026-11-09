@@ -41,11 +41,11 @@ BEGIN
         DELETE FROM dbo.tblHallazgoSeguimiento WHERE HallazgoId IN (SELECT h.Id FROM dbo.tblHallazgos h WHERE h.InspeccionId IN (SELECT Id FROM @insp));
         DELETE FROM dbo.tblTransferenciasCustodia WHERE InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblEvidencias WHERE InspeccionId IN (SELECT Id FROM @insp);
-        DELETE FROM dbo.tblInspeccionExtras WHERE InspeccionId IN (SELECT Id FROM @insp);
         -- Las unidades que "no salen" apuntan a un hallazgo, y un hallazgo preexistente apunta a su origen: se quitan primero.
         DELETE FROM dbo.tblViajeVehiculos WHERE VehiculoId = @v;
         DELETE FROM dbo.tblHallazgos WHERE EsPreexistente = 1 AND InspeccionId IN (SELECT Id FROM @insp);
         DELETE FROM dbo.tblHallazgos WHERE InspeccionId IN (SELECT Id FROM @insp);
+        DELETE FROM dbo.tblInspeccionExtras WHERE InspeccionId IN (SELECT Id FROM @insp);
         -- Las versiones se borran de la mas nueva a la mas antigua: una version no se puede quitar mientras otra la corrige.
         WHILE EXISTS (SELECT 1 FROM dbo.tblInspecciones WHERE Id IN (SELECT Id FROM @insp))
             DELETE FROM dbo.tblInspecciones
@@ -731,8 +731,16 @@ INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, Recibe
 INSERT #r SELECT N'Transferencia: quien recibe puede ser una persona externa, sin usuario',
     CASE WHEN EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @bX AND RecibeUsuarioId IS NULL AND RecibeExternoNombre = N'Ana Restrepo' AND RecibeExternoCedula = '1 020 304 050') THEN 1 ELSE 0 END, NULL;
 
+-- Dano en un extra: un extra en el borrador de @bX y los casos del hallazgo que nace de el.
+DECLARE @exD uniqueidentifier = NEWID();
+INSERT dbo.tblInspeccionExtras (Id, InspeccionId, Tipo) VALUES (@exD, @bX, 'platon');
+
 DECLARE @casosNotif TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
 INSERT @casosNotif VALUES
+ (N'CHECK el dano de un extra es del inspector', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ParteVehiculo,ClaseDano,TamanoDano,NivelSeveridad,Origen,ExtraId) VALUES (NEWID(),''' + CAST(@bX AS nvarchar(36)) + N''',N''Platon'',''golpe'',''5_10cm'',''v3'',''conductor'',''' + CAST(@exD AS nvarchar(36)) + N''')', 547),
+ (N'Hallazgo: el dano de un extra se guarda sin zona', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ParteVehiculo,ClaseDano,TamanoDano,NivelSeveridad,ExtraId) VALUES (NEWID(),''' + CAST(@bX AS nvarchar(36)) + N''',N''Platon'',''golpe'',''5_10cm'',''v3'',''' + CAST(@exD AS nvarchar(36)) + N''')', 0),
+ (N'UNIQUE un extra tiene a lo sumo un hallazgo', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ParteVehiculo,ClaseDano,TamanoDano,NivelSeveridad,ExtraId) VALUES (NEWID(),''' + CAST(@bX AS nvarchar(36)) + N''',N''Platon'',''golpe'',''1_5cm'',''v1'',''' + CAST(@exD AS nvarchar(36)) + N''')', 2601),
+ (N'No se borra un extra con dano (la llave foranea lo impide)', N'DELETE FROM dbo.tblInspeccionExtras WHERE Id = ''' + CAST(@exD AS nvarchar(36)) + N'''', 547),
  (N'CHECK quien recibe es un usuario o una persona externa, no las dos', N'UPDATE dbo.tblTransferenciasCustodia SET RecibeUsuarioId = ''' + CAST(@u2 AS nvarchar(36)) + N''' WHERE InspeccionId = ''' + CAST(@bX AS nvarchar(36)) + N'''', 547),
  (N'CHECK el nombre de la persona externa va con su cedula', N'UPDATE dbo.tblTransferenciasCustodia SET RecibeExternoCedula = NULL WHERE InspeccionId = ''' + CAST(@bX AS nvarchar(36)) + N'''', 547),
  (N'CHECK la cedula de la persona externa no va vacia', N'UPDATE dbo.tblTransferenciasCustodia SET RecibeExternoCedula = '''' WHERE InspeccionId = ''' + CAST(@bX AS nvarchar(36)) + N'''', 547),
@@ -792,18 +800,18 @@ INSERT #r SELECT N'Parametros de alertas: niveles criticos v1_plus,v1 (lista), u
           AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'captura_incompleta_minutos' AND Valor = N'30' AND Tipo = 'numero') = 1
           AND (SELECT COUNT(*) FROM dbo.tblParametros WHERE Clave = 'transferencia_pendiente_minutos' AND Valor = N'240' AND Tipo = 'numero') = 1 THEN 1 ELSE 0 END, NULL;
 -- Un hallazgo del inspector en la llegada del Cargue de la unidad 5 y una novedad del conductor sin revisar en la salida de su Transporte (ya creada arriba): mientras las inspecciones estan en
--- borrador la vista no trae ninguno; ya cerradas, trae solo el hallazgo del inspector hasta que la novedad se revisa.
+-- borrador la vista no trae ninguno; ya cerradas, trae los dos (la novedad sin revisar es dano sin calificar y cuenta).
 DECLARE @hvA uniqueidentifier = NEWID(), @hvB uniqueidentifier = NEWID();
 INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) VALUES (@hvA, @l5, @zonaDer7, 'golpe', '5_10cm', 'v2');
 INSERT dbo.tblHallazgos (Id, InspeccionId, TamanoDano, Origen, TipoNovedad) VALUES (@hvB, @st5, '5_10cm', 'conductor', 'golpe');
 INSERT #r SELECT N'vwHallazgosVentanaUmbral: una inspeccion en borrador no trae hallazgos',
     CASE WHEN NOT EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral WHERE HallazgoId IN (@hvA, @hvB)) THEN 1 ELSE 0 END, NULL;
 UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id IN (@l5, @st5);
-INSERT #r SELECT N'vwHallazgosVentanaUmbral: trae el hallazgo con su cliente, zona, proceso y fecha de cierre y excluye la novedad del conductor sin revisar',
+INSERT #r SELECT N'vwHallazgosVentanaUmbral: trae el hallazgo con su cliente, zona, proceso y fecha de cierre e incluye la novedad del conductor sin revisar (dano sin calificar)',
     CASE WHEN EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral w WHERE w.HallazgoId = @hvA AND w.InspeccionId = @l5 AND w.ViajeId = @vj5 AND w.VehiculoId = @v5
                        AND w.ClienteId = (SELECT ClienteId FROM dbo.tblVehiculos WHERE Id = @v5) AND w.ZonaId = @zonaDer7 AND w.Numero = 7 AND w.Lado = 'derecho'
                        AND w.Proceso = 'cargue' AND w.Fecha IS NOT NULL)
-          AND NOT EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral WHERE HallazgoId = @hvB) THEN 1 ELSE 0 END, NULL;
+          AND EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral WHERE HallazgoId = @hvB AND ZonaId IS NULL AND Numero IS NULL AND Proceso = 'transporte') THEN 1 ELSE 0 END, NULL;
 UPDATE dbo.tblHallazgos SET ClaseDano = 'golpe', NivelSeveridad = 'v1', ZonaId = @zonaDer7, RevisadoAt = SYSDATETIMEOFFSET(), RevisadoPor = @u1 WHERE Id = @hvB;
 INSERT #r SELECT N'vwHallazgosVentanaUmbral: la novedad revisada entra a la vista con su proceso',
     CASE WHEN EXISTS (SELECT 1 FROM dbo.vwHallazgosVentanaUmbral w WHERE w.HallazgoId = @hvB AND w.Proceso = 'transporte') THEN 1 ELSE 0 END, NULL;

@@ -81,6 +81,9 @@ internal sealed class clsConfiguracionHallazgo : IEntityTypeConfiguration<clsHal
         builder.Property(h => h.EstadoSeguimiento).HasColumnType("varchar(15)").IsRequired();
         // La revision solo se hace una vez: si dos usuarios revisan a la vez, el cambio del segundo no encuentra el hallazgo sin revisar y se rechaza.
         builder.Property(h => h.RevisadoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA).IsConcurrencyToken();
+        builder.HasOne<clsInspeccionExtra>().WithMany().HasForeignKey(h => h.ExtraId)
+            .HasConstraintName("FK_tblHallazgos_Extra").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(h => h.ExtraId).IsUnique().HasFilter("[ExtraId] IS NOT NULL").HasDatabaseName("UQ_tblHallazgos_Extra");
         builder.HasOne<clsZonaDano>().WithMany().HasForeignKey(h => h.ZonaId)
             .HasConstraintName("FK_tblHallazgos_Zona").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsNivelSeveridad>().WithMany().HasForeignKey(h => h.NivelSeveridad).HasPrincipalKey(n => n.Codigo)

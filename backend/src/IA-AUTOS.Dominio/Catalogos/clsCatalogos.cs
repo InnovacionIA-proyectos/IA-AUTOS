@@ -67,6 +67,9 @@ public sealed class clsTipoExtra : clsCatalogoCodificado
     /// <summary>El codigo del tipo que se describe con un texto libre.</summary>
     public const string OTRO = "otro";
 
+    /// <summary>El nombre del tipo «otro»: lo ven las pantallas y los extras («Otro: portabicicletas») y no se cambia.</summary>
+    public const string NOMBRE_OTRO = "Otro";
+
     private clsTipoExtra()
     {
     }
