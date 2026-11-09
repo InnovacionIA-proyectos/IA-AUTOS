@@ -14,5 +14,11 @@ internal sealed class clsRepositorioReclamos(clsAppDbContext contexto) : IReclam
     public async Task<IReadOnlyList<Guid>> LugaresDelInspectorAsync(Guid usuarioId, CancellationToken ct = default) =>
         await contexto.InspectorLugares.AsNoTracking().Where(p => p.UsuarioId == usuarioId).Select(p => p.LugarId).ToListAsync(ct);
 
+    public async Task<bool> LugarTieneInspectoresAsync(Guid lugarId, CancellationToken ct = default) =>
+        await (from p in contexto.InspectorLugares.AsNoTracking()
+               join u in contexto.Usuarios.AsNoTracking() on p.UsuarioId equals u.Id
+               where p.LugarId == lugarId && u.Activo
+               select p.LugarId).AnyAsync(ct);
+
     public void Agregar(clsReclamo reclamo) => contexto.Reclamos.Add(reclamo);
 }

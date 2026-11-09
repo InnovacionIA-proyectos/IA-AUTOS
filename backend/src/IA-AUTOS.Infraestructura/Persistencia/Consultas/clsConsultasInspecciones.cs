@@ -188,7 +188,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                                    join ut in contexto.Usuarios on t.TestigoUsuarioId equals ut.Id into testigos
                                    from ut in testigos.DefaultIfEmpty()
                                    where t.InspeccionId == id
-                                   select new { Transferencia = t, EntregaNombre = (string?)ue.Nombre, RecibeNombre = (string?)ur.Nombre, TestigoNombre = (string?)ut.Nombre })
+                                   select new { Transferencia = t, EntregaNombre = (string?)ue.Nombre, RecibeNombre = (string?)ur.Nombre ?? t.RecibeExternoNombre, TestigoNombre = (string?)ut.Nombre })
             .FirstOrDefaultAsync(ct);
 
         return new InformeDetalleDto(
@@ -237,7 +237,8 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                     transferencia.Transferencia.TestigoUsuarioId,
                     transferencia.TestigoNombre,
                     transferencia.Transferencia.EvidenciaConstanciaId,
-                    await consultaNotas.ListarAsync(clsEntidadNota.TRANSFERENCIA, transferencia.Transferencia.Id, ct)),
+                    await consultaNotas.ListarAsync(clsEntidadNota.TRANSFERENCIA, transferencia.Transferencia.Id, ct),
+                    transferencia.Transferencia.RecibeExternoCedula),
             insp.IniciadaAt,
             insp.CerradaAt,
             insp.Version,

@@ -70,7 +70,7 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
     /// <summary>
     /// El viaje MT-4512: tres unidades al Concesionario Autonorte (Bogota) y dos al Concesionario Cali Sur (Cali), ya en curso, cada una con la inspeccion de llegada del Descargue cerrada (ahi se firma la entrega).
     /// </summary>
-    private async Task<Escenario> EscenarioAsync(bool conLlegadas = true)
+    private async Task<Escenario> EscenarioAsync(bool conLlegadas = true, bool conInspector = true)
     {
         var conductor = await SesionAsync("conductor@ejemplo.com", clsRol.CONDUCTOR);
         var inspector = await SesionAsync("inspector@ejemplo.com", clsRol.INSPECTOR);
@@ -84,7 +84,7 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
             await Sembrador.VehiculoAsync(vin);
         }
 
-        var creado = await CrearViajeAsync(coordinador, "MT-4512", [.. Unidades(autonorte, vinesBogota), .. Unidades(caliSur, vinesCali)], conductor, inspector);
+        var creado = await CrearViajeAsync(coordinador, "MT-4512", [.. Unidades(autonorte, vinesBogota), .. Unidades(caliSur, vinesCali)], conductor, conInspector ? inspector : null);
         Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
         var viaje = (await JsonAsync(creado)).GetProperty("id").GetGuid();
         Assert.Equal(HttpStatusCode.OK, (await Como(coordinador).PatchAsync($"/api/viajes/{viaje}/estado", Cuerpo(new { estado = "en_curso" }))).StatusCode);
@@ -463,5 +463,224 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
         Assert.Equal("en_curso", await Sembrador.EscalarAsync("SELECT Estado FROM dbo.tblViajes WHERE Id = @v", ("@v", e.Viaje)));
         var entregas = await JsonAsync(await Como(e.Conductor).GetAsync($"/api/viajes/{e.Viaje}/entregas"));
         Assert.Equal(1, entregas.GetProperty("unidades_sin_destino").GetInt32());
+    }
+
+    // ------------------------------------------------------------- S7-HU-02: firma quien de verdad recibe (firmante externo)
+
+    private Task<HttpResponseMessage> FirmarConExternoAsync(Sesion quien, Guid viaje, Guid lugar, object cuerpo) =>
+        Como(quien).PostAsync($"/api/viajes/{viaje}/entregas/{lugar}/firma", Cuerpo(cuerpo));
+
+    private static Dictionary<string, string> ErroresDeCampos(JsonElement respuesta) =>
+        respuesta.GetProperty("details").GetProperty("fieldErrors").EnumerateObject().ToDictionary(p => p.Name, p => p.Value[0].GetString()!);
+
+    [Fact]
+    public async Task Un_punto_sin_inspector_se_firma_con_el_nombre_la_cedula_y_la_firma_de_quien_recibe_y_queda_cerrado_y_auditado()
+    {
+        var e = await EscenarioAsync(conInspector: false);
+
+        var r = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.Autonorte, new { firma = "firma-conductor", recibe_nombre = "Ana Restrepo", recibe_cedula = "1 020 304 050", firma_recibe = "firma-ana" });
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var punto = await JsonAsync(r);
+        Assert.True(punto.GetProperty("entregada").GetBoolean());
+        Assert.All(punto.GetProperty("unidades").EnumerateArray(), u =>
+        {
+            Assert.Equal("cerrada", u.GetProperty("estado").GetString());
+            Assert.Equal("firmada", u.GetProperty("tipo_cierre").GetString());
+            Assert.Equal("Ana Restrepo", u.GetProperty("recibe_externo_nombre").GetString());
+            Assert.Equal("1 020 304 050", u.GetProperty("recibe_externo_cedula").GetString());
+            Assert.Equal(JsonValueKind.Null, u.GetProperty("motivo_cierre").ValueKind);
+            Assert.NotEqual(JsonValueKind.Null, u.GetProperty("entrega_firmada_at").ValueKind);
+            Assert.NotEqual(JsonValueKind.Null, u.GetProperty("recibe_firmada_at").ValueKind);
+        });
+        foreach (var vin in new[] { "VIN-ENT-B1", "VIN-ENT-B2", "VIN-ENT-B3" })
+        {
+            Assert.Equal("firmada", await TransferenciaAsync(e.Llegadas[vin], "TipoCierre"));
+            Assert.Null(await TransferenciaAsync(e.Llegadas[vin], "RecibeUsuarioId"));
+            Assert.Equal("Ana Restrepo", await TransferenciaAsync(e.Llegadas[vin], "RecibeExternoNombre"));
+            Assert.Equal("1 020 304 050", await TransferenciaAsync(e.Llegadas[vin], "RecibeExternoCedula"));
+            Assert.Equal("firma-conductor", await TransferenciaAsync(e.Llegadas[vin], "FirmaEntrega"));
+            Assert.Equal("firma-ana", await TransferenciaAsync(e.Llegadas[vin], "FirmaRecibe"));
+            Assert.Equal(e.Conductor.UsuarioId, await TransferenciaAsync(e.Llegadas[vin], "EntregaUsuarioId"));
+        }
+
+        // El detalle de la entrega muestra quien recibio (ESC-01) y el punto sigue leyendose igual.
+        var detalle = await JsonAsync(await Como(e.Conductor).GetAsync($"/api/viajes/{e.Viaje}/entregas/{e.Autonorte}"));
+        Assert.All(detalle.GetProperty("unidades").EnumerateArray(), u => Assert.Equal("Ana Restrepo", u.GetProperty("recibe_externo_nombre").GetString()));
+
+        // CA-6: quien recibio, cuando y en que punto, una entrada de auditoria por unidad, hecha por el conductor.
+        Assert.Equal(3, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'transferencia.firmar_externo' AND ViajeId = @v AND UsuarioId = @u", ("@v", e.Viaje), ("@u", e.Conductor.UsuarioId)));
+        Assert.Equal(
+            3,
+            await Sembrador.ContarAsync(
+                "SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'transferencia.firmar_externo' AND Detalle LIKE N'%Ana Restrepo%' AND Detalle LIKE N'%1 020 304 050%' AND Detalle LIKE N'%Concesionario Autonorte%' AND Detalle LIKE N'%\"punto\"%'"));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'transferencia.firmar' AND ViajeId = @v", ("@v", e.Viaje)));
+
+        // La firma externa no manda ningun aviso (el aviso es solo del cierre con una sola firma) y la cedula no sale en ninguno.
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Mensaje LIKE N'%1 020 304 050%' OR Titulo LIKE N'%1 020 304 050%' OR Datos LIKE N'%1 020 304 050%'"));
+
+        // El otro punto tambien lo firma otra persona externa y entonces el viaje se finaliza.
+        var cali = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.CaliSur, new { firma = "firma-conductor", recibe_nombre = "Luis Mora", recibe_cedula = "79.123.456", firma_recibe = "firma-luis" });
+        Assert.Equal(HttpStatusCode.OK, cali.StatusCode);
+        Assert.Equal("finalizado", (await JsonAsync(cali)).GetProperty("viaje_estado").GetString());
+    }
+
+    [Fact]
+    public async Task Faltando_el_nombre_la_cedula_o_la_firma_de_quien_recibe_la_entrega_se_rechaza_nombrando_lo_que_falta_y_no_guarda_nada()
+    {
+        var e = await EscenarioAsync(conInspector: false);
+
+        var nada = await FirmarAsync(e.Conductor, e.Viaje, e.Autonorte);
+        var sinCedula = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.Autonorte, new { firma = "f", recibe_nombre = "Ana Restrepo", firma_recibe = "fa" });
+        var sinNombre = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.Autonorte, new { firma = "f", recibe_cedula = "1020304050", firma_recibe = "fa" });
+        var sinFirmaExterna = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.Autonorte, new { firma = "f", recibe_nombre = "Ana Restrepo", recibe_cedula = "1020304050" });
+        var nombreVacio = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.Autonorte, new { firma = "f", recibe_nombre = "   ", recibe_cedula = "1020304050", firma_recibe = "fa" });
+        var cedulaSinNumeros = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.Autonorte, new { firma = "f", recibe_nombre = "Ana Restrepo", recibe_cedula = "sin-numero", firma_recibe = "fa" });
+        var cedulaLarga = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.Autonorte, new { firma = "f", recibe_nombre = "Ana Restrepo", recibe_cedula = new string('1', 31), firma_recibe = "fa" });
+        var conUsuario = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.Autonorte, new { firma = "f", recibe_usuario_id = e.Coordinador.UsuarioId, recibe_nombre = "Ana Restrepo", recibe_cedula = "1020304050", firma_recibe = "fa" });
+
+        foreach (var respuesta in new[] { nada, sinCedula, sinNombre, sinFirmaExterna, nombreVacio, cedulaSinNumeros, cedulaLarga, conUsuario })
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, respuesta.StatusCode);
+        }
+
+        // Sin nada de quien recibe (el punto no tiene inspector ni el viaje) se nombra lo que falta: nombre, cedula y firma.
+        var errNada = ErroresDeCampos(await JsonAsync(nada));
+        var errSinCedula = ErroresDeCampos(await JsonAsync(sinCedula));
+        var errSinNombre = ErroresDeCampos(await JsonAsync(sinNombre));
+        var errSinFirma = ErroresDeCampos(await JsonAsync(sinFirmaExterna));
+        Assert.Equal(["firma_recibe", "recibe_cedula", "recibe_nombre"], errNada.Keys.Order().ToList());
+        Assert.Equal(["recibe_cedula"], errSinCedula.Keys.ToList());
+        Assert.Equal("La cédula de quien recibe es obligatoria", errSinCedula["recibe_cedula"]);
+        Assert.Equal(["recibe_nombre"], errSinNombre.Keys.ToList());
+        Assert.Equal(["firma_recibe"], errSinFirma.Keys.ToList());
+        Assert.Equal("La firma de quien recibe es obligatoria", errSinFirma["firma_recibe"]);
+        Assert.Equal(["recibe_nombre"], ErroresDeCampos(await JsonAsync(nombreVacio)).Keys.ToList());
+        Assert.Equal(["recibe_cedula"], ErroresDeCampos(await JsonAsync(cedulaSinNumeros)).Keys.ToList());
+        Assert.Equal(["recibe_cedula"], ErroresDeCampos(await JsonAsync(cedulaLarga)).Keys.ToList());
+        Assert.Equal(["recibe_usuario_id"], ErroresDeCampos(await JsonAsync(conUsuario)).Keys.ToList());
+
+        // Ninguna dejo nada guardado ni cerrado.
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia"));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion LIKE 'transferencia.%'"));
+    }
+
+    [Fact]
+    public async Task Un_punto_con_inspector_asignado_se_firma_entre_el_conductor_y_ese_inspector_como_hasta_ahora_y_rechaza_a_una_persona_externa()
+    {
+        var e = await EscenarioAsync();
+        await Sembrador.EjecutarAsync("INSERT dbo.tblInspectorLugares (Id, UsuarioId, LugarId) VALUES (NEWID(), @u, @l)", ("@u", e.Inspector.UsuarioId), ("@l", e.Autonorte));
+
+        // ESC-02: no se piden nombre ni cedula de nadie mas; si llegan, se rechazan.
+        var conExterno = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.Autonorte, new { firma = "f", recibe_nombre = "Ana Restrepo", recibe_cedula = "1020304050", firma_recibe = "fa" });
+        var soloNombre = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.Autonorte, new { firma = "f", recibe_nombre = "Ana Restrepo" });
+        Assert.Equal(HttpStatusCode.BadRequest, conExterno.StatusCode);
+        var errExterno = ErroresDeCampos(await JsonAsync(conExterno));
+        Assert.Equal(["firma_recibe", "recibe_cedula", "recibe_nombre"], errExterno.Keys.Order().ToList());
+        Assert.StartsWith("El punto de entrega tiene inspector asignado", errExterno["recibe_nombre"]);
+        Assert.Equal(["recibe_nombre"], ErroresDeCampos(await JsonAsync(soloNombre)).Keys.ToList());
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia"));
+
+        Assert.Equal(HttpStatusCode.OK, (await FirmarAsync(e.Conductor, e.Viaje, e.Autonorte)).StatusCode);
+        var cierre = await FirmarAsync(e.Inspector, e.Viaje, e.Autonorte);
+
+        Assert.Equal(HttpStatusCode.OK, cierre.StatusCode);
+        // CA-8: lo cerrado se lee igual que antes: sin persona externa ni motivo.
+        Assert.All((await JsonAsync(cierre)).GetProperty("unidades").EnumerateArray(), u =>
+        {
+            Assert.Equal("firmada", u.GetProperty("tipo_cierre").GetString());
+            Assert.Equal(JsonValueKind.Null, u.GetProperty("recibe_externo_nombre").ValueKind);
+            Assert.Equal(JsonValueKind.Null, u.GetProperty("recibe_externo_cedula").ValueKind);
+            Assert.Equal(JsonValueKind.Null, u.GetProperty("motivo_cierre").ValueKind);
+        });
+        Assert.Equal(e.Inspector.UsuarioId, await TransferenciaAsync(e.Llegadas["VIN-ENT-B1"], "RecibeUsuarioId"));
+        Assert.Null(await TransferenciaAsync(e.Llegadas["VIN-ENT-B1"], "RecibeExternoNombre"));
+        Assert.Equal(6, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'transferencia.firmar' AND ViajeId = @v", ("@v", e.Viaje)));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'transferencia.firmar_externo'"));
+    }
+
+    [Fact]
+    public async Task Solo_quien_entrega_registra_a_la_persona_externa_que_recibe()
+    {
+        var e = await EscenarioAsync();
+
+        // El inspector del viaje no entrega: en un punto sin inspector asignado no puede firmar por la persona externa.
+        var comoInspector = await FirmarConExternoAsync(e.Inspector, e.Viaje, e.CaliSur, new { firma = "f", recibe_nombre = "Ana Restrepo", recibe_cedula = "1020304050", firma_recibe = "fa" });
+        var comoCoordinador = await FirmarConExternoAsync(e.Coordinador, e.Viaje, e.CaliSur, new { firma = "f", recibe_nombre = "Ana Restrepo", recibe_cedula = "1020304050", firma_recibe = "fa" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, comoInspector.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, comoCoordinador.StatusCode);
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia"));
+    }
+
+    [Fact]
+    public async Task El_detalle_de_la_entrega_trae_el_motivo_del_cierre_con_una_sola_firma_y_lo_deja_vacio_cuando_no_aplica()
+    {
+        var e = await EscenarioAsync(conInspector: false);
+        const string MOTIVO = "El concesionario cerró antes de la llegada";
+
+        var r = await UnaFirmaAsync(e.Conductor, e.Viaje, e.Autonorte, MOTIVO, "firma-conductor");
+
+        // ESC-04: el motivo, y que parte firmo y cual no.
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.All((await JsonAsync(r)).GetProperty("unidades").EnumerateArray(), u =>
+        {
+            Assert.Equal("recibo_sin_entrega", u.GetProperty("tipo_cierre").GetString());
+            Assert.Equal(MOTIVO, u.GetProperty("motivo_cierre").GetString());
+            Assert.Equal("recibe", u.GetProperty("no_firma_parte").GetString());
+            Assert.NotEqual(JsonValueKind.Null, u.GetProperty("entrega_firmada_at").ValueKind);
+            Assert.Equal(JsonValueKind.Null, u.GetProperty("recibe_firmada_at").ValueKind);
+            Assert.Equal(JsonValueKind.Null, u.GetProperty("recibe_externo_nombre").ValueKind);
+        });
+        var leido = await JsonAsync(await Como(e.Coordinador).GetAsync($"/api/viajes/{e.Viaje}/entregas/{e.Autonorte}"));
+        Assert.All(leido.GetProperty("unidades").EnumerateArray(), u => Assert.Equal(MOTIVO, u.GetProperty("motivo_cierre").GetString()));
+
+        // En un punto sin inspector ni quien reciba la transferencia queda sin quien reciba, solo con la firma de quien entrega.
+        Assert.Null(await TransferenciaAsync(e.Llegadas["VIN-ENT-B1"], "RecibeUsuarioId"));
+        Assert.Null(await TransferenciaAsync(e.Llegadas["VIN-ENT-B1"], "RecibeExternoNombre"));
+        Assert.Equal("recibe", await TransferenciaAsync(e.Llegadas["VIN-ENT-B1"], "NoFirmaParte"));
+
+        // Lo que no esta cerrado con una sola firma no trae motivo.
+        var otro = await JsonAsync(await Como(e.Conductor).GetAsync($"/api/viajes/{e.Viaje}/entregas/{e.CaliSur}"));
+        Assert.All(otro.GetProperty("unidades").EnumerateArray(), u => Assert.Equal(JsonValueKind.Null, u.GetProperty("motivo_cierre").ValueKind));
+    }
+
+    [Fact]
+    public async Task El_aviso_de_la_entrega_con_una_sola_firma_lleva_el_lugar_la_parte_que_firmo_y_el_motivo_como_campos_ademas_del_texto()
+    {
+        var e = await EscenarioAsync(conInspector: false);
+        const string MOTIVO = "El concesionario cerró antes de la llegada";
+        Assert.Equal(HttpStatusCode.OK, (await UnaFirmaAsync(e.Conductor, e.Viaje, e.Autonorte, MOTIVO, "firma-conductor")).StatusCode);
+
+        // ESC-05: la bandeja del coordinador trae el aviso con sus datos propios y se filtra por tipo.
+        var bandeja = await JsonAsync(await Como(e.Coordinador).GetAsync("/api/notificaciones?tipo=novedad_proceso"));
+        var aviso = Assert.Single(bandeja.GetProperty("items").EnumerateArray());
+        var datos = aviso.GetProperty("datos");
+        Assert.Equal("Concesionario Autonorte", datos.GetProperty("lugar").GetString());
+        Assert.Equal(e.Autonorte, datos.GetProperty("lugar_id").GetGuid());
+        Assert.Equal("entrega", datos.GetProperty("parte_que_firmo").GetString());
+        Assert.Equal(MOTIVO, datos.GetProperty("motivo").GetString());
+        Assert.Equal(3, datos.GetProperty("unidades").GetInt32());
+        // El texto que ya tenia no se pierde.
+        Assert.Contains("Concesionario Autonorte", aviso.GetProperty("mensaje").GetString());
+        Assert.Contains(MOTIVO, aviso.GetProperty("mensaje").GetString());
+        Assert.StartsWith("Entrega con una sola firma", aviso.GetProperty("titulo").GetString());
+
+        // Un aviso sin campos propios sigue sin ellos.
+        var otras = await JsonAsync(await Como(e.Coordinador).GetAsync("/api/notificaciones"));
+        Assert.All(otras.GetProperty("items").EnumerateArray().Where(n => n.GetProperty("tipo").GetString() != "novedad_proceso"), n => Assert.Equal(JsonValueKind.Null, n.GetProperty("datos").ValueKind));
+    }
+
+    [Fact]
+    public async Task Cuando_firma_solo_quien_recibe_el_aviso_dice_que_la_parte_que_firmo_es_quien_recibe()
+    {
+        var e = await EscenarioAsync();
+        Assert.Equal(HttpStatusCode.OK, (await UnaFirmaAsync(e.Inspector, e.Viaje, e.Autonorte, "El conductor no esta en el punto", "firma-del-inspector")).StatusCode);
+
+        var bandeja = await JsonAsync(await Como(e.Coordinador).GetAsync("/api/notificaciones?tipo=novedad_proceso"));
+
+        var datos = Assert.Single(bandeja.GetProperty("items").EnumerateArray()).GetProperty("datos");
+        Assert.Equal("recibe", datos.GetProperty("parte_que_firmo").GetString());
+        Assert.Equal("El conductor no esta en el punto", datos.GetProperty("motivo").GetString());
     }
 }

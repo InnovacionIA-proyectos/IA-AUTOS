@@ -737,14 +737,37 @@ Cada unidad se entrega en **su** lugar de destino. En cada punto se firma **una 
 de **cada unidad pendiente del punto** (la del Descargue, sobre su inspección de llegada), con la misma firma, fecha e IP, y cada unidad conserva su transferencia propia. Las unidades que no salen del viaje no se entregan.
 
 - `GET /api/viajes/{id}/entregas` → `{ viaje_id, viaje_estado, unidades_sin_destino, puntos: [ EntregaPuntoDto ] }`: una entrega por lugar de destino. `unidades_sin_destino` cuenta las unidades de viajes anteriores al destino por unidad.
-- `GET /api/viajes/{id}/entregas/{lugar}` → `EntregaPuntoDto`: `{ viaje_id, viaje_estado, lugar_id, lugar, ciudad, unidades_total, unidades_pendientes, entregada, unidades: [ { vehiculo_id, vin, estado, inspeccion_id, tipo_cierre, entrega_firmada_at, recibe_firmada_at, no_firma_parte } ] }`.
+- `GET /api/viajes/{id}/entregas/{lugar}` → `EntregaPuntoDto`: `{ viaje_id, viaje_estado, lugar_id, lugar, ciudad, unidades_total, unidades_pendientes, entregada, unidades: [ { vehiculo_id, vin, estado, inspeccion_id, tipo_cierre, entrega_firmada_at, recibe_firmada_at, no_firma_parte, motivo_cierre, recibe_externo_nombre, recibe_externo_cedula } ] }`.
+  `motivo_cierre` es el **motivo escrito del cierre con una sola firma** (`tipo_cierre: "recibo_sin_entrega"`) y es `null` en cualquier otro caso; `no_firma_parte` dice cuál parte **no** firmó (`entrega` o `recibe`; la otra es la que firmó). `recibe_externo_nombre` y `recibe_externo_cedula` son los de la persona que recibió cuando
+  no es un usuario (ver «Quien recibe es una persona externa») y son `null` si recibió un usuario o si nadie recibió. Las entregas cerradas antes de este cambio se leen igual, con esos campos en `null`.
   `unidades_pendientes` es el «Aquí entregas estas N unidades»; `estado` de cada unidad es `sin_inspeccion` (aún no tiene la inspección de llegada del Descargue, donde se firma), `pendiente` o `cerrada`. `404` si ninguna unidad activa del viaje va a ese lugar.
-- `POST /api/viajes/{id}/entregas/{lugar}/firma` con `{ "firma": "…", "entrega_usuario_id"?, "recibe_usuario_id"? }` → `200` con la entrega: la firma del usuario autenticado (quien entrega o quien recibe) se guarda en cada unidad pendiente; con
+- `POST /api/viajes/{id}/entregas/{lugar}/firma` con `{ "firma": "…", "entrega_usuario_id"?, "recibe_usuario_id"?, "recibe_nombre"?, "recibe_cedula"?, "firma_recibe"? }` → `200` con la entrega: la firma del usuario autenticado (quien entrega o quien recibe) se guarda en cada unidad pendiente; con
   las dos firmas cada transferencia queda `firmada`. Solo el conductor o el inspector del viaje (`403` el resto; `entrega_usuario_id` y `recibe_usuario_id` deben ser usuarios del viaje, distintos entre sí); `409` si no hay unidades pendientes en el punto o alguna aún no tiene la inspección
-  de llegada del Descargue; `400` sin `firma`.
+  de llegada del Descargue; `400` sin `firma`. Los tres campos `recibe_nombre`, `recibe_cedula` y `firma_recibe` son de la persona externa que recibe (siguiente apartado).
 - `POST /api/viajes/{id}/entregas/{lugar}/una-firma` con `{ "motivo": "…", "firma"? }` → `200` con la entrega: **una sola firma no bloquea**. Cada unidad pendiente queda `recibo_sin_entrega` con la parte que no firmó (`no_firma_parte`) y el `motivo`
   (obligatorio, hasta 300 caracteres), se crea su **novedad de proceso** `recibo_sin_entrega` y los coordinadores de calidad y administradores del cliente reciben **un solo aviso** por entrega y punto (`novedad_proceso`, con clave de dedupe del viaje y el lugar).
-  La `firma` solo hace falta si quien cierra aún no había firmado; `409` si la otra parte ya firmó. Quien cierra es quien entrega o quien recibe (`403` el resto).
+  La `firma` solo hace falta si quien cierra aún no había firmado; `409` si la otra parte ya firmó. Quien cierra es quien entrega o quien recibe (`403` el resto). En un punto **sin inspector** ni quien reciba, la transferencia queda **sin quien reciba** y solo con la firma de quien entrega (`no_firma_parte: "recibe"`).
+  **El aviso lleva sus campos propios.** Además del `titulo` y el `mensaje` de siempre (que no cambian), la notificación trae `datos` (ver `NotificacionDto`): `{ "hecho": "entrega_con_una_firma", "lugar_id": "uuid", "lugar": "Concesionario Norte", "parte_que_firmo": "entrega", "motivo": "…", "unidades": 3 }`.
+  `parte_que_firmo` es `entrega` o `recibe`. La bandeja se filtra por ese tipo con `GET /api/notificaciones?tipo=novedad_proceso`.
+
+#### Quien recibe es una persona externa
+
+Si el **punto de entrega no tiene inspector asignado** (ningún inspector activo asignado a ese lugar en los puntos de los inspectores) y no hay quien reciba por defecto (el viaje no tiene inspector ni nadie reclamó la entrega), quien recibe es una **persona que no es usuario** (por ejemplo, quien recibe en el concesionario).
+El conductor la registra en el mismo `POST …/firma`: `firma` es la de quien entrega y
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `recibe_nombre` | sí | de 3 a 150 caracteres |
+| `recibe_cedula` | sí | hasta 30 caracteres: números, letras, espacios, puntos o guiones, con al menos un número (por ejemplo `1 020 304 050`) |
+| `firma_recibe` | sí | el trazo de la persona que recibe |
+
+Las dos firmas cierran cada unidad pendiente del punto como `firmada`, con el nombre y la cédula guardados en **cada** transferencia (`recibe_usuario_id` queda `null` y `TransferenciaDto` trae `recibe_externo_nombre` y `recibe_externo_cedula`; `TransferenciaDetalleDto`, `recibe_nombre` con ese nombre y `recibe_externo_cedula`).
+Si falta alguno, `400` con `details.fieldErrors` **nombrando todo lo que falta** (`recibe_nombre`, `recibe_cedula`, `firma_recibe`); un valor inválido responde `400` en su campo. Solo quien entrega puede registrarla (`403` el resto) y no se puede indicar a la vez `recibe_usuario_id` (`400`).
+
+Si el punto **sí tiene inspector asignado**, nada cambia: la entrega se firma entre el conductor y ese inspector y los tres campos de la persona externa se **rechazan** con `400` (`El punto de entrega tiene inspector asignado: la entrega la firma él, no una persona externa`). Un viaje con inspector (o con la entrega reclamada) sigue firmándose entre el conductor y su inspector.
+
+**Auditoría.** Cada unidad firmada así deja la acción `transferencia.firmar_externo` con quién la registró, cuándo y, en `despues`, la transferencia (con el nombre y la cédula de quien recibió) y el `punto` (`lugar_id`, `lugar`, `vin`). **La cédula es un dato personal: no viaja en el texto ni en los campos de ningún aviso.**
+La constancia en PDF muestra a esa persona como quien recibe, con su documento.
 - **El viaje se finaliza** solo: cuando todas sus unidades activas tienen el Descargue cerrado (inspección de llegada cerrada y transferencia con cierre) y estaba `en_curso`, pasa a `finalizado` (auditoría `viaje.estado.finalizado`); con entregas pendientes sigue en curso.
 
 ### `DELETE /api/viajes/{id}/vehiculos/{vin}`
@@ -1429,9 +1452,13 @@ Todo lo que se hace aquí queda en la auditoría.
   "viaje_id": "uuid", "codigo_mtrack": "MTK-001", "vin": "9BWZZZ377VT004251", "hallazgo_id": "uuid", "inspeccion_id": "uuid",
   "leida_at": null,
   "respuesta": { "texto": "Detente en el siguiente peaje", "medio": "app", "usuario_nombre": "Ana Ruiz", "fecha": "2026-10-21T14:12:00Z" },
-  "created_at": "2026-10-21T13:31:00Z"
+  "created_at": "2026-10-21T13:31:00Z",
+  "datos": null
 }
 ```
+
+`datos` son los **campos propios del aviso**, además del texto, para que el portal y la app no tengan que leer el mensaje: un objeto con claves en `snake_case` y `null` en los avisos que no los llevan. Hoy los lleva el aviso de la entrega con una sola firma (`novedad_proceso`, ver «Entrega por punto»):
+`{ "hecho": "entrega_con_una_firma", "lugar_id": "…", "lugar": "…", "parte_que_firmo": "entrega", "motivo": "…", "unidades": 3 }`. Un dato personal (como la cédula) nunca va en `datos`.
 
 `tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar` o `propuesta_ubicacion` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
 
@@ -1745,10 +1772,11 @@ el testigo y la foto de la constancia. Inspector y conductor solo la descargan d
 { "id": "uuid", "inspeccion_id": "uuid", "entrega_usuario_id": "uuid", "recibe_usuario_id": "uuid",
   "firmada": false, "firmada_at": null, "created_at": "…", "updated_at": "…",
   "tipo_cierre": null, "entrega_firmada_at": "…", "recibe_firmada_at": null,
-  "reservas_texto": null, "no_firma_parte": null, "motivo_no_firma": null, "testigo_usuario_id": null, "evidencia_constancia_id": null }
+  "reservas_texto": null, "no_firma_parte": null, "motivo_no_firma": null, "testigo_usuario_id": null, "evidencia_constancia_id": null,
+  "recibe_externo_nombre": null, "recibe_externo_cedula": null }
 ```
 
-`entrega_usuario_id` es `null` solo en el cierre `recibo_sin_entrega`.
+`entrega_usuario_id` es `null` solo en el cierre `recibo_sin_entrega`. `recibe_usuario_id` es `null` cuando recibió una persona externa (entonces vienen `recibe_externo_nombre` y `recibe_externo_cedula`, ver «Entrega por punto») o cuando la entrega se cerró con la sola firma de quien entrega porque nadie recibió.
 
 `firmada` es `true` cuando están las dos firmas (también si fue con reservas); `firmada_at` se sella cuando está la segunda. En el detalle del informe (`GET /api/inspecciones/{id}`) la
 transferencia llega como `TransferenciaDetalleDto`: los mismos campos más `entrega_nombre`, `recibe_nombre`, `firma_entrega`, `firma_recibe`, `entrega_firma_ip`, `recibe_firma_ip` y `testigo_nombre`.

@@ -166,13 +166,14 @@ public sealed record ExtraDto(
 /// <summary>
 /// Las firmas dibujadas no se exponen en los listados. <c>Firmada</c> es true cuando estan las dos firmas (tambien si fue con reservas);
 /// <c>TipoCierre</c> dice como se cerro (<c>firmada</c>, <c>con_reservas</c>, <c>no_firma</c> o <c>recibo_sin_entrega</c>) y es nulo mientras la transferencia esta abierta;
-/// en <c>recibo_sin_entrega</c> no hay <c>EntregaUsuarioId</c>.
+/// en <c>recibo_sin_entrega</c> no hay <c>EntregaUsuarioId</c>. Si recibe una persona externa (el punto de entrega no tiene inspector) no hay <c>RecibeUsuarioId</c> y vienen su nombre y su cedula; tampoco hay
+/// <c>RecibeUsuarioId</c> ni persona externa si la entrega se cerro con la sola firma de quien entrega porque nadie recibio.
 /// </summary>
 public sealed record TransferenciaDto(
     Guid Id,
     Guid InspeccionId,
     Guid? EntregaUsuarioId,
-    Guid RecibeUsuarioId,
+    Guid? RecibeUsuarioId,
     bool Firmada,
     DateTimeOffset? FirmadaAt,
     DateTimeOffset CreatedAt,
@@ -184,4 +185,6 @@ public sealed record TransferenciaDto(
     string? NoFirmaParte,
     string? MotivoNoFirma,
     Guid? TestigoUsuarioId,
-    Guid? EvidenciaConstanciaId);
+    Guid? EvidenciaConstanciaId,
+    string? RecibeExternoNombre = null,
+    string? RecibeExternoCedula = null);

@@ -1013,6 +1013,7 @@ BEGIN
         RespondidaAt     datetimeoffset(3) NULL,
         ClaveDedupe      varchar(300)      NOT NULL,
         CreatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblNotificaciones_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        Datos            nvarchar(max)     NULL,
         CONSTRAINT FK_tblNotificaciones_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT FK_tblNotificaciones_Cliente FOREIGN KEY (ClienteId) REFERENCES dbo.tblClientes (Id),
         CONSTRAINT FK_tblNotificaciones_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
@@ -1028,6 +1029,8 @@ BEGIN
         -- Solo el reporte diario no tiene destinatario, y solo el reporte diario se envia por correo.
         CONSTRAINT CK_tblNotificaciones_Destinatario CHECK (UsuarioId IS NOT NULL OR Tipo = 'reporte_diario'),
         CONSTRAINT CK_tblNotificaciones_Correo CHECK (Canal <> 'correo' OR Tipo = 'reporte_diario'),
+        -- Los campos propios del aviso (lugar, parte que firmo, motivo...) van como JSON valido, ademas del texto.
+        CONSTRAINT CK_tblNotificaciones_Datos CHECK (Datos IS NULL OR ISJSON(Datos) = 1),
         -- La respuesta del coordinador es completa (texto, medio, quien y cuando) y solo existe sobre una novedad del conductor.
         CONSTRAINT CK_tblNotificaciones_Respuesta CHECK (
             (RespuestaTexto IS NULL AND RespuestaMedio IS NULL AND RespondidaPor IS NULL AND RespondidaAt IS NULL)
@@ -1035,6 +1038,14 @@ BEGIN
     );
     CREATE INDEX IX_tblNotificaciones_Usuario_Leida ON dbo.tblNotificaciones (UsuarioId, LeidaAt);
 END
+GO
+
+-- Datos: los campos propios del aviso (JSON opcional), en una base creada antes de este cambio. Va antes del trigger, que tambien lo protege.
+IF COL_LENGTH(N'dbo.tblNotificaciones', N'Datos') IS NULL
+    ALTER TABLE dbo.tblNotificaciones ADD Datos nvarchar(max) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Datos' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones'))
+    ALTER TABLE dbo.tblNotificaciones ADD CONSTRAINT CK_tblNotificaciones_Datos CHECK (Datos IS NULL OR ISJSON(Datos) = 1);
 GO
 
 -- Solo se lee y se responde una notificacion: cualquier otra columna que se intente cambiar falla (51006). El borrado lo impide el trigger de no borrado de las tablas de evidencia (51003).
@@ -1045,7 +1056,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
     IF UPDATE(Id) OR UPDATE(Tipo) OR UPDATE(Urgencia) OR UPDATE(UsuarioId) OR UPDATE(ClienteId) OR UPDATE(ViajeId) OR UPDATE(VehiculoId) OR UPDATE(HallazgoId)
-       OR UPDATE(InspeccionId) OR UPDATE(Titulo) OR UPDATE(Mensaje) OR UPDATE(Canal) OR UPDATE(EnviadaAt) OR UPDATE(ErrorEnvio) OR UPDATE(ClaveDedupe) OR UPDATE(CreatedAt)
+       OR UPDATE(InspeccionId) OR UPDATE(Titulo) OR UPDATE(Mensaje) OR UPDATE(Canal) OR UPDATE(EnviadaAt) OR UPDATE(ErrorEnvio) OR UPDATE(ClaveDedupe) OR UPDATE(CreatedAt) OR UPDATE(Datos)
         THROW 51006, 'Una notificacion solo admite cambiar su lectura y su respuesta', 1;
 END
 GO
@@ -1149,7 +1160,9 @@ BEGIN
         Id                uniqueidentifier NOT NULL CONSTRAINT PK_tblTransferenciasCustodia PRIMARY KEY,
         InspeccionId      uniqueidentifier NOT NULL,
         EntregaUsuarioId  uniqueidentifier NULL,
-        RecibeUsuarioId   uniqueidentifier NOT NULL,
+        RecibeUsuarioId   uniqueidentifier NULL,
+        RecibeExternoNombre nvarchar(150)  NULL,
+        RecibeExternoCedula varchar(30)    NULL,
         FirmaEntrega      nvarchar(max)    NULL,
         FirmaRecibe       nvarchar(max)    NULL,
         FirmadaAt         datetimeoffset(3) NULL,
@@ -1188,11 +1201,49 @@ BEGIN
                 AND ((NoFirmaParte = 'entrega' AND EntregaUsuarioId IS NULL AND FirmaEntrega IS NULL AND FirmaEntregaAt IS NULL AND FirmaEntregaIp IS NULL
                       AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '')
                   OR (NoFirmaParte = 'recibe' AND EntregaUsuarioId IS NOT NULL AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> ''
-                      AND FirmaRecibe IS NULL AND FirmaRecibeAt IS NULL AND FirmaRecibeIp IS NULL))))
+                      AND FirmaRecibe IS NULL AND FirmaRecibeAt IS NULL AND FirmaRecibeIp IS NULL)))),
+        -- Quien recibe es un usuario o una persona externa (nombre y cedula, siempre juntos), nunca las dos. Solo falta quien recibe cuando la entrega se cerro con la firma de quien entrega porque nadie recibio.
+        CONSTRAINT CK_tblTransferencias_Recibe CHECK (
+            ((RecibeExternoNombre IS NULL AND RecibeExternoCedula IS NULL)
+                OR (RecibeExternoNombre IS NOT NULL AND RecibeExternoNombre <> '' AND RecibeExternoCedula IS NOT NULL AND RecibeExternoCedula <> ''))
+            AND (RecibeUsuarioId IS NULL OR RecibeExternoNombre IS NULL)
+            AND (RecibeUsuarioId IS NOT NULL OR RecibeExternoNombre IS NOT NULL OR (ISNULL(TipoCierre, '') = 'recibo_sin_entrega' AND ISNULL(NoFirmaParte, '') = 'recibe')))
     );
     CREATE INDEX IX_tblTransferencias_Entrega ON dbo.tblTransferenciasCustodia (EntregaUsuarioId);
     CREATE INDEX IX_tblTransferencias_Recibe ON dbo.tblTransferenciasCustodia (RecibeUsuarioId);
 END
+GO
+
+-- Firmante externo: en una base creada antes de este cambio, las dos columnas de la persona que recibe, quien recibe admite nulo (se quitan y se recrean, iguales, su indice y la restriccion del testigo) y la restriccion
+-- que decide si recibe un usuario o una persona externa.
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'RecibeExternoNombre') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD RecibeExternoNombre nvarchar(150) NULL;
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'RecibeExternoCedula') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD RecibeExternoCedula varchar(30) NULL;
+GO
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND name = N'RecibeUsuarioId' AND is_nullable = 0)
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblTransferencias_Recibe' AND object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia'))
+        DROP INDEX IX_tblTransferencias_Recibe ON dbo.tblTransferenciasCustodia;
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Testigo' AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia'))
+        ALTER TABLE dbo.tblTransferenciasCustodia DROP CONSTRAINT CK_tblTransferencias_Testigo;
+    ALTER TABLE dbo.tblTransferenciasCustodia ALTER COLUMN RecibeUsuarioId uniqueidentifier NULL;
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblTransferencias_Recibe' AND object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia'))
+    CREATE INDEX IX_tblTransferencias_Recibe ON dbo.tblTransferenciasCustodia (RecibeUsuarioId);
+-- Las restricciones se recrean solo si la tabla ya tiene las columnas que usan (una base muy antigua las recibe con sus scripts de cambios); por eso van dentro de EXEC.
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'TestigoUsuarioId') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Testigo' AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia'))
+    EXEC (N'ALTER TABLE dbo.tblTransferenciasCustodia ADD CONSTRAINT CK_tblTransferencias_Testigo CHECK (TestigoUsuarioId IS NULL OR (TestigoUsuarioId <> EntregaUsuarioId AND TestigoUsuarioId <> RecibeUsuarioId))');
+GO
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'TipoCierre') IS NOT NULL AND COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'NoFirmaParte') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Recibe' AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia'))
+    EXEC (N'ALTER TABLE dbo.tblTransferenciasCustodia ADD CONSTRAINT CK_tblTransferencias_Recibe CHECK (
+        ((RecibeExternoNombre IS NULL AND RecibeExternoCedula IS NULL)
+            OR (RecibeExternoNombre IS NOT NULL AND RecibeExternoNombre <> '''' AND RecibeExternoCedula IS NOT NULL AND RecibeExternoCedula <> ''''))
+        AND (RecibeUsuarioId IS NULL OR RecibeExternoNombre IS NULL)
+        AND (RecibeUsuarioId IS NOT NULL OR RecibeExternoNombre IS NOT NULL OR (ISNULL(TipoCierre, '''') = ''recibo_sin_entrega'' AND ISNULL(NoFirmaParte, '''') = ''recibe'')))');
 GO
 
 /* -----------------------------------------------------------------------------

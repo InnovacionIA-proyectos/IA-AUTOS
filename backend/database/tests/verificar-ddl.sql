@@ -723,8 +723,23 @@ ALTER TABLE dbo.tblAuditLog ENABLE TRIGGER ALL;
 -- 7f) Notificaciones, dispositivos y la novedad del conductor
 DECLARE @st5 uniqueidentifier = NEWID(), @eT5 uniqueidentifier = (SELECT Id FROM dbo.tblEtapas WHERE ViajeId = @vj5 AND Orden = 2);
 INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@st5, @eT5, @vj5, @u1, 'salida', SYSDATETIMEOFFSET());
+-- Firmante externo: una transferencia abierta cuyo receptor es una persona externa (nombre y cedula, sin usuario).
+DECLARE @bX uniqueidentifier = NEWID();
+INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (NEWID(), @v5, @vj5, @pc, 7);
+INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha) VALUES (@bX, (SELECT Id FROM dbo.tblEtapas WHERE VehiculoId = @v5 AND Orden = 7), @vj5, @u1, 'salida', SYSDATETIMEOFFSET());
+INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeExternoNombre, RecibeExternoCedula) VALUES (NEWID(), @bX, @u1, N'Ana Restrepo', '1 020 304 050');
+INSERT #r SELECT N'Transferencia: quien recibe puede ser una persona externa, sin usuario',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @bX AND RecibeUsuarioId IS NULL AND RecibeExternoNombre = N'Ana Restrepo' AND RecibeExternoCedula = '1 020 304 050') THEN 1 ELSE 0 END, NULL;
+
 DECLARE @casosNotif TABLE (Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
 INSERT @casosNotif VALUES
+ (N'CHECK quien recibe es un usuario o una persona externa, no las dos', N'UPDATE dbo.tblTransferenciasCustodia SET RecibeUsuarioId = ''' + CAST(@u2 AS nvarchar(36)) + N''' WHERE InspeccionId = ''' + CAST(@bX AS nvarchar(36)) + N'''', 547),
+ (N'CHECK el nombre de la persona externa va con su cedula', N'UPDATE dbo.tblTransferenciasCustodia SET RecibeExternoCedula = NULL WHERE InspeccionId = ''' + CAST(@bX AS nvarchar(36)) + N'''', 547),
+ (N'CHECK la cedula de la persona externa no va vacia', N'UPDATE dbo.tblTransferenciasCustodia SET RecibeExternoCedula = '''' WHERE InspeccionId = ''' + CAST(@bX AS nvarchar(36)) + N'''', 547),
+ (N'CHECK una transferencia abierta no queda sin quien reciba', N'UPDATE dbo.tblTransferenciasCustodia SET RecibeExternoNombre = NULL, RecibeExternoCedula = NULL WHERE InspeccionId = ''' + CAST(@bX AS nvarchar(36)) + N'''', 547),
+ (N'Notificacion: sus datos propios en JSON se guardan', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,VehiculoId,Titulo,Mensaje,Canal,ClaveDedupe,Datos) VALUES (NEWID(),''novedad_proceso'',''alta'',''' + CAST(@u1 AS nvarchar(36)) + N''',''' + CAST(@v5 AS nvarchar(36)) + N''',N''T'',N''M'',''bandeja'',''zz_dedupe_d1'',N''{"lugar":"Concesionario Norte","parte_que_firmo":"entrega"}'')', 0),
+ (N'CHECK los datos de la notificacion son JSON valido', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,VehiculoId,Titulo,Mensaje,Canal,ClaveDedupe,Datos) VALUES (NEWID(),''novedad_proceso'',''alta'',''' + CAST(@u1 AS nvarchar(36)) + N''',''' + CAST(@v5 AS nvarchar(36)) + N''',N''T'',N''M'',''bandeja'',''zz_dedupe_d2'',N''esto no es json'')', 547),
+ (N'Trigger: los datos de una notificacion no se cambian', N'UPDATE dbo.tblNotificaciones SET Datos = N''{}'' WHERE ClaveDedupe = ''zz_dedupe_d1''', 51006),
  (N'Notificacion: una valida se guarda', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,VehiculoId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''novedad_conductor'',''alta'',''' + CAST(@u1 AS nvarchar(36)) + N''',''' + CAST(@v5 AS nvarchar(36)) + N''',N''T'',N''M'',''bandeja'',''zz_dedupe_1'')', 0),
  (N'UNIQUE clave de dedupe de la notificacion', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''novedad_conductor'',''alta'',''' + CAST(@u1 AS nvarchar(36)) + N''',N''T'',N''M'',''push'',''zz_dedupe_1'')', 2627),
  (N'CHECK tipo de la notificacion', N'INSERT dbo.tblNotificaciones (Id,Tipo,Urgencia,UsuarioId,Titulo,Mensaje,Canal,ClaveDedupe) VALUES (NEWID(),''inventado'',''alta'',''' + CAST(@u1 AS nvarchar(36)) + N''',N''T'',N''M'',''bandeja'',''zz_dedupe_2'')', 547),

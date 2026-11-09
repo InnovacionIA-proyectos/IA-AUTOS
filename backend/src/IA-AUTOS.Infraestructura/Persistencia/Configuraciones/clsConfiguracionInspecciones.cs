@@ -196,6 +196,9 @@ internal sealed class clsConfiguracionTransferencia : IEntityTypeConfiguration<c
         builder.Property(t => t.NoFirmaParte).HasColumnType("varchar(10)");
         builder.Property(t => t.ReservasTexto).HasMaxLength(clsTransferenciaCustodia.RESERVAS_MAX);
         builder.Property(t => t.MotivoNoFirma).HasMaxLength(clsTransferenciaCustodia.MOTIVO_MAX);
+        builder.Property(t => t.RecibeExternoNombre).HasMaxLength(clsTransferenciaCustodia.NOMBRE_EXTERNO_MAX);
+        builder.Property(t => t.RecibeExternoCedula).HasColumnType("varchar(30)");
+        builder.Ignore(t => t.RecibeEsExterno);
         // El testigo y la foto de la constancia: ningun borrado en cascada (la inspeccion arrastra la transferencia y la foto a la vez).
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.TestigoUsuarioId)
             .HasConstraintName("FK_tblTransferencias_Testigo").OnDelete(DeleteBehavior.NoAction);

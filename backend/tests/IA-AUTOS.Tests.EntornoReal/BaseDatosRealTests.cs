@@ -853,6 +853,22 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_entrega_admite_un_firmante_externo_y_el_aviso_lleva_sus_datos()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/35-firmante-externo-y-datos-del-aviso.sql.
+        await using var conexion = await AbrirAsync();
+
+        var externas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND name IN (N'RecibeExternoNombre', N'RecibeExternoCedula')");
+        var recibeAdmiteNulo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND name = N'RecibeUsuarioId' AND is_nullable = 1");
+        var restriccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Recibe' AND parent_object_id = OBJECT_ID(N'tblTransferenciasCustodia')");
+        var datos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblNotificaciones') AND name = N'Datos'");
+
+        Assert.True(
+            externas == 2 && recibeAdmiteNulo == 1 && restriccion == 1 && datos == 1,
+            "Falta el firmante externo de la entrega o los datos del aviso. Ejecute database/cambios-esquema/35-firmante-externo-y-datos-del-aviso.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

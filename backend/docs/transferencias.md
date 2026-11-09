@@ -52,6 +52,11 @@ Una sola firma no bloquea: `POST …/entregas/{lugar}/una-firma` cierra la entre
 por unidad (con el motivo escrito como texto del motivo `otro`) y los coordinadores de calidad y administradores del cliente reciben un solo aviso `novedad_proceso` por entrega y punto (clave de dedupe con el viaje y el lugar). El viaje pasa a `finalizado` cuando todas sus unidades activas
 tienen el Descargue cerrado. Los endpoints y sus cuerpos están en [CONTRATO.md](../CONTRATO.md#entrega-por-punto).
 
+**Firmante externo.** En un punto sin inspector asignado recibe una persona que no es usuario: su nombre, su cédula y su firma (`recibe_nombre`, `recibe_cedula`, `firma_recibe`) se guardan en la transferencia de cada unidad (`RecibeExternoNombre`, `RecibeExternoCedula`) y, con la firma de quien entrega, el cierre es `firmada`.
+`RecibeUsuarioId` admite nulo y `CK_tblTransferencias_Recibe` decide quién recibe: un usuario o una persona externa (nombre y cédula juntos), nunca las dos, y solo falta quien reciba en el cierre con la sola firma de quien entrega (`recibo_sin_entrega` con `NoFirmaParte = recibe`). Quedan en la auditoría (`transferencia.firmar_externo`: quién recibió, cuándo y en qué punto).
+El script [`35-firmante-externo-y-datos-del-aviso.sql`](../database/cambios-esquema/35-firmante-externo-y-datos-del-aviso.sql) (ajustando `@esquema`, en una sola ejecución y **antes** de desplegar la API; es idempotente y no cambia ningún dato) agrega las columnas, deja `RecibeUsuarioId` en nulo, vuelve a crear el índice y la restricción del testigo iguales y agrega la restricción nueva; `ddl.sql` ya lo trae y `tests/verificar-ddl.sql` lo cubre (395 comprobaciones).
+En el detalle de la entrega, `motivo_cierre` trae el motivo del cierre con una sola firma.
+
 ## Qué bloquea
 
 La salida de una etapa exige que la etapa anterior del mismo VIN esté **terminada**: su llegada cerrada **y** ninguna transferencia suya sin tipo de cierre. Si falta algo, `409` con

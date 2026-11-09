@@ -160,6 +160,18 @@ public class NovedadesYNotificacionesTests
     }
 
     [Fact]
+    public void Una_notificacion_lleva_sus_datos_propios_como_json_y_sin_ellos_no_los_tiene()
+    {
+        var con = clsNotificacion.Crear(
+            clsTipoNotificacion.NOVEDAD_PROCESO, clsUrgenciaNotificacion.ALTA, Guid.NewGuid(), null, null, null, null, null, "t", "m", clsCanalNotificacion.BANDEJA, AHORA, null, "clave-datos", AHORA,
+            "{\"lugar\":\"Concesionario Norte\"}");
+        var sin = Notificacion(clsTipoNotificacion.NOVEDAD_PROCESO);
+
+        Assert.Equal("{\"lugar\":\"Concesionario Norte\"}", con.Datos);
+        Assert.Null(sin.Datos);
+    }
+
+    [Fact]
     public void Solo_el_reporte_diario_no_tiene_destinatario_y_solo_el_se_envia_por_correo()
     {
         Assert.Throws<clsValidacionException>(() => clsNotificacion.Crear(

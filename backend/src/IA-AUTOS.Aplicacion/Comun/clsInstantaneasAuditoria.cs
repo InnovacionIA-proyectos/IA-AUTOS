@@ -95,6 +95,8 @@ public static class clsInstantaneasAuditoria
         t.InspeccionId,
         t.EntregaUsuarioId,
         t.RecibeUsuarioId,
+        t.RecibeExternoNombre,
+        t.RecibeExternoCedula,
         entrega_firmada = t.FirmaEntregaAt,
         recibe_firmada = t.FirmaRecibeAt,
         t.FirmadaAt,

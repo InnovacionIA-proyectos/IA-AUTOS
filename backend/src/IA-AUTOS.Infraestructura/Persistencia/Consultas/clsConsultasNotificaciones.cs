@@ -71,6 +71,24 @@ internal sealed class clsConsultasNotificaciones(clsAppDbContext contexto) : ICo
             ? new RespuestaNotificacionDto(texto, medio, f.RespondidaPorNombre, fecha)
             : null;
         return new NotificacionDto(
-            n.Id, n.Tipo, n.Urgencia, n.Titulo, n.Mensaje, n.ViajeId, f.CodigoMtrack, f.Vin, n.HallazgoId, n.InspeccionId, n.LeidaAt, respuesta, n.CreatedAt);
+            n.Id, n.Tipo, n.Urgencia, n.Titulo, n.Mensaje, n.ViajeId, f.CodigoMtrack, f.Vin, n.HallazgoId, n.InspeccionId, n.LeidaAt, respuesta, n.CreatedAt, DatosDelAviso(n.Datos));
+    }
+
+    /// <summary>Los campos propios del aviso guardados como JSON, como un objeto; nulo si no lleva o si el texto guardado no es un objeto.</summary>
+    private static Dictionary<string, object?>? DatosDelAviso(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(json);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 }
