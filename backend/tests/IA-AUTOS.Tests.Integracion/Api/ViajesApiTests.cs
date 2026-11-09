@@ -273,11 +273,84 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Contains("ya está en el viaje MTK-Y1 de este archivo", errores[4]);
         Assert.Contains("Ya existe un viaje con el código MTrack MTK-EXISTE", errores[5]);
         Assert.Contains("ya está en el viaje activo MTK-EXISTE", errores[6]);
-        Assert.Contains("código MTrack es requerido", errores[7]);
+        Assert.Contains("ya está en el viaje MTK-EXISTE de este archivo", errores[7]);
         Assert.Contains("placa es requerida", errores[8]);
         Assert.Contains("\"Carreta\" no existe", errores[9]);
         Assert.Contains("VIN es requerido", errores[10]);
         Assert.Contains("código MTrack admite", errores[11]);
+        Assert.Equal(1, vista.GetProperty("validas").GetInt32());
+    }
+
+    [Fact]
+    public async Task Sin_codigo_MTrack_la_carga_arma_el_viaje_por_placa_y_fecha_y_la_unidad_toma_el_valor_por_defecto()
+    {
+        var coordinador = await CoordinadorAsync();
+        await LugaresDeLaCargaAsync(coordinador);
+        var vines = Enumerable.Range(1, 9).Select(i => $"VIN-S-{i:00}").ToList();
+        foreach (var vin in vines.Append("VIN-S-10").Append("VIN-S-11"))
+        {
+            await Sembrador.VehiculoAsync(vin);
+        }
+
+        object Fila(int n, string vin, string placa, string fecha, string? codigo = null, string? unidad = null) =>
+            new { fila = n, vin, placa, trailer = "", cedula_conductor = (string?)null, unidad, codigo_mtrack = codigo, fecha_programada = fecha, origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" };
+
+        var filas = vines.Select((vin, i) => Fila(i + 2, vin, i % 2 == 0 ? "WXY123" : "wxy-123", "2025-11-19 06:00")).ToList();
+        filas.Add(Fila(11, "VIN-S-10", "WXY123", "2025-11-19 14:30"));
+        filas.Add(Fila(12, "VIN-S-11", "QRS456", "2025-11-19 06:00", codigo: "MTK-CON-CODIGO", unidad: "Nodriza"));
+
+        var vista = await LeerJsonAsync(await Cliente(coordinador.Token).PostAsync("/api/viajes/cargar/previsualizar", Cuerpo(new { filas })));
+
+        Assert.Equal(11, vista.GetProperty("validas").GetInt32());
+        Assert.Equal(3, vista.GetProperty("viajes").GetInt32());
+        var porFila = vista.GetProperty("filas").EnumerateArray().ToDictionary(f => f.GetProperty("fila").GetInt32());
+        Assert.Equal("AUTO-WXY123-202511190600", porFila[2].GetProperty("codigo_mtrack").GetString());
+        Assert.True(porFila[2].GetProperty("codigo_generado").GetBoolean());
+        Assert.Equal("AUTO-WXY123-202511191430", porFila[11].GetProperty("codigo_mtrack").GetString());
+        Assert.Equal("MTK-CON-CODIGO", porFila[12].GetProperty("codigo_mtrack").GetString());
+        Assert.False(porFila[12].GetProperty("codigo_generado").GetBoolean());
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes"));
+
+        var confirmada = await Cliente(coordinador.Token).PostAsync("/api/viajes/cargar", Cuerpo(new { filas }));
+
+        Assert.Equal(HttpStatusCode.Created, confirmada.StatusCode);
+        Assert.Equal(3, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes"));
+        Assert.Equal(9, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajeVehiculos vv JOIN dbo.tblViajes v ON v.Id = vv.ViajeId WHERE v.CodigoMtrack = 'AUTO-WXY123-202511190600'"));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes v JOIN dbo.tblTiposUnidadTransportadora t ON t.Id = v.TipoUnidadId WHERE v.CodigoMtrack = 'AUTO-WXY123-202511190600' AND t.Codigo = 'ninera'"));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes v JOIN dbo.tblTiposUnidadTransportadora t ON t.Id = v.TipoUnidadId WHERE v.CodigoMtrack = 'MTK-CON-CODIGO' AND t.Codigo = 'nodriza'"));
+
+        // Cargar otra vez el mismo archivo no crea viajes duplicados ni codigos distintos: cada fila se rechaza porque ese camion ya se cargo.
+        var otraVez = await LeerJsonAsync(await Cliente(coordinador.Token).PostAsync("/api/viajes/cargar", Cuerpo(new { filas })));
+
+        Assert.Equal(0, otraVez.GetProperty("validas").GetInt32());
+        Assert.Equal(0, otraVez.GetProperty("viajes").GetInt32());
+        Assert.Contains("este camión ya se cargó", otraVez.GetProperty("filas")[0].GetProperty("errores")[0].GetString());
+        Assert.Equal(3, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes"));
+    }
+
+    [Fact]
+    public async Task Sin_codigo_MTrack_las_filas_del_mismo_camion_deben_coincidir_y_sin_placa_o_fecha_no_se_puede_armar_el_viaje()
+    {
+        var coordinador = await CoordinadorAsync();
+        await LugaresDeLaCargaAsync(coordinador);
+        foreach (var vin in new[] { "VIN-Z-01", "VIN-Z-02", "VIN-Z-03" })
+        {
+            await Sembrador.VehiculoAsync(vin);
+        }
+
+        object Fila(int n, string vin, string? placa, string? fecha, string? trailer = "T-1") =>
+            new { fila = n, vin, placa, trailer, cedula_conductor = (string?)null, unidad = (string?)null, codigo_mtrack = (string?)null, fecha_programada = fecha, origen = "CEDI Envigado", destino = "Concesionario Autolarte Medellín" };
+
+        object[] filas = [Fila(1, "VIN-Z-01", "ABC123", "2026-11-03 06:00"), Fila(2, "VIN-Z-02", "ABC123", "2026-11-03 06:00", trailer: "T-2"), Fila(3, "VIN-Z-03", null, "2026-11-03 06:00")];
+
+        var vista = await LeerJsonAsync(await Cliente(coordinador.Token).PostAsync("/api/viajes/cargar/previsualizar", Cuerpo(new { filas })));
+
+        var errores = vista.GetProperty("filas").EnumerateArray()
+            .ToDictionary(f => f.GetProperty("fila").GetInt32(), f => string.Join(" | ", f.GetProperty("errores").EnumerateArray().Select(e => e.GetString())));
+        Assert.Equal(string.Empty, errores[1]);
+        Assert.Contains("No coincide con el viaje de la fila 1 (el tráiler): la misma placa y fecha son un solo viaje", errores[2]);
+        Assert.Contains("placa es requerida", errores[3]);
+        Assert.Contains("Sin código MTrack, la placa y la fecha programada", errores[3]);
         Assert.Equal(1, vista.GetProperty("validas").GetInt32());
     }
 
