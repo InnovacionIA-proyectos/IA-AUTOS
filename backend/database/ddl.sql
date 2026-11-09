@@ -1898,8 +1898,8 @@ GO
 /* -----------------------------------------------------------------------------
    Vistas de los indicadores del tablero (cobertura, adopcion, tiempo de captura, averias por configuracion e indicador diario). Todas calculan el cliente por el vehiculo y los dias en
    hora de Colombia (UTC-5). vwCobertura: una fila por unidad despachada (VIN de un viaje con la salida de su Cargue cerrada, sin las unidades "no sale"); RegistrosCerrados cuenta de 0 a 6
-   (salida y llegada de las 3 etapas) y Completa = 1 solo con los 6. vwAdopcion (formula propuesta, pendiente de confirmar por Calidad): por dia, Programados = VIN de los viajes no cancelados
-   creados ese dia y ConSalidaDigital = los que tienen una inspeccion de salida en el sistema. vwTiempoCaptura: una fila por inspeccion cerrada de Cargue y Descargue, con Minutos = cierre - inicio.
+   (salida y llegada de las 3 etapas) y Completa = 1 solo con los 6. vwAdopcion (por carro): por dia y por el destino de cada unidad, Programados = VIN de los viajes no cancelados programados ese dia y ConSalidaDigital = los que tienen una inspeccion de salida CERRADA. vwAdopcionPorCamion:
+   lo mismo contando cada viaje una sola vez (adoptado si alguna de sus unidades tiene su salida cerrada), agrupado por el destino del viaje (el de sus unidades si es uno solo; nulo si son varios o falta alguno). vwTiempoCaptura: una fila por inspeccion cerrada de Cargue y Descargue, con Minutos = cierre - inicio.
    vwAveriasPorConfiguracion: una fila por hallazgo de una inspeccion cerrada (tambien el dano sin calificar, sin nivel), con la configuracion del viaje y la zona (lado + numero). vwIndicadorDiario: por dia,
    Despachados, ConNovedad (unidades con al menos un hallazgo V1 o V1+ ese dia) y SinCalificar (los danos sin nivel de esas unidades ese dia, una cifra aparte que no se suma a ConNovedad). Se crean con SQL dinamico para poder ejecutar este script tambien sobre una base que aun no tiene las columnas que usan.
    ----------------------------------------------------------------------------- */
@@ -1939,23 +1939,51 @@ CROSS APPLY (
 WHERE vv.EstadoUnidad <> ''no_sale'' AND d.FechaDespacho IS NOT NULL');
     EXEC (N'CREATE OR ALTER VIEW dbo.vwAdopcion
 AS
-SELECT x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer,
+SELECT x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer, x.LugarDestinoId,
        COUNT(*) AS Programados,
        SUM(x.ConSalidaDigital) AS ConSalidaDigital,
        CAST(ROUND(SUM(x.ConSalidaDigital) * 100.0 / COUNT(*), 2) AS decimal(5, 2)) AS Porcentaje
 FROM (
-    SELECT CAST(SWITCHOFFSET(COALESCE(vj.FechaProgramada, vj.CreatedAt), N''-05:00'') AS date) AS Fecha, v.ClienteId, v.Operacion, vj.OrigenId, vj.DestinoId, v.Marca, vj.Trailer,
+    SELECT CAST(SWITCHOFFSET(COALESCE(vj.FechaProgramada, vj.CreatedAt), N''-05:00'') AS date) AS Fecha, v.ClienteId, v.Operacion, vj.OrigenId, vj.DestinoId, v.Marca, vj.Trailer, vv.LugarDestinoId,
            CASE WHEN EXISTS (SELECT 1
                              FROM dbo.tblInspecciones i
                              JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
-                             WHERE e.ViajeId = vv.ViajeId AND e.VehiculoId = vv.VehiculoId AND i.Momento = ''salida'')
+                             WHERE e.ViajeId = vv.ViajeId AND e.VehiculoId = vv.VehiculoId AND i.Momento = ''salida'' AND i.Estado = ''cerrada'')
                 THEN 1 ELSE 0 END AS ConSalidaDigital
     FROM dbo.tblViajeVehiculos vv
     JOIN dbo.tblViajes vj ON vj.Id = vv.ViajeId
     JOIN dbo.tblVehiculos v ON v.Id = vv.VehiculoId
     WHERE vj.Estado <> ''cancelado''
 ) AS x
-GROUP BY x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer');
+GROUP BY x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer, x.LugarDestinoId');
+    EXEC (N'CREATE OR ALTER VIEW dbo.vwAdopcionPorCamion
+AS
+SELECT x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer, x.LugarDestinoId,
+       COUNT(*) AS Programados,
+       SUM(x.ConSalidaDigital) AS ConSalidaDigital,
+       CAST(ROUND(SUM(x.ConSalidaDigital) * 100.0 / COUNT(*), 2) AS decimal(5, 2)) AS Porcentaje
+FROM (
+    SELECT CAST(SWITCHOFFSET(COALESCE(vj.FechaProgramada, vj.CreatedAt), N''-05:00'') AS date) AS Fecha, p.ClienteId, p.Operacion, vj.OrigenId, vj.DestinoId, p.Marca, vj.Trailer,
+           CASE WHEN d.Destinos = 1 AND d.SinDestino = 0 THEN CAST(d.DestinoTexto AS uniqueidentifier) END AS LugarDestinoId,
+           CASE WHEN EXISTS (SELECT 1
+                             FROM dbo.tblInspecciones i
+                             JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+                             WHERE e.ViajeId = vj.Id AND i.Momento = ''salida'' AND i.Estado = ''cerrada'')
+                THEN 1 ELSE 0 END AS ConSalidaDigital
+    FROM dbo.tblViajes vj
+    CROSS APPLY (SELECT TOP 1 v.ClienteId, v.Operacion, v.Marca
+                 FROM dbo.tblViajeVehiculos vv
+                 JOIN dbo.tblVehiculos v ON v.Id = vv.VehiculoId
+                 WHERE vv.ViajeId = vj.Id
+                 ORDER BY v.Vin) p
+    CROSS APPLY (SELECT COUNT(DISTINCT vv.LugarDestinoId) AS Destinos,
+                        SUM(CASE WHEN vv.LugarDestinoId IS NULL THEN 1 ELSE 0 END) AS SinDestino,
+                        MAX(CAST(vv.LugarDestinoId AS varchar(36))) AS DestinoTexto
+                 FROM dbo.tblViajeVehiculos vv
+                 WHERE vv.ViajeId = vj.Id) d
+    WHERE vj.Estado <> ''cancelado''
+) AS x
+GROUP BY x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer, x.LugarDestinoId');
     EXEC (N'CREATE OR ALTER VIEW dbo.vwTiempoCaptura
 AS
 SELECT i.Id AS InspeccionId, i.ViajeId, e.VehiculoId, v.ClienteId, v.Operacion, vj.OrigenId, vj.DestinoId, v.Marca, vj.Trailer,

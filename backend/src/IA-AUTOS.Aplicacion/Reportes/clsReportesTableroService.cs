@@ -96,10 +96,22 @@ public sealed class clsReportesTableroService(
 
     public async Task<AdopcionDto> AdopcionAsync(FiltrosReporteRequest solicitud, CancellationToken ct = default)
     {
-        var filas = await consultas.AdopcionAsync(Parsear(solicitud), ct);
+        var filtros = Parsear(solicitud);
+        var filas = await consultas.AdopcionAsync(filtros, ct);
+        var filasPorCamion = await consultas.AdopcionPorCamionAsync(filtros, ct);
         var clientes = await NombresAsync(clsNombresCatalogo.CLIENTES, ct);
+        var lugares = await NombresAsync(clsNombresCatalogo.LUGARES, ct);
         var programados = filas.Sum(f => f.Programados);
         var conSalida = filas.Sum(f => f.ConSalidaDigital);
+        AdopcionMedidaDto Medida(IReadOnlyList<FilaAdopcion> f) => new(
+            f.Sum(x => x.Programados),
+            f.Sum(x => x.ConSalidaDigital),
+            clsReglasReportes.Porcentaje(f.Sum(x => x.ConSalidaDigital), f.Sum(x => x.Programados)),
+            f.GroupBy(x => x.LugarDestinoId)
+                .Select(g => (Lugar: g.Key, Nombre: g.Key is { } id ? lugares.GetValueOrDefault(id) : null, Programados: g.Sum(x => x.Programados), Con: g.Sum(x => x.ConSalidaDigital)))
+                .OrderBy(g => g.Lugar is null ? 1 : 0).ThenBy(g => g.Nombre, StringComparer.CurrentCultureIgnoreCase)
+                .Select(g => new AdopcionDestinoDto(g.Lugar, g.Nombre, g.Programados, g.Con, clsReglasReportes.Porcentaje(g.Con, g.Programados)))
+                .ToList());
         return new AdopcionDto(
             programados,
             conSalida,
@@ -113,7 +125,9 @@ public sealed class clsReportesTableroService(
                 .ToList(),
             filas.GroupBy(f => f.ClienteId).OrderBy(g => clientes.GetValueOrDefault(g.Key), StringComparer.Ordinal)
                 .Select(g => new AdopcionClienteDto(g.Key, clientes.GetValueOrDefault(g.Key), g.Sum(f => f.Programados), g.Sum(f => f.ConSalidaDigital), clsReglasReportes.Porcentaje(g.Sum(f => f.ConSalidaDigital), g.Sum(f => f.Programados))))
-                .ToList());
+                .ToList(),
+            Medida(filasPorCamion),
+            Medida(filas));
     }
 
     // -------------------------------------------------------------------------------------- tiempo de captura

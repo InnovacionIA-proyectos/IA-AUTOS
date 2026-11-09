@@ -154,7 +154,7 @@ public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaT
 
         var r = await ConsultarAsync(coordinador, "/api/reportes/adopcion");
 
-        Assert.Equal(["programados", "con_salida_digital", "adopcion", "meta", "por_dia", "por_operacion", "por_cliente"], r.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["programados", "con_salida_digital", "adopcion", "meta", "por_dia", "por_operacion", "por_cliente", "por_camion", "por_carro"], r.EnumerateObject().Select(p => p.Name).ToList());
         // El dia del despacho se programaron V1, V2, V3 y V6 de Sofasa (V4 es de otro cliente); V6 no tiene inspeccion de salida.
         Assert.Equal(4, r.GetProperty("programados").GetInt32());
         Assert.Equal(3, r.GetProperty("con_salida_digital").GetInt32());

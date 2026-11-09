@@ -767,7 +767,7 @@ INSERT @casosNotif VALUES
  (N'CHECK la novedad sin revisar no tiene texto libre', N'INSERT dbo.tblHallazgos (Id,InspeccionId,TamanoDano,Origen,TipoNovedad,Nota) VALUES (NEWID(),''' + CAST(@st5 AS nvarchar(36)) + N''',''5_10cm'',''conductor'',''golpe'',N''texto'')', 547),
  (N'CHECK la novedad revisada se completa', N'UPDATE dbo.tblHallazgos SET RevisadoAt = SYSDATETIMEOFFSET() WHERE InspeccionId = ''' + CAST(@st5 AS nvarchar(36)) + N''' AND TipoNovedad IS NOT NULL', 547),
  (N'CHECK el conductor no asigna el nivel', N'INSERT dbo.tblHallazgos (Id,InspeccionId,TamanoDano,Origen,ClaseDano,NivelSeveridad) VALUES (NEWID(),''' + CAST(@s5 AS nvarchar(36)) + N''',''5_10cm'',''conductor'',''golpe'',''v1'')', 547),
- (N'Trigger: una novedad solo es de la salida de Transporte', N'INSERT dbo.tblHallazgos (Id,InspeccionId,TamanoDano,Origen,TipoNovedad) VALUES (NEWID(),''' + CAST(@s5 AS nvarchar(36)) + N''',''5_10cm'',''conductor'',''golpe'')', 51007);
+ (N'Trigger: una novedad solo es de la salida de Transporte', N'INSERT dbo.tblHallazgos (Id,InspeccionId,TamanoDano,Origen,TipoNovedad) VALUES (NEWID(),''' + CAST(@c5 AS nvarchar(36)) + N''',''5_10cm'',''conductor'',''golpe'')', 51007);
 DECLARE @pruebaN nvarchar(200), @sentenciaN nvarchar(max), @esperadoN int, @obtenidoN int, @mensajeN nvarchar(4000);
 DECLARE cNotif CURSOR LOCAL FAST_FORWARD FOR SELECT Prueba, Sentencia, Esperado FROM @casosNotif;
 OPEN cNotif;
@@ -1093,6 +1093,13 @@ INSERT #r SELECT N'vwAdopcion: el viaje programado cuenta en su dia programado y
 INSERT #r SELECT N'vwAdopcion: sin fecha programada el viaje cuenta en el dia de su creacion',
     CASE WHEN EXISTS (SELECT 1 FROM dbo.vwAdopcion WHERE Fecha = '2026-11-01' AND Trailer = N'ZZ_TEST_TR_SIN' AND Programados = 1)
           AND NOT EXISTS (SELECT 1 FROM dbo.vwAdopcion WHERE Fecha = '2026-11-03' AND Trailer = N'ZZ_TEST_TR_SIN') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'vwAdopcionPorCamion: el viaje cuenta una sola vez, en su dia programado y sin salida cerrada no esta adoptado',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.vwAdopcionPorCamion WHERE Trailer = N'ZZ_TEST_TR_PROG') = 1
+          AND EXISTS (SELECT 1 FROM dbo.vwAdopcionPorCamion WHERE Fecha = '2026-11-03' AND Trailer = N'ZZ_TEST_TR_PROG' AND Programados = 1 AND ConSalidaDigital = 0) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'vwAdopcion y vwAdopcionPorCamion: traen el destino y solo cuentan salidas cerradas',
+    CASE WHEN COL_LENGTH(N'dbo.vwAdopcion', N'LugarDestinoId') IS NOT NULL AND COL_LENGTH(N'dbo.vwAdopcionPorCamion', N'LugarDestinoId') IS NOT NULL
+          AND COL_LENGTH(N'dbo.vwAdopcionPorCamion', N'Programados') IS NOT NULL AND COL_LENGTH(N'dbo.vwAdopcionPorCamion', N'ConSalidaDigital') IS NOT NULL
+          AND (SELECT definition FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'dbo.vwAdopcion')) LIKE N'%i.Estado = ''cerrada''%' THEN 1 ELSE 0 END, NULL;
 -- Limpieza de esta seccion: las unidades y los viajes de ejemplo, el lugar de cargue y de destino del viaje base y, al final, los lugares de prueba.
 DELETE FROM dbo.tblViajeVehiculos WHERE ViajeId IN (@vjProgLg, @vjSinLg);
 DELETE FROM dbo.tblViajes WHERE Id IN (@vjProgLg, @vjSinLg);
@@ -1149,7 +1156,7 @@ INSERT #r SELECT N'Vistas de indicadores: tienen sus columnas',
           AND COL_LENGTH(N'dbo.vwIndicadorDiario', N'Despachados') IS NOT NULL AND COL_LENGTH(N'dbo.vwIndicadorDiario', N'ConNovedad') IS NOT NULL AND COL_LENGTH(N'dbo.vwIndicadorDiario', N'Porcentaje') IS NOT NULL THEN 1 ELSE 0 END, NULL;
 DECLARE @vistasOk int = 1;
 BEGIN TRY
-    EXEC (N'SELECT COUNT(*) FROM dbo.vwCobertura; SELECT COUNT(*) FROM dbo.vwAdopcion; SELECT COUNT(*) FROM dbo.vwTiempoCaptura; SELECT COUNT(*) FROM dbo.vwAveriasPorConfiguracion; SELECT COUNT(*) FROM dbo.vwIndicadorDiario') WITH RESULT SETS UNDEFINED;
+    EXEC (N'SELECT COUNT(*) FROM dbo.vwCobertura; SELECT COUNT(*) FROM dbo.vwAdopcion; SELECT COUNT(*) FROM dbo.vwAdopcionPorCamion; SELECT COUNT(*) FROM dbo.vwTiempoCaptura; SELECT COUNT(*) FROM dbo.vwAveriasPorConfiguracion; SELECT COUNT(*) FROM dbo.vwIndicadorDiario') WITH RESULT SETS UNDEFINED;
 END TRY
 BEGIN CATCH
     SET @vistasOk = 0;

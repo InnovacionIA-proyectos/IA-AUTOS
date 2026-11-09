@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.6.0"
+    "version": "3.7.0"
   },
   "paths": {
     "/api/viajes": {
@@ -22216,6 +22216,52 @@
           }
         }
       },
+      "AdopcionDestinoDto": {
+        "examples": [
+          {
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar": "texto",
+            "programados": 1,
+            "con_salida_digital": 1,
+            "adopcion": 1.5
+          }
+        ],
+        "required": [
+          "lugar_id",
+          "lugar",
+          "programados",
+          "con_salida_digital",
+          "adopcion"
+        ],
+        "type": "object",
+        "properties": {
+          "lugar_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "lugar": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "programados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_salida_digital": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "adopcion": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "AdopcionDiaDto": {
         "examples": [
           {
@@ -22282,7 +22328,35 @@
                 "con_salida_digital": 1,
                 "adopcion": 1.5
               }
-            ]
+            ],
+            "por_camion": {
+              "programados": 1,
+              "con_salida_digital": 1,
+              "adopcion": 1.5,
+              "por_destino": [
+                {
+                  "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "lugar": "texto",
+                  "programados": 1,
+                  "con_salida_digital": 1,
+                  "adopcion": 1.5
+                }
+              ]
+            },
+            "por_carro": {
+              "programados": 1,
+              "con_salida_digital": 1,
+              "adopcion": 1.5,
+              "por_destino": [
+                {
+                  "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "lugar": "texto",
+                  "programados": 1,
+                  "con_salida_digital": 1,
+                  "adopcion": 1.5
+                }
+              ]
+            }
           }
         ],
         "required": [
@@ -22328,6 +22402,71 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AdopcionClienteDto"
+            }
+          },
+          "por_camion": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AdopcionMedidaDto"
+              }
+            ]
+          },
+          "por_carro": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AdopcionMedidaDto"
+              }
+            ]
+          }
+        }
+      },
+      "AdopcionMedidaDto": {
+        "examples": [
+          {
+            "programados": 1,
+            "con_salida_digital": 1,
+            "adopcion": 1.5,
+            "por_destino": [
+              {
+                "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "lugar": "texto",
+                "programados": 1,
+                "con_salida_digital": 1,
+                "adopcion": 1.5
+              }
+            ]
+          }
+        ],
+        "required": [
+          "programados",
+          "con_salida_digital",
+          "adopcion",
+          "por_destino"
+        ],
+        "type": "object",
+        "properties": {
+          "programados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_salida_digital": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "adopcion": {
+            "type": "number",
+            "format": "double"
+          },
+          "por_destino": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdopcionDestinoDto"
             }
           }
         }

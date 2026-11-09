@@ -98,6 +98,7 @@ public sealed class clsAppDbContext : DbContext
         modelBuilder.Entity<clsHallazgoVentana>().HasNoKey().ToView("vwHallazgosVentanaUmbral");
         modelBuilder.Entity<clsFilaCobertura>().HasNoKey().ToView("vwCobertura");
         modelBuilder.Entity<clsFilaAdopcion>().HasNoKey().ToView("vwAdopcion");
+        modelBuilder.Entity<clsFilaAdopcionCamion>().HasNoKey().ToView("vwAdopcionPorCamion");
         modelBuilder.Entity<clsFilaTiempoCaptura>().HasNoKey().ToView("vwTiempoCaptura");
         modelBuilder.Entity<clsFilaAveria>().HasNoKey().ToView("vwAveriasPorConfiguracion");
         modelBuilder.Entity<clsFilaIndicadorDiario>().HasNoKey().ToView("vwIndicadorDiario");

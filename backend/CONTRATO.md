@@ -2129,15 +2129,33 @@ decimales; `meta` es 90. Una unidad cuenta en el punto de origen y en el de dest
 ```
 
 ### `GET /api/reportes/adopcion`
-**Fórmula propuesta, pendiente de confirmar por Calidad:** de los VIN de los viajes programados cada día (no cancelados, no solo los que ya salieron del Cargue: con ese denominador la adopción daría siempre 100 %), cuántos tienen una **inspección de salida registrada en el
-sistema**; el que no la tiene se hizo en papel o no se hizo. Como el viaje aún no guarda su fecha programada, el día es el de su **creación**. `meta` es 95.
+De lo **programado** cada día (viajes no cancelados, no solo los que ya salieron del Cargue: con ese denominador la adopción daría siempre 100 %), cuánto tiene su **salida del Cargue cerrada en el sistema**; lo que no la tiene se hizo en papel o no se hizo. **Solo cuenta la
+salida cerrada**: una salida que quedó en borrador ya no suma. El día es el de la **fecha programada** del viaje (hora de Colombia) y, en los viajes anteriores que no la tienen, el de su creación. `meta` es 95.
+
+Se entrega con **dos medidas**, cada una con su numerador (`con_salida_digital`), su denominador (`programados`) y su desglose por **destino**:
+
+| Medida | Qué cuenta | Adoptado cuando |
+|---|---|---|
+| `por_camion` | cada **viaje (camión) una sola vez**, en el destino del viaje | **alguna** de sus unidades tiene su salida del Cargue cerrada |
+| `por_carro` | cada **VIN programado** en el destino de **su** unidad | su salida del Cargue está cerrada |
+
+`por_camion.por_destino[].lugar_id` y `lugar` son `null` donde no hay un destino único: los viajes cuyas unidades van a **varios destinos** (por camión) y las unidades de viajes anteriores que no guardaron destino. Ese grupo va siempre al final; los demás, por nombre del lugar. Los totales de arriba
+(`programados`, `con_salida_digital`, `adopcion`) y `por_dia`, `por_operacion` y `por_cliente` son los **por carro**, como hasta ahora, solo que sin la salida en borrador.
 
 ```json
 {
   "programados": 100, "con_salida_digital": 92, "adopcion": 92.0, "meta": 95,
   "por_dia": [ { "fecha": "2026-10-20", "programados": 40, "con_salida_digital": 38, "adopcion": 95.0 } ],
   "por_operacion": [ { "operacion": "nacional", "programados": 60, "con_salida_digital": 58, "adopcion": 96.67 } ],
-  "por_cliente": [ { "cliente_id": "uuid", "cliente_nombre": "Sofasa", "programados": 100, "con_salida_digital": 92, "adopcion": 92.0 } ]
+  "por_cliente": [ { "cliente_id": "uuid", "cliente_nombre": "Sofasa", "programados": 100, "con_salida_digital": 92, "adopcion": 92.0 } ],
+  "por_camion": {
+    "programados": 20, "con_salida_digital": 19, "adopcion": 95.0,
+    "por_destino": [ { "lugar_id": "uuid", "lugar": "Concesionario Norte", "programados": 12, "con_salida_digital": 12, "adopcion": 100.0 }, { "lugar_id": null, "lugar": null, "programados": 2, "con_salida_digital": 1, "adopcion": 50.0 } ]
+  },
+  "por_carro": {
+    "programados": 100, "con_salida_digital": 92, "adopcion": 92.0,
+    "por_destino": [ { "lugar_id": "uuid", "lugar": "Concesionario Norte", "programados": 60, "con_salida_digital": 58, "adopcion": 96.67 } ]
+  }
 }
 ```
 
