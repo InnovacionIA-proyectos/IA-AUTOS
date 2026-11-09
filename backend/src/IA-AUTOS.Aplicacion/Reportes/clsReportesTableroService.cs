@@ -190,7 +190,8 @@ public sealed class clsReportesTableroService(
                 id => id is { } tipo ? tiposUnidad.GetValueOrDefault(tipo) : null),
             Agrupar(u => u.Marca, (m, v, c, h) => new AveriaMarcaDto(m, v, c, h), m => m),
             cuentas.GroupBy(c => c.Clase).Select(g => new ConteoClaseTableroDto(g.Key, g.Sum(c => c.Total))).OrderByDescending(c => c.Total).ThenBy(c => c.Clase, StringComparer.Ordinal).ToList(),
-            cuentas.GroupBy(c => c.Nivel).Select(g => new ConteoNivelTableroDto(g.Key, g.Sum(c => c.Total))).OrderByDescending(c => c.Total).ThenBy(c => c.Nivel, StringComparer.Ordinal).ToList());
+            cuentas.GroupBy(c => c.Nivel).Select(g => new ConteoNivelTableroDto(g.Key, g.Sum(c => c.Total))).OrderByDescending(c => c.Total).ThenBy(c => c.Nivel, StringComparer.Ordinal).ToList(),
+            cuentas.Where(c => c.Nivel is null).Sum(c => c.Total));
     }
 
     // ------------------------------------------------------------------------------------------ patrones
@@ -229,7 +230,8 @@ public sealed class clsReportesTableroService(
             cuentas.GroupBy(c => c.Nivel).Select(g => new PatronNivelDto(g.Key, g.Sum(c => c.Total))).OrderByDescending(n => n.Total).ThenBy(n => n.Nivel, StringComparer.Ordinal).ToList(),
             cuentas.GroupBy(c => c.Clase).Select(g => new PatronClaseDto(g.Key, g.Sum(c => c.Total))).OrderByDescending(n => n.Total).ThenBy(n => n.Clase, StringComparer.Ordinal).ToList(),
             cuentas.GroupBy(c => c.Tamano).Select(g => new PatronTamanoDto(g.Key, g.Sum(c => c.Total))).OrderByDescending(n => n.Total).ThenBy(n => n.Tamano, StringComparer.Ordinal).ToList(),
-            new UmbralPatronDto(cantidad, ventana));
+            new UmbralPatronDto(cantidad, ventana),
+            cuentas.Where(c => c.Nivel is null).Sum(c => c.Total));
     }
 
     /// <summary>La zona de un hallazgo: lado + numero del cuadrante (sin zona, un grupo aparte).</summary>
@@ -253,11 +255,12 @@ public sealed class clsReportesTableroService(
             clsReglasReportes.Porcentaje(conNovedad, despachados),
             objetivo,
             filas.GroupBy(f => f.Operacion).OrderBy(g => g.Key, StringComparer.Ordinal)
-                .Select(g => new IndicadorOperacionDto(g.Key, g.Sum(f => f.Despachados), g.Sum(f => f.ConNovedad), clsReglasReportes.Porcentaje(g.Sum(f => f.ConNovedad), g.Sum(f => f.Despachados))))
+                .Select(g => new IndicadorOperacionDto(g.Key, g.Sum(f => f.Despachados), g.Sum(f => f.ConNovedad), clsReglasReportes.Porcentaje(g.Sum(f => f.ConNovedad), g.Sum(f => f.Despachados)), g.Sum(f => f.SinCalificar)))
                 .ToList(),
             filas.GroupBy(f => f.ClienteId).OrderBy(g => clientes.GetValueOrDefault(g.Key), StringComparer.Ordinal)
-                .Select(g => new IndicadorClienteDto(g.Key, clientes.GetValueOrDefault(g.Key), g.Sum(f => f.Despachados), g.Sum(f => f.ConNovedad), clsReglasReportes.Porcentaje(g.Sum(f => f.ConNovedad), g.Sum(f => f.Despachados))))
-                .ToList());
+                .Select(g => new IndicadorClienteDto(g.Key, clientes.GetValueOrDefault(g.Key), g.Sum(f => f.Despachados), g.Sum(f => f.ConNovedad), clsReglasReportes.Porcentaje(g.Sum(f => f.ConNovedad), g.Sum(f => f.Despachados)), g.Sum(f => f.SinCalificar)))
+                .ToList(),
+            filas.Sum(f => f.SinCalificar));
     }
 
     // ----------------------------------------------------------------------------------------------- filtros

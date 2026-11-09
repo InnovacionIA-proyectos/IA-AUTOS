@@ -167,6 +167,9 @@ internal sealed class clsFilaIndicadorDiario : IFilaIndicador
     public int Despachados { get; set; }
 
     public int ConNovedad { get; set; }
+
+    /// <summary>Los danos sin nivel de esas unidades ese dia (una cifra aparte de <see cref="ConNovedad"/>).</summary>
+    public int SinCalificar { get; set; }
 }
 
 internal sealed class clsConsultasIndicadores(clsAppDbContext contexto) : IConsultasIndicadores
@@ -331,9 +334,9 @@ internal sealed class clsConsultasIndicadores(clsAppDbContext contexto) : IConsu
     public async Task<IReadOnlyList<FilaIndicador>> IndicadorDiarioAsync(FiltrosReporte filtros, CancellationToken ct = default) =>
         (await Filtrar(contexto.Set<clsFilaIndicadorDiario>().AsNoTracking(), filtros)
             .GroupBy(x => new { x.ClienteId, x.Operacion })
-            .Select(g => new { g.Key.ClienteId, g.Key.Operacion, Despachados = g.Sum(x => x.Despachados), ConNovedad = g.Sum(x => x.ConNovedad) })
+            .Select(g => new { g.Key.ClienteId, g.Key.Operacion, Despachados = g.Sum(x => x.Despachados), ConNovedad = g.Sum(x => x.ConNovedad), SinCalificar = g.Sum(x => x.SinCalificar) })
             .ToListAsync(ct))
-        .Select(x => new FilaIndicador(x.ClienteId, x.Operacion, x.Despachados, x.ConNovedad))
+        .Select(x => new FilaIndicador(x.ClienteId, x.Operacion, x.Despachados, x.ConNovedad, x.SinCalificar))
         .ToList();
 
     public async Task<IReadOnlyDictionary<Guid, UsuarioReporte>> UsuariosAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)

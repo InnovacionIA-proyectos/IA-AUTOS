@@ -34,7 +34,7 @@ public static class clsMapeadorInspecciones
         h.TipoNovedad, h.NivelSeveridad, nivel?.Nombre, nivel?.Accion,
         h.Origen, h.Nota, h.EsPreexistente, h.HallazgoOrigenId, h.ConfirmadoPor, h.EstadoSeguimiento,
         evidenciaFaltante.Count == 0, evidenciaFaltante,
-        h.RevisadoPor, h.RevisadoAt, h.CreatedAt, h.UpdatedAt);
+        h.RevisadoPor, h.RevisadoAt, h.CreatedAt, h.UpdatedAt, h.NivelSeveridad is null);
 
     public static HallazgoCreadoDto AHallazgoCreado(HallazgoDto hallazgo, clsEvidencia foto) => new(hallazgo, AEvidencia(foto));
 

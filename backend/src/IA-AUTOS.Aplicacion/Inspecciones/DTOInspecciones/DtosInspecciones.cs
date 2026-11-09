@@ -141,7 +141,10 @@ public sealed record FiltrosInspecciones(
     DateTimeOffset? Desde,
     DateTimeOffset? Hasta);
 
-/// <summary>Fila del listado de inspecciones: los datos de la inspeccion mas el VIN y el proceso. La placa, el trailer y el conductor salen del viaje.</summary>
+/// <summary>
+/// Fila del listado de inspecciones: los datos de la inspeccion mas el VIN y el proceso. La placa, el trailer y el conductor salen del viaje. <c>Lugar</c> es el punto de custodia de la etapa, <c>CodigoMtrack</c>
+/// el codigo del viaje y <c>Unidad</c> el tipo de unidad transportadora del viaje (los mismos datos que trae el detalle del informe): nulos cuando no hay.
+/// </summary>
 public sealed record InspeccionListadoDto(
     Guid Id,
     Guid EtapaId,
@@ -164,7 +167,10 @@ public sealed record InspeccionListadoDto(
     DateTimeOffset? CerradaAt,
     int Version,
     Guid? CorrigeInspeccionId,
-    string MomentoNombre);
+    string MomentoNombre,
+    string? Lugar = null,
+    string? CodigoMtrack = null,
+    string? Unidad = null);
 
 /// <summary>Transferencia con nombres y firmas dibujadas, para la revision del informe en la web.</summary>
 public sealed record TransferenciaDetalleDto(

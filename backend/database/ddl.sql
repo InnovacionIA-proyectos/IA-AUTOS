@@ -1873,8 +1873,8 @@ GO
 
 /* -----------------------------------------------------------------------------
    vwHallazgosVentanaUmbral: los hallazgos de inspecciones CERRADAS con su cliente, su zona (lado + numero), su proceso y la fecha de cierre, para contar patrones
-   por zona o por proceso dentro de una ventana de dias. Una fila por hallazgo. Excluye las novedades del conductor aun sin revisar (no tienen zona, clase ni nivel); un hallazgo historico sin
-   zona si esta (cuenta por proceso, con la zona nula).
+   por zona o por proceso dentro de una ventana de dias. Una fila por hallazgo. Incluye el dano sin calificar (sin nivel), tambien las novedades del conductor aun sin revisar (sin zona, clase ni nivel:
+   cuentan por proceso, con la zona nula); un hallazgo historico sin zona tambien esta (cuenta por proceso, con la zona nula).
    ----------------------------------------------------------------------------- */
 IF COL_LENGTH(N'dbo.tblHallazgos', N'ZonaId') IS NOT NULL
     EXEC (N'CREATE OR ALTER VIEW dbo.vwHallazgosVentanaUmbral
@@ -1887,8 +1887,7 @@ JOIN dbo.tblInspecciones i ON i.Id = h.InspeccionId AND i.Estado = ''cerrada''
 JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
 JOIN dbo.tblEtapasCatalogo ec ON ec.Id = e.EtapaCatalogoId
 JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId
-LEFT JOIN dbo.tblZonasDano z ON z.Id = h.ZonaId
-WHERE NOT (h.Origen = ''conductor'' AND h.RevisadoAt IS NULL)');
+LEFT JOIN dbo.tblZonasDano z ON z.Id = h.ZonaId');
 GO
 
 /* -----------------------------------------------------------------------------
@@ -1896,8 +1895,8 @@ GO
    hora de Colombia (UTC-5). vwCobertura: una fila por unidad despachada (VIN de un viaje con la salida de su Cargue cerrada, sin las unidades "no sale"); RegistrosCerrados cuenta de 0 a 6
    (salida y llegada de las 3 etapas) y Completa = 1 solo con los 6. vwAdopcion (formula propuesta, pendiente de confirmar por Calidad): por dia, Programados = VIN de los viajes no cancelados
    creados ese dia y ConSalidaDigital = los que tienen una inspeccion de salida en el sistema. vwTiempoCaptura: una fila por inspeccion cerrada de Cargue y Descargue, con Minutos = cierre - inicio.
-   vwAveriasPorConfiguracion: una fila por hallazgo revisado de una inspeccion cerrada, con la configuracion del viaje y la zona (lado + numero). vwIndicadorDiario: por dia, Despachados y
-   ConNovedad (unidades con al menos un hallazgo V1 o V1+ ese dia). Se crean con SQL dinamico para poder ejecutar este script tambien sobre una base que aun no tiene las columnas que usan.
+   vwAveriasPorConfiguracion: una fila por hallazgo de una inspeccion cerrada (tambien el dano sin calificar, sin nivel), con la configuracion del viaje y la zona (lado + numero). vwIndicadorDiario: por dia,
+   Despachados, ConNovedad (unidades con al menos un hallazgo V1 o V1+ ese dia) y SinCalificar (los danos sin nivel de esas unidades ese dia, una cifra aparte que no se suma a ConNovedad). Se crean con SQL dinamico para poder ejecutar este script tambien sobre una base que aun no tiene las columnas que usan.
    ----------------------------------------------------------------------------- */
 IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'EstadoUnidad') IS NOT NULL
    AND COL_LENGTH(N'dbo.tblHallazgos', N'NivelSeveridad') IS NOT NULL
@@ -1983,14 +1982,14 @@ JOIN dbo.tblViajes vj ON vj.Id = i.ViajeId
 LEFT JOIN dbo.tblTiposUnidadTransportadora tu ON tu.Id = vj.TipoUnidadId
 LEFT JOIN dbo.tblUsuarios cu ON cu.Id = vj.ConductorId
 LEFT JOIN dbo.tblZonasDano z ON z.Id = h.ZonaId
-LEFT JOIN dbo.tblCuadrantes c ON c.Id = z.CuadranteId
-WHERE NOT (h.Origen = ''conductor'' AND h.RevisadoAt IS NULL)');
+LEFT JOIN dbo.tblCuadrantes c ON c.Id = z.CuadranteId');
     EXEC (N'CREATE OR ALTER VIEW dbo.vwIndicadorDiario
 AS
 SELECT x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer,
        COUNT(*) AS Despachados,
        SUM(x.ConNovedad) AS ConNovedad,
-       CAST(ROUND(SUM(x.ConNovedad) * 100.0 / COUNT(*), 2) AS decimal(5, 2)) AS Porcentaje
+       CAST(ROUND(SUM(x.ConNovedad) * 100.0 / COUNT(*), 2) AS decimal(5, 2)) AS Porcentaje,
+       SUM(x.SinCalificar) AS SinCalificar
 FROM (
     SELECT c.Fecha, c.ClienteId, c.Operacion, c.OrigenId, c.DestinoId, c.Marca, c.Trailer,
            CASE WHEN EXISTS (SELECT 1
@@ -2001,7 +2000,14 @@ FROM (
                                AND h.NivelSeveridad IN (''v1'', ''v1_plus'')
                                AND NOT (h.Origen = ''conductor'' AND h.RevisadoAt IS NULL)
                                AND CAST(SWITCHOFFSET(i.CerradaAt, N''-05:00'') AS date) = c.Fecha)
-                THEN 1 ELSE 0 END AS ConNovedad
+                THEN 1 ELSE 0 END AS ConNovedad,
+           (SELECT COUNT(*)
+            FROM dbo.tblHallazgos h
+            JOIN dbo.tblInspecciones i ON i.Id = h.InspeccionId AND i.Estado = ''cerrada''
+            JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+            WHERE e.ViajeId = c.ViajeId AND e.VehiculoId = c.VehiculoId
+              AND h.NivelSeveridad IS NULL
+              AND CAST(SWITCHOFFSET(i.CerradaAt, N''-05:00'') AS date) = c.Fecha) AS SinCalificar
     FROM dbo.vwCobertura c
 ) AS x
 GROUP BY x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer');

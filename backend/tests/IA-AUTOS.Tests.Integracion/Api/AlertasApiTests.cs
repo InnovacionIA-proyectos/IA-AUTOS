@@ -214,6 +214,19 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
         Assert.Contains(mensajes, m => m!.StartsWith("La zona 50 acumula 3 hallazgos en los últimos 30 días (umbral 2)", StringComparison.Ordinal));
         Assert.Contains(mensajes, m => m!.StartsWith("El proceso cargue acumula 2 hallazgos", StringComparison.Ordinal));
         Assert.All(await ComoJsonListaAsync(e.Coordinador), n => Assert.Equal("media", n.GetProperty("urgencia").GetString()));
+
+        // CA-6: el aviso lleva la zona (numero de cuadrante y lado) o el proceso como campos propios, ademas del texto.
+        var avisos = await ComoJsonListaAsync(e.Coordinador);
+        var deZona = avisos.Single(n => n.GetProperty("datos").GetProperty("tipo_umbral").GetString() == "zona").GetProperty("datos");
+        Assert.Equal(50, deZona.GetProperty("cuadrante_numero").GetInt32());
+        Assert.Equal(3, deZona.GetProperty("total").GetInt32());
+        Assert.Equal(2, deZona.GetProperty("umbral").GetInt32());
+        Assert.Equal(30, deZona.GetProperty("ventana_dias").GetInt32());
+        Assert.Equal(JsonValueKind.Null, deZona.GetProperty("proceso").ValueKind);
+        var deProceso = avisos.Single(n => n.GetProperty("datos").GetProperty("tipo_umbral").GetString() == "proceso").GetProperty("datos");
+        Assert.Equal("cargue", deProceso.GetProperty("proceso").GetString());
+        Assert.Equal(JsonValueKind.Null, deProceso.GetProperty("cuadrante_numero").ValueKind);
+        Assert.Equal(JsonValueKind.Null, deProceso.GetProperty("lado").ValueKind);
         Assert.Equal(0, await NotificacionesAsync("umbral_patron", e.Inspector.UsuarioId) + await NotificacionesAsync("umbral_patron", e.Conductor.UsuarioId));
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Canal = 'correo'"));
     }
