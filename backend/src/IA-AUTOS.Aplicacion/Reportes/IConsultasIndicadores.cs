@@ -55,7 +55,8 @@ public sealed record FilaConteoHallazgo(
     string Tamano,
     int Total);
 
-public sealed record FilaIndicador(Guid ClienteId, string Operacion, int Despachados, int ConNovedad);
+/// <summary><c>SinCalificar</c> son los danos sin nivel de esas unidades ese dia: una cifra aparte que no se suma a <c>ConNovedad</c>.</summary>
+public sealed record FilaIndicador(Guid ClienteId, string Operacion, int Despachados, int ConNovedad, int SinCalificar = 0);
 
 public sealed record UsuarioReporte(Guid Id, string Nombre, string? Cedula);
 

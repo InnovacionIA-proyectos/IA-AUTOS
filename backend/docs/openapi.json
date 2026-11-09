@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.2.0"
+    "version": "3.3.0"
   },
   "paths": {
     "/api/viajes": {
@@ -13699,7 +13699,8 @@
                         "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "revisado_at": "2026-10-22T14:30:00.000Z",
                         "created_at": "2026-10-22T14:30:00.000Z",
-                        "updated_at": "2026-10-22T14:30:00.000Z"
+                        "updated_at": "2026-10-22T14:30:00.000Z",
+                        "sin_calificar": true
                       }
                     ]
                   ],
@@ -13775,7 +13776,8 @@
                         "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "revisado_at": "2026-10-22T14:30:00.000Z",
                         "created_at": "2026-10-22T14:30:00.000Z",
-                        "updated_at": "2026-10-22T14:30:00.000Z"
+                        "updated_at": "2026-10-22T14:30:00.000Z",
+                        "sin_calificar": true
                       }
                     ]
                   ],
@@ -13851,7 +13853,8 @@
                         "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "revisado_at": "2026-10-22T14:30:00.000Z",
                         "created_at": "2026-10-22T14:30:00.000Z",
-                        "updated_at": "2026-10-22T14:30:00.000Z"
+                        "updated_at": "2026-10-22T14:30:00.000Z",
+                        "sin_calificar": true
                       }
                     ]
                   ],
@@ -21577,7 +21580,8 @@
                 "nivel": "v1",
                 "total": 1
               }
-            ]
+            ],
+            "sin_calificar": 1
           }
         ],
         "required": [
@@ -21632,6 +21636,11 @@
             "items": {
               "$ref": "#/components/schemas/ConteoNivelTableroDto"
             }
+          },
+          "sin_calificar": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -24525,7 +24534,8 @@
             "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
-            "updated_at": "2026-10-22T14:30:00.000Z"
+            "updated_at": "2026-10-22T14:30:00.000Z",
+            "sin_calificar": true
           }
         ],
         "required": [
@@ -24686,6 +24696,9 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "sin_calificar": {
+            "type": "boolean"
           }
         }
       },
@@ -24770,6 +24783,12 @@
               "ruta_archivo": "texto",
               "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
             },
+            "conductor_nombre": "texto",
+            "motivo_sin_inspector": {
+              "codigo": "codigo_de_ejemplo",
+              "nombre": "Nombre de ejemplo",
+              "texto": "texto"
+            },
             "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "parte_vehiculo": "texto",
@@ -24801,7 +24820,8 @@
             "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
-            "updated_at": "2026-10-22T14:30:00.000Z"
+            "updated_at": "2026-10-22T14:30:00.000Z",
+            "sin_calificar": true
           }
         ],
         "required": [
@@ -24854,6 +24874,22 @@
               },
               {
                 "$ref": "#/components/schemas/EvidenciaDto"
+              }
+            ]
+          },
+          "conductor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_sin_inspector": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MotivoSinInspectorDto"
               }
             ]
           },
@@ -25007,6 +25043,9 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "sin_calificar": {
+            "type": "boolean"
           }
         }
       },
@@ -25044,7 +25083,8 @@
             "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
-            "updated_at": "2026-10-22T14:30:00.000Z"
+            "updated_at": "2026-10-22T14:30:00.000Z",
+            "sin_calificar": true
           }
         ],
         "required": [
@@ -25228,6 +25268,10 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "sin_calificar": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -25264,6 +25308,12 @@
               "ruta_archivo": "texto",
               "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
             },
+            "conductor_nombre": "texto",
+            "motivo_sin_inspector": {
+              "codigo": "codigo_de_ejemplo",
+              "nombre": "Nombre de ejemplo",
+              "texto": "texto"
+            },
             "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "parte_vehiculo": "texto",
@@ -25295,7 +25345,8 @@
             "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
-            "updated_at": "2026-10-22T14:30:00.000Z"
+            "updated_at": "2026-10-22T14:30:00.000Z",
+            "sin_calificar": true
           }
         ],
         "required": [
@@ -25342,6 +25393,22 @@
               },
               {
                 "$ref": "#/components/schemas/EvidenciaDto"
+              }
+            ]
+          },
+          "conductor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_sin_inspector": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MotivoSinInspectorDto"
               }
             ]
           },
@@ -25495,6 +25562,9 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "sin_calificar": {
+            "type": "boolean"
           }
         }
       },
@@ -25562,7 +25632,8 @@
             "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
-            "updated_at": "2026-10-22T14:30:00.000Z"
+            "updated_at": "2026-10-22T14:30:00.000Z",
+            "sin_calificar": true
           }
         ],
         "required": [
@@ -25750,6 +25821,9 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "sin_calificar": {
+            "type": "boolean"
           }
         }
       },
@@ -25760,7 +25834,8 @@
             "cliente_nombre": "texto",
             "despachados": 1,
             "con_novedad": 1,
-            "porcentaje": 1.25
+            "porcentaje": 1.25,
+            "sin_calificar": 1
           }
         ],
         "required": [
@@ -25793,6 +25868,11 @@
           "porcentaje": {
             "type": "number",
             "format": "double"
+          },
+          "sin_calificar": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -25809,7 +25889,8 @@
                 "operacion": "nacional",
                 "despachados": 1,
                 "con_novedad": 1,
-                "porcentaje": 1.25
+                "porcentaje": 1.25,
+                "sin_calificar": 1
               }
             ],
             "por_cliente": [
@@ -25818,9 +25899,11 @@
                 "cliente_nombre": "texto",
                 "despachados": 1,
                 "con_novedad": 1,
-                "porcentaje": 1.25
+                "porcentaje": 1.25,
+                "sin_calificar": 1
               }
-            ]
+            ],
+            "sin_calificar": 1
           }
         ],
         "required": [
@@ -25865,6 +25948,11 @@
             "items": {
               "$ref": "#/components/schemas/IndicadorClienteDto"
             }
+          },
+          "sin_calificar": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -25874,7 +25962,8 @@
             "operacion": "nacional",
             "despachados": 1,
             "con_novedad": 1,
-            "porcentaje": 1.25
+            "porcentaje": 1.25,
+            "sin_calificar": 1
           }
         ],
         "required": [
@@ -25899,6 +25988,11 @@
           "porcentaje": {
             "type": "number",
             "format": "double"
+          },
+          "sin_calificar": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -25963,7 +26057,8 @@
                 "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "revisado_at": "2026-10-22T14:30:00.000Z",
                 "created_at": "2026-10-22T14:30:00.000Z",
-                "updated_at": "2026-10-22T14:30:00.000Z"
+                "updated_at": "2026-10-22T14:30:00.000Z",
+                "sin_calificar": true
               }
             ],
             "evidencias": [
@@ -26699,7 +26794,10 @@
             "cerrada_at": "2026-10-22T14:30:00.000Z",
             "version": 1,
             "corrige_inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "momento_nombre": "texto"
+            "momento_nombre": "texto",
+            "lugar": "texto",
+            "codigo_mtrack": "MTK-0001",
+            "unidad": "texto"
           }
         ],
         "required": [
@@ -26822,6 +26920,24 @@
           },
           "momento_nombre": {
             "type": "string"
+          },
+          "lugar": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unidad": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -27137,7 +27253,8 @@
                 "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "revisado_at": "2026-10-22T14:30:00.000Z",
                 "created_at": "2026-10-22T14:30:00.000Z",
-                "updated_at": "2026-10-22T14:30:00.000Z"
+                "updated_at": "2026-10-22T14:30:00.000Z",
+                "sin_calificar": true
               }
             ],
             "evidencias": [
@@ -27495,6 +27612,12 @@
                   "ruta_archivo": "texto",
                   "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                 },
+                "conductor_nombre": "texto",
+                "motivo_sin_inspector": {
+                  "codigo": "codigo_de_ejemplo",
+                  "nombre": "Nombre de ejemplo",
+                  "texto": "texto"
+                },
                 "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "parte_vehiculo": "texto",
@@ -27526,7 +27649,8 @@
                 "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "revisado_at": "2026-10-22T14:30:00.000Z",
                 "created_at": "2026-10-22T14:30:00.000Z",
-                "updated_at": "2026-10-22T14:30:00.000Z"
+                "updated_at": "2026-10-22T14:30:00.000Z",
+                "sin_calificar": true
               }
             ],
             "total": 1,
@@ -28885,7 +29009,10 @@
                 "cerrada_at": "2026-10-22T14:30:00.000Z",
                 "version": 1,
                 "corrige_inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                "momento_nombre": "texto"
+                "momento_nombre": "texto",
+                "lugar": "texto",
+                "codigo_mtrack": "MTK-0001",
+                "unidad": "texto"
               }
             ],
             "total": 1,
@@ -29224,7 +29351,8 @@
             "umbral": {
               "cantidad": 1,
               "ventana_dias": 1
-            }
+            },
+            "sin_calificar": 1
           }
         ],
         "required": [
@@ -29281,6 +29409,11 @@
           },
           "umbral": {
             "$ref": "#/components/schemas/UmbralPatronDto"
+          },
+          "sin_calificar": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },

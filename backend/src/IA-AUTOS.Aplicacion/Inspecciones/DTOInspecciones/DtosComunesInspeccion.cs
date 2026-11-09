@@ -66,7 +66,8 @@ public record HallazgoDto(
     Guid? RevisadoPor,
     DateTimeOffset? RevisadoAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    bool SinCalificar = false);
 
 /// <summary>El hallazgo recien guardado junto con la foto propia que se guardo con el.</summary>
 public sealed record HallazgoCreadoDto : HallazgoDto

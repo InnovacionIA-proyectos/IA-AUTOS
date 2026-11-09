@@ -10,7 +10,8 @@ namespace IAAutos.Aplicacion.Inspecciones;
 
 /// <summary>
 /// Un hallazgo del listado: el <c>HallazgoDto</c> mas el contexto de donde salio (VIN, viaje y su codigo, proceso, momento, estado y cierre de su inspeccion) y su foto propia
-/// (nula si no tiene).
+/// (nula si no tiene). <c>ConductorNombre</c> es el del conductor de la inspeccion (el capturado en ella o, si no, el del viaje) y <c>MotivoSinInspector</c> el motivo por el que esa inspeccion se hizo sin
+/// inspector: nulos cuando no aplican, para no abrir cada informe.
 /// </summary>
 public record HallazgoListadoDto : HallazgoDto
 {
@@ -23,9 +24,13 @@ public record HallazgoListadoDto : HallazgoDto
         string momento,
         string inspeccionEstado,
         DateTimeOffset? cerradaAt,
-        EvidenciaDto? evidencia)
+        EvidenciaDto? evidencia,
+        string? conductorNombre = null,
+        MotivoSinInspectorDto? motivoSinInspector = null)
         : base(hallazgo)
     {
+        ConductorNombre = conductorNombre;
+        MotivoSinInspector = motivoSinInspector;
         Vin = vin;
         ViajeId = viajeId;
         CodigoMtrack = codigoMtrack;
@@ -51,6 +56,10 @@ public record HallazgoListadoDto : HallazgoDto
     public DateTimeOffset? CerradaAt { get; init; }
 
     public EvidenciaDto? Evidencia { get; init; }
+
+    public string? ConductorNombre { get; init; }
+
+    public MotivoSinInspectorDto? MotivoSinInspector { get; init; }
 }
 
 /// <summary>El hallazgo con su historial de seguimiento y sus notas aclaratorias (vacio si no tiene).</summary>

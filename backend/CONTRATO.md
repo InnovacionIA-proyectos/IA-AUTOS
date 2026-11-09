@@ -978,7 +978,8 @@ Autenticado. Una **página** de informes (`{ items, total, pagina, tamano }`; 50
 | `origen_id`, `destino_id` | UUID del origen y del destino del viaje |
 | `desde`, `hasta` | fecha ISO sobre la fecha de la inspección |
 
-Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es el `InspeccionDto` más `vin` y `proceso`. Inspector y conductor solo reciben los informes de sus viajes.
+Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es el `InspeccionDto` más `vin` y `proceso`, y `lugar` (el punto de custodia de la etapa, el mismo que trae el detalle del informe), `codigo_mtrack` (el del viaje) y `unidad` (el tipo de unidad transportadora del viaje), para no abrir cada informe;
+los tres son `null` cuando no hay (una etapa sin punto de custodia, un viaje sin código o sin tipo de unidad). Inspector y conductor solo reciben los informes de sus viajes.
 
 ### `GET /api/inspecciones/{id}/pdf`
 Autenticado. El **informe de la inspección en PDF** (`Content-Type: application/pdf`, nombre `informe-{vin}-{proceso}-{momento}-v{version}.pdf`), como descarga binaria (use `fetch` con el token y descargue el `blob`). Lleva:
@@ -1206,8 +1207,12 @@ Ver «Visibilidad por cliente».
 
 Un filtro con un valor inválido responde `400` con todos los errores juntos en `details.fieldErrors`.
 
-Cada fila (`HallazgoListadoDto`) es el `HallazgoDto` más el contexto de su inspección: `vin`, `viaje_id`, `codigo_mtrack`, `proceso`, `momento`, `inspeccion_estado`, `cerrada_at` (nulo si la inspección está en borrador) y `evidencia`, la **foto propia** del hallazgo como `EvidenciaDto` con su `url`
-(nula si no tiene; no cuenta la foto del sello).
+Cada fila (`HallazgoListadoDto`) es el `HallazgoDto` más el contexto de su inspección: `vin`, `viaje_id`, `codigo_mtrack`, `proceso`, `momento`, `inspeccion_estado`, `cerrada_at` (nulo si la inspección está en borrador), `evidencia`, la **foto propia** del hallazgo como `EvidenciaDto` con su `url`
+(nula si no tiene; no cuenta la foto del sello), `conductor_nombre` (el conductor de la inspección: el capturado en ella o, si no, el del viaje) y `motivo_sin_inspector` (`{ codigo, nombre, texto }`: por qué esa inspección se hizo sin inspector, como en el detalle del informe). Los dos son `null` cuando no aplican,
+así «Por revisar» no obliga a abrir cada informe. El nombre del conductor es un dato personal: va solo en este campo, nunca en textos libres.
+
+**Sin calificar.** El `HallazgoDto` (en el listado, el detalle y el informe) trae `sin_calificar`: `true` cuando el daño **no tiene nivel** (una novedad del conductor aún sin revisar o un daño sin nivel), para que las pantallas lo distingan a simple vista. Un viaje finalizado lo sigue mostrando, y
+finalizar un viaje con daños sin calificar funciona igual que siempre. El conductor no ve el nivel y recibe siempre `sin_calificar: false`.
 
 ### `GET /api/hallazgos/{id}`
 La misma fila más `seguimiento` (el historial, como en `GET /api/hallazgos/{id}/seguimiento`) y `notas_aclaratorias` (un arreglo que va vacío hasta que existan las notas aclaratorias de una inspección cerrada). `404` si no existe; `403` si es de un viaje ajeno (inspector) o de otro cliente.
@@ -1457,8 +1462,9 @@ Todo lo que se hace aquí queda en la auditoría.
 }
 ```
 
-`datos` son los **campos propios del aviso**, además del texto, para que el portal y la app no tengan que leer el mensaje: un objeto con claves en `snake_case` y `null` en los avisos que no los llevan. Hoy los lleva el aviso de la entrega con una sola firma (`novedad_proceso`, ver «Entrega por punto»):
-`{ "hecho": "entrega_con_una_firma", "lugar_id": "…", "lugar": "…", "parte_que_firmo": "entrega", "motivo": "…", "unidades": 3 }`. Un dato personal (como la cédula) nunca va en `datos`.
+`datos` son los **campos propios del aviso**, además del texto, para que el portal y la app no tengan que leer el mensaje: un objeto con claves en `snake_case` y `null` en los avisos que no los llevan. Hoy los llevan dos avisos. El de la entrega con una sola firma (`novedad_proceso`, ver «Entrega por punto»):
+`{ "hecho": "entrega_con_una_firma", "lugar_id": "…", "lugar": "…", "parte_que_firmo": "entrega", "motivo": "…", "unidades": 3 }`. Y el de **umbral superado** (`umbral_patron`): `{ "tipo_umbral": "zona", "cuadrante_numero": 4, "lado": "izquierdo", "proceso": null, "total": 12, "umbral": 10, "ventana_dias": 30 }`
+cuando la zona (lado y número de cuadrante) llega al umbral, o `{ "tipo_umbral": "proceso", "cuadrante_numero": null, "lado": null, "proceso": "cargue", … }` cuando es el proceso; con esos campos el portal abre el tablero ya filtrado (`/api/reportes/patrones?proceso=…`). Un dato personal (como la cédula) nunca va en `datos`.
 
 `tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar` o `propuesta_ubicacion` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
 
@@ -2105,9 +2111,12 @@ fila con la clave en `null` (unidades sin trailer, sin conductor o sin tipo de u
   "por_unidad": [ { "tipo_unidad_id": "uuid", "unidad": "Niñera", "vines": 12, "con_novedad": 3, "hallazgos": 4 } ],
   "por_marca": [ { "marca": "Renault", "vines": 12, "con_novedad": 3, "hallazgos": 4 } ],
   "por_clase": [ { "clase": "golpe", "total": 6 } ],
-  "por_nivel": [ { "nivel": "v1", "total": 2 } ]
+  "por_nivel": [ { "nivel": "v1", "total": 2 }, { "nivel": null, "total": 1 } ],
+  "sin_calificar": 1
 }
 ```
+
+`sin_calificar` son los **daños sin nivel** que entran en estas cuentas (la misma fila `nivel: null` de `por_nivel`): cuentan por su zona y su clase, y una novedad del conductor aún sin revisar, que no tiene zona ni clase, cuenta por proceso y aparece con la zona y la clase en `null`. Ninguno queda fuera en silencio. El filtro `nivel` solo trae los de ese nivel.
 
 ### `GET /api/reportes/novedades-proceso`
 Las **novedades de proceso** del periodo (cargue sin inspector y recibo sin entrega; no son hallazgos y no cuentan en los patrones ni en la tasa de rechazo): el total y su conteo por tipo, por punto de custodia (el de la etapa), por cliente (el del vehículo) y por mes (`AAAA-MM`, hora de Colombia). Usa los mismos filtros que los demás reportes
@@ -2136,9 +2145,12 @@ días que terminan en `hasta`, con los mismos filtros) llegan a `umbral.cantidad
   "por_nivel": [ { "nivel": "v1", "total": 5 } ],
   "por_clase": [ { "clase": "golpe", "total": 14 } ],
   "por_tamano": [ { "tamano": "5_10cm", "total": 8 } ],
-  "umbral": { "cantidad": 10, "ventana_dias": 30 }
+  "umbral": { "cantidad": 10, "ventana_dias": 30 },
+  "sin_calificar": 2
 }
 ```
+
+El mapa de calor y los patrones **cuentan el daño sin nivel** por su zona, su clase y su proceso, y `sin_calificar` dice cuántos de los `total` lo son («12 daños · 2 sin calificar»); en `por_nivel` salen con `nivel: null`. Las alertas de umbral también los cuentan.
 
 Un hallazgo sin ubicar (histórico o desvinculado del dibujo anterior) no entra en el mapa de zonas y sí cuenta por proceso, nivel, clase y tamaño.
 
@@ -2149,10 +2161,13 @@ propuesta pendiente de confirmar por el negocio). `objetivo` es el parámetro `o
 ```json
 {
   "fecha": "2026-10-20", "despachados": 80, "con_novedad": 1, "porcentaje": 1.25, "objetivo": 1.2,
-  "por_operacion": [ { "operacion": "nacional", "despachados": 50, "con_novedad": 1, "porcentaje": 2.0 } ],
-  "por_cliente": [ { "cliente_id": "uuid", "cliente_nombre": "Sofasa", "despachados": 80, "con_novedad": 1, "porcentaje": 1.25 } ]
+  "por_operacion": [ { "operacion": "nacional", "despachados": 50, "con_novedad": 1, "porcentaje": 2.0, "sin_calificar": 2 } ],
+  "por_cliente": [ { "cliente_id": "uuid", "cliente_nombre": "Sofasa", "despachados": 80, "con_novedad": 1, "porcentaje": 1.25, "sin_calificar": 3 } ],
+  "sin_calificar": 3
 }
 ```
+
+`sin_calificar` es una **cifra aparte**: los daños sin nivel (hallazgos, no unidades) de las unidades despachadas ese día. No se suma a `con_novedad` ni al porcentaje, y tampoco se descarta. La tasa de rechazo (`GET /api/metricas/rechazo`) no cambia: sigue contando las unidades con al menos un hallazgo.
 
 La tasa de rechazo (`GET /api/metricas/rechazo`) sigue publicada como está; no hay `GET /api/reportes/rechazo`.
 

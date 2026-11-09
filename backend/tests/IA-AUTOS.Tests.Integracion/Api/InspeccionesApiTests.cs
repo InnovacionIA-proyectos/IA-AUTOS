@@ -1894,7 +1894,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var porFecha = Items(await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?desde=2026-07-01T00:00:00Z&hasta=2026-07-31T00:00:00Z")));
 
         Assert.Equal(3, todas.GetArrayLength());
-        Assert.Equal(["iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre"], todas[0].EnumerateObject().Select(p => p.Name).TakeLast(5).ToList());
+        Assert.Equal(["iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre", "lugar", "codigo_mtrack", "unidad"], todas[0].EnumerateObject().Select(p => p.Name).TakeLast(8).ToList());
         Assert.Equal(["vin", "proceso"], todas[0].EnumerateObject().Select(p => p.Name).Skip(15).Take(2).ToList());
         Assert.Equal(2, porUsuario.GetArrayLength());
         Assert.Contains(porUsuario.EnumerateArray(), i => i.GetProperty("id").GetGuid() == b);

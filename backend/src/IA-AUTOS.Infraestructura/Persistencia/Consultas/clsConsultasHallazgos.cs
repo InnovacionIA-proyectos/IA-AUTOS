@@ -116,9 +116,15 @@ internal sealed class clsConsultasHallazgos(clsAppDbContext contexto) : IConsult
         join v in contexto.Vehiculos on e.VehiculoId equals v.Id
         join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id
         join vj in contexto.Viajes on i.ViajeId equals vj.Id
+        join cu in contexto.Usuarios on vj.ConductorId equals cu.Id into conductores
+        from cu in conductores.DefaultIfEmpty()
         join z in contexto.ZonasDano on h.ZonaId equals z.Id into zonas
         from z in zonas.DefaultIfEmpty()
-        select new FilaHallazgo { Hallazgo = h, Inspeccion = i, Vin = v.Vin, ClienteId = v.ClienteId, Proceso = p.Codigo, CodigoMtrack = vj.CodigoMtrack, ZonaNumero = z.Numero, ZonaLado = z.Lado };
+        select new FilaHallazgo
+        {
+            Hallazgo = h, Inspeccion = i, Vin = v.Vin, ClienteId = v.ClienteId, Proceso = p.Codigo, CodigoMtrack = vj.CodigoMtrack, ZonaNumero = z.Numero, ZonaLado = z.Lado,
+            ConductorNombre = i.ConductorNombre ?? (string?)cu.Nombre,
+        };
 
     /// <summary>Convierte las filas en DTO: el hallazgo con su zona y nivel, y su foto propia (la primera que se tomo).</summary>
     private async Task<IReadOnlyList<HallazgoListadoDto>> ArmarAsync(IReadOnlyList<FilaHallazgo> filas, CancellationToken ct)
@@ -134,9 +140,19 @@ internal sealed class clsConsultasHallazgos(clsAppDbContext contexto) : IConsult
             .Where(e => e.HallazgoId != null && ids.Contains(e.HallazgoId.Value) && !e.EsSello && !e.EsConstancia)
             .OrderBy(e => e.CreatedAt).ToListAsync(ct)).GroupBy(e => e.HallazgoId!.Value).ToDictionary(g => g.Key, g => g.First());
 
+        // El motivo por el que la inspeccion se hizo sin inspector (con el nombre del catalogo), para las filas que lo tienen.
+        var inspeccionIds = filas.Select(f => f.Inspeccion.Id).Distinct().ToList();
+        var motivos = (await (from i in contexto.Inspecciones.AsNoTracking()
+                              join m in contexto.MotivosSinInspector.AsNoTracking() on i.MotivoSinInspector equals m.Codigo
+                              where inspeccionIds.Contains(i.Id)
+                              select new { i.Id, m.Codigo, m.Nombre, i.MotivoSinInspectorTexto }).ToListAsync(ct))
+            .ToDictionary(m => m.Id, m => new MotivoSinInspectorDto(m.Codigo, m.Nombre, m.MotivoSinInspectorTexto));
+
         return filas.Select(f => new HallazgoListadoDto(
             dtos[f.Hallazgo.Id], f.Vin, f.Inspeccion.ViajeId, f.CodigoMtrack, f.Proceso, f.Inspeccion.Momento, f.Inspeccion.Estado, f.Inspeccion.CerradaAt,
-            fotos.TryGetValue(f.Hallazgo.Id, out var foto) ? clsMapeadorInspecciones.AEvidencia(foto) : null)).ToList();
+            fotos.TryGetValue(f.Hallazgo.Id, out var foto) ? clsMapeadorInspecciones.AEvidencia(foto) : null,
+            f.ConductorNombre,
+            motivos.GetValueOrDefault(f.Inspeccion.Id))).ToList();
     }
 
     /// <summary>Una fila de la consulta; se proyecta con inicializadores (y no con constructor) para que EF pueda seguir filtrando y ordenando sobre sus miembros.</summary>
@@ -157,5 +173,7 @@ internal sealed class clsConsultasHallazgos(clsAppDbContext contexto) : IConsult
         public int? ZonaNumero { get; init; }
 
         public string? ZonaLado { get; init; }
+
+        public string? ConductorNombre { get; init; }
     }
 }

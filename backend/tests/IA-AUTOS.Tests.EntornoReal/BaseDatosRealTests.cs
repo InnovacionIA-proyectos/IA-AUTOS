@@ -869,6 +869,20 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Las_vistas_de_los_indicadores_cuentan_el_dano_sin_calificar()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/36-dano-sin-calificar-en-los-conteos.sql.
+        await using var conexion = await AbrirAsync();
+
+        var indicador = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'vwIndicadorDiario') AND name = N'SinCalificar'");
+        var vistasSinFiltro = await EscalarAsync<int>(
+            conexion,
+            "SELECT COUNT(*) FROM sys.sql_modules m WHERE m.object_id IN (OBJECT_ID(N'vwHallazgosVentanaUmbral'), OBJECT_ID(N'vwAveriasPorConfiguracion')) AND m.definition NOT LIKE N'%RevisadoAt IS NULL%'");
+
+        Assert.True(indicador == 1 && vistasSinFiltro == 2, "Las vistas de los indicadores aun excluyen el dano sin calificar. Ejecute database/cambios-esquema/36-dano-sin-calificar-en-los-conteos.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

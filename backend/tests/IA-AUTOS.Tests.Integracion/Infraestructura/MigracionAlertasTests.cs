@@ -150,7 +150,8 @@ public sealed partial class MigracionAlertasTests : IAsyncLifetime
 
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.views WHERE name = 'vwHallazgosVentanaUmbral'"));
         Assert.Equal(19, await ContarAsync("SELECT COUNT(*) FROM dbo.tblParametros"));
-        Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM dbo.vwHallazgosVentanaUmbral"));
+        // Cuenta tambien la novedad del conductor aun sin revisar (dano sin calificar): la vista ya no la excluye.
+        Assert.Equal(2, await ContarAsync("SELECT COUNT(*) FROM dbo.vwHallazgosVentanaUmbral"));
     }
 
     [Fact]
