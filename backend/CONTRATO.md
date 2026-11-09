@@ -621,7 +621,8 @@ Gestión de viajes. `201` con el `ViajeDto`.
 ```json
 {
   "codigo_mtrack": "MTK-001", "tipo_unidad_id": "uuid", "placa": "ABC123", "trailer": "T-9",
-  "conductor_id": "uuid", "inspector_id": null, "origen_id": "uuid",
+  "conductor_id": "uuid", "inspector_id": null,
+  "fecha_programada": "2026-11-18T06:00:00-05:00", "lugar_cargue_id": "uuid",
   "unidades": [
     { "vin": "9BWZZZ377VT004251", "lugar_destino_id": "uuid" },
     { "vin": "9BWZZZ377VT004252", "lugar_destino_id": "uuid" }
@@ -629,7 +630,8 @@ Gestión de viajes. `201` con el `ViajeDto`.
 }
 ```
 
-El destino es de **cada unidad**: el viaje ya no lleva un destino único, así que `destino_id` y `vines` **ya no se aceptan** (`400` «Campo no admitido»).
+El destino es de **cada unidad**: el viaje ya no lleva un destino único. **Todo campo que esta solicitud no declara se rechaza** con `400` «Campo no admitido» en ese campo (por ejemplo `destino_id`, `vines`, `origen_id` o `con_personal_apoyo`),
+igual que al corregir: ninguno se ignora en silencio ni se guarda.
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
@@ -639,8 +641,12 @@ El destino es de **cada unidad**: el viaje ya no lleva un destino único, así q
 | `trailer` | no | máximo 50 caracteres |
 | `conductor_id` | no | usuario activo con rol `conductor` |
 | `inspector_id` | no | usuario activo con rol `inspector` |
-| `origen_id` | no | `id` de un lugar **activo** del catálogo `puntos-custodia` |
+| `fecha_programada` | sí | fecha y hora ISO 8601 **con zona horaria** (por ejemplo `2026-11-18T06:00:00-05:00`); sin ella `400` «La fecha programada es obligatoria» en `fecha_programada`; una fecha sin zona, `400` |
+| `lugar_cargue_id` | sí | `id` de un lugar **activo** del catálogo `lugares`; sin él `400` «El lugar de cargue es obligatorio» en `lugar_cargue_id`; un lugar inexistente o inactivo, `400` |
 | `unidades` | no | hasta 500; cada una con su `vin` (que ya exista) y su `lugar_destino_id` (obligatorio: un lugar **activo** del catálogo `lugares`); sin VIN repetidos |
+
+**El tipo de origen no se envía: se deduce.** `origen_id` del viaje (y `origen` en la respuesta) es el tipo (`puntos-custodia`) del lugar de cargue; el Cargue de cada unidad se crea en ese tipo. Lo mismo vale para el viaje que nace de la carga por archivo
+(el archivo trae el lugar de cargue por nombre, no su tipo): el tablero lo cuenta bajo ese tipo y no bajo «SIN PUNTO». Los viajes anteriores a este cambio, sin fecha ni lugar de cargue, se siguen leyendo y corrigiendo igual.
 
 El Descargue de cada unidad se crea en el tipo (`puntos-custodia`) de **su** lugar de destino.
 
@@ -652,8 +658,17 @@ ninguna etapa.
 ### `GET /api/viajes`
 Autenticado. Una **página** de viajes (`{ items, total, pagina, tamano }`; 50 por defecto, máximo 200; ver «Paginación y filtros»), los más recientes primero, con cada fila como `ViajeResumenDto` (los campos del viaje sin `vehiculos`, más `total_vehiculos` y
 `vehiculos_completos`: cuántos VIN ya completaron su ruta en el viaje). Filtros opcionales en la consulta: `estado`, `codigo_mtrack` (fragmento),
-`vin` (VIN o chasis válido), `conductor_id`, `inspector_id`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` (fecha ISO sobre la creación); además `pagina`, `tamano` y `orden`. Un filtro mal formado responde `400` con `fieldErrors`. Inspectores y
+`vin` (VIN o chasis válido), `conductor_id`, `inspector_id`, `cliente_id`, `origen_id`, `destino_id`, `destino_unidad_id`, `desde`, `hasta` (fecha ISO sobre la creación); además `pagina`, `tamano` y `orden`. Un filtro mal formado responde `400` con `fieldErrors`. Inspectores y
 conductores solo reciben sus viajes. Cada fila trae `clientes` (ver «Clientes del viaje»).
+
+**Dos destinos distintos.** `destino_id` es el tipo de destino **del viaje** (`puntos-custodia`), un dato de los viajes anteriores: los viajes nuevos no lo tienen porque el destino es de cada unidad. `destino_unidad_id` es un **lugar** del catálogo `lugares` y trae los viajes que llevan
+**al menos una unidad** a ese lugar; el viaje cuenta **una sola vez** (y una sola vez en `total`) aunque varias de sus unidades vayan al mismo lugar. Cada fila trae `destinos`: los destinos **distintos** de sus unidades, con cuántas van a cada uno, en la misma respuesta (no hace falta una petición por fila):
+
+```json
+"destinos": [ { "lugar_id": "uuid", "lugar": "Concesionario Norte", "unidades": 5 }, { "lugar_id": "uuid", "lugar": "Concesionario Sur", "unidades": 3 } ]
+```
+
+Van ordenados por nombre; las unidades sin destino (viajes anteriores) salen al final con `lugar_id` y `lugar` en `null`. Quien se limita a su cliente solo cuenta las unidades de su cliente. `lugar_cargue` sigue siendo el origen que muestra la fila.
 
 `cliente_id` (uuid) trae los viajes que tienen **al menos un VIN de ese cliente**: un viaje con VIN de dos clientes aparece al filtrar por cualquiera de los dos. Un cliente sin
 viajes o que no existe da una página vacía; un valor que no es uuid, `400`. **Solo el super administrador elige el cliente**: quien no lo es siempre recibe los viajes de su cliente
@@ -681,7 +696,7 @@ Mientras el viaje está `programado` también se corrige su programación: `fech
 `lugar_cargue_id` (un lugar **activo** del catálogo `lugares`; `null` lo quita). Una fecha sin zona o un lugar inexistente o inactivo responde `400` con `details.fieldErrors`;
 en un viaje `en_curso` cambiarlos responde `409` (lo demás del viaje sí se sigue editando).
 
-Al cambiar `origen_id` se actualiza el lugar del Cargue de los VIN del viaje; las etapas que
+Al cambiar `lugar_cargue_id` el **tipo de origen** (`origen_id`) se recalcula con el tipo del lugar nuevo (y manda sobre un `origen_id` enviado en la misma solicitud). Al cambiar el tipo de origen se actualiza el lugar del Cargue de los VIN del viaje; las etapas que
 ya tienen un informe cerrado no cambian.
 
 ### `PATCH /api/viajes/{id}/estado`
@@ -1418,7 +1433,7 @@ Todo lo que se hace aquí queda en la auditoría.
 }
 ```
 
-`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente` o `reporte_diario`. `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
+`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar` o `propuesta_ubicacion` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
 
 ### `GET /api/notificaciones`
 Una página de la bandeja, las más recientes primero: `{ "items": [NotificacionDto], "total": 3, "pagina": 1, "tamano": 50, "no_leidas": 2 }`.

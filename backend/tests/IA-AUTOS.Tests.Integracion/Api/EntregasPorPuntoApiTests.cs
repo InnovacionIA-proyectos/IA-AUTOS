@@ -62,6 +62,8 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
             placa = "ABC123",
             conductor_id = conductor?.UsuarioId,
             inspector_id = inspector?.UsuarioId,
+            fecha_programada = "2026-11-18T06:00:00-05:00",
+            lugar_cargue_id = await LugarRealAsync(Como(coordinador), "CEDI de prueba", "cedi_1"),
             unidades,
         }));
 

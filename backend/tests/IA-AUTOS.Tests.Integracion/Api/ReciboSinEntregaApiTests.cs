@@ -287,7 +287,7 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
         var inspeccion = await SalidaDelCargueAsync(e.Conductor, e.Etapas[0], motivo: "inspector_no_llego");
         Assert.Equal(HttpStatusCode.Created, (await SinEntregaAsync(e.Conductor, inspeccion)).StatusCode);
         var hoy = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).ToString("yyyy-MM-dd");
-        var desde = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).AddDays(-10).ToString("yyyy-MM-dd");
+        var desde = "2026-10-01"; // antes de la fecha fija de la prueba: una ventana relativa a hoy la dejaba por fuera con el paso de los dias
 
         var r = await Como(e.Coordinador).GetAsync($"/api/reportes/novedades-proceso?desde={desde}&hasta={hoy}");
 

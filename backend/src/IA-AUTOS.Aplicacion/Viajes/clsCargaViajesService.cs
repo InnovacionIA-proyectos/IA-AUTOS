@@ -2,6 +2,7 @@ using FluentValidation;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
@@ -21,6 +22,7 @@ public sealed class clsCargaViajesService(
     IVehiculoRepository vehiculos,
     IUsuarioRepository usuarios,
     ICatalogosLectura catalogos,
+    ILugarRepository lugares,
     clsEnsamblajeViajes ensamblaje,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
@@ -389,8 +391,10 @@ public sealed class clsCargaViajesService(
         var cabecera = grupo[0];
         try
         {
+            // El tipo de origen del viaje es el tipo de su lugar de cargue: el archivo no lo trae.
+            var origenId = cabecera.LugarCargueId is { } lugarCargue ? (await lugares.ObtenerAsync(lugarCargue, ct))?.TipoId : null;
             var viaje = clsViaje.Crear(
-                cabecera.Codigo, cabecera.TipoUnidadId, cabecera.Placa, cabecera.Trailer, cabecera.ConductorId, null, null, null,
+                cabecera.Codigo, cabecera.TipoUnidadId, cabecera.Placa, cabecera.Trailer, cabecera.ConductorId, null, origenId, null,
                 actual.IdObligatorio(), reloj.Ahora, cabecera.FechaProgramada, cabecera.LugarCargueId);
             viajes.Agregar(viaje);
             var destinos = grupo.Where(f => f.LugarDestinoId is not null).ToDictionary(f => f.Vehiculo!.Id, f => f.LugarDestinoId);

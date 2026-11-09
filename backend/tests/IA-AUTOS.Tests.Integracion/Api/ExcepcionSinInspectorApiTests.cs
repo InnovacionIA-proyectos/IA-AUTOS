@@ -405,7 +405,7 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
         var e = await EscenarioAsync();
         Assert.Equal(HttpStatusCode.Created, (await ConMotivoAsync(e.Conductor, e.Etapas[0])).StatusCode);
         var hoy = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).ToString("yyyy-MM-dd");
-        var desde = DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).AddDays(-10).ToString("yyyy-MM-dd");
+        var desde = "2026-10-01"; // antes de la fecha fija de la prueba: una ventana relativa a hoy la dejaba por fuera con el paso de los dias
 
         var patrones = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/reportes/patrones?desde={desde}&hasta={hoy}"));
         var diario = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/reportes/indicador-diario?fecha={hoy}"));
