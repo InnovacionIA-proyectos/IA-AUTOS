@@ -25,6 +25,18 @@ void main() {
       expect(adaptador.peticiones.single.uri.toString(), 'https://api.test/health');
     });
 
+    test('apiAlcanzable envía los encabezados de enrutamiento de la pasarela', () async {
+      final adaptador = AdaptadorFalso((_) => json(200, {'status': 'ok'}));
+      final red = EstadoRedConectividad(
+        apiUrl: 'https://servicios.test/contenedores',
+        encabezados: const {'X-Forwarded-Host': 'interno.sslip.io'},
+        dio: Dio()..httpClientAdapter = adaptador,
+      );
+      expect(await red.apiAlcanzable(), isTrue);
+      expect(adaptador.peticiones.single.uri.toString(), 'https://servicios.test/contenedores/health');
+      expect(adaptador.peticiones.single.headers['X-Forwarded-Host'], 'interno.sslip.io');
+    });
+
     test('apiAlcanzable es false con 503, con fallo de red o sin URL configurada', () async {
       final r503 = EstadoRedConectividad(apiUrl: 'https://api.test', dio: Dio()..httpClientAdapter = AdaptadorFalso((_) => json(503, {})));
       expect(await r503.apiAlcanzable(), isFalse);

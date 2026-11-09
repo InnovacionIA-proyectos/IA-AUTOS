@@ -15,6 +15,7 @@ Future<bool?> preguntarPreexistente(
   required HallazgoPrevio previo,
   required Catalogos catalogos,
   String? urlFoto,
+  Map<String, String> encabezadosFoto = const {},
   VoidCallback? alVencerFoto,
   bool sinSenal = false,
 }) {
@@ -28,6 +29,7 @@ Future<bool?> preguntarPreexistente(
       previo: previo,
       catalogos: catalogos,
       urlFoto: urlFoto,
+      encabezadosFoto: encabezadosFoto,
       alVencerFoto: alVencerFoto,
       sinSenal: sinSenal,
     ),
@@ -46,6 +48,7 @@ class _HojaPreexistente extends StatelessWidget {
     required this.previo,
     required this.catalogos,
     required this.urlFoto,
+    required this.encabezadosFoto,
     required this.alVencerFoto,
     required this.sinSenal,
   });
@@ -53,6 +56,9 @@ class _HojaPreexistente extends StatelessWidget {
   final HallazgoPrevio previo;
   final Catalogos catalogos;
   final String? urlFoto;
+
+  /// Encabezados de enrutamiento de la pasarela para pedir la foto. Vacíos si no hay pasarela.
+  final Map<String, String> encabezadosFoto;
   final VoidCallback? alVencerFoto;
   final bool sinSenal;
 
@@ -83,6 +89,7 @@ class _HojaPreexistente extends StatelessWidget {
                       const SizedBox(height: Espacio.md),
                       FotoEvidencia(
                         url: urlFoto,
+                        encabezados: encabezadosFoto,
                         alto: 180,
                         venceEn: previo.fotoVenceEn,
                         alVencer: alVencerFoto,

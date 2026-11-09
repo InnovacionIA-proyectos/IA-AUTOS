@@ -7,6 +7,10 @@ import '../tema/tema.dart';
 /// El enlace ya viene **firmado y con vencimiento**, así que va tal cual, sin `Authorization`: mandar además el
 /// token no autoriza nada y hace creer que la foto se abre con la sesión, cuando lo que la abre es la firma.
 ///
+/// [encabezados] es otra cosa y no contradice lo anterior: no autoriza, enruta. Detrás de la pasarela de IIS la
+/// petición necesita `X-Forwarded-Host` para llegar al servicio; sin él IIS responde su propio 404 y la foto nunca
+/// se pide al backend. Van vacíos cuando se llama a la API directo.
+///
 /// Cuando el enlace vence o el servidor lo rechaza, la imagen no se reintenta —el mismo enlace volvería a
 /// fallar— : se avisa con [alVencer] para que quien la muestra vuelva a pedir su fuente, que es la que trae
 /// enlaces nuevos.
@@ -19,6 +23,7 @@ class FotoEvidencia extends StatefulWidget {
     super.key,
     required this.url,
     required this.alto,
+    this.encabezados = const {},
     this.venceEn,
     this.alVencer,
     this.ancho,
@@ -29,6 +34,9 @@ class FotoEvidencia extends StatefulWidget {
 
   /// El enlace firmado tal como llega. Null cuando no hay nada que mostrar.
   final String? url;
+
+  /// Encabezados de enrutamiento de la pasarela, no de autorización. Vacíos si no hay pasarela.
+  final Map<String, String> encabezados;
 
   final double alto;
   final double? ancho;
@@ -94,6 +102,7 @@ class _EstadoFotoEvidencia extends State<FotoEvidencia> {
       borderRadius: BorderRadius.circular(widget.radio),
       child: Image.network(
         url,
+        headers: widget.encabezados.isEmpty ? null : widget.encabezados,
         width: widget.ancho,
         height: widget.alto,
         fit: BoxFit.cover,

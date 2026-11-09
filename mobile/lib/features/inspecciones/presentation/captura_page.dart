@@ -305,6 +305,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       previo: previo,
       catalogos: ref.read(catalogosProvider),
       urlFoto: resolverUrlImagen(ref.read(entornoProvider).apiUrl, previo.fotoUrl),
+      encabezadosFoto: ref.read(entornoProvider).encabezadosEnrutamiento,
       // Guardados para el patio, sus enlaces casi siempre llegan vencidos: se vuelven a pedir.
       alVencerFoto: _cargarPrevios,
       sinSenal: !ref.read(syncControllerProvider).online,

@@ -1,6 +1,7 @@
 {
   "FLAVOR": "qa",
-  "API_URL": "https://<url-de-la-api-qa>",
+  "API_URL": "https://servicios.boterosoto.com/contenedores",
+  "API_HOST_DESTINO": "iaautos-backend-7cfmwx-4e79a5-10-10-40-17.sslip.io",
   "EXTRAS_HABILITADOS": false,
   "GPS_PRECISION_MINIMA_M": 30
 }

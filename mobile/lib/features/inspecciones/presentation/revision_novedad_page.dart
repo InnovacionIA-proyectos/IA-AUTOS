@@ -109,6 +109,7 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
         previo: previo,
         catalogos: catalogos,
         urlFoto: _url(previo.fotoUrl),
+        encabezadosFoto: ref.read(entornoProvider).encabezadosEnrutamiento,
         alVencerFoto: _cargarPrevios,
         sinSenal: !ref.read(syncControllerProvider).online,
       );
@@ -174,6 +175,7 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
               const SizedBox(height: Espacio.md),
               FotoEvidencia(
                 url: url,
+                encabezados: ref.watch(entornoProvider).encabezadosEnrutamiento,
                 alto: 220,
                 venceEn: novedad.foto?.venceEn,
                 // Al vencer, los enlaces nuevos vienen con la lista de novedades.

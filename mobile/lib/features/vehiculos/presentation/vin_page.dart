@@ -418,6 +418,7 @@ class _UltimoInforme extends ConsumerWidget {
       hallazgo: hallazgo,
       catalogos: ref.read(catalogosProvider),
       urlFoto: resolverUrlImagen(ref.read(entornoProvider).apiUrl, foto?.url),
+      encabezadosFoto: ref.read(entornoProvider).encabezadosEnrutamiento,
       venceFoto: foto?.venceEn,
       alVencerFoto: () => ref.invalidate(inventarioProvider(vin)),
       sinSenal: !ref.read(syncControllerProvider).online,
@@ -449,6 +450,8 @@ class _UltimoInforme extends ConsumerWidget {
     final tema = Theme.of(context).textTheme;
     final catalogos = ref.watch(catalogosProvider);
     final apiUrl = ref.watch(entornoProvider).apiUrl;
+    // Enrutamiento de la pasarela, no autorización: sin esto IIS no sabe a qué servicio mandar la foto.
+    final encabezadosFoto = ref.watch(entornoProvider).encabezadosEnrutamiento;
     final yo = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario));
     final sinSenal = !ref.watch(syncControllerProvider).online;
     final fotos = [for (final e in inspeccion.evidencias) if (resolverUrlImagen(apiUrl, e.url) != null) e];
@@ -497,11 +500,13 @@ class _UltimoInforme extends ConsumerWidget {
                   // El enlace va firmado: el visor lo abre igual, sin encabezados.
                   onTap: () => mostrarVisorImagen(
                     context,
-                    imagen: NetworkImage(resolverUrlImagen(apiUrl, fotos[i].url)!),
+                    imagen: NetworkImage(resolverUrlImagen(apiUrl, fotos[i].url)!,
+                        headers: encabezadosFoto.isEmpty ? null : encabezadosFoto),
                     titulo: 'Evidencia ${i + 1} de ${fotos.length}',
                   ),
                   child: FotoEvidencia(
                     url: resolverUrlImagen(apiUrl, fotos[i].url),
+                    encabezados: encabezadosFoto,
                     ancho: 88,
                     alto: 88,
                     venceEn: fotos[i].venceEn,
