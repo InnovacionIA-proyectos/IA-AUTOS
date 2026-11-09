@@ -19,7 +19,8 @@ public sealed record CrearViajeRequest(
     Guid? InspectorId,
     IReadOnlyList<UnidadDelViajeRequest>? Unidades,
     string? FechaProgramada = null,
-    Guid? LugarCargueId = null);
+    Guid? LugarCargueId = null,
+    int? Capacidad = null);
 
 /// <summary>
 /// Campos que admite el cambio de un viaje. Solo se cambia lo enviado; trailer, conductor, inspector y origen admiten
@@ -123,7 +124,19 @@ public sealed record ViajeDto(
     IReadOnlyList<NovedadDelViajeDto> NovedadesProceso,
     DateTimeOffset? FechaProgramada = null,
     Guid? LugarCargueId = null,
-    string? LugarCargue = null);
+    string? LugarCargue = null,
+    int Capacidad = 7,
+    DisposicionDeNiniera? Disposicion = null,
+    IReadOnlyList<IAAutos.Aplicacion.Inspecciones.DTOInspecciones.EvidenciaDto>? FotosAcomodacion = null);
+
+/// <summary>Un puesto de la ninera: su <c>Numero</c> (el que se envia como posicion de una unidad), la <c>Etiqueta</c> con que se muestra (hoy el mismo numero) y el <c>Vin</c> de la unidad que lo ocupa (nulo si esta libre).</summary>
+public sealed record PuestoDeNiniera(int Numero, string Etiqueta, string? Vin);
+
+/// <summary>
+/// La disposicion de los puestos de la ninera del viaje, como dato: la app dibuja los <c>Puestos</c> en el orden en que llegan, con su etiqueta y su ocupante, sin llevar ningun esquema propio. Admite numeraciones
+/// distintas sin cambiar de forma (la etiqueta puede dejar de ser el numero).
+/// </summary>
+public sealed record DisposicionDeNiniera(IReadOnlyList<PuestoDeNiniera> Puestos);
 
 /// <summary>A donde van las unidades de un viaje: un lugar de destino y cuantas unidades van a el. Una unidad sin destino (viajes anteriores) aparece con <c>LugarId</c> y <c>Lugar</c> nulos.</summary>
 public sealed record DestinoDeUnidadesDto(Guid? LugarId, string? Lugar, int Unidades);

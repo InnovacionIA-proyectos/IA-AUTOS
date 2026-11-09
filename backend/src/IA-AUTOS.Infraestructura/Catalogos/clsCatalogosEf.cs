@@ -108,6 +108,42 @@ internal sealed class clsCatalogoSimple<T>(
 }
 
 /// <summary>
+/// Los tipos de unidad transportadora con sus <c>puestos</c> por defecto (1 a 20; nulo = sin definir). Un viaje nuevo toma esos puestos como su capacidad; cambiarlos no mueve los viajes ya creados.
+/// </summary>
+internal sealed class clsCatalogoTiposUnidad(clsAppDbContext contexto, IReloj reloj) : clsCatalogoEf<clsTipoUnidadTransportadora>(contexto, reloj, clsNombresCatalogo.TIPOS_UNIDAD)
+{
+    protected override IReadOnlyList<string> CamposPermitidos { get; } = [.. clsCamposCatalogo.COMUNES, "puestos"];
+
+    protected override ValorCatalogo Mapear(clsTipoUnidadTransportadora t)
+    {
+        var valor = Comunes(t);
+        valor["puestos"] = t.Puestos;
+        return valor;
+    }
+
+    protected override Task<clsTipoUnidadTransportadora> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct)
+    {
+        var tipo = clsTipoUnidadTransportadora.Crear(campos.Texto("codigo"), campos.Texto("nombre"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora);
+        if (campos.Tiene("puestos"))
+        {
+            tipo.CambiarPuestos(campos.Entero("puestos"), Reloj.Ahora);
+        }
+
+        return Task.FromResult(tipo);
+    }
+
+    protected override Task AplicarAsync(clsTipoUnidadTransportadora entidad, clsCamposCatalogo campos, CancellationToken ct)
+    {
+        if (campos.Tiene("puestos"))
+        {
+            entidad.CambiarPuestos(campos.Entero("puestos"), Reloj.Ahora);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
 /// Los tipos de extra del vehiculo. El tipo «otro» esta protegido: es el que describe un extra con texto libre y no tiene reemplazo, asi que no se inactiva, no se borra y no cambia de nombre (409).
 /// </summary>
 internal sealed class clsCatalogoTiposExtra(clsAppDbContext contexto, IReloj reloj) : clsCatalogoEf<clsTipoExtra>(contexto, reloj, clsNombresCatalogo.TIPOS_EXTRA)

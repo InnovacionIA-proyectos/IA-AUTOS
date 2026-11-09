@@ -97,12 +97,12 @@ además de los suyos y los que reclamó; el conductor no cambia. Un camión recl
 
 ## Posición de la unidad en la niñera (script 29)
 
-`tblViajeVehiculos.Posicion` (`tinyint`, nula) es la posición de la unidad dentro de la niñera, de **1 a 7**. La registra la **segunda inspección del cargue** (la de momento `salida` de la etapa Cargue) y se libera al marcar la unidad «no sale» (lo hace la aplicación). La base garantiza el rango
+`tblViajeVehiculos.Posicion` (`tinyint`, nula) es la posición de la unidad dentro de la niñera, de **1 a la capacidad del viaje** (hasta 20; 7 si el viaje no la tiene definida). La registra la **segunda inspección del cargue** (la de momento `salida` de la etapa Cargue) y se libera al marcar la unidad «no sale» (lo hace la aplicación). La base garantiza el rango
 (`CK_tblViajeVehiculos_Posicion`) y que dos unidades de un mismo viaje no compartan posición (`UX_tblViajeVehiculos_Posicion`, índice único filtrado sobre `(ViajeId, Posicion)` para las filas con posición); la misma posición en viajes distintos es válida y las unidades sin posición no cuentan. El script
 [`29-posicion-de-la-unidad.sql`](../database/cambios-esquema/29-posicion-de-la-unidad.sql) (una transacción, repetible, `@esquema` ajustable) no cambia ningún dato: todas las unidades quedan sin posición.
 
 **Registro y cierre de la acomodación.** `PUT /api/viajes/{id}/vehiculos/{vin}/posicion` con `{ "posicion": 1..7 }` (nulo la libera) lo hacen el inspector del viaje (o quien reclamó el cargue), el coordinador de calidad y los administradores, y solo mientras el viaje tiene su segunda inspección del cargue en borrador
-(409 si no). Fuera de 1 a 7 responde `400` «La posición debe estar entre 1 y 7»; una posición que ya tiene otra unidad del viaje, `409` «La posición N ya está ocupada por otra unidad de este viaje» (con varias solicitudes simultáneas por la misma gana exactamente una: lo resuelve el índice único); una unidad
+(409 si no). Fuera de 1 a la capacidad del viaje responde `400` «La niñera tiene N puestos: la posición debe estar entre 1 y N»; una posición que ya tiene otra unidad del viaje, `409` «La posición N ya está ocupada por otra unidad de este viaje» (con varias solicitudes simultáneas por la misma gana exactamente una: lo resuelve el índice único); una unidad
 que no sale no admite posición (409). La respuesta es el viaje, cuyas unidades traen `posicion`. Cada cambio queda auditado (`viaje.posicion_unidad`). El informe PDF de la segunda inspección del cargue lista cada unidad con su posición y trae las fotos de la acomodación con su sello, y el inventario del VIN (JSON y PDF) muestra «Posición en niñera: N» en las etapas de los viajes en que fue despachado con posición; un viaje sin posiciones genera ambos documentos igual, sin el dato. El cierre de la segunda inspección del cargue exige la posición de **cada unidad activa** y las fotos de la acomodación (ver [inspecciones.md](inspecciones.md)).
 
 ## Aplicar el cambio en una base existente
@@ -119,3 +119,9 @@ El trigger de inmutabilidad de las inspecciones se desactiva **solo** mientras s
 vuelve a activar dentro de la misma transacción.
 
 Una base nueva se crea con `ddl.sql`, que ya trae el esquema. `tests/verificar-ddl.sql` comprueba las restricciones de los viajes y la vista. Un viaje sin inspecciones se borra junto con la lista de sus VIN (esa cascada se conserva); el vehiculo, las etapas y las inspecciones no se borran en cascada (ver [evidencia-inmutable.md](evidencia-inmutable.md)).
+
+## Capacidad y disposición de la niñera (script 38)
+
+`tblViajes.Capacidad` (`tinyint`, nula, 1 a 20 con `CK_tblViajes_Capacidad`) son los puestos de la niñera de ese viaje: la toma de `tblTiposUnidadTransportadora.Puestos` (nula = sin definir; el viaje nuevo toma 7) al crearse o la que se indique, y no se mueve si el tipo cambia sus puestos. Un viaje sin capacidad guardada rige como de 7 (no se migra).
+`CK_tblViajeVehiculos_Posicion` pasa a 1..20 y la posición se valida en la aplicación contra la capacidad del viaje. La capacidad no baja por debajo de las unidades activas ni de la posición más alta usada (409 con la causa). `tblEvidencias.EsAcomodacion` (`bit`, 0 por defecto; `CK_tblEvidencias_Acomodacion`) marca la foto de la acomodación, que sale en `fotos_acomodacion` del detalle del viaje.
+El script [`38-capacidad-de-la-ninera.sql`](../database/cambios-esquema/38-capacidad-de-la-ninera.sql) (ajustando `@esquema`, en una sola ejecución y **antes** de desplegar la API; idempotente y sin cambiar ningún dato) lo aplica; `ddl.sql` ya lo trae y `tests/verificar-ddl.sql` lo cubre. Los endpoints y los cuerpos están en [CONTRATO.md](../CONTRATO.md).

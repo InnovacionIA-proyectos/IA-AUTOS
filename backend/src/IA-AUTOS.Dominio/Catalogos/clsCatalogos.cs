@@ -50,11 +50,21 @@ public sealed class clsTipoUnidadTransportadora : clsCatalogoCodificado
     {
     }
 
+    /// <summary>Los puestos por defecto de la ninera de este tipo (1 a 20); un viaje nuevo los toma como su capacidad. Nulo = sin definir (el viaje toma 7). Cambiarlos no mueve los viajes ya creados.</summary>
+    public byte? Puestos { get; private set; }
+
     public static clsTipoUnidadTransportadora Crear(string? codigo, string? nombre, int? orden, bool? activo, DateTimeOffset ahora)
     {
         var tipo = new clsTipoUnidadTransportadora();
         tipo.Iniciar(codigo, nombre, orden, activo, ahora);
         return tipo;
+    }
+
+    /// <summary>Cambia los puestos por defecto (400 en <c>puestos</c> si no esta entre 1 y 20); nulo los deja sin definir.</summary>
+    public void CambiarPuestos(int? puestos, DateTimeOffset ahora)
+    {
+        Puestos = puestos is null ? null : puestos is >= 1 and <= 20 ? (byte)puestos.Value : throw clsErroresCampos.De("puestos", "Los puestos deben ser un entero de 1 a 20");
+        Tocar(ahora);
     }
 }
 

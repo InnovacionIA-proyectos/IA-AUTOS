@@ -1,6 +1,8 @@
 using IAAutos.Aplicacion.Comun;
 using System.Linq.Expressions;
 using IAAutos.Aplicacion.Auth.DTOAuth;
+using IAAutos.Aplicacion.Inspecciones;
+using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Viajes;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Inspecciones;
@@ -331,7 +333,15 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                select new { n.ViajeId, n.Tipo, n.MotivoCodigo, Motivo = (string?)m.Nombre, Texto = n.MotivoTexto, Usuario = (string?)u.Nombre, n.Fecha, h.Vin, n.InspeccionId }).ToListAsync(ct);
         var novedadesPorViaje = novedades.ToLookup(
             n => n.ViajeId, n => new NovedadDelViajeDto(n.Tipo, n.MotivoCodigo, n.Motivo, n.Texto, n.Usuario, n.Fecha, n.Vin, n.InspeccionId));
-        return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id], novedadesPorViaje[f.Viaje.Id].ToList())).ToList();
+
+        // Las fotos de la acomodacion cuelgan del viaje: se llega a ellas desde su detalle, sin pasar por el inventario de cada VIN.
+        var fotos = (await (from e in contexto.Evidencias.AsNoTracking()
+                            join i in contexto.Inspecciones.AsNoTracking() on e.InspeccionId equals i.Id
+                            where e.EsAcomodacion && ids.Contains(i.ViajeId)
+                            orderby e.CreatedAt
+                            select new { i.ViajeId, Foto = e }).ToListAsync(ct))
+            .ToLookup(x => x.ViajeId, x => clsMapeadorInspecciones.AEvidencia(x.Foto));
+        return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id], novedadesPorViaje[f.Viaje.Id].ToList(), fotos[f.Viaje.Id].ToList())).ToList();
     }
 
     private static ViajeResumenDto AResumen(FilaViaje f, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<DestinoDeUnidadesDto> destinos) => new(
@@ -340,9 +350,19 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         f.Viaje.Estado, f.TotalVehiculos, f.VehiculosCompletos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt,
         f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue, destinos);
 
-    private static ViajeDto ADto(FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<NovedadDelViajeDto> novedades) => new(
+    private static ViajeDto ADto(
+        FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<NovedadDelViajeDto> novedades, IReadOnlyList<EvidenciaDto> fotosAcomodacion) => new(
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
         f.Viaje.Estado, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt, novedades,
-        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue);
+        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue,
+        f.Viaje.CapacidadEfectiva, Disposicion(f.Viaje.CapacidadEfectiva, vehiculos), fotosAcomodacion);
+
+    /// <summary>Los puestos de la ninera, del 1 a la capacidad, cada uno con el VIN que lo ocupa (los de las unidades que quien consulta puede ver).</summary>
+    private static DisposicionDeNiniera Disposicion(int capacidad, IReadOnlyList<ViajeVehiculoDto> vehiculos)
+    {
+        var ocupados = vehiculos.Where(v => v.Posicion is not null).GroupBy(v => v.Posicion!.Value).ToDictionary(g => g.Key, g => g.First().Vin);
+        return new DisposicionDeNiniera(
+            [.. Enumerable.Range(1, capacidad).Select(n => new PuestoDeNiniera(n, n.ToString(System.Globalization.CultureInfo.InvariantCulture), ocupados.GetValueOrDefault(n)))]);
+    }
 }

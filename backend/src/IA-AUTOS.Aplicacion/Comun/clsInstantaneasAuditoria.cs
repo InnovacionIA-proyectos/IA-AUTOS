@@ -112,6 +112,7 @@ public static class clsInstantaneasAuditoria
     {
         v.FechaProgramada,
         v.LugarCargueId,
+        v.Capacidad,
         v.CodigoMtrack,
         v.Estado,
         v.TipoUnidadId,

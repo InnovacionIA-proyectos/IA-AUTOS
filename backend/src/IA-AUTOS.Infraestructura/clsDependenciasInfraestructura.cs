@@ -150,8 +150,7 @@ public static class clsDependenciasInfraestructura
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.ETAPAS, clsEtapaCatalogo.Crear));
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsPuntoCustodia>(
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.PUNTOS_CUSTODIA, clsPuntoCustodia.Crear));
-        servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsTipoUnidadTransportadora>(
-            p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.TIPOS_UNIDAD, clsTipoUnidadTransportadora.Crear));
+        servicios.AddScoped<ICatalogo, clsCatalogoTiposUnidad>();
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsCliente>(
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.CLIENTES, clsCliente.Crear));
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsClaseDano>(

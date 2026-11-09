@@ -896,6 +896,20 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_capacidad_de_la_ninera_tiene_donde_guardarse()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/38-capacidad-de-la-ninera.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columnas = await EscalarAsync<int>(
+            conexion,
+            "SELECT COUNT(*) FROM sys.columns WHERE (object_id = OBJECT_ID(N'tblViajes') AND name = N'Capacidad') OR (object_id = OBJECT_ID(N'tblTiposUnidadTransportadora') AND name = N'Puestos') OR (object_id = OBJECT_ID(N'tblEvidencias') AND name = N'EsAcomodacion')");
+        var posicion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_Posicion' AND parent_object_id = OBJECT_ID(N'tblViajeVehiculos') AND definition LIKE N'%(20)%'");
+
+        Assert.True(columnas == 3 && posicion == 1, "Falta la capacidad de la ninera. Ejecute database/cambios-esquema/38-capacidad-de-la-ninera.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

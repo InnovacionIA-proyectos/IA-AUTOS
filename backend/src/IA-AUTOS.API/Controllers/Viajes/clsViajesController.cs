@@ -40,7 +40,7 @@ public sealed class clsViajesController(
     public async Task<IActionResult> Crear(CancellationToken ct)
     {
         var solicitud = await LeerCuerpoSoloAsync<CrearViajeRequest>(
-            ct, "codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "inspector_id", "unidades", "fecha_programada", "lugar_cargue_id");
+            ct, "codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "inspector_id", "unidades", "fecha_programada", "lugar_cargue_id", "capacidad");
         return Creado(await servicio.CrearAsync(solicitud, ct));
     }
 
