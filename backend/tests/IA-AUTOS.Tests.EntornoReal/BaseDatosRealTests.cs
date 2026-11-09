@@ -910,6 +910,19 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task El_permiso_de_la_excepcion_sin_inspector_tiene_donde_guardarse()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/39-permiso-sin-inspector.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblPermisosSinInspector'");
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblNovedadesProceso') AND name = N'PermisoId'");
+        var tipo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%permiso_sin_inspector%'");
+
+        Assert.True(tabla == 1 && columna == 1 && tipo == 1, "Falta el permiso de la excepcion sin inspector. Ejecute database/cambios-esquema/39-permiso-sin-inspector.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

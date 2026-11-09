@@ -88,6 +88,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<INotaAclaratoriaRepository, clsNotaAclaratoriaRepository>();
         servicios.AddScoped<INovedadProcesoRepository, clsNovedadProcesoRepository>();
         servicios.AddScoped<IReclamoRepository, clsRepositorioReclamos>();
+        servicios.AddScoped<IPermisoSinInspectorRepository, clsRepositorioPermisosSinInspector>();
         servicios.AddScoped<ILugarRepository, clsRepositorioLugares>();
         servicios.AddScoped<IPropuestaUbicacionRepository, clsRepositorioPropuestasUbicacion>();
         servicios.AddScoped<IAAutos.Aplicacion.Viajes.DTOViajes.IConsultasPendientes, clsConsultasPendientes>();

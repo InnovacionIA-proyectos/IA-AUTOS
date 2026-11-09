@@ -61,6 +61,7 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             DELETE FROM dbo.tblPropuestasUbicacion;
             UPDATE dbo.tblLugares SET UbicacionFijadaPor = NULL;
             DELETE FROM dbo.tblNovedadesProceso;
+            DELETE FROM dbo.tblPermisosSinInspector;
             DELETE FROM dbo.tblReclamos;
             DELETE FROM dbo.tblInspectorLugares;
             DELETE FROM dbo.tblNotasAclaratorias;

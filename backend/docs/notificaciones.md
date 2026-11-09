@@ -9,7 +9,7 @@ los endpoints que lo usan estan en [CONTRATO.md](../CONTRATO.md) («Conductor en
 
 | Columna | Contenido |
 |---|---|
-| `Tipo` | `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso` (el conductor hizo el cargue sin inspector o se cerró una entrega con una sola firma) o `reclamo_sin_actividad` (un camión reclamado sin ninguna inspección en `reclamo_sin_actividad_minutos`; al coordinador de calidad) |
+| `Tipo` | `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso` (el conductor hizo el cargue sin inspector o se cerró una entrega con una sola firma) `permiso_sin_inspector` (el conductor pide el permiso de la excepción «No hay inspector» en un punto con inspectores, o se le avisa que se concedió; con `Datos`) o `reclamo_sin_actividad` (un camión reclamado sin ninguna inspección en `reclamo_sin_actividad_minutos`; al coordinador de calidad) |
 | `Urgencia` | `alta` o `media` |
 | `UsuarioId` | el destinatario; nulo solo en `reporte_diario` (el reporte diario no tiene un destinatario propio) |
 | `ClienteId`, `ViajeId`, `VehiculoId`, `HallazgoId`, `InspeccionId` | a que se refiere la notificacion (todos opcionales) |

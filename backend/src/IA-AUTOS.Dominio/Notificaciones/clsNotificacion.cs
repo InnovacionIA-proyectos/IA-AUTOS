@@ -32,9 +32,12 @@ public static class clsTipoNotificacion
     /// <summary>Algo paso en el proceso y no es un dano (por ejemplo, un cargue sin inspector).</summary>
     public const string NOVEDAD_PROCESO = "novedad_proceso";
 
+    /// <summary>El conductor pide el permiso para activar la excepcion «No hay inspector» en un punto con inspectores (al inspector y al coordinador del cliente), o se le avisa que se concedio (a el).</summary>
+    public const string PERMISO_SIN_INSPECTOR = "permiso_sin_inspector";
+
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string>
     {
-        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD, FUERA_DE_RANGO, CARGUE_SIN_RECLAMAR, PROPUESTA_UBICACION,
+        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD, FUERA_DE_RANGO, CARGUE_SIN_RECLAMAR, PROPUESTA_UBICACION, PERMISO_SIN_INSPECTOR,
     };
 }
 

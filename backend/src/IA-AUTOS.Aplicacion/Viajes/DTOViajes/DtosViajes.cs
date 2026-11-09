@@ -48,6 +48,37 @@ public sealed record CambiarDestinoUnidadRequest(Guid? LugarDestinoId);
 public sealed record CambiarEstadoViajeRequest(string? Estado);
 
 /// <summary>
+/// El conductor pide el permiso de la excepcion «No hay inspector» (el punto de cargue tiene inspectores): su <c>MotivoSinInspector</c> (codigo activo del catalogo <c>motivos-sin-inspector</c>), el
+/// <c>MotivoSinInspectorTexto</c> si el motivo lo pide, la <c>Fecha</c> (ISO 8601 con zona horaria) y el GPS (<c>Lat</c>, <c>Lng</c>) del momento en que lo pide.
+/// </summary>
+public sealed record SolicitarPermisoSinInspectorRequest(string? MotivoSinInspector, string? MotivoSinInspectorTexto, string? Fecha, double? Lat, double? Lng);
+
+/// <summary>
+/// La solicitud del permiso de un viaje. <c>Estado</c> es <c>pendiente</c> o <c>concedido</c>; <c>VenceAt</c> es cuando el reloj puede concederla (10 minutos despues de pedirla, nunca antes). Concedido trae cuando
+/// y quien lo concedio o, si nadie respondio, <c>AutorizadoPorTiempo</c> en verdadero y sin quien. <c>Fecha</c>, <c>Lat</c> y <c>Lng</c> son los del momento en que el conductor la pidio.
+/// </summary>
+public sealed record PermisoSinInspectorDto(
+    Guid Id,
+    Guid ViajeId,
+    string Estado,
+    DateTimeOffset SolicitadoAt,
+    DateTimeOffset VenceAt,
+    Guid ConductorId,
+    string? ConductorNombre,
+    Guid LugarId,
+    string? Lugar,
+    string MotivoCodigo,
+    string? Motivo,
+    string? MotivoTexto,
+    DateTimeOffset Fecha,
+    double? Lat,
+    double? Lng,
+    DateTimeOffset? ConcedidoAt,
+    Guid? ConcedidoPor,
+    string? ConcedidoPorNombre,
+    bool AutorizadoPorTiempo);
+
+/// <summary>
 /// Una unidad que no sale del viaje: el motivo, el hallazgo que la causo, quien la marco (y su nombre), cuando y el VIN que la reemplaza (si ya se
 /// asigno).
 /// </summary>
@@ -94,7 +125,8 @@ public sealed record NovedadDelViajeDto(
     string? UsuarioNombre,
     DateTimeOffset Fecha,
     string Vin,
-    Guid InspeccionId);
+    Guid InspeccionId,
+    IAAutos.Aplicacion.Inspecciones.DTOInspecciones.PermisoDeLaNovedadDto? Permiso = null);
 
 /// <summary>
 /// Viaje completo con sus VIN. <c>NovedadesProceso</c> son las novedades de proceso de sus unidades (la excepcion «No hay inspector» y el recibo sin entrega), de la mas antigua a la mas reciente. El viaje no tiene un cliente propio: <c>Clientes</c>

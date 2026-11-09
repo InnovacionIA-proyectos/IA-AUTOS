@@ -328,11 +328,25 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                from u in usuarios.DefaultIfEmpty()
                                join m in contexto.MotivosSinInspector.AsNoTracking() on n.MotivoCodigo equals m.Codigo into motivos
                                from m in motivos.DefaultIfEmpty()
+                               join p in contexto.PermisosSinInspector.AsNoTracking() on n.PermisoId equals p.Id into permisos
+                               from p in permisos.DefaultIfEmpty()
+                               join pc in contexto.Usuarios.AsNoTracking() on p.ConductorId equals pc.Id into conductores
+                               from pc in conductores.DefaultIfEmpty()
+                               join pq in contexto.Usuarios.AsNoTracking() on p.ConcedidoPor equals pq.Id into concedentes
+                               from pq in concedentes.DefaultIfEmpty()
                                where ids.Contains(n.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente)
                                orderby n.Fecha, n.CreatedAt
-                               select new { n.ViajeId, n.Tipo, n.MotivoCodigo, Motivo = (string?)m.Nombre, Texto = n.MotivoTexto, Usuario = (string?)u.Nombre, n.Fecha, h.Vin, n.InspeccionId }).ToListAsync(ct);
+                               select new
+                               {
+                                   n.ViajeId, n.Tipo, n.MotivoCodigo, Motivo = (string?)m.Nombre, Texto = n.MotivoTexto, Usuario = (string?)u.Nombre, n.Fecha, h.Vin, n.InspeccionId,
+                                   TienePermiso = p != null, PedidoPor = (string?)pc.Nombre, PedidoAt = (DateTimeOffset?)p.CreatedAt, PedidoLat = p.Lat, PedidoLng = p.Lng,
+                                   ConcedidoPorNombre = (string?)pq.Nombre, ConcedidoAt = p.ConcedidoAt, PorTiempo = p != null && p.PorTiempo,
+                               }).ToListAsync(ct);
         var novedadesPorViaje = novedades.ToLookup(
-            n => n.ViajeId, n => new NovedadDelViajeDto(n.Tipo, n.MotivoCodigo, n.Motivo, n.Texto, n.Usuario, n.Fecha, n.Vin, n.InspeccionId));
+            n => n.ViajeId,
+            n => new NovedadDelViajeDto(
+                n.Tipo, n.MotivoCodigo, n.Motivo, n.Texto, n.Usuario, n.Fecha, n.Vin, n.InspeccionId,
+                n.TienePermiso ? new PermisoDeLaNovedadDto(n.PedidoPor, n.PedidoAt!.Value, n.PedidoLat, n.PedidoLng, n.ConcedidoPorNombre, n.ConcedidoAt, n.PorTiempo) : null));
 
         // Las fotos de la acomodacion cuelgan del viaje: se llega a ellas desde su detalle, sin pasar por el inventario de cada VIN.
         var fotos = (await (from e in contexto.Evidencias.AsNoTracking()

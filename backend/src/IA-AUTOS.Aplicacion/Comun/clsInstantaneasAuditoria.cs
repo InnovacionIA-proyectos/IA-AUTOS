@@ -46,6 +46,23 @@ public static class clsInstantaneasAuditoria
         n.Fecha,
         n.Lat,
         n.Lng,
+        n.PermisoId,
+    };
+
+    public static object De(clsPermisoSinInspector p) => new
+    {
+        p.ViajeId,
+        p.ConductorId,
+        p.LugarId,
+        p.MotivoCodigo,
+        p.MotivoTexto,
+        solicitado_en = p.Fecha,
+        p.Lat,
+        p.Lng,
+        p.Estado,
+        p.ConcedidoAt,
+        p.ConcedidoPor,
+        autorizado_por_tiempo = p.PorTiempo,
     };
 
     public static object De(clsHallazgo h) => new

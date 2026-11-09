@@ -65,6 +65,8 @@ public sealed class clsAppDbContext : DbContext
 
     public DbSet<clsInspectorLugar> InspectorLugares => Set<clsInspectorLugar>();
 
+    public DbSet<clsPermisoSinInspector> PermisosSinInspector => Set<clsPermisoSinInspector>();
+
     public DbSet<clsEvidencia> Evidencias => Set<clsEvidencia>();
 
     public DbSet<clsInspeccionExtra> InspeccionExtras => Set<clsInspeccionExtra>();

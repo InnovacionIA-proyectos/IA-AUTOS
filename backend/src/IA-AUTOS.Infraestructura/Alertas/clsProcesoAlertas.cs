@@ -29,6 +29,7 @@ public sealed class clsProcesoAlertas(IServiceScopeFactory alcances, IOptions<cl
         do
         {
             var ahora = reloj.Ahora;
+            await EjecutarAsync("los permisos por tiempo", p => p.EjecutarPermisosSinInspectorAsync(parada), parada);
             if (ahora - ultimoAviso >= TimeSpan.FromMinutes(Math.Max(opciones.Value.AvisosCadaMinutos, 1)))
             {
                 ultimoAviso = ahora;
