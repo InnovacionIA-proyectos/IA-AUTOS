@@ -34,7 +34,7 @@ public static class clsMapeadorInspecciones
         h.TipoNovedad, h.NivelSeveridad, nivel?.Nombre, nivel?.Accion,
         h.Origen, h.Nota, h.EsPreexistente, h.HallazgoOrigenId, h.ConfirmadoPor, h.EstadoSeguimiento,
         evidenciaFaltante.Count == 0, evidenciaFaltante,
-        h.RevisadoPor, h.RevisadoAt, h.CreatedAt, h.UpdatedAt, h.NivelSeveridad is null);
+        h.RevisadoPor, h.RevisadoAt, h.CreatedAt, h.UpdatedAt, h.NivelSeveridad is null, h.ExtraId);
 
     public static HallazgoCreadoDto AHallazgoCreado(HallazgoDto hallazgo, clsEvidencia foto) => new(hallazgo, AEvidencia(foto));
 
@@ -62,8 +62,9 @@ public static class clsMapeadorInspecciones
         clsUrlsArchivos.ParaStoragePath(e.StoragePath), null, e.CreatedAt, e.UpdatedAt,
         e.VistaId, e.HashSha256, e.SelloServidorAt, e.Precision, e.DispositivoId, e.Nota, e.SinUbicacion, e.EsConstancia, e.EsSello, e.StoragePath, e.ExtraId);
 
-    public static ExtraDto AExtra(clsInspeccionExtra e, string nombreDelTipo, IReadOnlyList<EvidenciaDto> fotos) => new(
-        e.Id, e.InspeccionId, e.Tipo, nombreDelTipo, e.Texto, clsInspeccionExtra.NombreParaMostrar(e.Tipo, nombreDelTipo, e.Texto), e.Observacion, e.CreatedAt, e.UpdatedAt, fotos);
+    public static ExtraDto AExtra(clsInspeccionExtra e, string nombreDelTipo, IReadOnlyList<EvidenciaDto> fotos, clsHallazgo? dano = null) => new(
+        e.Id, e.InspeccionId, e.Tipo, nombreDelTipo, e.Texto, clsInspeccionExtra.NombreParaMostrar(e.Tipo, nombreDelTipo, e.Texto), e.Observacion, e.CreatedAt, e.UpdatedAt, fotos,
+        dano is null ? null : new ExtraDanoDto(dano.Id, dano.ClaseDano ?? string.Empty, dano.TamanoDano, dano.NivelSeveridad));
 
     public static TransferenciaDto ATransferencia(clsTransferenciaCustodia t) => new(
         t.Id, t.InspeccionId, t.EntregaUsuarioId, t.RecibeUsuarioId, t.EstaCompleta, t.FirmadaAt, t.CreatedAt, t.UpdatedAt,

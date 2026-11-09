@@ -25,9 +25,7 @@ internal sealed class clsDescriptorHallazgos(clsAppDbContext contexto) : IDescri
         var codigosNivel = hallazgos.Where(h => h.NivelSeveridad is not null).Select(h => h.NivelSeveridad!).Distinct().ToList();
         var niveles = await contexto.NivelesSeveridad.AsNoTracking().Where(n => codigosNivel.Contains(n.Codigo)).ToDictionaryAsync(n => n.Codigo, ct);
         var ids = hallazgos.Select(h => h.Id).ToList();
-        var conFoto = (await contexto.Evidencias.AsNoTracking()
-            .Where(e => e.HallazgoId != null && ids.Contains(e.HallazgoId.Value) && !e.EsSello && !e.EsConstancia)
-            .Select(e => e.HallazgoId!.Value).Distinct().ToListAsync(ct)).ToHashSet();
+        var conFoto = await clsFotosDeHallazgos.ConFotoAsync(contexto, ids, ct);
         var inspeccionIds = hallazgos.Select(h => h.InspeccionId).Distinct().ToList();
         var cierres = await contexto.Transferencias.AsNoTracking().Where(t => inspeccionIds.Contains(t.InspeccionId))
             .ToDictionaryAsync(t => t.InspeccionId, t => t.TipoCierre, ct);

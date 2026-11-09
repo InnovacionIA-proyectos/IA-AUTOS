@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.3.0"
+    "version": "3.4.0"
   },
   "paths": {
     "/api/viajes": {
@@ -13700,7 +13700,8 @@
                         "revisado_at": "2026-10-22T14:30:00.000Z",
                         "created_at": "2026-10-22T14:30:00.000Z",
                         "updated_at": "2026-10-22T14:30:00.000Z",
-                        "sin_calificar": true
+                        "sin_calificar": true,
+                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                       }
                     ]
                   ],
@@ -13777,7 +13778,8 @@
                         "revisado_at": "2026-10-22T14:30:00.000Z",
                         "created_at": "2026-10-22T14:30:00.000Z",
                         "updated_at": "2026-10-22T14:30:00.000Z",
-                        "sin_calificar": true
+                        "sin_calificar": true,
+                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                       }
                     ]
                   ],
@@ -13854,7 +13856,8 @@
                         "revisado_at": "2026-10-22T14:30:00.000Z",
                         "created_at": "2026-10-22T14:30:00.000Z",
                         "updated_at": "2026-10-22T14:30:00.000Z",
-                        "sin_calificar": true
+                        "sin_calificar": true,
+                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                       }
                     ]
                   ],
@@ -20743,7 +20746,11 @@
           {
             "tipo": "texto",
             "texto": "texto",
-            "observacion": "texto"
+            "observacion": "texto",
+            "danado": true,
+            "clase_dano": "golpe",
+            "tamano_dano": "5_10cm",
+            "nivel_severidad": "v1"
           }
         ],
         "required": [
@@ -20766,6 +20773,30 @@
             ]
           },
           "observacion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "danado": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "clase_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tamano_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_severidad": {
             "type": [
               "null",
               "string"
@@ -23000,7 +23031,11 @@
           {
             "tipo": "texto",
             "texto": "texto",
-            "observacion": "texto"
+            "observacion": "texto",
+            "danado": true,
+            "clase_dano": "golpe",
+            "tamano_dano": "5_10cm",
+            "nivel_severidad": "v1"
           }
         ],
         "required": [
@@ -23023,6 +23058,30 @@
             ]
           },
           "observacion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "danado": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "clase_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tamano_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_severidad": {
             "type": [
               "null",
               "string"
@@ -24043,6 +24102,41 @@
           }
         }
       },
+      "ExtraDanoDto": {
+        "examples": [
+          {
+            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "clase_dano": "golpe",
+            "tamano_dano": "5_10cm",
+            "nivel_severidad": "v1"
+          }
+        ],
+        "required": [
+          "hallazgo_id",
+          "clase_dano",
+          "tamano_dano",
+          "nivel_severidad"
+        ],
+        "type": "object",
+        "properties": {
+          "hallazgo_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clase_dano": {
+            "type": "string"
+          },
+          "tamano_dano": {
+            "type": "string"
+          },
+          "nivel_severidad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ExtraDto": {
         "examples": [
           {
@@ -24079,7 +24173,13 @@
                 "ruta_archivo": "texto",
                 "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
               }
-            ]
+            ],
+            "dano": {
+              "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "clase_dano": "golpe",
+              "tamano_dano": "5_10cm",
+              "nivel_severidad": "v1"
+            }
           }
         ],
         "required": [
@@ -24136,6 +24236,16 @@
             "items": {
               "$ref": "#/components/schemas/EvidenciaDto"
             }
+          },
+          "dano": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExtraDanoDto"
+              }
+            ]
           }
         }
       },
@@ -24535,7 +24645,8 @@
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
             "updated_at": "2026-10-22T14:30:00.000Z",
-            "sin_calificar": true
+            "sin_calificar": true,
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -24699,6 +24810,13 @@
           },
           "sin_calificar": {
             "type": "boolean"
+          },
+          "extra_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -24821,7 +24939,8 @@
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
             "updated_at": "2026-10-22T14:30:00.000Z",
-            "sin_calificar": true
+            "sin_calificar": true,
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -25046,6 +25165,13 @@
           },
           "sin_calificar": {
             "type": "boolean"
+          },
+          "extra_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -25084,7 +25210,8 @@
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
             "updated_at": "2026-10-22T14:30:00.000Z",
-            "sin_calificar": true
+            "sin_calificar": true,
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -25272,6 +25399,13 @@
           "sin_calificar": {
             "type": "boolean",
             "default": false
+          },
+          "extra_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -25346,7 +25480,8 @@
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
             "updated_at": "2026-10-22T14:30:00.000Z",
-            "sin_calificar": true
+            "sin_calificar": true,
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -25565,6 +25700,13 @@
           },
           "sin_calificar": {
             "type": "boolean"
+          },
+          "extra_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -25633,7 +25775,8 @@
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
             "updated_at": "2026-10-22T14:30:00.000Z",
-            "sin_calificar": true
+            "sin_calificar": true,
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -25824,6 +25967,13 @@
           },
           "sin_calificar": {
             "type": "boolean"
+          },
+          "extra_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -26058,7 +26208,8 @@
                 "revisado_at": "2026-10-22T14:30:00.000Z",
                 "created_at": "2026-10-22T14:30:00.000Z",
                 "updated_at": "2026-10-22T14:30:00.000Z",
-                "sin_calificar": true
+                "sin_calificar": true,
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
               }
             ],
             "evidencias": [
@@ -26167,7 +26318,13 @@
                 "observacion": "texto",
                 "created_at": "2026-10-22T14:30:00.000Z",
                 "updated_at": "2026-10-22T14:30:00.000Z",
-                "fotos": []
+                "fotos": [],
+                "dano": {
+                  "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "clase_dano": "golpe",
+                  "tamano_dano": "5_10cm",
+                  "nivel_severidad": "v1"
+                }
               }
             ],
             "confirmacion_sitio": {
@@ -27254,7 +27411,8 @@
                 "revisado_at": "2026-10-22T14:30:00.000Z",
                 "created_at": "2026-10-22T14:30:00.000Z",
                 "updated_at": "2026-10-22T14:30:00.000Z",
-                "sin_calificar": true
+                "sin_calificar": true,
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
               }
             ],
             "evidencias": [
@@ -27340,7 +27498,13 @@
                 "observacion": "texto",
                 "created_at": "2026-10-22T14:30:00.000Z",
                 "updated_at": "2026-10-22T14:30:00.000Z",
-                "fotos": []
+                "fotos": [],
+                "dano": {
+                  "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "clase_dano": "golpe",
+                  "tamano_dano": "5_10cm",
+                  "nivel_severidad": "v1"
+                }
               }
             ]
           }
@@ -27650,7 +27814,8 @@
                 "revisado_at": "2026-10-22T14:30:00.000Z",
                 "created_at": "2026-10-22T14:30:00.000Z",
                 "updated_at": "2026-10-22T14:30:00.000Z",
-                "sin_calificar": true
+                "sin_calificar": true,
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
               }
             ],
             "total": 1,

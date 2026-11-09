@@ -68,10 +68,27 @@ public sealed record CrearEvidenciaRequest(
     Guid? ExtraId = null);
 
 /// <summary>Un extra nuevo: <c>Tipo</c> es el codigo de un tipo activo de <c>tipos-extra</c>; <c>Texto</c> es obligatorio con el tipo «otro» y no se admite en los demas; <c>Observacion</c> es opcional (hasta 500 caracteres).</summary>
-public sealed record CrearExtraRequest(string? Tipo, string? Texto, string? Observacion);
+public sealed record CrearExtraRequest(
+    string? Tipo,
+    string? Texto,
+    string? Observacion,
+    bool? Danado = null,
+    string? ClaseDano = null,
+    string? TamanoDano = null,
+    string? NivelSeveridad = null);
 
-/// <summary>Cambia un extra: se envian los tres campos y reemplazan a los guardados (lo que no se envia queda sin valor).</summary>
-public sealed record ActualizarExtraRequest(string? Tipo, string? Texto, string? Observacion);
+/// <summary>
+/// Cambia un extra: se envian los tres campos y reemplazan a los guardados (lo que no se envia queda sin valor). El dano (<c>Danado</c> con su clase, tamano y nivel) se puede agregar si el extra aun no lo tiene; uno ya
+/// guardado es evidencia y no se quita ni se cambia (409).
+/// </summary>
+public sealed record ActualizarExtraRequest(
+    string? Tipo,
+    string? Texto,
+    string? Observacion,
+    bool? Danado = null,
+    string? ClaseDano = null,
+    string? TamanoDano = null,
+    string? NivelSeveridad = null);
 
 /// <summary>
 /// Firma de la transferencia. La firma es SIEMPRE la de quien la envia (sale del token): si es quien entrega firma la entrega y si es quien

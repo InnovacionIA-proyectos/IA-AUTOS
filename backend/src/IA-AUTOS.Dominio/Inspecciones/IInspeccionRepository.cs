@@ -62,6 +62,9 @@ public interface IInspeccionRepository
     /// <summary>El hallazgo (para modificarlo), o nulo si no existe.</summary>
     Task<clsHallazgo?> ObtenerHallazgoAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>El hallazgo que nacio del dano de un extra, o nulo si el extra no esta danado.</summary>
+    Task<clsHallazgo?> ObtenerHallazgoDeExtraAsync(Guid extraId, CancellationToken ct = default);
+
     /// <summary>Los hallazgos de la inspeccion (para recalcular su evidencia).</summary>
     Task<IReadOnlyList<clsHallazgo>> ObtenerHallazgosDeInspeccionAsync(Guid inspeccionId, CancellationToken ct = default);
 

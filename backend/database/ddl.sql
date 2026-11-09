@@ -829,6 +829,7 @@ BEGIN
         RevisadoPor         uniqueidentifier NULL,
         RevisadoAt          datetimeoffset(3) NULL,
         MigracionPendiente  bit              NOT NULL CONSTRAINT DF_tblHallazgos_MigracionPendiente DEFAULT (0),
+        ExtraId             uniqueidentifier NULL,
         CreatedAt       datetimeoffset(3) NOT NULL CONSTRAINT DF_tblHallazgos_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt       datetimeoffset(3) NOT NULL CONSTRAINT DF_tblHallazgos_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblHallazgos_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
@@ -2097,6 +2098,23 @@ IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblEvidenci
     EXEC (N'ALTER TABLE dbo.tblEvidencias ADD CONSTRAINT CK_tblEvidencias_Extra CHECK (ExtraId IS NULL OR (HallazgoId IS NULL AND VistaId IS NULL AND EsConstancia = 0 AND EsSello = 0))');
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblEvidencias_Extra' AND object_id = OBJECT_ID(N'dbo.tblEvidencias'))
     CREATE INDEX IX_tblEvidencias_Extra ON dbo.tblEvidencias (ExtraId) WHERE ExtraId IS NOT NULL;
+GO
+
+/* -----------------------------------------------------------------------------
+   Dano en un extra. tblHallazgos.ExtraId: el hallazgo que nace de un extra marcado como danado (clase, tamano y nivel); es el hallazgo de siempre (cuenta en los listados, los patrones y la tasa de rechazo)
+   sin zona del dibujo (ZonaId nulo) y de origen inspector. Un extra tiene a lo sumo un hallazgo (UQ_tblHallazgos_Extra) y, como un hallazgo no se borra, un extra con dano no se quita.
+   ----------------------------------------------------------------------------- */
+IF COL_LENGTH(N'dbo.tblHallazgos', N'ExtraId') IS NULL
+    ALTER TABLE dbo.tblHallazgos ADD ExtraId uniqueidentifier NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblHallazgos_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblHallazgos'))
+    ALTER TABLE dbo.tblHallazgos ADD CONSTRAINT FK_tblHallazgos_Extra FOREIGN KEY (ExtraId) REFERENCES dbo.tblInspeccionExtras (Id);
+-- Se crea con SQL dinamico y solo si las columnas que compara existen, para poder ejecutar este script tambien sobre una base que aun no las tiene.
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblHallazgos'))
+   AND COL_LENGTH(N'dbo.tblHallazgos', N'ZonaId') IS NOT NULL AND COL_LENGTH(N'dbo.tblHallazgos', N'Origen') IS NOT NULL
+    EXEC (N'ALTER TABLE dbo.tblHallazgos ADD CONSTRAINT CK_tblHallazgos_Extra CHECK (ExtraId IS NULL OR (ZonaId IS NULL AND Origen = ''inspector''))');
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_tblHallazgos_Extra' AND object_id = OBJECT_ID(N'dbo.tblHallazgos'))
+    CREATE UNIQUE INDEX UQ_tblHallazgos_Extra ON dbo.tblHallazgos (ExtraId) WHERE ExtraId IS NOT NULL;
 GO
 
 /* -----------------------------------------------------------------------------

@@ -73,9 +73,10 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             DELETE FROM dbo.tblTransferenciasCustodia;
             UPDATE dbo.tblInspecciones SET ConfirmacionEvidenciaId = NULL;
             DELETE FROM dbo.tblEvidencias;
-            DELETE FROM dbo.tblInspeccionExtras;
+
             DELETE FROM dbo.tblViajeVehiculos;
             DELETE FROM dbo.tblHallazgos;
+            DELETE FROM dbo.tblInspeccionExtras;
             DELETE FROM dbo.tblInspecciones;
             DELETE FROM dbo.tblEtapas;
             DELETE FROM dbo.tblViajes;
