@@ -69,6 +69,8 @@ public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
             tipo_unidad_id = tipo,
             placa = "ABC123",
             conductor_id = conductor?.UsuarioId,
+            fecha_programada = fecha,
+            lugar_cargue_id = lugarCargue,
             unidades = new[] { new { vin, lugar_destino_id = destino ?? lugarCargue } },
         }));
         Assert.Equal(HttpStatusCode.Created, creado.StatusCode);

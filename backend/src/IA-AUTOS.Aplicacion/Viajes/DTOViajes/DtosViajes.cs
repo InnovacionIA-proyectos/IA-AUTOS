@@ -6,8 +6,9 @@ namespace IAAutos.Aplicacion.Viajes.DTOViajes;
 public sealed record UnidadDelViajeRequest(string? Vin, Guid? LugarDestinoId);
 
 /// <summary>
-/// Viaje nuevo: unidad transportadora, placa, trailer, conductor, codigo MTrack y, opcionalmente, sus unidades (cada una con su VIN y el lugar de destino, un lugar activo del catalogo <c>lugares</c>). El viaje
-/// ya no tiene un destino unico: <c>destino_id</c> y <c>vines</c> se rechazan.
+/// Viaje nuevo: unidad transportadora, placa, trailer, conductor, codigo MTrack, <c>FechaProgramada</c> (fecha y hora ISO 8601 con zona horaria) y <c>LugarCargueId</c> (un lugar activo del catalogo <c>lugares</c>), ambos
+/// obligatorios, y, opcionalmente, sus unidades (cada una con su VIN y el lugar de destino, un lugar activo del catalogo <c>lugares</c>). El tipo de origen no se envia: se deduce del tipo del lugar de cargue. El viaje
+/// ya no tiene un destino unico: <c>destino_id</c> y <c>vines</c> se rechazan, como todo campo que este tipo no declara.
 /// </summary>
 public sealed record CrearViajeRequest(
     string? CodigoMtrack,
@@ -16,8 +17,9 @@ public sealed record CrearViajeRequest(
     string? Trailer,
     Guid? ConductorId,
     Guid? InspectorId,
-    Guid? OrigenId,
-    IReadOnlyList<UnidadDelViajeRequest>? Unidades);
+    IReadOnlyList<UnidadDelViajeRequest>? Unidades,
+    string? FechaProgramada = null,
+    Guid? LugarCargueId = null);
 
 /// <summary>
 /// Campos que admite el cambio de un viaje. Solo se cambia lo enviado; trailer, conductor, inspector y origen admiten
@@ -123,7 +125,13 @@ public sealed record ViajeDto(
     Guid? LugarCargueId = null,
     string? LugarCargue = null);
 
-/// <summary>Fila del listado de viajes: los datos del viaje, el conteo de sus VIN y los clientes de esos VIN (los que quien consulta puede ver).</summary>
+/// <summary>A donde van las unidades de un viaje: un lugar de destino y cuantas unidades van a el. Una unidad sin destino (viajes anteriores) aparece con <c>LugarId</c> y <c>Lugar</c> nulos.</summary>
+public sealed record DestinoDeUnidadesDto(Guid? LugarId, string? Lugar, int Unidades);
+
+/// <summary>
+/// Fila del listado de viajes: los datos del viaje, el conteo de sus VIN, los clientes de esos VIN (los que quien consulta puede ver) y <c>Destinos</c>, los destinos distintos de sus unidades con cuantas van a cada uno,
+/// para no abrir el viaje fila por fila.
+/// </summary>
 public sealed record ViajeResumenDto(
     Guid Id,
     string? CodigoMtrack,
@@ -147,7 +155,8 @@ public sealed record ViajeResumenDto(
     DateTimeOffset UpdatedAt,
     DateTimeOffset? FechaProgramada = null,
     Guid? LugarCargueId = null,
-    string? LugarCargue = null);
+    string? LugarCargue = null,
+    IReadOnlyList<DestinoDeUnidadesDto>? Destinos = null);
 
 /// <summary>
 /// Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio. <c>Pagina</c>, <c>Tamano</c> y <c>Orden</c> son el formato comun de los listados; la exportacion a Excel los
@@ -166,9 +175,10 @@ public sealed record FiltrosViajesRequest(
     string? Hasta,
     string? Pagina = null,
     string? Tamano = null,
-    string? Orden = null);
+    string? Orden = null,
+    string? DestinoUnidadId = null);
 
-/// <summary>Los filtros ya validados. <c>ClienteId</c> pide los viajes con algun VIN de ese cliente.</summary>
+/// <summary>Los filtros ya validados. <c>ClienteId</c> pide los viajes con algun VIN de ese cliente; <c>LugarDestinoId</c>, los que llevan al menos una unidad a ese lugar de destino (del catalogo <c>lugares</c>).</summary>
 public sealed record FiltrosViajes(
     string? Estado,
     string? CodigoMtrack,
@@ -179,7 +189,8 @@ public sealed record FiltrosViajes(
     Guid? OrigenId,
     Guid? DestinoId,
     DateTimeOffset? Desde,
-    DateTimeOffset? Hasta);
+    DateTimeOffset? Hasta,
+    Guid? LugarDestinoId = null);
 
 /// <summary>
 /// Fila de la carga masiva de viajes (una por VIN). Las filas con el mismo codigo MTrack forman un viaje. <c>Fila</c> es el

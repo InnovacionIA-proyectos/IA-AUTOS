@@ -54,13 +54,25 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         return vines.Select(v => (object)new { vin = v, lugar_destino_id = lugar }).ToArray();
     }
 
+    /// <summary>El lugar de cargue que usan los viajes de las pruebas cuando no se indica otro: «CEDI de prueba», de tipo CEDI 1.</summary>
+    private Sesion? _quienAdministraLugares;
+
+    /// <summary>Crear un lugar exige administrar catalogos: se hace con un administrador aparte, para que tambien lo use quien prueba que otro rol no puede crear viajes.</summary>
+    private async Task<Guid> LugarDeCargueAsync(Sesion quien)
+    {
+        _quienAdministraLugares ??= await SesionAsync("admin-lugares@ejemplo.com", clsRol.ADMIN);
+        return await LugarRealAsync(Cliente(_quienAdministraLugares.Token), "CEDI de prueba", "cedi_1");
+    }
+
+    private const string FECHA_PROGRAMADA = "2026-11-18T06:00:00-05:00";
+
     private async Task<HttpResponseMessage> CrearViajeAsync(
         Sesion quien,
         string codigo,
         string[]? vines = null,
         Guid? conductorId = null,
         Guid? inspectorId = null,
-        Guid? origenId = null,
+        Guid? lugarCargueId = null,
         Guid? lugarDestinoId = null,
         string placa = "ABC123") =>
         await Cliente(quien.Token).PostAsync(
@@ -73,7 +85,8 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
                 trailer = "T-9",
                 conductor_id = conductorId,
                 inspector_id = inspectorId,
-                origen_id = origenId,
+                fecha_programada = FECHA_PROGRAMADA,
+                lugar_cargue_id = lugarCargueId ?? await LugarDeCargueAsync(quien),
                 unidades = await UnidadesAsync(quien, vines, lugarDestinoId),
             }));
 
@@ -295,9 +308,10 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         await Sembrador.VehiculoAsync("VIN-V-01");
         await Sembrador.VehiculoAsync("VIN-V-02");
         var origen = await LugarAsync("cedi_1");
+        var lugarDeCargue = await LugarRealAsync(Cliente(coordinador.Token), "CEDI Envigado", "cedi_1");
         var destino = await LugarRealAsync(Cliente(coordinador.Token), "Concesionario Autolarte Medellin", "concesionario");
 
-        var r = await CrearViajeAsync(coordinador, "MTK-ALTA", ["VIN-V-01", "vin-v-02"], conductor.UsuarioId, inspector.UsuarioId, origen, destino);
+        var r = await CrearViajeAsync(coordinador, "MTK-ALTA", ["VIN-V-01", "vin-v-02"], conductor.UsuarioId, inspector.UsuarioId, lugarDeCargue, destino);
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var viaje = await LeerJsonAsync(r);
@@ -359,7 +373,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var retirado = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblUsuarios WHERE Email = 'retirado@ejemplo.com'"))!;
 
         var sinNada = await Cliente(coordinador.Token).PostAsync("/api/viajes", Cuerpo(new { }));
-        var referencias = await CrearViajeAsync(coordinador, "MTK-REF", conductorId: otroCoordinador.UsuarioId, inspectorId: inspector.UsuarioId, origenId: Guid.NewGuid());
+        var referencias = await CrearViajeAsync(coordinador, "MTK-REF", conductorId: otroCoordinador.UsuarioId, inspectorId: inspector.UsuarioId, lugarCargueId: Guid.NewGuid());
         var conductorRetirado = await CrearViajeAsync(coordinador, "MTK-RET", conductorId: retirado);
         var inspectorQueEsConductor = await CrearViajeAsync(coordinador, "MTK-INS", inspectorId: otroCoordinador.UsuarioId);
         var vinInexistente = await CrearViajeAsync(coordinador, "MTK-VIN", ["VIN-INEXISTENTE"]);
@@ -367,11 +381,11 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
 
         Assert.Equal(HttpStatusCode.BadRequest, sinNada.StatusCode);
         var faltan = (await LeerJsonAsync(sinNada)).GetProperty("details").GetProperty("fieldErrors").EnumerateObject().Select(p => p.Name).Order().ToList();
-        Assert.Equal(["codigo_mtrack", "placa", "tipo_unidad_id"], faltan);
+        Assert.Equal(["codigo_mtrack", "fecha_programada", "lugar_cargue_id", "placa", "tipo_unidad_id"], faltan);
         Assert.Equal(HttpStatusCode.BadRequest, referencias.StatusCode);
         var errores = (await LeerJsonAsync(referencias)).GetProperty("details").GetProperty("fieldErrors");
         Assert.Equal("El usuario indicado no es un conductor", errores.GetProperty("conductor_id")[0].GetString());
-        Assert.True(errores.TryGetProperty("origen_id", out _));
+        Assert.True(errores.TryGetProperty("lugar_cargue_id", out _));
         Assert.False(errores.TryGetProperty("inspector_id", out _));
         Assert.Equal(HttpStatusCode.BadRequest, conductorRetirado.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, inspectorQueEsConductor.StatusCode);
@@ -627,8 +641,9 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var inspector = await SesionAsync("insp@ejemplo.com", clsRol.INSPECTOR);
         var cedi1 = await LugarAsync("cedi_1");
         var origenViejo = await LugarAsync("origen");
+        var lugarDeOrigenViejo = await LugarRealAsync(Cliente(coordinador.Token), "Patio de origen", "origen");
         await Sembrador.VehiculoAsync("VIN-P-01");
-        var creado = await LeerJsonAsync(await CrearViajeAsync(coordinador, "MTK-PROP", ["VIN-P-01"], inspectorId: inspector.UsuarioId, origenId: origenViejo));
+        var creado = await LeerJsonAsync(await CrearViajeAsync(coordinador, "MTK-PROP", ["VIN-P-01"], inspectorId: inspector.UsuarioId, lugarCargueId: lugarDeOrigenViejo));
         var id = creado.GetProperty("id").GetGuid();
         var cargue = (Guid)(await Sembrador.EscalarAsync("SELECT e.Id FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE c.Codigo = 'cargue'"))!;
         await Sembrador.InformeAsync(cargue, inspector.UsuarioId, cerrada: true);

@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.0.0"
+    "version": "3.1.0"
   },
   "paths": {
     "/api/viajes": {
@@ -262,6 +262,13 @@
           },
           {
             "name": "orden",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "destino_unidad_id",
             "in": "query",
             "schema": {
               "type": "string"
@@ -23340,13 +23347,14 @@
             "trailer": "TR-1",
             "conductor_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "inspector_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "origen_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "unidades": [
               {
                 "vin": "9FBHSR4E8PM000001",
                 "lugar_destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
               }
-            ]
+            ],
+            "fecha_programada": "2026-10-22T14:30:00.000Z",
+            "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -23356,7 +23364,6 @@
           "trailer",
           "conductor_id",
           "inspector_id",
-          "origen_id",
           "unidades"
         ],
         "type": "object",
@@ -23400,13 +23407,6 @@
             ],
             "format": "uuid"
           },
-          "origen_id": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
           "unidades": {
             "type": [
               "null",
@@ -23440,6 +23440,53 @@
                 }
               }
             }
+          },
+          "fecha_programada": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lugar_cargue_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "DestinoDeUnidadesDto": {
+        "examples": [
+          {
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar": "texto",
+            "unidades": 1
+          }
+        ],
+        "required": [
+          "lugar_id",
+          "lugar",
+          "unidades"
+        ],
+        "type": "object",
+        "properties": {
+          "lugar_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "lugar": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unidades": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -28951,7 +28998,8 @@
                 "updated_at": "2026-10-22T14:30:00.000Z",
                 "fecha_programada": "2026-10-22T14:30:00.000Z",
                 "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                "lugar_cargue": "texto"
+                "lugar_cargue": "texto",
+                "destinos": []
               }
             ],
             "total": 1,
@@ -31703,7 +31751,14 @@
             "updated_at": "2026-10-22T14:30:00.000Z",
             "fecha_programada": "2026-10-22T14:30:00.000Z",
             "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "lugar_cargue": "texto"
+            "lugar_cargue": "texto",
+            "destinos": [
+              {
+                "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "lugar": "texto",
+                "unidades": 1
+              }
+            ]
           }
         ],
         "required": [
@@ -31853,6 +31908,15 @@
               "null",
               "string"
             ]
+          },
+          "destinos": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/DestinoDeUnidadesDto"
+            }
           }
         }
       },
