@@ -33,6 +33,7 @@ internal sealed class clsConfiguracionNotificacion : IEntityTypeConfiguration<cl
         builder.Property(n => n.RespondidaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
         builder.Property(n => n.ClaveDedupe).HasColumnType("varchar(300)").IsRequired();
         builder.Property(n => n.CreatedAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(n => n.Datos).HasColumnType("nvarchar(max)");
         builder.Ignore(n => n.EstaLeida);
         builder.Ignore(n => n.EstaRespondida);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(n => n.UsuarioId)

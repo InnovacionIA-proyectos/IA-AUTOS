@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.1.0"
+    "version": "3.2.0"
   },
   "paths": {
     "/api/viajes": {
@@ -23624,7 +23624,10 @@
                 "tipo_cierre": "texto",
                 "entrega_firmada_at": "2026-10-22T14:30:00.000Z",
                 "recibe_firmada_at": "2026-10-22T14:30:00.000Z",
-                "no_firma_parte": "texto"
+                "no_firma_parte": "texto",
+                "motivo_cierre": "texto",
+                "recibe_externo_nombre": "texto",
+                "recibe_externo_cedula": "texto"
               }
             ]
           }
@@ -23739,7 +23742,10 @@
             "tipo_cierre": "texto",
             "entrega_firmada_at": "2026-10-22T14:30:00.000Z",
             "recibe_firmada_at": "2026-10-22T14:30:00.000Z",
-            "no_firma_parte": "texto"
+            "no_firma_parte": "texto",
+            "motivo_cierre": "texto",
+            "recibe_externo_nombre": "texto",
+            "recibe_externo_cedula": "texto"
           }
         ],
         "required": [
@@ -23784,6 +23790,24 @@
             "format": "date-time"
           },
           "no_firma_parte": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_cierre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recibe_externo_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recibe_externo_cedula": {
             "type": [
               "null",
               "string"
@@ -24354,7 +24378,10 @@
           {
             "firma": "texto",
             "entrega_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "recibe_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "recibe_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "recibe_nombre": "texto",
+            "recibe_cedula": "texto",
+            "firma_recibe": "texto"
           }
         ],
         "required": [
@@ -24383,6 +24410,24 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "recibe_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recibe_cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "firma_recibe": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -25981,7 +26026,8 @@
                   "texto": "texto",
                   "created_at": "2026-10-22T14:30:00.000Z"
                 }
-              ]
+              ],
+              "recibe_externo_cedula": "texto"
             },
             "iniciada_at": "2026-10-22T14:30:00.000Z",
             "cerrada_at": "2026-10-22T14:30:00.000Z",
@@ -26946,7 +26992,9 @@
                   "no_firma_parte": "texto",
                   "motivo_no_firma": "texto",
                   "testigo_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                  "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "recibe_externo_nombre": "texto",
+                  "recibe_externo_cedula": "texto"
                 },
                 "notas_aclaratorias": [],
                 "motivo_sin_inspector": {
@@ -27133,7 +27181,9 @@
               "no_firma_parte": "texto",
               "motivo_no_firma": "texto",
               "testigo_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-              "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "recibe_externo_nombre": "texto",
+              "recibe_externo_cedula": "texto"
             },
             "notas_aclaratorias": [
               {
@@ -27534,7 +27584,8 @@
                   "usuario_nombre": "texto",
                   "fecha": "2026-10-22T14:30:00.000Z"
                 },
-                "created_at": "2026-10-22T14:30:00.000Z"
+                "created_at": "2026-10-22T14:30:00.000Z",
+                "datos": []
               }
             ],
             "total": 1,
@@ -28236,7 +28287,13 @@
               "usuario_nombre": "texto",
               "fecha": "2026-10-22T14:30:00.000Z"
             },
-            "created_at": "2026-10-22T14:30:00.000Z"
+            "created_at": "2026-10-22T14:30:00.000Z",
+            "datos": [
+              {
+                "key": "texto",
+                "value": {}
+              }
+            ]
           }
         ],
         "required": [
@@ -28320,6 +28377,12 @@
           },
           "created_at": {
             "format": "date-time"
+          },
+          "datos": {
+            "type": [
+              "null",
+              "object"
+            ]
           }
         }
       },
@@ -31003,7 +31066,8 @@
                 "texto": "texto",
                 "created_at": "2026-10-22T14:30:00.000Z"
               }
-            ]
+            ],
+            "recibe_externo_cedula": "texto"
           }
         ],
         "required": [
@@ -31050,7 +31114,10 @@
             "format": "uuid"
           },
           "recibe_usuario_id": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "uuid"
           },
           "firmada": {
@@ -31156,6 +31223,12 @@
             "items": {
               "$ref": "#/components/schemas/NotaAclaratoriaDto"
             }
+          },
+          "recibe_externo_cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -31177,7 +31250,9 @@
             "no_firma_parte": "texto",
             "motivo_no_firma": "texto",
             "testigo_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "recibe_externo_nombre": "texto",
+            "recibe_externo_cedula": "texto"
           }
         ],
         "required": [
@@ -31216,7 +31291,10 @@
             "format": "uuid"
           },
           "recibe_usuario_id": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "uuid"
           },
           "firmada": {
@@ -31274,6 +31352,18 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "recibe_externo_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recibe_externo_cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

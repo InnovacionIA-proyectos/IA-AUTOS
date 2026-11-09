@@ -171,7 +171,7 @@ public sealed record TransferenciaDetalleDto(
     Guid Id,
     Guid InspeccionId,
     Guid? EntregaUsuarioId,
-    Guid RecibeUsuarioId,
+    Guid? RecibeUsuarioId,
     bool Firmada,
     DateTimeOffset? FirmadaAt,
     DateTimeOffset CreatedAt,
@@ -191,7 +191,8 @@ public sealed record TransferenciaDetalleDto(
     Guid? TestigoUsuarioId,
     string? TestigoNombre,
     Guid? EvidenciaConstanciaId,
-    IReadOnlyList<NotaAclaratoriaDto> NotasAclaratorias);
+    IReadOnlyList<NotaAclaratoriaDto> NotasAclaratorias,
+    string? RecibeExternoCedula = null);
 
 /// <summary>
 /// Informe completo para revision: inspeccion con su contexto (VIN, proceso, lugar, inspector), hallazgos, evidencias con URL

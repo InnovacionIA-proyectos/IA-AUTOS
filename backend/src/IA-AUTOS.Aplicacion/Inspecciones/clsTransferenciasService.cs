@@ -193,7 +193,12 @@ public sealed class clsTransferenciasService(
         var entrega = transferencia.EntregaUsuarioId is { } entregaId
             ? await ArmarFirmaAsync(entregaId, transferencia.FirmaEntrega, transferencia.FirmaEntregaAt, transferencia.FirmaEntregaIp, ct)
             : new FirmaConstancia("Sin entrega", null, null, null, null);
-        var recibe = await ArmarFirmaAsync(transferencia.RecibeUsuarioId, transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct);
+        var recibe = transferencia.RecibeEsExterno
+            ? await clsArmadorFirmas.ArmarAsync(
+                almacen, $"{transferencia.RecibeExternoNombre} (documento {transferencia.RecibeExternoCedula})", transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct)
+            : transferencia.RecibeUsuarioId is { } recibeId
+                ? await ArmarFirmaAsync(recibeId, transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct)
+                : new FirmaConstancia("Nadie recibió", null, null, null, null);
         string? testigo = null;
         var fotos = new List<FotoConstancia>();
         if (transferencia.TestigoUsuarioId is { } testigoId)

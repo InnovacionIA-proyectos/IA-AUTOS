@@ -83,5 +83,8 @@ public interface IReclamoRepository
     /// <summary>Los lugares (puntos) del inspector.</summary>
     Task<IReadOnlyList<Guid>> LugaresDelInspectorAsync(Guid usuarioId, CancellationToken ct = default);
 
+    /// <summary>True si el lugar tiene al menos un inspector activo asignado (<c>tblInspectorLugares</c>): ahi la entrega la firma el inspector y no una persona externa.</summary>
+    Task<bool> LugarTieneInspectoresAsync(Guid lugarId, CancellationToken ct = default);
+
     void Agregar(clsReclamo reclamo);
 }
