@@ -790,7 +790,7 @@ Gestión de viajes. Borra el viaje con sus VIN y etapas, solo si **no tiene insp
 
 ### Carga de viajes por Excel
 El archivo tiene **una fila por VIN**: VIN, placa, tráiler, cédula del conductor, unidad, código MTrack, fecha y hora programada del cargue, lugar de cargue (origen) y lugar de destino de esa unidad. El cliente lee el Excel y envía las filas como JSON; las filas con el
-mismo `codigo_mtrack` forman **un solo viaje**. Son dos pasos: primero una **vista previa** con el error de cada fila (no guarda nada) y, al confirmar,
+mismo `codigo_mtrack` forman **un solo viaje**; si el archivo **no trae el código**, las filas con la misma **placa y fecha programada** forman un viaje y el sistema le genera el código (ver «Archivo sin código del viaje»). Son dos pasos: primero una **vista previa** con el error de cada fila (no guarda nada) y, al confirmar,
 **solo se guardan los viajes de las filas válidas**.
 
 ```json
@@ -811,8 +811,8 @@ mismo `codigo_mtrack` forman **un solo viaje**. Son dos pasos: primero una **vis
 | `placa` | sí | máximo 50 caracteres |
 | `trailer` | no | máximo 50 caracteres |
 | `cedula_conductor` | no | con o sin puntos; debe ser la de un usuario activo con rol `conductor`. Vacía = viaje sin conductor |
-| `unidad` | sí | el `codigo` o el nombre de un valor **activo** de `tipos-unidad` (sin distinguir tildes ni mayúsculas) |
-| `codigo_mtrack` | sí | formato y unicidad como en `POST /api/viajes` |
+| `unidad` | no | el `codigo` o el nombre de un valor **activo** de `tipos-unidad` (sin distinguir tildes ni mayúsculas). **Si no se trae, el viaje toma la niñera** (`ninera`, el valor por defecto) |
+| `codigo_mtrack` | no | formato y unicidad como en `POST /api/viajes`. **Si no se trae, el sistema lo genera** de la placa y la fecha programada |
 | `fecha_programada` | sí | día y hora del cargue: `2026-11-03 06:00` (también `AAAA-MM-DDTHH:mm`); **sin zona horaria es hora de Colombia (UTC-5)** y con zona (`Z`, `-05:00`) se respeta |
 | `origen` | sí | nombre de un lugar **activo** del catálogo `lugares` (sin distinguir tildes ni mayúsculas): el lugar de cargue del viaje |
 | `destino` | sí | nombre de un lugar **activo** del catálogo `lugares`: el destino de **esa** unidad (cada VIN del viaje puede ir a uno distinto) |
@@ -823,6 +823,11 @@ Una fila es inválida si falla un campo, si su `codigo_mtrack` ya existe, si su 
 aparece bajo dos códigos del archivo, o si no coincide en placa, tráiler, conductor, unidad, fecha programada o lugar de cargue con la primera fila válida de su mismo `codigo_mtrack` (el destino es de cada unidad y no se compara). Máximo **5000** filas;
 una lista vacía o más grande responde `400`.
 
+**Archivo sin código del viaje** *(regla propuesta por el equipo, pendiente de confirmar por el negocio, DEC-003)*. Las filas **sin** `codigo_mtrack` se agrupan por **placa** (sin distinguir mayúsculas, guiones ni espacios) y **fecha y hora programada**: todas las que coinciden forman **un solo viaje** y no uno por fila.
+El código del viaje lo genera el sistema y es **estable**: `AUTO-{PLACA}-{AAAAMMDDHHmm}` (la placa en mayúsculas y sin símbolos; la fecha, en hora de Colombia), por ejemplo `AUTO-WXY123-202511190600`; lo mismo vale para una placa con varios viajes en días u horas distintos (cada fecha y hora es otro viaje). Por eso **cargar dos veces el mismo
+archivo no crea viajes duplicados ni códigos distintos**: la segunda vez cada fila se rechaza con «Ya existe el viaje de la placa … y esa fecha: este camión ya se cargó». Esas filas deben coincidir en tráiler, conductor, unidad y lugar de cargue (la placa y la fecha ya coinciden por construcción). Una fila con código sigue
+como siempre, y en un mismo archivo pueden venir filas con código y filas sin él. Cada fila responde con el código que se usó y `codigo_generado` (`true` si lo generó el sistema).
+
 - `POST /api/viajes/cargar/previsualizar` (gestión de viajes) → `200`, sin guardar nada.
 - `POST /api/viajes/cargar` (gestión de viajes) → `201`, guarda los viajes de las filas válidas; cada viaje se confirma por separado.
 
@@ -832,9 +837,9 @@ Ambos responden con la misma forma:
 {
   "confirmado": false, "total": 3, "validas": 2, "invalidas": 1, "viajes": 1,
   "filas": [
-    { "fila": 2, "vin": "9BWZZZ377VT004251", "codigo_mtrack": "MTK-001", "valida": true, "errores": [], "viaje_id": null },
-    { "fila": 3, "vin": "9BWZZZ377VT004252", "codigo_mtrack": "MTK-001", "valida": true, "errores": [], "viaje_id": null },
-    { "fila": 4, "vin": "NO-EXISTE", "codigo_mtrack": "MTK-002", "valida": false, "errores": ["El VIN NO-EXISTE no existe en el inventario: cárguelo antes"], "viaje_id": null }
+    { "fila": 2, "vin": "9BWZZZ377VT004251", "codigo_mtrack": "MTK-001", "codigo_generado": false, "valida": true, "errores": [], "viaje_id": null },
+    { "fila": 3, "vin": "9BWZZZ377VT004252", "codigo_mtrack": "MTK-001", "codigo_generado": false, "valida": true, "errores": [], "viaje_id": null },
+    { "fila": 4, "vin": "NO-EXISTE", "codigo_mtrack": "AUTO-DEF456-202611030600", "codigo_generado": true, "valida": false, "errores": ["El VIN NO-EXISTE no existe en el inventario: cárguelo antes"], "viaje_id": null }
   ]
 }
 ```

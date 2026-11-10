@@ -31,6 +31,12 @@ public static class clsEstadoViaje
 public sealed partial class clsViaje : clsEntidadBase
 {
     public const int CODIGO_MAX = 50;
+
+    /// <summary>El <c>codigo</c> del tipo de unidad que toma un viaje de la carga por archivo cuando el archivo no trae la unidad.</summary>
+    public const string TIPO_UNIDAD_POR_DEFECTO = "ninera";
+
+    /// <summary>El prefijo del codigo que el sistema genera para el viaje de un archivo que no trae el codigo MTrack.</summary>
+    public const string PREFIJO_CODIGO_GENERADO = "AUTO-";
     public const int PLACA_MAX = 50;
     public const int TRAILER_MAX = 50;
 

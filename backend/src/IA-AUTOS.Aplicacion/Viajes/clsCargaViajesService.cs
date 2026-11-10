@@ -15,7 +15,8 @@ namespace IAAutos.Aplicacion.Viajes;
 /// Carga masiva de viajes desde un Excel (una fila por VIN: VIN, placa, trailer, cedula del conductor, unidad, codigo MTrack, fecha y hora programada del cargue, lugar de cargue y lugar de
 /// destino de ESA unidad). Las filas con el mismo codigo MTrack forman un viaje y deben coincidir en placa, trailer, conductor, unidad, fecha programada y lugar de cargue; el destino es de cada
 /// unidad. Los lugares se buscan por nombre en el catalogo <c>lugares</c>. Primero se muestra una vista previa con el error de cada fila (sin guardar nada) y al confirmar solo se guardan los
-/// viajes de las filas validas; una fila invalida no frena a las demas.
+/// viajes de las filas validas; una fila invalida no frena a las demas. Si una fila no trae el codigo MTrack, el sistema arma el viaje con las filas que comparten placa y fecha programada y le genera un
+/// codigo estable (<c>AUTO-PLACA-AAAAMMDDHHmm</c>); si no trae la unidad, toma el tipo de unidad por defecto (<see cref="clsViaje.TIPO_UNIDAD_POR_DEFECTO"/>).
 /// </summary>
 public sealed class clsCargaViajesService(
     IViajeRepository viajes,
@@ -46,7 +47,10 @@ public sealed class clsCargaViajesService(
 
         public string? UnidadTexto { get; init; }
 
-        public string? Codigo { get; init; }
+        public string? Codigo { get; set; }
+
+        /// <summary>El codigo lo genero el sistema porque la fila no lo traia.</summary>
+        public bool CodigoGenerado { get; set; }
 
         public string? FechaTexto { get; init; }
 
@@ -103,7 +107,7 @@ public sealed class clsCargaViajesService(
             await unidadDeTrabajo.GuardarCambiosAsync(ct);
         }
 
-        var resultado = filas.Select(f => new FilaCargaViajeDto(f.Numero, f.Vin, f.Codigo, f.Valida, f.Errores, f.ViajeId)).ToList();
+        var resultado = filas.Select(f => new FilaCargaViajeDto(f.Numero, f.Vin, f.Codigo, f.Valida, f.Errores, f.ViajeId, f.CodigoGenerado)).ToList();
         var validas = resultado.Count(f => f.Valida);
         return new ResultadoCargaViajesDto(confirmar, resultado.Count, validas, resultado.Count - validas, viajesCreados, resultado);
     }
@@ -149,6 +153,7 @@ public sealed class clsCargaViajesService(
         {
             ValidarCampos(fila, vehiculosPorVin, conductores, unidades);
             ValidarProgramacion(fila, lugares);
+            GenerarCodigoSiFalta(fila);
         }
 
         ValidarCoherenciaDeViajes(filas);
@@ -174,11 +179,7 @@ public sealed class clsCargaViajesService(
             fila.Errores.Add($"El VIN {fila.Vin} no existe en el inventario: cárguelo antes");
         }
 
-        if (fila.Codigo is null)
-        {
-            fila.Errores.Add("El código MTrack es requerido");
-        }
-        else
+        if (fila.Codigo is not null)
         {
             try
             {
@@ -206,7 +207,16 @@ public sealed class clsCargaViajesService(
 
         if (fila.UnidadTexto is null)
         {
-            fila.Errores.Add("La unidad transportadora es requerida");
+            // Sin unidad en el archivo, el viaje toma el tipo por defecto.
+            var porDefecto = unidades.FirstOrDefault(u => clsTextoComparable.Normalizar(u.Codigo) == clsTextoComparable.Normalizar(clsViaje.TIPO_UNIDAD_POR_DEFECTO));
+            if (porDefecto is null)
+            {
+                fila.Errores.Add($"La fila no trae la unidad y el tipo por defecto «{clsViaje.TIPO_UNIDAD_POR_DEFECTO}» no está activo en el catálogo: indique la unidad");
+            }
+            else
+            {
+                fila.TipoUnidadId = porDefecto.Id;
+            }
         }
         else
         {
@@ -259,6 +269,35 @@ public sealed class clsCargaViajesService(
         fila.LugarDestinoId = BuscarLugar(fila, fila.DestinoTexto, "El lugar de destino de la unidad es requerido", lugares);
     }
 
+    /// <summary>
+    /// Sin codigo MTrack en la fila, el viaje se arma por placa y fecha programada: las filas con la misma placa y la misma fecha y hora son un solo viaje y su codigo se genera de esos dos datos, asi que
+    /// cargar dos veces el mismo archivo da el mismo codigo (y la segunda vez se rechaza por duplicado en lugar de crear otro viaje). Si falta la placa o la fecha ya tienen su propio error.
+    /// </summary>
+    private static void GenerarCodigoSiFalta(Fila fila)
+    {
+        if (fila.Codigo is not null)
+        {
+            return;
+        }
+
+        if (fila.Placa is null || fila.FechaProgramada is null)
+        {
+            fila.Errores.Add("Sin código MTrack, la placa y la fecha programada son las que arman el viaje");
+            return;
+        }
+
+        var placa = new string(fila.Placa.Where(char.IsAsciiLetterOrDigit).ToArray()).ToUpperInvariant();
+        var codigo = $"{clsViaje.PREFIJO_CODIGO_GENERADO}{placa}-{fila.FechaProgramada.Value.ToOffset(clsFechaProgramada.COLOMBIA):yyyyMMddHHmm}";
+        if (placa.Length == 0 || codigo.Length > clsViaje.CODIGO_MAX)
+        {
+            fila.Errores.Add("Sin código MTrack, la placa debe tener letras o números (máximo 32) para armar el viaje");
+            return;
+        }
+
+        fila.Codigo = codigo;
+        fila.CodigoGenerado = true;
+    }
+
     private static Guid? BuscarLugar(Fila fila, string? texto, string faltante, IReadOnlyList<ValorCatalogo> lugares)
     {
         if (texto is null)
@@ -307,7 +346,8 @@ public sealed class clsCargaViajesService(
                 if (cabecera is not null && fila != cabecera && fila.Valida)
                 {
                     var distintos = new List<string>();
-                    if (!string.Equals(fila.Placa, cabecera.Placa, StringComparison.OrdinalIgnoreCase))
+                    // Con el codigo generado la placa ya coincide (el codigo se arma con ella, sin guiones ni espacios).
+                    if (!fila.CodigoGenerado && !string.Equals(fila.Placa, cabecera.Placa, StringComparison.OrdinalIgnoreCase))
                     {
                         distintos.Add("la placa");
                     }
@@ -339,7 +379,7 @@ public sealed class clsCargaViajesService(
 
                     if (distintos.Count > 0)
                     {
-                        fila.Errores.Add($"No coincide con el viaje de la fila {cabecera.Numero} ({string.Join(", ", distintos)}): un código MTrack es un solo viaje");
+                        fila.Errores.Add($"No coincide con el viaje de la fila {cabecera.Numero} ({string.Join(", ", distintos)}): {(fila.CodigoGenerado ? "la misma placa y fecha son un solo viaje" : "un código MTrack es un solo viaje")}");
                     }
                 }
 
@@ -370,7 +410,9 @@ public sealed class clsCargaViajesService(
         {
             if (fila.Codigo is not null && existentes.Contains(fila.Codigo))
             {
-                fila.Errores.Add($"Ya existe un viaje con el código MTrack {fila.Codigo}");
+                fila.Errores.Add(fila.CodigoGenerado
+                    ? $"Ya existe el viaje de la placa {fila.Placa} y esa fecha (código {fila.Codigo}): este camión ya se cargó"
+                    : $"Ya existe un viaje con el código MTrack {fila.Codigo}");
             }
 
             if (fila.Vehiculo is not null && enViajes.TryGetValue(fila.Vehiculo.Id, out var activo))

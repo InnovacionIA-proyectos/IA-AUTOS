@@ -258,7 +258,7 @@ public sealed record FilaCargaViajeRequest(
 public sealed record CargarViajesRequest(IReadOnlyList<FilaCargaViajeRequest>? Filas);
 
 /// <summary>Resultado de una fila: valida o con sus errores; si el viaje se guardo, su id.</summary>
-public sealed record FilaCargaViajeDto(int Fila, string? Vin, string? CodigoMtrack, bool Valida, IReadOnlyList<string> Errores, Guid? ViajeId);
+public sealed record FilaCargaViajeDto(int Fila, string? Vin, string? CodigoMtrack, bool Valida, IReadOnlyList<string> Errores, Guid? ViajeId, bool CodigoGenerado = false);
 
 /// <summary>
 /// Vista previa o resultado de la carga. <c>Confirmado</c> es falso en la vista previa (no se guarda nada). <c>Viajes</c> es la
