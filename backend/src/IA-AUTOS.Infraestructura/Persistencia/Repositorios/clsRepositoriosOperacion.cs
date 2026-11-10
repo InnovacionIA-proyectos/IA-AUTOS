@@ -27,6 +27,14 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
     public Task<clsUsuario?> ObtenerPorPortalIdAsync(long portalUsuarioId, CancellationToken ct = default) =>
         contexto.Usuarios.FirstOrDefaultAsync(u => u.PortalUsuarioId == portalUsuarioId, ct);
 
+    public async Task<IReadOnlyDictionary<Guid, string>> NombresAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        var distintos = ids.Distinct().ToList();
+        return distintos.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await contexto.Usuarios.AsNoTracking().Where(u => distintos.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Nombre, ct);
+    }
+
     public async Task<IReadOnlyDictionary<string, clsUsuario>> ObtenerPorCedulasAsync(IReadOnlyCollection<string> cedulas, CancellationToken ct = default)
     {
         var resultado = new Dictionary<string, clsUsuario>(StringComparer.OrdinalIgnoreCase);

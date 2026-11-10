@@ -207,6 +207,9 @@ public sealed class clsUsuarioRepositoryFalso : IUsuarioRepository
     public Task<IReadOnlyDictionary<string, clsUsuario>> ObtenerPorCedulasAsync(IReadOnlyCollection<string> cedulas, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyDictionary<string, clsUsuario>>(Usuarios.Where(u => u.Cedula is not null && cedulas.Contains(u.Cedula)).ToDictionary(u => u.Cedula!));
 
+    public Task<IReadOnlyDictionary<Guid, string>> NombresAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyDictionary<Guid, string>>(Usuarios.Where(u => ids.Contains(u.Id)).ToDictionary(u => u.Id, u => u.Nombre));
+
     public Task<clsUsuario?> ObtenerPorCedulaAsync(string cedula, CancellationToken ct = default) =>
         Task.FromResult(Usuarios.FirstOrDefault(u => u.Cedula == cedula));
 

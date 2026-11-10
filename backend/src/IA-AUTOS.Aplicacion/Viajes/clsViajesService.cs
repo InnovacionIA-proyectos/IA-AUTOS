@@ -65,7 +65,7 @@ public sealed class clsViajesService(
 
         if (impide.Count > 0)
         {
-            throw new clsConflictoException($"No se puede bajar la capacidad a {nueva}: {string.Join(" y ", impide)} en el viaje");
+            throw new clsConflictoException($"No se puede bajar la capacidad a {nueva}: {string.Join(" y ", impide)} en el viaje", clsMotivosRechazo.CAPACIDAD_NO_BAJA);
         }
     }
 
@@ -284,16 +284,16 @@ public sealed class clsViajesService(
         var viaje = await ObtenerViajeAsync(id, ct);
         viaje.AsegurarActivo();
         var vehiculo = await vehiculos.ObtenerPorVinAsync(vin, ct)
-            ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
+            ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado", clsMotivosRechazo.VEHICULO_NO_EXISTE);
         var enlace = await viajes.ObtenerVehiculoAsync(id, vehiculo.Id, ct)
-            ?? throw new clsEntidadNoEncontradaException($"El VIN {vehiculo.Vin} no está en este viaje");
+            ?? throw new clsEntidadNoEncontradaException($"El VIN {vehiculo.Vin} no está en este viaje", clsMotivosRechazo.VIN_FUERA_DEL_VIAJE);
         await ValidarDestinosAsync([new UnidadDelViajeRequest(vehiculo.Vin, solicitud.LugarDestinoId)], ct);
 
         var codigosPorEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).ToDictionary(v => v.Id, v => v.Codigo);
         var descargue = (await viajes.ObtenerEtapasAsync(id, vehiculo.Id, ct)).FirstOrDefault(e => codigosPorEtapa.TryGetValue(e.EtapaCatalogoId, out var codigo) && codigo == clsCodigosEtapa.DESCARGUE);
         if (descargue is not null && (await viajes.EtapasConInformeCerradoAsync(id, ct)).Contains(descargue.Id))
         {
-            throw new clsConflictoException("El descargue de la unidad ya tiene un informe cerrado: su destino no se cambia");
+            throw new clsConflictoException("El descargue de la unidad ya tiene un informe cerrado: su destino no se cambia", clsMotivosRechazo.DESCARGUE_CON_INFORME_CERRADO);
         }
 
         var antes = enlace.LugarDestinoId;
@@ -321,20 +321,20 @@ public sealed class clsViajesService(
         viaje.AsegurarActivo();
         if (actual.SoloSusViajes() is { } usuarioId && !await acceso.ParticipaOReclamaAsync(viaje, usuarioId, ct))
         {
-            throw new clsProhibidoException("El viaje no está asignado a su usuario");
+            throw new clsProhibidoException("El viaje no está asignado a su usuario", clsMotivosRechazo.VIAJE_NO_ASIGNADO);
         }
 
         // El conductor solo acomoda las unidades cuando hace el cargue sin inspector: con el permiso concedido (donde el punto tiene inspectores) o con la excepcion ya activa (donde no los tiene).
         if (actual.Rol == clsRol.CONDUCTOR
             && !(await permisos.ObtenerDeViajeAsync(id, ct) is { EstaConcedido: true } || await novedadesProceso.ExisteCargueSinInspectorAsync(id, ct)))
         {
-            throw new clsProhibidoException("El conductor solo registra la posición de las unidades cuando hace el cargue sin inspector, con el permiso concedido");
+            throw new clsProhibidoException("El conductor solo registra la posición de las unidades cuando hace el cargue sin inspector, con el permiso concedido", clsMotivosRechazo.CONDUCTOR_SIN_PERMISO_DE_EXCEPCION);
         }
 
         var vehiculo = await vehiculos.ObtenerPorVinAsync(vin, ct)
-            ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
+            ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado", clsMotivosRechazo.VEHICULO_NO_EXISTE);
         var enlace = await viajes.ObtenerVehiculoAsync(id, vehiculo.Id, ct)
-            ?? throw new clsEntidadNoEncontradaException($"El VIN {vehiculo.Vin} no está en este viaje");
+            ?? throw new clsEntidadNoEncontradaException($"El VIN {vehiculo.Vin} no está en este viaje", clsMotivosRechazo.VIN_FUERA_DEL_VIAJE);
         if (solicitud.Posicion is { } posicion)
         {
             // Primero el rango contra la capacidad de la ninera del viaje (400) y despues lo demas.
@@ -346,12 +346,12 @@ public sealed class clsViajesService(
 
             if (!await viajes.TieneSegundaInspeccionDelCargueEnCursoAsync(id, ct))
             {
-                throw new clsConflictoException("El viaje no tiene su segunda inspección del cargue en curso: la posición se registra durante ella");
+                throw new clsConflictoException("El viaje no tiene su segunda inspección del cargue en curso: la posición se registra durante ella", clsMotivosRechazo.SIN_SEGUNDA_INSPECCION_EN_CURSO);
             }
 
             if ((await viajes.ObtenerVehiculosAsync(id, ct)).Any(v => v.VehiculoId != vehiculo.Id && v.Posicion == posicion))
             {
-                throw new clsConflictoException($"La posición {posicion} ya está ocupada por otra unidad de este viaje");
+                throw new clsConflictoException($"La posición {posicion} ya está ocupada por otra unidad de este viaje", clsMotivosRechazo.POSICION_OCUPADA);
             }
         }
 
@@ -371,12 +371,12 @@ public sealed class clsViajesService(
         var viaje = await ObtenerViajeAsync(id, ct);
         viaje.AsegurarActivo();
         var vehiculo = await vehiculos.ObtenerPorVinAsync(vin, ct)
-            ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
+            ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado", clsMotivosRechazo.VEHICULO_NO_EXISTE);
         var enlace = await viajes.ObtenerVehiculoAsync(id, vehiculo.Id, ct)
-            ?? throw new clsEntidadNoEncontradaException($"El VIN {vehiculo.Vin} no está en este viaje");
+            ?? throw new clsEntidadNoEncontradaException($"El VIN {vehiculo.Vin} no está en este viaje", clsMotivosRechazo.VIN_FUERA_DEL_VIAJE);
         if (await viajes.TieneInspeccionesAsync(id, vehiculo.Id, ct))
         {
-            throw new clsConflictoException("El VIN ya tiene inspecciones en este viaje y no puede quitarse");
+            throw new clsConflictoException("El VIN ya tiene inspecciones en este viaje y no puede quitarse", clsMotivosRechazo.VIN_CON_INSPECCIONES);
         }
 
         viajes.Eliminar(await viajes.ObtenerEtapasAsync(id, vehiculo.Id, ct));
@@ -393,7 +393,7 @@ public sealed class clsViajesService(
         var viaje = await ObtenerViajeAsync(id, ct);
         if (await viajes.TieneInspeccionesAsync(id, null, ct))
         {
-            throw new clsConflictoException("El viaje tiene inspecciones y no puede eliminarse: cancélelo");
+            throw new clsConflictoException("El viaje tiene inspecciones y no puede eliminarse: cancélelo", clsMotivosRechazo.VIAJE_CON_INSPECCIONES);
         }
 
         viajes.Eliminar(await viajes.ObtenerEtapasAsync(id, null, ct));
@@ -410,10 +410,10 @@ public sealed class clsViajesService(
     // ----------------------------------------------------------------------------------------------- internos
 
     private async Task<clsViaje> ObtenerViajeAsync(Guid id, CancellationToken ct) =>
-        await viajes.ObtenerPorIdAsync(id, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado");
+        await viajes.ObtenerPorIdAsync(id, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE);
 
     private async Task<ViajeDto> ObtenerDtoAsync(Guid id, CancellationToken ct) =>
-        await consultas.ObtenerAsync(id, ClienteRestringido, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado");
+        await consultas.ObtenerAsync(id, ClienteRestringido, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE);
 
     /// <summary>
     /// El viaje no tiene un cliente propio: se toma de sus VIN. Quien administra viajes sin ser super administrador (coordinador, administrador,
@@ -427,12 +427,12 @@ public sealed class clsViajesService(
     {
         if (actual.SoloSusViajes() is { } usuarioId && !await acceso.PuedeVerAsync(viaje, usuarioId, ct))
         {
-            throw new clsProhibidoException("El viaje no está asignado a su usuario");
+            throw new clsProhibidoException("El viaje no está asignado a su usuario", clsMotivosRechazo.VIAJE_NO_ASIGNADO);
         }
 
         if (ClienteRestringido is { } cliente && !await consultas.ViajeEsDeClienteAsync(viaje.Id, cliente, ct))
         {
-            throw new clsProhibidoException("El viaje no tiene unidades de su cliente");
+            throw new clsProhibidoException("El viaje no tiene unidades de su cliente", clsMotivosRechazo.VIAJE_SIN_UNIDADES_DEL_CLIENTE);
         }
     }
 
@@ -440,7 +440,7 @@ public sealed class clsViajesService(
     {
         if (await viajes.ExisteCodigoMtrackAsync(codigo, exceptoViajeId, ct))
         {
-            throw new clsConflictoException("Ya existe un viaje con ese código MTrack");
+            throw new clsConflictoException("Ya existe un viaje con ese código MTrack", clsMotivosRechazo.CODIGO_MTRACK_DUPLICADO);
         }
     }
 
@@ -531,7 +531,7 @@ public sealed class clsViajesService(
         var repetidos = encontrados.Where(v => yaEnElViaje.Contains(v.Id)).Select(v => v.Vin).ToList();
         if (repetidos.Count > 0)
         {
-            throw new clsConflictoException($"Ya están en este viaje: {string.Join(", ", repetidos)}");
+            throw new clsConflictoException($"Ya están en este viaje: {string.Join(", ", repetidos)}", clsMotivosRechazo.VIN_YA_EN_EL_VIAJE);
         }
 
         var enOtros = await viajes.ViajesActivosPorVehiculoAsync(encontrados.Select(v => v.Id).ToList(), viaje.Id, ct);
@@ -539,7 +539,7 @@ public sealed class clsViajesService(
         {
             var detalle = encontrados.Where(v => enOtros.ContainsKey(v.Id))
                 .Select(v => $"{v.Vin} (viaje {enOtros[v.Id].CodigoMtrack ?? enOtros[v.Id].ViajeId.ToString()})");
-            throw new clsConflictoException($"Ya están en otro viaje activo: {string.Join(", ", detalle)}");
+            throw new clsConflictoException($"Ya están en otro viaje activo: {string.Join(", ", detalle)}", clsMotivosRechazo.VIN_EN_OTRO_VIAJE_ACTIVO);
         }
 
         return encontrados;
@@ -636,7 +636,7 @@ public sealed class clsViajesService(
     {
         if (clienteRestringido is { } propio && filtros.ClienteId is { } otro && otro != propio)
         {
-            throw new clsProhibidoException("Solo puede consultar lo de su propio cliente");
+            throw new clsProhibidoException("Solo puede consultar lo de su propio cliente", clsMotivosRechazo.OTRO_CLIENTE);
         }
 
         return clienteRestringido is null ? filtros : filtros with { ClienteId = null };
