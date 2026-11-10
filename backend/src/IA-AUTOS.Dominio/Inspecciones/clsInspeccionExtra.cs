@@ -5,8 +5,9 @@ namespace IAAutos.Dominio.Inspecciones;
 
 /// <summary>
 /// Un extra del vehiculo fuera del dibujo estandar (barras de techo, volco, platon, otro...) que reporta una inspeccion: su tipo (el <c>Codigo</c> del catalogo de tipos de extra), un texto libre solo cuando el
-/// tipo es <see cref="clsTipoExtra.OTRO"/>, una observacion opcional y sus fotos selladas (evidencias con <c>ExtraId</c>). No es un hallazgo: no toca el dibujo ni cuenta en los patrones, el mapa de calor ni la
-/// tasa de rechazo. Solo se agrega, cambia o quita mientras la inspeccion esta en borrador; con fotos no se quita (la foto es evidencia).
+/// tipo es <see cref="clsTipoExtra.OTRO"/>, una observacion opcional y sus fotos selladas (evidencias con <c>ExtraId</c>). El extra en si no es un hallazgo: no toca el dibujo ni cuenta en los patrones, el mapa
+/// de calor ni la tasa de rechazo. Si esta danado, el dano (clase, tamano y nivel) es un hallazgo ligado a el (<see cref="clsHallazgo.ExtraId"/>) que si cuenta. Solo se agrega, cambia o quita mientras la
+/// inspeccion esta en borrador; con fotos o con dano no se quita (son evidencia).
 /// </summary>
 public sealed class clsInspeccionExtra : clsEntidadBase
 {

@@ -1,6 +1,8 @@
 using IAAutos.Aplicacion.Comun;
 using System.Linq.Expressions;
 using IAAutos.Aplicacion.Auth.DTOAuth;
+using IAAutos.Aplicacion.Inspecciones;
+using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Viajes;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Inspecciones;
@@ -141,6 +143,12 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
             consulta = consulta.Where(v => v.DestinoId == f.DestinoId);
         }
 
+        if (f.LugarDestinoId is { } lugarDestino)
+        {
+            // Una sola vez por viaje aunque varias de sus unidades vayan al mismo lugar.
+            consulta = consulta.Where(v => contexto.ViajeVehiculos.Any(vv => vv.ViajeId == v.Id && vv.LugarDestinoId == lugarDestino));
+        }
+
         if (f.Desde is not null)
         {
             consulta = consulta.Where(v => v.CreatedAt >= f.Desde);
@@ -167,7 +175,8 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
             .OrderBy(x => ids.IndexOf(x.Viaje.Id))
             .ToList();
         var clientes = await ClientesPorViajeAsync(ids, soloDeCliente, ct);
-        return (filas.Select(x => AResumen(x, clientes[x.Viaje.Id])).ToList(), total);
+        var destinos = await DestinosPorViajeAsync(ids, soloDeCliente, ct);
+        return (filas.Select(x => AResumen(x, clientes[x.Viaje.Id], destinos[x.Viaje.Id])).ToList(), total);
     }
 
     public async Task<IReadOnlyList<ViajeDto>> MiosAsync(Guid usuarioId, IReadOnlyCollection<string> estados, CancellationToken ct = default)
@@ -247,6 +256,25 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         return viajeIds.ToDictionary(id => id, id => (IReadOnlyList<ClienteDto>)porViaje[id].OrderBy(c => c.Nombre, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
+    /// <summary>
+    /// Los destinos distintos de las unidades de cada viaje, con cuantas unidades van a cada uno, en una sola consulta agrupada por viaje y lugar (no una por fila). Con <paramref name="soloDeCliente"/> solo cuentan las unidades de
+    /// ese cliente. Los lugares se ordenan por nombre y una unidad sin destino (viajes anteriores) va al final con el lugar nulo. Todo viaje de <paramref name="viajeIds"/> tiene su lista.
+    /// </summary>
+    private async Task<Dictionary<Guid, IReadOnlyList<DestinoDeUnidadesDto>>> DestinosPorViajeAsync(IReadOnlyCollection<Guid> viajeIds, Guid? soloDeCliente, CancellationToken ct)
+    {
+        var grupos = await (from vv in contexto.ViajeVehiculos.AsNoTracking()
+                            join h in contexto.Vehiculos on vv.VehiculoId equals h.Id
+                            join l in contexto.Lugares on vv.LugarDestinoId equals l.Id into lugaresDestino
+                            from l in lugaresDestino.DefaultIfEmpty()
+                            where viajeIds.Contains(vv.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente)
+                            group vv by new { vv.ViajeId, vv.LugarDestinoId, Nombre = (string?)l.Nombre } into g
+                            select new { g.Key.ViajeId, g.Key.LugarDestinoId, g.Key.Nombre, Unidades = g.Count() }).ToListAsync(ct);
+        var porViaje = grupos.ToLookup(g => g.ViajeId, g => new DestinoDeUnidadesDto(g.LugarDestinoId, g.Nombre, g.Unidades));
+        return viajeIds.ToDictionary(
+            id => id,
+            id => (IReadOnlyList<DestinoDeUnidadesDto>)porViaje[id].OrderBy(d => d.LugarId is null ? 1 : 0).ThenBy(d => d.Lugar, StringComparer.OrdinalIgnoreCase).ToList());
+    }
+
     private async Task<IReadOnlyList<ViajeDto>> ConVehiculosAsync(List<FilaViaje> filas, Guid? soloDeCliente, CancellationToken ct)
     {
         var ids = filas.Select(f => f.Viaje.Id).ToList();
@@ -300,23 +328,55 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                from u in usuarios.DefaultIfEmpty()
                                join m in contexto.MotivosSinInspector.AsNoTracking() on n.MotivoCodigo equals m.Codigo into motivos
                                from m in motivos.DefaultIfEmpty()
+                               join p in contexto.PermisosSinInspector.AsNoTracking() on n.PermisoId equals p.Id into permisos
+                               from p in permisos.DefaultIfEmpty()
+                               join pc in contexto.Usuarios.AsNoTracking() on p.ConductorId equals pc.Id into conductores
+                               from pc in conductores.DefaultIfEmpty()
+                               join pq in contexto.Usuarios.AsNoTracking() on p.ConcedidoPor equals pq.Id into concedentes
+                               from pq in concedentes.DefaultIfEmpty()
                                where ids.Contains(n.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente)
                                orderby n.Fecha, n.CreatedAt
-                               select new { n.ViajeId, n.Tipo, n.MotivoCodigo, Motivo = (string?)m.Nombre, Texto = n.MotivoTexto, Usuario = (string?)u.Nombre, n.Fecha, h.Vin, n.InspeccionId }).ToListAsync(ct);
+                               select new
+                               {
+                                   n.ViajeId, n.Tipo, n.MotivoCodigo, Motivo = (string?)m.Nombre, Texto = n.MotivoTexto, Usuario = (string?)u.Nombre, n.Fecha, h.Vin, n.InspeccionId,
+                                   TienePermiso = p != null, PedidoPor = (string?)pc.Nombre, PedidoAt = (DateTimeOffset?)p.CreatedAt, PedidoLat = p.Lat, PedidoLng = p.Lng,
+                                   ConcedidoPorNombre = (string?)pq.Nombre, ConcedidoAt = p.ConcedidoAt, PorTiempo = p != null && p.PorTiempo,
+                               }).ToListAsync(ct);
         var novedadesPorViaje = novedades.ToLookup(
-            n => n.ViajeId, n => new NovedadDelViajeDto(n.Tipo, n.MotivoCodigo, n.Motivo, n.Texto, n.Usuario, n.Fecha, n.Vin, n.InspeccionId));
-        return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id], novedadesPorViaje[f.Viaje.Id].ToList())).ToList();
+            n => n.ViajeId,
+            n => new NovedadDelViajeDto(
+                n.Tipo, n.MotivoCodigo, n.Motivo, n.Texto, n.Usuario, n.Fecha, n.Vin, n.InspeccionId,
+                n.TienePermiso ? new PermisoDeLaNovedadDto(n.PedidoPor, n.PedidoAt!.Value, n.PedidoLat, n.PedidoLng, n.ConcedidoPorNombre, n.ConcedidoAt, n.PorTiempo) : null));
+
+        // Las fotos de la acomodacion cuelgan del viaje: se llega a ellas desde su detalle, sin pasar por el inventario de cada VIN.
+        var fotos = (await (from e in contexto.Evidencias.AsNoTracking()
+                            join i in contexto.Inspecciones.AsNoTracking() on e.InspeccionId equals i.Id
+                            where e.EsAcomodacion && ids.Contains(i.ViajeId)
+                            orderby e.CreatedAt
+                            select new { i.ViajeId, Foto = e }).ToListAsync(ct))
+            .ToLookup(x => x.ViajeId, x => clsMapeadorInspecciones.AEvidencia(x.Foto));
+        return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id], novedadesPorViaje[f.Viaje.Id].ToList(), fotos[f.Viaje.Id].ToList())).ToList();
     }
 
-    private static ViajeResumenDto AResumen(FilaViaje f, IReadOnlyList<ClienteDto> clientes) => new(
+    private static ViajeResumenDto AResumen(FilaViaje f, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<DestinoDeUnidadesDto> destinos) => new(
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
         f.Viaje.Estado, f.TotalVehiculos, f.VehiculosCompletos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt,
-        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue);
+        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue, destinos);
 
-    private static ViajeDto ADto(FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<NovedadDelViajeDto> novedades) => new(
+    private static ViajeDto ADto(
+        FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<NovedadDelViajeDto> novedades, IReadOnlyList<EvidenciaDto> fotosAcomodacion) => new(
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
         f.Viaje.Estado, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt, novedades,
-        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue);
+        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue,
+        f.Viaje.CapacidadEfectiva, Disposicion(f.Viaje.CapacidadEfectiva, vehiculos), fotosAcomodacion);
+
+    /// <summary>Los puestos de la ninera, del 1 a la capacidad, cada uno con el VIN que lo ocupa (los de las unidades que quien consulta puede ver).</summary>
+    private static DisposicionDeNiniera Disposicion(int capacidad, IReadOnlyList<ViajeVehiculoDto> vehiculos)
+    {
+        var ocupados = vehiculos.Where(v => v.Posicion is not null).GroupBy(v => v.Posicion!.Value).ToDictionary(g => g.Key, g => g.First().Vin);
+        return new DisposicionDeNiniera(
+            [.. Enumerable.Range(1, capacidad).Select(n => new PuestoDeNiniera(n, n.ToString(System.Globalization.CultureInfo.InvariantCulture), ocupados.GetValueOrDefault(n)))]);
+    }
 }

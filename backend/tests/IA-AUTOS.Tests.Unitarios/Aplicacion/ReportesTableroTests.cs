@@ -46,6 +46,9 @@ public sealed class ReportesTableroTests
             return Task.FromResult<IReadOnlyList<FilaAdopcion>>([]);
         }
 
+        public Task<IReadOnlyList<FilaAdopcion>> AdopcionPorCamionAsync(FiltrosReporte filtros, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<FilaAdopcion>>([]);
+
         public Task<IReadOnlyList<FilaTiempo>> TiemposDeCapturaAsync(FiltrosReporte filtros, CancellationToken ct = default)
         {
             Recibidos.Add(filtros);

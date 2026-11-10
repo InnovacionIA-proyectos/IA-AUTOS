@@ -57,6 +57,16 @@ public sealed class clsEntregasService(
         public bool Cerrada => Transferencia is { EstaCerrada: true };
     }
 
+    /// <summary>Quien recibe: un usuario, una persona externa con su nombre, su cedula y su firma (el punto no tiene inspector) o nadie (la entrega se cierra con la sola firma de quien entrega).</summary>
+    private sealed record Receptor(Guid? UsuarioId, string? Nombre, string? Cedula, string? Firma)
+    {
+        public static readonly Receptor NADIE = new(null, null, null, null);
+
+        public bool EsExterno => Nombre is not null;
+
+        public static Receptor DeUsuario(Guid id) => new(id, null, null, null);
+    }
+
     // ---------------------------------------------------------------------------------------------- consulta
 
     /// <summary>Las entregas del viaje, una por lugar de destino. Conductor e inspector solo ven las de sus viajes (403).</summary>
@@ -88,7 +98,9 @@ public sealed class clsEntregasService(
 
     /// <summary>
     /// Firma la entrega del punto: la firma del usuario autenticado (quien entrega o quien recibe) se guarda en la transferencia de cada unidad pendiente del punto, con la misma fecha e IP. Las dos firmas cierran
-    /// cada transferencia como «firmada». 403 si no es el conductor ni el inspector del viaje; 409 si no hay unidades pendientes o alguna aun no tiene la inspeccion de llegada del Descargue.
+    /// cada transferencia como «firmada». En un punto SIN inspector asignado recibe una persona externa: su nombre, su cedula y su firma son obligatorios (400 nombrando lo que falta) y la entrega queda cerrada como
+    /// «firmada», con la auditoria de quien recibio, cuando y en que punto; en un punto CON inspector esos campos se rechazan (400). 403 si no es el conductor ni el inspector del viaje; 409 si no hay unidades pendientes o
+    /// alguna aun no tiene la inspeccion de llegada del Descargue.
     /// </summary>
     public async Task<EntregaPuntoDto> FirmarAsync(Guid viajeId, Guid lugarId, FirmarEntregaRequest solicitud, ContextoCliente cliente, CancellationToken ct = default)
     {
@@ -97,19 +109,36 @@ public sealed class clsEntregasService(
         viaje.AsegurarActivo();
         var reclamante = await ReclamanteDeLaEntregaAsync(viaje, ct);
         var actorId = ActorDelViaje(viaje, reclamante);
-        var (entregaId, recibeId) = Firmantes(viaje, solicitud, actorId, reclamante);
+        var (entregaId, receptor) = await FirmantesAsync(viaje, lugarId, solicitud, actorId, reclamante, false, ct);
         var unidades = await CargarUnidadesAsync(viaje, ct);
         var pendientes = PendientesConInspeccion(DelPunto(unidades, lugarId));
 
         var ahora = reloj.Ahora;
+        var lugar = (await LugaresAsync(ct)).TryGetValue(lugarId, out var datosLugar) ? datosLugar.Nombre : string.Empty;
         foreach (var unidad in pendientes)
         {
-            var transferencia = ObtenerOCrear(unidad, entregaId, recibeId, ahora);
+            var transferencia = ObtenerOCrear(unidad, entregaId, receptor, ahora);
             var antes = clsInstantaneasAuditoria.De(transferencia);
             transferencia.Firmar(actorId, firma, cliente.Ip, ahora);
+            if (receptor.EsExterno)
+            {
+                // La persona externa firma con su propio trazo: con las dos firmas la transferencia queda cerrada como «firmada».
+                transferencia.FirmarComoExterno(receptor.Firma, cliente.Ip, ahora);
+            }
+
             await evidenciaDeHallazgos.RecalcularAsync(unidad.Llegada!.Id, transferencia.TipoCierre, ct);
-            await auditor.RegistrarDeViajeAsync(
-                "transferencia.firmar", "transferencias_custodia", transferencia.Id, viaje.Id, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(transferencia)), unidad.Vehiculo.ClienteId, ct);
+            if (receptor.EsExterno)
+            {
+                // Quien recibio (nombre y cedula), cuando firmo y en que punto, en la misma entrada de auditoria.
+                await auditor.RegistrarDeViajeAsync(
+                    "transferencia.firmar_externo", "transferencias_custodia", transferencia.Id, viaje.Id,
+                    new DetalleAuditoria(antes, new { transferencia = clsInstantaneasAuditoria.De(transferencia), punto = new { lugar_id = lugarId, lugar, vin = unidad.Vehiculo.Vin } }), unidad.Vehiculo.ClienteId, ct);
+            }
+            else
+            {
+                await auditor.RegistrarDeViajeAsync(
+                    "transferencia.firmar", "transferencias_custodia", transferencia.Id, viaje.Id, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(transferencia)), unidad.Vehiculo.ClienteId, ct);
+            }
         }
 
         await FinalizarSiCompletoAsync(viaje, unidades, ct);
@@ -136,13 +165,14 @@ public sealed class clsEntregasService(
         var unidades = await CargarUnidadesAsync(viaje, ct);
         var pendientes = PendientesConInspeccion(DelPunto(unidades, lugarId));
 
-        // Quien cierra firma su parte; la otra queda sin firmar. Por defecto quien entrega es el conductor y quien recibe, el inspector que reclamo la entrega o, sin reclamo, el del viaje.
-        var (entregaId, recibeId) = Firmantes(viaje, new FirmarEntregaRequest(null, null, null), actorId, reclamante);
+        // Quien cierra firma su parte; la otra queda sin firmar. Por defecto quien entrega es el conductor y quien recibe, el inspector que reclamo la entrega o, sin reclamo, el del viaje; en un punto sin
+        // inspector ni quien reciba, solo queda la firma de quien entrega.
+        var (entregaId, receptor) = await FirmantesAsync(viaje, lugarId, new FirmarEntregaRequest(null, null, null), actorId, reclamante, true, ct);
         var ahora = reloj.Ahora;
         var novedadesCreadas = new List<clsNovedadProceso>();
         foreach (var unidad in pendientes)
         {
-            var transferencia = ObtenerOCrear(unidad, entregaId, recibeId, ahora);
+            var transferencia = ObtenerOCrear(unidad, entregaId, receptor, ahora);
             var antes = clsInstantaneasAuditoria.De(transferencia);
             transferencia.CerrarConUnaFirma(actorId, solicitud.Firma, motivo, cliente.Ip, ahora);
             await evidenciaDeHallazgos.RecalcularAsync(unidad.Llegada!.Id, transferencia.TipoCierre, ct);
@@ -194,14 +224,52 @@ public sealed class clsEntregasService(
         return actorId;
     }
 
+    private const string MENSAJE_EXTERNO_CON_INSPECTOR = "El punto de entrega tiene inspector asignado: la entrega la firma él, no una persona externa";
+
     /// <summary>
-    /// Quien entrega y quien recibe: los indicados o, por defecto, el conductor y el inspector del viaje. Deben ser usuarios del viaje, distintos entre si, y quien envia debe ser uno de los dos.
+    /// Quien entrega y quien recibe: los indicados o, por defecto, el conductor y el inspector del viaje (el que reclamo la entrega o el del viaje). Deben ser usuarios del viaje, distintos entre si, y quien envia debe
+    /// ser uno de los dos. Si el punto NO tiene inspector asignado y no hay quien reciba por defecto (o el cuerpo trae a la persona externa), recibe esa persona externa: nombre, cedula y firma obligatorios (400 con
+    /// lo que falta) y quien entrega es quien firma (403 si es otro). En un punto con inspector asignado esos campos se rechazan (400). Con <paramref name="admiteSinReceptor"/> (el cierre con una sola firma), un punto sin
+    /// inspector ni quien reciba deja a nadie como receptor.
     /// </summary>
-    private static (Guid Entrega, Guid Recibe) Firmantes(clsViaje viaje, FirmarEntregaRequest solicitud, Guid actorId, Guid? reclamante)
+    private async Task<(Guid Entrega, Receptor Recibe)> FirmantesAsync(
+        clsViaje viaje, Guid lugarId, FirmarEntregaRequest solicitud, Guid actorId, Guid? reclamante, bool admiteSinReceptor, CancellationToken ct)
     {
         bool EsDelViaje(Guid id) => id == viaje.ConductorId || id == viaje.InspectorId || id == reclamante;
+        var nombre = clsValidador.Opcional(solicitud.RecibeNombre);
+        var cedula = clsValidador.Opcional(solicitud.RecibeCedula);
+        var firmaRecibe = string.IsNullOrWhiteSpace(solicitud.FirmaRecibe) ? null : solicitud.FirmaRecibe;
+        var traeExterno = nombre is not null || cedula is not null || firmaRecibe is not null;
+        var conInspector = await reclamos.LugarTieneInspectoresAsync(lugarId, ct);
+        if (traeExterno && conInspector)
+        {
+            var rechazados = new Dictionary<string, string[]>();
+            if (nombre is not null)
+            {
+                rechazados["recibe_nombre"] = [MENSAJE_EXTERNO_CON_INSPECTOR];
+            }
+
+            if (cedula is not null)
+            {
+                rechazados["recibe_cedula"] = [MENSAJE_EXTERNO_CON_INSPECTOR];
+            }
+
+            if (firmaRecibe is not null)
+            {
+                rechazados["firma_recibe"] = [MENSAJE_EXTERNO_CON_INSPECTOR];
+            }
+
+            throw clsErroresCampos.Varios(rechazados);
+        }
+
+        if (traeExterno && solicitud.RecibeUsuarioId is not null)
+        {
+            throw clsErroresCampos.De("recibe_usuario_id", "Indique un usuario que recibe o una persona externa, no las dos");
+        }
+
         var entrega = solicitud.EntregaUsuarioId ?? viaje.ConductorId;
         var recibe = solicitud.RecibeUsuarioId ?? reclamante ?? viaje.InspectorId;
+        var esExterno = traeExterno || (recibe is null && !conInspector);
         var errores = new Dictionary<string, string[]>();
         if (entrega is null)
         {
@@ -212,18 +280,33 @@ public sealed class clsEntregasService(
             errores["entrega_usuario_id"] = ["Quien entrega debe ser un usuario del viaje"];
         }
 
-        if (recibe is null)
+        if (!esExterno)
         {
-            errores["recibe_usuario_id"] = ["Indique quién recibe: el viaje no tiene inspector"];
-        }
-        else if (!EsDelViaje(recibe.Value))
-        {
-            errores["recibe_usuario_id"] = ["Quien recibe debe ser un usuario del viaje"];
-        }
+            if (recibe is null)
+            {
+                errores["recibe_usuario_id"] = ["Indique quién recibe: el viaje no tiene inspector"];
+            }
+            else if (!EsDelViaje(recibe.Value))
+            {
+                errores["recibe_usuario_id"] = ["Quien recibe debe ser un usuario del viaje"];
+            }
 
-        if (errores.Count == 0 && entrega == recibe)
+            if (errores.Count == 0 && entrega == recibe)
+            {
+                errores["recibe_usuario_id"] = ["Quien recibe debe ser distinto de quien entrega"];
+            }
+        }
+        else if (!admiteSinReceptor)
         {
-            errores["recibe_usuario_id"] = ["Quien recibe debe ser distinto de quien entrega"];
+            foreach (var error in clsTransferenciaCustodia.ErroresDelExterno(nombre, cedula))
+            {
+                errores[error.Key] = error.Value;
+            }
+
+            if (firmaRecibe is null)
+            {
+                errores["firma_recibe"] = ["La firma de quien recibe es obligatoria"];
+            }
         }
 
         if (errores.Count > 0)
@@ -231,20 +314,35 @@ public sealed class clsEntregasService(
             throw clsErroresCampos.Varios(errores);
         }
 
+        if (esExterno)
+        {
+            if (actorId != entrega)
+            {
+                throw new clsProhibidoException("Solo quien entrega puede registrar a la persona que recibe: nadie actúa por otro");
+            }
+
+            return (entrega!.Value, admiteSinReceptor && !traeExterno ? Receptor.NADIE : new Receptor(null, nombre, cedula, firmaRecibe));
+        }
+
         if (actorId != entrega && actorId != recibe)
         {
             throw new clsProhibidoException("Solo quien entrega o quien recibe puede firmar: nadie actúa por otro");
         }
 
-        return (entrega!.Value, recibe!.Value);
+        return (entrega!.Value, Receptor.DeUsuario(recibe!.Value));
     }
 
+    private static bool Igual(string? a, string? b) => string.Equals(a?.Trim(), b?.Trim(), StringComparison.OrdinalIgnoreCase);
+
     /// <summary>La transferencia de la unidad, o una nueva sobre su inspeccion de llegada si es la primera vez. Si ya existe, quienes firman deben ser los mismos (409).</summary>
-    private clsTransferenciaCustodia ObtenerOCrear(Unidad unidad, Guid entregaId, Guid recibeId, DateTimeOffset ahora)
+    private clsTransferenciaCustodia ObtenerOCrear(Unidad unidad, Guid entregaId, Receptor recibe, DateTimeOffset ahora)
     {
         if (unidad.Transferencia is { } existente)
         {
-            if ((existente.EntregaUsuarioId is not null && existente.EntregaUsuarioId != entregaId) || existente.RecibeUsuarioId != recibeId)
+            var mismoReceptor = recibe.EsExterno
+                ? existente.RecibeEsExterno && Igual(existente.RecibeExternoNombre, recibe.Nombre) && Igual(existente.RecibeExternoCedula, recibe.Cedula)
+                : !existente.RecibeEsExterno && existente.RecibeUsuarioId == recibe.UsuarioId;
+            if ((existente.EntregaUsuarioId is not null && existente.EntregaUsuarioId != entregaId) || !mismoReceptor)
             {
                 throw new clsConflictoException("Los firmantes de la transferencia no se pueden cambiar");
             }
@@ -252,7 +350,11 @@ public sealed class clsEntregasService(
             return existente;
         }
 
-        var nueva = clsTransferenciaCustodia.Crear(unidad.Llegada!.Id, entregaId, recibeId, ahora);
+        var nueva = recibe.EsExterno
+            ? clsTransferenciaCustodia.CrearConExterno(unidad.Llegada!.Id, entregaId, recibe.Nombre, recibe.Cedula, ahora)
+            : recibe.UsuarioId is { } usuarioId
+                ? clsTransferenciaCustodia.Crear(unidad.Llegada!.Id, entregaId, usuarioId, ahora)
+                : clsTransferenciaCustodia.CrearSinReceptor(unidad.Llegada!.Id, entregaId, ahora);
         transferencias.Agregar(nueva);
         unidad.Transferencia = nueva;
         return nueva;
@@ -333,7 +435,10 @@ public sealed class clsEntregasService(
                 u.Transferencia?.TipoCierre,
                 u.Transferencia?.FirmaEntregaAt,
                 u.Transferencia?.FirmaRecibeAt,
-                u.Transferencia?.NoFirmaParte))
+                u.Transferencia?.NoFirmaParte,
+                u.Transferencia is { TipoCierre: clsTipoCierre.RECIBO_SIN_ENTREGA } cerrada ? cerrada.MotivoNoFirma : null,
+                u.Transferencia?.RecibeExternoNombre,
+                u.Transferencia?.RecibeExternoCedula))
             .ToList();
         var pendientes = filas.Count(f => f.Estado != "cerrada");
         return new EntregaPuntoDto(viaje.Id, viaje.Estado, lugarId, lugar.Nombre, lugar.Ciudad, filas.Count, pendientes, pendientes == 0, filas);
@@ -341,7 +446,8 @@ public sealed class clsEntregasService(
 
     /// <summary>
     /// Avisa a los coordinadores de calidad (y administradores) del cliente de la entrega con una sola firma: el viaje, el punto, quien cerro y el motivo. Una sola alerta por entrega y punto (la clave de dedupe lleva
-    /// el viaje y el lugar). Nunca lanza: un fallo al avisar no deshace la entrega, que ya quedo guardada.
+    /// el viaje y el lugar). Ademas del texto lleva sus campos propios (<c>Datos</c>): el lugar, la parte que firmo y el motivo; la cedula de quien recibe nunca viaja en el aviso. Nunca lanza: un fallo al avisar no
+    /// deshace la entrega, que ya quedo guardada.
     /// </summary>
     private async Task AvisarAsync(clsViaje viaje, Guid lugarId, List<Unidad> unidades, string motivo, Guid actorId, CancellationToken ct)
     {
@@ -353,6 +459,8 @@ public sealed class clsEntregasService(
             var lugar = (await LugaresAsync(ct)).TryGetValue(lugarId, out var datos) ? datos.Nombre : "el punto de entrega";
             var codigoViaje = viaje.CodigoMtrack is { } codigo ? $" (viaje {codigo})" : string.Empty;
             var vines = string.Join(", ", unidades.Select(u => u.Vehiculo.Vin));
+            // La parte que firmo es la otra de la que no firmo (la transferencia ya quedo cerrada con una sola firma).
+            var parteQueFirmo = unidades[0].Transferencia?.NoFirmaParte == clsParteFirmante.RECIBE ? clsParteFirmante.ENTREGA : clsParteFirmante.RECIBE;
             await emisor.EmitirAsync(
                 new clsAlerta(
                     clsTipoNotificacion.NOVEDAD_PROCESO,
@@ -365,7 +473,16 @@ public sealed class clsEntregasService(
                     null,
                     $"Entrega con una sola firma: {lugar}",
                     $"{autor} cerró la entrega en {lugar}{codigoViaje} con una sola firma ({unidades.Count} unidades: {vines}). Motivo: {motivo}.",
-                    $"{clsTipoNotificacion.NOVEDAD_PROCESO}:entrega:{viaje.Id}:{lugarId}"),
+                    $"{clsTipoNotificacion.NOVEDAD_PROCESO}:entrega:{viaje.Id}:{lugarId}",
+                    new Dictionary<string, object?>
+                    {
+                        ["hecho"] = "entrega_con_una_firma",
+                        ["lugar_id"] = lugarId,
+                        ["lugar"] = lugar,
+                        ["parte_que_firmo"] = parteQueFirmo,
+                        ["motivo"] = motivo,
+                        ["unidades"] = unidades.Count,
+                    }),
                 ct);
         }
         catch (Exception)

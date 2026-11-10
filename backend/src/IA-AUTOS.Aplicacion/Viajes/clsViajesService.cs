@@ -3,6 +3,8 @@ using FluentValidation;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
+using IAAutos.Dominio.Catalogos;
+using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
@@ -20,8 +22,11 @@ public sealed class clsViajesService(
     IUsuarioRepository usuarios,
     IConsultasViajes consultas,
     ICatalogosLectura catalogos,
+    ILugarRepository lugares,
     clsEnsamblajeViajes ensamblaje,
     clsAccesoViajes acceso,
+    IPermisoSinInspectorRepository permisos,
+    INovedadProcesoRepository novedadesProceso,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -35,9 +40,49 @@ public sealed class clsViajesService(
     public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "created_at", "updated_at", "codigo_mtrack", "estado", "placa", "trailer" };
 
     private static readonly string[] CAMPOS_EDITABLES =
-        ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "origen_id", "fecha_programada", "lugar_cargue_id"];
+        ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "origen_id", "fecha_programada", "lugar_cargue_id", "capacidad"];
 
-    private static readonly string[] CAMPOS_SIN_NULO = ["codigo_mtrack", "tipo_unidad_id", "placa"];
+    private static readonly string[] CAMPOS_SIN_NULO = ["codigo_mtrack", "tipo_unidad_id", "placa", "capacidad"];
+
+    /// <summary>
+    /// La capacidad no puede quedar por debajo de las unidades activas del viaje ni de la posicion mas alta ya usada: 409 diciendo cual de las dos lo impide (o las dos).
+    /// </summary>
+    private async Task AsegurarCapacidadAsync(clsViaje viaje, int nueva, CancellationToken ct)
+    {
+        var enlaces = await viajes.ObtenerVehiculosAsync(viaje.Id, ct);
+        var unidades = enlaces.Count(e => !e.NoSale);
+        var masAlta = enlaces.Where(e => e.Posicion is not null).Select(e => (int)e.Posicion!.Value).DefaultIfEmpty(0).Max();
+        var impide = new List<string>();
+        if (nueva < unidades)
+        {
+            impide.Add(unidades == 1 ? "hay 1 unidad" : $"hay {unidades} unidades");
+        }
+
+        if (nueva < masAlta)
+        {
+            impide.Add($"hay una unidad en el puesto {masAlta}");
+        }
+
+        if (impide.Count > 0)
+        {
+            throw new clsConflictoException($"No se puede bajar la capacidad a {nueva}: {string.Join(" y ", impide)} en el viaje");
+        }
+    }
+
+    private const string MENSAJE_FECHA = "Debe ser una fecha y hora ISO 8601 con zona horaria (por ejemplo 2026-11-03T06:00:00-05:00)";
+
+    /// <summary>
+    /// El lugar de cargue debe existir y estar activo en el catalogo <c>lugares</c> (400 en <c>lugar_cargue_id</c>) y de el sale el tipo de origen del viaje: el tipo (<c>puntos-custodia</c>) de ese lugar.
+    /// </summary>
+    private async Task<Guid> TipoDelLugarDeCargueAsync(Guid lugarId, CancellationToken ct)
+    {
+        if (!await catalogos.ExisteActivoAsync(clsNombresCatalogo.LUGARES, lugarId, ct))
+        {
+            throw clsErroresCampos.De("lugar_cargue_id", "El lugar de cargue no existe en el catálogo de lugares o está inactivo");
+        }
+
+        return (await lugares.ObtenerAsync(lugarId, ct))?.TipoId ?? throw clsErroresCampos.De("lugar_cargue_id", "El lugar de cargue no existe en el catálogo de lugares o está inactivo");
+    }
 
     // ------------------------------------------------------------------------------------------------ alta
 
@@ -46,14 +91,17 @@ public sealed class clsViajesService(
         await validadorCrear.ValidarOLanzarAsync(solicitud, ct);
         var codigo = clsViaje.CodigoValido(solicitud.CodigoMtrack);
         await AsegurarCodigoLibreAsync(codigo, null, ct);
-        await ValidarReferenciasAsync(solicitud.TipoUnidadId, solicitud.ConductorId, solicitud.InspectorId, solicitud.OrigenId, null, ct);
+        await ValidarReferenciasAsync(solicitud.TipoUnidadId, solicitud.ConductorId, solicitud.InspectorId, null, null, ct, solicitud.LugarCargueId);
+        var fechaProgramada = clsFechaProgramada.DeIso(solicitud.FechaProgramada) ?? throw clsErroresCampos.De("fecha_programada", MENSAJE_FECHA);
+        var origenId = await TipoDelLugarDeCargueAsync(solicitud.LugarCargueId!.Value, ct);
+        var capacidad = await clsCapacidadDeViajes.InicialAsync(catalogos, solicitud.TipoUnidadId!.Value, solicitud.Capacidad, ct);
         var unidades = solicitud.Unidades ?? [];
         await ValidarDestinosAsync(unidades, ct);
 
-        // El viaje ya no tiene un destino unico: cada unidad lleva el suyo.
+        // El viaje ya no tiene un destino unico: cada unidad lleva el suyo. El tipo de origen sale del tipo del lugar de cargue.
         var viaje = clsViaje.Crear(
             codigo, solicitud.TipoUnidadId, solicitud.Placa, solicitud.Trailer, solicitud.ConductorId, solicitud.InspectorId,
-            solicitud.OrigenId, null, actual.IdObligatorio(), reloj.Ahora);
+            origenId, null, actual.IdObligatorio(), reloj.Ahora, fechaProgramada, solicitud.LugarCargueId, capacidad);
 
         var vehiculosAAgregar = await ResolverVehiculosAsync(viaje, unidades.Select(u => u.Vin!).ToList(), new HashSet<Guid>(), ct);
         var destinos = DestinosPorVehiculo(vehiculosAAgregar, unidades);
@@ -121,7 +169,7 @@ public sealed class clsViajesService(
     public async Task<ViajeDto> ActualizarAsync(Guid id, IReadOnlyDictionary<string, JsonElement> campos, CancellationToken ct = default)
     {
         var lector = new clsCamposCatalogo(campos);
-        lector.SoloPermitidos(CAMPOS_EDITABLES);
+        lector.SoloPermitidos(CAMPOS_EDITABLES, "un viaje");
         foreach (var campo in CAMPOS_SIN_NULO.Where(c => lector.Tiene(c) && campos[c].ValueKind == JsonValueKind.Null))
         {
             throw clsErroresCampos.De(campo, "No admite valor nulo");
@@ -144,19 +192,29 @@ public sealed class clsViajesService(
         // La programacion (fecha y lugar real de cargue) solo se corrige mientras el viaje esta programado.
         var cambiaFecha = lector.Tiene("fecha_programada");
         var fechaProgramada = cambiaFecha && campos["fecha_programada"].ValueKind != JsonValueKind.Null
-            ? clsFechaProgramada.DeIso(lector.Texto("fecha_programada")) ?? throw clsErroresCampos.De("fecha_programada", "Debe ser una fecha y hora ISO 8601 con zona horaria (por ejemplo 2026-11-03T06:00:00-05:00)")
+            ? clsFechaProgramada.DeIso(lector.Texto("fecha_programada")) ?? throw clsErroresCampos.De("fecha_programada", MENSAJE_FECHA)
             : (DateTimeOffset?)null;
         var cambiaLugar = lector.Tiene("lugar_cargue_id");
         var lugarCargueId = lector.Identificador("lugar_cargue_id");
-        if (lugarCargueId is { } lugar && !await catalogos.ExisteActivoAsync(clsNombresCatalogo.LUGARES, lugar, ct))
+        // Al cambiar el lugar de cargue el tipo de origen se recalcula con el tipo del lugar nuevo (y manda sobre un origen_id enviado en la misma solicitud).
+        var origenDelLugar = lugarCargueId is { } lugar ? await TipoDelLugarDeCargueAsync(lugar, ct) : (Guid?)null;
+        var cambiaOrigen = lector.Tiene("origen_id") || origenDelLugar is not null;
+        if (origenDelLugar is not null)
         {
-            throw clsErroresCampos.De("lugar_cargue_id", "El lugar de cargue no existe en el catálogo de lugares o está inactivo");
+            origenId = origenDelLugar;
         }
 
         var antes = clsInstantaneasAuditoria.De(viaje);
         if (cambiaFecha || cambiaLugar)
         {
             viaje.Reprogramar(cambiaFecha, fechaProgramada, cambiaLugar, lugarCargueId, reloj.Ahora);
+        }
+
+        if (lector.Tiene("capacidad"))
+        {
+            var nueva = clsViaje.CapacidadValida(lector.Entero("capacidad"));
+            await AsegurarCapacidadAsync(viaje, nueva, ct);
+            viaje.CambiarCapacidad(nueva, reloj.Ahora);
         }
 
         viaje.Actualizar(
@@ -166,11 +224,11 @@ public sealed class clsViajesService(
             lector.Tiene("trailer"), lector.Texto("trailer"),
             lector.Tiene("conductor_id"), conductorId,
             false, null,
-            lector.Tiene("origen_id"), origenId,
+            cambiaOrigen, origenId,
             false, null,
             reloj.Ahora);
 
-        if (lector.Tiene("origen_id"))
+        if (cambiaOrigen)
         {
             await PropagarAEtapasAsync(viaje, ct);
         }
@@ -266,16 +324,24 @@ public sealed class clsViajesService(
             throw new clsProhibidoException("El viaje no está asignado a su usuario");
         }
 
+        // El conductor solo acomoda las unidades cuando hace el cargue sin inspector: con el permiso concedido (donde el punto tiene inspectores) o con la excepcion ya activa (donde no los tiene).
+        if (actual.Rol == clsRol.CONDUCTOR
+            && !(await permisos.ObtenerDeViajeAsync(id, ct) is { EstaConcedido: true } || await novedadesProceso.ExisteCargueSinInspectorAsync(id, ct)))
+        {
+            throw new clsProhibidoException("El conductor solo registra la posición de las unidades cuando hace el cargue sin inspector, con el permiso concedido");
+        }
+
         var vehiculo = await vehiculos.ObtenerPorVinAsync(vin, ct)
             ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
         var enlace = await viajes.ObtenerVehiculoAsync(id, vehiculo.Id, ct)
             ?? throw new clsEntidadNoEncontradaException($"El VIN {vehiculo.Vin} no está en este viaje");
         if (solicitud.Posicion is { } posicion)
         {
-            // Primero el rango (400) y despues lo demas.
-            if (posicion < clsViajeVehiculo.POSICION_MINIMA || posicion > clsViajeVehiculo.POSICION_MAXIMA)
+            // Primero el rango contra la capacidad de la ninera del viaje (400) y despues lo demas.
+            var capacidad = viaje.CapacidadEfectiva;
+            if (posicion < clsViajeVehiculo.POSICION_MINIMA || posicion > capacidad)
             {
-                throw clsErroresCampos.De("posicion", $"La posición debe estar entre {clsViajeVehiculo.POSICION_MINIMA} y {clsViajeVehiculo.POSICION_MAXIMA}");
+                throw clsErroresCampos.De("posicion", $"La niñera tiene {capacidad} puestos: la posición debe estar entre {clsViajeVehiculo.POSICION_MINIMA} y {capacidad}");
             }
 
             if (!await viajes.TieneSegundaInspeccionDelCargueEnCursoAsync(id, ct))
@@ -290,7 +356,7 @@ public sealed class clsViajesService(
         }
 
         var antes = enlace.Posicion;
-        enlace.AsignarPosicion(solicitud.Posicion, reloj.Ahora);
+        enlace.AsignarPosicion(solicitud.Posicion, reloj.Ahora, viaje.CapacidadEfectiva);
         await auditor.RegistrarDeViajeAsync(
             "viaje.posicion_unidad", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(new { vin = vehiculo.Vin, posicion = antes }, new { vin = vehiculo.Vin, posicion = enlace.Posicion }), vehiculo.ClienteId, ct);
 
@@ -382,7 +448,7 @@ public sealed class clsViajesService(
     /// La unidad, el conductor, el inspector, el origen y el destino deben existir y estar activos (el conductor y el inspector, con su
     /// rol). Se devuelven todos los errores juntos.
     /// </summary>
-    private async Task ValidarReferenciasAsync(Guid? tipoUnidadId, Guid? conductorId, Guid? inspectorId, Guid? origenId, Guid? destinoId, CancellationToken ct)
+    private async Task ValidarReferenciasAsync(Guid? tipoUnidadId, Guid? conductorId, Guid? inspectorId, Guid? origenId, Guid? destinoId, CancellationToken ct, Guid? lugarCargueId = null)
     {
         var errores = new Dictionary<string, string[]>();
         if (tipoUnidadId is { } tipo && !await catalogos.ExisteActivoAsync(clsNombresCatalogo.TIPOS_UNIDAD, tipo, ct))
@@ -393,6 +459,11 @@ public sealed class clsViajesService(
         if (origenId is { } origen && !await catalogos.ExisteActivoAsync(clsNombresCatalogo.PUNTOS_CUSTODIA, origen, ct))
         {
             errores["origen_id"] = ["El origen no existe en el catálogo de lugares o está inactivo"];
+        }
+
+        if (lugarCargueId is { } lugarCargue && !await catalogos.ExisteActivoAsync(clsNombresCatalogo.LUGARES, lugarCargue, ct))
+        {
+            errores["lugar_cargue_id"] = ["El lugar de cargue no existe en el catálogo de lugares o está inactivo"];
         }
 
         if (destinoId is { } destino && !await catalogos.ExisteActivoAsync(clsNombresCatalogo.PUNTOS_CUSTODIA, destino, ct))
@@ -557,7 +628,8 @@ public sealed class clsViajesService(
         clsParseoFiltros.Uuid(s.OrigenId, "origen_id", errores),
         clsParseoFiltros.Uuid(s.DestinoId, "destino_id", errores),
         clsParseoFiltros.Fecha(s.Desde, "desde", errores),
-        clsParseoFiltros.Fecha(s.Hasta, "hasta", errores));
+        clsParseoFiltros.Fecha(s.Hasta, "hasta", errores),
+        clsParseoFiltros.Uuid(s.DestinoUnidadId, "destino_unidad_id", errores));
 
     /// <summary>Quien se limita a su cliente no elige otro (403) y su cliente ya se aplica como alcance: el filtro solo lo usa quien ve todos los clientes.</summary>
     private static FiltrosViajes AlcanzarCliente(FiltrosViajes filtros, Guid? clienteRestringido)

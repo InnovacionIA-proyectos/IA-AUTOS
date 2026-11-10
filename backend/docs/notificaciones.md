@@ -9,7 +9,7 @@ los endpoints que lo usan estan en [CONTRATO.md](../CONTRATO.md) («Conductor en
 
 | Columna | Contenido |
 |---|---|
-| `Tipo` | `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso` (el conductor hizo el cargue sin inspector o se cerró una entrega con una sola firma) o `reclamo_sin_actividad` (un camión reclamado sin ninguna inspección en `reclamo_sin_actividad_minutos`; al coordinador de calidad) |
+| `Tipo` | `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso` (el conductor hizo el cargue sin inspector o se cerró una entrega con una sola firma) `permiso_sin_inspector` (el conductor pide el permiso de la excepción «No hay inspector» en un punto con inspectores, o se le avisa que se concedió; con `Datos`) o `reclamo_sin_actividad` (un camión reclamado sin ninguna inspección en `reclamo_sin_actividad_minutos`; al coordinador de calidad) |
 | `Urgencia` | `alta` o `media` |
 | `UsuarioId` | el destinatario; nulo solo en `reporte_diario` (el reporte diario no tiene un destinatario propio) |
 | `ClienteId`, `ViajeId`, `VehiculoId`, `HallazgoId`, `InspeccionId` | a que se refiere la notificacion (todos opcionales) |
@@ -17,10 +17,11 @@ los endpoints que lo usan estan en [CONTRATO.md](../CONTRATO.md) («Conductor en
 | `Canal` | `bandeja`, `push` o `correo`; el **correo solo se admite en el reporte diario** |
 | `EnviadaAt`, `ErrorEnvio` | cuando se entrego al canal y, si fallo (por ejemplo FCM), el motivo; se guardan al crear la fila |
 | `LeidaAt` | cuando la leyo el destinatario |
+| `Datos` | los campos propios del aviso como un objeto JSON (`CK_tblNotificaciones_Datos`: solo JSON válido), además del texto; nulo en los avisos que no los llevan. Hoy, el de la entrega con una sola firma: el lugar, la parte que firmó y el motivo. Nunca un dato personal. Lo agrega el script [`35-firmante-externo-y-datos-del-aviso.sql`](../database/cambios-esquema/35-firmante-externo-y-datos-del-aviso.sql); la API lo devuelve como `datos` |
 | `RespuestaTexto`, `RespuestaMedio`, `RespondidaPor`, `RespondidaAt` | la respuesta del coordinador a una `novedad_conductor` (`RespuestaMedio`: `app` o `llamada`); completa o vacia, y solo sobre ese tipo |
 | `ClaveDedupe` | clave **unica** para que una alerta no se repita; incluye la alerta, el destinatario y el canal (hasta 300 caracteres) |
 
-- **Append-only salvo la lectura y la respuesta.** Solo se pueden cambiar `LeidaAt` y las cuatro columnas de la respuesta: cambiar otra columna falla con el error **51006** y borrar una fila con el **51003**
+- **Append-only salvo la lectura y la respuesta.** Solo se pueden cambiar `LeidaAt` y las cuatro columnas de la respuesta (`Datos` tampoco se cambia): cambiar otra columna falla con el error **51006** y borrar una fila con el **51003**
   (la misma regla que protege el resto de la evidencia, ver [evidencia-inmutable.md](evidencia-inmutable.md)).
 - El indice `IX_tblNotificaciones_Usuario_Leida` (`UsuarioId`, `LeidaAt`) sirve a la bandeja y al conteo de no leidas.
 

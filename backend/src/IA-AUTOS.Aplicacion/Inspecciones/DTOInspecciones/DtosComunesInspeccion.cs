@@ -66,7 +66,9 @@ public record HallazgoDto(
     Guid? RevisadoPor,
     DateTimeOffset? RevisadoAt,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    bool SinCalificar = false,
+    Guid? ExtraId = null);
 
 /// <summary>El hallazgo recien guardado junto con la foto propia que se guardo con el.</summary>
 public sealed record HallazgoCreadoDto : HallazgoDto
@@ -145,7 +147,8 @@ public sealed record EvidenciaDto(
     bool EsConstancia,
     bool EsSello,
     [property: System.Text.Json.Serialization.JsonIgnore] string? RutaArchivo = null,
-    Guid? ExtraId = null);
+    Guid? ExtraId = null,
+    bool EsAcomodacion = false);
 
 /// <summary>
 /// Un extra del vehiculo fuera del dibujo estandar que reporta una inspeccion: <c>Tipo</c> (codigo del catalogo <c>tipos-extra</c>) y su nombre, <c>Texto</c> (solo en «otro»), <c>Nombre</c> (como se muestra:
@@ -161,18 +164,23 @@ public sealed record ExtraDto(
     string? Observacion,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<EvidenciaDto> Fotos);
+    IReadOnlyList<EvidenciaDto> Fotos,
+    ExtraDanoDto? Dano = null);
+
+/// <summary>El dano de un extra: el hallazgo que nacio de el (<c>HallazgoId</c>) con su clase, su tamano y su nivel de severidad.</summary>
+public sealed record ExtraDanoDto(Guid HallazgoId, string ClaseDano, string TamanoDano, string? NivelSeveridad);
 
 /// <summary>
 /// Las firmas dibujadas no se exponen en los listados. <c>Firmada</c> es true cuando estan las dos firmas (tambien si fue con reservas);
 /// <c>TipoCierre</c> dice como se cerro (<c>firmada</c>, <c>con_reservas</c>, <c>no_firma</c> o <c>recibo_sin_entrega</c>) y es nulo mientras la transferencia esta abierta;
-/// en <c>recibo_sin_entrega</c> no hay <c>EntregaUsuarioId</c>.
+/// en <c>recibo_sin_entrega</c> no hay <c>EntregaUsuarioId</c>. Si recibe una persona externa (el punto de entrega no tiene inspector) no hay <c>RecibeUsuarioId</c> y vienen su nombre y su cedula; tampoco hay
+/// <c>RecibeUsuarioId</c> ni persona externa si la entrega se cerro con la sola firma de quien entrega porque nadie recibio.
 /// </summary>
 public sealed record TransferenciaDto(
     Guid Id,
     Guid InspeccionId,
     Guid? EntregaUsuarioId,
-    Guid RecibeUsuarioId,
+    Guid? RecibeUsuarioId,
     bool Firmada,
     DateTimeOffset? FirmadaAt,
     DateTimeOffset CreatedAt,
@@ -184,4 +192,6 @@ public sealed record TransferenciaDto(
     string? NoFirmaParte,
     string? MotivoNoFirma,
     Guid? TestigoUsuarioId,
-    Guid? EvidenciaConstanciaId);
+    Guid? EvidenciaConstanciaId,
+    string? RecibeExternoNombre = null,
+    string? RecibeExternoCedula = null);

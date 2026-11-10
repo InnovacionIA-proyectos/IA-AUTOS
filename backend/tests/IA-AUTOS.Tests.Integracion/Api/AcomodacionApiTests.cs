@@ -189,7 +189,7 @@ public sealed partial class AcomodacionApiTests(clsBaseDatosFixture bd) : clsPru
         var r = await PosicionAsync(e.Inspector, e.Viaje, VINES[2], posicion);
 
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
-        Assert.Equal("La posición debe estar entre 1 y 7", (await JsonAsync(r)).GetProperty("details").GetProperty("fieldErrors").GetProperty("posicion")[0].GetString());
+        Assert.Equal("La niñera tiene 7 puestos: la posición debe estar entre 1 y 7", (await JsonAsync(r)).GetProperty("details").GetProperty("fieldErrors").GetProperty("posicion")[0].GetString());
         Assert.Null(await PosicionDeAsync(e.Viaje, VINES[2]));
     }
 
@@ -401,5 +401,154 @@ public sealed partial class AcomodacionApiTests(clsBaseDatosFixture bd) : clsPru
         Assert.Contains("VIN-ANTIGUO-001", informe);
         Assert.DoesNotContain("Posici", inventario);
         Assert.All(json.GetProperty("etapas").EnumerateArray(), x => Assert.Equal(JsonValueKind.Null, x.GetProperty("posicion").ValueKind));
+    }
+
+    // ------------------------------------------------------------------ S7-HU-05: la acomodacion refleja la niñera real
+
+    private async Task<JsonElement> ViajeAsync(Sesion quien, Guid viaje) => await JsonAsync(await Como(quien).GetAsync($"/api/viajes/{viaje}"));
+
+    private Task<HttpResponseMessage> PatchViajeAsync(Sesion quien, Guid viaje, object cuerpo) => Como(quien).PatchAsync($"/api/viajes/{viaje}", Cuerpo(cuerpo));
+
+    private static List<string?> Mensajes(JsonElement cuerpo, string campo) =>
+        cuerpo.GetProperty("details").GetProperty("fieldErrors").GetProperty(campo).EnumerateArray().Select(m => m.GetString()).ToList();
+
+    [Fact]
+    public async Task Un_viaje_sin_capacidad_definida_se_comporta_como_de_7_puestos_y_entrega_su_disposicion_como_dato()
+    {
+        var e = await EscenarioAsync();
+        Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[0], 3)).StatusCode);
+
+        var viaje = await ViajeAsync(e.Inspector, e.Viaje);
+
+        // ESC-06: un viaje de antes (sin capacidad guardada) tiene 7 puestos y el 8 no esta disponible.
+        Assert.Null(await Sembrador.EscalarAsync("SELECT Capacidad FROM dbo.tblViajes WHERE Id = @v", ("@v", e.Viaje)));
+        Assert.Equal(7, viaje.GetProperty("capacidad").GetInt32());
+        var puestos = viaje.GetProperty("disposicion").GetProperty("puestos").EnumerateArray().ToList();
+        Assert.Equal(7, puestos.Count);
+        Assert.Equal(Enumerable.Range(1, 7), puestos.Select(p => p.GetProperty("numero").GetInt32()));
+        Assert.Equal(["1", "2", "3", "4", "5", "6", "7"], puestos.Select(p => p.GetProperty("etiqueta").GetString()).ToList());
+        Assert.Equal(VINES[0], puestos[2].GetProperty("vin").GetString());
+        Assert.All(puestos.Where(p => p.GetProperty("numero").GetInt32() != 3), p => Assert.Equal(JsonValueKind.Null, p.GetProperty("vin").ValueKind));
+        var fuera = await PosicionAsync(e.Inspector, e.Viaje, VINES[1], 8);
+        Assert.Equal(HttpStatusCode.BadRequest, fuera.StatusCode);
+        Assert.Equal(["La niñera tiene 7 puestos: la posición debe estar entre 1 y 7"], Mensajes(await JsonAsync(fuera), "posicion"));
+        Assert.Null(await PosicionDeAsync(e.Viaje, VINES[1]));
+    }
+
+    [Fact]
+    public async Task La_posicion_se_valida_contra_la_capacidad_del_viaje_y_esta_no_baja_de_las_unidades_ni_de_la_posicion_mas_alta()
+    {
+        var e = await EscenarioAsync();
+
+        // ESC-01 y ESC-07: el coordinador sube la capacidad a 9 y el puesto 9 se puede usar; con 8 un carro no cabe en el 9.
+        var subir = await PatchViajeAsync(e.Coordinador, e.Viaje, new { capacidad = 9 });
+        Assert.Equal(HttpStatusCode.OK, subir.StatusCode);
+        var viaje = await JsonAsync(subir);
+        Assert.Equal(9, viaje.GetProperty("capacidad").GetInt32());
+        Assert.Equal(9, viaje.GetProperty("disposicion").GetProperty("puestos").GetArrayLength());
+        Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[0], 9)).StatusCode);
+        var fuera = await PosicionAsync(e.Inspector, e.Viaje, VINES[1], 10);
+        Assert.Equal(HttpStatusCode.BadRequest, fuera.StatusCode);
+        Assert.Equal(["La niñera tiene 9 puestos: la posición debe estar entre 1 y 9"], Mensajes(await JsonAsync(fuera), "posicion"));
+
+        // ESC-05 / CA-4: no se baja por debajo de la posicion mas alta usada ni de las unidades, y el rechazo dice cual lo impide.
+        var porPosicion = await PatchViajeAsync(e.Coordinador, e.Viaje, new { capacidad = 8 });
+        var porAmbas = await PatchViajeAsync(e.Coordinador, e.Viaje, new { capacidad = 2 });
+        Assert.Equal(HttpStatusCode.Conflict, porPosicion.StatusCode);
+        Assert.Equal("No se puede bajar la capacidad a 8: hay una unidad en el puesto 9 en el viaje", (await JsonAsync(porPosicion)).GetProperty("message").GetString());
+        Assert.Equal(HttpStatusCode.Conflict, porAmbas.StatusCode);
+        Assert.Equal("No se puede bajar la capacidad a 2: hay 3 unidades y hay una unidad en el puesto 9 en el viaje", (await JsonAsync(porAmbas)).GetProperty("message").GetString());
+        Assert.Equal(9, Convert.ToInt32(await Sembrador.EscalarAsync("SELECT Capacidad FROM dbo.tblViajes WHERE Id = @v", ("@v", e.Viaje))));
+
+        // Liberado el puesto 9, solo lo impiden las unidades: 3 unidades no caben en 2 puestos pero si en 3.
+        Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[0], null)).StatusCode);
+        var porUnidades = await PatchViajeAsync(e.Coordinador, e.Viaje, new { capacidad = 2 });
+        Assert.Equal(HttpStatusCode.Conflict, porUnidades.StatusCode);
+        Assert.Equal("No se puede bajar la capacidad a 2: hay 3 unidades en el viaje", (await JsonAsync(porUnidades)).GetProperty("message").GetString());
+        Assert.Equal(HttpStatusCode.OK, (await PatchViajeAsync(e.Coordinador, e.Viaje, new { capacidad = 3 })).StatusCode);
+
+        // Una capacidad fuera de 1 a 20 o nula se rechaza (400 en capacidad) y no cambia nada.
+        foreach (var invalida in new object?[] { 0, 21, -1, null })
+        {
+            var r = await PatchViajeAsync(e.Coordinador, e.Viaje, new { capacidad = invalida });
+            Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+            Assert.Single(Mensajes(await JsonAsync(r), "capacidad"));
+        }
+
+        Assert.Equal(3, Convert.ToInt32(await Sembrador.EscalarAsync("SELECT Capacidad FROM dbo.tblViajes WHERE Id = @v", ("@v", e.Viaje))));
+        Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'viaje.actualizar' AND ViajeId = @v", ("@v", e.Viaje)));
+    }
+
+    [Fact]
+    public async Task El_viaje_nace_con_la_capacidad_de_su_tipo_de_unidad_o_la_que_se_indique_y_cambiar_los_puestos_del_tipo_no_lo_mueve()
+    {
+        var e = await EscenarioAsync(conSalidaEnCurso: false);
+        var tipos = (await JsonAsync(await Como(e.Coordinador).GetAsync("/api/catalogos/tipos-unidad"))).GetProperty("items").EnumerateArray().ToList();
+        var ninera = tipos.First(t => t.GetProperty("codigo").GetString() == "ninera");
+        var niniera = ninera.GetProperty("id").GetGuid();
+        Assert.Equal(JsonValueKind.Null, ninera.GetProperty("puestos").ValueKind);
+        var lugar = await LugarRealAsync(Como(e.Coordinador), "CEDI de prueba", "cedi_1");
+        Task<HttpResponseMessage> Crear(string codigo, object? capacidad) => Como(e.Coordinador).PostAsync(
+            "/api/viajes",
+            Cuerpo(capacidad is null
+                ? new { codigo_mtrack = codigo, tipo_unidad_id = niniera, placa = "ABC123", fecha_programada = FECHA, lugar_cargue_id = lugar }
+                : (object)new { codigo_mtrack = codigo, tipo_unidad_id = niniera, placa = "ABC123", fecha_programada = FECHA, lugar_cargue_id = lugar, capacidad }));
+
+        // Un tipo sin puestos definidos: el viaje nuevo toma 7.
+        var sinPuestos = await JsonAsync(await Crear("MT-CAP-1", null));
+        Assert.Equal(7, sinPuestos.GetProperty("capacidad").GetInt32());
+        Assert.Equal(7, Convert.ToInt32(await Sembrador.EscalarAsync("SELECT Capacidad FROM dbo.tblViajes WHERE Id = @v", ("@v", sinPuestos.GetProperty("id").GetGuid()))));
+
+        // ESC-01: el tipo con 9 puestos por defecto; el viaje nace con 9 y se puede cambiar al crearlo.
+        Assert.Equal(HttpStatusCode.OK, (await Como(e.Coordinador).PatchAsync($"/api/catalogos/tipos-unidad/{niniera}", Cuerpo(new { puestos = 9 }))).StatusCode);
+        var conTipo = await JsonAsync(await Crear("MT-CAP-2", null));
+        var indicada = await JsonAsync(await Crear("MT-CAP-3", 8));
+        var invalida = await Crear("MT-CAP-4", 25);
+        Assert.Equal(9, conTipo.GetProperty("capacidad").GetInt32());
+        Assert.Equal(8, indicada.GetProperty("capacidad").GetInt32());
+        Assert.Equal(HttpStatusCode.BadRequest, invalida.StatusCode);
+        Assert.Single(Mensajes(await JsonAsync(invalida), "capacidad"));
+
+        // CA-7: cambiar los puestos por defecto del tipo no mueve ningun viaje ya creado.
+        Assert.Equal(HttpStatusCode.OK, (await Como(e.Coordinador).PatchAsync($"/api/catalogos/tipos-unidad/{niniera}", Cuerpo(new { puestos = 5 }))).StatusCode);
+        Assert.Equal(9, (await ViajeAsync(e.Coordinador, conTipo.GetProperty("id").GetGuid())).GetProperty("capacidad").GetInt32());
+        Assert.Equal(7, (await ViajeAsync(e.Coordinador, sinPuestos.GetProperty("id").GetGuid())).GetProperty("capacidad").GetInt32());
+        Assert.Equal(5, (await JsonAsync(await Crear("MT-CAP-5", null))).GetProperty("capacidad").GetInt32());
+
+        // El catalogo valida los puestos (1 a 20) y admite dejarlos sin definir; el catalogo se comparte, asi que queda como estaba.
+        foreach (var mala in new object[] { 0, 21 })
+        {
+            var r = await Como(e.Coordinador).PatchAsync($"/api/catalogos/tipos-unidad/{niniera}", Cuerpo(new { puestos = mala }));
+            Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+            Assert.Single(Mensajes(await JsonAsync(r), "puestos"));
+        }
+
+        var sinDefinir = await Como(e.Coordinador).PatchAsync($"/api/catalogos/tipos-unidad/{niniera}", Cuerpo(new { puestos = (int?)null }));
+        Assert.Equal(HttpStatusCode.OK, sinDefinir.StatusCode);
+        Assert.Equal(JsonValueKind.Null, (await JsonAsync(sinDefinir)).GetProperty("puestos").ValueKind);
+    }
+
+    [Fact]
+    public async Task La_foto_de_la_acomodacion_llega_marcada_y_el_detalle_del_viaje_trae_las_fotos_de_su_acomodacion()
+    {
+        var e = await EscenarioAsync();
+
+        var foto = await FotoDeAcomodacionAsync(e.Inspector, e.Inspeccion);
+
+        Assert.Equal(HttpStatusCode.Created, foto.StatusCode);
+        var dto = await JsonAsync(foto);
+        Assert.True(dto.GetProperty("es_acomodacion").GetBoolean());
+        // CA-6: el detalle del viaje llega a ella sin pasar por el inventario del VIN.
+        var viaje = await ViajeAsync(e.Coordinador, e.Viaje);
+        var fotos = viaje.GetProperty("fotos_acomodacion").EnumerateArray().ToList();
+        Assert.Equal(dto.GetProperty("id").GetGuid(), Assert.Single(fotos).GetProperty("id").GetGuid());
+        Assert.True(fotos[0].GetProperty("es_acomodacion").GetBoolean());
+        Assert.False(string.IsNullOrEmpty(fotos[0].GetProperty("url").GetString()));
+        // Un viaje sin fotos de acomodacion trae la lista vacia, y la marca esta tambien en el detalle del informe.
+        var otro = await Sembrador.ViajeAsync(e.Conductor.UsuarioId, e.Inspector.UsuarioId, codigoMtrack: "M-OTRO");
+        await Sembrador.VehiculoConRutaAsync("9FB45RFL8NM209999", viajeId: otro);
+        Assert.Equal(0, (await ViajeAsync(e.Coordinador, otro)).GetProperty("fotos_acomodacion").GetArrayLength());
+        var informe = await JsonAsync(await Como(e.Inspector).GetAsync($"/api/inspecciones/{e.Inspeccion}"));
+        Assert.True(Assert.Single(informe.GetProperty("evidencias").EnumerateArray()).GetProperty("es_acomodacion").GetBoolean());
     }
 }

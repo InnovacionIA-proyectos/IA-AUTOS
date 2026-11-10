@@ -45,7 +45,7 @@ y por **proceso**. Cuando una cuenta **llega** a `umbral_patron_cantidad` (mayor
 
 - **Una vez por ventana.** La ventana es un bloque de `umbral_patron_ventana_dias` dias contado desde el 1 de enero de 2000: dentro de un bloque una zona o un proceso alerta una sola vez aunque siga creciendo; en el bloque siguiente, si sigue en el umbral, vuelve a alertar.
   El conteo es de los ultimos N dias hasta el momento de correr.
-- Los hallazgos de otro cliente no se mezclan. Las novedades del conductor sin revisar no cuentan hasta que se revisan.
+- Los hallazgos de otro cliente no se mezclan. El dano sin calificar (sin nivel) cuenta: tambien las novedades del conductor aun sin revisar, por proceso (script `36-dano-sin-calificar-en-los-conteos.sql`). El aviso de umbral lleva sus campos propios en `datos`: `tipo_umbral` (`zona` o `proceso`), `cuadrante_numero`, `lado`, `proceso`, `total`, `umbral` y `ventana_dias`.
 
 El reporte `GET /api/reportes/patrones` marca `supera_umbral` con estos mismos parametros (`umbral_patron_cantidad` y `umbral_patron_ventana_dias`).
 

@@ -14,7 +14,7 @@ using Microsoft.Extensions.Logging;
 namespace IAAutos.Aplicacion.Alertas;
 
 /// <summary>Cuantos hallazgos tiene un cliente en una zona o en un proceso dentro de la ventana. <c>Clave</c> identifica la zona o el proceso y <c>Nombre</c> es como se muestra.</summary>
-public sealed record clsConteoPatron(Guid ClienteId, string Clave, string Nombre, int Total);
+public sealed record clsConteoPatron(Guid ClienteId, string Clave, string Nombre, int Total, int? CuadranteNumero = null, string? Lado = null);
 
 /// <summary>Una inspeccion en borrador de Cargue o Descargue que sigue abierta: quien la inicio, a que unidad y proceso, y si su creador es un conductor en un cargue sin personal de apoyo.</summary>
 public sealed record clsCapturaAbierta(
@@ -84,7 +84,8 @@ public sealed class clsAlertasPeriodicas(
     clsCalculadoraVistas calculadoraVistas,
     clsEmisorNotificaciones emisor,
     IReloj reloj,
-    ILogger<clsAlertasPeriodicas> registro)
+    ILogger<clsAlertasPeriodicas> registro,
+    IAAutos.Aplicacion.Viajes.clsPermisosSinInspectorService permisosSinInspector)
 {
     public const int UMBRAL_POR_DEFECTO = 10;
     public const int VENTANA_DIAS_POR_DEFECTO = 30;
@@ -136,7 +137,18 @@ public sealed class clsAlertasPeriodicas(
                         null,
                         $"Patrón de hallazgos: {conteo.Nombre}",
                         $"{que} acumula {conteo.Total} hallazgos en los últimos {dias} días (umbral {umbral}).",
-                        $"{clsTipoNotificacion.UMBRAL_PATRON}:{porCliente.Key}:{tipo}:{conteo.Clave}:{bloque}"),
+                        $"{clsTipoNotificacion.UMBRAL_PATRON}:{porCliente.Key}:{tipo}:{conteo.Clave}:{bloque}",
+                        // Los campos propios del aviso: la zona (numero de cuadrante y lado) o el proceso que superaron el umbral, para abrir el tablero ya filtrado.
+                        new Dictionary<string, object?>
+                        {
+                            ["tipo_umbral"] = tipo,
+                            ["cuadrante_numero"] = tipo == "zona" ? conteo.CuadranteNumero : null,
+                            ["lado"] = tipo == "zona" ? conteo.Lado : null,
+                            ["proceso"] = tipo == "proceso" ? conteo.Clave : null,
+                            ["total"] = conteo.Total,
+                            ["umbral"] = umbral,
+                            ["ventana_dias"] = dias,
+                        }),
                     ct);
                 emitidas += destinatarios.Count;
             }
@@ -144,6 +156,12 @@ public sealed class clsAlertasPeriodicas(
 
         return emitidas;
     }
+
+    /// <summary>
+    /// Concede por tiempo los permisos de la excepcion «No hay inspector» que cumplieron 10 minutos sin respuesta (nunca antes) y avisa al conductor y al coordinador. Corre cada minuto, aparte de los demas avisos, para que
+    /// la espera no dependa de que alguien abra una pantalla. Devuelve cuantos concedio.
+    /// </summary>
+    public Task<int> EjecutarPermisosSinInspectorAsync(CancellationToken ct = default) => permisosSinInspector.ConcederVencidosAsync(ct);
 
     /// <summary>Corre los avisos operativos: captura incompleta, transferencia pendiente y camion reclamado sin actividad. Devuelve cuantos avisos intento crear.</summary>
     public async Task<int> EjecutarAvisosAsync(CancellationToken ct = default) =>
