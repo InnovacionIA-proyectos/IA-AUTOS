@@ -40,7 +40,9 @@ dev_dependencies:
 # Ícono de la app (regenerar con: dart run flutter_launcher_icons).
 flutter_launcher_icons:
   android: true
-  ios: false
+  ios: true
+  # La App Store rechaza íconos con transparencia.
+  remove_alpha_ios: true
   image_path: "assets/icon.png"
   adaptive_icon_background: "#FFFFFF"
   adaptive_icon_foreground: "assets/adaptive-icon.png"

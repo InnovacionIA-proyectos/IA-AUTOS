@@ -1,0 +1,50 @@
+# Compilación de la app móvil para iOS en Codemagic (la app vive en mobile/).
+#
+# Sin cuenta de Apple Developer no se puede firmar en Codemagic: este flujo deja un .ipa SIN FIRMAR, que se firma
+# después en Windows con Sideloadly y un Apple ID gratuito para instalarlo en un iPhone de pruebas (vale 7 días).
+# Ver mobile/docs/ios.md.
+workflows:
+  ios-qa-sin-firma:
+    name: iOS QA sin firma (Sideloadly)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    # Sin disparadores: se lanza a mano desde Codemagic, para no gastar los minutos del plan gratuito en cada push.
+    scripts:
+      - name: Configuración QA (pasarela /contenedores)
+        script: |
+          cd mobile
+          # La configuración de QA no es secreta y ya está versionada como ejemplo.
+          cp config/qa.example.json config/qa.json
+          cat config/qa.json
+      - name: Dependencias
+        script: |
+          cd mobile
+          flutter pub get
+      - name: Íconos de iOS
+        script: |
+          cd mobile
+          dart run flutter_launcher_icons
+      - name: Pruebas
+        script: |
+          cd mobile
+          flutter analyze
+          flutter test
+      - name: Compilar iOS (release, sin firma)
+        script: |
+          cd mobile
+          # Sin --flavor: en iOS hay un solo esquema (Runner) con el identificador de QA.
+          flutter build ios --release --no-codesign --dart-define-from-file=config/qa.json
+      - name: Empaquetar .ipa
+        script: |
+          cd mobile/build/ios/iphoneos
+          rm -rf Payload traza-autos-qa-sin-firma.ipa
+          mkdir Payload
+          cp -R Runner.app Payload/
+          zip -qry traza-autos-qa-sin-firma.ipa Payload
+          ls -la traza-autos-qa-sin-firma.ipa
+    artifacts:
+      - mobile/build/ios/iphoneos/traza-autos-qa-sin-firma.ipa

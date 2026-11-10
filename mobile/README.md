@@ -75,6 +75,8 @@ el código). Detalle y valores en [docs/configuracion.md](docs/configuracion.md)
 Los tres pueden convivir en el mismo teléfono, y con la app Expo anterior (`co.com.boterosoto.inventariovin`) durante la
 transición. Compilar y firmar un release: [docs/release.md](docs/release.md).
 
+iOS (sin Mac, compilado en Codemagic y firmado en Windows para un iPhone de pruebas): [docs/ios.md](docs/ios.md).
+
 ## Decisiones y diferencias con el plan
 
 - **Firma**: se implementó un lienzo propio con `CustomPainter` en lugar del paquete `signature`, porque la web dibuja
