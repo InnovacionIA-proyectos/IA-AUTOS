@@ -147,7 +147,8 @@ public sealed record EvidenciaDto(
     bool EsConstancia,
     bool EsSello,
     [property: System.Text.Json.Serialization.JsonIgnore] string? RutaArchivo = null,
-    Guid? ExtraId = null);
+    Guid? ExtraId = null,
+    bool EsAcomodacion = false);
 
 /// <summary>
 /// Un extra del vehiculo fuera del dibujo estandar que reporta una inspeccion: <c>Tipo</c> (codigo del catalogo <c>tipos-extra</c>) y su nombre, <c>Texto</c> (solo en «otro»), <c>Nombre</c> (como se muestra:

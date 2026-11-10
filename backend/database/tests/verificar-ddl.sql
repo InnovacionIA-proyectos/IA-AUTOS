@@ -1248,7 +1248,7 @@ DECLARE @vjPos nvarchar(36) = CAST(@vj AS nvarchar(36)), @vjPosOtro nvarchar(36)
 DECLARE @casosPos TABLE (Orden int IDENTITY(1, 1) PRIMARY KEY, Prueba nvarchar(200), Sentencia nvarchar(max), Esperado int);
 INSERT @casosPos (Prueba, Sentencia, Esperado) VALUES
  (N'CHECK posicion: la 0 no es valida', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 0 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosA + N'''', 547),
- (N'CHECK posicion: la 8 no es valida', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 8 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosA + N'''', 547),
+ (N'CHECK posicion: la 21 no es valida', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 21 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosA + N'''', 547),
  (N'Posicion: la 4 se guarda', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 4 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosA + N'''', 0),
  (N'UNIQUE filtrado posicion: la 4 ya esta ocupada en el mismo viaje', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 4 WHERE ViajeId = ''' + @vjPos + N''' AND VehiculoId = ''' + @vPosB + N'''', 2601),
  (N'Posicion: la misma posicion en otro viaje es valida', N'UPDATE dbo.tblViajeVehiculos SET Posicion = 4 WHERE ViajeId = ''' + @vjPosOtro + N''' AND VehiculoId = ''' + @vPosA + N'''', 0),

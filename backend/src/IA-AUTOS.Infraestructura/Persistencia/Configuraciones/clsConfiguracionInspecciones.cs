@@ -133,6 +133,7 @@ internal sealed class clsConfiguracionEvidencia : IEntityTypeConfiguration<clsEv
         builder.HasIndex(e => e.ExtraId).HasFilter("[ExtraId] IS NOT NULL").HasDatabaseName("IX_tblEvidencias_Extra");
         builder.Property(e => e.EsConstancia).HasDefaultValue(false);
         builder.Property(e => e.EsSello).HasDefaultValue(false);
+        builder.Property(e => e.EsAcomodacion).HasDefaultValue(false);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(e => e.InspeccionId)
             .HasConstraintName("FK_tblEvidencias_Inspeccion").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(e => e.HallazgoId)

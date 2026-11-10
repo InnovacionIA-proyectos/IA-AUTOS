@@ -504,7 +504,7 @@ incluidos los que aún no están en un viaje. Inspector y conductor solo ven los
 Autenticado. Inventario completo de un VIN: etapas (de todos sus viajes), y dentro de cada una sus inspecciones con hallazgos, evidencias y
 transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus viajes (`404` si no existe) y, del VIN, ve solo las etapas de sus viajes.
 
-Cada etapa trae `posicion`: la posición (de 1 a 7) que tuvo el VIN en la niñera de ese viaje, o `null` si no se registró (los viajes anteriores al cambio y las unidades que no salen).
+Cada etapa trae `posicion`: la posición (de 1 a la capacidad de la niñera de ese viaje) que tuvo el VIN en ella, o `null` si no se registró (los viajes anteriores al cambio y las unidades que no salen).
 
 ```json
 {
@@ -590,9 +590,18 @@ Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viaj
   ],
   "clientes": [ { "id": "uuid", "codigo": "sofasa", "nombre": "Sofasa" } ],
   "created_at": "…", "updated_at": "…",
-  "fecha_programada": "2026-11-03T11:00:00.000Z", "lugar_cargue_id": "uuid", "lugar_cargue": "CEDI Envigado"
+  "fecha_programada": "2026-11-03T11:00:00.000Z", "lugar_cargue_id": "uuid", "lugar_cargue": "CEDI Envigado",
+  "capacidad": 9,
+  "disposicion": { "puestos": [ { "numero": 1, "etiqueta": "1", "vin": "9FB45RFL8NM201001" }, { "numero": 2, "etiqueta": "2", "vin": null } ] },
+  "fotos_acomodacion": [ { /* EvidenciaDto con es_acomodacion: true */ } ]
 }
 ```
+
+**La niñera del viaje (capacidad y disposición).** `capacidad` es el número de **puestos** de la niñera de ESE viaje, de 1 a 20. Un viaje nuevo la toma de los `puestos` de su tipo de unidad (catálogo `tipos-unidad`; **7** si el tipo no los define) y se puede indicar otra
+al crearlo (`capacidad` en `POST /api/viajes`) o cambiar después (`PATCH /api/viajes/{id}` con `capacidad`). Queda **guardada en el viaje**: cambiar luego los puestos de un tipo **no mueve ningún viaje ya creado**. Un viaje anterior a este cambio, sin capacidad guardada, **rige como de 7 puestos** y
+su `capacidad` sale 7 (no se migra). `disposicion.puestos` es la **disposición como dato**: un puesto por cada número de 1 a la capacidad, en orden, con `numero` (el que se envía como posición), `etiqueta` (cómo se muestra; hoy el mismo número, y es donde cabrá otra numeración sin cambiar la forma) y `vin`
+(la unidad que lo ocupa, o `null` si está libre; solo de las unidades que quien consulta puede ver). La app dibuja esos puestos tal como llegan y no lleva ningún esquema propio. `fotos_acomodacion` son las fotos de la acomodación del viaje (ver `es_acomodacion`), de la más antigua a la más reciente, para llegar a ellas
+sin pasar por el inventario del VIN; es `[]` si no hay. `capacidad` y `disposicion` salen en el detalle del viaje (`ViajeDto`), no en el listado.
 
 `fecha_programada` es el día y la hora en que se programó el cargue (UTC), `lugar_cargue_id` / `lugar_cargue` el lugar **real** del cargue (catálogo `lugares`) y `lugar_destino_id` / `lugar_destino`
 el lugar de entrega de **cada unidad**; los tres pueden ser `null` en los viajes que no vienen de la carga por Excel. El listado trae `fecha_programada`, `lugar_cargue_id` y `lugar_cargue`.
@@ -643,6 +652,7 @@ igual que al corregir: ninguno se ignora en silencio ni se guarda.
 | `inspector_id` | no | usuario activo con rol `inspector` |
 | `fecha_programada` | sí | fecha y hora ISO 8601 **con zona horaria** (por ejemplo `2026-11-18T06:00:00-05:00`); sin ella `400` «La fecha programada es obligatoria» en `fecha_programada`; una fecha sin zona, `400` |
 | `lugar_cargue_id` | sí | `id` de un lugar **activo** del catálogo `lugares`; sin él `400` «El lugar de cargue es obligatorio» en `lugar_cargue_id`; un lugar inexistente o inactivo, `400` |
+| `capacidad` | no | los puestos de la niñera, de 1 a 20 (`400` en `capacidad` fuera de rango); sin ella toma los `puestos` del tipo de unidad (o 7) |
 | `unidades` | no | hasta 500; cada una con su `vin` (que ya exista) y su `lugar_destino_id` (obligatorio: un lugar **activo** del catálogo `lugares`); sin VIN repetidos |
 
 **El tipo de origen no se envía: se deduce.** `origen_id` del viaje (y `origen` en la respuesta) es el tipo (`puntos-custodia`) del lugar de cargue; el Cargue de cada unidad se crea en ese tipo. Lo mismo vale para el viaje que nace de la carga por archivo
@@ -689,7 +699,8 @@ quién entrega y quién recibe. `403` si es un inspector o conductor y el viaje 
 
 ### `PATCH /api/viajes/{id}`
 Gestión de viajes. Cambia **solo los campos enviados** de un viaje `programado` o `en_curso`; responde `200` con el `ViajeDto`. Campos: `codigo_mtrack`,
-`tipo_unidad_id`, `placa`, `trailer`, `conductor_id`, `origen_id` (mismas reglas que al crear).
+`tipo_unidad_id`, `placa`, `trailer`, `conductor_id`, `origen_id`, `fecha_programada`, `lugar_cargue_id` y `capacidad` (mismas reglas que al crear). **La capacidad no baja por debajo de las unidades activas del viaje ni de la posición más alta ya usada**: `409` diciendo cuál lo impide («No se puede bajar la capacidad a 8: hay una unidad en el puesto 9 en el viaje»,
+«…: hay 9 unidades…» o las dos); `400` en `capacidad` si no es un entero de 1 a 20 o es `null`.
 `trailer`, `conductor_id` y `origen_id` admiten `null` para quitarlos; `inspector_id` **ya no se acepta** (lo llena el reclamo del cargue: ver «Reclamo del camión»); `destino_id` **ya no se acepta** (el destino es de cada unidad: ver `PATCH /api/viajes/{id}/vehiculos/{vin}`); `con_personal_apoyo` **ya no existe** (el cargue no lleva ninguna marca previa); `codigo_mtrack`, `tipo_unidad_id` y `placa` no admiten `null`. Un campo que no existe responde `400`; un `codigo_mtrack` repetido, `409`; un viaje finalizado o cancelado, `409`.
 
 Mientras el viaje está `programado` también se corrige su programación: `fecha_programada` (ISO 8601 **con zona horaria**, por ejemplo `2026-11-03T06:00:00-05:00`; `null` la quita) y
@@ -1139,11 +1150,11 @@ Es lo que hace la app cuando una foto quedó «sin ubicación».
 ```json
 { "id": "uuid", "inspeccion_id": "uuid", "hallazgo_id": null, "sello_fecha": "…", "sello_lat": 6.24, "sello_lng": -75.58,
   "url": "/api/uploads/3f2b…c1.png", "created_at": "…", "updated_at": "…",
-  "vista_id": "uuid", "hash_sha256": "…", "sello_servidor_at": "…", "precision": 4.5, "dispositivo_id": "tablet-7", "nota": null, "sin_ubicacion": false, "es_constancia": false }
+  "vista_id": "uuid", "hash_sha256": "…", "sello_servidor_at": "…", "precision": 4.5, "dispositivo_id": "tablet-7", "nota": null, "sin_ubicacion": false, "es_constancia": false, "es_sello": false, "extra_id": null, "es_acomodacion": false }
 ```
 
 `sin_ubicacion` es `true` cuando la foto se tomó sin señal de GPS (`sello_lat` y `sello_lng` valen 0): muéstrela marcada y pida repetirla antes de cerrar. `es_constancia` es `true` en la foto de
-una constancia de no firma (se registra con `POST /api/inspecciones/{id}/transferencia/no-firma`, no con este endpoint) y esa foto no cuenta como foto de una vista.
+una constancia de no firma (se registra con `POST /api/inspecciones/{id}/transferencia/no-firma`, no con este endpoint) y esa foto no cuenta como foto de una vista. `es_acomodacion` es `true` en la foto de la **acomodación** de las unidades en la niñera (la de la segunda inspección del cargue, sin vista, hallazgo ni extra); las fotos anteriores a esta marca quedan en `false` y las del viaje salen en `fotos_acomodacion` de su detalle.
 
 ### Extras del vehículo: `POST|PUT|DELETE /api/inspecciones/{id}/extras`
 Un **extra** es un elemento del vehículo fuera del dibujo estándar (barras de techo, volco, platón…) que reporta una inspección **en borrador**, con su tipo, sus fotos selladas, una observación y, si está dañado, su daño. **Un extra sin daño no es un hallazgo**: no toca el dibujo y no cuenta en los patrones, el mapa de calor ni la tasa de rechazo. **Un extra dañado sí cuenta** (ver «Daño de un extra»). Lo hacen `inspector`, `conductor` y `admin` (el creador del informe o un administrador); `409` si la inspección está cerrada (los extras quedan inmutables al cierre).
@@ -1359,9 +1370,9 @@ Registra la **posición de la unidad en la niñera** durante la segunda inspecci
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
-| `posicion` | sí | un entero de **1 a 7**; `null` libera la posición de la unidad |
+| `posicion` | sí | un entero de **1 a la capacidad** de la niñera del viaje (7 si no la tiene definida); `null` libera la posición de la unidad |
 
-Responde `200` con el `ViajeDto`: cada unidad trae `posicion` (nulo si no la tiene). `400` en `posicion` («La posición debe estar entre 1 y 7») si está fuera de rango.
+Responde `200` con el `ViajeDto`: cada unidad trae `posicion` (nulo si no la tiene). `400` en `posicion` («La niñera tiene 8 puestos: la posición debe estar entre 1 y 8») si está fuera de la capacidad del viaje, con el mensaje que nombra esa capacidad.
 
 `409` si la posición **ya la ocupa otra unidad del viaje** («La posición N ya está ocupada por otra unidad de este viaje»; con solicitudes simultáneas por la misma gana exactamente una), si la unidad **no sale** del viaje o si el viaje **no tiene su segunda inspección del cargue en curso** (la de momento `salida` de la etapa Cargue, en borrador). `404` si el viaje o el VIN no existen o el VIN no está en el viaje.
 
@@ -1810,7 +1821,7 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | `etapas` | Etapas del proceso: `cargue`, `transporte`, `descargue`. Es el `proceso` de un informe o de un tramo de la ruta | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `puntos-custodia` | Los **tipos** de lugar: CEDI 1, Origen, Certificadora, Destino, CEDI 2, Concesionario | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `lugares` | Los lugares **reales** donde se carga y se entrega (CEDI Envigado, Concesionario Autolarte Medellín…). Empieza vacío: lo llena el negocio | `id`, `nombre` (único), `tipo` (el `codigo` de un valor activo de `puntos-custodia`), `tipo_nombre`, `ciudad`, `orden`, `activo`, `latitud`, `longitud`, `radio_metros` y `sin_ubicacion` (los tres primeros `null` mientras no tenga ubicación), más `estado_ubicacion` (`sin_ubicacion`, `pendiente_confirmar` o `confirmada`: solo una ubicación confirmada sirve para la confirmación «en sitio») |
-| `tipos-unidad` | Tipos de unidad transportadora: niñera, nodriza, quintinaria, planchón grúa | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `tipos-unidad` | Tipos de unidad transportadora: niñera, nodriza, quintinaria, planchón grúa. `puestos` son los **puestos por defecto** de su niñera (1 a 20; `null` = sin definir, el viaje nuevo toma 7): un viaje toma ese valor al crearse y cambiarlo **no mueve ningún viaje ya creado** (`400` en `puestos` fuera de rango) | `id`, `codigo`, `nombre`, `orden`, `activo`, `puestos` |
 | `clases-dano` | Clases de daño de un hallazgo (10 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `tamanos-dano` | Tamaños de daño de un hallazgo (6 iniciales) | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `niveles-severidad` | Niveles V1+, V1, V2 y V3 con su acción: «Se recupera antes del despacho», «Se rechaza el vehículo», «Validación por Sofasa» y «Se deroga (se acepta el defecto)» | `id`, `codigo`, `nombre`, `orden`, `activo`, `accion` (texto o `null`, máx. 500) |

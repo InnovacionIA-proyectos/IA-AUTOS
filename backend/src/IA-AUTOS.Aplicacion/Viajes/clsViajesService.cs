@@ -37,9 +37,34 @@ public sealed class clsViajesService(
     public static readonly IReadOnlySet<string> CAMPOS_ORDEN = new HashSet<string> { "created_at", "updated_at", "codigo_mtrack", "estado", "placa", "trailer" };
 
     private static readonly string[] CAMPOS_EDITABLES =
-        ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "origen_id", "fecha_programada", "lugar_cargue_id"];
+        ["codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "origen_id", "fecha_programada", "lugar_cargue_id", "capacidad"];
 
-    private static readonly string[] CAMPOS_SIN_NULO = ["codigo_mtrack", "tipo_unidad_id", "placa"];
+    private static readonly string[] CAMPOS_SIN_NULO = ["codigo_mtrack", "tipo_unidad_id", "placa", "capacidad"];
+
+    /// <summary>
+    /// La capacidad no puede quedar por debajo de las unidades activas del viaje ni de la posicion mas alta ya usada: 409 diciendo cual de las dos lo impide (o las dos).
+    /// </summary>
+    private async Task AsegurarCapacidadAsync(clsViaje viaje, int nueva, CancellationToken ct)
+    {
+        var enlaces = await viajes.ObtenerVehiculosAsync(viaje.Id, ct);
+        var unidades = enlaces.Count(e => !e.NoSale);
+        var masAlta = enlaces.Where(e => e.Posicion is not null).Select(e => (int)e.Posicion!.Value).DefaultIfEmpty(0).Max();
+        var impide = new List<string>();
+        if (nueva < unidades)
+        {
+            impide.Add(unidades == 1 ? "hay 1 unidad" : $"hay {unidades} unidades");
+        }
+
+        if (nueva < masAlta)
+        {
+            impide.Add($"hay una unidad en el puesto {masAlta}");
+        }
+
+        if (impide.Count > 0)
+        {
+            throw new clsConflictoException($"No se puede bajar la capacidad a {nueva}: {string.Join(" y ", impide)} en el viaje");
+        }
+    }
 
     private const string MENSAJE_FECHA = "Debe ser una fecha y hora ISO 8601 con zona horaria (por ejemplo 2026-11-03T06:00:00-05:00)";
 
@@ -66,13 +91,14 @@ public sealed class clsViajesService(
         await ValidarReferenciasAsync(solicitud.TipoUnidadId, solicitud.ConductorId, solicitud.InspectorId, null, null, ct, solicitud.LugarCargueId);
         var fechaProgramada = clsFechaProgramada.DeIso(solicitud.FechaProgramada) ?? throw clsErroresCampos.De("fecha_programada", MENSAJE_FECHA);
         var origenId = await TipoDelLugarDeCargueAsync(solicitud.LugarCargueId!.Value, ct);
+        var capacidad = await clsCapacidadDeViajes.InicialAsync(catalogos, solicitud.TipoUnidadId!.Value, solicitud.Capacidad, ct);
         var unidades = solicitud.Unidades ?? [];
         await ValidarDestinosAsync(unidades, ct);
 
         // El viaje ya no tiene un destino unico: cada unidad lleva el suyo. El tipo de origen sale del tipo del lugar de cargue.
         var viaje = clsViaje.Crear(
             codigo, solicitud.TipoUnidadId, solicitud.Placa, solicitud.Trailer, solicitud.ConductorId, solicitud.InspectorId,
-            origenId, null, actual.IdObligatorio(), reloj.Ahora, fechaProgramada, solicitud.LugarCargueId);
+            origenId, null, actual.IdObligatorio(), reloj.Ahora, fechaProgramada, solicitud.LugarCargueId, capacidad);
 
         var vehiculosAAgregar = await ResolverVehiculosAsync(viaje, unidades.Select(u => u.Vin!).ToList(), new HashSet<Guid>(), ct);
         var destinos = DestinosPorVehiculo(vehiculosAAgregar, unidades);
@@ -179,6 +205,13 @@ public sealed class clsViajesService(
         if (cambiaFecha || cambiaLugar)
         {
             viaje.Reprogramar(cambiaFecha, fechaProgramada, cambiaLugar, lugarCargueId, reloj.Ahora);
+        }
+
+        if (lector.Tiene("capacidad"))
+        {
+            var nueva = clsViaje.CapacidadValida(lector.Entero("capacidad"));
+            await AsegurarCapacidadAsync(viaje, nueva, ct);
+            viaje.CambiarCapacidad(nueva, reloj.Ahora);
         }
 
         viaje.Actualizar(
@@ -294,10 +327,11 @@ public sealed class clsViajesService(
             ?? throw new clsEntidadNoEncontradaException($"El VIN {vehiculo.Vin} no está en este viaje");
         if (solicitud.Posicion is { } posicion)
         {
-            // Primero el rango (400) y despues lo demas.
-            if (posicion < clsViajeVehiculo.POSICION_MINIMA || posicion > clsViajeVehiculo.POSICION_MAXIMA)
+            // Primero el rango contra la capacidad de la ninera del viaje (400) y despues lo demas.
+            var capacidad = viaje.CapacidadEfectiva;
+            if (posicion < clsViajeVehiculo.POSICION_MINIMA || posicion > capacidad)
             {
-                throw clsErroresCampos.De("posicion", $"La posición debe estar entre {clsViajeVehiculo.POSICION_MINIMA} y {clsViajeVehiculo.POSICION_MAXIMA}");
+                throw clsErroresCampos.De("posicion", $"La niñera tiene {capacidad} puestos: la posición debe estar entre {clsViajeVehiculo.POSICION_MINIMA} y {capacidad}");
             }
 
             if (!await viajes.TieneSegundaInspeccionDelCargueEnCursoAsync(id, ct))
@@ -312,7 +346,7 @@ public sealed class clsViajesService(
         }
 
         var antes = enlace.Posicion;
-        enlace.AsignarPosicion(solicitud.Posicion, reloj.Ahora);
+        enlace.AsignarPosicion(solicitud.Posicion, reloj.Ahora, viaje.CapacidadEfectiva);
         await auditor.RegistrarDeViajeAsync(
             "viaje.posicion_unidad", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(new { vin = vehiculo.Vin, posicion = antes }, new { vin = vehiculo.Vin, posicion = enlace.Posicion }), vehiculo.ClienteId, ct);
 

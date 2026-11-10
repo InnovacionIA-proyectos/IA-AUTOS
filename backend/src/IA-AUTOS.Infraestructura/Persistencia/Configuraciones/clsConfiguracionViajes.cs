@@ -31,6 +31,8 @@ internal sealed class clsConfiguracionViaje : IEntityTypeConfiguration<clsViaje>
         builder.HasOne<clsPuntoCustodia>().WithMany().HasForeignKey(v => v.DestinoId)
             .HasConstraintName("FK_tblViajes_Destino").OnDelete(DeleteBehavior.NoAction);
         builder.Property(v => v.FechaProgramada).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(v => v.Capacidad).HasColumnType("tinyint");
+        builder.Ignore(v => v.CapacidadEfectiva);
         builder.HasOne<clsLugar>().WithMany().HasForeignKey(v => v.LugarCargueId)
             .HasConstraintName("FK_tblViajes_LugarCargue").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(v => v.LugarCargueId).HasDatabaseName("IX_tblViajes_LugarCargue");

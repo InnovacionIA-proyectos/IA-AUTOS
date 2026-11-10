@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.4.0"
+    "version": "3.5.0"
   },
   "paths": {
     "/api/viajes": {
@@ -652,7 +652,37 @@
                         ],
                         "fecha_programada": "2026-10-22T14:30:00.000Z",
                         "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                        "lugar_cargue": "texto"
+                        "lugar_cargue": "texto",
+                        "capacidad": 1,
+                        "disposicion": {
+                          "puestos": []
+                        },
+                        "fotos_acomodacion": [
+                          {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "sello_fecha": "2026-10-22T14:30:00.000Z",
+                            "sello_lat": 1.5,
+                            "sello_lng": 1.5,
+                            "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                            "url_expira_at": "2026-10-22T14:30:00.000Z",
+                            "created_at": "2026-10-22T14:30:00.000Z",
+                            "updated_at": "2026-10-22T14:30:00.000Z",
+                            "vista_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                            "sello_servidor_at": "2026-10-22T14:30:00.000Z",
+                            "precision": 1.5,
+                            "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "nota": "Mensaje de ejemplo",
+                            "sin_ubicacion": true,
+                            "es_constancia": true,
+                            "es_sello": true,
+                            "ruta_archivo": "texto",
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "es_acomodacion": true
+                          }
+                        ]
                       }
                     ]
                   ],
@@ -724,7 +754,37 @@
                         ],
                         "fecha_programada": "2026-10-22T14:30:00.000Z",
                         "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                        "lugar_cargue": "texto"
+                        "lugar_cargue": "texto",
+                        "capacidad": 1,
+                        "disposicion": {
+                          "puestos": []
+                        },
+                        "fotos_acomodacion": [
+                          {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "sello_fecha": "2026-10-22T14:30:00.000Z",
+                            "sello_lat": 1.5,
+                            "sello_lng": 1.5,
+                            "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                            "url_expira_at": "2026-10-22T14:30:00.000Z",
+                            "created_at": "2026-10-22T14:30:00.000Z",
+                            "updated_at": "2026-10-22T14:30:00.000Z",
+                            "vista_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                            "sello_servidor_at": "2026-10-22T14:30:00.000Z",
+                            "precision": 1.5,
+                            "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "nota": "Mensaje de ejemplo",
+                            "sin_ubicacion": true,
+                            "es_constancia": true,
+                            "es_sello": true,
+                            "ruta_archivo": "texto",
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "es_acomodacion": true
+                          }
+                        ]
                       }
                     ]
                   ],
@@ -796,7 +856,37 @@
                         ],
                         "fecha_programada": "2026-10-22T14:30:00.000Z",
                         "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                        "lugar_cargue": "texto"
+                        "lugar_cargue": "texto",
+                        "capacidad": 1,
+                        "disposicion": {
+                          "puestos": []
+                        },
+                        "fotos_acomodacion": [
+                          {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "sello_fecha": "2026-10-22T14:30:00.000Z",
+                            "sello_lat": 1.5,
+                            "sello_lng": 1.5,
+                            "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                            "url_expira_at": "2026-10-22T14:30:00.000Z",
+                            "created_at": "2026-10-22T14:30:00.000Z",
+                            "updated_at": "2026-10-22T14:30:00.000Z",
+                            "vista_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                            "sello_servidor_at": "2026-10-22T14:30:00.000Z",
+                            "precision": 1.5,
+                            "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "nota": "Mensaje de ejemplo",
+                            "sin_ubicacion": true,
+                            "es_constancia": true,
+                            "es_sello": true,
+                            "ruta_archivo": "texto",
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "es_acomodacion": true
+                          }
+                        ]
                       }
                     ]
                   ],
@@ -12030,7 +12120,8 @@
                           "es_constancia": true,
                           "es_sello": true,
                           "ruta_archivo": "texto",
-                          "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                          "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                          "es_acomodacion": true
                         },
                         "detalle": {},
                         "created_at": "2026-10-22T14:30:00.000Z"
@@ -12076,7 +12167,8 @@
                           "es_constancia": true,
                           "es_sello": true,
                           "ruta_archivo": "texto",
-                          "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                          "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                          "es_acomodacion": true
                         },
                         "detalle": {},
                         "created_at": "2026-10-22T14:30:00.000Z"
@@ -12122,7 +12214,8 @@
                           "es_constancia": true,
                           "es_sello": true,
                           "ruta_archivo": "texto",
-                          "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                          "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                          "es_acomodacion": true
                         },
                         "detalle": {},
                         "created_at": "2026-10-22T14:30:00.000Z"
@@ -13665,7 +13758,8 @@
                             "es_constancia": true,
                             "es_sello": true,
                             "ruta_archivo": "texto",
-                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "es_acomodacion": true
                           }
                         ],
                         "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -13743,7 +13837,8 @@
                             "es_constancia": true,
                             "es_sello": true,
                             "ruta_archivo": "texto",
-                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "es_acomodacion": true
                           }
                         ],
                         "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -13821,7 +13916,8 @@
                             "es_constancia": true,
                             "es_sello": true,
                             "ruta_archivo": "texto",
-                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "es_acomodacion": true
                           }
                         ],
                         "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -23422,7 +23518,8 @@
               }
             ],
             "fecha_programada": "2026-10-22T14:30:00.000Z",
-            "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "capacidad": 1
           }
         ],
         "required": [
@@ -23521,6 +23618,13 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "capacidad": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
           }
         }
       },
@@ -23590,6 +23694,31 @@
                 "$ref": "#/components/schemas/JsonElement"
               }
             ]
+          }
+        }
+      },
+      "DisposicionDeNiniera": {
+        "examples": [
+          {
+            "puestos": [
+              {
+                "numero": 1,
+                "etiqueta": "texto",
+                "vin": "9FBHSR4E8PM000001"
+              }
+            ]
+          }
+        ],
+        "required": [
+          "puestos"
+        ],
+        "type": "object",
+        "properties": {
+          "puestos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PuestoDeNiniera"
+            }
           }
         }
       },
@@ -23982,7 +24111,8 @@
             "es_constancia": true,
             "es_sello": true,
             "ruta_archivo": "texto",
-            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "es_acomodacion": true
           }
         ],
         "required": [
@@ -24099,6 +24229,10 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "es_acomodacion": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -24171,7 +24305,8 @@
                 "es_constancia": true,
                 "es_sello": true,
                 "ruta_archivo": "texto",
-                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "es_acomodacion": true
               }
             ],
             "dano": {
@@ -24611,7 +24746,8 @@
               "es_constancia": true,
               "es_sello": true,
               "ruta_archivo": "texto",
-              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "es_acomodacion": true
             },
             "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -24853,7 +24989,8 @@
                   "es_constancia": true,
                   "es_sello": true,
                   "ruta_archivo": "texto",
-                  "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "es_acomodacion": true
                 },
                 "detalle": {},
                 "created_at": "2026-10-22T14:30:00.000Z"
@@ -24899,7 +25036,8 @@
               "es_constancia": true,
               "es_sello": true,
               "ruta_archivo": "texto",
-              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "es_acomodacion": true
             },
             "conductor_nombre": "texto",
             "motivo_sin_inspector": {
@@ -25440,7 +25578,8 @@
               "es_constancia": true,
               "es_sello": true,
               "ruta_archivo": "texto",
-              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "es_acomodacion": true
             },
             "conductor_nombre": "texto",
             "motivo_sin_inspector": {
@@ -25740,7 +25879,8 @@
                 "es_constancia": true,
                 "es_sello": true,
                 "ruta_archivo": "texto",
-                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "es_acomodacion": true
               }
             ],
             "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -26234,7 +26374,8 @@
                 "es_constancia": true,
                 "es_sello": true,
                 "ruta_archivo": "texto",
-                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "es_acomodacion": true
               }
             ],
             "transferencia": {
@@ -27437,7 +27578,8 @@
                 "es_constancia": true,
                 "es_sello": true,
                 "ruta_archivo": "texto",
-                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "es_acomodacion": true
               }
             ],
             "transferencia": {
@@ -27774,7 +27916,8 @@
                   "es_constancia": true,
                   "es_sello": true,
                   "ruta_archivo": "texto",
-                  "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "es_acomodacion": true
                 },
                 "conductor_nombre": "texto",
                 "motivo_sin_inspector": {
@@ -30027,6 +30170,36 @@
           }
         }
       },
+      "PuestoDeNiniera": {
+        "examples": [
+          {
+            "numero": 1,
+            "etiqueta": "texto",
+            "vin": "9FBHSR4E8PM000001"
+          }
+        ],
+        "required": [
+          "numero",
+          "etiqueta",
+          "vin"
+        ],
+        "type": "object",
+        "properties": {
+          "numero": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "etiqueta": {
+            "type": "string"
+          },
+          "vin": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "RecibirConReservasRequest": {
         "examples": [
           {
@@ -30974,7 +31147,8 @@
               "es_constancia": true,
               "es_sello": true,
               "ruta_archivo": "texto",
-              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "es_acomodacion": true
             },
             "detalle": {},
             "created_at": "2026-10-22T14:30:00.000Z"
@@ -31951,7 +32125,43 @@
             ],
             "fecha_programada": "2026-10-22T14:30:00.000Z",
             "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "lugar_cargue": "texto"
+            "lugar_cargue": "texto",
+            "capacidad": 1,
+            "disposicion": {
+              "puestos": [
+                {
+                  "numero": 1,
+                  "etiqueta": "texto",
+                  "vin": "9FBHSR4E8PM000001"
+                }
+              ]
+            },
+            "fotos_acomodacion": [
+              {
+                "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "sello_fecha": "2026-10-22T14:30:00.000Z",
+                "sello_lat": 1.5,
+                "sello_lng": 1.5,
+                "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                "url_expira_at": "2026-10-22T14:30:00.000Z",
+                "created_at": "2026-10-22T14:30:00.000Z",
+                "updated_at": "2026-10-22T14:30:00.000Z",
+                "vista_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "sello_servidor_at": "2026-10-22T14:30:00.000Z",
+                "precision": 1.5,
+                "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "nota": "Mensaje de ejemplo",
+                "sin_ubicacion": true,
+                "es_constancia": true,
+                "es_sello": true,
+                "ruta_archivo": "texto",
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "es_acomodacion": true
+              }
+            ]
           }
         ],
         "required": [
@@ -32105,6 +32315,30 @@
               "null",
               "string"
             ]
+          },
+          "capacidad": {
+            "type": "integer",
+            "format": "int32",
+            "default": 7
+          },
+          "disposicion": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DisposicionDeNiniera"
+              }
+            ]
+          },
+          "fotos_acomodacion": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EvidenciaDto"
+            }
           }
         }
       },

@@ -237,6 +237,7 @@ BEGIN
         Nombre     nvarchar(100)     NOT NULL,
         Orden      int               NOT NULL CONSTRAINT DF_tblTiposUnidadTransportadora_Orden DEFAULT (0),
         Activo     bit               NOT NULL CONSTRAINT DF_tblTiposUnidadTransportadora_Activo DEFAULT (1),
+        Puestos    tinyint           NULL,
         CreatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTiposUnidadTransportadora_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt  datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTiposUnidadTransportadora_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT UQ_tblTiposUnidadTransportadora_Codigo UNIQUE (Codigo)
@@ -547,6 +548,7 @@ BEGIN
         -- Cuando esta programado el cargue y en que lugar real se carga (nulos en los viajes anteriores). OrigenId y DestinoId (tipos de lugar) quedan para el historico.
         FechaProgramada datetimeoffset(3) NULL,
         LugarCargueId  uniqueidentifier  NULL,
+        Capacidad      tinyint           NULL,
         Estado         varchar(20)       NOT NULL CONSTRAINT DF_tblViajes_Estado DEFAULT ('programado'),
         CreadoPor      uniqueidentifier  NULL,
         CreatedAt      datetimeoffset(3) NOT NULL CONSTRAINT DF_tblViajes_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
@@ -621,7 +623,7 @@ BEGIN
         CONSTRAINT FK_tblViajeVehiculos_LugarDestino FOREIGN KEY (LugarDestinoId) REFERENCES dbo.tblLugares (Id),
         CONSTRAINT UQ_tblViajeVehiculos_Viaje_Vehiculo UNIQUE (ViajeId, VehiculoId),
         CONSTRAINT CK_tblViajeVehiculos_EstadoUnidad CHECK (EstadoUnidad IN ('activa', 'no_sale')),
-        CONSTRAINT CK_tblViajeVehiculos_Posicion CHECK (Posicion IS NULL OR Posicion BETWEEN 1 AND 7),
+        CONSTRAINT CK_tblViajeVehiculos_Posicion CHECK (Posicion IS NULL OR Posicion BETWEEN 1 AND 20),
         -- "No sale" exige su motivo, el hallazgo que lo causa, quien lo marco y cuando; una unidad activa no lleva nada de eso.
         CONSTRAINT CK_tblViajeVehiculos_NoSale CHECK (
             (EstadoUnidad = 'activa' AND NoSaleMotivo IS NULL AND NoSaleHallazgoId IS NULL AND NoSaleMarcadoPor IS NULL AND NoSaleAt IS NULL AND ReemplazoVehiculoId IS NULL)
@@ -649,7 +651,7 @@ IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'Posicion') IS NULL
 GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_Posicion' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
-    ALTER TABLE dbo.tblViajeVehiculos ADD CONSTRAINT CK_tblViajeVehiculos_Posicion CHECK (Posicion IS NULL OR Posicion BETWEEN 1 AND 7);
+    ALTER TABLE dbo.tblViajeVehiculos ADD CONSTRAINT CK_tblViajeVehiculos_Posicion CHECK (Posicion IS NULL OR Posicion BETWEEN 1 AND 20);
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblViajeVehiculos_Posicion' AND object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
     CREATE UNIQUE INDEX UX_tblViajeVehiculos_Posicion ON dbo.tblViajeVehiculos (ViajeId, Posicion) WHERE Posicion IS NOT NULL;
 GO
@@ -900,6 +902,7 @@ BEGIN
         DispositivoId nvarchar(100)    NULL,
         Nota          nvarchar(500)    NULL,
         EsConstancia  bit              NOT NULL CONSTRAINT DF_tblEvidencias_EsConstancia DEFAULT (0),
+        EsAcomodacion bit              NOT NULL CONSTRAINT DF_tblEvidencias_EsAcomodacion DEFAULT (0),
         EsSello       bit              NOT NULL CONSTRAINT DF_tblEvidencias_EsSello DEFAULT (0),
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEvidencias_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
@@ -2115,6 +2118,33 @@ IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblHallazgo
     EXEC (N'ALTER TABLE dbo.tblHallazgos ADD CONSTRAINT CK_tblHallazgos_Extra CHECK (ExtraId IS NULL OR (ZonaId IS NULL AND Origen = ''inspector''))');
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_tblHallazgos_Extra' AND object_id = OBJECT_ID(N'dbo.tblHallazgos'))
     CREATE UNIQUE INDEX UQ_tblHallazgos_Extra ON dbo.tblHallazgos (ExtraId) WHERE ExtraId IS NOT NULL;
+GO
+
+/* -----------------------------------------------------------------------------
+   Capacidad y disposicion de la ninera. tblViajes.Capacidad: los puestos de la ninera de ESE viaje (1 a 20); la toma del tipo de unidad al crearlo y no se mueve cuando el tipo cambia sus puestos. Nula en los
+   viajes anteriores, que se comportan como de 7. tblTiposUnidadTransportadora.Puestos: los puestos por defecto de ese tipo (1 a 20; nulo = sin definir, el viaje nuevo toma 7). La posicion de una unidad
+   (tblViajeVehiculos.Posicion) llega hasta la capacidad maxima (20). tblEvidencias.EsAcomodacion: la foto de la acomodacion (sin vista, hallazgo, extra, constancia ni sello) llega marcada como tal.
+   ----------------------------------------------------------------------------- */
+IF COL_LENGTH(N'dbo.tblViajes', N'Capacidad') IS NULL
+    ALTER TABLE dbo.tblViajes ADD Capacidad tinyint NULL;
+IF COL_LENGTH(N'dbo.tblTiposUnidadTransportadora', N'Puestos') IS NULL
+    ALTER TABLE dbo.tblTiposUnidadTransportadora ADD Puestos tinyint NULL;
+IF COL_LENGTH(N'dbo.tblEvidencias', N'EsAcomodacion') IS NULL
+    ALTER TABLE dbo.tblEvidencias ADD EsAcomodacion bit NOT NULL CONSTRAINT DF_tblEvidencias_EsAcomodacion DEFAULT (0);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblViajes_Capacidad' AND parent_object_id = OBJECT_ID(N'dbo.tblViajes'))
+    ALTER TABLE dbo.tblViajes ADD CONSTRAINT CK_tblViajes_Capacidad CHECK (Capacidad IS NULL OR Capacidad BETWEEN 1 AND 20);
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTiposUnidadTransportadora_Puestos' AND parent_object_id = OBJECT_ID(N'dbo.tblTiposUnidadTransportadora'))
+    ALTER TABLE dbo.tblTiposUnidadTransportadora ADD CONSTRAINT CK_tblTiposUnidadTransportadora_Puestos CHECK (Puestos IS NULL OR Puestos BETWEEN 1 AND 20);
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_Posicion' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND definition NOT LIKE N'%(20)%')
+BEGIN
+    ALTER TABLE dbo.tblViajeVehiculos DROP CONSTRAINT CK_tblViajeVehiculos_Posicion;
+    ALTER TABLE dbo.tblViajeVehiculos ADD CONSTRAINT CK_tblViajeVehiculos_Posicion CHECK (Posicion IS NULL OR Posicion BETWEEN 1 AND 20);
+END
+-- Se crea con SQL dinamico y solo si las columnas que compara existen, para poder ejecutar este script tambien sobre una base que aun no las tiene.
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblEvidencias_Acomodacion' AND parent_object_id = OBJECT_ID(N'dbo.tblEvidencias'))
+   AND COL_LENGTH(N'dbo.tblEvidencias', N'VistaId') IS NOT NULL AND COL_LENGTH(N'dbo.tblEvidencias', N'ExtraId') IS NOT NULL AND COL_LENGTH(N'dbo.tblEvidencias', N'EsConstancia') IS NOT NULL AND COL_LENGTH(N'dbo.tblEvidencias', N'EsSello') IS NOT NULL
+    EXEC (N'ALTER TABLE dbo.tblEvidencias ADD CONSTRAINT CK_tblEvidencias_Acomodacion CHECK (EsAcomodacion = 0 OR (HallazgoId IS NULL AND VistaId IS NULL AND ExtraId IS NULL AND EsConstancia = 0 AND EsSello = 0))');
 GO
 
 /* -----------------------------------------------------------------------------
