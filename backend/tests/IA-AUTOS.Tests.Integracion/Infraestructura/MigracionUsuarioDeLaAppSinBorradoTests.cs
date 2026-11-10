@@ -120,11 +120,38 @@ public sealed partial class MigracionUsuarioDeLaAppSinBorradoTests : IAsyncLifet
         return (CON_EVIDENCIA.Length, lector.GetInt32(0));
     }
 
+    /// <summary>La misma consulta de la prueba de EntornoReal: cuantos pares (usuario de aplicacion, tabla de evidencia) aun no tienen el DENY DELETE; un propietario (db_owner) no es usuario de aplicacion.</summary>
+    private async Task<int> ParesSinDenyAsync()
+    {
+        await using var conexion = new SqlConnection(_cadena);
+        await conexion.OpenAsync();
+        await using var comando = new SqlCommand(
+            """
+            SELECT COUNT(*)
+            FROM sys.database_principals p
+            CROSS JOIN (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblHallazgoSeguimiento'), (N'tblNotasAclaratorias'), (N'tblTransferenciasCustodia'), (N'tblNotificaciones'), (N'tblAuditLog'), (N'tblVehiculos')) AS t (tabla)
+            WHERE p.type IN ('S', 'U', 'G') AND p.name NOT IN ('dbo', 'guest', 'INFORMATION_SCHEMA', 'sys')
+              AND IS_ROLEMEMBER(N'db_datawriter', p.name) = 1 AND IS_ROLEMEMBER(N'db_owner', p.name) = 0
+              AND NOT EXISTS (SELECT 1 FROM sys.database_permissions d
+                              WHERE d.grantee_principal_id = p.principal_id AND d.class = 1 AND d.major_id = OBJECT_ID(t.tabla) AND d.permission_name = N'DELETE' AND d.state = N'D')
+            """, conexion);
+        return Convert.ToInt32(await comando.ExecuteScalarAsync());
+    }
+
+    [Fact]
+    public async Task Una_base_donde_solo_hay_un_propietario_no_tiene_usuario_de_aplicacion_que_exigir()
+    {
+        await EjecutarEnUnaConexionAsync(_cadena, $"CREATE USER [{_usuario}] WITHOUT LOGIN; ALTER ROLE db_owner ADD MEMBER [{_usuario}]; ALTER ROLE db_datawriter ADD MEMBER [{_usuario}];");
+
+        Assert.Equal(0, await ParesSinDenyAsync());
+    }
+
     [Fact]
     public async Task Antes_de_migrar_el_usuario_de_la_app_puede_borrar_de_todo()
     {
         await CrearUsuarioSinDenyAsync();
 
+        Assert.Equal(CON_EVIDENCIA.Length, await ParesSinDenyAsync());
         foreach (var tabla in CON_EVIDENCIA)
         {
             Assert.True(await TienePermisoAsync(tabla, "DELETE"), $"{tabla} deberia poder borrarse antes de migrar");
@@ -156,6 +183,7 @@ public sealed partial class MigracionUsuarioDeLaAppSinBorradoTests : IAsyncLifet
         }
 
         Assert.Equal(CON_EVIDENCIA.Length, (await ResultadoAsync()).SinDelete);
+        Assert.Equal(0, await ParesSinDenyAsync());
     }
 
     [Fact]

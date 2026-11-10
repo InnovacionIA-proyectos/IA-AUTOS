@@ -923,22 +923,35 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
-    public async Task El_usuario_de_la_aplicacion_no_puede_borrar_la_evidencia_ni_el_historial()
+    public async Task Todo_usuario_de_aplicacion_de_la_base_tiene_negado_el_borrado_de_la_evidencia_y_el_historial()
     {
-        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql (o 01-crear-usuario-app.sql en una base nueva).
+        // Solo lectura. Un usuario de aplicacion es el que puede escribir datos (db_datawriter) y NO es propietario (db_owner ni dbo): donde la API se conecta como propietario no hay ninguno y no hay nada que exigir.
+        // Si hay uno y le falta el DENY DELETE, avisa: ejecute database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql (o 01-crear-usuario-app.sql en una base nueva).
         await using var conexion = await AbrirAsync();
 
-        var tablasSinDelete = await EscalarAsync<int>(
+        var usuariosDeAplicacion = await EscalarAsync<int>(
             conexion,
             """
-            SELECT COUNT(DISTINCT p.major_id)
-            FROM sys.database_permissions p
-            WHERE p.class = 1 AND p.permission_name = N'DELETE' AND p.state = N'D'
-              AND p.major_id IN (OBJECT_ID(N'tblEvidencias'), OBJECT_ID(N'tblHallazgos'), OBJECT_ID(N'tblHallazgoSeguimiento'), OBJECT_ID(N'tblNotasAclaratorias'),
-                                 OBJECT_ID(N'tblTransferenciasCustodia'), OBJECT_ID(N'tblNotificaciones'), OBJECT_ID(N'tblAuditLog'), OBJECT_ID(N'tblVehiculos'))
+            SELECT COUNT(*)
+            FROM sys.database_principals p
+            WHERE p.type IN ('S', 'U', 'G') AND p.name NOT IN ('dbo', 'guest', 'INFORMATION_SCHEMA', 'sys')
+              AND IS_ROLEMEMBER(N'db_datawriter', p.name) = 1 AND IS_ROLEMEMBER(N'db_owner', p.name) = 0
+            """);
+        var sinElDeny = await EscalarAsync<int>(
+            conexion,
+            """
+            SELECT COUNT(*)
+            FROM sys.database_principals p
+            CROSS JOIN (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblHallazgoSeguimiento'), (N'tblNotasAclaratorias'), (N'tblTransferenciasCustodia'), (N'tblNotificaciones'), (N'tblAuditLog'), (N'tblVehiculos')) AS t (tabla)
+            WHERE p.type IN ('S', 'U', 'G') AND p.name NOT IN ('dbo', 'guest', 'INFORMATION_SCHEMA', 'sys')
+              AND IS_ROLEMEMBER(N'db_datawriter', p.name) = 1 AND IS_ROLEMEMBER(N'db_owner', p.name) = 0
+              AND NOT EXISTS (SELECT 1 FROM sys.database_permissions d
+                              WHERE d.grantee_principal_id = p.principal_id AND d.class = 1 AND d.major_id = OBJECT_ID(t.tabla) AND d.permission_name = N'DELETE' AND d.state = N'D')
             """);
 
-        Assert.True(tablasSinDelete == 8, "Al usuario de la aplicacion aun le falta el DENY DELETE sobre la evidencia y el historial. Ejecute database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql.");
+        Assert.True(
+            sinElDeny == 0,
+            $"Hay {usuariosDeAplicacion} usuario(s) de aplicacion y a alguno le falta el DENY DELETE sobre la evidencia y el historial. Ejecute database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql.");
     }
 
     [FactEntornoReal]
