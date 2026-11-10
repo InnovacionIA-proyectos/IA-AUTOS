@@ -949,22 +949,9 @@ public sealed class BaseDatosRealTests
                               WHERE d.grantee_principal_id = p.principal_id AND d.class = 1 AND d.major_id = OBJECT_ID(t.tabla) AND d.permission_name = N'DELETE' AND d.state = N'D')
             """);
 
-        var nombres = sinElDeny == 0 ? string.Empty : await EscalarAsync<string>(
-            conexion,
-            """
-            SELECT STRING_AGG(x.name, N', ')
-            FROM (SELECT DISTINCT p.name
-                  FROM sys.database_principals p
-                  CROSS JOIN (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblHallazgoSeguimiento'), (N'tblNotasAclaratorias'), (N'tblTransferenciasCustodia'), (N'tblNotificaciones'), (N'tblAuditLog'), (N'tblVehiculos')) AS t (tabla)
-                  WHERE p.type IN ('S', 'U', 'G') AND p.name NOT IN ('dbo', 'guest', 'INFORMATION_SCHEMA', 'sys')
-                    AND IS_ROLEMEMBER(N'db_datawriter', p.name) = 1 AND IS_ROLEMEMBER(N'db_owner', p.name) = 0
-                    AND NOT EXISTS (SELECT 1 FROM sys.database_permissions d
-                                    WHERE d.grantee_principal_id = p.principal_id AND d.class = 1 AND d.major_id = OBJECT_ID(t.tabla) AND d.permission_name = N'DELETE' AND d.state = N'D')) x
-            """) ?? string.Empty;
-
         Assert.True(
             sinElDeny == 0,
-            $"Hay {usuariosDeAplicacion} usuario(s) de aplicacion y a alguno le falta el DENY DELETE sobre la evidencia y el historial (base {conexion.Database}; usuario(s): {nombres}). Ejecute database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql con ese nombre en @usuarioApp.");
+            $"Hay {usuariosDeAplicacion} usuario(s) de aplicacion y a alguno le falta el DENY DELETE sobre la evidencia y el historial. Ejecute database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql con el usuario de la aplicacion en @usuarioApp.");
     }
 
     [FactEntornoReal]
