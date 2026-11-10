@@ -20,6 +20,7 @@
     <Content Include="..\..\database\01-crear-usuario-app.sql" Link="database\01-crear-usuario-app.sql" CopyToOutputDirectory="PreserveNewest" />
     <!-- Todos los cambios de esquema y todos los esquemas previos entran por comodin: un script nuevo se incluye solo en la cadena de la prueba de migracion encadenada. -->
     <Content Include="..\..\database\cambios-esquema\*.sql" Link="database\cambios-esquema\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\semilla-desarrollo\*.sql" Link="database\semilla-desarrollo\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\*.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi.json" Link="docs\openapi.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\docs\openapi-versiones.json" Link="docs\openapi-versiones.json" CopyToOutputDirectory="PreserveNewest" />
