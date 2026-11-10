@@ -2252,8 +2252,12 @@ días que terminan en `hasta`, con los mismos filtros) llegan a `umbral.cantidad
 {
   "total": 40,
   "por_proceso": [ { "proceso": "cargue", "total": 12, "supera_umbral": true } ],
-  "por_region": [ { "cuadrante_numero": 7, "lado": "izquierdo", "nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera", "total": 9, "supera_umbral": false } ],
-  "por_region_proceso": [ { "cuadrante_numero": 7, "lado": "izquierdo", "nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera", "proceso": "cargue", "total": 4, "supera_umbral": false } ],
+  "por_region": [
+    { "cuadrante_numero": 7, "lado": "izquierdo", "nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera", "total": 9, "supera_umbral": false, "extra": false },
+    { "cuadrante_numero": null, "lado": null, "nombre": "Extras del vehículo", "zona": "Extras del vehículo", "total": 3, "supera_umbral": false, "extra": true },
+    { "cuadrante_numero": null, "lado": null, "nombre": "Sin zona en el dibujo", "zona": "Sin zona en el dibujo", "total": 1, "supera_umbral": false, "extra": false }
+  ],
+  "por_region_proceso": [ { "cuadrante_numero": 7, "lado": "izquierdo", "nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera", "proceso": "cargue", "total": 4, "supera_umbral": false, "extra": false } ],
   "por_nivel": [ { "nivel": "v1", "total": 5 } ],
   "por_clase": [ { "clase": "golpe", "total": 14 } ],
   "por_tamano": [ { "tamano": "5_10cm", "total": 8 } ],
@@ -2264,7 +2268,15 @@ días que terminan en `hasta`, con los mismos filtros) llegan a `umbral.cantidad
 
 El mapa de calor y los patrones **cuentan el daño sin nivel** por su zona, su clase y su proceso, y `sin_calificar` dice cuántos de los `total` lo son («12 daños · 2 sin calificar»); en `por_nivel` salen con `nivel: null`. Las alertas de umbral también los cuentan.
 
-Un hallazgo sin ubicar (histórico o desvinculado del dibujo anterior) no entra en el mapa de zonas y sí cuenta por proceso, nivel, clase y tamaño.
+**Los daños de extras y los hallazgos sin zona tienen cada uno su fila.** Además de las filas de cada zona con cuadrante numerado (que no cambian: `extra: false`), `por_region` y `por_region_proceso` traen, cuando hay datos, hasta dos grupos **sin cuadrante** (`cuadrante_numero: null` y `lado: null`) con un rótulo fijo, que
+no depende de ningún hallazgo del grupo:
+
+| Grupo | `extra` | `nombre` y `zona` | Qué cuenta |
+|---|---|---|---|
+| Daños de extras | `true` | «Extras del vehículo» | el daño de cualquier tipo de extra (un extra no tiene zona en el dibujo y no se dibuja en el vehículo: el portal no pinta ningún punto por él); los de todos los tipos van juntos |
+| Sin zona | `false` | «Sin zona en el dibujo» | los hallazgos sin zona que no son de un extra: los históricos o desvinculados del dibujo anterior y la novedad del conductor aún sin revisar |
+
+`extra` es un indicador explícito: el portal lo usa en lugar de leer el rótulo. En `por_region_proceso` hay una fila de cada grupo **por proceso**. Los daños de extras y los hallazgos sin zona **siguen contando** en `total`, en `por_proceso`, `por_nivel`, `por_clase`, `por_tamano`, en la tasa de rechazo y en las alertas de umbral (`supera_umbral` de cada grupo se calcula con sus propios hallazgos de la ventana).
 
 ### `GET /api/reportes/indicador-diario?fecha=`
 De las unidades **despachadas el día `fecha`** (`AAAA-MM-DD`; por defecto `hasta` o, si tampoco llega, hoy), el porcentaje de **vehículos con novedad**: los que tuvieron **al menos un hallazgo de nivel V1** ese día (no cualquier hallazgo; los de nivel V1+ también cuentan, como
