@@ -58,3 +58,8 @@ key.properties
 **/android/app/profile
 **/android/app/release
 **/ios/Pods/
+
+# Configuración local de Claude Code (permisos personales, puede tener credenciales)
+.claude/settings.json
+.claude/settings.local.json
+__pycache__/
