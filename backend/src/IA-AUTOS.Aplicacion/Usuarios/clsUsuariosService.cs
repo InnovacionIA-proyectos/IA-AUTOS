@@ -79,6 +79,31 @@ public sealed class clsUsuariosService(
             .Select(u => new UsuarioListaDto(u.Id, u.Nombre, u.Rol))
             .ToList();
 
+    /// <summary>
+    /// Un usuario por su identificador, con la misma visibilidad por cliente que el listado: quien administra usuarios recibe el usuario completo de su cliente (el super administrador, el de cualquiera); un usuario
+    /// de otro cliente responde 404, como si no existiera.
+    /// </summary>
+    public async Task<UsuarioDto> ObtenerAsync(Guid id, CancellationToken ct = default) =>
+        clsMapeadorUsuarios.ADto(await ObtenerVisibleAsync(id, ct));
+
+    /// <summary>La version reducida (id, nombre y rol) de un usuario activo del cliente, para quien no administra usuarios; 404 si es de otro cliente o esta inactivo, como en la lista reducida.</summary>
+    public async Task<UsuarioListaDto> ObtenerBasicoAsync(Guid id, CancellationToken ct = default)
+    {
+        var usuario = await ObtenerVisibleAsync(id, ct);
+        return usuario.Activo
+            ? new UsuarioListaDto(usuario.Id, usuario.Nombre, usuario.Rol)
+            : throw new clsEntidadNoEncontradaException("Usuario no encontrado", clsMotivosRechazo.USUARIO_NO_EXISTE);
+    }
+
+    /// <summary>El usuario si lo ve quien consulta (los de su cliente; el super administrador ve todos); si no, 404.</summary>
+    private async Task<clsUsuario> ObtenerVisibleAsync(Guid id, CancellationToken ct)
+    {
+        var usuario = await usuarios.ObtenerPorIdAsync(id, ct);
+        return usuario is not null && (VeTodosLosClientes || usuario.ClienteId == ClienteDelActor())
+            ? usuario
+            : throw new clsEntidadNoEncontradaException("Usuario no encontrado", clsMotivosRechazo.USUARIO_NO_EXISTE);
+    }
+
     // ------------------------------------------------------------------------------------------------ escritura
 
     public async Task<UsuarioDto> CrearAsync(CrearUsuarioRequest solicitud, CancellationToken ct = default)
@@ -162,7 +187,7 @@ public sealed class clsUsuariosService(
         var actorId = actual.IdObligatorio();
         if (id == actorId)
         {
-            throw new clsConflictoException("No puedes eliminar tu propio usuario");
+            throw new clsConflictoException("No puedes eliminar tu propio usuario", clsMotivosRechazo.USUARIO_PROPIO);
         }
 
         var usuario = await ObtenerGestionableAsync(id, ct);
@@ -251,7 +276,7 @@ public sealed class clsUsuariosService(
 
         if (cambios.Activo == false && usuario.Id == actual.Id)
         {
-            throw new clsConflictoException("No puedes desactivar tu propio usuario");
+            throw new clsConflictoException("No puedes desactivar tu propio usuario", clsMotivosRechazo.USUARIO_PROPIO);
         }
 
         var rolFinal = cambios.Rol ?? usuario.Rol;
@@ -259,7 +284,7 @@ public sealed class clsUsuariosService(
         {
             if (!VeTodosLosClientes)
             {
-                throw new clsProhibidoException("Solo el super administrador cambia el cliente de un usuario");
+                throw new clsProhibidoException("Solo el super administrador cambia el cliente de un usuario", clsMotivosRechazo.SOLO_SUPER_ADMIN_CAMBIA_CLIENTE);
             }
 
             if (cambios.ClienteId is null && rolFinal != clsRol.SUPER_ADMIN)
@@ -303,7 +328,7 @@ public sealed class clsUsuariosService(
     private async Task<clsUsuario> ObtenerGestionableAsync(Guid id, CancellationToken ct)
     {
         var usuario = await usuarios.ObtenerPorIdAsync(id, ct)
-            ?? throw new clsEntidadNoEncontradaException("Usuario no encontrado");
+            ?? throw new clsEntidadNoEncontradaException("Usuario no encontrado", clsMotivosRechazo.USUARIO_NO_EXISTE);
         if (VeTodosLosClientes)
         {
             return usuario;
@@ -311,12 +336,12 @@ public sealed class clsUsuariosService(
 
         if (usuario.ClienteId != actual.ClienteId)
         {
-            throw new clsEntidadNoEncontradaException("Usuario no encontrado");
+            throw new clsEntidadNoEncontradaException("Usuario no encontrado", clsMotivosRechazo.USUARIO_NO_EXISTE);
         }
 
         if (usuario.Rol == clsRol.SUPER_ADMIN)
         {
-            throw new clsProhibidoException("Solo un super administrador puede modificar a un super administrador");
+            throw new clsProhibidoException("Solo un super administrador puede modificar a un super administrador", clsMotivosRechazo.SOLO_SUPER_ADMIN_MODIFICA_SUPER_ADMIN);
         }
 
         return usuario;
@@ -327,7 +352,7 @@ public sealed class clsUsuariosService(
     {
         if (rol == clsRol.SUPER_ADMIN && !VeTodosLosClientes)
         {
-            throw new clsProhibidoException("Solo un super administrador puede asignar el nivel super administrador");
+            throw new clsProhibidoException("Solo un super administrador puede asignar el nivel super administrador", clsMotivosRechazo.SOLO_SUPER_ADMIN_ASIGNA_SUPER_ADMIN);
         }
     }
 
@@ -356,7 +381,7 @@ public sealed class clsUsuariosService(
 
         if (solicitado is { } otro && otro != actual.ClienteId)
         {
-            throw new clsProhibidoException("Solo puedes administrar usuarios de tu propio cliente");
+            throw new clsProhibidoException("Solo puedes administrar usuarios de tu propio cliente", clsMotivosRechazo.USUARIO_DE_OTRO_CLIENTE);
         }
 
         return actual.ClienteId ?? await catalogos.ClienteAsync(null, ct);

@@ -78,6 +78,26 @@ Todos los errores son JSON con la misma forma:
 | `LLEGADA_YA_CERRADA` | 409 | la llegada de Transporte de esa unidad ya estaba confirmada: es un éxito para un reintento (ver «Conductor en ruta») |
 | `HALLAZGO_YA_REVISADO` | 409 | la novedad del conductor ya fue revisada: su zona, clase y nivel ya no se cambian (ver «Revisión de la novedad») |
 | `UNIDAD_NO_SALE` | 409 | la unidad se marcó «no sale» del viaje: no admite novedades ni llegada |
+
+**El motivo fijo de los rechazos.** Los rechazos (`409`, `403` y `404`) de **viajes**, **usuarios**, **vehículos** y de la **descarga de la constancia** traen además, en `details.motivo`, un valor fijo en minúsculas (el mismo patrón de `ETAPA_PREVIA_SIN_CIERRE`): el portal y la app muestran el mensaje que corresponde a partir del
+motivo y no de la frase, que puede cambiar. El `code` y el `message` no cambian. Algunos traen datos propios junto al motivo (por ejemplo el viaje que impide la baja de un carro).
+
+| Motivo | Cuándo |
+|---|---|
+| `viaje_programado`, `viaje_en_curso`, `viaje_finalizado`, `viaje_cancelado` | el viaje, en ese estado, ya no admite el cambio (por ejemplo corregir uno `finalizado` o `cancelado`; la fecha y el lugar de cargue solo se corrigen programado) |
+| `transicion_de_estado_invalida` | el viaje no puede pasar a ese estado |
+| `viaje_no_existe`, `viaje_no_asignado`, `viaje_sin_unidades_del_cliente` | el viaje no existe, no es del conductor o inspector que lo pide, o no tiene unidades de su cliente |
+| `viaje_con_inspecciones`, `vin_con_inspecciones` | el viaje o el VIN ya tiene inspecciones y no se elimina ni se quita |
+| `codigo_mtrack_duplicado` | ya existe un viaje con ese código MTrack |
+| `vin_ya_en_el_viaje`, `vin_en_otro_viaje_activo` | el VIN ya está en este viaje o en otro viaje programado o en curso |
+| `vehiculo_no_existe`, `vin_fuera_del_viaje` | el vehículo no existe o su VIN no está en ese viaje |
+| `capacidad_no_baja`, `posicion_ocupada`, `sin_segunda_inspeccion_en_curso`, `descargue_con_informe_cerrado`, `conductor_sin_permiso_de_excepcion` | reglas de la niñera, el destino y el cargue sin inspector del viaje |
+| `otro_cliente` | se pidió lo de un cliente que no es el suyo |
+| `vehiculo_en_viaje_activo` | el carro está en un viaje programado o en curso y no se da de baja (`details.viaje_id` y `details.codigo_mtrack` nombran el viaje) |
+| `usuario_no_existe`, `usuario_propio`, `usuario_de_otro_cliente` | el usuario no existe (o es de otro cliente), o se intentó eliminar o desactivar el propio |
+| `solo_super_admin_cambia_cliente`, `solo_super_admin_modifica_super_admin`, `solo_super_admin_asigna_super_admin` | solo el super administrador puede hacerlo |
+| `rol_sin_permiso_de_puntos`, `punto_no_asignado` | los puntos del inspector |
+| `inspeccion_no_existe`, `inspeccion_de_otro_cliente`, `inspeccion_sin_transferencia` | la descarga de la constancia: la inspección no existe, es de un VIN de otro cliente o no tiene transferencia |
 | `URL_FIRMADA_INVALIDA` | 403 | la URL de una foto no tiene firma, la firma no coincide o ya venció (ver «URL firmada de una foto») |
 | `PIN_CHANGE_REQUIRED` | 403 | el PIN fue asignado o reiniciado por un administrador: hay que cambiarlo (`POST /api/auth/cambiar-pin`) antes de usar el resto de la API |
 | `ACCOUNT_LOCKED` | 423 | la cuenta está bloqueada por PIN errados seguidos; `details.bloqueado_hasta` (ISO 8601) dice hasta cuándo, o un administrador la desbloquea |
@@ -376,6 +396,10 @@ Autenticado. La respuesta depende del rol:
 Sin contraseña, solo el conductor y el inspector pueden crearse (`400` para los demás roles, que necesitan contraseña). Errores `400` por campo en
 `details.fieldErrors` (por ejemplo, conductor sin `cedula`).
 
+### `GET /api/usuarios/{id}`
+Un usuario por su identificador, con la **misma visibilidad por cliente que el listado** (la pantalla que abre un enlace filtrado por un usuario muestra su nombre sin traer la lista): `admin`, `coordinador_calidad` y `super_admin` reciben el `UsuarioDto` completo, igual que cada elemento de `GET /api/usuarios`; los demás roles reciben solo `{ id, nombre, rol }` y solo de un usuario **activo** de su cliente.
+Un usuario de otro cliente (para quien no es `super_admin`, que ve todos) o inexistente responde `404` con `details.motivo: "usuario_no_existe"`, como si no existiera; sin token, `401`.
+
 ### `PATCH /api/usuarios/{id}`
 Mismos roles. Cambia únicamente los campos enviados: `nombre`, `email`, `rol`, `subtipo_inspector`, `password`, `activo`, `cedula` y, solo `super_admin`,
 `cliente_id`. Un campo desconocido es `400`.
@@ -542,7 +566,12 @@ etapas, inspecciones, hallazgos y evidencias.
 - Un vehículo inactivo **no aparece** en `GET /api/vehiculos?vin=` y **no se puede agregar a un viaje** (`400` en `vines`).
 - **Sigue apareciendo** en `GET /api/vehiculos/listado`, en el inventario (`GET /api/vehiculos/{vin}/inventario`), en los informes y en los reportes, con `activo: false`.
 - Repetir la baja responde igual y no cambia nada. `404` si el VIN no existe; `403` para cualquier otro rol.
+- **Un carro que está en un viaje programado o en curso no se da de baja**: `409` con `details.motivo: "vehiculo_en_viaje_activo"` y los datos del viaje (`details.viaje_id`, `details.codigo_mtrack`); el mensaje lo nombra («El vehículo … está en el viaje MT-2026-0417»). Se saca del viaje (o el viaje termina) y luego se da de baja; el carro sigue activo.
 - Queda en la auditoría (`vehiculo.baja`, con `activo` antes y después).
+
+### `POST /api/vehiculos/{vin}/reactivar`
+Deshace la baja. Los mismos roles que la baja (`admin`, `super_admin` y `coordinador_calidad`, de un VIN de su cliente: `403` si es de otro; `403` para cualquier otro rol). Sin cuerpo. Responde `200` con `{ "modo": "reactivado" }`: el vehículo vuelve a `activo: true`, se busca de nuevo en `GET /api/vehiculos?vin=` y se puede agregar a un viaje; conserva todo su historial.
+Reactivar uno que ya está activo responde igual y no cambia nada. `404` si el VIN no existe. Queda en la auditoría (`vehiculo.reactivar`, con quién y cuándo, y `activo` antes y después).
 
 ### `GET /api/vehiculos/{vin}/inventario/pdf`
 Autenticado. Devuelve el inventario en PDF (`Content-Type: application/pdf`, nombre `inventario-{vin}.pdf`). Es una
@@ -1543,7 +1572,7 @@ Una página de la bandeja, las más recientes primero: `{ "items": [Notificacion
 | `urgencia` | `alta` o `media` |
 | `pagina`, `tamano` | página desde 1 (por defecto 1) y tamaño (por defecto 50, máximo **200**: uno mayor se reduce a 200) |
 
-Cada usuario ve **solo las suyas**; el `super_admin` ve las de **todos los clientes**. `no_leidas` es cuántas hay sin leer en ese alcance, sin contar los filtros. Un filtro inválido responde `400` con todos los errores juntos en `details.fieldErrors`.
+Cada usuario ve **solo las suyas**; el `super_admin` ve las de **todos los clientes**, pero **una sola copia de cada aviso**: si una novedad se envió a tres personas del cliente, él la ve una vez y no tres veces iguales (de cada aviso queda la primera copia enviada; cada destinatario conserva la suya). `no_leidas` es cuántas hay sin leer en ese alcance, sin contar los filtros. Un filtro inválido responde `400` con todos los errores juntos en `details.fieldErrors`.
 Solo se listan las de la bandeja: las filas de push son el registro del envío.
 
 ### `POST /api/notificaciones/{id}/leida`
@@ -1590,7 +1619,7 @@ la alerta responde igual y la notificación de push guarda el motivo en `ErrorEn
 
 ## Ubicación de los lugares
 
-La ubicación de un lugar (`latitud`, `longitud`, `radio_metros`) tiene un estado, `estado_ubicacion`, que el catálogo `lugares` devuelve junto con quién la fijó (`ubicacion_fijada_por`) y cuándo (`ubicacion_fijada_at`):
+La ubicación de un lugar (`latitud`, `longitud`, `radio_metros`) tiene un estado, `estado_ubicacion`, que el catálogo `lugares` devuelve junto con quién la fijó (`ubicacion_fijada_por`, y su nombre en `ubicacion_fijada_por_nombre`, para leer «Ubicación confirmada por Ana Restrepo» sin ningún identificador) y cuándo (`ubicacion_fijada_at`); ambos son `null` mientras nadie la fija:
 
 | `estado_ubicacion` | Qué significa | Cómo se llega |
 |---|---|---|
@@ -1606,12 +1635,12 @@ La ubicación de un lugar (`latitud`, `longitud`, `radio_metros`) tiene un estad
 ```json
 { "lat": 6.1706, "lng": -75.5874, "precision": 18.5 }
 ```
-`lat` y `lng` son obligatorios (`400` si faltan o están fuera de rango); `precision` (metros, opcional, no negativa) es la del GPS y queda en la auditoría (`lugar.fijar_ubicacion`). `200` con el lugar: `{ "id", "nombre", "latitud", "longitud", "radio_metros": null, "estado_ubicacion": "pendiente_confirmar", "ubicacion_fijada_por", "ubicacion_fijada_at", "precision_m" }`. `404` si el lugar no existe. `409` si el lugar ya tiene ubicación (pendiente o confirmada): una ubicación existente la cambia quien administra el catálogo.
+`lat` y `lng` son obligatorios (`400` si faltan o están fuera de rango); `precision` (metros, opcional, no negativa) es la del GPS y queda en la auditoría (`lugar.fijar_ubicacion`). `200` con el lugar: `{ "id", "nombre", "latitud", "longitud", "radio_metros": null, "estado_ubicacion": "pendiente_confirmar", "ubicacion_fijada_por", "ubicacion_fijada_por_nombre", "ubicacion_fijada_at", "precision_m" }`. `404` si el lugar no existe. `409` si el lugar ya tiene ubicación (pendiente o confirmada): una ubicación existente la cambia quien administra el catálogo.
 
 ### Autocalibración: propuestas de ubicación
 Cada hora el servidor toma las fotos selladas de las vistas de Cargue y Descargue (lugar de cargue del viaje y destino de la unidad) con ubicación y con precisión menor que `valvula_precision_m`, de los lugares **activos cuya ubicación no está confirmada**. Si un lugar reúne fotos de **al menos 3 visitas distintas** (viajes), propone el **centro** en la mediana de las coordenadas y el **radio** que cubre al 90 % de las fotos (redondeado hacia arriba a 10 m, entre 100 y 5.000 m), crea una propuesta `pendiente` y avisa al `coordinador_calidad` del cliente (`propuesta_ubicacion`, urgencia media, bandeja y push). **El lugar no cambia** mientras la propuesta esté pendiente. No se repite una propuesta pendiente ni se vuelve a proponer tras una decisión sin fotos nuevas.
 
-`PropuestaUbicacionDto`: `{ "id", "lugar_id", "lugar", "centro_lat", "centro_lng", "radio_metros", "fotos", "visitas", "estado", "decidida_por", "decidida_at", "created_at" }`.
+`PropuestaUbicacionDto`: `{ "id", "lugar_id", "lugar", "centro_lat", "centro_lng", "radio_metros", "fotos", "visitas", "estado", "decidida_por", "decidida_por_nombre", "decidida_at", "created_at" }` (`decidida_por`, `decidida_por_nombre` y `decidida_at` son `null` mientras está pendiente).
 
 | Endpoint | Roles | Qué hace |
 |---|---|---|

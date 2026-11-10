@@ -80,7 +80,7 @@ public sealed class clsPuntosDeInspectorService(
     {
         var inspector = await ObtenerInspectorAsync(usuarioId, soloLectura: false, ct);
         var punto = (await reclamos.ObtenerPuntosAsync(inspector.Id, ct)).FirstOrDefault(p => p.LugarId == lugarId)
-            ?? throw new clsEntidadNoEncontradaException("El inspector no tiene ese punto asignado");
+            ?? throw new clsEntidadNoEncontradaException("El inspector no tiene ese punto asignado", clsMotivosRechazo.PUNTO_NO_ASIGNADO);
         reclamos.QuitarPunto(punto);
         auditor.Registrar(
             "usuario.punto_quitar", "usuarios", inspector.Id,
@@ -91,18 +91,18 @@ public sealed class clsPuntosDeInspectorService(
 
     private async Task<clsUsuario> ObtenerInspectorAsync(Guid usuarioId, bool soloLectura, CancellationToken ct)
     {
-        var usuario = await usuarios.ObtenerPorIdAsync(usuarioId, ct) ?? throw new clsEntidadNoEncontradaException("Usuario no encontrado");
+        var usuario = await usuarios.ObtenerPorIdAsync(usuarioId, ct) ?? throw new clsEntidadNoEncontradaException("Usuario no encontrado", clsMotivosRechazo.USUARIO_NO_EXISTE);
         if (actual.Rol == clsRol.INSPECTOR)
         {
             // El inspector solo consulta sus propios puntos; no asigna ni quita.
             if (!soloLectura || usuario.Id != actual.IdObligatorio())
             {
-                throw new clsProhibidoException("Solo el coordinador de calidad y los administradores administran los puntos de un inspector");
+                throw new clsProhibidoException("Solo el coordinador de calidad y los administradores administran los puntos de un inspector", clsMotivosRechazo.ROL_SIN_PERMISO_DE_PUNTOS);
             }
         }
         else if (!VeTodosLosClientes && usuario.ClienteId != actual.ClienteId)
         {
-            throw new clsEntidadNoEncontradaException("Usuario no encontrado");
+            throw new clsEntidadNoEncontradaException("Usuario no encontrado", clsMotivosRechazo.USUARIO_NO_EXISTE);
         }
 
         return usuario.Rol == clsRol.INSPECTOR ? usuario : throw clsErroresCampos.De("usuario", "El usuario no es un inspector: solo los inspectores tienen puntos");

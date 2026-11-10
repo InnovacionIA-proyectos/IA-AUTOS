@@ -221,7 +221,13 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj,
     private async Task<Dictionary<Guid, (string Codigo, string Nombre)>> TiposAsync(CancellationToken ct) =>
         (await Contexto.PuntosCustodia.AsNoTracking().Select(p => new { p.Id, p.Codigo, p.Nombre }).ToListAsync(ct)).ToDictionary(p => p.Id, p => (p.Codigo, p.Nombre));
 
-    private static ValorCatalogo Armar(clsLugar l, IReadOnlyDictionary<Guid, (string Codigo, string Nombre)> tipos) => new()
+    private async Task<Dictionary<Guid, string>> NombresDeQuienFijoAsync(IEnumerable<clsLugar> lugares, CancellationToken ct)
+    {
+        var ids = lugares.Where(l => l.UbicacionFijadaPor is not null).Select(l => l.UbicacionFijadaPor!.Value).Distinct().ToList();
+        return ids.Count == 0 ? [] : await Contexto.Usuarios.AsNoTracking().Where(u => ids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Nombre, ct);
+    }
+
+    private static ValorCatalogo Armar(clsLugar l, IReadOnlyDictionary<Guid, (string Codigo, string Nombre)> tipos, IReadOnlyDictionary<Guid, string>? nombres = null) => new()
     {
         ["id"] = l.Id,
         ["nombre"] = l.Nombre,
@@ -236,18 +242,20 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj,
         ["sin_ubicacion"] = l.SinUbicacion,
         ["estado_ubicacion"] = l.EstadoUbicacion,
         ["ubicacion_fijada_por"] = l.UbicacionFijadaPor,
+        ["ubicacion_fijada_por_nombre"] = l.UbicacionFijadaPor is { } fijador && nombres is not null ? nombres.GetValueOrDefault(fijador) : null,
         ["ubicacion_fijada_at"] = l.UbicacionFijadaAt,
     };
 
     protected override ValorCatalogo Mapear(clsLugar l) => Armar(l, new Dictionary<Guid, (string, string)>());
 
-    protected override async Task<ValorCatalogo> MapearAsync(clsLugar entidad, CancellationToken ct) => Armar(entidad, await TiposAsync(ct));
+    protected override async Task<ValorCatalogo> MapearAsync(clsLugar entidad, CancellationToken ct) => Armar(entidad, await TiposAsync(ct), await NombresDeQuienFijoAsync([entidad], ct));
 
     public override async Task<IReadOnlyList<ValorCatalogo>> ListarAsync(CancellationToken ct = default)
     {
         var tipos = await TiposAsync(ct);
         var filas = await Conjunto.AsNoTracking().OrderBy(l => l.Orden).ThenBy(l => l.Nombre).ToListAsync(ct);
-        return filas.Select(l => Armar(l, tipos)).ToList();
+        var nombres = await NombresDeQuienFijoAsync(filas, ct);
+        return filas.Select(l => Armar(l, tipos, nombres)).ToList();
     }
 
     protected override async Task<clsLugar> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct)

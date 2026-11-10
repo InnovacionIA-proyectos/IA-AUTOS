@@ -65,6 +65,18 @@ public sealed class clsVehiculo : clsEntidadBase
         Tocar(ahora);
     }
 
+    /// <summary>Deshace la baja: el vehiculo vuelve a estar activo, con todo su historial. Reactivar uno activo no cambia nada.</summary>
+    public void Reactivar(DateTimeOffset ahora)
+    {
+        if (Activo)
+        {
+            return;
+        }
+
+        Activo = true;
+        Tocar(ahora);
+    }
+
     /// <summary>Alta desde una orden Sofasa: operacion fija "nacional".</summary>
     public static clsVehiculo CrearDesdeSofasa(string vin, string? marca, string? modelo, Guid clienteId, DateTimeOffset ahora) =>
         Crear(vin, clsValidador.Opcional(marca) ?? "Sofasa", modelo, null, clsOperacion.NACIONAL, clienteId, ahora);
