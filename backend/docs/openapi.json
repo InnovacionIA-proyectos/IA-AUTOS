@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.10.0"
+    "version": "3.11.0"
   },
   "paths": {
     "/api/viajes": {
@@ -14335,7 +14335,7 @@
             }
           },
           "403": {
-            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED, CORRECCION_SOLO_AUTOR",
             "content": {
               "application/json": {
                 "schema": {
@@ -14357,6 +14357,15 @@
                       "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
                       "code": "PIN_CHANGE_REQUIRED",
                       "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "CORRECCION_SOLO_AUTOR": {
+                    "summary": "La inspeccion la hizo otra persona y quien intenta no es administrador: la corrigen quien la hizo y los administradores",
+                    "value": {
+                      "error": "La inspeccion la hizo otra persona y quien intenta no es administrador: la corrigen quien la hizo y los administradores",
+                      "code": "CORRECCION_SOLO_AUTOR",
+                      "message": "La inspeccion la hizo otra persona y quien intenta no es administrador: la corrigen quien la hizo y los administradores",
                       "timestamp": "2026-10-22T14:30:00.000Z"
                     }
                   }
@@ -14386,7 +14395,7 @@
             }
           },
           "409": {
-            "description": "Error 409: CONFLICT",
+            "description": "Error 409: CONFLICT, INSPECCION_YA_FIRMADA",
             "content": {
               "application/json": {
                 "schema": {
@@ -14399,6 +14408,15 @@
                       "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
                       "code": "CONFLICT",
                       "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "INSPECCION_YA_FIRMADA": {
+                    "summary": "La transferencia de la inspeccion ya tiene una firma o un cierre: ya no se corrige (se aclara con una nota)",
+                    "value": {
+                      "error": "La transferencia de la inspeccion ya tiene una firma o un cierre: ya no se corrige (se aclara con una nota)",
+                      "code": "INSPECCION_YA_FIRMADA",
+                      "message": "La transferencia de la inspeccion ya tiene una firma o un cierre: ya no se corrige (se aclara con una nota)",
                       "timestamp": "2026-10-22T14:30:00.000Z"
                     }
                   }

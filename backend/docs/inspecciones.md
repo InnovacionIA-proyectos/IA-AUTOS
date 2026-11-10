@@ -62,7 +62,8 @@ la foto del sello en `null` o ausentes (`clsVisibilidadConductor`). `GET /api/in
 
 Una inspección cerrada no se edita. `POST /api/inspecciones/{id}/corregir` crea la **versión siguiente** (`version` 2, 3…, en borrador y vacía) con `corrige_inspeccion_id` apuntando a la
 anterior; la anterior no cambia (sigue cerrada, con sus fotos y su hora de cierre). La nueva tiene sus propias fotos, hallazgos, transferencia y reglas de cierre. Solo se corrige la
-**última** versión, y mientras el viaje esté activo (`409` en otro caso). Quien corrige es quien participa en el viaje o un administrador.
+**última** versión, y mientras el viaje esté activo (`409` en otro caso). Quien corrige es quien participa en el viaje **y**, además, quien hizo la inspección o un administrador (`403 CORRECCION_SOLO_AUTOR` en otro caso); y solo hasta la primera firma: si la transferencia ya tiene una
+firma o un cierre, nadie corrige (`409 INSPECCION_YA_FIRMADA`) y se aclara con una nota aclaratoria o firmando con reservas. Ningún rechazo crea una versión.
 
 ## Nombres en pantalla
 

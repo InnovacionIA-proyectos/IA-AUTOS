@@ -131,6 +131,27 @@ public sealed class clsHallazgoYaRevisadoException : clsExcepcionDominio
     }
 }
 
+/// <summary>Corregir una inspeccion la hizo otra persona y quien intenta no es administrador: 403 CORRECCION_SOLO_AUTOR.</summary>
+public sealed class clsCorreccionSoloDelAutorException : clsExcepcionDominio
+{
+    public clsCorreccionSoloDelAutorException()
+        : base(clsCodigosError.CORRECCION_SOLO_AUTOR, "Esta inspección solo la corrigen quien la hizo o un administrador", new Dictionary<string, object> { ["motivo"] = "solo_autor_o_administrador" })
+    {
+    }
+}
+
+/// <summary>La transferencia de la inspeccion ya tiene una firma o un cierre, asi que ya no se corrige: 409 INSPECCION_YA_FIRMADA.</summary>
+public sealed class clsInspeccionYaFirmadaException : clsExcepcionDominio
+{
+    public clsInspeccionYaFirmadaException()
+        : base(
+            clsCodigosError.INSPECCION_YA_FIRMADA,
+            "Esta inspección ya fue firmada: ya no se corrige, nadie puede hacerlo. Agregue una nota aclaratoria o firme con reservas",
+            new Dictionary<string, object> { ["motivo"] = "inspeccion_firmada" })
+    {
+    }
+}
+
 /// <summary>La unidad no sale del viaje, asi que no se transporta: 409 UNIDAD_NO_SALE.</summary>
 public sealed class clsUnidadNoSaleException : clsExcepcionDominio
 {
