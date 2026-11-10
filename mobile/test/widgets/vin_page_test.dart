@@ -339,6 +339,51 @@ void main() {
 
   // Lo que se vio en el celular: desde un viaje ya terminado la app ofrecía capturar, y el envío habría muerto
   // con «El viaje está finalizado y no admite inspecciones nuevas» después de tomar las siete fotos.
+  // Corregir es rehacer la inspección. Nada se crea en el servidor al pulsarlo: la versión siguiente se pide al
+  // enviar, porque una versión vacía no se puede descartar y bloquearía volver a corregir.
+  group('corregir una inspección cerrada', () {
+    ViajesRepositorioFalso enEstado(String estado) => ViajesRepositorioFalso()
+      ..viajeDeEtapa = Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: estado,
+        inspectorId: 'u1',
+        vehiculos: const [ViajeVehiculo(vin: 'VIN00000000000001')],
+      );
+
+    testWidgets('una cerrada de un viaje en curso la ofrece', (tester) async {
+      await abrir(tester, viajes: enEstado('en_curso'));
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsOneWidget);
+    });
+
+    testWidgets('con el viaje terminado dice por qué no, en vez de dejar el botón gris', (tester) async {
+      await abrir(tester, viajes: enEstado('finalizado'));
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
+      expect(find.text('El viaje ya terminó: este informe no admite correcciones.'), findsOneWidget);
+    });
+
+    // Rehacer la inspección cuesta siete fotos: quien lo pulsa tiene que saber a qué se compromete, y que lo
+    // que ya firmó no se pierde.
+    testWidgets('avisa que hay que repetir las fotos y que la versión anterior no cambia', (tester) async {
+      await abrir(tester, viajes: enEstado('en_curso'));
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Corregir'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('volver a tomar todas las fotos obligatorias'), findsOneWidget);
+      expect(find.textContaining('La versión anterior no cambia'), findsOneWidget);
+    });
+
+    testWidgets('al conductor que solo recibe no se le ofrece corregir lo del inspector', (tester) async {
+      await abrir(tester, viajes: enEstado('en_curso'), sesion: conductor);
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
+    });
+  });
+
   group('un viaje que ya terminó', () {
     ViajesRepositorioFalso enEstado(String estado) => ViajesRepositorioFalso()
       ..viajeDeEtapa = Viaje(

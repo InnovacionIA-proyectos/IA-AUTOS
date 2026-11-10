@@ -10,6 +10,7 @@ import '../../auth/domain/sesion.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../inspecciones/domain/reglas_informe.dart';
 import '../../sync/domain/job.dart';
+import '../../sync/domain/desenlace_envio.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
 import '../../vehiculos/domain/etiquetas.dart';
@@ -127,14 +128,20 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
   bool _puedeFirmar(String? yoId) =>
       _miFirma(yoId) != null && !_guardando && (!_conReservas || _reservas.text.trim().isNotEmpty);
 
-  Future<void> _registrar() async {
+  Future<void> _registrar(List<Usuario> lista, TransferenciaVista? transferencia) async {
     final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
     final firma = _miFirma(usuarioId);
     if (firma == null || usuarioId == null) return;
+    // Quién falta por firmar, mirado ANTES de enviar: con la mía, el cambio de responsabilidad solo queda hecho
+    // si la otra parte ya había firmado. Decir «Cambio de responsabilidad registrado» con una sola firma hacía
+    // creer que el vehículo ya había cambiado de manos.
+    final otroId = usuarioId == _entregaId ? _recibeId : _entregaId;
+    final faltaElOtro = !(transferencia?.firmo(otroId) ?? false);
+    final jobId = const Uuid().v4();
     setState(() => _guardando = true);
     try {
       await ref.read(colaRepositorioProvider).agregar(FirmaJob(
-            id: const Uuid().v4(),
+            id: jobId,
             etiqueta: 'Firma ${widget.vin} · ${widget.proceso}',
             creadoEn: DateTime.now().millisecondsSinceEpoch,
             usuarioId: usuarioId,
@@ -147,13 +154,30 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
       final sync = ref.read(syncControllerProvider.notifier);
       await sync.refrescar();
       await sync.sincronizar();
+      // Se mira ESTA firma y no el contador de la cola: otro envío pendiente de otra unidad hacía que una
+      // firma que el servidor acababa de aceptar se anunciara como «quedó en cola».
+      final desenlace = desenlaceDe(
+        await ref.read(colaRepositorioProvider).listar(),
+        jobId,
+        pausa: ref.read(syncControllerProvider).pausa,
+      );
       if (!mounted) return;
-      final enCola = ref.read(syncControllerProvider).pendientes > 0;
+      final mensaje = switch (desenlace.fase) {
+        FaseEnvio.registrado when faltaElOtro =>
+          'Falta la firma de ${_nombreDeLaOtraParte(lista, usuarioId, transferencia)}. El cambio de '
+              'responsabilidad queda hecho cuando firme.',
+        FaseEnvio.registrado => 'Cambio de responsabilidad registrado: firmaron las dos partes.',
+        FaseEnvio.rechazado =>
+          'El servidor la rechazó${desenlace.motivo == null ? '' : ': ${desenlace.motivo}'}. Quedó en Inspecciones › Cola.',
+        FaseEnvio.enEspera =>
+          'No se pudo enviar${desenlace.motivo == null ? '' : ': ${desenlace.motivo}'}. Se reintenta sola ${enPalabras(desenlace.espera!)}.',
+        FaseEnvio.enCola => 'Quedó en cola; se enviará cuando la señal sea estable.',
+      };
       await showDialog<void>(
         context: context,
         builder: (contexto) => AlertDialog(
-          title: const Text('Firma registrada'),
-          content: Text(enCola ? 'Quedó en cola; se enviará cuando la señal sea estable.' : 'Cambio de responsabilidad registrado.'),
+          title: Text(desenlace.fase == FaseEnvio.rechazado ? 'No se pudo registrar la firma' : 'Firma registrada'),
+          content: Text(mensaje),
           actions: [TextButton(onPressed: () => Navigator.of(contexto).pop(), child: const Text('OK'))],
         ),
       );
@@ -321,7 +345,7 @@ class _EstadoFirmaPage extends ConsumerState<FirmaPage> {
           ),
           const SizedBox(height: Espacio.lg),
           FilledButton(
-            onPressed: _puedeFirmar(yoId) ? _registrar : null,
+            onPressed: _puedeFirmar(yoId) ? () => _registrar(lista, transferencia) : null,
             child: _guardando
                 ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
                 : Text(switch ((_conReservas, yaFirme)) {

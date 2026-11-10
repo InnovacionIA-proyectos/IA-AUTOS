@@ -26,7 +26,7 @@ class ServicioUbicacionGeolocator implements ServicioUbicacion {
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 20)),
       );
-      return Posicion(pos.latitude, pos.longitude, precision: pos.accuracy);
+      return Posicion(pos.latitude, pos.longitude, precision: pos.accuracy, tomadaEn: pos.timestamp);
     } catch (_) {
       throw const UbicacionNoDisponible('No se pudo obtener la ubicación. Verifica la señal del GPS e inténtalo de nuevo.');
     }
@@ -38,12 +38,20 @@ class ServicioUbicacionGeolocator implements ServicioUbicacion {
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium, timeLimit: Duration(seconds: 4)),
       );
-      return Posicion(pos.latitude, pos.longitude, precision: pos.accuracy);
+      return Posicion(pos.latitude, pos.longitude, precision: pos.accuracy, tomadaEn: pos.timestamp);
     } catch (_) {
+      // La última conocida sirve para saber por dónde anda el teléfono, pero su hora es la que lleva: puede ser
+      // de hace horas y de otro sitio, y quien la selle tiene que poder notarlo.
       final ultima = await Geolocator.getLastKnownPosition();
-      return ultima == null ? null : Posicion(ultima.latitude, ultima.longitude, precision: ultima.accuracy);
+      return ultima == null
+          ? null
+          : Posicion(ultima.latitude, ultima.longitude, precision: ultima.accuracy, tomadaEn: ultima.timestamp);
     }
   }
+
+  @override
+  Stream<bool> get servicioActivo =>
+      Geolocator.getServiceStatusStream().map((estado) => estado == ServiceStatus.enabled);
 
   @override
   Future<void> abrirAjustes() async {

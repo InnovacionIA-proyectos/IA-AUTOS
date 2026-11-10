@@ -195,11 +195,13 @@ InformeJob construirInformeJob({
   Map<String, int> posicionesPrevias = const {},
   String? motivoSinInspector,
   String? motivoSinInspectorTexto,
+  String? corrigeInspeccionId,
 }) {
   String? opcional(String valor) => valor.trim().isEmpty ? null : valor.trim();
   return InformeJob(
     id: id,
-    etiqueta: 'Informe $vin · $proceso',
+    // La etiqueta es lo que se lee en la cola: una corrección y el informe que corrige se distinguen ahí.
+    etiqueta: corrigeInspeccionId == null ? 'Informe $vin · $proceso' : 'Corrección $vin · $proceso',
     creadoEn: creadoEn,
     usuarioId: usuarioId,
     etapaId: etapaId,
@@ -216,6 +218,7 @@ InformeJob construirInformeJob({
     posicionesPrevias: posicionesPrevias,
     motivoSinInspector: motivoSinInspector,
     motivoSinInspectorTexto: motivoSinInspectorTexto,
+    corrigeInspeccionId: corrigeInspeccionId,
   );
 }
 

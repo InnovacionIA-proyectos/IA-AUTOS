@@ -101,9 +101,13 @@ class AuthRepositorioFalso implements AuthRepositorio {
   Object? errorCapacidades;
   int consultasDePerfil = 0;
 
+  /// El token con que se pidió el perfil. Null si se pidió sin él, que es lo que hacía que el servidor respondiera 401.
+  String? tokenDelPerfil;
+
   @override
-  Future<List<String>> capacidades() async {
+  Future<List<String>> capacidades({String? token}) async {
     consultasDePerfil++;
+    tokenDelPerfil = token;
     if (errorCapacidades != null) throw errorCapacidades!;
     return capacidadesDelPerfil;
   }
@@ -146,6 +150,18 @@ class InspeccionesRepositorioFalso implements InspeccionesRepositorio {
     cache = remoto;
     return remoto;
   }
+
+  /// Los informes del viaje, para la lista de unidades del cargue. Con qué se pidió, para comprobar que el
+  /// proceso que viaja es el del pendiente y no otro.
+  List<InspeccionResumen> delViajeResultado = const [];
+  final consultasDeViaje = <({String viajeId, String proceso})>[];
+
+  @override
+  Future<List<InspeccionResumen>> delViaje(String viajeId, {required String proceso}) async {
+    consultasDeViaje.add((viajeId: viajeId, proceso: proceso));
+    if (errorRemoto != null) throw errorRemoto!;
+    return delViajeResultado;
+  }
 }
 
 class DispositivoFalso implements ServicioDispositivo {
@@ -154,8 +170,16 @@ class DispositivoFalso implements ServicioDispositivo {
 }
 
 class UbicacionFalsa implements ServicioUbicacion {
-  Posicion? posicion = const Posicion(6.2, -75.5);
+  /// Por defecto, una lectura de ahora: es lo normal y es lo que se sella con su precisión.
+  Posicion? posicion = Posicion(6.2, -75.5, tomadaEn: DateTime.now());
   UbicacionNoDisponible? error;
+
+  /// El interruptor del GPS del teléfono. Como el real, solo avisa de los CAMBIOS: no emite el estado actual al
+  /// suscribirse, que es lo que evita que quien lo escucha se reinvoque en bucle.
+  final _gps = StreamController<bool>.broadcast();
+
+  void encenderGps() => _gps.add(true);
+  void apagarGps() => _gps.add(false);
 
   @override
   Future<Posicion> obtenerActual() async {
@@ -165,6 +189,9 @@ class UbicacionFalsa implements ServicioUbicacion {
 
   @override
   Future<Posicion?> obtenerRapida() async => posicion;
+
+  @override
+  Stream<bool> get servicioActivo => _gps.stream;
 
   @override
   Future<void> abrirAjustes() async {}

@@ -55,6 +55,18 @@ abstract interface class GatewayInformes {
     String? motivoSinInspectorTexto,
   });
 
+  /// Crea la **versión siguiente** de una inspección cerrada y devuelve su id. La anterior no cambia.
+  ///
+  /// Se llama al enviar, no al pulsar «Corregir»: el servidor no deja descartar una versión vacía, así que una
+  /// corrección que alguien empieza y abandona dejaría la etapa con un borrador que impide volver a corregir.
+  Future<String> corregirInspeccion(
+    String inspeccionId, {
+    required String fecha,
+    required double lat,
+    required double lng,
+    String? notas,
+  });
+
   /// Sube la imagen como multipart y devuelve dónde quedó y su huella.
   Future<ArchivoSubido> subirImagen(List<int> bytes, {String nombre = 'foto.jpg'});
 

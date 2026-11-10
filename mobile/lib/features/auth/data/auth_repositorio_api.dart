@@ -23,8 +23,9 @@ class AuthRepositorioApi implements AuthRepositorio {
       _api.post('/api/auth/cambiar-pin', cuerpo: {'pin_actual': pinActual, 'pin_nuevo': pinNuevo});
 
   @override
-  Future<List<String>> capacidades() async {
-    final r = await _api.get('/api/auth/me');
+  Future<List<String>> capacidades({String? token}) async {
+    // El encabezado explícito pisa al del cliente: va al final de la mezcla en `ClienteApi.enviar`.
+    final r = await _api.get('/api/auth/me', encabezados: token == null ? null : {'Authorization': 'Bearer $token'});
     final lista = (r as Map<String, dynamic>)['capacidades'] as List<dynamic>?;
     return [...?lista?.cast<String>()];
   }

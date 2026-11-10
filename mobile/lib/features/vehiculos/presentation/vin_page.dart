@@ -14,6 +14,7 @@ import '../../../core/ui/foto_evidencia.dart';
 import '../../../core/ui/visor_imagen.dart';
 import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
+import '../../auth/domain/sesion.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
@@ -23,6 +24,7 @@ import '../../inspecciones/domain/novedad_pendiente.dart';
 import '../../inspecciones/presentation/hoja_sin_inspector.dart';
 import '../../inspecciones/presentation/revision_novedad_page.dart';
 import '../../inspecciones/domain/nota_aclaratoria.dart';
+import '../../inspecciones/presentation/lista_hallazgos_previos.dart';
 import '../../inspecciones/presentation/nota_aclaratoria_hoja.dart';
 import '../../inspecciones/providers.dart';
 import '../../sync/domain/job.dart';
@@ -176,7 +178,19 @@ class _Detalle extends ConsumerWidget {
         if (ultima == null)
           Tarjeta(child: Text('Este VIN aún no tiene informes.', style: tema.bodySmall))
         else
-          _UltimoInforme(vin: inventario.vin, etapa: ultima.etapa, inspeccion: ultima.inspeccion),
+          _UltimoInforme(
+            vin: inventario.vin,
+            etapa: ultima.etapa,
+            inspeccion: ultima.inspeccion,
+            viajeTerminado: viajeTerminado,
+          ),
+        // El historial completo del vehículo, no solo el último informe: un daño que trae de un viaje anterior,
+        // con otra tripulación, no está en las etapas que esta ficha muestra. Al conductor no se le ofrece: la
+        // API le responde 403 a los previos.
+        if (rol != 'conductor') ...[
+          const SizedBox(height: Espacio.lg),
+          _HistorialDeDanos(vin: inventario.vin),
+        ],
         const SizedBox(height: Espacio.lg),
         Text('Cambio de responsabilidad', style: tema.titleMedium),
         const SizedBox(height: Espacio.sm),
@@ -216,6 +230,33 @@ class _Detalle extends ConsumerWidget {
             const SizedBox(height: Espacio.sm),
           ],
       ],
+    );
+  }
+}
+
+/// Con qué venía el vehículo, en la ficha: los daños de todas sus inspecciones cerradas, de cualquier viaje.
+///
+/// Es lo que el «Último informe» no puede dar. Esa tarjeta muestra una inspección; esto muestra la historia, que
+/// es lo que responde «¿este golpe ya venía?» cuando el golpe se registró en un viaje que esta ficha ni enumera.
+class _HistorialDeDanos extends ConsumerWidget {
+  const _HistorialDeDanos({required this.vin});
+
+  final String vin;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Cuando la cola entrega algo, esto quedó viejo: tras corregir un informe se seguían viendo los daños de la
+    // versión anterior hasta refrescar a mano. Solo cuando el contador **sube**: se reinicia al rearmarse la
+    // cola, y reaccionar a eso dejaba la pantalla parpadeando entre «buscando» y el resultado.
+    ref.listen(entregadosProvider, (anterior, actual) {
+      if (anterior != null && actual > anterior) ref.invalidate(hallazgosPreviosProvider(vin));
+    });
+    final previos = ref.watch(hallazgosPreviosProvider(vin));
+    return ListaHallazgosPrevios(
+      titulo: 'Historial de daños',
+      previos: previos.value ?? const [],
+      cargando: previos.isLoading,
+      alVencerFoto: () => ref.invalidate(hallazgosPreviosProvider(vin)),
     );
   }
 }
@@ -398,7 +439,15 @@ String _lineaHallazgo(HallazgoVista h, Catalogos catalogos) {
 }
 
 class _UltimoInforme extends ConsumerWidget {
-  const _UltimoInforme({required this.vin, required this.etapa, required this.inspeccion});
+  const _UltimoInforme({
+    required this.vin,
+    required this.etapa,
+    required this.inspeccion,
+    this.viajeTerminado = false,
+  });
+
+  /// Un viaje finalizado o cancelado no admite correcciones: el servidor responde 409.
+  final bool viajeTerminado;
 
   /// El VIN del inventario: es la clave con la que se vuelve a pedir, cuando un enlace de foto vence.
   final String vin;
@@ -445,6 +494,37 @@ class _UltimoInforme extends ConsumerWidget {
     avisos.showSnackBar(const SnackBar(content: Text('La nota quedó en la cola.')));
   }
 
+  /// Abre la captura para rehacer este informe. Nada se crea en el servidor todavía: la versión siguiente se
+  /// pide al enviar, porque el servidor no deja descartar una versión vacía y una corrección abandonada dejaría
+  /// la etapa con un borrador que impide volver a corregirla.
+  Future<void> _corregir(BuildContext context) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (contexto) => AlertDialog(
+        title: const Text('Corregir este informe'),
+        content: const Text(
+          'Vas a rehacer la inspección completa: hay que volver a tomar todas las fotos obligatorias. '
+          'La versión anterior no cambia: conserva sus fotos, sus hallazgos y su firma, y queda guardada '
+          'como la versión anterior de esta.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(contexto).pop(false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.of(contexto).pop(true), child: const Text('Corregir')),
+        ],
+      ),
+    );
+    if (confirmar != true || !context.mounted) return;
+    final consulta = [
+      'proceso=${Uri.encodeQueryComponent(etapa.proceso)}',
+      'momento=${Uri.encodeQueryComponent(inspeccion.momento)}',
+      if (etapa.viajeId != null) 'viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}',
+      'corrige=${Uri.encodeQueryComponent(inspeccion.id)}',
+    ].join('&');
+    if (context.mounted) {
+      context.go('/inspecciones/vin/${Uri.encodeComponent(vin)}/captura/${etapa.id}?$consulta');
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
@@ -462,6 +542,15 @@ class _UltimoInforme extends ConsumerWidget {
     // responde 403, así que a ellos no se les ofrece.
     final puedeAclarar =
         !ajeno && (inspeccion.usuarioId == yo?.id || yo?.rol == 'admin' || yo?.rol == 'super_admin');
+    // Corregir es rehacer la inspección: solo la ofrece quien puede registrarlas. El servidor además exige que
+    // el viaje sea suyo (o ser administrador) y responde 409 si la inspección no está cerrada, si ya fue
+    // corregida o si el viaje terminó. Aquí se comprueba lo que la app ya sabe; lo que no, lo dice su rechazo.
+    final yaCorregida = etapa.fueCorregida(inspeccion);
+    final puedeCorregir = !ajeno &&
+        inspeccion.cerrada &&
+        !yaCorregida &&
+        !viajeTerminado &&
+        (yo?.puede(Capacidad.registrarInspecciones) ?? false);
 
     return Tarjeta(
       child: Column(
@@ -557,6 +646,19 @@ class _UltimoInforme extends ConsumerWidget {
               onPressed: () => _agregarNota(context, ref),
               child: const Text('Agregar nota aclaratoria'),
             ),
+          ],
+          if (puedeCorregir) ...[
+            const SizedBox(height: Espacio.sm),
+            OutlinedButton(onPressed: () => _corregir(context), child: const Text('Corregir')),
+          ] else if (!ajeno && yaCorregida) ...[
+            const SizedBox(height: Espacio.sm),
+            Text(
+              'Esta versión ya fue corregida: la que vale es la siguiente, que es la que estás viendo arriba.',
+              style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+            ),
+          ] else if (!ajeno && inspeccion.cerrada && viajeTerminado) ...[
+            const SizedBox(height: Espacio.sm),
+            Text('El viaje ya terminó: este informe no admite correcciones.', style: tema.bodySmall),
           ],
         ],
       ),

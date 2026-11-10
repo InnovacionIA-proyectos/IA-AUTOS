@@ -138,6 +138,40 @@ void main() {
     });
   });
 
+  // Una firma sola no cambia nada de manos: el vehículo sigue siendo responsabilidad de quien lo entrega hasta
+  // que firmen los dos. Decir «Cambio de responsabilidad registrado» con una sola hacía creer lo contrario.
+  group('lo que dice el mensaje al firmar', () {
+    Future<void> firmarYRegistrar(WidgetTester tester) async {
+      final lienzo = tester.getBottomLeft(find.byType(LienzoFirma)) + const Offset(60, -80);
+      await tester.dragFrom(lienzo, const Offset(40, 30));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Registrar mi firma'));
+      // Y no `pumpAndSettle`: mientras el diálogo está abierto el botón sigue con su rueda girando, así que
+      // nunca se queda quieto.
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
+
+    testWidgets('firmando de primera, dice a quién le falta firmar', (tester) async {
+      await abrir(tester);
+
+      await firmarYRegistrar(tester);
+
+      expect(find.textContaining('Falta la firma de Luis Gómez'), findsOneWidget);
+      expect(find.textContaining('Cambio de responsabilidad registrado'), findsNothing);
+    });
+
+    testWidgets('firmando de segunda, ahí sí queda hecho el cambio', (tester) async {
+      await abrir(tester, transferencia: mediaFirmada());
+
+      await firmarYRegistrar(tester);
+
+      expect(find.textContaining('firmaron las dos partes'), findsOneWidget);
+      expect(find.textContaining('Falta la firma'), findsNothing);
+    });
+  });
+
   // #117: quien recibe puede firmar dejando por escrito con qué no está conforme. La sesión de la prueba es
   // Ana, que en `mediaFirmada()` es quien recibe.
   group('recibo con reservas', () {

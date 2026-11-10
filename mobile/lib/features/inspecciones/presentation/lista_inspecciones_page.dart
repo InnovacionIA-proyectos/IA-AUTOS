@@ -100,7 +100,7 @@ class _EstadoListaInspeccionesPage extends ConsumerState<ListaInspeccionesPage> 
           icono: Icons.warning_amber_rounded,
           colorIcono: Colores.peligro,
           titulo: 'No pudimos cargar tus inspecciones',
-          descripcion: 'Revisa tu conexión o que la API esté disponible e inténtalo de nuevo.',
+          descripcion: estado.mensaje ?? 'Revisa tu conexión o que la API esté disponible e inténtalo de nuevo.',
           accion: FilledButton(onPressed: cargar, child: const Text('Reintentar')),
         ),
       FaseLista.sinConexion => const EstadoMensaje(

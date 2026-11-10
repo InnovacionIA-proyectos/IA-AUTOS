@@ -148,9 +148,50 @@ void main() {
       await avanzar(tester);
       await firmar(tester);
 
-      expect(find.textContaining('Aún no tienen la inspección de llegada del descargue: VINBBBBBBBBBBBBB2'), findsOneWidget);
+      expect(find.textContaining('Aún no tienen la inspección de llegada: VINBBBBBBBBBBBBB2'), findsOneWidget);
       final boton = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Registrar mi firma'));
       expect(boton.onPressed, isNull);
+    });
+
+    // Un botón gris sin motivo deja adivinando a quien está en el punto, y el aviso del principio de la
+    // pantalla ya no se ve cuando se ha bajado hasta la firma.
+    testWidgets('el botón gris dice cuántas faltan, ahí mismo', (tester) async {
+      await abrir(
+        tester,
+        EntregasRepositorioFalso()
+          ..puntos = [
+            EntregaPunto(
+              viajeId: 'v1',
+              lugarId: 'l1',
+              lugar: 'Autonorte',
+              pendientes: 3,
+              entregada: false,
+              unidades: const [
+                UnidadEntrega(vin: 'VINAAAAAAAAAAAAA1', estado: EstadoEntrega.pendiente),
+                UnidadEntrega(vin: 'VINBBBBBBBBBBBBB2', estado: EstadoEntrega.sinInspeccion),
+                UnidadEntrega(vin: 'VINCCCCCCCCCCCCC3', estado: EstadoEntrega.sinInspeccion),
+              ],
+            ),
+          ],
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Firmar la entrega'));
+      await avanzar(tester);
+      await firmar(tester);
+
+      expect(find.textContaining('Faltan 2 unidades por descargar'), findsWidgets);
+    });
+
+    // Con todas descargadas, lo que falta es la firma: el motivo tiene que decir eso y no quedarse en el
+    // anterior, que ya no aplica.
+    testWidgets('sin unidades pendientes el motivo pasa a ser la firma que falta', (tester) async {
+      await abrir(tester, EntregasRepositorioFalso()..puntos = [puntoDe('Autonorte')]);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Firmar la entrega'));
+      await avanzar(tester);
+
+      expect(find.text('Dibuja tu firma arriba.'), findsOneWidget);
+      expect(find.textContaining('por descargar'), findsNothing);
     });
   });
 

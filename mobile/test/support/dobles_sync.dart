@@ -107,6 +107,22 @@ class GatewayFalso implements GatewayInformes {
     return 'insp-${++_inspecciones}';
   }
 
+  /// Las inspecciones que se mandaron a corregir, en orden.
+  final corregidas = <String>[];
+
+  @override
+  Future<String> corregirInspeccion(
+    String inspeccionId, {
+    required String fecha,
+    required double lat,
+    required double lng,
+    String? notas,
+  }) async {
+    corregidas.add(inspeccionId);
+    await _paso('corregirInspeccion');
+    return 'insp-${++_inspecciones}';
+  }
+
   @override
   Future<ArchivoSubido> subirImagen(List<int> bytes, {String nombre = 'foto.jpg'}) async {
     await _paso('subirImagen');
@@ -304,6 +320,7 @@ InformeJob informe({
   bool posicionesEnviadas = false,
   String? motivoSinInspector,
   String? motivoSinInspectorTexto,
+  String? corrigeInspeccionId,
 }) => InformeJob(
   id: id,
   etiqueta: 'Informe $id',
@@ -327,6 +344,7 @@ InformeJob informe({
   posicionesEnviadas: posicionesEnviadas,
   motivoSinInspector: motivoSinInspector,
   motivoSinInspectorTexto: motivoSinInspectorTexto,
+  corrigeInspeccionId: corrigeInspeccionId,
 );
 
 FotoLocal foto(String ruta, {String fecha = '2026-01-02T10:01:00.000Z', double? lat = 6.21, double? lng = -75.51, String? storagePath, bool enviada = false}) =>

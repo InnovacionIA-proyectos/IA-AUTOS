@@ -237,6 +237,8 @@ class _Miniatura extends StatelessWidget {
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
     final sinUbicacion = foto.sinUbicacion;
+    // Sin precisión no es «precisa»: es que la lectura no era de ese momento y nadie la comprobó.
+    final sinComprobar = !sinUbicacion && foto.precision == null;
     final imprecisa = !sinUbicacion && (foto.precision ?? 0) > (precisionBaja ?? precisionBajaMetrosPorDefecto);
     return SizedBox(
       width: 88,
@@ -264,6 +266,8 @@ class _Miniatura extends StatelessWidget {
           ),
           if (sinUbicacion)
             Text('Sin ubicación: repítela', style: tema.labelSmall?.copyWith(color: Colores.peligro))
+          else if (sinComprobar)
+            Text('Sin comprobar', style: tema.labelSmall?.copyWith(color: Colores.advertencia))
           else if (imprecisa)
             Text('±${foto.precision!.round()} m', style: tema.labelSmall?.copyWith(color: Colores.advertencia)),
         ],

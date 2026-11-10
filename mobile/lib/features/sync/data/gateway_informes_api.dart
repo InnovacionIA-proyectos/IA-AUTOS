@@ -37,6 +37,23 @@ class GatewayInformesApi implements GatewayInformes {
   }
 
   @override
+  Future<String> corregirInspeccion(
+    String inspeccionId, {
+    required String fecha,
+    required double lat,
+    required double lng,
+    String? notas,
+  }) async {
+    final r = await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/corregir', cuerpo: {
+      'fecha': fecha,
+      'lat': lat,
+      'lng': lng,
+      'notas': notas,
+    });
+    return (r as Map<String, dynamic>)['id'] as String;
+  }
+
+  @override
   Future<ArchivoSubido> subirImagen(List<int> bytes, {String nombre = 'foto.jpg'}) async {
     final r = await _api.subirArchivo('/api/uploads', bytes: bytes, nombre: nombre) as Map<String, dynamic>;
     return ArchivoSubido(storagePath: r['storage_path'] as String, hash: r['hash_sha256'] as String?);

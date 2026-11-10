@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../../core/db/cache_lecturas.dart';
 import '../../../core/http/cliente_api.dart';
+import '../../../core/http/listados.dart';
 import '../domain/viaje.dart';
 
 /// Los viajes del usuario, con caché local para poder trabajar sin señal.
@@ -28,7 +29,7 @@ class ViajesRepositorio {
   /// Mis viajes desde la API (los `programado` y `en_curso`), guardando la copia.
   Future<List<Viaje>> listarRemoto(String usuarioId) async {
     final r = await _api.get('/api/viajes/mios');
-    final viajes = [for (final v in r as List<dynamic>) Viaje.fromJson(v as Map<String, dynamic>)];
+    final viajes = [for (final v in elementosDe(r, ruta: '/api/viajes/mios')) Viaje.fromJson(v as Map<String, dynamic>)];
     await _cache.escribir(clave(usuarioId), jsonEncode([for (final v in viajes) v.toJson()]));
     return viajes;
   }
@@ -59,7 +60,7 @@ class ViajesRepositorio {
   /// en el patio con viajes en la lista que ya no puede trabajar.
   Future<List<Viaje>> terminados() async {
     final r = await _api.get('/api/viajes/mios', query: {'estado': 'finalizado'});
-    return [for (final v in r as List<dynamic>) Viaje.fromJson(v as Map<String, dynamic>)];
+    return [for (final v in elementosDe(r, ruta: '/api/viajes/mios')) Viaje.fromJson(v as Map<String, dynamic>)];
   }
 
   /// El viaje de una etapa, para que la captura muestre su placa, tráiler, unidad y conductor.

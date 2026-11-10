@@ -52,4 +52,56 @@ void main() {
       expect((nada.fondo, nada.linea), (null, null));
     });
   });
+
+  /// Lo que el vehículo ya traía. La diferencia tiene que notarse sin depender del color: el criterio lo pide
+  /// («por algo más que el color») y en el patio la pantalla se mira al sol.
+  group('daños anteriores', () {
+    test('se marcan como anteriores, fuera de la escala de severidad', () {
+      final anterior = pinturaDeRegion(
+        seleccionada: false,
+        tieneDano: false,
+        tieneDanoAnterior: true,
+        nivel: null,
+        cuadricula: true,
+      );
+
+      expect(anterior.anterior, isTrue, reason: 'rayado en diagonal y borde discontinuo, no solo otro color');
+      expect(anterior.linea, ColoresDibujo.anterior);
+      expect(anterior.linea, isNot(ColoresDibujo.dano));
+      expect(anterior.linea, isNot(ColoresDibujo.porRevisar), reason: 'no es una novedad por revisar: es de otro informe');
+    });
+
+    test('un daño que se está capturando gana sobre el anterior de la misma zona', () {
+      final ambos = pinturaDeRegion(
+        seleccionada: false,
+        tieneDano: true,
+        tieneDanoAnterior: true,
+        nivel: 'v2',
+        cuadricula: true,
+      );
+
+      expect(ambos.anterior, isFalse, reason: 'lo que se registra ahora es lo que quien inspecciona tiene que ver');
+      expect(ambos.linea, ColoresDibujo.nivelV2);
+    });
+
+    test('elegir una zona anterior cambia el borde, pero sigue rayada', () {
+      final elegida = pinturaDeRegion(
+        seleccionada: true,
+        tieneDano: false,
+        tieneDanoAnterior: true,
+        nivel: null,
+        cuadricula: true,
+      );
+
+      expect(elegida.linea, ColoresDibujo.seleccion);
+      expect(elegida.anterior, isTrue, reason: 'elegirla no la convierte en un daño de este informe');
+    });
+
+    test('una zona sin nada sigue siendo cuadrícula', () {
+      final sin = pinturaDeRegion(seleccionada: false, tieneDano: false, nivel: null, cuadricula: true);
+
+      expect(sin.anterior, isFalse);
+      expect(sin.linea, ColoresDibujo.cuadricula);
+    });
+  });
 }

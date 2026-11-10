@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 
 import '../domain/dibujo_dano.dart';
@@ -25,6 +26,11 @@ abstract final class ColoresDibujo {
   /// Una novedad que nadie ha clasificado todavía: la del conductor, a la espera de un inspector.
   static const porRevisar = Color(0xFF1D6FD1);
   static const rellenoPorRevisar = Color(0x6B1D6FD1);
+
+  /// Un daño que el vehículo **ya traía** de una inspección anterior. Queda fuera de la escala de severidad a
+  /// propósito: no es de quien captura ahora y no debe competir por la mirada con lo que sí lo es.
+  static const anterior = Color(0xFF4B5A6B);
+  static const rellenoAnterior = Color(0x334B5A6B);
 }
 
 /// Con qué color se pinta un daño según su nivel de severidad.
@@ -43,11 +49,19 @@ abstract final class ColoresDibujo {
 ///
 /// Una zona **con daño** conserva el color de su nivel aunque esté elegida, y lo que marca la elección es el
 /// borde: si el amarillo le tapara el relleno, parecería que el daño cambió de estado al tocarlo.
-({Color? fondo, Color? linea, double grosor}) pinturaDeRegion({
+/// [tieneDanoAnterior] marca la zona como un daño que el vehículo ya traía: se raya en diagonal y su borde va
+/// discontinuo. No basta con cambiarle el color —hay quien no separa el gris del rojo, y la pantalla se mira al sol
+/// en el patio—, así que la diferencia es también de forma.
+///
+/// Un daño que se está capturando **gana** sobre uno anterior en la misma zona: lo que se registra ahora es lo que
+/// quien inspecciona tiene que ver. Si resulta ser el mismo, el flujo de «ya estaba registrado» lo enlaza y sigue
+/// siendo un hallazgo de este informe.
+({Color? fondo, Color? linea, double grosor, bool anterior}) pinturaDeRegion({
   required bool seleccionada,
   required bool tieneDano,
   required String? nivel,
   required bool cuadricula,
+  bool tieneDanoAnterior = false,
 }) {
   if (tieneDano) {
     final color = colorDeNivel(nivel);
@@ -55,15 +69,24 @@ abstract final class ColoresDibujo {
       fondo: color.relleno,
       linea: seleccionada ? ColoresDibujo.seleccion : color.linea,
       grosor: seleccionada ? 2.5 : 2.0,
+      anterior: false,
+    );
+  }
+  if (tieneDanoAnterior) {
+    return (
+      fondo: ColoresDibujo.rellenoAnterior,
+      linea: seleccionada ? ColoresDibujo.seleccion : ColoresDibujo.anterior,
+      grosor: seleccionada ? 2.5 : 1.6,
+      anterior: true,
     );
   }
   if (seleccionada) {
-    return (fondo: ColoresDibujo.rellenoSeleccion, linea: ColoresDibujo.seleccion, grosor: 2.5);
+    return (fondo: ColoresDibujo.rellenoSeleccion, linea: ColoresDibujo.seleccion, grosor: 2.5, anterior: false);
   }
   if (cuadricula) {
-    return (fondo: ColoresDibujo.rellenoCuadricula, linea: ColoresDibujo.cuadricula, grosor: 1.2);
+    return (fondo: ColoresDibujo.rellenoCuadricula, linea: ColoresDibujo.cuadricula, grosor: 1.2, anterior: false);
   }
-  return (fondo: null, linea: null, grosor: 0.0);
+  return (fondo: null, linea: null, grosor: 0.0, anterior: false);
 }
 
 /// Pinta las regiones de un panel encima de su imagen: la cuadrícula, las zonas con daño en rojo y la elegida en
@@ -80,12 +103,16 @@ class PintorRegiones extends CustomPainter {
     required this.seleccionada,
     required this.escala,
     this.cuadricula = true,
+    this.anteriores = const {},
   });
 
   final PanelDano panel;
   final List<RegionDano> regiones;
   /// Clave de la zona con daño al nivel de severidad de ese daño; el nivel va nulo si nadie lo clasificó.
   final Map<String, String?> danos;
+
+  /// Las zonas que ya traían un daño de una inspección anterior del mismo vehículo.
+  final Set<String> anteriores;
   final String? seleccionada;
   final double escala;
   final bool cuadricula;
@@ -106,16 +133,56 @@ class PintorRegiones extends CustomPainter {
       final pintura = pinturaDeRegion(
         seleccionada: r.clave == seleccionada,
         tieneDano: danos.containsKey(r.clave),
+        tieneDanoAnterior: anteriores.contains(r.clave),
         nivel: danos[r.clave],
         cuadricula: cuadricula,
       );
       if (pintura.fondo case final fondo?) canvas.drawPath(camino, relleno..color = fondo);
+      if (pintura.anterior) _rayar(canvas, camino);
       if (pintura.linea case final linea?) {
-        canvas.drawPath(camino, trazo..color = linea..strokeWidth = pintura.grosor / escala);
+        canvas.drawPath(
+          pintura.anterior ? _discontinuo(camino) : camino,
+          trazo..color = linea..strokeWidth = pintura.grosor / escala,
+        );
       }
     }
 
     if (cuadricula) _numeros(canvas, size);
+  }
+
+  /// Rayado diagonal de una zona con daño anterior, recortado a su polígono para que no se salga de la pieza.
+  /// El paso y el grosor se dividen por la escala, igual que los trazos: con el zoom la trama debe verse igual.
+  void _rayar(Canvas canvas, Path camino) {
+    final caja = camino.getBounds();
+    if (caja.isEmpty) return;
+    final raya = Paint()
+      ..style = PaintingStyle.stroke
+      ..color = ColoresDibujo.anterior
+      ..strokeWidth = 1.1 / escala;
+    final paso = 7 / escala;
+    canvas.save();
+    canvas.clipPath(camino);
+    // Diagonales a 45 grados; se empieza una altura antes del borde izquierdo para cubrir la esquina inferior.
+    for (var x = caja.left - caja.height; x < caja.right; x += paso) {
+      canvas.drawLine(Offset(x, caja.bottom), Offset(x + caja.height, caja.top), raya);
+    }
+    canvas.restore();
+  }
+
+  /// El mismo contorno, a guiones: Flutter no tiene trazo discontinuo, así que se recorta a pedazos.
+  Path _discontinuo(Path origen) {
+    final guion = 6 / escala;
+    final hueco = 4 / escala;
+    final salida = Path();
+    for (final metrica in origen.computeMetrics()) {
+      var desde = 0.0;
+      while (desde < metrica.length) {
+        final hasta = math.min(desde + guion, metrica.length);
+        salida.addPath(metrica.extractPath(desde, hasta), Offset.zero);
+        desde = hasta + hueco;
+      }
+    }
+    return salida;
   }
 
   /// El número de cada zona en su punto interior, del tamaño que quepa (la regla del prototipo).
@@ -155,6 +222,7 @@ class PintorRegiones extends CustomPainter {
       anterior.seleccionada != seleccionada ||
       anterior.escala != escala ||
       anterior.cuadricula != cuadricula ||
+      !setEquals(anterior.anteriores, anteriores) ||
       !_mismos(anterior.danos, danos);
 
   static bool _mismos(Map<String, String?> a, Map<String, String?> b) =>

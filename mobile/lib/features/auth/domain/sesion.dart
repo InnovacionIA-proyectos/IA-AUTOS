@@ -123,5 +123,9 @@ abstract interface class AuthRepositorio {
   Future<void> cambiarPin(String pinActual, String pinNuevo);
 
   /// Capacidades del perfil (`GET /api/auth/me`). Se puede pedir con un PIN temporal: el endpoint está exento.
-  Future<List<String>> capacidades();
+  ///
+  /// El token viaja explícito porque esta llamada ocurre **entre** el login y el momento en que la sesión queda en
+  /// el estado, que es de donde el cliente HTTP saca el suyo. Sin él la petición salía sin `Authorization`, el
+  /// servidor respondía 401 y la app se quedaba con las capacidades de respaldo por rol.
+  Future<List<String>> capacidades({String? token});
 }

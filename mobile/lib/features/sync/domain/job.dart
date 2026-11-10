@@ -93,6 +93,7 @@ class InformeJob extends Job {
     this.posicionesEnviadas = false,
     this.motivoSinInspector,
     this.motivoSinInspectorTexto,
+    this.corrigeInspeccionId,
     this.inspeccionId,
     this.hallazgosEnviados = 0,
     this.cerrada = false,
@@ -126,6 +127,8 @@ class InformeJob extends Job {
         posicionesEnviadas: json['posiciones_enviadas'] as bool? ?? false,
         motivoSinInspector: json['motivo_sin_inspector'] as String?,
         motivoSinInspectorTexto: json['motivo_sin_inspector_texto'] as String?,
+        // Los informes encolados antes de que se pudiera corregir desde la app no traen la clave.
+        corrigeInspeccionId: json['corrige_inspeccion_id'] as String?,
         inspeccionId: json['inspeccion_id'] as String?,
         hallazgosEnviados: json['hallazgos_enviados'] as int? ?? 0,
         cerrada: json['cerrada'] as bool? ?? false,
@@ -158,6 +161,15 @@ class InformeJob extends Job {
   /// momento en que eligió el motivo.
   final String? motivoSinInspector;
   final String? motivoSinInspectorTexto;
+
+  /// La inspección **cerrada** que este informe viene a corregir, cuando lo es.
+  ///
+  /// Con ella puesta, el envío no crea una inspección nueva en la etapa: pide al servidor la versión siguiente de
+  /// esa, que nace vacía y en borrador. Es lo que hace que una corrección abandonada no deje nada en el servidor,
+  /// porque hasta aquí la corrección solo existió en el teléfono.
+  final String? corrigeInspeccionId;
+
+  bool get esCorreccion => corrigeInspeccionId != null;
 
   // Progreso reanudable.
   final bool posicionesEnviadas;
@@ -201,6 +213,7 @@ class InformeJob extends Job {
         posicionesEnviadas: posicionesEnviadas ?? this.posicionesEnviadas,
         motivoSinInspector: motivoSinInspector,
         motivoSinInspectorTexto: motivoSinInspectorTexto,
+        corrigeInspeccionId: corrigeInspeccionId,
         inspeccionId: inspeccionId ?? this.inspeccionId,
         hallazgosEnviados: hallazgosEnviados ?? this.hallazgosEnviados,
         cerrada: cerrada ?? this.cerrada,
@@ -231,6 +244,7 @@ class InformeJob extends Job {
         posicionesEnviadas: posicionesEnviadas,
         motivoSinInspector: motivoSinInspector,
         motivoSinInspectorTexto: motivoSinInspectorTexto,
+        corrigeInspeccionId: corrigeInspeccionId,
         inspeccionId: inspeccionId,
         hallazgosEnviados: hallazgosEnviados,
         cerrada: cerrada,
@@ -261,6 +275,7 @@ class InformeJob extends Job {
         posicionesEnviadas: posicionesEnviadas,
         motivoSinInspector: motivoSinInspector,
         motivoSinInspectorTexto: motivoSinInspectorTexto,
+        corrigeInspeccionId: corrigeInspeccionId,
         inspeccionId: inspeccionId,
         hallazgosEnviados: hallazgosEnviados,
         cerrada: cerrada,
@@ -292,6 +307,7 @@ class InformeJob extends Job {
         'posiciones_enviadas': posicionesEnviadas,
         'motivo_sin_inspector': motivoSinInspector,
         'motivo_sin_inspector_texto': motivoSinInspectorTexto,
+        'corrige_inspeccion_id': corrigeInspeccionId,
         'inspeccion_id': inspeccionId,
         'hallazgos_enviados': hallazgosEnviados,
         'cerrada': cerrada,

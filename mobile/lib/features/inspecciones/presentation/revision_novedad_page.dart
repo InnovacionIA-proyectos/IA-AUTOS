@@ -171,19 +171,20 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
                 ],
               ),
             ),
-            if (url != null) ...[
-              const SizedBox(height: Espacio.md),
-              FotoEvidencia(
-                url: url,
-                encabezados: ref.watch(entornoProvider).encabezadosEnrutamiento,
-                alto: 220,
-                venceEn: novedad.foto?.venceEn,
-                // Al vencer, los enlaces nuevos vienen con la lista de novedades.
-                alVencer: () => ref.invalidate(novedadesPorRevisarProvider(novedad.vin)),
-                sinSenal: !ref.watch(syncControllerProvider).online,
-                semanticLabel: 'Foto de la novedad del conductor',
-              ),
-            ],
+            // Sin `if (url != null)`: cuando la novedad llegaba sin enlace no se pintaba nada y quedaba un hueco
+            // mudo, justo donde quien revisa espera la prueba de lo que va a calificar. `FotoEvidencia` ya sabe
+            // decir «Sin foto», «Sin conexión» o «La foto no se pudo cargar», cada uno en su marco.
+            const SizedBox(height: Espacio.md),
+            FotoEvidencia(
+              url: url,
+              encabezados: ref.watch(entornoProvider).encabezadosEnrutamiento,
+              alto: 220,
+              venceEn: novedad.foto?.venceEn,
+              // Al vencer, los enlaces nuevos vienen con la lista de novedades.
+              alVencer: () => ref.invalidate(novedadesPorRevisarProvider(novedad.vin)),
+              sinSenal: !ref.watch(syncControllerProvider).online,
+              semanticLabel: 'Foto de la novedad del conductor',
+            ),
             const SizedBox(height: Espacio.lg),
             Text('¿Dónde está el daño?', style: tema.titleMedium),
             Text('Tócalo en el dibujo y después dile qué es y de qué nivel.', style: tema.bodySmall),

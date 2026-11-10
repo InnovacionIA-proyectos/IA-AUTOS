@@ -56,8 +56,17 @@ class FotoEvidencia extends StatefulWidget {
 }
 
 class _EstadoFotoEvidencia extends State<FotoEvidencia> {
-  /// Una sola vez por enlace: refrescar la fuente vuelve a construir este widget, y sin esto se pediría en bucle.
-  bool _avisado = false;
+  /// Avisos porque el enlace ya venció según su propia fecha: uno por enlace. Pedir otro sí arregla esto, y el
+  /// enlace nuevo viene con un vencimiento futuro, así que la cuenta no se dispara.
+  bool _avisadoVencido = false;
+
+  /// Avisos porque la imagen no cargó: **uno solo, para siempre**.
+  ///
+  /// Un enlace recién firmado que aun así falla no es un problema de enlace: el archivo no está en el almacén, o
+  /// el almacén no responde. Pedir otro no lo va a arreglar. Y como cada refresco firma una URL distinta, la
+  /// guarda por enlace se reiniciaba sola y el aviso entraba en bucle: la pantalla parpadeaba entre «buscando» y
+  /// el resultado, y un teléfono en el patio llegó a hacer casi seiscientas peticiones en unos minutos.
+  bool _avisadoError = false;
 
   bool get _vencido => switch (widget.venceEn) {
         final vence? => !vence.isAfter(DateTime.now()),
@@ -67,12 +76,17 @@ class _EstadoFotoEvidencia extends State<FotoEvidencia> {
   @override
   void didUpdateWidget(FotoEvidencia anterior) {
     super.didUpdateWidget(anterior);
-    if (anterior.url != widget.url) _avisado = false;
+    if (anterior.url != widget.url) _avisadoVencido = false;
   }
 
-  void _avisar() {
-    if (_avisado || widget.alVencer == null) return;
-    _avisado = true;
+  void _avisar({required bool porError}) {
+    if (widget.alVencer == null) return;
+    if (porError ? _avisadoError : _avisadoVencido) return;
+    if (porError) {
+      _avisadoError = true;
+    } else {
+      _avisadoVencido = true;
+    }
     // Al terminar el fotograma: avisar en mitad del dibujo haría reconstruir lo que se está dibujando.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.alVencer!();
@@ -94,7 +108,7 @@ class _EstadoFotoEvidencia extends State<FotoEvidencia> {
     if (url == null || url.isEmpty) return _aviso('Sin foto');
     if (widget.sinSenal) return _aviso('Sin conexión');
     if (_vencido) {
-      _avisar();
+      _avisar(porError: false);
       return _aviso('Actualizando la foto…');
     }
 
@@ -108,9 +122,11 @@ class _EstadoFotoEvidencia extends State<FotoEvidencia> {
         fit: BoxFit.cover,
         semanticLabel: widget.semanticLabel,
         errorBuilder: (_, _, _) {
-          // 403 por enlace vencido o firma inválida: el mismo enlace no va a servir, hay que pedir otro.
-          _avisar();
-          return _aviso('La foto no se pudo cargar');
+          // Puede ser un 403 por firma vencida —y entonces pedir otro enlace lo arregla— o que el archivo ya no
+          // esté. Se intenta una vez; si el enlace nuevo también falla, se deja de pedir y se dice.
+          final yaSeIntento = _avisadoError;
+          _avisar(porError: true);
+          return _aviso(yaSeIntento ? 'La foto ya no está disponible' : 'La foto no se pudo cargar');
         },
       ),
     );

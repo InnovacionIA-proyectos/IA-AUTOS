@@ -8,6 +8,7 @@ import '../../../core/ui/widgets.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../custodia/presentation/lienzo_firma.dart';
 import '../../sync/domain/job.dart';
+import '../../sync/domain/desenlace_envio.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
 import '../domain/entrega_punto.dart';
@@ -173,6 +174,22 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
 
   EntregaPunto get _punto => widget.punto;
 
+  /// Por qué no se puede firmar todavía, o null si sí se puede.
+  ///
+  /// Un botón gris sin motivo deja a quien está en el punto adivinando. La cuenta va primero porque es lo que
+  /// se necesita para decidir qué hacer ahora: dos unidades por descargar es un rato, ocho es otra cosa.
+  String? get _motivoSinFirmar {
+    final faltan = _punto.sinInspeccion.length;
+    if (faltan > 0) {
+      return faltan == 1
+          ? 'Falta 1 unidad por descargar: hazle la inspección de llegada antes de firmar.'
+          : 'Faltan $faltan unidades por descargar: hazles la inspección de llegada antes de firmar.';
+    }
+    if (_firma == null) return 'Dibuja tu firma arriba.';
+    if (_unaSolaFirma && _motivo.text.trim().isEmpty) return 'Escribe por qué no firma la otra parte.';
+    return null;
+  }
+
   bool get _puedeEnviar =>
       !_guardando &&
       _punto.sinInspeccion.isEmpty &&
@@ -185,8 +202,9 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
     if (usuarioId == null || firma == null || !_puedeEnviar) return;
     setState(() => _guardando = true);
     try {
+      final jobId = const Uuid().v4();
       await ref.read(colaRepositorioProvider).agregar(EntregaPuntoJob(
-            id: const Uuid().v4(),
+            id: jobId,
             etiqueta: 'Entrega ${_punto.lugar}',
             creadoEn: DateTime.now().millisecondsSinceEpoch,
             usuarioId: usuarioId,
@@ -198,20 +216,37 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
       final sync = ref.read(syncControllerProvider.notifier);
       await sync.refrescar();
       await sync.sincronizar();
+      // Se mira ESTE envío y no el contador de la cola: con dos pendientes de otra cosa, una entrega que el
+      // servidor acababa de aceptar se anunciaba como «quedó en cola».
+      final desenlace = desenlaceDe(
+        await ref.read(colaRepositorioProvider).listar(),
+        jobId,
+        pausa: ref.read(syncControllerProvider).pausa,
+      );
       if (!mounted) return;
-      final enCola = ref.read(syncControllerProvider).pendientes > 0;
-      final fallida = ref.read(syncControllerProvider).fallidos > 0;
+      final (titulo, mensaje) = switch (desenlace.fase) {
+        FaseEnvio.registrado => (
+            'Entrega registrada',
+            'Quedó registrada para ${_deLaUnidad(_punto.porEntregar.length)} del punto.',
+          ),
+        FaseEnvio.rechazado => (
+            'No se pudo enviar',
+            'El servidor rechazó la entrega${desenlace.motivo == null ? '' : ': ${desenlace.motivo}'}. '
+                'Quedó en Inspecciones › Cola para reintentarla o descartarla.',
+          ),
+        // Falló por algo pasajero: lo que hace falta saber es por qué y cuándo se vuelve a intentar solo.
+        FaseEnvio.enEspera => (
+            'Entrega en espera',
+            'No se pudo enviar${desenlace.motivo == null ? '' : ': ${desenlace.motivo}'}. '
+                'Se vuelve a intentar sola ${enPalabras(desenlace.espera!)}.',
+          ),
+        FaseEnvio.enCola => ('Entrega guardada', 'Quedó en cola; se enviará cuando la señal sea estable.'),
+      };
       await showDialog<void>(
         context: context,
         builder: (contexto) => AlertDialog(
-          title: Text(fallida ? 'No se pudo enviar' : (enCola ? 'Entrega guardada' : 'Entrega registrada')),
-          content: Text(
-            fallida
-                ? 'El servidor rechazó la entrega. Quedó en Inspecciones › Cola para reintentarla o descartarla.'
-                : enCola
-                    ? 'Quedó en cola; se enviará cuando la señal sea estable.'
-                    : 'Quedó registrada para ${_deLaUnidad(_punto.porEntregar.length)} del punto.',
-          ),
+          title: Text(titulo),
+          content: Text(mensaje),
           actions: [TextButton(onPressed: () => Navigator.of(contexto).pop(), child: const Text('OK'))],
         ),
       );
@@ -255,8 +290,8 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
               Semantics(
                 liveRegion: true,
                 child: Text(
-                  'Aún no tienen la inspección de llegada del descargue: ${sinInspeccion.map((u) => u.vin).join(', ')}. '
-                      'Hazla antes de firmar.',
+                  '${sinInspeccion.length == 1 ? 'Falta 1 unidad' : 'Faltan ${sinInspeccion.length} unidades'} por descargar. '
+                      'Aún no tienen la inspección de llegada: ${sinInspeccion.map((u) => u.vin).join(', ')}.',
                   style: tema.bodySmall?.copyWith(color: Colores.peligro),
                 ),
               ),
@@ -276,6 +311,7 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
                     ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
                     : const Text('Registrar mi firma'),
               ),
+              if (_motivoSinFirmar case final motivo?) _MotivoDelBoton(motivo),
               const SizedBox(height: Espacio.sm),
               TextButton(
                 onPressed: _guardando ? null : () => setState(() => _unaSolaFirma = true),
@@ -308,6 +344,7 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
                     ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
                     : const Text('Cerrar con una sola firma'),
               ),
+              if (_motivoSinFirmar case final motivo?) _MotivoDelBoton(motivo),
               const SizedBox(height: Espacio.sm),
               TextButton(
                 onPressed: _guardando ? null : () => setState(() => _unaSolaFirma = false),
@@ -319,4 +356,25 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
       ),
     );
   }
+}
+
+/// Por qué el botón de arriba está gris. Va pegado a él: el aviso del principio de la pantalla ya no se ve
+/// cuando se ha bajado hasta la firma.
+class _MotivoDelBoton extends StatelessWidget {
+  const _MotivoDelBoton(this.motivo);
+
+  final String motivo;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: Espacio.xs),
+        child: Semantics(
+          liveRegion: true,
+          child: Text(
+            motivo,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colores.advertencia),
+          ),
+        ),
+      );
 }
