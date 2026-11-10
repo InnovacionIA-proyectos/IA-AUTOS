@@ -113,7 +113,10 @@ public sealed class clsNoSaleService(
         }
     }
 
-    /// <summary>El hallazgo debe ser V1+, de una inspeccion cerrada de esa unidad en ese viaje (409 si no).</summary>
+    /// <summary>
+    /// El hallazgo debe ser V1+, de una inspeccion cerrada de esa unidad en ese viaje y de su version vigente (409 si no): el dano de una version que una correccion cerrada ya reemplazo no justifica que la unidad no
+    /// salga (<c>details.motivo: hallazgo_de_version_reemplazada</c>); el de una inspeccion cuya correccion sigue en borrador si, porque esa sigue siendo la vigente.
+    /// </summary>
     private async Task<clsHallazgo> AsegurarHallazgoDeLaUnidadAsync(clsViaje viaje, clsVehiculo vehiculo, Guid hallazgoId, CancellationToken ct)
     {
         const string NO_ES_DE_LA_UNIDAD = "El hallazgo indicado no es de ese VIN en ese viaje";
@@ -128,6 +131,13 @@ public sealed class clsNoSaleService(
         if (inspeccion.Estado != clsEstadoInspeccion.CERRADA)
         {
             throw new clsConflictoException("La inspección del hallazgo sigue en borrador: la unidad solo no sale por un hallazgo de una inspección cerrada");
+        }
+
+        if (await inspecciones.TieneCorreccionCerradaAsync(inspeccion.Id, ct))
+        {
+            throw new clsConflictoException(
+                $"El hallazgo es de una versión reemplazada de la inspección (versión {inspeccion.Version}): una corrección cerrada ya la sustituyó. Marque «no sale» con un hallazgo de la versión vigente",
+                clsMotivosRechazo.HALLAZGO_DE_VERSION_REEMPLAZADA);
         }
 
         if (hallazgo.NivelSeveridad != clsCodigosNivel.V1_PLUS)

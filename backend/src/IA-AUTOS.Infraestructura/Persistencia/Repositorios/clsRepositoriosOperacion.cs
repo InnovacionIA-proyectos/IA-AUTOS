@@ -198,6 +198,9 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
     public Task<Guid?> ObtenerCorreccionIdAsync(Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Inspecciones.AsNoTracking().Where(i => i.CorrigeInspeccionId == inspeccionId).Select(i => (Guid?)i.Id).FirstOrDefaultAsync(ct);
 
+    public Task<bool> TieneCorreccionCerradaAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        contexto.Inspecciones.AsNoTracking().AnyAsync(i => i.CorrigeInspeccionId == inspeccionId && i.Estado == clsEstadoInspeccion.CERRADA, ct);
+
     public Task<bool> ExisteHallazgoEnInspeccionAsync(Guid hallazgoId, Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Hallazgos.AnyAsync(h => h.Id == hallazgoId && h.InspeccionId == inspeccionId, ct);
 

@@ -93,6 +93,7 @@ motivo y no de la frase, que puede cambiar. El `code` y el `message` no cambian.
 | `codigo_mtrack_duplicado` | ya existe un viaje con ese código MTrack |
 | `vin_ya_en_el_viaje`, `vin_en_otro_viaje_activo` | el VIN ya está en este viaje o en otro viaje programado o en curso |
 | `vehiculo_no_existe`, `vin_fuera_del_viaje` | el vehículo no existe o su VIN no está en ese viaje |
+| `hallazgo_de_version_reemplazada` | «no sale» con un hallazgo de una inspección que ya reemplazó una corrección cerrada |
 | `capacidad_no_baja`, `posicion_ocupada`, `sin_segunda_inspeccion_en_curso`, `descargue_con_informe_cerrado`, `conductor_sin_permiso_de_excepcion` | reglas de la niñera, el destino y el cargue sin inspector del viaje |
 | `otro_cliente` | se pidió lo de un cliente que no es el suyo |
 | `vehiculo_en_viaje_activo` | el carro está en un viaje programado o en curso y no se da de baja (`details.viaje_id` y `details.codigo_mtrack` nombran el viaje) |
@@ -1437,12 +1438,12 @@ Solo el **inspector del viaje** y el `coordinador_calidad` (de un viaje de su cl
 | Campo | Obligatorio | Regla |
 |---|---|---|
 | `motivo` | sí | máximo 500 caracteres |
-| `hallazgo_id` | sí | un hallazgo **V1+** de una inspección **cerrada** de ese VIN en ese viaje |
+| `hallazgo_id` | sí | un hallazgo **V1+** de una inspección **cerrada** de ese VIN en ese viaje y de su **versión vigente** (no de una versión que una corrección cerrada ya reemplazó) |
 | `vin_reemplazo` | no (propuesta pendiente de confirmar por el negocio: el negocio dijo que la unidad «se cambia por otra») | un VIN que existe en el inventario (`400` en `vin_reemplazo` si no); entra al viaje con sus etapas nuevas, con las reglas de `POST /api/viajes/{id}/vehiculos` |
 
 Responde `200` con el `ViajeDto`: la unidad queda con `estado_unidad: "no_sale"` y `no_sale { motivo, hallazgo_id, marcado_por, marcado_por_nombre, fecha, vin_reemplazo }`. Queda una fila `no_sale` en el historial del hallazgo y en la auditoría.
 
-`409` si el hallazgo **no es V1+**, no es de ese VIN en ese viaje, su inspección **no está cerrada**, la unidad **ya no sale**, el VIN de reemplazo **ya está en este viaje o en otro viaje activo**, o el reemplazo **antes no salió y el hallazgo V1+ que lo causó no está recuperado**
+`409` si el hallazgo **no es V1+**, no es de ese VIN en ese viaje, su inspección **no está cerrada**, **es de una versión reemplazada** (la inspección ya tiene una corrección **cerrada**: se rechaza con `details.motivo: "hallazgo_de_version_reemplazada"` y un mensaje que lo explica, y la unidad no cambia de estado; el hallazgo de una inspección cuya corrección sigue **en borrador** sí sirve, porque esa sigue siendo la vigente), la unidad **ya no sale**, el VIN de reemplazo **ya está en este viaje o en otro viaje activo**, o el reemplazo **antes no salió y el hallazgo V1+ que lo causó no está recuperado**
 (un VIN que no salió puede volver a entrar como reemplazo solo cuando ese hallazgo esté en estado `recuperado`). `404` si el viaje o el VIN no existen o el VIN no está en el viaje.
 
 Una unidad que no sale no cuenta en `vehiculos_completos` ni en `vwViajesCompletos`, y su vínculo no cuenta como «viaje activo» del VIN: se puede asignar a otro viaje, y su inventario muestra el historial completo, incluido el viaje del que no salió y su hallazgo V1+.
