@@ -44,7 +44,7 @@ public sealed record FilaUnidad(
     string Marca,
     int Hallazgos);
 
-/// <summary>Los hallazgos de un grupo (proceso, zona, nivel, clase y tamano).</summary>
+/// <summary>Los hallazgos de un grupo (proceso, zona, nivel, clase y tamano). <c>EsExtra</c> marca el dano de un extra del vehiculo (no tiene zona en el dibujo).</summary>
 public sealed record FilaConteoHallazgo(
     string Proceso,
     int? Numero,
@@ -54,7 +54,8 @@ public sealed record FilaConteoHallazgo(
     string? Nivel,
     string? Clase,
     string Tamano,
-    int Total);
+    int Total,
+    bool EsExtra = false);
 
 /// <summary><c>SinCalificar</c> son los danos sin nivel de esas unidades ese dia: una cifra aparte que no se suma a <c>ConNovedad</c>.</summary>
 public sealed record FilaIndicador(Guid ClienteId, string Operacion, int Despachados, int ConNovedad, int SinCalificar = 0);
