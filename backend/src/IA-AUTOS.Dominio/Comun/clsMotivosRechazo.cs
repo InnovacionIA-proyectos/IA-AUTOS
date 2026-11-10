@@ -25,6 +25,8 @@ public static class clsMotivosRechazo
     public const string CONDUCTOR_SIN_PERMISO_DE_EXCEPCION = "conductor_sin_permiso_de_excepcion";
     public const string OTRO_CLIENTE = "otro_cliente";
 
+    public const string HALLAZGO_DE_VERSION_REEMPLAZADA = "hallazgo_de_version_reemplazada";
+
     // ---- Vehiculos
     public const string VEHICULO_EN_VIAJE_ACTIVO = "vehiculo_en_viaje_activo";
 
