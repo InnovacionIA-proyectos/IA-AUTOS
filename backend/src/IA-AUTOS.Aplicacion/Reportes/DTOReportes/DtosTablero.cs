@@ -50,6 +50,12 @@ public sealed record AdopcionOperacionDto(string Operacion, int Programados, int
 
 public sealed record AdopcionClienteDto(Guid ClienteId, string? ClienteNombre, int Programados, int ConSalidaDigital, decimal Adopcion);
 
+/// <summary>La adopcion de un destino: <c>LugarId</c> y <c>Lugar</c> son nulos en lo que no tiene destino unico (las unidades de viajes anteriores sin destino y, por camion, los viajes que van a varios destinos).</summary>
+public sealed record AdopcionDestinoDto(Guid? LugarId, string? Lugar, int Programados, int ConSalidaDigital, decimal Adopcion);
+
+/// <summary>Una medida de adopcion con su numerador (<c>ConSalidaDigital</c>), su denominador (<c>Programados</c>) y su desglose por destino.</summary>
+public sealed record AdopcionMedidaDto(int Programados, int ConSalidaDigital, decimal Adopcion, IReadOnlyList<AdopcionDestinoDto> PorDestino);
+
 /// <summary>Adopcion (formula propuesta): de los VIN de los viajes programados, cuantos tienen una inspeccion de salida en el sistema. <c>Meta</c> es el objetivo (95 %).</summary>
 public sealed record AdopcionDto(
     int Programados,
@@ -58,7 +64,9 @@ public sealed record AdopcionDto(
     decimal Meta,
     IReadOnlyList<AdopcionDiaDto> PorDia,
     IReadOnlyList<AdopcionOperacionDto> PorOperacion,
-    IReadOnlyList<AdopcionClienteDto> PorCliente);
+    IReadOnlyList<AdopcionClienteDto> PorCliente,
+    AdopcionMedidaDto? PorCamion = null,
+    AdopcionMedidaDto? PorCarro = null);
 
 // ------------------------------------------------------------------------------------------ tiempo de captura
 

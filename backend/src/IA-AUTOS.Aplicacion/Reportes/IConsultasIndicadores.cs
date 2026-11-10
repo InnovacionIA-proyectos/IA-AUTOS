@@ -28,7 +28,8 @@ public sealed record FiltrosReporteRequest(
 /// <summary>Unidades despachadas de un cliente, operacion, origen y destino, y cuantas tienen sus seis registros cerrados.</summary>
 public sealed record FilaCobertura(Guid ClienteId, string Operacion, Guid? OrigenId, Guid? DestinoId, int Despachadas, int Completas);
 
-public sealed record FilaAdopcion(DateOnly Fecha, Guid ClienteId, string Operacion, int Programados, int ConSalidaDigital);
+/// <summary>Una fila de adopcion: el dia, el cliente, la operacion y el destino (lugar) de las unidades o del viaje, con cuantas estaban programadas y cuantas tienen su salida cerrada.</summary>
+public sealed record FilaAdopcion(DateOnly Fecha, Guid ClienteId, string Operacion, int Programados, int ConSalidaDigital, Guid? LugarDestinoId = null);
 
 public sealed record FilaTiempo(string Proceso, Guid UsuarioId, decimal Minutos);
 
@@ -74,7 +75,11 @@ public interface IConsultasIndicadores
 
     Task<IReadOnlyList<FilaCobertura>> CoberturaAsync(FiltrosReporte filtros, CancellationToken ct = default);
 
+    /// <summary>La adopcion por carro (cada VIN programado cuenta en el destino de su unidad; adoptado si su salida esta cerrada).</summary>
     Task<IReadOnlyList<FilaAdopcion>> AdopcionAsync(FiltrosReporte filtros, CancellationToken ct = default);
+
+    /// <summary>La adopcion por camion (cada viaje cuenta una sola vez, en el destino del viaje; adoptado si alguna de sus unidades tiene su salida cerrada).</summary>
+    Task<IReadOnlyList<FilaAdopcion>> AdopcionPorCamionAsync(FiltrosReporte filtros, CancellationToken ct = default);
 
     Task<IReadOnlyList<FilaTiempo>> TiemposDeCapturaAsync(FiltrosReporte filtros, CancellationToken ct = default);
 

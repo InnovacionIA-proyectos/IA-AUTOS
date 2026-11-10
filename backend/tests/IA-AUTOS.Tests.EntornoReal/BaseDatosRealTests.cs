@@ -923,6 +923,19 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_adopcion_cuenta_solo_salidas_cerradas_y_tiene_su_vista_por_camion()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/40-adopcion-por-carro-y-por-camion.sql.
+        await using var conexion = await AbrirAsync();
+
+        var destino = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'vwAdopcion') AND name = N'LugarDestinoId'");
+        var soloCerradas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.sql_modules m WHERE m.object_id = OBJECT_ID(N'vwAdopcion') AND m.definition LIKE N'%i.Estado = ''cerrada''%'");
+        var porCamion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE name = N'vwAdopcionPorCamion' AND schema_id = SCHEMA_ID()");
+
+        Assert.True(destino == 1 && soloCerradas == 1 && porCamion == 1, "Falta la adopcion por camion y por carro. Ejecute database/cambios-esquema/40-adopcion-por-carro-y-por-camion.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

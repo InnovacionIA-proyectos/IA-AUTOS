@@ -70,6 +70,32 @@ internal sealed class clsFilaAdopcion : IFilaIndicador
 
     public string? Trailer { get; set; }
 
+    public Guid? LugarDestinoId { get; set; }
+
+    public int Programados { get; set; }
+
+    public int ConSalidaDigital { get; set; }
+}
+
+/// <summary>Una fila de vwAdopcionPorCamion: como vwAdopcion pero con un viaje (camion) contado una sola vez.</summary>
+internal sealed class clsFilaAdopcionCamion : IFilaIndicador
+{
+    public DateOnly Fecha { get; set; }
+
+    public Guid ClienteId { get; set; }
+
+    public string Operacion { get; set; } = string.Empty;
+
+    public Guid? OrigenId { get; set; }
+
+    public Guid? DestinoId { get; set; }
+
+    public string Marca { get; set; } = string.Empty;
+
+    public string? Trailer { get; set; }
+
+    public Guid? LugarDestinoId { get; set; }
+
     public int Programados { get; set; }
 
     public int ConSalidaDigital { get; set; }
@@ -219,10 +245,18 @@ internal sealed class clsConsultasIndicadores(clsAppDbContext contexto) : IConsu
 
     public async Task<IReadOnlyList<FilaAdopcion>> AdopcionAsync(FiltrosReporte filtros, CancellationToken ct = default) =>
         (await Filtrar(contexto.Set<clsFilaAdopcion>().AsNoTracking(), filtros)
-            .GroupBy(x => new { x.Fecha, x.ClienteId, x.Operacion })
-            .Select(g => new { g.Key.Fecha, g.Key.ClienteId, g.Key.Operacion, Programados = g.Sum(x => x.Programados), ConSalidaDigital = g.Sum(x => x.ConSalidaDigital) })
+            .GroupBy(x => new { x.Fecha, x.ClienteId, x.Operacion, x.LugarDestinoId })
+            .Select(g => new { g.Key.Fecha, g.Key.ClienteId, g.Key.Operacion, g.Key.LugarDestinoId, Programados = g.Sum(x => x.Programados), ConSalidaDigital = g.Sum(x => x.ConSalidaDigital) })
             .ToListAsync(ct))
-        .Select(x => new FilaAdopcion(x.Fecha, x.ClienteId, x.Operacion, x.Programados, x.ConSalidaDigital))
+        .Select(x => new FilaAdopcion(x.Fecha, x.ClienteId, x.Operacion, x.Programados, x.ConSalidaDigital, x.LugarDestinoId))
+        .ToList();
+
+    public async Task<IReadOnlyList<FilaAdopcion>> AdopcionPorCamionAsync(FiltrosReporte filtros, CancellationToken ct = default) =>
+        (await Filtrar(contexto.Set<clsFilaAdopcionCamion>().AsNoTracking(), filtros)
+            .GroupBy(x => new { x.Fecha, x.ClienteId, x.Operacion, x.LugarDestinoId })
+            .Select(g => new { g.Key.Fecha, g.Key.ClienteId, g.Key.Operacion, g.Key.LugarDestinoId, Programados = g.Sum(x => x.Programados), ConSalidaDigital = g.Sum(x => x.ConSalidaDigital) })
+            .ToListAsync(ct))
+        .Select(x => new FilaAdopcion(x.Fecha, x.ClienteId, x.Operacion, x.Programados, x.ConSalidaDigital, x.LugarDestinoId))
         .ToList();
 
     public async Task<IReadOnlyList<FilaTiempo>> TiemposDeCapturaAsync(FiltrosReporte filtros, CancellationToken ct = default)
