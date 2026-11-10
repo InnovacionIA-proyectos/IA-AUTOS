@@ -22,10 +22,12 @@ internal static class clsConsultasExtras
         var extraIds = extras.Select(e => e.Id).ToList();
         var fotos = (await contexto.Evidencias.AsNoTracking().Where(e => e.ExtraId != null && extraIds.Contains(e.ExtraId.Value)).OrderBy(e => e.CreatedAt).ToListAsync(ct))
             .ToLookup(e => e.ExtraId!.Value);
+        // El dano del extra es el hallazgo que nacio de el (a lo sumo uno).
+        var danos = (await contexto.Hallazgos.AsNoTracking().Where(h => h.ExtraId != null && extraIds.Contains(h.ExtraId.Value)).ToListAsync(ct)).ToDictionary(h => h.ExtraId!.Value);
         return extras
             .GroupBy(e => e.InspeccionId)
             .ToDictionary(
                 g => g.Key,
-                g => (IReadOnlyList<ExtraDto>)g.Select(e => clsMapeadorInspecciones.AExtra(e, nombres.GetValueOrDefault(e.Tipo) ?? e.Tipo, fotos[e.Id].Select(clsMapeadorInspecciones.AEvidencia).ToList())).ToList());
+                g => (IReadOnlyList<ExtraDto>)g.Select(e => clsMapeadorInspecciones.AExtra(e, nombres.GetValueOrDefault(e.Tipo) ?? e.Tipo, fotos[e.Id].Select(clsMapeadorInspecciones.AEvidencia).ToList(), danos.GetValueOrDefault(e.Id))).ToList());
     }
 }

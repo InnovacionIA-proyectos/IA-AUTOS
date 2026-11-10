@@ -7,7 +7,7 @@ namespace IAAutos.Aplicacion.Notificaciones;
 
 /// <summary>
 /// Una alerta para varios destinatarios. <c>ClaveBase</c> identifica el hecho (por ejemplo «novedad_conductor:{hallazgo}»): con el destinatario y el canal forma la clave que impide
-/// repetir la misma alerta.
+/// repetir la misma alerta. <c>Datos</c> son los campos propios del aviso (clave en snake_case y su valor), que se guardan como JSON junto al texto; nunca un dato personal como la cedula.
 /// </summary>
 public sealed record clsAlerta(
     string Tipo,
@@ -20,7 +20,8 @@ public sealed record clsAlerta(
     Guid? InspeccionId,
     string Titulo,
     string Mensaje,
-    string ClaveBase);
+    string ClaveBase,
+    IReadOnlyDictionary<string, object?>? Datos = null);
 
 /// <summary>
 /// Crea las notificaciones de una alerta: una por destinatario en la bandeja y una por destinatario por push (FCM a todos sus dispositivos activos). El envio nunca rompe la peticion que
@@ -149,7 +150,8 @@ public sealed class clsEmisorNotificaciones(
 
     private static clsNotificacion Crear(clsAlerta a, Guid destinatario, string canal, DateTimeOffset? enviadaAt, string? error, string clave, DateTimeOffset ahora) =>
         clsNotificacion.Crear(
-            a.Tipo, a.Urgencia, destinatario, a.ClienteId, a.ViajeId, a.VehiculoId, a.HallazgoId, a.InspeccionId, a.Titulo, a.Mensaje, canal, enviadaAt, error, clave, ahora);
+            a.Tipo, a.Urgencia, destinatario, a.ClienteId, a.ViajeId, a.VehiculoId, a.HallazgoId, a.InspeccionId, a.Titulo, a.Mensaje, canal, enviadaAt, error, clave, ahora,
+            a.Datos is { Count: > 0 } ? System.Text.Json.JsonSerializer.Serialize(a.Datos) : null);
 
     private static string Clave(clsAlerta alerta, Guid destinatario, string canal) => $"{alerta.ClaveBase}:{destinatario}:{canal}";
 }

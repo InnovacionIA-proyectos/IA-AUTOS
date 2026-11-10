@@ -46,6 +46,23 @@ public static class clsInstantaneasAuditoria
         n.Fecha,
         n.Lat,
         n.Lng,
+        n.PermisoId,
+    };
+
+    public static object De(clsPermisoSinInspector p) => new
+    {
+        p.ViajeId,
+        p.ConductorId,
+        p.LugarId,
+        p.MotivoCodigo,
+        p.MotivoTexto,
+        solicitado_en = p.Fecha,
+        p.Lat,
+        p.Lng,
+        p.Estado,
+        p.ConcedidoAt,
+        p.ConcedidoPor,
+        autorizado_por_tiempo = p.PorTiempo,
     };
 
     public static object De(clsHallazgo h) => new
@@ -95,6 +112,8 @@ public static class clsInstantaneasAuditoria
         t.InspeccionId,
         t.EntregaUsuarioId,
         t.RecibeUsuarioId,
+        t.RecibeExternoNombre,
+        t.RecibeExternoCedula,
         entrega_firmada = t.FirmaEntregaAt,
         recibe_firmada = t.FirmaRecibeAt,
         t.FirmadaAt,
@@ -110,6 +129,7 @@ public static class clsInstantaneasAuditoria
     {
         v.FechaProgramada,
         v.LugarCargueId,
+        v.Capacidad,
         v.CodigoMtrack,
         v.Estado,
         v.TipoUnidadId,

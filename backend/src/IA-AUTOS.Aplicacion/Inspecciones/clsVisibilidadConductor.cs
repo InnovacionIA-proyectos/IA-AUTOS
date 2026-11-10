@@ -29,6 +29,8 @@ public static class clsVisibilidadConductor
             EvidenciaFaltante = null,
             RevisadoPor = null,
             RevisadoAt = null,
+            // Lo que es de la calidad (el nivel) no se ve, y con ello tampoco si esta sin calificar.
+            SinCalificar = false,
         };
 
     public static InformeDetalleDto ParaConductor(this InformeDetalleDto informe, IUsuarioActual actual) =>

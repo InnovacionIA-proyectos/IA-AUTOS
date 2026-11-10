@@ -154,7 +154,7 @@ public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaT
 
         var r = await ConsultarAsync(coordinador, "/api/reportes/adopcion");
 
-        Assert.Equal(["programados", "con_salida_digital", "adopcion", "meta", "por_dia", "por_operacion", "por_cliente"], r.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["programados", "con_salida_digital", "adopcion", "meta", "por_dia", "por_operacion", "por_cliente", "por_camion", "por_carro"], r.EnumerateObject().Select(p => p.Name).ToList());
         // El dia del despacho se programaron V1, V2, V3 y V6 de Sofasa (V4 es de otro cliente); V6 no tiene inspeccion de salida.
         Assert.Equal(4, r.GetProperty("programados").GetInt32());
         Assert.Equal(3, r.GetProperty("con_salida_digital").GetInt32());
@@ -223,7 +223,7 @@ public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaT
 
         var r = await ConsultarAsync(comercial, "/api/reportes/averias");
 
-        Assert.Equal(["por_trailer", "por_placa", "por_conductor", "por_unidad", "por_marca", "por_clase", "por_nivel"], r.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["por_trailer", "por_placa", "por_conductor", "por_unidad", "por_marca", "por_clase", "por_nivel", "sin_calificar"], r.EnumerateObject().Select(p => p.Name).ToList());
         var trailers = Lista(r, "por_trailer");
         Assert.Equal(["trailer", "vines", "con_novedad", "hallazgos"], trailers[0].EnumerateObject().Select(p => p.Name).ToList());
         var tr1 = trailers.Single(t => t.GetProperty("trailer").GetString() == "TR-1");
@@ -273,7 +273,7 @@ public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaT
 
         var r = await ConsultarAsync(coordinador, "/api/reportes/patrones");
 
-        Assert.Equal(["total", "por_proceso", "por_region", "por_region_proceso", "por_nivel", "por_clase", "por_tamano", "umbral"], r.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["total", "por_proceso", "por_region", "por_region_proceso", "por_nivel", "por_clase", "por_tamano", "umbral", "sin_calificar"], r.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal(2, r.GetProperty("total").GetInt32());
         var proceso = Assert.Single(Lista(r, "por_proceso"));
         Assert.Equal(["proceso", "total", "supera_umbral"], proceso.EnumerateObject().Select(p => p.Name).ToList());
@@ -339,7 +339,7 @@ public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaT
 
         var r = await ConsultarAsync(coordinador, "/api/reportes/indicador-diario", $"?fecha={e.Dias.Dia}");
 
-        Assert.Equal(["fecha", "despachados", "con_novedad", "porcentaje", "objetivo", "por_operacion", "por_cliente"], r.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["fecha", "despachados", "con_novedad", "porcentaje", "objetivo", "por_operacion", "por_cliente", "sin_calificar"], r.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal(e.Dias.Dia, r.GetProperty("fecha").GetString());
         // V1, V2 y V3 se despacharon; solo V2 tuvo un hallazgo V1 (el V3 de V3 no cuenta).
         Assert.Equal(3, r.GetProperty("despachados").GetInt32());

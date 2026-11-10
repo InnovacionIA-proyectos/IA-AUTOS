@@ -50,6 +50,10 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                        join vj in contexto.Viajes on i.ViajeId equals vj.Id
                        join c in contexto.Usuarios on vj.ConductorId equals c.Id into conductores
                        from c in conductores.DefaultIfEmpty()
+                       join lg in contexto.PuntosCustodia on e.PuntoCustodiaId equals lg.Id into lugares
+                       from lg in lugares.DefaultIfEmpty()
+                       join tu in contexto.TiposUnidad on vj.TipoUnidadId equals tu.Id into unidades
+                       from tu in unidades.DefaultIfEmpty()
                        where (f.Vin == null || (vinExacto ? v.Vin == f.Vin : v.Vin.Contains(f.Vin)))
                           && (soloDeCliente == null || v.ClienteId == soloDeCliente)
                           && (f.Operacion == null || v.Operacion == f.Operacion)
@@ -63,7 +67,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                           && (f.Proceso == null || p.Codigo == f.Proceso)
                           && (f.Desde == null || i.Fecha >= f.Desde)
                           && (f.Hasta == null || i.Fecha <= f.Hasta)
-                       select new { Inspeccion = i, v.Vin, Proceso = p.Codigo, vj.Placa, vj.Trailer, Conductor = (string?)c.Nombre };
+                       select new { Inspeccion = i, v.Vin, Proceso = p.Codigo, vj.Placa, vj.Trailer, Conductor = (string?)c.Nombre, Lugar = (string?)lg.Nombre, vj.CodigoMtrack, Unidad = (string?)tu.Nombre };
         if (soloDeUsuario is { } usuarioId)
         {
             var viajesPropios = clsAlcanceViajes.Viajes(contexto, usuarioId);
@@ -92,7 +96,8 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                 x.Inspeccion.ConductorNombre ?? x.Conductor, x.Inspeccion.Placa ?? x.Placa, x.Inspeccion.Trailer ?? x.Trailer, x.Inspeccion.Notas,
                 x.Inspeccion.CreatedAt, x.Inspeccion.UpdatedAt, x.Vin, x.Proceso,
                 x.Inspeccion.IniciadaAt, x.Inspeccion.CerradaAt, x.Inspeccion.Version, x.Inspeccion.CorrigeInspeccionId,
-                x.Inspeccion.Momento == clsMomento.SALIDA ? "Inspección de salida" : x.Inspeccion.Momento == clsMomento.LLEGADA ? "Inspección de llegada" : x.Inspeccion.Momento))
+                x.Inspeccion.Momento == clsMomento.SALIDA ? "Inspección de salida" : x.Inspeccion.Momento == clsMomento.LLEGADA ? "Inspección de llegada" : x.Inspeccion.Momento,
+                x.Lugar, x.CodigoMtrack, x.Unidad))
             .ToListAsync(ct);
         return (filas, total);
     }
@@ -188,7 +193,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                                    join ut in contexto.Usuarios on t.TestigoUsuarioId equals ut.Id into testigos
                                    from ut in testigos.DefaultIfEmpty()
                                    where t.InspeccionId == id
-                                   select new { Transferencia = t, EntregaNombre = (string?)ue.Nombre, RecibeNombre = (string?)ur.Nombre, TestigoNombre = (string?)ut.Nombre })
+                                   select new { Transferencia = t, EntregaNombre = (string?)ue.Nombre, RecibeNombre = (string?)ur.Nombre ?? t.RecibeExternoNombre, TestigoNombre = (string?)ut.Nombre })
             .FirstOrDefaultAsync(ct);
 
         return new InformeDetalleDto(
@@ -237,7 +242,8 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                     transferencia.Transferencia.TestigoUsuarioId,
                     transferencia.TestigoNombre,
                     transferencia.Transferencia.EvidenciaConstanciaId,
-                    await consultaNotas.ListarAsync(clsEntidadNota.TRANSFERENCIA, transferencia.Transferencia.Id, ct)),
+                    await consultaNotas.ListarAsync(clsEntidadNota.TRANSFERENCIA, transferencia.Transferencia.Id, ct),
+                    transferencia.Transferencia.RecibeExternoCedula),
             insp.IniciadaAt,
             insp.CerradaAt,
             insp.Version,

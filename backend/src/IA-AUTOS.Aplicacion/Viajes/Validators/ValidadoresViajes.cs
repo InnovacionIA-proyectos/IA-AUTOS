@@ -30,7 +30,8 @@ public sealed class CrearViajeRequestValidator : AbstractValidator<CrearViajeReq
         RuleFor(x => x.Placa).Must(p => !string.IsNullOrWhiteSpace(p)).WithMessage("La placa es requerida");
         RuleFor(x => x.ConductorId).Must(clsReglasViajes.UuidOpcionalValido).WithMessage(clsReglasViajes.MENSAJE_UUID);
         RuleFor(x => x.InspectorId).Must(clsReglasViajes.UuidOpcionalValido).WithMessage(clsReglasViajes.MENSAJE_UUID);
-        RuleFor(x => x.OrigenId).Must(clsReglasViajes.UuidOpcionalValido).WithMessage(clsReglasViajes.MENSAJE_UUID);
+        RuleFor(x => x.FechaProgramada).Must(f => !string.IsNullOrWhiteSpace(f)).WithMessage("La fecha programada es obligatoria");
+        RuleFor(x => x.LugarCargueId).Must(l => l is not null && l != Guid.Empty).WithMessage("El lugar de cargue es obligatorio");
         RuleFor(x => x.Unidades).Must(clsReglasViajes.UnidadesValidas)
             .WithMessage($"Máximo {clsReglasViajes.MAXIMO_VINES} unidades por solicitud y ninguna sin VIN")
             .Must(clsReglasViajes.UnidadesConDestino).WithMessage(clsReglasViajes.MENSAJE_SIN_DESTINO);

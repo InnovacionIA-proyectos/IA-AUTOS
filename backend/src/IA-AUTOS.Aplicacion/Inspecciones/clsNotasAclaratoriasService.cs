@@ -165,9 +165,10 @@ public sealed class clsNotasAclaratoriasService(
             firmantes.Add(entrega);
         }
 
-        if (transferencia.FirmaRecibe is not null)
+        // Quien recibe firma como usuario; una persona externa que recibe no tiene usuario y no puede aclarar la nota.
+        if (transferencia.FirmaRecibe is not null && transferencia.RecibeUsuarioId is { } recibe)
         {
-            firmantes.Add(transferencia.RecibeUsuarioId);
+            firmantes.Add(recibe);
         }
 
         return firmantes;

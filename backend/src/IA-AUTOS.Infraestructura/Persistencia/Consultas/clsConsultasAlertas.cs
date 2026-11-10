@@ -138,7 +138,7 @@ internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultas
             var numero = f.Numero!.Value;
             var clave = $"{f.Lado ?? "sin-lado"}-{numero}";
             var nombre = f.Lado is { Length: > 0 } lado ? $"{char.ToUpperInvariant(lado[0])}{lado[1..]} {numero}" : $"{numero}";
-            return new clsConteoPatron(f.ClienteId, clave, nombre, f.Total);
+            return new clsConteoPatron(f.ClienteId, clave, nombre, f.Total, numero, f.Lado);
         }).ToList();
     }
 

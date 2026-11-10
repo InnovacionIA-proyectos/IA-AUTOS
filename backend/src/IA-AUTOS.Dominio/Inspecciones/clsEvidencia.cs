@@ -26,6 +26,9 @@ public sealed partial class clsEvidencia : clsEntidadBase
     /// <summary>El extra del vehiculo (fuera del dibujo estandar) al que pertenece la foto. Nulo en las fotos de una vista, de un hallazgo o de la acomodacion.</summary>
     public Guid? ExtraId { get; private set; }
 
+    /// <summary>True en la foto de la acomodacion de las unidades en la ninera (no es de una vista, un hallazgo, un extra, una constancia ni un sello). Las fotos de antes de esta marca quedan en falso.</summary>
+    public bool EsAcomodacion { get; private set; }
+
     public string StoragePath { get; private set; } = string.Empty;
 
     /// <summary>Fecha y hora de la foto segun el dispositivo.</summary>
@@ -186,6 +189,7 @@ public sealed partial class clsEvidencia : clsEntidadBase
             HallazgoId = hallazgoId,
             VistaId = vistaId,
             ExtraId = extraId,
+            EsAcomodacion = deAcomodacion,
             EsConstancia = esConstancia,
             EsSello = esSello,
             StoragePath = clsValidador.Requerido(storagePath, "storage_path es requerido"),

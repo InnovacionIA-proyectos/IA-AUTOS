@@ -74,6 +74,8 @@ public sealed class clsInspeccionesService(
     IConsultasInspecciones consultas,
     IConsultasNovedadesProceso consultasNovedades,
     INovedadProcesoRepository novedades,
+    IPermisoSinInspectorRepository permisos,
+    IReclamoRepository reclamos,
     clsEmisorNotificaciones emisor,
     IDescriptorHallazgos descriptorHallazgos,
     clsAccesoViajes acceso,
@@ -116,6 +118,18 @@ public sealed class clsInspeccionesService(
         // «No hay inspector» (con su motivo); sin motivo es 403 y en cualquier otro caso el motivo no se admite (400).
         var porExcepcion = actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && await EsCargueAsync(etapa, ct);
         var motivo = await ResolverMotivoAsync(solicitud, porExcepcion, ct);
+
+        // Donde el punto de cargue TIENE inspectores la excepcion se pide y la concede un coordinador (o el reloj a los 10 minutos); donde no los hay se activa en el momento, como siempre.
+        clsPermisoSinInspector? permiso = null;
+        if (porExcepcion && viaje.LugarCargueId is { } lugarDeCargue && await reclamos.LugarTieneInspectoresAsync(lugarDeCargue, ct))
+        {
+            permiso = await permisos.ObtenerDeViajeAsync(viaje.Id, ct);
+            if (permiso is not { EstaConcedido: true })
+            {
+                throw new clsProhibidoException(
+                    $"El punto de cargue tiene inspectores: pida el permiso de la excepción «No hay inspector» y espere a que lo conceda el coordinador (o a que pasen {clsPermisoSinInspector.MINUTOS_DE_ESPERA} minutos sin respuesta)");
+            }
+        }
 
         // La salida de una etapa solo se crea cuando la etapa anterior del VIN ya termino (su llegada esta cerrada).
         if (solicitud.Momento == clsMomento.SALIDA)
@@ -160,7 +174,8 @@ public sealed class clsInspeccionesService(
                 solicitud.Fecha!.Value,
                 solicitud.Lat,
                 solicitud.Lng,
-                reloj.Ahora);
+                reloj.Ahora,
+                permiso?.Id);
             novedades.Agregar(novedad);
             await auditor.RegistrarDeViajeAsync(
                 "novedad_proceso.crear", "novedades_proceso", novedad.Id, viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(novedad)), vehiculo.ClienteId, ct);
@@ -400,9 +415,15 @@ public sealed class clsInspeccionesService(
         var inspeccion = await ObtenerParaEscrituraAsync(inspeccionId, ct);
         inspeccion.AsegurarEditable();
         await ValidarTipoDeExtraAsync(solicitud.Tipo, null, ct);
+        var dano = await ValidarDanoDelExtraAsync(solicitud.Danado, solicitud.ClaseDano, solicitud.TamanoDano, solicitud.NivelSeveridad, ct);
         var extra = clsInspeccionExtra.Crear(inspeccionId, solicitud.Tipo, solicitud.Texto, solicitud.Observacion, reloj.Ahora);
         inspecciones.Agregar(extra);
         await auditor.RegistrarDeViajeAsync("extra.crear", "extras", extra.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(extra)), ct: ct);
+        if (dano is not null)
+        {
+            await AgregarDanoDelExtraAsync(inspeccion, extra, dano, ct);
+        }
+
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ExtraAsync(inspeccionId, extra.Id, ct);
     }
@@ -414,9 +435,33 @@ public sealed class clsInspeccionesService(
         inspeccion.AsegurarEditable();
         var extra = await ObtenerExtraDeInspeccionAsync(inspeccionId, extraId, ct);
         await ValidarTipoDeExtraAsync(solicitud.Tipo, extra.Tipo, ct);
+        var existente = await inspecciones.ObtenerHallazgoDeExtraAsync(extra.Id, ct);
+        DanoDeExtra? nuevoDano = null;
+        if (existente is not null)
+        {
+            // El dano guardado es un hallazgo: evidencia que no se quita ni se cambia. Sin dano en la solicitud (o con el mismo) se conserva.
+            var distinto = solicitud.Danado == false
+                || (clsValidador.Opcional(solicitud.ClaseDano) is { } clase && clase != existente.ClaseDano)
+                || (clsValidador.Opcional(solicitud.TamanoDano) is { } tamano && tamano != existente.TamanoDano)
+                || (clsValidador.Opcional(solicitud.NivelSeveridad) is { } nivel && nivel != existente.NivelSeveridad);
+            if (distinto)
+            {
+                throw new clsConflictoException("El daño del extra ya está guardado: es evidencia y no se quita ni se cambia");
+            }
+        }
+        else
+        {
+            nuevoDano = await ValidarDanoDelExtraAsync(solicitud.Danado, solicitud.ClaseDano, solicitud.TamanoDano, solicitud.NivelSeveridad, ct);
+        }
+
         var antes = clsInstantaneasAuditoria.De(extra);
         extra.Actualizar(solicitud.Tipo, solicitud.Texto, solicitud.Observacion, reloj.Ahora);
         await auditor.RegistrarDeViajeAsync("extra.actualizar", "extras", extra.Id, inspeccion.ViajeId, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(extra)), ct: ct);
+        if (nuevoDano is not null)
+        {
+            await AgregarDanoDelExtraAsync(inspeccion, extra, nuevoDano, ct);
+        }
+
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ExtraAsync(inspeccionId, extra.Id, ct);
     }
@@ -432,9 +477,75 @@ public sealed class clsInspeccionesService(
             throw new clsConflictoException("El extra tiene fotos, que son evidencia y no se pueden borrar");
         }
 
+        if (await inspecciones.ObtenerHallazgoDeExtraAsync(extra.Id, ct) is not null)
+        {
+            throw new clsConflictoException("El extra tiene un daño guardado, que es evidencia y no se puede borrar");
+        }
+
         inspecciones.Quitar(extra);
         await auditor.RegistrarDeViajeAsync("extra.quitar", "extras", extra.Id, inspeccion.ViajeId, new DetalleAuditoria(clsInstantaneasAuditoria.De(extra), null), ct: ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
+    }
+
+    private sealed record DanoDeExtra(string Clase, string Tamano, string Nivel);
+
+    /// <summary>
+    /// El dano de un extra: con <c>danado: true</c> la clase, el tamano y el nivel son obligatorios (400 nombrando cada uno que falta) y deben ser de un valor activo de sus catalogos; sin <c>danado</c> (o en
+    /// falso) ninguno de los tres se admite (400). Devuelve nulo si el extra no esta danado.
+    /// </summary>
+    private async Task<DanoDeExtra?> ValidarDanoDelExtraAsync(bool? danado, string? claseDano, string? tamanoDano, string? nivelSeveridad, CancellationToken ct)
+    {
+        var clase = clsValidador.Opcional(claseDano);
+        var tamano = clsValidador.Opcional(tamanoDano);
+        var nivel = clsValidador.Opcional(nivelSeveridad);
+        var errores = new Dictionary<string, string[]>();
+        if (danado != true)
+        {
+            const string SOLO_DANADO = "Solo se admite cuando el extra se marca como dañado (danado: true)";
+            if (clase is not null)
+            {
+                errores["clase_dano"] = [SOLO_DANADO];
+            }
+
+            if (tamano is not null)
+            {
+                errores["tamano_dano"] = [SOLO_DANADO];
+            }
+
+            if (nivel is not null)
+            {
+                errores["nivel_severidad"] = [SOLO_DANADO];
+            }
+
+            return errores.Count > 0 ? throw clsErroresCampos.Varios(errores) : null;
+        }
+
+        async Task Revisar(string campo, string? valor, string catalogo, string faltante, string invalido)
+        {
+            if (valor is null)
+            {
+                errores[campo] = [faltante];
+            }
+            else if (!(await catalogos.CodigosAsync(catalogo, soloActivos: true, ct)).Contains(valor))
+            {
+                errores[campo] = [invalido];
+            }
+        }
+
+        await Revisar("clase_dano", clase, clsNombresCatalogo.CLASES_DANO, "La clase del daño es obligatoria cuando el extra está dañado", "Clase de daño inválida");
+        await Revisar("tamano_dano", tamano, clsNombresCatalogo.TAMANOS_DANO, "El tamaño del daño es obligatorio cuando el extra está dañado", "Tamaño de daño inválido");
+        await Revisar("nivel_severidad", nivel, clsNombresCatalogo.NIVELES_SEVERIDAD, "El nivel de severidad es obligatorio cuando el extra está dañado", "Nivel de severidad inválido");
+        return errores.Count > 0 ? throw clsErroresCampos.Varios(errores) : new DanoDeExtra(clase!, tamano!, nivel!);
+    }
+
+    /// <summary>El dano del extra queda como un hallazgo de siempre (sin zona, con el nombre del extra como parte del vehiculo): cuenta en los listados, los patrones y la tasa de rechazo.</summary>
+    private async Task AgregarDanoDelExtraAsync(clsInspeccion inspeccion, clsInspeccionExtra extra, DanoDeExtra dano, CancellationToken ct)
+    {
+        var nombreDelTipo = (await NombresDeTiposDeExtraAsync(ct)).GetValueOrDefault(extra.Tipo) ?? extra.Tipo;
+        var hallazgo = clsHallazgo.CrearDeExtra(inspeccion.Id, extra.Id, clsInspeccionExtra.NombreParaMostrar(extra.Tipo, nombreDelTipo, extra.Texto), dano.Clase, dano.Tamano, dano.Nivel, reloj.Ahora);
+        inspecciones.Agregar(hallazgo);
+        await auditor.RegistrarDeViajeAsync(
+            "hallazgo.crear", "hallazgos", hallazgo.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(hallazgo)), ct: ct);
     }
 
     private async Task<clsInspeccionExtra> ObtenerExtraDeInspeccionAsync(Guid inspeccionId, Guid extraId, CancellationToken ct) =>

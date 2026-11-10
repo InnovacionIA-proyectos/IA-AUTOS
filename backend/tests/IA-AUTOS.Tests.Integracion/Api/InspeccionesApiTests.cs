@@ -800,7 +800,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(
             [
                 "id", "inspeccion_id", "hallazgo_id", "sello_fecha", "sello_lat", "sello_lng", "url", "url_expira_at", "created_at", "updated_at", "vista_id", "hash_sha256",
-                "sello_servidor_at", "precision", "dispositivo_id", "nota", "sin_ubicacion", "es_constancia", "es_sello", "extra_id",
+                "sello_servidor_at", "precision", "dispositivo_id", "nota", "sin_ubicacion", "es_constancia", "es_sello", "extra_id", "es_acomodacion",
             ],
             e.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal(vista, e.GetProperty("vista_id").GetGuid());
@@ -1475,7 +1475,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(
             [
                 "id", "inspeccion_id", "entrega_usuario_id", "recibe_usuario_id", "firmada", "firmada_at", "created_at", "updated_at", "tipo_cierre",
-                "entrega_firmada_at", "recibe_firmada_at", "reservas_texto", "no_firma_parte", "motivo_no_firma", "testigo_usuario_id", "evidencia_constancia_id",
+                "entrega_firmada_at", "recibe_firmada_at", "reservas_texto", "no_firma_parte", "motivo_no_firma", "testigo_usuario_id", "evidencia_constancia_id", "recibe_externo_nombre", "recibe_externo_cedula",
             ],
             t1.EnumerateObject().Select(p => p.Name).ToList());
         Assert.False(t1.GetProperty("firmada").GetBoolean());
@@ -1894,7 +1894,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var porFecha = Items(await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?desde=2026-07-01T00:00:00Z&hasta=2026-07-31T00:00:00Z")));
 
         Assert.Equal(3, todas.GetArrayLength());
-        Assert.Equal(["iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre"], todas[0].EnumerateObject().Select(p => p.Name).TakeLast(5).ToList());
+        Assert.Equal(["iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre", "lugar", "codigo_mtrack", "unidad"], todas[0].EnumerateObject().Select(p => p.Name).TakeLast(8).ToList());
         Assert.Equal(["vin", "proceso"], todas[0].EnumerateObject().Select(p => p.Name).Skip(15).Take(2).ToList());
         Assert.Equal(2, porUsuario.GetArrayLength());
         Assert.Contains(porUsuario.EnumerateArray(), i => i.GetProperty("id").GetGuid() == b);

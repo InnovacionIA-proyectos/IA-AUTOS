@@ -88,6 +88,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<INotaAclaratoriaRepository, clsNotaAclaratoriaRepository>();
         servicios.AddScoped<INovedadProcesoRepository, clsNovedadProcesoRepository>();
         servicios.AddScoped<IReclamoRepository, clsRepositorioReclamos>();
+        servicios.AddScoped<IPermisoSinInspectorRepository, clsRepositorioPermisosSinInspector>();
         servicios.AddScoped<ILugarRepository, clsRepositorioLugares>();
         servicios.AddScoped<IPropuestaUbicacionRepository, clsRepositorioPropuestasUbicacion>();
         servicios.AddScoped<IAAutos.Aplicacion.Viajes.DTOViajes.IConsultasPendientes, clsConsultasPendientes>();
@@ -150,16 +151,14 @@ public static class clsDependenciasInfraestructura
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.ETAPAS, clsEtapaCatalogo.Crear));
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsPuntoCustodia>(
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.PUNTOS_CUSTODIA, clsPuntoCustodia.Crear));
-        servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsTipoUnidadTransportadora>(
-            p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.TIPOS_UNIDAD, clsTipoUnidadTransportadora.Crear));
+        servicios.AddScoped<ICatalogo, clsCatalogoTiposUnidad>();
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsCliente>(
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.CLIENTES, clsCliente.Crear));
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsClaseDano>(
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.CLASES_DANO, clsClaseDano.Crear));
         servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsTamanoDano>(
             p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.TAMANOS_DANO, clsTamanoDano.Crear));
-        servicios.AddScoped<ICatalogo>(p => new clsCatalogoSimple<clsTipoExtra>(
-            p.GetRequiredService<clsAppDbContext>(), p.GetRequiredService<IReloj>(), clsNombresCatalogo.TIPOS_EXTRA, clsTipoExtra.Crear));
+        servicios.AddScoped<ICatalogo, clsCatalogoTiposExtra>();
         servicios.AddScoped<ICatalogo, clsCatalogoNiveles>();
         servicios.AddScoped<ICatalogo, clsCatalogoEstadosSofasa>();
         servicios.AddScoped<ICatalogo, clsCatalogoMotivosSinInspector>();

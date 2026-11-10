@@ -50,6 +50,12 @@ public sealed record AdopcionOperacionDto(string Operacion, int Programados, int
 
 public sealed record AdopcionClienteDto(Guid ClienteId, string? ClienteNombre, int Programados, int ConSalidaDigital, decimal Adopcion);
 
+/// <summary>La adopcion de un destino: <c>LugarId</c> y <c>Lugar</c> son nulos en lo que no tiene destino unico (las unidades de viajes anteriores sin destino y, por camion, los viajes que van a varios destinos).</summary>
+public sealed record AdopcionDestinoDto(Guid? LugarId, string? Lugar, int Programados, int ConSalidaDigital, decimal Adopcion);
+
+/// <summary>Una medida de adopcion con su numerador (<c>ConSalidaDigital</c>), su denominador (<c>Programados</c>) y su desglose por destino.</summary>
+public sealed record AdopcionMedidaDto(int Programados, int ConSalidaDigital, decimal Adopcion, IReadOnlyList<AdopcionDestinoDto> PorDestino);
+
 /// <summary>Adopcion (formula propuesta): de los VIN de los viajes programados, cuantos tienen una inspeccion de salida en el sistema. <c>Meta</c> es el objetivo (95 %).</summary>
 public sealed record AdopcionDto(
     int Programados,
@@ -58,7 +64,9 @@ public sealed record AdopcionDto(
     decimal Meta,
     IReadOnlyList<AdopcionDiaDto> PorDia,
     IReadOnlyList<AdopcionOperacionDto> PorOperacion,
-    IReadOnlyList<AdopcionClienteDto> PorCliente);
+    IReadOnlyList<AdopcionClienteDto> PorCliente,
+    AdopcionMedidaDto? PorCamion = null,
+    AdopcionMedidaDto? PorCarro = null);
 
 // ------------------------------------------------------------------------------------------ tiempo de captura
 
@@ -93,7 +101,8 @@ public sealed record AveriasDto(
     IReadOnlyList<AveriaUnidadDto> PorUnidad,
     IReadOnlyList<AveriaMarcaDto> PorMarca,
     IReadOnlyList<ConteoClaseTableroDto> PorClase,
-    IReadOnlyList<ConteoNivelTableroDto> PorNivel);
+    IReadOnlyList<ConteoNivelTableroDto> PorNivel,
+    int SinCalificar = 0);
 
 // ---------------------------------------------------------------------------------------------- patrones
 
@@ -122,15 +131,19 @@ public sealed record PatronesTableroDto(
     IReadOnlyList<PatronNivelDto> PorNivel,
     IReadOnlyList<PatronClaseDto> PorClase,
     IReadOnlyList<PatronTamanoDto> PorTamano,
-    UmbralPatronDto Umbral);
+    UmbralPatronDto Umbral,
+    int SinCalificar = 0);
 
 // ------------------------------------------------------------------------------------------ indicador diario
 
-public sealed record IndicadorOperacionDto(string Operacion, int Despachados, int ConNovedad, decimal Porcentaje);
+public sealed record IndicadorOperacionDto(string Operacion, int Despachados, int ConNovedad, decimal Porcentaje, int SinCalificar = 0);
 
-public sealed record IndicadorClienteDto(Guid ClienteId, string? ClienteNombre, int Despachados, int ConNovedad, decimal Porcentaje);
+public sealed record IndicadorClienteDto(Guid ClienteId, string? ClienteNombre, int Despachados, int ConNovedad, decimal Porcentaje, int SinCalificar = 0);
 
-/// <summary>Vehiculos con novedad (al menos un hallazgo V1 o V1+ ese dia) sobre las unidades despachadas ese dia, frente al objetivo del parametro.</summary>
+/// <summary>
+/// Vehiculos con novedad (al menos un hallazgo V1 o V1+ ese dia) sobre las unidades despachadas ese dia, frente al objetivo del parametro. <c>SinCalificar</c> son los danos sin nivel de esas unidades ese dia:
+/// una cifra aparte que no se suma a <c>ConNovedad</c> ni al porcentaje, y tampoco se descarta.
+/// </summary>
 public sealed record IndicadorDiarioDto(
     DateOnly Fecha,
     int Despachados,
@@ -138,4 +151,5 @@ public sealed record IndicadorDiarioDto(
     decimal Porcentaje,
     decimal Objetivo,
     IReadOnlyList<IndicadorOperacionDto> PorOperacion,
-    IReadOnlyList<IndicadorClienteDto> PorCliente);
+    IReadOnlyList<IndicadorClienteDto> PorCliente,
+    int SinCalificar = 0);

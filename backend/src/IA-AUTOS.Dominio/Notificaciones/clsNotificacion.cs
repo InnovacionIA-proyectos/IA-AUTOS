@@ -32,9 +32,12 @@ public static class clsTipoNotificacion
     /// <summary>Algo paso en el proceso y no es un dano (por ejemplo, un cargue sin inspector).</summary>
     public const string NOVEDAD_PROCESO = "novedad_proceso";
 
+    /// <summary>El conductor pide el permiso para activar la excepcion «No hay inspector» en un punto con inspectores (al inspector y al coordinador del cliente), o se le avisa que se concedio (a el).</summary>
+    public const string PERMISO_SIN_INSPECTOR = "permiso_sin_inspector";
+
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string>
     {
-        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD, FUERA_DE_RANGO, CARGUE_SIN_RECLAMAR, PROPUESTA_UBICACION,
+        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD, FUERA_DE_RANGO, CARGUE_SIN_RECLAMAR, PROPUESTA_UBICACION, PERMISO_SIN_INSPECTOR,
     };
 }
 
@@ -125,13 +128,16 @@ public sealed class clsNotificacion
 
     public DateTimeOffset CreatedAt { get; private set; }
 
+    /// <summary>Los campos propios del aviso (lugar, parte que firmo, motivo...) como un objeto JSON, ademas del texto. Nulo en los avisos que no los llevan.</summary>
+    public string? Datos { get; private set; }
+
     public bool EstaLeida => LeidaAt is not null;
 
     public bool EstaRespondida => RespondidaAt is not null;
 
     /// <summary>
     /// Crea la notificacion de un canal. <paramref name="enviadaAt"/> es cuando salio por su canal (la bandeja se entrega al crearla) y <paramref name="errorEnvio"/> por que no
-    /// salio; no pueden venir los dos. La respuesta nunca se fija al crearla.
+    /// salio; no pueden venir los dos. La respuesta nunca se fija al crearla. <paramref name="datos"/> son los campos propios del aviso, un objeto JSON.
     /// </summary>
     public static clsNotificacion Crear(
         string tipo,
@@ -148,7 +154,8 @@ public sealed class clsNotificacion
         DateTimeOffset? enviadaAt,
         string? errorEnvio,
         string claveDedupe,
-        DateTimeOffset ahora)
+        DateTimeOffset ahora,
+        string? datos = null)
     {
         clsValidador.EnCatalogo(tipo, clsTipoNotificacion.VALORES, "tipo");
         clsValidador.EnCatalogo(urgencia, clsUrgenciaNotificacion.VALORES, "urgencia");
@@ -186,6 +193,7 @@ public sealed class clsNotificacion
             ErrorEnvio = errorEnvio is null ? null : Recortar(errorEnvio, ERROR_MAX),
             ClaveDedupe = Recortar(clsValidador.Requerido(claveDedupe, "La clave de la alerta es requerida"), CLAVE_MAX),
             CreatedAt = ahora,
+            Datos = datos,
         };
     }
 

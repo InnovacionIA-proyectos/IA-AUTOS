@@ -6,8 +6,9 @@ namespace IAAutos.Aplicacion.Viajes.DTOViajes;
 public sealed record UnidadDelViajeRequest(string? Vin, Guid? LugarDestinoId);
 
 /// <summary>
-/// Viaje nuevo: unidad transportadora, placa, trailer, conductor, codigo MTrack y, opcionalmente, sus unidades (cada una con su VIN y el lugar de destino, un lugar activo del catalogo <c>lugares</c>). El viaje
-/// ya no tiene un destino unico: <c>destino_id</c> y <c>vines</c> se rechazan.
+/// Viaje nuevo: unidad transportadora, placa, trailer, conductor, codigo MTrack, <c>FechaProgramada</c> (fecha y hora ISO 8601 con zona horaria) y <c>LugarCargueId</c> (un lugar activo del catalogo <c>lugares</c>), ambos
+/// obligatorios, y, opcionalmente, sus unidades (cada una con su VIN y el lugar de destino, un lugar activo del catalogo <c>lugares</c>). El tipo de origen no se envia: se deduce del tipo del lugar de cargue. El viaje
+/// ya no tiene un destino unico: <c>destino_id</c> y <c>vines</c> se rechazan, como todo campo que este tipo no declara.
 /// </summary>
 public sealed record CrearViajeRequest(
     string? CodigoMtrack,
@@ -16,8 +17,10 @@ public sealed record CrearViajeRequest(
     string? Trailer,
     Guid? ConductorId,
     Guid? InspectorId,
-    Guid? OrigenId,
-    IReadOnlyList<UnidadDelViajeRequest>? Unidades);
+    IReadOnlyList<UnidadDelViajeRequest>? Unidades,
+    string? FechaProgramada = null,
+    Guid? LugarCargueId = null,
+    int? Capacidad = null);
 
 /// <summary>
 /// Campos que admite el cambio de un viaje. Solo se cambia lo enviado; trailer, conductor, inspector y origen admiten
@@ -43,6 +46,37 @@ public sealed record AsignarPosicionRequest(int? Posicion);
 public sealed record CambiarDestinoUnidadRequest(Guid? LugarDestinoId);
 
 public sealed record CambiarEstadoViajeRequest(string? Estado);
+
+/// <summary>
+/// El conductor pide el permiso de la excepcion «No hay inspector» (el punto de cargue tiene inspectores): su <c>MotivoSinInspector</c> (codigo activo del catalogo <c>motivos-sin-inspector</c>), el
+/// <c>MotivoSinInspectorTexto</c> si el motivo lo pide, la <c>Fecha</c> (ISO 8601 con zona horaria) y el GPS (<c>Lat</c>, <c>Lng</c>) del momento en que lo pide.
+/// </summary>
+public sealed record SolicitarPermisoSinInspectorRequest(string? MotivoSinInspector, string? MotivoSinInspectorTexto, string? Fecha, double? Lat, double? Lng);
+
+/// <summary>
+/// La solicitud del permiso de un viaje. <c>Estado</c> es <c>pendiente</c> o <c>concedido</c>; <c>VenceAt</c> es cuando el reloj puede concederla (10 minutos despues de pedirla, nunca antes). Concedido trae cuando
+/// y quien lo concedio o, si nadie respondio, <c>AutorizadoPorTiempo</c> en verdadero y sin quien. <c>Fecha</c>, <c>Lat</c> y <c>Lng</c> son los del momento en que el conductor la pidio.
+/// </summary>
+public sealed record PermisoSinInspectorDto(
+    Guid Id,
+    Guid ViajeId,
+    string Estado,
+    DateTimeOffset SolicitadoAt,
+    DateTimeOffset VenceAt,
+    Guid ConductorId,
+    string? ConductorNombre,
+    Guid LugarId,
+    string? Lugar,
+    string MotivoCodigo,
+    string? Motivo,
+    string? MotivoTexto,
+    DateTimeOffset Fecha,
+    double? Lat,
+    double? Lng,
+    DateTimeOffset? ConcedidoAt,
+    Guid? ConcedidoPor,
+    string? ConcedidoPorNombre,
+    bool AutorizadoPorTiempo);
 
 /// <summary>
 /// Una unidad que no sale del viaje: el motivo, el hallazgo que la causo, quien la marco (y su nombre), cuando y el VIN que la reemplaza (si ya se
@@ -91,7 +125,8 @@ public sealed record NovedadDelViajeDto(
     string? UsuarioNombre,
     DateTimeOffset Fecha,
     string Vin,
-    Guid InspeccionId);
+    Guid InspeccionId,
+    IAAutos.Aplicacion.Inspecciones.DTOInspecciones.PermisoDeLaNovedadDto? Permiso = null);
 
 /// <summary>
 /// Viaje completo con sus VIN. <c>NovedadesProceso</c> son las novedades de proceso de sus unidades (la excepcion «No hay inspector» y el recibo sin entrega), de la mas antigua a la mas reciente. El viaje no tiene un cliente propio: <c>Clientes</c>
@@ -121,9 +156,27 @@ public sealed record ViajeDto(
     IReadOnlyList<NovedadDelViajeDto> NovedadesProceso,
     DateTimeOffset? FechaProgramada = null,
     Guid? LugarCargueId = null,
-    string? LugarCargue = null);
+    string? LugarCargue = null,
+    int Capacidad = 7,
+    DisposicionDeNiniera? Disposicion = null,
+    IReadOnlyList<IAAutos.Aplicacion.Inspecciones.DTOInspecciones.EvidenciaDto>? FotosAcomodacion = null);
 
-/// <summary>Fila del listado de viajes: los datos del viaje, el conteo de sus VIN y los clientes de esos VIN (los que quien consulta puede ver).</summary>
+/// <summary>Un puesto de la ninera: su <c>Numero</c> (el que se envia como posicion de una unidad), la <c>Etiqueta</c> con que se muestra (hoy el mismo numero) y el <c>Vin</c> de la unidad que lo ocupa (nulo si esta libre).</summary>
+public sealed record PuestoDeNiniera(int Numero, string Etiqueta, string? Vin);
+
+/// <summary>
+/// La disposicion de los puestos de la ninera del viaje, como dato: la app dibuja los <c>Puestos</c> en el orden en que llegan, con su etiqueta y su ocupante, sin llevar ningun esquema propio. Admite numeraciones
+/// distintas sin cambiar de forma (la etiqueta puede dejar de ser el numero).
+/// </summary>
+public sealed record DisposicionDeNiniera(IReadOnlyList<PuestoDeNiniera> Puestos);
+
+/// <summary>A donde van las unidades de un viaje: un lugar de destino y cuantas unidades van a el. Una unidad sin destino (viajes anteriores) aparece con <c>LugarId</c> y <c>Lugar</c> nulos.</summary>
+public sealed record DestinoDeUnidadesDto(Guid? LugarId, string? Lugar, int Unidades);
+
+/// <summary>
+/// Fila del listado de viajes: los datos del viaje, el conteo de sus VIN, los clientes de esos VIN (los que quien consulta puede ver) y <c>Destinos</c>, los destinos distintos de sus unidades con cuantas van a cada uno,
+/// para no abrir el viaje fila por fila.
+/// </summary>
 public sealed record ViajeResumenDto(
     Guid Id,
     string? CodigoMtrack,
@@ -147,7 +200,8 @@ public sealed record ViajeResumenDto(
     DateTimeOffset UpdatedAt,
     DateTimeOffset? FechaProgramada = null,
     Guid? LugarCargueId = null,
-    string? LugarCargue = null);
+    string? LugarCargue = null,
+    IReadOnlyList<DestinoDeUnidadesDto>? Destinos = null);
 
 /// <summary>
 /// Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio. <c>Pagina</c>, <c>Tamano</c> y <c>Orden</c> son el formato comun de los listados; la exportacion a Excel los
@@ -166,9 +220,10 @@ public sealed record FiltrosViajesRequest(
     string? Hasta,
     string? Pagina = null,
     string? Tamano = null,
-    string? Orden = null);
+    string? Orden = null,
+    string? DestinoUnidadId = null);
 
-/// <summary>Los filtros ya validados. <c>ClienteId</c> pide los viajes con algun VIN de ese cliente.</summary>
+/// <summary>Los filtros ya validados. <c>ClienteId</c> pide los viajes con algun VIN de ese cliente; <c>LugarDestinoId</c>, los que llevan al menos una unidad a ese lugar de destino (del catalogo <c>lugares</c>).</summary>
 public sealed record FiltrosViajes(
     string? Estado,
     string? CodigoMtrack,
@@ -179,7 +234,8 @@ public sealed record FiltrosViajes(
     Guid? OrigenId,
     Guid? DestinoId,
     DateTimeOffset? Desde,
-    DateTimeOffset? Hasta);
+    DateTimeOffset? Hasta,
+    Guid? LugarDestinoId = null);
 
 /// <summary>
 /// Fila de la carga masiva de viajes (una por VIN). Las filas con el mismo codigo MTrack forman un viaje. <c>Fila</c> es el
@@ -202,7 +258,7 @@ public sealed record FilaCargaViajeRequest(
 public sealed record CargarViajesRequest(IReadOnlyList<FilaCargaViajeRequest>? Filas);
 
 /// <summary>Resultado de una fila: valida o con sus errores; si el viaje se guardo, su id.</summary>
-public sealed record FilaCargaViajeDto(int Fila, string? Vin, string? CodigoMtrack, bool Valida, IReadOnlyList<string> Errores, Guid? ViajeId);
+public sealed record FilaCargaViajeDto(int Fila, string? Vin, string? CodigoMtrack, bool Valida, IReadOnlyList<string> Errores, Guid? ViajeId, bool CodigoGenerado = false);
 
 /// <summary>
 /// Vista previa o resultado de la carga. <c>Confirmado</c> es falso en la vista previa (no se guarda nada). <c>Viajes</c> es la

@@ -5,7 +5,8 @@ public sealed record RespuestaNotificacionDto(string Texto, string Medio, string
 
 /// <summary>
 /// Una notificacion de la bandeja. <c>Respuesta</c> es nula mientras nadie responde la novedad. El viaje, su codigo MTrack y el VIN son los del hecho que se avisa
-/// (nulos en lo que no es de un viaje).
+/// (nulos en lo que no es de un viaje). <c>Datos</c> son los campos propios del aviso (por ejemplo el lugar, la parte que firmo y el motivo de una entrega con una sola firma), ademas del texto: nulo en
+/// los avisos que no los llevan.
 /// </summary>
 public sealed record NotificacionDto(
     Guid Id,
@@ -20,7 +21,8 @@ public sealed record NotificacionDto(
     Guid? InspeccionId,
     DateTimeOffset? LeidaAt,
     RespuestaNotificacionDto? Respuesta,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    IReadOnlyDictionary<string, object?>? Datos = null);
 
 /// <summary>Una pagina de la bandeja con el total de la busqueda y cuantas notificaciones sin leer hay en total (sin contar los filtros).</summary>
 public sealed record ListadoNotificacionesDto(IReadOnlyList<NotificacionDto> Items, int Total, int Pagina, int Tamano, int NoLeidas);

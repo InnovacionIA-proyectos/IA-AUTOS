@@ -55,6 +55,9 @@ public sealed class clsNovedadProceso
 
     public DateTimeOffset CreatedAt { get; private set; }
 
+    /// <summary>La solicitud de permiso con la que se activo la excepcion (cuando el punto de cargue tenia inspectores); nula si el punto no los tenia y se activo en el momento.</summary>
+    public Guid? PermisoId { get; private set; }
+
     public static clsNovedadProceso Crear(
         string tipo,
         Guid viajeId,
@@ -67,7 +70,8 @@ public sealed class clsNovedadProceso
         DateTimeOffset fecha,
         double? lat,
         double? lng,
-        DateTimeOffset ahora)
+        DateTimeOffset ahora,
+        Guid? permisoId = null)
     {
         clsValidador.EnCatalogo(tipo, clsTipoNovedadProceso.VALORES, "tipo");
         var codigo = clsValidador.Opcional(motivoCodigo);
@@ -104,6 +108,7 @@ public sealed class clsNovedadProceso
             Lat = lat,
             Lng = lng,
             CreatedAt = ahora,
+            PermisoId = permisoId,
         };
     }
 }
@@ -111,4 +116,7 @@ public sealed class clsNovedadProceso
 public interface INovedadProcesoRepository
 {
     void Agregar(clsNovedadProceso novedad);
+
+    /// <summary>True si el viaje ya tiene una novedad de cargue sin inspector (la excepcion «No hay inspector» se activo en alguna de sus unidades).</summary>
+    Task<bool> ExisteCargueSinInspectorAsync(Guid viajeId, CancellationToken ct = default);
 }

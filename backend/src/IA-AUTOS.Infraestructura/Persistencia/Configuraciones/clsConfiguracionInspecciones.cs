@@ -81,6 +81,9 @@ internal sealed class clsConfiguracionHallazgo : IEntityTypeConfiguration<clsHal
         builder.Property(h => h.EstadoSeguimiento).HasColumnType("varchar(15)").IsRequired();
         // La revision solo se hace una vez: si dos usuarios revisan a la vez, el cambio del segundo no encuentra el hallazgo sin revisar y se rechaza.
         builder.Property(h => h.RevisadoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA).IsConcurrencyToken();
+        builder.HasOne<clsInspeccionExtra>().WithMany().HasForeignKey(h => h.ExtraId)
+            .HasConstraintName("FK_tblHallazgos_Extra").OnDelete(DeleteBehavior.NoAction);
+        builder.HasIndex(h => h.ExtraId).IsUnique().HasFilter("[ExtraId] IS NOT NULL").HasDatabaseName("UQ_tblHallazgos_Extra");
         builder.HasOne<clsZonaDano>().WithMany().HasForeignKey(h => h.ZonaId)
             .HasConstraintName("FK_tblHallazgos_Zona").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsNivelSeveridad>().WithMany().HasForeignKey(h => h.NivelSeveridad).HasPrincipalKey(n => n.Codigo)
@@ -130,6 +133,7 @@ internal sealed class clsConfiguracionEvidencia : IEntityTypeConfiguration<clsEv
         builder.HasIndex(e => e.ExtraId).HasFilter("[ExtraId] IS NOT NULL").HasDatabaseName("IX_tblEvidencias_Extra");
         builder.Property(e => e.EsConstancia).HasDefaultValue(false);
         builder.Property(e => e.EsSello).HasDefaultValue(false);
+        builder.Property(e => e.EsAcomodacion).HasDefaultValue(false);
         builder.HasOne<clsInspeccion>().WithMany().HasForeignKey(e => e.InspeccionId)
             .HasConstraintName("FK_tblEvidencias_Inspeccion").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(e => e.HallazgoId)
@@ -196,6 +200,9 @@ internal sealed class clsConfiguracionTransferencia : IEntityTypeConfiguration<c
         builder.Property(t => t.NoFirmaParte).HasColumnType("varchar(10)");
         builder.Property(t => t.ReservasTexto).HasMaxLength(clsTransferenciaCustodia.RESERVAS_MAX);
         builder.Property(t => t.MotivoNoFirma).HasMaxLength(clsTransferenciaCustodia.MOTIVO_MAX);
+        builder.Property(t => t.RecibeExternoNombre).HasMaxLength(clsTransferenciaCustodia.NOMBRE_EXTERNO_MAX);
+        builder.Property(t => t.RecibeExternoCedula).HasColumnType("varchar(30)");
+        builder.Ignore(t => t.RecibeEsExterno);
         // El testigo y la foto de la constancia: ningun borrado en cascada (la inspeccion arrastra la transferencia y la foto a la vez).
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.TestigoUsuarioId)
             .HasConstraintName("FK_tblTransferencias_Testigo").OnDelete(DeleteBehavior.NoAction);
