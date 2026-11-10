@@ -16,6 +16,7 @@ Un usuario de un cliente **sin cliente asignado** no ve ninguna unidad.
 ## Cómo se aplica
 
 - **Listados.** Vehículos, inspecciones, viajes, órdenes Sofasa, usuarios, hallazgos, notificaciones, auditoría, reportes y exportaciones filtran por el cliente de quien consulta; el total y la paginación cuentan solo esas filas.
+- **Consultar un carro sin viajes.** El coordinador de calidad (y el comercial y el administrador) busca y abre el inventario de cualquier carro de su cliente **sin tener un viaje asignado y aunque el carro no esté en ningún viaje**; el inspector y el conductor siguen viendo solo los de sus viajes. Es solo lectura. Pruebas: `ConsultaDeCarroApiTests`.
 - **Un recurso por id** de otro cliente responde `403` (no `404`): el inventario de un VIN, un informe, su PDF, la constancia de transferencia…
 - **`cliente_id`.** Quien se limita a su cliente puede enviar el suyo (no cambia nada); enviar otro responde `403`. Solo el `super_admin` ve un cliente a elección o todos.
 - **Alertas y notificaciones.** Las alertas preventivas llegan solo a los `coordinador_calidad` y `admin` activos del cliente de la unidad, nunca de otro.

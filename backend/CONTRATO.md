@@ -861,9 +861,16 @@ Se aplica a:
 | `POST /api/inspecciones` | `403` si la etapa es de otro viaje |
 | `GET /api/sofasa/ordenes` | solo las órdenes vinculadas a sus viajes |
 
-Los reportes (`/api/reportes/*`, `/api/metricas/rechazo`) son agregados y no se filtran. La visibilidad por **cliente** está hoy en los **viajes**: el listado y el detalle
-(`GET /api/viajes`, `GET /api/viajes/{id}`) muestran a quien no es super administrador solo los viajes y los VIN de su cliente (ver «Clientes del viaje»). El resto de recursos
-(vehículos, inspecciones, órdenes) aún no se filtra por cliente.
+Los reportes (`/api/reportes/*`, `/api/metricas/rechazo`) son agregados y no se filtran por viaje. Los demás roles (coordinador de calidad, comercial, administradores) no se limitan por viaje sino por **cliente**: ver «Consultar un carro desde la app» y «Visibilidad por cliente».
+
+#### Consultar un carro desde la app
+El `coordinador_calidad` (y el `comercial` y el `admin`) consulta **los carros de su cliente aunque no tenga ningún viaje asignado y el carro no esté en ningún viaje**, en lectura y con la misma regla de cliente que el listado de hallazgos:
+
+- `GET /api/vehiculos?vin=` encuentra el carro por su VIN (o un fragmento) y `GET /api/vehiculos/{vin}/inventario` (y `/pdf`) abre su ficha con sus inspecciones, sus daños y su estado: `200` con un VIN de su cliente.
+- Con un VIN de **otro cliente** el inventario responde `403` («El VIN no es de su cliente») y la búsqueda no lo devuelve; para que la app lo explique, el `message` dice que ese carro no es de su cliente.
+- Sus informes salen en `GET /api/inspecciones` y se abren con `GET /api/inspecciones/{id}` aunque no sean de un viaje suyo; uno de un VIN de otro cliente responde `403`.
+- El **inspector y el conductor no cambian**: siguen viendo solo los carros de sus viajes (tabla de arriba), aunque el carro sea de su mismo cliente; un VIN de otro viaje responde `403` («El VIN no pertenece a ninguno de sus viajes»).
+- Es **solo lectura**: abrir la captura o la edición a estos roles no forma parte de esta regla (crear inspecciones, firmar o cambiar viajes sigue siendo de sus roles).
 
 > **Retirados.** `POST /api/asignaciones` y `POST /api/etapas` ya no existen (responden `404`): las asignaciones pasaron a ser viajes y las etapas nacen al
 > agregar un VIN a un viaje.
