@@ -32,10 +32,13 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
 
     /// <summary>
     /// Corrige una inspeccion CERRADA: crea la version siguiente (en borrador, vacia: se vuelven a tomar las fotos) que referencia a la anterior;
-    /// la anterior no cambia. 409 si la inspeccion no esta cerrada o ya fue corregida. Cuerpo opcional.
+    /// la anterior no cambia. Solo corrige quien hizo la inspeccion o un administrador (403 CORRECCION_SOLO_AUTOR) y solo mientras su transferencia no tenga una firma ni un cierre (409 INSPECCION_YA_FIRMADA);
+    /// 409 tambien si la inspeccion no esta cerrada o ya fue corregida. Cuerpo opcional.
     /// </summary>
     [HttpPost("{id:guid}/corregir")]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
+    [CodigoError("CORRECCION_SOLO_AUTOR", "La inspeccion la hizo otra persona y quien intenta no es administrador: la corrigen quien la hizo y los administradores")]
+    [CodigoError("INSPECCION_YA_FIRMADA", "La transferencia de la inspeccion ya tiene una firma o un cierre: ya no se corrige (se aclara con una nota)")]
     [ProducesResponseType<InspeccionDto>(StatusCodes.Status201Created)]
     [CuerpoSolicitud(typeof(IAAutos.Aplicacion.Inspecciones.DTOInspecciones.CorregirInspeccionRequest))]
     public async Task<IActionResult> Corregir(Guid id, CancellationToken ct)

@@ -78,6 +78,8 @@ Todos los errores son JSON con la misma forma:
 | `LLEGADA_YA_CERRADA` | 409 | la llegada de Transporte de esa unidad ya estaba confirmada: es un éxito para un reintento (ver «Conductor en ruta») |
 | `HALLAZGO_YA_REVISADO` | 409 | la novedad del conductor ya fue revisada: su zona, clase y nivel ya no se cambian (ver «Revisión de la novedad») |
 | `UNIDAD_NO_SALE` | 409 | la unidad se marcó «no sale» del viaje: no admite novedades ni llegada |
+| `CORRECCION_SOLO_AUTOR` | 403 | corregir una inspección que hizo otra persona sin ser administrador: la corrigen quien la hizo y los administradores (ver «Corregir una inspección») |
+| `INSPECCION_YA_FIRMADA` | 409 | la transferencia de la inspección ya tiene una firma o un cierre: ya no se corrige, sea quien sea quien lo intente (ver «Corregir una inspección») |
 
 **El motivo fijo de los rechazos.** Los rechazos (`409`, `403` y `404`) de **viajes**, **usuarios**, **vehículos** y de la **descarga de la constancia** traen además, en `details.motivo`, un valor fijo en minúsculas (el mismo patrón de `ETAPA_PREVIA_SIN_CIERRE`): el portal y la app muestran el mensaje que corresponde a partir del
 motivo y no de la frase, que puede cambiar. El `code` y el `message` no cambian. Algunos traen datos propios junto al motivo (por ejemplo el viaje que impide la baja de un carro).
@@ -1042,6 +1044,16 @@ sin que se le pida ningún inspector. Sin el permiso, el conductor recibe `403` 
 ### `POST /api/inspecciones/{id}/corregir`
 Campo (quien participa en el viaje, o un administrador). Corrige una inspección **cerrada**: crea la **versión siguiente** (en `borrador` y vacía: se vuelven a tomar las fotos)
 que referencia a la anterior; **la anterior no cambia**. `201` con la `InspeccionDto` nueva. Cuerpo opcional (`fecha`, `lat`, `lng`, `notas`; por defecto la fecha es ahora).
+
+**Quién corrige y hasta cuándo.** El servidor hace cumplir dos reglas antes de crear la versión; los roles que llaman no cambian (`inspector`, `conductor`, `admin`) y ningún rechazo crea una versión ni deja rastro de corrección:
+
+| Regla | Rechazo | Código |
+|---|---|---|
+| Solo corrige **quien hizo la inspección** (su `usuario_id`) **o un administrador** (`admin`, `super_admin`). Quien participa en el viaje pero no la hizo (por ejemplo el conductor con una inspección del inspector) no corrige | `403` «Esta inspección solo la corrigen quien la hizo o un administrador» | `CORRECCION_SOLO_AUTOR` |
+| Solo **mientras nadie la haya firmado**: si la transferencia de la inspección ya tiene una firma (de quien entrega o de quien recibe) o un cierre (firmada, con reservas, constancia de no firma o recibo sin entrega), **nadie** corrige, tampoco quien la hizo ni un administrador | `409` «Esta inspección ya fue firmada…» | `INSPECCION_YA_FIRMADA` |
+
+Los dos códigos son estables y distintos, con `details.motivo` (`solo_autor_o_administrador` e `inspeccion_firmada`), para que la app muestre el mensaje que corresponde. Si ambas se cumplen a la vez, gana la de la firma. Una transferencia ya registrada pero **sin ninguna firma** no impide corregir. **Después de firmar se sigue aclarando**: la nota aclaratoria
+(`POST /api/inspecciones/{id}/notas`) y la firma de quien recibe con reservas (`POST /api/inspecciones/{id}/transferencia/reservas`) funcionan igual y no cambian la inspección.
 
 - `409` si la inspección no está cerrada (se sigue editando), si ya fue corregida (se corrige la última versión) o si el viaje está finalizado o cancelado. `403` si el viaje no es del usuario. `404` si no existe.
 - La versión nueva tiene sus propias fotos, hallazgos, transferencia y reglas de cierre. Una etapa puede tener varias versiones; los listados e informes las muestran todas con su `version`.
