@@ -923,6 +923,25 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task El_usuario_de_la_aplicacion_no_puede_borrar_la_evidencia_ni_el_historial()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql (o 01-crear-usuario-app.sql en una base nueva).
+        await using var conexion = await AbrirAsync();
+
+        var tablasSinDelete = await EscalarAsync<int>(
+            conexion,
+            """
+            SELECT COUNT(DISTINCT p.major_id)
+            FROM sys.database_permissions p
+            WHERE p.class = 1 AND p.permission_name = N'DELETE' AND p.state = N'D'
+              AND p.major_id IN (OBJECT_ID(N'tblEvidencias'), OBJECT_ID(N'tblHallazgos'), OBJECT_ID(N'tblHallazgoSeguimiento'), OBJECT_ID(N'tblNotasAclaratorias'),
+                                 OBJECT_ID(N'tblTransferenciasCustodia'), OBJECT_ID(N'tblNotificaciones'), OBJECT_ID(N'tblAuditLog'), OBJECT_ID(N'tblVehiculos'))
+            """);
+
+        Assert.True(tablasSinDelete == 8, "Al usuario de la aplicacion aun le falta el DENY DELETE sobre la evidencia y el historial. Ejecute database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task La_adopcion_cuenta_solo_salidas_cerradas_y_tiene_su_vista_por_camion()
     {
         // Solo lectura: avisa si falta ejecutar database/cambios-esquema/40-adopcion-por-carro-y-por-camion.sql.

@@ -35,7 +35,9 @@ Cambios intencionales que corrigen riesgos detectados en el diagnostico. Ninguno
 - Un filtro global rechaza con `403 PIN_CHANGE_REQUIRED` toda accion mientras el PIN sea temporal, salvo `cambiar-pin`, `me` y `logout`.
 - El PIN y la contrasena nunca se guardan ni se devuelven en claro: solo el hash (`PinHash`, `PasswordHash`). El PIN generado por la API viaja una unica vez en la respuesta que lo crea.
 - Todo el acceso a datos es parametrizado (EF Core).
-- La API se conecta con un usuario de base de datos de minimo privilegio (`database/01-crear-usuario-app.sql`), no con `sa`.
+- La API se conecta con un usuario de base de datos de minimo privilegio (`database/01-crear-usuario-app.sql`), no con `sa`. Ese usuario **no puede borrar la evidencia ni el historial**: `db_datawriter` incluye DELETE sobre todo, asi que el script le **niega** (`DENY DELETE`) `tblEvidencias`, `tblHallazgos`, `tblHallazgoSeguimiento`,
+  `tblNotasAclaratorias`, `tblTransferenciasCustodia`, `tblNotificaciones`, `tblAuditLog` y `tblVehiculos` (un vehiculo se da de baja, no se borra); conserva SELECT, INSERT y UPDATE y sigue borrando lo que la API si borra (etapas y viajes sin inspecciones, usuarios sin historial, catalogos). Es una segunda defensa
+  junto a los triggers con error 51003. Una base ya creada lo recibe con `database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql` (ajustando `@esquema` y `@usuarioApp`); para volver a darle el permiso: `REVOKE DELETE ON <tabla> FROM <usuario>`.
 - El secreto JWT se valida al arrancar (minimo 32 caracteres).
 - Las fotos no son publicas: solo se ven con una URL firmada por el servidor (HMAC-SHA256 del nombre del archivo y su vencimiento con `Storage__FirmaSecreto`, minimo 32 caracteres) y vigente (`url_firmada_minutos`). Una URL sin firma, con otra firma o vencida
   responde `403 URL_FIRMADA_INVALIDA`; la firma se compara en tiempo constante y no hace falta enviar el token, asi que sirve en una etiqueta de imagen.
