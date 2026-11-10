@@ -108,16 +108,29 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
             return [];
         }
 
-        // Cerradas antes de que empezara esta, del mismo vehiculo; sin la version que esta corrige ni las que ya reemplazo una correccion cerrada.
+        return await PreviasAsync(actual.VehiculoId, inspeccionId, actual.CorrigeInspeccionId, actual.IniciadaAt, ct);
+    }
+
+    public Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosDeVehiculoAsync(Guid vehiculoId, CancellationToken ct = default) =>
+        PreviasAsync(vehiculoId, null, null, null, ct);
+
+    /// <summary>
+    /// Los hallazgos de las inspecciones cerradas del vehiculo, del cierre mas reciente al mas antiguo. Con <paramref name="antesDe"/> solo las cerradas antes de ese
+    /// instante, y con <paramref name="excluir"/> y <paramref name="corrige"/> se dejan fuera la inspeccion que pregunta y la version que corrige. Nunca entran las que
+    /// ya reemplazo una correccion cerrada.
+    /// </summary>
+    private async Task<IReadOnlyList<HallazgoPrevioDto>> PreviasAsync(
+        Guid vehiculoId, Guid? excluir, Guid? corrige, DateTimeOffset? antesDe, CancellationToken ct)
+    {
         var previas = await (from i in contexto.Inspecciones.AsNoTracking()
                              join e in contexto.Etapas on i.EtapaId equals e.Id
                              join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id
                              join vj in contexto.Viajes on i.ViajeId equals vj.Id
-                             where e.VehiculoId == actual.VehiculoId
-                                && i.Id != inspeccionId
-                                && i.Id != actual.CorrigeInspeccionId
+                             where e.VehiculoId == vehiculoId
+                                && (excluir == null || i.Id != excluir)
+                                && (corrige == null || i.Id != corrige)
                                 && i.Estado == clsEstadoInspeccion.CERRADA
-                                && i.CerradaAt < actual.IniciadaAt
+                                && (antesDe == null || i.CerradaAt < antesDe)
                                 && !contexto.Inspecciones.Any(c => c.CorrigeInspeccionId == i.Id && c.Estado == clsEstadoInspeccion.CERRADA)
                              select new { i.Id, i.Momento, CerradaAt = i.CerradaAt!.Value, i.ViajeId, vj.CodigoMtrack, Proceso = p.Codigo }).ToListAsync(ct);
         if (previas.Count == 0)

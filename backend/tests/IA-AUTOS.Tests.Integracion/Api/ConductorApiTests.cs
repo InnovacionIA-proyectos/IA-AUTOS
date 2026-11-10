@@ -643,6 +643,54 @@ public sealed class ConductorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal(ajeno, deOtro.GetProperty("etapas").EnumerateArray().SelectMany(et => et.GetProperty("inspecciones").EnumerateArray()).Single().GetProperty("hallazgos")[0].GetProperty("id").GetGuid());
     }
 
+    /// <summary>
+    /// El caso del patio: el vehiculo ya viajo antes, con otra tripulacion, y traia un dano. El inventario del inspector de hoy no lo trae —va recortado a sus viajes— y por eso los
+    /// hallazgos previos no se pueden deducir de ahi: se piden a <c>/api/vehiculos/{vin}/hallazgos-previos</c>, que es toda la historia del VIN.
+    /// </summary>
+    [Fact]
+    public async Task Los_hallazgos_previos_del_VIN_traen_los_de_un_viaje_anterior_de_otra_tripulacion()
+    {
+        var e = await EscenarioAsync();
+        var inspector = await SesionAsync("inspector@ejemplo.com", clsRol.INSPECTOR);
+        var otroInspector = await SesionAsync("otro-inspector@ejemplo.com", clsRol.INSPECTOR);
+        var otroConductor = await SesionAsync("otro-conductor@ejemplo.com", clsRol.CONDUCTOR);
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET InspectorId = @i WHERE Id = @v", ("@i", inspector.UsuarioId), ("@v", e.Viaje));
+        var (_, propio) = await HallazgoDelInspectorAsync(e, inspector);
+
+        // El mismo VIN en otro viaje, con otra tripulacion, y su propio hallazgo cerrado.
+        var otroViaje = await Sembrador.ViajeAsync(conductorId: otroConductor.UsuarioId, inspectorId: otroInspector.UsuarioId);
+        var otraEtapa = Guid.NewGuid();
+        await Sembrador.EjecutarAsync("INSERT dbo.tblViajeVehiculos (Id, ViajeId, VehiculoId) VALUES (NEWID(), @v, @ve)", ("@v", otroViaje), ("@ve", e.Vehiculo));
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@e, @ve, @v, (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'cargue'), 1)",
+            ("@e", otraEtapa), ("@ve", e.Vehiculo), ("@v", otroViaje));
+        var (_, ajeno) = await Sembrador.InformeCerradoConHallazgoAsync(otraEtapa, otroInspector.UsuarioId, await ZonaFrenteAsync(), nivel: "v1", conFoto: true);
+
+        var inventario = await ComoJsonAsync(await Como(inspector).GetAsync($"/api/vehiculos/{e.Vin}/inventario"));
+        var previos = await ComoJsonAsync(await Como(inspector).GetAsync($"/api/vehiculos/{e.Vin}/hallazgos-previos"));
+
+        var ids = previos.EnumerateArray().Select(h => h.GetProperty("id").GetGuid()).ToList();
+        Assert.Contains(ajeno, ids);
+        Assert.Contains(propio, ids);
+        Assert.Contains(previos.EnumerateArray(), h => h.GetProperty("viaje_id").GetGuid() == otroViaje && h.GetProperty("evidencias").GetArrayLength() == 1);
+        // El inventario sigue recortado a los viajes del inspector: es justo lo que hacia invisible el dano del viaje anterior.
+        Assert.Equal(1, HallazgosDelInventario(inventario));
+        Assert.DoesNotContain(inventario.GetProperty("etapas").EnumerateArray(), et => et.GetProperty("viaje_id").GetGuid() == otroViaje);
+    }
+
+    [Fact]
+    public async Task Los_hallazgos_previos_del_VIN_responden_403_al_conductor_y_al_que_no_lleva_ese_VIN()
+    {
+        var e = await EscenarioAsync();
+        var ajeno = await SesionAsync("inspector-ajeno@ejemplo.com", clsRol.INSPECTOR);
+
+        var delConductor = await Como(e.Conductor).GetAsync($"/api/vehiculos/{e.Vin}/hallazgos-previos");
+        var delAjeno = await Como(ajeno).GetAsync($"/api/vehiculos/{e.Vin}/hallazgos-previos");
+
+        Assert.Equal(HttpStatusCode.Forbidden, delConductor.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, delAjeno.StatusCode);
+    }
+
     [Fact]
     public async Task El_conductor_si_ve_sus_propias_novedades_en_el_informe_y_el_inventario()
     {

@@ -47,6 +47,12 @@ public interface IConsultasInspecciones
     /// al mas antiguo. Una inspeccion corregida cuenta con su ultima version cerrada y no con la que reemplazo.
     /// </summary>
     Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosAsync(Guid inspeccionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lo mismo, pero de todo el historial del vehiculo y sin inspeccion de referencia: no hay corte por fecha de inicio ni version corregida que excluir. Es lo que
+    /// pide el equipo en el patio, que arma el informe entero antes de crear nada y necesita los previos descargados de antemano para trabajar sin senal.
+    /// </summary>
+    Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosDeVehiculoAsync(Guid vehiculoId, CancellationToken ct = default);
 }
 
 /// <summary>Arma el DTO de los hallazgos con lo que solo referencian: su zona, su nivel de severidad y si ya tienen su foto.</summary>

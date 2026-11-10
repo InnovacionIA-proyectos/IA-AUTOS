@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.0.0"
+    "version": "3.1.0"
   },
   "paths": {
     "/api/viajes": {
@@ -5926,6 +5926,384 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/InventarioDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/vehiculos/{vin}/hallazgos-previos": {
+      "get": {
+        "tags": [
+          "Vehiculos"
+        ],
+        "operationId": "Vehiculos_HallazgosPrevios",
+        "parameters": [
+          {
+            "name": "vin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "examples": [
+                    [
+                      {
+                        "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "codigo_mtrack": "MTK-0001",
+                        "proceso": "cargue",
+                        "momento": "salida",
+                        "cerrada_at": "2026-10-22T14:30:00.000Z",
+                        "evidencias": [
+                          {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "sello_fecha": "2026-10-22T14:30:00.000Z",
+                            "sello_lat": 1.5,
+                            "sello_lng": 1.5,
+                            "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                            "url_expira_at": "2026-10-22T14:30:00.000Z",
+                            "created_at": "2026-10-22T14:30:00.000Z",
+                            "updated_at": "2026-10-22T14:30:00.000Z",
+                            "vista_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                            "sello_servidor_at": "2026-10-22T14:30:00.000Z",
+                            "precision": 1.5,
+                            "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "nota": "Mensaje de ejemplo",
+                            "sin_ubicacion": true,
+                            "es_constancia": true,
+                            "es_sello": true,
+                            "ruta_archivo": "texto",
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                          }
+                        ],
+                        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "parte_vehiculo": "texto",
+                        "clase_dano": "golpe",
+                        "tamano_dano": "5_10cm",
+                        "coords_diagrama": {
+                          "x": 1.5,
+                          "y": 1.5
+                        },
+                        "cuadrante_numero": 1,
+                        "lado": "izquierdo",
+                        "cuadrante_nombre": "texto",
+                        "zona": "texto",
+                        "aiag_area": "texto",
+                        "tipo_novedad": "texto",
+                        "nivel_severidad": "v1",
+                        "nivel_nombre": "texto",
+                        "nivel_accion": "texto",
+                        "origen": "texto",
+                        "nota": "Mensaje de ejemplo",
+                        "es_preexistente": true,
+                        "hallazgo_origen_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "confirmado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "estado_seguimiento": "texto",
+                        "evidencia_completa": true,
+                        "evidencia_faltante": [
+                          "texto"
+                        ],
+                        "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "revisado_at": "2026-10-22T14:30:00.000Z",
+                        "created_at": "2026-10-22T14:30:00.000Z",
+                        "updated_at": "2026-10-22T14:30:00.000Z"
+                      }
+                    ]
+                  ],
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HallazgoPrevioDto"
+                  }
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "examples": [
+                    [
+                      {
+                        "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "codigo_mtrack": "MTK-0001",
+                        "proceso": "cargue",
+                        "momento": "salida",
+                        "cerrada_at": "2026-10-22T14:30:00.000Z",
+                        "evidencias": [
+                          {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "sello_fecha": "2026-10-22T14:30:00.000Z",
+                            "sello_lat": 1.5,
+                            "sello_lng": 1.5,
+                            "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                            "url_expira_at": "2026-10-22T14:30:00.000Z",
+                            "created_at": "2026-10-22T14:30:00.000Z",
+                            "updated_at": "2026-10-22T14:30:00.000Z",
+                            "vista_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                            "sello_servidor_at": "2026-10-22T14:30:00.000Z",
+                            "precision": 1.5,
+                            "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "nota": "Mensaje de ejemplo",
+                            "sin_ubicacion": true,
+                            "es_constancia": true,
+                            "es_sello": true,
+                            "ruta_archivo": "texto",
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                          }
+                        ],
+                        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "parte_vehiculo": "texto",
+                        "clase_dano": "golpe",
+                        "tamano_dano": "5_10cm",
+                        "coords_diagrama": {
+                          "x": 1.5,
+                          "y": 1.5
+                        },
+                        "cuadrante_numero": 1,
+                        "lado": "izquierdo",
+                        "cuadrante_nombre": "texto",
+                        "zona": "texto",
+                        "aiag_area": "texto",
+                        "tipo_novedad": "texto",
+                        "nivel_severidad": "v1",
+                        "nivel_nombre": "texto",
+                        "nivel_accion": "texto",
+                        "origen": "texto",
+                        "nota": "Mensaje de ejemplo",
+                        "es_preexistente": true,
+                        "hallazgo_origen_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "confirmado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "estado_seguimiento": "texto",
+                        "evidencia_completa": true,
+                        "evidencia_faltante": [
+                          "texto"
+                        ],
+                        "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "revisado_at": "2026-10-22T14:30:00.000Z",
+                        "created_at": "2026-10-22T14:30:00.000Z",
+                        "updated_at": "2026-10-22T14:30:00.000Z"
+                      }
+                    ]
+                  ],
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HallazgoPrevioDto"
+                  }
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "examples": [
+                    [
+                      {
+                        "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "codigo_mtrack": "MTK-0001",
+                        "proceso": "cargue",
+                        "momento": "salida",
+                        "cerrada_at": "2026-10-22T14:30:00.000Z",
+                        "evidencias": [
+                          {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "sello_fecha": "2026-10-22T14:30:00.000Z",
+                            "sello_lat": 1.5,
+                            "sello_lng": 1.5,
+                            "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                            "url_expira_at": "2026-10-22T14:30:00.000Z",
+                            "created_at": "2026-10-22T14:30:00.000Z",
+                            "updated_at": "2026-10-22T14:30:00.000Z",
+                            "vista_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                            "sello_servidor_at": "2026-10-22T14:30:00.000Z",
+                            "precision": 1.5,
+                            "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "nota": "Mensaje de ejemplo",
+                            "sin_ubicacion": true,
+                            "es_constancia": true,
+                            "es_sello": true,
+                            "ruta_archivo": "texto",
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                          }
+                        ],
+                        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "parte_vehiculo": "texto",
+                        "clase_dano": "golpe",
+                        "tamano_dano": "5_10cm",
+                        "coords_diagrama": {
+                          "x": 1.5,
+                          "y": 1.5
+                        },
+                        "cuadrante_numero": 1,
+                        "lado": "izquierdo",
+                        "cuadrante_nombre": "texto",
+                        "zona": "texto",
+                        "aiag_area": "texto",
+                        "tipo_novedad": "texto",
+                        "nivel_severidad": "v1",
+                        "nivel_nombre": "texto",
+                        "nivel_accion": "texto",
+                        "origen": "texto",
+                        "nota": "Mensaje de ejemplo",
+                        "es_preexistente": true,
+                        "hallazgo_origen_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "confirmado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "estado_seguimiento": "texto",
+                        "evidencia_completa": true,
+                        "evidencia_faltante": [
+                          "texto"
+                        ],
+                        "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "revisado_at": "2026-10-22T14:30:00.000Z",
+                        "created_at": "2026-10-22T14:30:00.000Z",
+                        "updated_at": "2026-10-22T14:30:00.000Z"
+                      }
+                    ]
+                  ],
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HallazgoPrevioDto"
+                  }
                 }
               }
             }
