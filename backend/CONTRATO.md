@@ -724,7 +724,7 @@ Gestión de viajes. Cambia el destino de **una** unidad: cuerpo `{ "lugar_destin
 unidades del viaje no se tocan. `200` con el `ViajeDto`. `404` si el VIN no está en el viaje; `409` si el viaje no está activo, si la unidad no sale del viaje o si su Descargue ya tiene un informe cerrado.
 
 ### Reclamo del camión
-El inspector reclama el camión que va a revisar («revisar este»). Los puntos de cada inspector (lugares del catálogo `lugares`) los asigna Datos; el inspector solo reclama lo de sus puntos.
+El inspector reclama el camión que va a revisar («revisar este»). Los **puntos** de cada inspector (lugares del catálogo `lugares`) los asignan el coordinador de calidad y los administradores desde el portal (ver «Puntos del inspector»); el inspector solo reclama lo de sus puntos y, asignado un punto, ve sus pendientes sin otro paso.
 
 - `POST /api/viajes/{id}/reclamos` con `{ "proceso": "cargue" | "entrega" }` (solo `inspector`) → `201` con el `ReclamoDto`, o `200` si el reclamo ya era suyo. `cargue`: un cargue **programado para hoy** (hora de Colombia) en uno de sus puntos (`lugar_cargue_id`); el inspector queda como
   **inspector del viaje** (de ahí salen los firmantes de la transferencia). `entrega`: un viaje cuyas unidades se entregan en uno de sus puntos (revisión de la llegada del Descargue); no cambia el inspector del cargue, y quien la reclama ve y firma las entregas del viaje
@@ -886,7 +886,7 @@ Campo. `201` con la inspección. El usuario sale del token (no se envía) y **la
 Inspector y conductor reciben `403` si la etapa es de un viaje que no es suyo; un viaje finalizado o cancelado responde `409`; una etapa inexistente, `404`.
 
 **El conductor no crea la salida de un Cargue… salvo que active la excepción.** Si la etapa es el Cargue, la salida la crea el inspector: el conductor recibe `403` con «La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción» (no hay ninguna marca previa en el cargue).
-En Transporte y Descargue el conductor sí la crea. La regla es de la salida del Cargue; la llegada y el resto no cambian. La excepción «No hay inspector» está en [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso) (decisión del equipo, pendiente de confirmar por el negocio, P-073).
+En Transporte y Descargue el conductor sí la crea. La regla es de la salida del Cargue; la llegada y el resto no cambian. La excepción «No hay inspector» está en [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso) (donde el punto de cargue tiene inspectores se pide y se concede; ver «Permiso de la excepción»).
 
 **La salida exige la etapa anterior terminada.** Si el VIN tiene una etapa anterior en el viaje (por su `orden`) y esa etapa no tiene su **llegada cerrada**, o tiene una
 **transferencia sin tipo de cierre**, la salida responde `409` con `code: "ETAPA_PREVIA_SIN_CIERRE"` y `details` con `motivo` (`etapa_previa_sin_cierre` si falta cerrar la llegada,
@@ -926,9 +926,21 @@ cambiarla, se corrige).
 son la hora del servidor al crear y al cerrar (`cerrada_at` es `null` en borrador). `version` es 1 en la original y 2, 3… en las correcciones, que traen en
 `corrige_inspeccion_id` la versión que corrigen. `motivo_sin_inspector` y `novedades_proceso` son los de la excepción «No hay inspector» (`null` y `[]` en el resto).
 
+### Puntos del inspector: `GET|POST /api/usuarios/{id}/puntos` y `DELETE /api/usuarios/{id}/puntos/{lugar}`
+Los **puntos** de un inspector son los lugares reales (catálogo `lugares`) donde trabaja; un inspector puede tener varios. Los administran `coordinador_calidad`, `admin` y `super_admin` (cada uno, los inspectores de **su** cliente; el super administrador, los de todos); el inspector solo **consulta los suyos**; a los demás roles responde `403` (el rechazo de siempre).
+
+| Llamada | Qué hace |
+|---|---|
+| `GET /api/usuarios/{id}/puntos` | `{ "usuario_id": "uuid", "puntos": [ { "lugar_id": "uuid", "lugar": "CEDI Envigado", "ciudad": "Envigado", "asignado_at": "…" } ] }`, por nombre de lugar |
+| `POST /api/usuarios/{id}/puntos` con `{ "lugar_ids": ["uuid", "uuid"] }` | asigna uno o varios puntos (los que ya tenía se conservan; repetir uno no cambia nada) y responde con sus puntos |
+| `DELETE /api/usuarios/{id}/puntos/{lugar}` | quita un punto y responde con sus puntos (`404` si no lo tenía) |
+
+`404` si el usuario no existe (o es de otro cliente); `400` en `usuario` si no es inspector; `400` en `lugar_ids` si la lista viene vacía o algún lugar no existe o está inactivo (se nombran juntos). Asignado un punto, el inspector ve **sin otro paso** los pendientes de ese punto (`GET /api/viajes/pendientes`). Cada asignación y cada retiro
+quedan en la auditoría con quién y cuándo (`usuario.puntos_asignar` y `usuario.punto_quitar`, entidad `usuarios`).
+
 ### Excepción «No hay inspector» y novedades de proceso
 
-Si no hay inspector en el Cargue de una unidad, el **conductor del viaje** activa en el momento la excepción y crea la salida con `motivo_sin_inspector`:
+Si no hay inspector en el Cargue de una unidad, el **conductor del viaje** activa la excepción y crea la salida con `motivo_sin_inspector`. **Donde el punto de cargue del viaje no tiene inspectores asignados la activa en el momento**; **donde tiene inspectores la excepción se pide y se concede** (ver «Permiso de la excepción»):
 
 ```json
 { "etapa_id": "uuid", "momento": "salida", "fecha": "2026-10-23T08:30:00-05:00", "lat": 6.2442, "lng": -75.5812, "motivo_sin_inspector": "otro", "motivo_sin_inspector_texto": "El inspector se enfermó" }
@@ -942,6 +954,7 @@ Si no hay inspector en el Cargue de una unidad, el **conductor del viaje** activ
 | motivo en cualquier otra salida, en una llegada, en otra etapa, en un Cargue sin apoyo o de un inspector o administrador | `400` «Campo no admitido» |
 | conductor de otro viaje | `403` |
 | el inspector ya creó esa salida | `409`, como hoy |
+| el mismo caso en un punto de cargue **con inspectores** y sin el permiso concedido | `403` («pida el permiso de la excepción…») |
 
 La inspección sigue las reglas de la salida que hace el conductor (las 7 vistas con sello, hallazgos del conductor sin nivel V). Al crearla, en la misma confirmación:
 
@@ -964,6 +977,26 @@ Una novedad de proceso **no es un hallazgo**: no tiene zona, clase ni nivel y no
 ```
 
 `motivo_sin_inspector` es `null` y `novedades_proceso` es `[]` en las demás inspecciones. `motivo` es el nombre del motivo y `motivo_codigo` su código. Las novedades se listan de la más antigua a la más reciente.
+
+Cada novedad trae además `permiso` (en el viaje, la inspección y el inventario): `null` si la excepción se activó directamente (el punto no tenía inspectores) o, si se pidió el permiso, `{ solicitado_por_nombre, solicitado_at, solicitado_lat, solicitado_lng, concedido_por_nombre, concedido_at, autorizado_por_tiempo }`: **quién pidió, cuándo y desde dónde**, y **quién concedió o, si
+nadie respondió, que lo concedió el reloj** (`autorizado_por_tiempo: true`, sin quien).
+
+#### Permiso de la excepción
+
+Donde el punto de cargue **tiene inspectores** asignados (ver «Puntos del inspector») el conductor **pide el permiso** antes de activar la excepción:
+
+- `POST /api/viajes/{id}/permiso-sin-inspector` (solo el conductor del viaje; `403` el resto) con `{ "motivo_sin_inspector": "inspector_no_llego", "motivo_sin_inspector_texto"?, "fecha": "2026-11-10T08:30:00-05:00", "lat"?, "lng"? }`: `motivo_sin_inspector` es un motivo activo de `motivos-sin-inspector` (y su texto si lo pide), `fecha` es ISO 8601 **con zona** y `lat`/`lng`
+  son el GPS del momento en que lo pide (los mismos errores `400` por campo que la excepción). `201` con el `PermisoSinInspectorDto`; repetir la solicitud devuelve la misma (una por viaje). `409` si el punto de cargue **no** tiene inspectores (ahí la excepción se activa directamente) o el viaje no está activo.
+  Se avisa (`permiso_sin_inspector`, urgencia `alta`, bandeja y push) a los **inspectores del punto** y a los **coordinadores y administradores del cliente**.
+- `POST /api/viajes/{id}/permiso-sin-inspector/conceder` (`coordinador_calidad`, `admin`, `super_admin`): concede el permiso y el **conductor queda habilitado de inmediato**, sin esperar al inspector; se le avisa a él. `404` si no hay solicitud; `409` si ya está concedida.
+- `GET /api/viajes/{id}/permiso-sin-inspector`: el estado (el conductor y el inspector del viaje, los coordinadores y administradores del cliente; `404` si no hay).
+- **Si nadie responde en 10 minutos** el permiso queda **concedido por tiempo**: un proceso periódico lo concede cada minuto (no depende de que alguien abra una pantalla) y **nunca antes de los 10 minutos** (la base lo impide). Queda `autorizado_por_tiempo: true` y sin `concedido_por`; se avisa al conductor y al coordinador.
+
+`PermisoSinInspectorDto`: `{ id, viaje_id, estado ("pendiente" o "concedido"), solicitado_at, vence_at (solicitado_at + 10 minutos), conductor_id, conductor_nombre, lugar_id, lugar, motivo_codigo, motivo, motivo_texto, fecha, lat, lng, concedido_at, concedido_por, concedido_por_nombre, autorizado_por_tiempo }`;
+`fecha`, `lat` y `lng` son los del momento en que el conductor lo pidió. Con el permiso concedido el conductor crea la salida del Cargue con la excepción como siempre (`POST /api/inspecciones` con `motivo_sin_inspector`) y la novedad de proceso queda ligada a su permiso.
+
+**El conductor con permiso cierra la salida del Cargue.** Con el permiso concedido (o con la excepción ya activa donde no hay inspectores) el conductor puede registrar las posiciones de la niñera (`PUT /api/viajes/{id}/vehiculos/{vin}/posicion`, antes solo de inspector, coordinador y administradores) y cerrar esa salida (`POST /api/inspecciones/{id}/cerrar`) con sus posiciones y las fotos de la acomodación,
+sin que se le pida ningún inspector. Sin el permiso, el conductor recibe `403` en la posición. Todo queda en la auditoría: `permiso_sin_inspector.solicitar`, `permiso_sin_inspector.conceder` o `permiso_sin_inspector.conceder_por_tiempo` (entidad `permisos_sin_inspector`) y `novedad_proceso.crear` con su permiso.
 
 ### `POST /api/inspecciones/{id}/corregir`
 Campo (quien participa en el viaje, o un administrador). Corrige una inspección **cerrada**: crea la **versión siguiente** (en `borrador` y vacía: se vuelven a tomar las fotos)
@@ -1466,7 +1499,7 @@ Nada de otros viajes del mismo VIN: el inventario solo trae las etapas de sus vi
 
 Las alertas y los avisos llegan a una **bandeja** (el portal y la app) y, las urgentes, también por **push** al celular. La capacidad `ver_alertas` de `GET /api/auth/me` la tienen `coordinador_calidad`, `admin` y `super_admin` (las alertas preventivas
 de su cliente), `inspector` (solo los avisos operativos dirigidos a él: `captura_incompleta` de una inspección que inició y `transferencia_pendiente` de su firma) y `conductor` (solo `respuesta_conductor`, `captura_incompleta` de una inspección que
-él inició en la salida de un cargue y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente`, `cargue_sin_reclamar` y `propuesta_ubicacion` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
+él inició en la salida de un cargue y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `permiso_sin_inspector` (urgencia alta: el conductor pide el permiso de esa excepción, al inspector del punto y al coordinador del cliente, o se avisa que se concedió; con `datos`: `hecho` `solicitud` o `concesion`), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente`, `cargue_sin_reclamar` y `propuesta_ubicacion` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
 Todo lo que se hace aquí queda en la auditoría.
 
 `NotificacionDto`:
@@ -1486,7 +1519,7 @@ Todo lo que se hace aquí queda en la auditoría.
 `{ "hecho": "entrega_con_una_firma", "lugar_id": "…", "lugar": "…", "parte_que_firmo": "entrega", "motivo": "…", "unidades": 3 }`. Y el de **umbral superado** (`umbral_patron`): `{ "tipo_umbral": "zona", "cuadrante_numero": 4, "lado": "izquierdo", "proceso": null, "total": 12, "umbral": 10, "ventana_dias": 30 }`
 cuando la zona (lado y número de cuadrante) llega al umbral, o `{ "tipo_umbral": "proceso", "cuadrante_numero": null, "lado": null, "proceso": "cargue", … }` cuando es el proceso; con esos campos el portal abre el tablero ya filtrado (`/api/reportes/patrones?proceso=…`). Un dato personal (como la cédula) nunca va en `datos`.
 
-`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar` o `propuesta_ubicacion` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
+`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar`, `propuesta_ubicacion` o `permiso_sin_inspector` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
 
 ### `GET /api/notificaciones`
 Una página de la bandeja, las más recientes primero: `{ "items": [NotificacionDto], "total": 3, "pagina": 1, "tamano": 50, "no_leidas": 2 }`.

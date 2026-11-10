@@ -10,7 +10,20 @@ public sealed record MotivoSinInspectorDto(string Codigo, string Nombre, string?
 /// Algo que paso en el proceso y no es un dano: <c>Tipo</c> es <c>cargue_sin_inspector</c> o <c>recibo_sin_entrega</c>. <c>MotivoCodigo</c> y <c>Motivo</c> (el nombre) salen del catalogo
 /// <c>motivos-sin-inspector</c> y <c>Texto</c> es lo que escribio quien la registro; <c>Fecha</c> es el momento en que ocurrio.
 /// </summary>
-public sealed record NovedadProcesoDto(string Tipo, string? MotivoCodigo, string? Motivo, string? Texto, string? UsuarioNombre, DateTimeOffset Fecha);
+public sealed record NovedadProcesoDto(string Tipo, string? MotivoCodigo, string? Motivo, string? Texto, string? UsuarioNombre, DateTimeOffset Fecha, PermisoDeLaNovedadDto? Permiso = null);
+
+/// <summary>
+/// El permiso con el que se activo la excepcion «No hay inspector» en un punto con inspectores: quien lo pidio, cuando y desde donde (el momento y el GPS de la solicitud) y quien lo concedio o, si nadie respondio, que
+/// lo concedio el reloj (<c>AutorizadoPorTiempo</c>). Nulo en la excepcion que se activo directamente (el punto no tenia inspectores).
+/// </summary>
+public sealed record PermisoDeLaNovedadDto(
+    string? SolicitadoPorNombre,
+    DateTimeOffset SolicitadoAt,
+    double? SolicitadoLat,
+    double? SolicitadoLng,
+    string? ConcedidoPorNombre,
+    DateTimeOffset? ConcedidoAt,
+    bool AutorizadoPorTiempo);
 
 /// <summary>El motivo de una inspeccion (si la hizo el conductor sin el inspector previsto) y sus novedades de proceso, de la mas antigua a la mas reciente.</summary>
 public sealed record NovedadesDeInspeccionDto(MotivoSinInspectorDto? Motivo, IReadOnlyList<NovedadProcesoDto> Novedades)

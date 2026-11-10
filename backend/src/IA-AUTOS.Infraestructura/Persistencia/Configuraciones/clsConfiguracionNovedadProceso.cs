@@ -25,6 +25,8 @@ internal sealed class clsConfiguracionNovedadProceso : IEntityTypeConfiguration<
         builder.Property(n => n.MotivoTexto).HasMaxLength(clsNovedadProceso.TEXTO_MAX);
         builder.Property(n => n.Fecha).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
         builder.Property(n => n.CreatedAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.HasOne<clsPermisoSinInspector>().WithMany().HasForeignKey(n => n.PermisoId)
+            .HasConstraintName("FK_tblNovedadesProceso_Permiso").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsViaje>().WithMany().HasForeignKey(n => n.ViajeId)
             .HasConstraintName("FK_tblNovedadesProceso_Viaje").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsVehiculo>().WithMany().HasForeignKey(n => n.VehiculoId)

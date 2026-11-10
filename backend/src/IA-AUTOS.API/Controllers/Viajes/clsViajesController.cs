@@ -26,7 +26,8 @@ public sealed class clsViajesController(
     clsNoSaleService noSale,
     clsEntregasService entregas,
     clsReclamosService reclamos,
-    clsConductorService conductor) : clsControladorBase
+    clsConductorService conductor,
+    clsPermisosSinInspectorService permisosSinInspector) : clsControladorBase
 {
     /// <summary>
     /// Crea un viaje con su unidad, placa, trailer, conductor, codigo MTrack, <c>fecha_programada</c> y <c>lugar_cargue_id</c> (obligatorios) y, opcionalmente, sus unidades (cada una con su <c>vin</c> y su
@@ -207,11 +208,34 @@ public sealed class clsViajesController(
     }
 
     /// <summary>
+    /// El conductor del viaje pide el permiso de la excepcion «No hay inspector» cuando el punto de cargue tiene inspectores: <c>motivo_sin_inspector</c>, su texto si el motivo lo pide, la <c>fecha</c> y el GPS (<c>lat</c>,
+    /// <c>lng</c>) del momento en que lo pide. Avisa al inspector del punto y al coordinador del cliente. 409 si el punto no tiene inspectores (ahi la excepcion se activa directamente); 403 si no es el conductor del viaje.
+    /// </summary>
+    [HttpPost("{id:guid}/permiso-sin-inspector")]
+    [RolesPermitidos(clsRol.CONDUCTOR)]
+    [ProducesResponseType<PermisoSinInspectorDto>(StatusCodes.Status201Created)]
+    [CuerpoSolicitud(typeof(SolicitarPermisoSinInspectorRequest))]
+    public async Task<IActionResult> SolicitarPermisoSinInspector(Guid id, CancellationToken ct) =>
+        Creado(await permisosSinInspector.SolicitarAsync(id, await LeerCuerpoAsync<SolicitarPermisoSinInspectorRequest>(ct), ct));
+
+    /// <summary>La solicitud del permiso del viaje y su estado (pendiente o concedido, y quien lo concedio o si fue el reloj). 404 si no hay.</summary>
+    [HttpGet("{id:guid}/permiso-sin-inspector")]
+    [RolesPermitidos(clsRol.CONDUCTOR, clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType<PermisoSinInspectorDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ObtenerPermisoSinInspector(Guid id, CancellationToken ct) => Ok(await permisosSinInspector.ObtenerAsync(id, ct));
+
+    /// <summary>El coordinador de calidad o un administrador concede el permiso: el conductor queda habilitado de inmediato, sin esperar al inspector. 404 si no hay solicitud; 409 si ya esta concedido.</summary>
+    [HttpPost("{id:guid}/permiso-sin-inspector/conceder")]
+    [RolesPermitidos(clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType<PermisoSinInspectorDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ConcederPermisoSinInspector(Guid id, CancellationToken ct) => Ok(await permisosSinInspector.ConcederAsync(id, ct));
+
+    /// <summary>
     /// Registra la posicion de la unidad en la ninera (<c>posicion</c> de 1 a 7; <c>null</c> la libera) durante la segunda inspeccion del cargue. 400 «La posicion debe estar entre 1 y 7»; 409 «La posicion N ya esta
     /// ocupada por otra unidad de este viaje» (con dos solicitudes simultaneas por la misma, gana una), si la unidad no sale o si el viaje no tiene su segunda inspeccion del cargue en curso. Responde con el viaje.
     /// </summary>
     [HttpPut("{id:guid}/vehiculos/{vin}/posicion")]
-    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
     [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]
     [CuerpoSolicitud(typeof(AsignarPosicionRequest))]
     public async Task<IActionResult> AsignarPosicion(Guid id, string vin, CancellationToken ct) =>

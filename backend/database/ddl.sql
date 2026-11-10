@@ -1026,7 +1026,7 @@ BEGIN
         CONSTRAINT FK_tblNotificaciones_Inspeccion FOREIGN KEY (InspeccionId) REFERENCES dbo.tblInspecciones (Id),
         CONSTRAINT FK_tblNotificaciones_RespondidaPor FOREIGN KEY (RespondidaPor) REFERENCES dbo.tblUsuarios (Id),
         CONSTRAINT UQ_tblNotificaciones_ClaveDedupe UNIQUE (ClaveDedupe),
-        CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario', 'novedad_proceso', 'reclamo_sin_actividad', 'fuera_de_rango', 'cargue_sin_reclamar', 'propuesta_ubicacion')),
+        CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario', 'novedad_proceso', 'reclamo_sin_actividad', 'fuera_de_rango', 'cargue_sin_reclamar', 'propuesta_ubicacion', 'permiso_sin_inspector')),
         CONSTRAINT CK_tblNotificaciones_Urgencia CHECK (Urgencia IN ('alta', 'media')),
         CONSTRAINT CK_tblNotificaciones_Canal CHECK (Canal IN ('bandeja', 'push', 'correo')),
         CONSTRAINT CK_tblNotificaciones_RespuestaMedio CHECK (RespuestaMedio IS NULL OR RespuestaMedio IN ('app', 'llamada')),
@@ -1720,6 +1720,7 @@ BEGIN
         Fecha         datetimeoffset(3) NOT NULL,
         Lat           float             NULL,
         Lng           float             NULL,
+        PermisoId     uniqueidentifier  NULL,
         CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblNovedadesProceso_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
         CONSTRAINT FK_tblNovedadesProceso_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
         CONSTRAINT FK_tblNovedadesProceso_Vehiculo FOREIGN KEY (VehiculoId) REFERENCES dbo.tblVehiculos (Id),
@@ -2189,12 +2190,64 @@ IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblInspecciones_
 GO
 
 -- Los tipos de notificacion de una base que ya tenia la tabla (en una nueva ya vienen en su CREATE).
-IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%propuesta_ubicacion%')
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%permiso_sin_inspector%')
 BEGIN
     IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones'))
         ALTER TABLE dbo.tblNotificaciones DROP CONSTRAINT CK_tblNotificaciones_Tipo;
-    ALTER TABLE dbo.tblNotificaciones ADD CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario', 'novedad_proceso', 'reclamo_sin_actividad', 'fuera_de_rango', 'cargue_sin_reclamar', 'propuesta_ubicacion'));
+    ALTER TABLE dbo.tblNotificaciones ADD CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario', 'novedad_proceso', 'reclamo_sin_actividad', 'fuera_de_rango', 'cargue_sin_reclamar', 'propuesta_ubicacion', 'permiso_sin_inspector'));
 END
+GO
+
+/* -----------------------------------------------------------------------------
+   Permiso de la excepcion "No hay inspector". tblPermisosSinInspector: la solicitud del conductor cuando el punto de cargue TIENE inspectores (uno por viaje): motivo, texto, y la fecha y el GPS del momento en que
+   la pidio. Se concede por un coordinador o administrador (ConcedidoPor) o, si nadie responde en 10 minutos, por el reloj (PorTiempo = 1, nunca antes de los 10: CK_tblPermisosSinInspector_Reloj).
+   tblNovedadesProceso.PermisoId: la solicitud con la que se activo la excepcion (nulo cuando el punto no tenia inspectores y se activo en el momento). tblNotificaciones admite el tipo permiso_sin_inspector.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblPermisosSinInspector', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblPermisosSinInspector
+    (
+        Id            uniqueidentifier  NOT NULL CONSTRAINT PK_tblPermisosSinInspector PRIMARY KEY,
+        ViajeId       uniqueidentifier  NOT NULL,
+        ConductorId   uniqueidentifier  NOT NULL,
+        LugarId       uniqueidentifier  NOT NULL,
+        MotivoCodigo  varchar(30)       NOT NULL,
+        MotivoTexto   nvarchar(300)     NULL,
+        Fecha         datetimeoffset(3) NOT NULL,
+        Lat           float             NULL,
+        Lng           float             NULL,
+        Estado        varchar(10)       NOT NULL CONSTRAINT DF_tblPermisosSinInspector_Estado DEFAULT ('pendiente'),
+        ConcedidoAt   datetimeoffset(3) NULL,
+        ConcedidoPor  uniqueidentifier  NULL,
+        PorTiempo     bit               NOT NULL CONSTRAINT DF_tblPermisosSinInspector_PorTiempo DEFAULT (0),
+        CreatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblPermisosSinInspector_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt     datetimeoffset(3) NOT NULL CONSTRAINT DF_tblPermisosSinInspector_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblPermisosSinInspector_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
+        CONSTRAINT FK_tblPermisosSinInspector_Conductor FOREIGN KEY (ConductorId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblPermisosSinInspector_Lugar FOREIGN KEY (LugarId) REFERENCES dbo.tblLugares (Id),
+        CONSTRAINT FK_tblPermisosSinInspector_Motivo FOREIGN KEY (MotivoCodigo) REFERENCES dbo.tblMotivosSinInspector (Codigo),
+        CONSTRAINT FK_tblPermisosSinInspector_ConcedidoPor FOREIGN KEY (ConcedidoPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT UQ_tblPermisosSinInspector_Viaje UNIQUE (ViajeId),
+        CONSTRAINT CK_tblPermisosSinInspector_Estado CHECK (Estado IN ('pendiente', 'concedido')),
+        CONSTRAINT CK_tblPermisosSinInspector_Texto CHECK (MotivoTexto IS NULL OR LEN(LTRIM(RTRIM(MotivoTexto))) > 0),
+        CONSTRAINT CK_tblPermisosSinInspector_Lat CHECK (Lat IS NULL OR (Lat BETWEEN -90 AND 90)),
+        CONSTRAINT CK_tblPermisosSinInspector_Lng CHECK (Lng IS NULL OR (Lng BETWEEN -180 AND 180)),
+        -- Pendiente no trae concesion; concedido dice cuando y quien (un coordinador o administrador) o, si fue el reloj, ninguno.
+        CONSTRAINT CK_tblPermisosSinInspector_Concesion CHECK (
+            (Estado = 'pendiente' AND ConcedidoAt IS NULL AND ConcedidoPor IS NULL AND PorTiempo = 0)
+            OR (Estado = 'concedido' AND ConcedidoAt IS NOT NULL AND ((PorTiempo = 0 AND ConcedidoPor IS NOT NULL) OR (PorTiempo = 1 AND ConcedidoPor IS NULL)))),
+        -- El reloj nunca concede antes de los 10 minutos de la solicitud.
+        CONSTRAINT CK_tblPermisosSinInspector_Reloj CHECK (PorTiempo = 0 OR ConcedidoAt >= DATEADD(MINUTE, 10, CreatedAt))
+    );
+    CREATE INDEX IX_tblPermisosSinInspector_Estado ON dbo.tblPermisosSinInspector (Estado, CreatedAt);
+END
+GO
+
+IF COL_LENGTH(N'dbo.tblNovedadesProceso', N'PermisoId') IS NULL
+    ALTER TABLE dbo.tblNovedadesProceso ADD PermisoId uniqueidentifier NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblNovedadesProceso_Permiso' AND parent_object_id = OBJECT_ID(N'dbo.tblNovedadesProceso'))
+    ALTER TABLE dbo.tblNovedadesProceso ADD CONSTRAINT FK_tblNovedadesProceso_Permiso FOREIGN KEY (PermisoId) REFERENCES dbo.tblPermisosSinInspector (Id);
 GO
 
 IF OBJECT_ID(N'dbo.tblPropuestasUbicacion', N'U') IS NULL

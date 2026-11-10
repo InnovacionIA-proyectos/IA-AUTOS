@@ -74,6 +74,8 @@ public sealed class clsInspeccionesService(
     IConsultasInspecciones consultas,
     IConsultasNovedadesProceso consultasNovedades,
     INovedadProcesoRepository novedades,
+    IPermisoSinInspectorRepository permisos,
+    IReclamoRepository reclamos,
     clsEmisorNotificaciones emisor,
     IDescriptorHallazgos descriptorHallazgos,
     clsAccesoViajes acceso,
@@ -116,6 +118,18 @@ public sealed class clsInspeccionesService(
         // «No hay inspector» (con su motivo); sin motivo es 403 y en cualquier otro caso el motivo no se admite (400).
         var porExcepcion = actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && await EsCargueAsync(etapa, ct);
         var motivo = await ResolverMotivoAsync(solicitud, porExcepcion, ct);
+
+        // Donde el punto de cargue TIENE inspectores la excepcion se pide y la concede un coordinador (o el reloj a los 10 minutos); donde no los hay se activa en el momento, como siempre.
+        clsPermisoSinInspector? permiso = null;
+        if (porExcepcion && viaje.LugarCargueId is { } lugarDeCargue && await reclamos.LugarTieneInspectoresAsync(lugarDeCargue, ct))
+        {
+            permiso = await permisos.ObtenerDeViajeAsync(viaje.Id, ct);
+            if (permiso is not { EstaConcedido: true })
+            {
+                throw new clsProhibidoException(
+                    $"El punto de cargue tiene inspectores: pida el permiso de la excepción «No hay inspector» y espere a que lo conceda el coordinador (o a que pasen {clsPermisoSinInspector.MINUTOS_DE_ESPERA} minutos sin respuesta)");
+            }
+        }
 
         // La salida de una etapa solo se crea cuando la etapa anterior del VIN ya termino (su llegada esta cerrada).
         if (solicitud.Momento == clsMomento.SALIDA)
@@ -160,7 +174,8 @@ public sealed class clsInspeccionesService(
                 solicitud.Fecha!.Value,
                 solicitud.Lat,
                 solicitud.Lng,
-                reloj.Ahora);
+                reloj.Ahora,
+                permiso?.Id);
             novedades.Agregar(novedad);
             await auditor.RegistrarDeViajeAsync(
                 "novedad_proceso.crear", "novedades_proceso", novedad.Id, viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(novedad)), vehiculo.ClienteId, ct);

@@ -4,6 +4,7 @@ using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Catalogos;
+using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
@@ -24,6 +25,8 @@ public sealed class clsViajesService(
     ILugarRepository lugares,
     clsEnsamblajeViajes ensamblaje,
     clsAccesoViajes acceso,
+    IPermisoSinInspectorRepository permisos,
+    INovedadProcesoRepository novedadesProceso,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -319,6 +322,13 @@ public sealed class clsViajesService(
         if (actual.SoloSusViajes() is { } usuarioId && !await acceso.ParticipaOReclamaAsync(viaje, usuarioId, ct))
         {
             throw new clsProhibidoException("El viaje no está asignado a su usuario");
+        }
+
+        // El conductor solo acomoda las unidades cuando hace el cargue sin inspector: con el permiso concedido (donde el punto tiene inspectores) o con la excepcion ya activa (donde no los tiene).
+        if (actual.Rol == clsRol.CONDUCTOR
+            && !(await permisos.ObtenerDeViajeAsync(id, ct) is { EstaConcedido: true } || await novedadesProceso.ExisteCargueSinInspectorAsync(id, ct)))
+        {
+            throw new clsProhibidoException("El conductor solo registra la posición de las unidades cuando hace el cargue sin inspector, con el permiso concedido");
         }
 
         var vehiculo = await vehiculos.ObtenerPorVinAsync(vin, ct)

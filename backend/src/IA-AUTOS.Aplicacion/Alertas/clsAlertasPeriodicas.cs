@@ -84,7 +84,8 @@ public sealed class clsAlertasPeriodicas(
     clsCalculadoraVistas calculadoraVistas,
     clsEmisorNotificaciones emisor,
     IReloj reloj,
-    ILogger<clsAlertasPeriodicas> registro)
+    ILogger<clsAlertasPeriodicas> registro,
+    IAAutos.Aplicacion.Viajes.clsPermisosSinInspectorService permisosSinInspector)
 {
     public const int UMBRAL_POR_DEFECTO = 10;
     public const int VENTANA_DIAS_POR_DEFECTO = 30;
@@ -155,6 +156,12 @@ public sealed class clsAlertasPeriodicas(
 
         return emitidas;
     }
+
+    /// <summary>
+    /// Concede por tiempo los permisos de la excepcion «No hay inspector» que cumplieron 10 minutos sin respuesta (nunca antes) y avisa al conductor y al coordinador. Corre cada minuto, aparte de los demas avisos, para que
+    /// la espera no dependa de que alguien abra una pantalla. Devuelve cuantos concedio.
+    /// </summary>
+    public Task<int> EjecutarPermisosSinInspectorAsync(CancellationToken ct = default) => permisosSinInspector.ConcederVencidosAsync(ct);
 
     /// <summary>Corre los avisos operativos: captura incompleta, transferencia pendiente y camion reclamado sin actividad. Devuelve cuantos avisos intento crear.</summary>
     public async Task<int> EjecutarAvisosAsync(CancellationToken ct = default) =>

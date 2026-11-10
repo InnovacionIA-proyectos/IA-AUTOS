@@ -70,6 +70,10 @@ public sealed class clsInspectorLugar
     public Guid LugarId { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
+
+    /// <summary>Asigna el punto (un lugar real) al inspector.</summary>
+    public static clsInspectorLugar Crear(Guid usuarioId, Guid lugarId, DateTimeOffset ahora) =>
+        new() { Id = Guid.NewGuid(), UsuarioId = usuarioId, LugarId = lugarId, CreatedAt = ahora };
 }
 
 public interface IReclamoRepository
@@ -82,6 +86,16 @@ public interface IReclamoRepository
 
     /// <summary>Los lugares (puntos) del inspector.</summary>
     Task<IReadOnlyList<Guid>> LugaresDelInspectorAsync(Guid usuarioId, CancellationToken ct = default);
+
+    /// <summary>Los puntos del inspector (con la fecha en que se le asignaron), del mas antiguo al mas reciente.</summary>
+    Task<IReadOnlyList<clsInspectorLugar>> ObtenerPuntosAsync(Guid usuarioId, CancellationToken ct = default);
+
+    void AgregarPunto(clsInspectorLugar punto);
+
+    void QuitarPunto(clsInspectorLugar punto);
+
+    /// <summary>Los inspectores activos asignados al lugar (sus ids).</summary>
+    Task<IReadOnlyList<Guid>> InspectoresDelLugarAsync(Guid lugarId, CancellationToken ct = default);
 
     /// <summary>True si el lugar tiene al menos un inspector activo asignado (<c>tblInspectorLugares</c>): ahi la entrega la firma el inspector y no una persona externa.</summary>
     Task<bool> LugarTieneInspectoresAsync(Guid lugarId, CancellationToken ct = default);

@@ -227,7 +227,7 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.DoesNotContain("con_personal_apoyo", contrato.ToJsonString());
         Assert.Contains("novedades_proceso", esquemas["ViajeDto"]!["properties"]!.AsObject().Select(p => p.Key));
         Assert.Equal(
-            ["tipo", "motivo_codigo", "motivo", "texto", "usuario_nombre", "fecha", "vin", "inspeccion_id"],
+            ["tipo", "motivo_codigo", "motivo", "texto", "usuario_nombre", "fecha", "vin", "inspeccion_id", "permiso"],
             esquemas["NovedadDelViajeDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList());
     }
 
