@@ -11,7 +11,7 @@ compila el .ipa SIN firmar    →     Sideloadly lo firma con un   →    se ins
 ## Qué hay en el proyecto
 
 - `ios/`: un solo esquema (`Runner`), sin sabores. Identificador `co.com.boterosoto.trazaautos.qa`, nombre
-  «Traza Autos QA», solo iPhone, iOS 13 o superior.
+  «Traza Autos QA», solo iPhone, iOS 15 o superior. Los plugins van por Swift Package Manager (no hay Podfile).
 - `ios/Runner/Info.plist`: textos de permiso de cámara y ubicación (sin ellos iOS cierra la app al pedirlos).
 - Configuración: la de QA (`config/qa.example.json`), que llama a la API por la pasarela `/contenedores` de IIS.
 - `../codemagic.yaml`: flujo `ios-qa-sin-firma`. Corre las pruebas, compila en release y deja

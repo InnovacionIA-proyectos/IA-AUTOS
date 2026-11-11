@@ -11,7 +11,6 @@ workflows:
     environment:
       flutter: stable
       xcode: latest
-      cocoapods: default
     # Sin disparadores: se lanza a mano desde Codemagic, para no gastar los minutos del plan gratuito en cada push.
     scripts:
       - name: Configuración QA (pasarela /contenedores)
