@@ -17,6 +17,7 @@
     <!-- Los scripts reales del proyecto se ejecutan contra SQL Server 2019 en las pruebas. -->
     <Content Include="..\..\database\00-crear-base.sql" Link="database\00-crear-base.sql" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\database\ddl.sql" Link="database\ddl.sql" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\database\01-crear-usuario-app.sql" Link="database\01-crear-usuario-app.sql" CopyToOutputDirectory="PreserveNewest" />
     <!-- Todos los cambios de esquema y todos los esquemas previos entran por comodin: un script nuevo se incluye solo en la cadena de la prueba de migracion encadenada. -->
     <Content Include="..\..\database\cambios-esquema\*.sql" Link="database\cambios-esquema\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Infraestructura\Esquemas\*.sql" CopyToOutputDirectory="PreserveNewest" />

@@ -923,6 +923,38 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Todo_usuario_de_aplicacion_de_la_base_tiene_negado_el_borrado_de_la_evidencia_y_el_historial()
+    {
+        // Solo lectura. Un usuario de aplicacion es el que puede escribir datos (db_datawriter) y NO es propietario (db_owner ni dbo): donde la API se conecta como propietario no hay ninguno y no hay nada que exigir.
+        // Si hay uno y le falta el DENY DELETE, avisa: ejecute database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql (o 01-crear-usuario-app.sql en una base nueva).
+        await using var conexion = await AbrirAsync();
+
+        var usuariosDeAplicacion = await EscalarAsync<int>(
+            conexion,
+            """
+            SELECT COUNT(*)
+            FROM sys.database_principals p
+            WHERE p.type IN ('S', 'U', 'G') AND p.name NOT IN ('dbo', 'guest', 'INFORMATION_SCHEMA', 'sys')
+              AND IS_ROLEMEMBER(N'db_datawriter', p.name) = 1 AND IS_ROLEMEMBER(N'db_owner', p.name) = 0
+            """);
+        var sinElDeny = await EscalarAsync<int>(
+            conexion,
+            """
+            SELECT COUNT(*)
+            FROM sys.database_principals p
+            CROSS JOIN (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblHallazgoSeguimiento'), (N'tblNotasAclaratorias'), (N'tblTransferenciasCustodia'), (N'tblNotificaciones'), (N'tblAuditLog'), (N'tblVehiculos')) AS t (tabla)
+            WHERE p.type IN ('S', 'U', 'G') AND p.name NOT IN ('dbo', 'guest', 'INFORMATION_SCHEMA', 'sys')
+              AND IS_ROLEMEMBER(N'db_datawriter', p.name) = 1 AND IS_ROLEMEMBER(N'db_owner', p.name) = 0
+              AND NOT EXISTS (SELECT 1 FROM sys.database_permissions d
+                              WHERE d.grantee_principal_id = p.principal_id AND d.class = 1 AND d.major_id = OBJECT_ID(t.tabla) AND d.permission_name = N'DELETE' AND d.state = N'D')
+            """);
+
+        Assert.True(
+            sinElDeny == 0,
+            $"Hay {usuariosDeAplicacion} usuario(s) de aplicacion y a alguno le falta el DENY DELETE sobre la evidencia y el historial. Ejecute database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql con el usuario de la aplicacion en @usuarioApp.");
+    }
+
+    [FactEntornoReal]
     public async Task La_adopcion_cuenta_solo_salidas_cerradas_y_tiene_su_vista_por_camion()
     {
         // Solo lectura: avisa si falta ejecutar database/cambios-esquema/40-adopcion-por-carro-y-por-camion.sql.

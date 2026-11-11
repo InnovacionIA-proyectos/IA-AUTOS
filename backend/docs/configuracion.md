@@ -73,6 +73,8 @@ sqlcmd -S <servidor> -U <usuario_admin> -P <password_admin> -I -b ^
        -i database/01-crear-usuario-app.sql
 ```
 
+Ejecutelo despues de `ddl.sql`: ademas de leer y escribir, **le niega el DELETE** sobre la evidencia y el historial (ver `docs/seguridad.md`). En una base que ya tiene el usuario, use `database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql`.
+
 ## Correspondencia con el sistema anterior
 
 | Antes | Ahora |
