@@ -678,6 +678,51 @@ public sealed class ConductorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.DoesNotContain(inventario.GetProperty("etapas").EnumerateArray(), et => et.GetProperty("viaje_id").GetGuid() == otroViaje);
     }
 
+    /// <summary>
+    /// S7-HU-20 CA-4: corregir una inspeccion no deja dos verdades. La propuesta de «ya estaba registrado» sale de la version que vale, y los cuatro danos que la correccion
+    /// dejo atras no se proponen: ofrecerlos haria marcar como preexistente un dano que el carro ya no tiene.
+    /// </summary>
+    [Fact]
+    public async Task Los_hallazgos_previos_del_VIN_dejan_fuera_los_de_una_version_reemplazada()
+    {
+        var e = await EscenarioAsync();
+        var inspector = await SesionAsync("inspector@ejemplo.com", clsRol.INSPECTOR);
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET InspectorId = @i WHERE Id = @v", ("@i", inspector.UsuarioId), ("@v", e.Viaje));
+        var zona = await ZonaFrenteAsync();
+
+        // La version 1 con cuatro danos. Los cuatro entran antes de cerrarla: una inspeccion cerrada es inmutable y la base rechaza hallazgos nuevos.
+        var (original, primero) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[0], inspector.UsuarioId, zona, nivel: "v1", cerrada: false);
+        var reemplazados = new List<Guid> { primero };
+        foreach (var clase in new[] { "rotura", "mancha", "faltante" })
+        {
+            var otro = Guid.NewGuid();
+            await Sembrador.EjecutarAsync(
+                "INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) VALUES (@h, @i, @z, @c, '1_5cm', 'v1')",
+                ("@h", otro), ("@i", original), ("@z", zona), ("@c", clase));
+            reemplazados.Add(otro);
+        }
+
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i", ("@i", original));
+
+        // La version 2 del mismo informe, cerrada, con un solo dano: es la que vale.
+        var correccion = Guid.NewGuid();
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, Estado, Version, CorrigeInspeccionId) "
+            + "SELECT @c, EtapaId, ViajeId, UsuarioId, Momento, Fecha, 'borrador', 2, @o FROM dbo.tblInspecciones WHERE Id = @o",
+            ("@c", correccion), ("@o", original));
+        var vigente = Guid.NewGuid();
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) VALUES (@h, @i, @z, 'golpe', '1_5cm', 'v1')",
+            ("@h", vigente), ("@i", correccion), ("@z", zona));
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE Id = @i", ("@i", correccion));
+
+        var previos = await ComoJsonAsync(await Como(inspector).GetAsync($"/api/vehiculos/{e.Vin}/hallazgos-previos"));
+
+        var ids = previos.EnumerateArray().Select(h => h.GetProperty("id").GetGuid()).ToList();
+        Assert.Contains(vigente, ids);
+        Assert.DoesNotContain(ids, id => reemplazados.Contains(id));
+    }
+
     [Fact]
     public async Task Los_hallazgos_previos_del_VIN_responden_403_al_conductor_y_al_que_no_lleva_ese_VIN()
     {

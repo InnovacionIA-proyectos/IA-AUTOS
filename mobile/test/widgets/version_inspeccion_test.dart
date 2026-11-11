@@ -27,15 +27,32 @@ class _InventarioFalso implements VehiculosRepositorio {
   Future<Inventario> inventario(String vin) async => Inventario.fromJson(respuesta);
 }
 
-Map<String, dynamic> _inspeccion(String id, int version, {String? corrige, String fecha = '2026-10-23T08:30:00Z'}) => {
+Map<String, dynamic> _hallazgo(String id) => {
+      'id': id,
+      'zona': 'Izquierdo 7 · Espejo retrovisor',
+      'cuadrante_numero': 7,
+      'lado': 'izquierdo',
+      'clase_dano': 'golpe',
+      'tamano_dano': '1_5cm',
+      'nivel_severidad': 'v1',
+    };
+
+Map<String, dynamic> _inspeccion(
+  String id,
+  int version, {
+  String? corrige,
+  String fecha = '2026-10-23T08:30:00Z',
+  String estado = 'cerrada',
+  List<Map<String, dynamic>> hallazgos = const [],
+}) => {
       'id': id,
       'momento': 'llegada',
       'momento_nombre': 'Inspección de llegada',
       'fecha': fecha,
-      'cerrada_at': fecha,
-      'estado': 'cerrada',
+      'cerrada_at': estado == 'cerrada' ? fecha : null,
+      'estado': estado,
       'usuario_id': 'u1',
-      'hallazgos': [],
+      'hallazgos': hallazgos,
       'evidencias': [],
       'transferencia': null,
       'version': version,
@@ -61,6 +78,17 @@ Map<String, dynamic> _inventario(List<Map<String, dynamic>> inspecciones) => {
         },
       ],
     };
+
+/// Cuántos daños lista la ficha: cada uno es una línea con viñeta. Es la cuenta que ESC-02 y ESC-05 miran.
+int _danosListados() =>
+    find.byWidgetPredicate((w) => w is Text && (w.data?.startsWith('• ') ?? false)).evaluate().length;
+
+/// Los mismos pumps de [abrir], para lo que se abre después de tocar algo.
+Future<void> _asentar(WidgetTester tester) async {
+  for (var i = 0; i < 12; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
 
 Future<void> abrir(WidgetTester tester, List<Map<String, dynamic>> inspecciones) async {
   await tester.binding.setSurfaceSize(const Size(600, 3000));
@@ -140,6 +168,44 @@ void main() {
       await abrir(tester, [_inspeccion('i1', 1)]);
 
       expect(find.textContaining('Versión'), findsNothing);
+    });
+  });
+
+  /// S7-HU-20: la ficha cuenta como estado del carro solo la versión vigente. El caso es siempre el mismo —una
+  /// inspección de 4 daños corregida a 1— porque es el que se vio en el patio dando «4 daños» donde la verdad era 1.
+  group('la ficha cuenta solo lo vigente', () {
+    List<Map<String, dynamic>> corregida({String estadoCorreccion = 'cerrada'}) => [
+          _inspeccion('i1', 1, hallazgos: [for (var i = 1; i <= 4; i++) _hallazgo('h$i')]),
+          _inspeccion('i2', 2,
+              corrige: 'i1',
+              fecha: '2026-10-24T08:30:00Z',
+              estado: estadoCorreccion,
+              hallazgos: estadoCorreccion == 'cerrada' ? [_hallazgo('h5')] : const []),
+        ];
+
+    testWidgets('ESC-02: una inspección de 4 daños corregida a 1 deja la ficha en 1', (tester) async {
+      await abrir(tester, corregida());
+
+      expect(_danosListados(), 1);
+      expect(find.text('Ver la versión anterior, ya reemplazada'), findsOneWidget);
+    });
+
+    testWidgets('ESC-06: la versión reemplazada se abre con sus 4 daños y marcada con una palabra', (tester) async {
+      await abrir(tester, corregida());
+
+      await tester.tap(find.text('Ver la versión anterior, ya reemplazada'));
+      await _asentar(tester);
+
+      expect(_danosListados(), 5, reason: 'el 1 de la versión que vale y los 4 de la reemplazada, ya abierta');
+      expect(find.text('Reemplazada'), findsOneWidget, reason: 'marcada con una palabra, no solo con el color');
+      expect(find.text('Versión 1 · ya fue corregida'), findsOneWidget);
+    });
+
+    testWidgets('ESC-05: una corrección en borrador todavía no reemplaza; la ficha sigue contando los 4', (tester) async {
+      await abrir(tester, corregida(estadoCorreccion: 'borrador'));
+
+      expect(_danosListados(), 4);
+      expect(find.textContaining('reemplazada'), findsNothing);
     });
   });
 }

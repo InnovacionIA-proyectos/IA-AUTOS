@@ -345,8 +345,26 @@ class EtapaVista {
 
   final List<InspeccionVista> inspecciones;
 
-  /// ¿Esta versión ya tiene una corrección encima? Entonces no es la que vale.
-  bool fueCorregida(InspeccionVista inspeccion) => inspecciones.any((o) => o.corrigeInspeccionId == inspeccion.id);
+  /// ¿Esta versión ya tiene encima una corrección **cerrada**? Entonces no es la que vale: sus daños dejaron de ser
+  /// el estado del carro. Una corrección en borrador todavía no reemplaza nada —se puede abandonar a medio llenar—,
+  /// así que mientras no se cierre la que vale sigue siendo esta.
+  bool fueCorregida(InspeccionVista inspeccion) =>
+      inspecciones.any((o) => o.corrigeInspeccionId == inspeccion.id && o.cerrada);
+
+  /// Las versiones que [inspeccion] dejó atrás, de la más reciente a la más antigua. No cuentan como estado del
+  /// carro, pero se siguen pudiendo abrir: conservan sus daños, sus fotos y su firma.
+  List<InspeccionVista> versionesAnteriores(InspeccionVista inspeccion) {
+    final anteriores = <InspeccionVista>[];
+    var actual = inspeccion;
+    // Acotado por el número de inspecciones de la etapa: una cadena mal formada no deja la pantalla dando vueltas.
+    while (anteriores.length < inspecciones.length) {
+      final previa = inspecciones.where((i) => i.id == actual.corrigeInspeccionId).firstOrNull;
+      if (previa == null) break;
+      anteriores.add(previa);
+      actual = previa;
+    }
+    return anteriores;
+  }
 }
 
 /// Cómo se dice, en una línea, dónde está una inspección en su cadena de versiones. Null en la versión 1 que nadie
@@ -376,15 +394,25 @@ class Inventario {
   final String operacion;
   final List<EtapaVista> etapas;
 
-  /// La inspección más reciente de cualquier etapa (la que se revisa antes del cambio de responsabilidad).
+  /// La inspección más reciente de cualquier etapa (la que se revisa antes del cambio de responsabilidad), **de las
+  /// que valen**: es la que la ficha muestra como estado del carro.
+  ///
+  /// Quedan fuera las dos clases de versión que no son el estado del carro: la que ya reemplazó una corrección
+  /// cerrada, porque sus daños los reemplazó la siguiente, y la corrección que sigue en borrador, porque todavía
+  /// está a medio llenar y contarla haría ver limpio un carro con daños. El respaldo es para un inventario que no
+  /// traiga ninguna que valga: antes de decir «no tiene informes» se muestra la que haya.
   ({EtapaVista etapa, InspeccionVista inspeccion})? get ultimaInspeccion {
     ({EtapaVista etapa, InspeccionVista inspeccion})? mejor;
+    ({EtapaVista etapa, InspeccionVista inspeccion})? respaldo;
     for (final etapa in etapas) {
       for (final inspeccion in etapa.inspecciones) {
+        if (respaldo == null || inspeccion.fecha.isAfter(respaldo.inspeccion.fecha)) respaldo = (etapa: etapa, inspeccion: inspeccion);
+        if (etapa.fueCorregida(inspeccion)) continue;
+        if (!inspeccion.cerrada && inspeccion.corrigeInspeccionId != null) continue;
         if (mejor == null || inspeccion.fecha.isAfter(mejor.inspeccion.fecha)) mejor = (etapa: etapa, inspeccion: inspeccion);
       }
     }
-    return mejor;
+    return mejor ?? respaldo;
   }
 
   /// El mismo inventario con solo las etapas de [viajeId]; tal cual si no se pide ninguno.

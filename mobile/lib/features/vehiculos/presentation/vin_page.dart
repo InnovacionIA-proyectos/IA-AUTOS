@@ -182,6 +182,7 @@ class _Detalle extends ConsumerWidget {
             vin: inventario.vin,
             etapa: ultima.etapa,
             inspeccion: ultima.inspeccion,
+            anteriores: ultima.etapa.versionesAnteriores(ultima.inspeccion),
             viajeTerminado: viajeTerminado,
           ),
         // El historial completo del vehículo, no solo el último informe: un daño que trae de un viaje anterior,
@@ -443,6 +444,7 @@ class _UltimoInforme extends ConsumerWidget {
     required this.vin,
     required this.etapa,
     required this.inspeccion,
+    this.anteriores = const [],
     this.viajeTerminado = false,
   });
 
@@ -454,6 +456,10 @@ class _UltimoInforme extends ConsumerWidget {
 
   final EtapaVista etapa;
   final InspeccionVista inspeccion;
+
+  /// Las versiones que [inspeccion] dejó atrás, de la más reciente a la más antigua. Se pliegan debajo: no son el
+  /// estado del carro, pero son lo que explica por qué este informe dice otra cosa que el anterior.
+  final List<InspeccionVista> anteriores;
 
   /// El daño de esa zona, con su foto. La zona la da el dibujo; el hallazgo sale del informe que se está viendo.
   void _abrirDetalle(BuildContext context, WidgetRef ref, ZonaDano zona) {
@@ -565,6 +571,12 @@ class _UltimoInforme extends ConsumerWidget {
                 ),
               ),
               Insignia(inspeccion.cerrada ? 'Cerrada' : 'Borrador', tono: inspeccion.cerrada ? TonoInsignia.exito : TonoInsignia.advertencia),
+              // Dicho con una palabra, no solo con el color del texto de la versión: la pantalla se mira al sol
+              // en el patio y el color es lo primero que se pierde.
+              if (yaCorregida) ...[
+                const SizedBox(width: Espacio.sm),
+                const Insignia('Reemplazada', tono: TonoInsignia.advertencia),
+              ],
             ],
           ),
           Text(formatearFecha(inspeccion.fecha), style: tema.bodySmall),
@@ -626,6 +638,29 @@ class _UltimoInforme extends ConsumerWidget {
             else
               for (final h in inspeccion.hallazgos)
                 Text('• ${_lineaHallazgo(h, catalogos)}', style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
+          ],
+          // Lo que una corrección cerrada dejó atrás. No suma al estado del carro, pero se sigue pudiendo abrir
+          // con sus daños y sus fotos: es lo que responde «¿y los otros tres golpes que vi ayer?». Va plegado
+          // para que lo primero que se lea sea la versión que vale.
+          if (!ajeno && anteriores.isNotEmpty) ...[
+            const SizedBox(height: Espacio.sm),
+            Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                title: Text(
+                  anteriores.length == 1
+                      ? 'Ver la versión anterior, ya reemplazada'
+                      : 'Ver las ${anteriores.length} versiones anteriores, ya reemplazadas',
+                  style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+                ),
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                children: [
+                  for (final previa in anteriores)
+                    _UltimoInforme(vin: vin, etapa: etapa, inspeccion: previa, viajeTerminado: viajeTerminado),
+                ],
+              ),
+            ),
           ],
           if (!ajeno && (inspeccion.notas?.trim().isNotEmpty ?? false)) ...[
             const SizedBox(height: Espacio.md),
