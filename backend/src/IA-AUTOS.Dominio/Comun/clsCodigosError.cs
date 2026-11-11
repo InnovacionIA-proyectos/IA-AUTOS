@@ -32,6 +32,12 @@ public static class clsCodigosError
     /// <summary>La unidad se marco «no sale» del viaje y ya no se transporta (409): no admite novedades ni llegada.</summary>
     public const string UNIDAD_NO_SALE = "UNIDAD_NO_SALE";
 
+    /// <summary>Corregir una inspeccion la hizo otra persona y quien intenta no es administrador (403): la corrigen quien la hizo y los administradores.</summary>
+    public const string CORRECCION_SOLO_AUTOR = "CORRECCION_SOLO_AUTOR";
+
+    /// <summary>La transferencia de la inspeccion ya tiene una firma o un cierre (409): una inspeccion firmada ya no se corrige, sea quien sea quien lo intente; se aclara con una nota.</summary>
+    public const string INSPECCION_YA_FIRMADA = "INSPECCION_YA_FIRMADA";
+
     /// <summary>El PIN fue asignado o reiniciado y hay que cambiarlo antes de usar el resto de la API (403).</summary>
     public const string PIN_CHANGE_REQUIRED = "PIN_CHANGE_REQUIRED";
 

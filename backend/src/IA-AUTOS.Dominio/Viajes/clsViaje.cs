@@ -202,7 +202,7 @@ public sealed partial class clsViaje : clsEntidadBase
     {
         if (Estado != clsEstadoViaje.PROGRAMADO)
         {
-            throw new clsConflictoException($"El viaje está {Estado.Replace('_', ' ')}: la fecha programada y el lugar de cargue solo se corrigen mientras está programado");
+            throw new clsConflictoException($"El viaje está {Estado.Replace('_', ' ')}: la fecha programada y el lugar de cargue solo se corrigen mientras está programado", clsMotivosRechazo.ViajeEn(Estado));
         }
 
         if (cambiaFecha)
@@ -235,7 +235,7 @@ public sealed partial class clsViaje : clsEntidadBase
 
         if (!clsEstadoViaje.PuedePasar(Estado, nuevo))
         {
-            throw new clsConflictoException($"Un viaje {Estado.Replace('_', ' ')} no puede pasar a {nuevo.Replace('_', ' ')}");
+            throw new clsConflictoException($"Un viaje {Estado.Replace('_', ' ')} no puede pasar a {nuevo.Replace('_', ' ')}", clsMotivosRechazo.TRANSICION_DE_ESTADO_INVALIDA);
         }
 
         Estado = nuevo;
@@ -257,7 +257,7 @@ public sealed partial class clsViaje : clsEntidadBase
     {
         if (!EstaActivo)
         {
-            throw new clsConflictoException($"El viaje está {Estado} y no admite cambios");
+            throw new clsConflictoException($"El viaje está {Estado} y no admite cambios", clsMotivosRechazo.ViajeEn(Estado));
         }
     }
 

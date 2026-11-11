@@ -16,6 +16,9 @@ public interface IUsuarioRepository
     /// <summary>Usuarios por cedula (ya normalizada): cedula -> usuario. Sirve para identificar al conductor en la carga de viajes.</summary>
     Task<IReadOnlyDictionary<string, clsUsuario>> ObtenerPorCedulasAsync(IReadOnlyCollection<string> cedulas, CancellationToken ct = default);
 
+    /// <summary>El nombre de cada usuario indicado (id -> nombre); los que no existen no salen. Sirve para nombrar a las personas en las respuestas en lugar de numerarlas.</summary>
+    Task<IReadOnlyDictionary<Guid, string>> NombresAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
+
     /// <summary>Usuarios ordenados por nombre, con <paramref name="clienteId"/> solo los de ese cliente (selector de entrega y recibo).</summary>
     Task<IReadOnlyList<clsUsuario>> ListarAsync(Guid? clienteId = null, CancellationToken ct = default);
 

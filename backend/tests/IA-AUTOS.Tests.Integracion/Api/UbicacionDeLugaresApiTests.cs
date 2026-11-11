@@ -24,6 +24,8 @@ public sealed class UbicacionDeLugaresApiTests(clsBaseDatosFixture bd) : clsPrue
 
     private sealed record Sesion(string Token, Guid UsuarioId);
 
+    private async Task<string> NombreDeAsync(Sesion sesion) => (string)(await Sembrador.EscalarAsync("SELECT Nombre FROM dbo.tblUsuarios WHERE Id = @u", ("@u", sesion.UsuarioId)))!;
+
     private async Task<Sesion> SesionAsync(string email, string rol)
     {
         var usuario = await Fabrica.SembrarUsuarioAsync(email, "Clave-Segura-1", rol, nombre: "Nombre " + email);
@@ -81,6 +83,7 @@ public sealed class UbicacionDeLugaresApiTests(clsBaseDatosFixture bd) : clsPrue
         Assert.Equal(1000, valor.GetProperty("radio_metros").GetInt32());
         Assert.Equal("confirmada", valor.GetProperty("estado_ubicacion").GetString());
         Assert.Equal(diana.UsuarioId, valor.GetProperty("ubicacion_fijada_por").GetGuid());
+        Assert.Equal(await NombreDeAsync(diana), valor.GetProperty("ubicacion_fijada_por_nombre").GetString());
         Assert.NotEqual(JsonValueKind.Null, valor.GetProperty("ubicacion_fijada_at").ValueKind);
         Assert.Equal(("confirmada", LAT, 1000), await EstadoDelLugarAsync(lugar));
     }
@@ -140,6 +143,7 @@ public sealed class UbicacionDeLugaresApiTests(clsBaseDatosFixture bd) : clsPrue
         Assert.Equal(LAT, valor.GetProperty("latitud").GetDouble());
         Assert.Equal(JsonValueKind.Null, valor.GetProperty("radio_metros").ValueKind);
         Assert.Equal(inspector.UsuarioId, valor.GetProperty("ubicacion_fijada_por").GetGuid());
+        Assert.Equal(await NombreDeAsync(inspector), valor.GetProperty("ubicacion_fijada_por_nombre").GetString());
         Assert.Equal(18.5, valor.GetProperty("precision_m").GetDouble());
         Assert.Equal(("pendiente_confirmar", LAT, null), await EstadoDelLugarAsync(lugar));
         Assert.Equal("pendiente_confirmar", (await LugarDelCatalogoAsync(inspector, lugar)).GetProperty("estado_ubicacion").GetString());
@@ -292,6 +296,7 @@ public sealed class UbicacionDeLugaresApiTests(clsBaseDatosFixture bd) : clsPrue
         var cuerpo = await JsonAsync(confirmada);
         Assert.Equal("confirmada", cuerpo.GetProperty("estado").GetString());
         Assert.Equal(diana.UsuarioId, cuerpo.GetProperty("decidida_por").GetGuid());
+        Assert.Equal(await NombreDeAsync(diana), cuerpo.GetProperty("decidida_por_nombre").GetString());
         var (estado, lat, radio) = await EstadoDelLugarAsync(lugar);
         Assert.Equal("confirmada", estado);
         Assert.Equal(AlNorte(200), lat!.Value, 5);
@@ -299,6 +304,10 @@ public sealed class UbicacionDeLugaresApiTests(clsBaseDatosFixture bd) : clsPrue
         var delCatalogo = await LugarDelCatalogoAsync(diana, lugar);
         Assert.Equal("confirmada", delCatalogo.GetProperty("estado_ubicacion").GetString());
         Assert.Equal(diana.UsuarioId, delCatalogo.GetProperty("ubicacion_fijada_por").GetGuid());
+        Assert.Equal(await NombreDeAsync(diana), delCatalogo.GetProperty("ubicacion_fijada_por_nombre").GetString());
+        // La propuesta ya decidida, listada, tambien dice quien la decidio.
+        var decidida = (await JsonAsync(await Como(diana).GetAsync("/api/lugares/propuestas?estado=confirmada"))).EnumerateArray().Single();
+        Assert.Equal(await NombreDeAsync(diana), decidida.GetProperty("decidida_por_nombre").GetString());
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'lugar.confirmar_propuesta' AND UsuarioId = @u", ("@u", diana.UsuarioId)));
         Assert.Equal(HttpStatusCode.Conflict, (await Como(diana).PostAsync($"/api/lugares/propuestas/{propuestaId}/confirmar", null)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await Como(diana).PostAsync($"/api/lugares/propuestas/{propuestaId}/descartar", null)).StatusCode);

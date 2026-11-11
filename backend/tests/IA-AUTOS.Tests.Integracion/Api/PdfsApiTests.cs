@@ -319,6 +319,8 @@ public sealed partial class PdfsApiTests(clsBaseDatosFixture bd) : clsPruebaTabl
         var e = await EscenarioAsync();
         var admin = await SesionAsync(clsRol.ADMIN);
         var delOtro = await SesionAsync(clsRol.COORDINADOR_CALIDAD, "coord-otro@ejemplo.com", e.Otro);
+        // Un carro en un viaje programado o en curso no se da de baja: el viaje ya termino.
+        await new clsSembrador(BaseDatos.CadenaConexion).EjecutarAsync("UPDATE dbo.tblViajes SET Estado = 'finalizado'");
         Assert.Equal(HttpStatusCode.OK, (await Cliente(admin.Token).DeleteAsync("/api/vehiculos/VIN-IND-0001")).StatusCode);
 
         var (r, bytes) = await PdfAsync(admin, "/api/vehiculos/VIN-IND-0001/inventario/pdf");

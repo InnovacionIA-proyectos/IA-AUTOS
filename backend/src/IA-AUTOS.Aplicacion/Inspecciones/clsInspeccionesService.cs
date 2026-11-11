@@ -6,6 +6,7 @@ using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Aplicacion.Parametros;
 using IAAutos.Dominio.Comun;
+using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Notificaciones;
@@ -67,6 +68,7 @@ public interface IDescriptorHallazgos
 /// </summary>
 public sealed class clsInspeccionesService(
     IInspeccionRepository inspecciones,
+    ITransferenciaCustodiaRepository transferencias,
     IEtapaRepository etapas,
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
@@ -268,7 +270,8 @@ public sealed class clsInspeccionesService(
 
     /// <summary>
     /// Corrige una inspeccion CERRADA: crea la version siguiente (en borrador y vacia) que referencia a la anterior; la anterior no cambia. Solo
-    /// se corrige la ultima version y mientras el viaje siga activo. Quien corrige es quien participa en el viaje (o un administrador).
+    /// se corrige la ultima version y mientras el viaje siga activo. Quien corrige es quien participa en el viaje y, ademas, quien hizo la inspeccion o un administrador (403 CORRECCION_SOLO_AUTOR); y solo
+    /// mientras la transferencia no tenga ninguna firma ni cierre, sea quien sea quien lo intente (409 INSPECCION_YA_FIRMADA). Ningun rechazo crea una version.
     /// </summary>
     public async Task<InspeccionDto> CorregirAsync(Guid inspeccionId, CorregirInspeccionRequest solicitud, CancellationToken ct = default)
     {
@@ -291,6 +294,17 @@ public sealed class clsInspeccionesService(
         if (await inspecciones.ObtenerCorreccionIdAsync(inspeccionId, ct) is { } corregidaPor)
         {
             throw new clsConflictoException($"Esta inspección ya fue corregida (versión {corregidaPor}): corrija la última versión");
+        }
+
+        // Una inspeccion firmada ya no se corrige, sea quien sea; antes de eso, solo quien la hizo o un administrador.
+        if (await transferencias.ObtenerPorInspeccionAsync(inspeccionId, ct) is { TieneFirmaOCierre: true })
+        {
+            throw new clsInspeccionYaFirmadaException();
+        }
+
+        if (original.UsuarioId != actual.IdObligatorio() && !actual.EsAdministrador())
+        {
+            throw new clsCorreccionSoloDelAutorException();
         }
 
         var ahora = reloj.Ahora;

@@ -27,6 +27,14 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
     public Task<clsUsuario?> ObtenerPorPortalIdAsync(long portalUsuarioId, CancellationToken ct = default) =>
         contexto.Usuarios.FirstOrDefaultAsync(u => u.PortalUsuarioId == portalUsuarioId, ct);
 
+    public async Task<IReadOnlyDictionary<Guid, string>> NombresAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        var distintos = ids.Distinct().ToList();
+        return distintos.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await contexto.Usuarios.AsNoTracking().Where(u => distintos.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Nombre, ct);
+    }
+
     public async Task<IReadOnlyDictionary<string, clsUsuario>> ObtenerPorCedulasAsync(IReadOnlyCollection<string> cedulas, CancellationToken ct = default)
     {
         var resultado = new Dictionary<string, clsUsuario>(StringComparer.OrdinalIgnoreCase);
@@ -189,6 +197,9 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
 
     public Task<Guid?> ObtenerCorreccionIdAsync(Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Inspecciones.AsNoTracking().Where(i => i.CorrigeInspeccionId == inspeccionId).Select(i => (Guid?)i.Id).FirstOrDefaultAsync(ct);
+
+    public Task<bool> TieneCorreccionCerradaAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        contexto.Inspecciones.AsNoTracking().AnyAsync(i => i.CorrigeInspeccionId == inspeccionId && i.Estado == clsEstadoInspeccion.CERRADA, ct);
 
     public Task<bool> ExisteHallazgoEnInspeccionAsync(Guid hallazgoId, Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Hallazgos.AnyAsync(h => h.Id == hallazgoId && h.InspeccionId == inspeccionId, ct);

@@ -428,6 +428,8 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var inspector = await Fabrica.SembrarUsuarioAsync("insp@ejemplo.com", "Clave-Segura-1", clsRol.INSPECTOR);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-BAJA-0003", inspectorId: inspector.Id);
         await Sembrador.InformeAsync(etapas[0], inspector.Id, cerrada: true, hallazgos: 1);
+        // El viaje ya termino: un carro en un viaje programado o en curso no se da de baja (ver la prueba de la baja en un viaje activo).
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET Estado = 'finalizado'");
 
         var r = await Cliente(token).DeleteAsync("/api/vehiculos/VIN-BAJA-0003");
 

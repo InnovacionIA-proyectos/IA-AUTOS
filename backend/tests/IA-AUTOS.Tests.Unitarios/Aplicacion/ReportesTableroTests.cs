@@ -325,8 +325,37 @@ public sealed class ReportesTableroTests
         Assert.Equal(new DateOnly(2026, 10, 1), consultas.Recibidos.First().Desde);
         var region = r.PorRegion.First();
         Assert.Equal((7, "izquierdo", "Puerta", 2), (region.CuadranteNumero, region.Lado, region.Nombre, region.Total));
-        Assert.Equal("Sin ubicar", r.PorRegion.Last().Nombre);
+        // El grupo sin zona lleva un rotulo fijo y no el nombre de una muestra del grupo.
+        Assert.Equal("Sin zona en el dibujo", r.PorRegion.Last().Nombre);
+        Assert.Equal("Sin zona en el dibujo", r.PorRegion.Last().Zona);
         Assert.Equal(["golpe", "rotura"], r.PorClase.Select(c => c.Clase).ToList());
+    }
+
+    [Fact]
+    public async Task Los_danos_de_extras_forman_su_propio_grupo_y_el_grupo_sin_zona_no_toma_el_nombre_de_una_muestra()
+    {
+        var (servicio, consultas) = Crear();
+        consultas.Hallazgos.Add(new FilaConteoHallazgo("cargue", 7, "izquierdo", "Izquierdo 7", "Puerta", "v1", "golpe", "5_10cm", 2));
+        consultas.Hallazgos.Add(new FilaConteoHallazgo("cargue", null, null, "Platón", null, "v3", "rotura", "1_5cm", 1, EsExtra: true));
+        consultas.Hallazgos.Add(new FilaConteoHallazgo("cargue", null, null, "Barras del techo", null, "v1", "golpe", "1_5cm", 2, EsExtra: true));
+        consultas.Hallazgos.Add(new FilaConteoHallazgo("cargue", null, null, "Un nombre cualquiera", null, "v1", "golpe", "1_5cm", 1));
+        consultas.Hallazgos.Add(new FilaConteoHallazgo("descargue", null, null, null, null, "v1", "golpe", "1_5cm", 1, EsExtra: true));
+
+        var r = await servicio.PatronesAsync(new FiltrosReporteRequest("2026-10-01", "2026-10-15", null, null, null, null, null, null, null));
+
+        Assert.Equal(7, r.Total);
+        Assert.Equal(3, r.PorRegion.Count);
+        var extras = r.PorRegion.Single(g => g.Extra);
+        Assert.Equal((null, null, "Extras del vehículo", "Extras del vehículo", 4), (extras.CuadranteNumero, extras.Lado, extras.Nombre, extras.Zona, extras.Total));
+        var sinZona = r.PorRegion.Single(g => !g.Extra && g.CuadranteNumero is null);
+        Assert.Equal(("Sin zona en el dibujo", "Sin zona en el dibujo", 1), (sinZona.Nombre, sinZona.Zona, sinZona.Total));
+        Assert.Equal((7, "izquierdo", 2, false), (r.PorRegion.Single(g => g.CuadranteNumero == 7).CuadranteNumero, r.PorRegion.Single(g => g.CuadranteNumero == 7).Lado, r.PorRegion.Single(g => g.CuadranteNumero == 7).Total, r.PorRegion.Single(g => g.CuadranteNumero == 7).Extra));
+        // Por proceso: los extras del cargue y los del descargue son dos filas, cada una con su proceso.
+        Assert.Equal([("cargue", 3), ("descargue", 1)], r.PorRegionProceso.Where(g => g.Extra).OrderBy(g => g.Proceso).Select(g => (g.Proceso, g.Total)).ToList());
+        Assert.Equal([("cargue", 1)], r.PorRegionProceso.Where(g => !g.Extra && g.CuadranteNumero is null).Select(g => (g.Proceso, g.Total)).ToList());
+        Assert.All(r.PorRegionProceso.Where(g => g.Extra), g => Assert.Equal("Extras del vehículo", g.Zona));
+        // El total de las filas por zona es el total del reporte: los extras siguen contando.
+        Assert.Equal(r.Total, r.PorRegion.Sum(g => g.Total));
     }
 
     [Fact]

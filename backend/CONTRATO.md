@@ -78,6 +78,29 @@ Todos los errores son JSON con la misma forma:
 | `LLEGADA_YA_CERRADA` | 409 | la llegada de Transporte de esa unidad ya estaba confirmada: es un éxito para un reintento (ver «Conductor en ruta») |
 | `HALLAZGO_YA_REVISADO` | 409 | la novedad del conductor ya fue revisada: su zona, clase y nivel ya no se cambian (ver «Revisión de la novedad») |
 | `UNIDAD_NO_SALE` | 409 | la unidad se marcó «no sale» del viaje: no admite novedades ni llegada |
+| `CORRECCION_SOLO_AUTOR` | 403 | corregir una inspección que hizo otra persona sin ser administrador: la corrigen quien la hizo y los administradores (ver «Corregir una inspección») |
+| `INSPECCION_YA_FIRMADA` | 409 | la transferencia de la inspección ya tiene una firma o un cierre: ya no se corrige, sea quien sea quien lo intente (ver «Corregir una inspección») |
+
+**El motivo fijo de los rechazos.** Los rechazos (`409`, `403` y `404`) de **viajes**, **usuarios**, **vehículos** y de la **descarga de la constancia** traen además, en `details.motivo`, un valor fijo en minúsculas (el mismo patrón de `ETAPA_PREVIA_SIN_CIERRE`): el portal y la app muestran el mensaje que corresponde a partir del
+motivo y no de la frase, que puede cambiar. El `code` y el `message` no cambian. Algunos traen datos propios junto al motivo (por ejemplo el viaje que impide la baja de un carro).
+
+| Motivo | Cuándo |
+|---|---|
+| `viaje_programado`, `viaje_en_curso`, `viaje_finalizado`, `viaje_cancelado` | el viaje, en ese estado, ya no admite el cambio (por ejemplo corregir uno `finalizado` o `cancelado`; la fecha y el lugar de cargue solo se corrigen programado) |
+| `transicion_de_estado_invalida` | el viaje no puede pasar a ese estado |
+| `viaje_no_existe`, `viaje_no_asignado`, `viaje_sin_unidades_del_cliente` | el viaje no existe, no es del conductor o inspector que lo pide, o no tiene unidades de su cliente |
+| `viaje_con_inspecciones`, `vin_con_inspecciones` | el viaje o el VIN ya tiene inspecciones y no se elimina ni se quita |
+| `codigo_mtrack_duplicado` | ya existe un viaje con ese código MTrack |
+| `vin_ya_en_el_viaje`, `vin_en_otro_viaje_activo` | el VIN ya está en este viaje o en otro viaje programado o en curso |
+| `vehiculo_no_existe`, `vin_fuera_del_viaje` | el vehículo no existe o su VIN no está en ese viaje |
+| `hallazgo_de_version_reemplazada` | «no sale» con un hallazgo de una inspección que ya reemplazó una corrección cerrada |
+| `capacidad_no_baja`, `posicion_ocupada`, `sin_segunda_inspeccion_en_curso`, `descargue_con_informe_cerrado`, `conductor_sin_permiso_de_excepcion` | reglas de la niñera, el destino y el cargue sin inspector del viaje |
+| `otro_cliente` | se pidió lo de un cliente que no es el suyo |
+| `vehiculo_en_viaje_activo` | el carro está en un viaje programado o en curso y no se da de baja (`details.viaje_id` y `details.codigo_mtrack` nombran el viaje) |
+| `usuario_no_existe`, `usuario_propio`, `usuario_de_otro_cliente` | el usuario no existe (o es de otro cliente), o se intentó eliminar o desactivar el propio |
+| `solo_super_admin_cambia_cliente`, `solo_super_admin_modifica_super_admin`, `solo_super_admin_asigna_super_admin` | solo el super administrador puede hacerlo |
+| `rol_sin_permiso_de_puntos`, `punto_no_asignado` | los puntos del inspector |
+| `inspeccion_no_existe`, `inspeccion_de_otro_cliente`, `inspeccion_sin_transferencia` | la descarga de la constancia: la inspección no existe, es de un VIN de otro cliente o no tiene transferencia |
 | `URL_FIRMADA_INVALIDA` | 403 | la URL de una foto no tiene firma, la firma no coincide o ya venció (ver «URL firmada de una foto») |
 | `PIN_CHANGE_REQUIRED` | 403 | el PIN fue asignado o reiniciado por un administrador: hay que cambiarlo (`POST /api/auth/cambiar-pin`) antes de usar el resto de la API |
 | `ACCOUNT_LOCKED` | 423 | la cuenta está bloqueada por PIN errados seguidos; `details.bloqueado_hasta` (ISO 8601) dice hasta cuándo, o un administrador la desbloquea |
@@ -376,6 +399,10 @@ Autenticado. La respuesta depende del rol:
 Sin contraseña, solo el conductor y el inspector pueden crearse (`400` para los demás roles, que necesitan contraseña). Errores `400` por campo en
 `details.fieldErrors` (por ejemplo, conductor sin `cedula`).
 
+### `GET /api/usuarios/{id}`
+Un usuario por su identificador, con la **misma visibilidad por cliente que el listado** (la pantalla que abre un enlace filtrado por un usuario muestra su nombre sin traer la lista): `admin`, `coordinador_calidad` y `super_admin` reciben el `UsuarioDto` completo, igual que cada elemento de `GET /api/usuarios`; los demás roles reciben solo `{ id, nombre, rol }` y solo de un usuario **activo** de su cliente.
+Un usuario de otro cliente (para quien no es `super_admin`, que ve todos) o inexistente responde `404` con `details.motivo: "usuario_no_existe"`, como si no existiera; sin token, `401`.
+
 ### `PATCH /api/usuarios/{id}`
 Mismos roles. Cambia únicamente los campos enviados: `nombre`, `email`, `rol`, `subtipo_inspector`, `password`, `activo`, `cedula` y, solo `super_admin`,
 `cliente_id`. Un campo desconocido es `400`.
@@ -542,7 +569,12 @@ etapas, inspecciones, hallazgos y evidencias.
 - Un vehículo inactivo **no aparece** en `GET /api/vehiculos?vin=` y **no se puede agregar a un viaje** (`400` en `vines`).
 - **Sigue apareciendo** en `GET /api/vehiculos/listado`, en el inventario (`GET /api/vehiculos/{vin}/inventario`), en los informes y en los reportes, con `activo: false`.
 - Repetir la baja responde igual y no cambia nada. `404` si el VIN no existe; `403` para cualquier otro rol.
+- **Un carro que está en un viaje programado o en curso no se da de baja**: `409` con `details.motivo: "vehiculo_en_viaje_activo"` y los datos del viaje (`details.viaje_id`, `details.codigo_mtrack`); el mensaje lo nombra («El vehículo … está en el viaje MT-2026-0417»). Se saca del viaje (o el viaje termina) y luego se da de baja; el carro sigue activo.
 - Queda en la auditoría (`vehiculo.baja`, con `activo` antes y después).
+
+### `POST /api/vehiculos/{vin}/reactivar`
+Deshace la baja. Los mismos roles que la baja (`admin`, `super_admin` y `coordinador_calidad`, de un VIN de su cliente: `403` si es de otro; `403` para cualquier otro rol). Sin cuerpo. Responde `200` con `{ "modo": "reactivado" }`: el vehículo vuelve a `activo: true`, se busca de nuevo en `GET /api/vehiculos?vin=` y se puede agregar a un viaje; conserva todo su historial.
+Reactivar uno que ya está activo responde igual y no cambia nada. `404` si el VIN no existe. Queda en la auditoría (`vehiculo.reactivar`, con quién y cuándo, y `activo` antes y después).
 
 ### `GET /api/vehiculos/{vin}/inventario/pdf`
 Autenticado. Devuelve el inventario en PDF (`Content-Type: application/pdf`, nombre `inventario-{vin}.pdf`). Es una
@@ -1014,6 +1046,16 @@ sin que se le pida ningún inspector. Sin el permiso, el conductor recibe `403` 
 Campo (quien participa en el viaje, o un administrador). Corrige una inspección **cerrada**: crea la **versión siguiente** (en `borrador` y vacía: se vuelven a tomar las fotos)
 que referencia a la anterior; **la anterior no cambia**. `201` con la `InspeccionDto` nueva. Cuerpo opcional (`fecha`, `lat`, `lng`, `notas`; por defecto la fecha es ahora).
 
+**Quién corrige y hasta cuándo.** El servidor hace cumplir dos reglas antes de crear la versión; los roles que llaman no cambian (`inspector`, `conductor`, `admin`) y ningún rechazo crea una versión ni deja rastro de corrección:
+
+| Regla | Rechazo | Código |
+|---|---|---|
+| Solo corrige **quien hizo la inspección** (su `usuario_id`) **o un administrador** (`admin`, `super_admin`). Quien participa en el viaje pero no la hizo (por ejemplo el conductor con una inspección del inspector) no corrige | `403` «Esta inspección solo la corrigen quien la hizo o un administrador» | `CORRECCION_SOLO_AUTOR` |
+| Solo **mientras nadie la haya firmado**: si la transferencia de la inspección ya tiene una firma (de quien entrega o de quien recibe) o un cierre (firmada, con reservas, constancia de no firma o recibo sin entrega), **nadie** corrige, tampoco quien la hizo ni un administrador | `409` «Esta inspección ya fue firmada…» | `INSPECCION_YA_FIRMADA` |
+
+Los dos códigos son estables y distintos, con `details.motivo` (`solo_autor_o_administrador` e `inspeccion_firmada`), para que la app muestre el mensaje que corresponde. Si ambas se cumplen a la vez, gana la de la firma. Una transferencia ya registrada pero **sin ninguna firma** no impide corregir. **Después de firmar se sigue aclarando**: la nota aclaratoria
+(`POST /api/inspecciones/{id}/notas`) y la firma de quien recibe con reservas (`POST /api/inspecciones/{id}/transferencia/reservas`) funcionan igual y no cambian la inspección.
+
 - `409` si la inspección no está cerrada (se sigue editando), si ya fue corregida (se corrige la última versión) o si el viaje está finalizado o cancelado. `403` si el viaje no es del usuario. `404` si no existe.
 - La versión nueva tiene sus propias fotos, hallazgos, transferencia y reglas de cierre. Una etapa puede tener varias versiones; los listados e informes las muestran todas con su `version`.
 
@@ -1396,12 +1438,12 @@ Solo el **inspector del viaje** y el `coordinador_calidad` (de un viaje de su cl
 | Campo | Obligatorio | Regla |
 |---|---|---|
 | `motivo` | sí | máximo 500 caracteres |
-| `hallazgo_id` | sí | un hallazgo **V1+** de una inspección **cerrada** de ese VIN en ese viaje |
+| `hallazgo_id` | sí | un hallazgo **V1+** de una inspección **cerrada** de ese VIN en ese viaje y de su **versión vigente** (no de una versión que una corrección cerrada ya reemplazó) |
 | `vin_reemplazo` | no (propuesta pendiente de confirmar por el negocio: el negocio dijo que la unidad «se cambia por otra») | un VIN que existe en el inventario (`400` en `vin_reemplazo` si no); entra al viaje con sus etapas nuevas, con las reglas de `POST /api/viajes/{id}/vehiculos` |
 
 Responde `200` con el `ViajeDto`: la unidad queda con `estado_unidad: "no_sale"` y `no_sale { motivo, hallazgo_id, marcado_por, marcado_por_nombre, fecha, vin_reemplazo }`. Queda una fila `no_sale` en el historial del hallazgo y en la auditoría.
 
-`409` si el hallazgo **no es V1+**, no es de ese VIN en ese viaje, su inspección **no está cerrada**, la unidad **ya no sale**, el VIN de reemplazo **ya está en este viaje o en otro viaje activo**, o el reemplazo **antes no salió y el hallazgo V1+ que lo causó no está recuperado**
+`409` si el hallazgo **no es V1+**, no es de ese VIN en ese viaje, su inspección **no está cerrada**, **es de una versión reemplazada** (la inspección ya tiene una corrección **cerrada**: se rechaza con `details.motivo: "hallazgo_de_version_reemplazada"` y un mensaje que lo explica, y la unidad no cambia de estado; el hallazgo de una inspección cuya corrección sigue **en borrador** sí sirve, porque esa sigue siendo la vigente), la unidad **ya no sale**, el VIN de reemplazo **ya está en este viaje o en otro viaje activo**, o el reemplazo **antes no salió y el hallazgo V1+ que lo causó no está recuperado**
 (un VIN que no salió puede volver a entrar como reemplazo solo cuando ese hallazgo esté en estado `recuperado`). `404` si el viaje o el VIN no existen o el VIN no está en el viaje.
 
 Una unidad que no sale no cuenta en `vehiculos_completos` ni en `vwViajesCompletos`, y su vínculo no cuenta como «viaje activo» del VIN: se puede asignar a otro viaje, y su inventario muestra el historial completo, incluido el viaje del que no salió y su hallazgo V1+.
@@ -1543,7 +1585,7 @@ Una página de la bandeja, las más recientes primero: `{ "items": [Notificacion
 | `urgencia` | `alta` o `media` |
 | `pagina`, `tamano` | página desde 1 (por defecto 1) y tamaño (por defecto 50, máximo **200**: uno mayor se reduce a 200) |
 
-Cada usuario ve **solo las suyas**; el `super_admin` ve las de **todos los clientes**. `no_leidas` es cuántas hay sin leer en ese alcance, sin contar los filtros. Un filtro inválido responde `400` con todos los errores juntos en `details.fieldErrors`.
+Cada usuario ve **solo las suyas**; el `super_admin` ve las de **todos los clientes**, pero **una sola copia de cada aviso**: si una novedad se envió a tres personas del cliente, él la ve una vez y no tres veces iguales (de cada aviso queda la primera copia enviada; cada destinatario conserva la suya). `no_leidas` es cuántas hay sin leer en ese alcance, sin contar los filtros. Un filtro inválido responde `400` con todos los errores juntos en `details.fieldErrors`.
 Solo se listan las de la bandeja: las filas de push son el registro del envío.
 
 ### `POST /api/notificaciones/{id}/leida`
@@ -1590,7 +1632,7 @@ la alerta responde igual y la notificación de push guarda el motivo en `ErrorEn
 
 ## Ubicación de los lugares
 
-La ubicación de un lugar (`latitud`, `longitud`, `radio_metros`) tiene un estado, `estado_ubicacion`, que el catálogo `lugares` devuelve junto con quién la fijó (`ubicacion_fijada_por`) y cuándo (`ubicacion_fijada_at`):
+La ubicación de un lugar (`latitud`, `longitud`, `radio_metros`) tiene un estado, `estado_ubicacion`, que el catálogo `lugares` devuelve junto con quién la fijó (`ubicacion_fijada_por`, y su nombre en `ubicacion_fijada_por_nombre`, para leer «Ubicación confirmada por Ana Restrepo» sin ningún identificador) y cuándo (`ubicacion_fijada_at`); ambos son `null` mientras nadie la fija:
 
 | `estado_ubicacion` | Qué significa | Cómo se llega |
 |---|---|---|
@@ -1606,12 +1648,12 @@ La ubicación de un lugar (`latitud`, `longitud`, `radio_metros`) tiene un estad
 ```json
 { "lat": 6.1706, "lng": -75.5874, "precision": 18.5 }
 ```
-`lat` y `lng` son obligatorios (`400` si faltan o están fuera de rango); `precision` (metros, opcional, no negativa) es la del GPS y queda en la auditoría (`lugar.fijar_ubicacion`). `200` con el lugar: `{ "id", "nombre", "latitud", "longitud", "radio_metros": null, "estado_ubicacion": "pendiente_confirmar", "ubicacion_fijada_por", "ubicacion_fijada_at", "precision_m" }`. `404` si el lugar no existe. `409` si el lugar ya tiene ubicación (pendiente o confirmada): una ubicación existente la cambia quien administra el catálogo.
+`lat` y `lng` son obligatorios (`400` si faltan o están fuera de rango); `precision` (metros, opcional, no negativa) es la del GPS y queda en la auditoría (`lugar.fijar_ubicacion`). `200` con el lugar: `{ "id", "nombre", "latitud", "longitud", "radio_metros": null, "estado_ubicacion": "pendiente_confirmar", "ubicacion_fijada_por", "ubicacion_fijada_por_nombre", "ubicacion_fijada_at", "precision_m" }`. `404` si el lugar no existe. `409` si el lugar ya tiene ubicación (pendiente o confirmada): una ubicación existente la cambia quien administra el catálogo.
 
 ### Autocalibración: propuestas de ubicación
 Cada hora el servidor toma las fotos selladas de las vistas de Cargue y Descargue (lugar de cargue del viaje y destino de la unidad) con ubicación y con precisión menor que `valvula_precision_m`, de los lugares **activos cuya ubicación no está confirmada**. Si un lugar reúne fotos de **al menos 3 visitas distintas** (viajes), propone el **centro** en la mediana de las coordenadas y el **radio** que cubre al 90 % de las fotos (redondeado hacia arriba a 10 m, entre 100 y 5.000 m), crea una propuesta `pendiente` y avisa al `coordinador_calidad` del cliente (`propuesta_ubicacion`, urgencia media, bandeja y push). **El lugar no cambia** mientras la propuesta esté pendiente. No se repite una propuesta pendiente ni se vuelve a proponer tras una decisión sin fotos nuevas.
 
-`PropuestaUbicacionDto`: `{ "id", "lugar_id", "lugar", "centro_lat", "centro_lng", "radio_metros", "fotos", "visitas", "estado", "decidida_por", "decidida_at", "created_at" }`.
+`PropuestaUbicacionDto`: `{ "id", "lugar_id", "lugar", "centro_lat", "centro_lng", "radio_metros", "fotos", "visitas", "estado", "decidida_por", "decidida_por_nombre", "decidida_at", "created_at" }` (`decidida_por`, `decidida_por_nombre` y `decidida_at` son `null` mientras está pendiente).
 
 | Endpoint | Roles | Qué hace |
 |---|---|---|
@@ -2223,8 +2265,12 @@ días que terminan en `hasta`, con los mismos filtros) llegan a `umbral.cantidad
 {
   "total": 40,
   "por_proceso": [ { "proceso": "cargue", "total": 12, "supera_umbral": true } ],
-  "por_region": [ { "cuadrante_numero": 7, "lado": "izquierdo", "nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera", "total": 9, "supera_umbral": false } ],
-  "por_region_proceso": [ { "cuadrante_numero": 7, "lado": "izquierdo", "nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera", "proceso": "cargue", "total": 4, "supera_umbral": false } ],
+  "por_region": [
+    { "cuadrante_numero": 7, "lado": "izquierdo", "nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera", "total": 9, "supera_umbral": false, "extra": false },
+    { "cuadrante_numero": null, "lado": null, "nombre": "Extras del vehículo", "zona": "Extras del vehículo", "total": 3, "supera_umbral": false, "extra": true },
+    { "cuadrante_numero": null, "lado": null, "nombre": "Sin zona en el dibujo", "zona": "Sin zona en el dibujo", "total": 1, "supera_umbral": false, "extra": false }
+  ],
+  "por_region_proceso": [ { "cuadrante_numero": 7, "lado": "izquierdo", "nombre": "Puerta delantera", "zona": "Izquierdo 7 · Puerta delantera", "proceso": "cargue", "total": 4, "supera_umbral": false, "extra": false } ],
   "por_nivel": [ { "nivel": "v1", "total": 5 } ],
   "por_clase": [ { "clase": "golpe", "total": 14 } ],
   "por_tamano": [ { "tamano": "5_10cm", "total": 8 } ],
@@ -2235,7 +2281,15 @@ días que terminan en `hasta`, con los mismos filtros) llegan a `umbral.cantidad
 
 El mapa de calor y los patrones **cuentan el daño sin nivel** por su zona, su clase y su proceso, y `sin_calificar` dice cuántos de los `total` lo son («12 daños · 2 sin calificar»); en `por_nivel` salen con `nivel: null`. Las alertas de umbral también los cuentan.
 
-Un hallazgo sin ubicar (histórico o desvinculado del dibujo anterior) no entra en el mapa de zonas y sí cuenta por proceso, nivel, clase y tamaño.
+**Los daños de extras y los hallazgos sin zona tienen cada uno su fila.** Además de las filas de cada zona con cuadrante numerado (que no cambian: `extra: false`), `por_region` y `por_region_proceso` traen, cuando hay datos, hasta dos grupos **sin cuadrante** (`cuadrante_numero: null` y `lado: null`) con un rótulo fijo, que
+no depende de ningún hallazgo del grupo:
+
+| Grupo | `extra` | `nombre` y `zona` | Qué cuenta |
+|---|---|---|---|
+| Daños de extras | `true` | «Extras del vehículo» | el daño de cualquier tipo de extra (un extra no tiene zona en el dibujo y no se dibuja en el vehículo: el portal no pinta ningún punto por él); los de todos los tipos van juntos |
+| Sin zona | `false` | «Sin zona en el dibujo» | los hallazgos sin zona que no son de un extra: los históricos o desvinculados del dibujo anterior y la novedad del conductor aún sin revisar |
+
+`extra` es un indicador explícito: el portal lo usa en lugar de leer el rótulo. En `por_region_proceso` hay una fila de cada grupo **por proceso**. Los daños de extras y los hallazgos sin zona **siguen contando** en `total`, en `por_proceso`, `por_nivel`, `por_clase`, `por_tamano`, en la tasa de rechazo y en las alertas de umbral (`supera_umbral` de cada grupo se calcula con sus propios hallazgos de la ventana).
 
 ### `GET /api/reportes/indicador-diario?fecha=`
 De las unidades **despachadas el día `fecha`** (`AAAA-MM-DD`; por defecto `hasta` o, si tampoco llega, hoy), el porcentaje de **vehículos con novedad**: los que tuvieron **al menos un hallazgo de nivel V1** ese día (no cualquier hallazgo; los de nivel V1+ también cuentan, como

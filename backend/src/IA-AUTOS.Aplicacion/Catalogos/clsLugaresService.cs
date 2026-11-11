@@ -1,19 +1,23 @@
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Comun;
+using IAAutos.Dominio.Usuarios;
 
 namespace IAAutos.Aplicacion.Catalogos;
 
-/// <summary>Un lugar con su ubicacion: <c>EstadoUbicacion</c> es sin_ubicacion, pendiente_confirmar o confirmada; <c>PrecisionM</c> es la del GPS con que se fijo «aqui» (solo en la respuesta de esa operacion).</summary>
+/// <summary>
+/// Un lugar con su ubicacion: <c>EstadoUbicacion</c> es sin_ubicacion, pendiente_confirmar o confirmada; <c>UbicacionFijadaPorNombre</c> es el nombre de quien la fijo (nulo si no aplica); <c>PrecisionM</c> es la del
+/// GPS con que se fijo «aqui» (solo en la respuesta de esa operacion).
+/// </summary>
 public sealed record LugarUbicacionDto(
-    Guid Id, string Nombre, double? Latitud, double? Longitud, int? RadioMetros, string EstadoUbicacion, Guid? UbicacionFijadaPor, DateTimeOffset? UbicacionFijadaAt, double? PrecisionM = null);
+    Guid Id, string Nombre, double? Latitud, double? Longitud, int? RadioMetros, string EstadoUbicacion, Guid? UbicacionFijadaPor, DateTimeOffset? UbicacionFijadaAt, double? PrecisionM = null, string? UbicacionFijadaPorNombre = null);
 
 /// <summary>La posicion de quien esta en el lugar: <c>Lat</c> y <c>Lng</c> son obligatorias; <c>Precision</c> (metros) es la del GPS del dispositivo.</summary>
 public sealed record FijarUbicacionRequest(double? Lat, double? Lng, double? Precision);
 
-/// <summary>Una propuesta de la autocalibracion: el centro (mediana de las fotos) y el radio (segun su dispersion) que se proponen para el lugar, las fotos y las visitas que los sustentan y su decision.</summary>
+/// <summary>Una propuesta de la autocalibracion: el centro (mediana de las fotos) y el radio (segun su dispersion) que se proponen para el lugar, las fotos y las visitas que los sustentan y su decision (con el nombre de quien la decidio; nulo si esta pendiente).</summary>
 public sealed record PropuestaUbicacionDto(
-    Guid Id, Guid LugarId, string Lugar, double CentroLat, double CentroLng, int RadioMetros, int Fotos, int Visitas, string Estado, Guid? DecididaPor, DateTimeOffset? DecididaAt, DateTimeOffset CreatedAt);
+    Guid Id, Guid LugarId, string Lugar, double CentroLat, double CentroLng, int RadioMetros, int Fotos, int Visitas, string Estado, Guid? DecididaPor, DateTimeOffset? DecididaAt, DateTimeOffset CreatedAt, string? DecididaPorNombre = null);
 
 /// <summary>
 /// La ubicacion de los lugares fuera del CRUD del catalogo: «fijar ubicacion aqui» (quien esta en un lugar sin ubicacion deja la suya, que queda pendiente de confirmar) y las propuestas de autocalibracion que el
@@ -21,6 +25,7 @@ public sealed record PropuestaUbicacionDto(
 /// </summary>
 public sealed class clsLugaresService(
     ILugarRepository lugares,
+    IUsuarioRepository usuarios,
     IPropuestaUbicacionRepository propuestas,
     clsCatalogosService catalogos,
     IUnidadDeTrabajo unidadDeTrabajo,
@@ -61,7 +66,7 @@ public sealed class clsLugaresService(
         auditor.Registrar("lugar.fijar_ubicacion", "lugares", lugar.Id, detalle: new DetalleAuditoria(antes, new { Instantanea(lugar).Latitud, Instantanea(lugar).Longitud, estado_ubicacion = lugar.EstadoUbicacion, precision_m = solicitud.Precision }));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         catalogos.InvalidarCache();
-        return Dto(lugar, solicitud.Precision);
+        return await ConNombreAsync(Dto(lugar, solicitud.Precision), ct);
     }
 
     /// <summary>Las propuestas de autocalibracion, las mas recientes primero; con <paramref name="estado"/> (pendiente, confirmada o descartada) solo las de ese estado (400 si no es uno de los tres).</summary>
@@ -72,7 +77,9 @@ public sealed class clsLugaresService(
             throw clsErroresCampos.De("estado", "El estado debe ser pendiente, confirmada o descartada");
         }
 
-        return (await propuestas.ListarAsync(estado, ct)).Select(x => Dto(x.Propuesta, x.LugarNombre)).ToList();
+        var filas = await propuestas.ListarAsync(estado, ct);
+        var nombres = await usuarios.NombresAsync(filas.Where(x => x.Propuesta.DecididaPor is not null).Select(x => x.Propuesta.DecididaPor!.Value).ToList(), ct);
+        return filas.Select(x => Dto(x.Propuesta, x.LugarNombre, x.Propuesta.DecididaPor is { } id ? nombres.GetValueOrDefault(id) : null)).ToList();
     }
 
     /// <summary>Confirma la propuesta: el lugar queda con su centro y su radio como ubicacion CONFIRMADA y la propuesta queda decidida con su autor y su fecha. 404 si no existe; 409 si ya estaba decidida.</summary>
@@ -87,7 +94,7 @@ public sealed class clsLugaresService(
         auditor.Registrar("lugar.confirmar_propuesta", "lugares", lugar.Id, detalle: new DetalleAuditoria(antes, Instantanea(lugar)));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         catalogos.InvalidarCache();
-        return Dto(propuesta, lugar.Nombre);
+        return Dto(propuesta, lugar.Nombre, (await usuarios.NombresAsync([usuario], ct)).GetValueOrDefault(usuario));
     }
 
     /// <summary>Descarta la propuesta: el lugar no cambia. 404 si no existe; 409 si ya estaba decidida.</summary>
@@ -95,17 +102,22 @@ public sealed class clsLugaresService(
     {
         var propuesta = await propuestas.ObtenerAsync(id, ct) ?? throw new clsEntidadNoEncontradaException($"Propuesta {id} no encontrada");
         var lugar = await lugares.ObtenerAsync(propuesta.LugarId, ct);
-        propuesta.Descartar(actual.IdObligatorio(), reloj.Ahora);
+        var decide = actual.IdObligatorio();
+        propuesta.Descartar(decide, reloj.Ahora);
         auditor.Registrar("lugar.descartar_propuesta", "lugares", propuesta.LugarId, detalle: new DetalleAuditoria(null, new { propuesta_id = propuesta.Id, propuesta.CentroLat, propuesta.CentroLng, propuesta.RadioMetros }));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        return Dto(propuesta, lugar?.Nombre ?? string.Empty);
+        return Dto(propuesta, lugar?.Nombre ?? string.Empty, (await usuarios.NombresAsync([decide], ct)).GetValueOrDefault(decide));
     }
+
+    /// <summary>Completa el nombre de quien fijo la ubicacion (nulo si nadie la fijo).</summary>
+    private async Task<LugarUbicacionDto> ConNombreAsync(LugarUbicacionDto dto, CancellationToken ct) =>
+        dto.UbicacionFijadaPor is { } id ? dto with { UbicacionFijadaPorNombre = (await usuarios.NombresAsync([id], ct)).GetValueOrDefault(id) } : dto;
 
     private static LugarUbicacionDto Instantanea(clsLugar l) => Dto(l, null);
 
     private static LugarUbicacionDto Dto(clsLugar l, double? precision) =>
         new(l.Id, l.Nombre, l.Latitud, l.Longitud, l.RadioMetros, l.EstadoUbicacion, l.UbicacionFijadaPor, l.UbicacionFijadaAt, precision);
 
-    private static PropuestaUbicacionDto Dto(clsPropuestaUbicacion p, string lugar) =>
-        new(p.Id, p.LugarId, lugar, p.CentroLat, p.CentroLng, p.RadioMetros, p.Fotos, p.Visitas, p.Estado, p.DecididaPor, p.DecididaAt, p.CreatedAt);
+    private static PropuestaUbicacionDto Dto(clsPropuestaUbicacion p, string lugar, string? decididaPorNombre) =>
+        new(p.Id, p.LugarId, lugar, p.CentroLat, p.CentroLng, p.RadioMetros, p.Fotos, p.Visitas, p.Estado, p.DecididaPor, p.DecididaAt, p.CreatedAt, decididaPorNombre);
 }

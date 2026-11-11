@@ -105,6 +105,12 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
     /// <summary>True si ya tiene tipo de cierre: no admite mas cambios.</summary>
     public bool EstaCerrada => TipoCierre is not null;
 
+    /// <summary>
+    /// Ya hay una firma (de quien entrega o de quien recibe) o un cierre (firmada, con reservas, con constancia de no firma o recibo sin entrega). Desde entonces la inspeccion ya no se corrige: se aclara con una nota.
+    /// </summary>
+    public bool TieneFirmaOCierre =>
+        EstaCerrada || FirmaEntregaAt is not null || FirmaRecibeAt is not null || !string.IsNullOrEmpty(FirmaEntrega) || !string.IsNullOrEmpty(FirmaRecibe);
+
     [GeneratedRegex(@"^[0-9A-Za-z][0-9A-Za-z .\-]*$")]
     private static partial Regex FormatoDeCedula();
 

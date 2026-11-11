@@ -25,16 +25,21 @@ public sealed class clsValidacionException : clsExcepcionDominio
 
 public sealed class clsEntidadNoEncontradaException : clsExcepcionDominio
 {
-    public clsEntidadNoEncontradaException(string mensaje)
-        : base(clsCodigosError.NOT_FOUND, mensaje)
+    /// <param name="mensaje">El texto para la persona.</param>
+    /// <param name="motivo">El motivo fijo (de <see cref="clsMotivosRechazo"/>) que la app lee en <c>details.motivo</c> sin depender de la frase; opcional.</param>
+    public clsEntidadNoEncontradaException(string mensaje, string? motivo = null)
+        : base(clsCodigosError.NOT_FOUND, mensaje, clsMotivosRechazo.Detalles(motivo))
     {
     }
 }
 
 public sealed class clsConflictoException : clsExcepcionDominio
 {
-    public clsConflictoException(string mensaje)
-        : base(clsCodigosError.CONFLICT, mensaje)
+    /// <param name="mensaje">El texto para la persona.</param>
+    /// <param name="motivo">El motivo fijo (de <see cref="clsMotivosRechazo"/>) que la app lee en <c>details.motivo</c> sin depender de la frase; opcional.</param>
+    /// <param name="datos">Datos del rechazo que acompanan al motivo en <c>details</c> (por ejemplo el viaje que lo impide); opcional.</param>
+    public clsConflictoException(string mensaje, string? motivo = null, IReadOnlyDictionary<string, object>? datos = null)
+        : base(clsCodigosError.CONFLICT, mensaje, clsMotivosRechazo.Detalles(motivo, datos))
     {
     }
 }
@@ -49,8 +54,10 @@ public sealed class clsNoAutenticadoException : clsExcepcionDominio
 
 public sealed class clsProhibidoException : clsExcepcionDominio
 {
-    public clsProhibidoException(string mensaje)
-        : base(clsCodigosError.FORBIDDEN, mensaje)
+    /// <param name="mensaje">El texto para la persona.</param>
+    /// <param name="motivo">El motivo fijo (de <see cref="clsMotivosRechazo"/>) que la app lee en <c>details.motivo</c> sin depender de la frase; opcional.</param>
+    public clsProhibidoException(string mensaje, string? motivo = null)
+        : base(clsCodigosError.FORBIDDEN, mensaje, clsMotivosRechazo.Detalles(motivo))
     {
     }
 }
@@ -120,6 +127,27 @@ public sealed class clsHallazgoYaRevisadoException : clsExcepcionDominio
 {
     public clsHallazgoYaRevisadoException()
         : base(clsCodigosError.HALLAZGO_YA_REVISADO, "El hallazgo ya fue revisado: su zona, clase y nivel ya no se cambian")
+    {
+    }
+}
+
+/// <summary>Corregir una inspeccion la hizo otra persona y quien intenta no es administrador: 403 CORRECCION_SOLO_AUTOR.</summary>
+public sealed class clsCorreccionSoloDelAutorException : clsExcepcionDominio
+{
+    public clsCorreccionSoloDelAutorException()
+        : base(clsCodigosError.CORRECCION_SOLO_AUTOR, "Esta inspección solo la corrigen quien la hizo o un administrador", new Dictionary<string, object> { ["motivo"] = "solo_autor_o_administrador" })
+    {
+    }
+}
+
+/// <summary>La transferencia de la inspeccion ya tiene una firma o un cierre, asi que ya no se corrige: 409 INSPECCION_YA_FIRMADA.</summary>
+public sealed class clsInspeccionYaFirmadaException : clsExcepcionDominio
+{
+    public clsInspeccionYaFirmadaException()
+        : base(
+            clsCodigosError.INSPECCION_YA_FIRMADA,
+            "Esta inspección ya fue firmada: ya no se corrige, nadie puede hacerlo. Agregue una nota aclaratoria o firme con reservas",
+            new Dictionary<string, object> { ["motivo"] = "inspeccion_firmada" })
     {
     }
 }

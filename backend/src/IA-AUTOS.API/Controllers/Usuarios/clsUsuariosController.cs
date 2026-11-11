@@ -59,6 +59,17 @@ public sealed class clsUsuariosController(
             : Ok(await servicio.ListarBasicoAsync(ct));
 
     /// <summary>
+    /// Un usuario por su identificador, con la misma visibilidad por cliente que el listado: quien administra usuarios recibe el usuario completo (como cada elemento de <c>GET /api/usuarios</c>) y los demas roles solo
+    /// <c>id</c>, <c>nombre</c> y <c>rol</c> de un usuario activo de su cliente. 404 si no existe o es de otro cliente.
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType<UsuarioDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Obtener(Guid id, CancellationToken ct) =>
+        actual.Rol is { } r && clsRol.GESTION_USUARIOS.Contains(r)
+            ? Ok(await servicio.ObtenerAsync(id, ct))
+            : Ok(await servicio.ObtenerBasicoAsync(id, ct));
+
+    /// <summary>
     /// Crea un usuario. Con <c>password</c> entra con correo y contrasena; sin ella, con cedula y PIN (conductor o inspector): si no se
     /// envia <c>pin</c> se genera uno temporal que viene en <c>pin_temporal</c>, una sola vez.
     /// </summary>

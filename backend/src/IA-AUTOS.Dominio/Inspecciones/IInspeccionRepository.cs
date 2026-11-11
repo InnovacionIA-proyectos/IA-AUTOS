@@ -39,6 +39,9 @@ public interface IInspeccionRepository
     /// <summary>Id de la version que corrige a esta inspeccion, o nulo si nadie la ha corregido.</summary>
     Task<Guid?> ObtenerCorreccionIdAsync(Guid inspeccionId, CancellationToken ct = default);
 
+    /// <summary>True si una correccion CERRADA ya reemplazo a esta inspeccion (una correccion en borrador todavia no la reemplaza: la vigente sigue siendo esta).</summary>
+    Task<bool> TieneCorreccionCerradaAsync(Guid inspeccionId, CancellationToken ct = default);
+
     Task<bool> ExisteHallazgoEnInspeccionAsync(Guid hallazgoId, Guid inspeccionId, CancellationToken ct = default);
 
     /// <summary>

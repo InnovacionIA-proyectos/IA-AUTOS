@@ -32,6 +32,15 @@ public sealed class clsVehiculosController(clsVehiculosService servicio, clsInve
     [ProducesResponseType<BajaVehiculoResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> DarDeBaja(string vin, CancellationToken ct) => Ok(await servicio.DarDeBajaAsync(vin, ct));
 
+    /// <summary>
+    /// Deshace la baja del vehiculo: <c>activo = true</c> y responde <c>{ "modo": "reactivado" }</c>; conserva todo su historial. Solo el administrador, el super administrador y el coordinador de calidad (de un VIN de su
+    /// cliente). 404 si no existe. Queda en la auditoria (<c>vehiculo.reactivar</c>).
+    /// </summary>
+    [HttpPost("{vin}/reactivar")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<ReactivarVehiculoResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Reactivar(string vin, CancellationToken ct) => Ok(await servicio.ReactivarAsync(vin, ct));
+
     /// <summary>Autocompletado del inventario: fragmento de VIN o de marca (maximo 8 resultados).</summary>
     [HttpGet]
     [ProducesResponseType<IReadOnlyList<VehiculoBusquedaDto>>(StatusCodes.Status200OK)]

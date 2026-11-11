@@ -281,7 +281,7 @@ public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaT
         Assert.Equal(2, proceso.GetProperty("total").GetInt32());
         Assert.False(proceso.GetProperty("supera_umbral").GetBoolean());
         var regiones = Lista(r, "por_region");
-        Assert.Equal(["cuadrante_numero", "lado", "nombre", "zona", "total", "supera_umbral"], regiones[0].EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["cuadrante_numero", "lado", "nombre", "zona", "total", "supera_umbral", "extra"], regiones[0].EnumerateObject().Select(p => p.Name).ToList());
         var izquierdo7 = regiones.Single(g => g.GetProperty("cuadrante_numero").ValueKind == JsonValueKind.Number && g.GetProperty("cuadrante_numero").GetInt32() == 7);
         Assert.Equal(7, izquierdo7.GetProperty("cuadrante_numero").GetInt32());
         Assert.Equal("izquierdo", izquierdo7.GetProperty("lado").GetString());

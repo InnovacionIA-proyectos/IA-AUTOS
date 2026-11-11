@@ -17,6 +17,9 @@ public sealed record VehiculoBusquedaDto(string Vin, string Marca, string? Model
 /// <summary>Resultado de dar de baja un vehiculo: siempre "inactivado" (nunca se borra: conserva su historial).</summary>
 public sealed record BajaVehiculoResponse(string Modo);
 
+/// <summary>Resultado de reactivar un vehiculo: siempre "reactivado".</summary>
+public sealed record ReactivarVehiculoResponse(string Modo);
+
 public sealed record ListadoVehiculoDto(
     Guid Id,
     string Vin,

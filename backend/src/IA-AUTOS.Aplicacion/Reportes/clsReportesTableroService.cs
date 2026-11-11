@@ -231,15 +231,14 @@ public sealed class clsReportesTableroService(
                 .Select(x => new PatronProcesoDto(x.Proceso, x.Total, Supera(ventanaPorProceso.GetValueOrDefault(x.Proceso))))
                 .ToList(),
             cuentas.GroupBy(c => ClaveRegion(c))
-                .Select(g => (Muestra: g.First(), Total: g.Sum(c => c.Total), Clave: g.Key))
-                .OrderByDescending(x => x.Total).ThenBy(x => x.Muestra.ZonaNombre, StringComparer.Ordinal)
-                .Select(x => new PatronRegionDto(x.Muestra.Numero, x.Muestra.Lado, x.Muestra.CuadranteNombre ?? x.Muestra.ZonaNombre, x.Muestra.ZonaNombre, x.Total, Supera(ventanaPorRegion.GetValueOrDefault(x.Clave))))
+                .Select(g => (Region: RegionDe(g.First()), Total: g.Sum(c => c.Total), Clave: g.Key))
+                .OrderByDescending(x => x.Total).ThenBy(x => x.Region.Zona, StringComparer.Ordinal).ThenBy(x => x.Clave, StringComparer.Ordinal)
+                .Select(x => new PatronRegionDto(x.Region.Numero, x.Region.Lado, x.Region.Nombre, x.Region.Zona, x.Total, Supera(ventanaPorRegion.GetValueOrDefault(x.Clave)), x.Region.Extra))
                 .ToList(),
             cuentas.GroupBy(c => (Region: ClaveRegion(c), c.Proceso))
-                .Select(g => (Muestra: g.First(), Total: g.Sum(c => c.Total), Clave: g.Key))
-                .OrderByDescending(x => x.Total).ThenBy(x => x.Clave.Proceso, StringComparer.Ordinal).ThenBy(x => x.Muestra.ZonaNombre, StringComparer.Ordinal)
-                .Select(x => new PatronRegionProcesoDto(
-                    x.Muestra.Numero, x.Muestra.Lado, x.Muestra.CuadranteNombre ?? x.Muestra.ZonaNombre, x.Muestra.ZonaNombre, x.Clave.Proceso, x.Total, Supera(ventanaPorRegionProceso.GetValueOrDefault(x.Clave))))
+                .Select(g => (Region: RegionDe(g.First()), Total: g.Sum(c => c.Total), Clave: g.Key))
+                .OrderByDescending(x => x.Total).ThenBy(x => x.Clave.Proceso, StringComparer.Ordinal).ThenBy(x => x.Region.Zona, StringComparer.Ordinal).ThenBy(x => x.Clave.Region, StringComparer.Ordinal)
+                .Select(x => new PatronRegionProcesoDto(x.Region.Numero, x.Region.Lado, x.Region.Nombre, x.Region.Zona, x.Clave.Proceso, x.Total, Supera(ventanaPorRegionProceso.GetValueOrDefault(x.Clave)), x.Region.Extra))
                 .ToList(),
             cuentas.GroupBy(c => c.Nivel).Select(g => new PatronNivelDto(g.Key, g.Sum(c => c.Total))).OrderByDescending(n => n.Total).ThenBy(n => n.Nivel, StringComparer.Ordinal).ToList(),
             cuentas.GroupBy(c => c.Clase).Select(g => new PatronClaseDto(g.Key, g.Sum(c => c.Total))).OrderByDescending(n => n.Total).ThenBy(n => n.Clase, StringComparer.Ordinal).ToList(),
@@ -248,9 +247,23 @@ public sealed class clsReportesTableroService(
             cuentas.Where(c => c.Nivel is null).Sum(c => c.Total));
     }
 
-    /// <summary>La zona de un hallazgo: lado + numero del cuadrante (sin zona, un grupo aparte).</summary>
+    /// <summary>Rotulo fijo del grupo de los danos de los extras del vehiculo.</summary>
+    public const string ZONA_EXTRAS = "Extras del vehículo";
+
+    /// <summary>Rotulo fijo del grupo de los hallazgos que no tienen zona en el dibujo (los anteriores a las zonas).</summary>
+    public const string ZONA_SIN_ZONA = "Sin zona en el dibujo";
+
+    /// <summary>
+    /// La zona de un hallazgo: lado + numero del cuadrante. Los danos de extras (no tienen zona: no se dibujan en el vehiculo) y los hallazgos sin zona son dos grupos aparte, cada uno con su rotulo fijo.
+    /// </summary>
     private static string ClaveRegion(FilaConteoHallazgo c) =>
-        c.Numero is { } numero ? $"{c.Lado ?? "sin-lado"}-{numero.ToString(CultureInfo.InvariantCulture)}" : "sin-zona";
+        c.EsExtra ? "extras" : c.Numero is { } numero ? $"{c.Lado ?? "sin-lado"}-{numero.ToString(CultureInfo.InvariantCulture)}" : "sin-zona";
+
+    /// <summary>Lo que dice una zona en el reporte: la de un cuadrante lleva su nombre; los dos grupos sin cuadrante, su rotulo fijo (y no el nombre de una muestra del grupo).</summary>
+    private static (int? Numero, string? Lado, string? Nombre, string? Zona, bool Extra) RegionDe(FilaConteoHallazgo c) =>
+        c.EsExtra ? (null, null, ZONA_EXTRAS, ZONA_EXTRAS, true)
+        : c.Numero is null ? (null, null, ZONA_SIN_ZONA, ZONA_SIN_ZONA, false)
+        : (c.Numero, c.Lado, c.CuadranteNombre ?? c.ZonaNombre, c.ZonaNombre, false);
 
     // ------------------------------------------------------------------------------------ indicador diario
 
