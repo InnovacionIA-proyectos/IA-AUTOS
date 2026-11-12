@@ -390,7 +390,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var viaje = await LeerJsonAsync(r);
         Assert.Equal(
             ["id", "codigo_mtrack", "tipo_unidad_id", "unidad", "placa", "trailer", "conductor_id", "conductor_nombre", "inspector_id", "inspector_nombre",
-             "origen_id", "origen", "destino_id", "destino", "estado", "vehiculos", "clientes", "created_at", "updated_at", "novedades_proceso", "fecha_programada", "lugar_cargue_id", "lugar_cargue", "capacidad", "disposicion", "fotos_acomodacion"],
+             "origen_id", "origen", "destino_id", "destino", "estado", "vehiculos", "clientes", "created_at", "updated_at", "novedades_proceso", "fecha_programada", "lugar_cargue_id", "lugar_cargue", "capacidad", "disposicion", "fotos_acomodacion", "lugar_cargue_tiene_inspector"],
             viaje.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("MTK-ALTA", viaje.GetProperty("codigo_mtrack").GetString());
         Assert.Equal("Niñera", viaje.GetProperty("unidad").GetString());

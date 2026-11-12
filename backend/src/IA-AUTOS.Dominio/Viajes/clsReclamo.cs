@@ -100,5 +100,8 @@ public interface IReclamoRepository
     /// <summary>True si el lugar tiene al menos un inspector activo asignado (<c>tblInspectorLugares</c>): ahi la entrega la firma el inspector y no una persona externa.</summary>
     Task<bool> LugarTieneInspectoresAsync(Guid lugarId, CancellationToken ct = default);
 
+    /// <summary>De esos lugares, los que tienen al menos un inspector activo asignado: la misma regla que <see cref="LugarTieneInspectoresAsync"/>, en una sola consulta.</summary>
+    Task<IReadOnlySet<Guid>> LugaresConInspectoresAsync(IReadOnlyCollection<Guid> lugarIds, CancellationToken ct = default);
+
     void Agregar(clsReclamo reclamo);
 }

@@ -66,7 +66,8 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         string? Destino,
         string? LugarCargue,
         int TotalVehiculos,
-        int VehiculosCompletos);
+        int VehiculosCompletos,
+        bool LugarCargueConInspector);
 
     /// <summary>El viaje tiene al menos un VIN de ese cliente.</summary>
     private Expression<Func<clsViaje, bool>> ConVehiculoDeCliente(Guid clienteId) =>
@@ -234,10 +235,16 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                               group vv by vv.ViajeId into g
                               select new { ViajeId = g.Key, Total = g.Count(), Completos = g.Count(x => x.Completa) }).ToListAsync(ct))
             .ToDictionary(x => x.ViajeId);
+        // Si el punto de cargue tiene inspector: la regla de siempre (clsReglaInspectorDelPunto), en una consulta para todos los viajes. Un viaje sin lugar de cargue (anteriores a la programacion) no tiene.
+        var lugaresDeCargue = filas.Where(f => f.Viaje.LugarCargueId is not null).Select(f => f.Viaje.LugarCargueId!.Value).Distinct().ToList();
+        var conInspector = lugaresDeCargue.Count == 0
+            ? new HashSet<Guid>()
+            : (await clsReglaInspectorDelPunto.LugaresConInspector(contexto).Where(l => lugaresDeCargue.Contains(l)).Distinct().ToListAsync(ct)).ToHashSet();
         return filas
             .Select(f => new FilaViaje(
                 f.Viaje, f.Unidad, f.Conductor, f.Inspector, f.Origen, f.Destino, f.LugarCargue,
-                conteos.GetValueOrDefault(f.Viaje.Id)?.Total ?? 0, conteos.GetValueOrDefault(f.Viaje.Id)?.Completos ?? 0))
+                conteos.GetValueOrDefault(f.Viaje.Id)?.Total ?? 0, conteos.GetValueOrDefault(f.Viaje.Id)?.Completos ?? 0,
+                f.Viaje.LugarCargueId is { } cargue && conInspector.Contains(cargue)))
             .ToList();
     }
 
@@ -362,7 +369,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
         f.Viaje.Estado, f.TotalVehiculos, f.VehiculosCompletos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt,
-        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue, destinos);
+        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue, destinos, f.LugarCargueConInspector);
 
     private static ViajeDto ADto(
         FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<NovedadDelViajeDto> novedades, IReadOnlyList<EvidenciaDto> fotosAcomodacion) => new(
@@ -370,7 +377,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
         f.Viaje.Estado, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt, novedades,
         f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue,
-        f.Viaje.CapacidadEfectiva, Disposicion(f.Viaje.CapacidadEfectiva, vehiculos), fotosAcomodacion);
+        f.Viaje.CapacidadEfectiva, Disposicion(f.Viaje.CapacidadEfectiva, vehiculos), fotosAcomodacion, f.LugarCargueConInspector);
 
     /// <summary>Los puestos de la ninera, del 1 a la capacidad, cada uno con el VIN que lo ocupa (los de las unidades que quien consulta puede ver).</summary>
     private static DisposicionDeNiniera Disposicion(int capacidad, IReadOnlyList<ViajeVehiculoDto> vehiculos)
