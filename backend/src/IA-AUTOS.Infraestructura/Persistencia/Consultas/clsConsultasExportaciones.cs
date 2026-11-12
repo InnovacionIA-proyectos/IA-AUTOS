@@ -235,7 +235,7 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                            EntregaNombre = en.Nombre,
                            EntregaFecha = tr.FirmaEntregaAt,
                            EntregaIp = tr.FirmaEntregaIp,
-                           RecibeNombre = re.Nombre,
+                           RecibeNombre = re.Nombre ?? tr.RecibeExternoNombre,
                            RecibeFecha = tr.FirmaRecibeAt,
                            RecibeIp = tr.FirmaRecibeIp,
                            Extras = contexto.InspeccionExtras.Count(x => x.InspeccionId == i.Id),

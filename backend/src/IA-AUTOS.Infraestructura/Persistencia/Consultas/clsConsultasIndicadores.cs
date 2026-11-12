@@ -70,6 +70,32 @@ internal sealed class clsFilaAdopcion : IFilaIndicador
 
     public string? Trailer { get; set; }
 
+    public Guid? LugarDestinoId { get; set; }
+
+    public int Programados { get; set; }
+
+    public int ConSalidaDigital { get; set; }
+}
+
+/// <summary>Una fila de vwAdopcionPorCamion: como vwAdopcion pero con un viaje (camion) contado una sola vez.</summary>
+internal sealed class clsFilaAdopcionCamion : IFilaIndicador
+{
+    public DateOnly Fecha { get; set; }
+
+    public Guid ClienteId { get; set; }
+
+    public string Operacion { get; set; } = string.Empty;
+
+    public Guid? OrigenId { get; set; }
+
+    public Guid? DestinoId { get; set; }
+
+    public string Marca { get; set; } = string.Empty;
+
+    public string? Trailer { get; set; }
+
+    public Guid? LugarDestinoId { get; set; }
+
     public int Programados { get; set; }
 
     public int ConSalidaDigital { get; set; }
@@ -167,6 +193,9 @@ internal sealed class clsFilaIndicadorDiario : IFilaIndicador
     public int Despachados { get; set; }
 
     public int ConNovedad { get; set; }
+
+    /// <summary>Los danos sin nivel de esas unidades ese dia (una cifra aparte de <see cref="ConNovedad"/>).</summary>
+    public int SinCalificar { get; set; }
 }
 
 internal sealed class clsConsultasIndicadores(clsAppDbContext contexto) : IConsultasIndicadores
@@ -216,10 +245,18 @@ internal sealed class clsConsultasIndicadores(clsAppDbContext contexto) : IConsu
 
     public async Task<IReadOnlyList<FilaAdopcion>> AdopcionAsync(FiltrosReporte filtros, CancellationToken ct = default) =>
         (await Filtrar(contexto.Set<clsFilaAdopcion>().AsNoTracking(), filtros)
-            .GroupBy(x => new { x.Fecha, x.ClienteId, x.Operacion })
-            .Select(g => new { g.Key.Fecha, g.Key.ClienteId, g.Key.Operacion, Programados = g.Sum(x => x.Programados), ConSalidaDigital = g.Sum(x => x.ConSalidaDigital) })
+            .GroupBy(x => new { x.Fecha, x.ClienteId, x.Operacion, x.LugarDestinoId })
+            .Select(g => new { g.Key.Fecha, g.Key.ClienteId, g.Key.Operacion, g.Key.LugarDestinoId, Programados = g.Sum(x => x.Programados), ConSalidaDigital = g.Sum(x => x.ConSalidaDigital) })
             .ToListAsync(ct))
-        .Select(x => new FilaAdopcion(x.Fecha, x.ClienteId, x.Operacion, x.Programados, x.ConSalidaDigital))
+        .Select(x => new FilaAdopcion(x.Fecha, x.ClienteId, x.Operacion, x.Programados, x.ConSalidaDigital, x.LugarDestinoId))
+        .ToList();
+
+    public async Task<IReadOnlyList<FilaAdopcion>> AdopcionPorCamionAsync(FiltrosReporte filtros, CancellationToken ct = default) =>
+        (await Filtrar(contexto.Set<clsFilaAdopcionCamion>().AsNoTracking(), filtros)
+            .GroupBy(x => new { x.Fecha, x.ClienteId, x.Operacion, x.LugarDestinoId })
+            .Select(g => new { g.Key.Fecha, g.Key.ClienteId, g.Key.Operacion, g.Key.LugarDestinoId, Programados = g.Sum(x => x.Programados), ConSalidaDigital = g.Sum(x => x.ConSalidaDigital) })
+            .ToListAsync(ct))
+        .Select(x => new FilaAdopcion(x.Fecha, x.ClienteId, x.Operacion, x.Programados, x.ConSalidaDigital, x.LugarDestinoId))
         .ToList();
 
     public async Task<IReadOnlyList<FilaTiempo>> TiemposDeCapturaAsync(FiltrosReporte filtros, CancellationToken ct = default)
@@ -318,22 +355,24 @@ internal sealed class clsConsultasIndicadores(clsAppDbContext contexto) : IConsu
         .ToList();
 
     public async Task<IReadOnlyList<FilaConteoHallazgo>> ConteoDeHallazgosAsync(FiltrosReporte filtros, CancellationToken ct = default) =>
-        (await Averias(filtros)
-            .GroupBy(x => new { x.Proceso, x.Numero, x.Lado, x.ZonaNombre, x.CuadranteNombre, x.NivelSeveridad, x.ClaseDano, x.TamanoDano })
+        (await (from a in Averias(filtros)
+                join h in contexto.Hallazgos.AsNoTracking() on a.HallazgoId equals h.Id
+                select new { a.Proceso, a.Numero, a.Lado, a.ZonaNombre, a.CuadranteNombre, a.NivelSeveridad, a.ClaseDano, a.TamanoDano, EsExtra = h.ExtraId != null })
+            .GroupBy(x => new { x.Proceso, x.Numero, x.Lado, x.ZonaNombre, x.CuadranteNombre, x.NivelSeveridad, x.ClaseDano, x.TamanoDano, x.EsExtra })
             .Select(g => new
             {
-                g.Key.Proceso, g.Key.Numero, g.Key.Lado, g.Key.ZonaNombre, g.Key.CuadranteNombre, g.Key.NivelSeveridad, g.Key.ClaseDano, g.Key.TamanoDano, Total = g.Count(),
+                g.Key.Proceso, g.Key.Numero, g.Key.Lado, g.Key.ZonaNombre, g.Key.CuadranteNombre, g.Key.NivelSeveridad, g.Key.ClaseDano, g.Key.TamanoDano, g.Key.EsExtra, Total = g.Count(),
             })
             .ToListAsync(ct))
-        .Select(x => new FilaConteoHallazgo(x.Proceso, x.Numero, x.Lado, x.ZonaNombre, x.CuadranteNombre, x.NivelSeveridad, x.ClaseDano, x.TamanoDano, x.Total))
+        .Select(x => new FilaConteoHallazgo(x.Proceso, x.Numero, x.Lado, x.ZonaNombre, x.CuadranteNombre, x.NivelSeveridad, x.ClaseDano, x.TamanoDano, x.Total, x.EsExtra))
         .ToList();
 
     public async Task<IReadOnlyList<FilaIndicador>> IndicadorDiarioAsync(FiltrosReporte filtros, CancellationToken ct = default) =>
         (await Filtrar(contexto.Set<clsFilaIndicadorDiario>().AsNoTracking(), filtros)
             .GroupBy(x => new { x.ClienteId, x.Operacion })
-            .Select(g => new { g.Key.ClienteId, g.Key.Operacion, Despachados = g.Sum(x => x.Despachados), ConNovedad = g.Sum(x => x.ConNovedad) })
+            .Select(g => new { g.Key.ClienteId, g.Key.Operacion, Despachados = g.Sum(x => x.Despachados), ConNovedad = g.Sum(x => x.ConNovedad), SinCalificar = g.Sum(x => x.SinCalificar) })
             .ToListAsync(ct))
-        .Select(x => new FilaIndicador(x.ClienteId, x.Operacion, x.Despachados, x.ConNovedad))
+        .Select(x => new FilaIndicador(x.ClienteId, x.Operacion, x.Despachados, x.ConNovedad, x.SinCalificar))
         .ToList();
 
     public async Task<IReadOnlyDictionary<Guid, UsuarioReporte>> UsuariosAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)

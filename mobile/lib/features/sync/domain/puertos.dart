@@ -51,6 +51,8 @@ abstract interface class GatewayInformes {
     required double lat,
     required double lng,
     String? notas,
+    String? motivoSinInspector,
+    String? motivoSinInspectorTexto,
   });
 
   /// Sube la imagen como multipart y devuelve dónde quedó y su huella.
@@ -70,11 +72,47 @@ abstract interface class GatewayInformes {
     String? dispositivoId,
     String? nota,
     String? hash,
+    String? extraId,
   });
+
+  /// Crea un extra de la inspección (barras de techo, volco, platón u otro) y devuelve su id: con él se mandan sus
+  /// fotos.
+  Future<String> crearExtra(String inspeccionId, {required String tipo, String? texto, String? observacion});
 
   Future<void> agregarHallazgo(String inspeccionId, HallazgoLocal hallazgo);
 
+  /// Registra (o libera, con null) la posición de una unidad en la niñera. Solo con la segunda inspección del cargue
+  /// en curso: por eso va después de crearla.
+  Future<void> registrarPosicion(String viajeId, String vin, int? posicion);
+
   Future<void> cerrarInspeccion(String inspeccionId);
+
+  /// Registra una novedad del conductor sobre una unidad del viaje. La foto ya está subida ([FotoLocal.storagePath]).
+  Future<void> crearNovedad(
+    String viajeId,
+    String vin, {
+    required String tipoNovedad,
+    required String tamanoDano,
+    required String fecha,
+    required double lat,
+    required double lng,
+    required FotoLocal foto,
+  });
+
+  /// Confirma la llegada de una unidad, con la fecha y el lugar del momento en que el conductor lo hizo.
+  Future<void> confirmarLlegada(String viajeId, String vin, {required String fecha, required double lat, required double lng});
+
+  /// El recibo sin entrega: el conductor cierra solo con su firma la transferencia de la salida del cargue que hizo
+  /// sin inspector.
+  Future<void> firmarReciboSinEntrega(String inspeccionId, {required String firma});
+
+  /// La firma de quien tiene la sesión sobre la entrega de un punto: el servidor la guarda en cada unidad pendiente.
+  /// Quién entrega y quién recibe salen del viaje (su conductor y su inspector).
+  Future<void> firmarEntregaPunto(String viajeId, String lugarId, {required String firma});
+
+  /// Cierra la entrega de un punto con una sola firma y el motivo de la otra parte. [firma] solo hace falta si quien
+  /// cierra todavía no había firmado.
+  Future<void> cerrarEntregaConUnaFirma(String viajeId, String lugarId, {required String motivo, String? firma});
 
   /// Firma la transferencia. Solo viaja **una** firma, la de quien tiene la sesión: el servidor se la atribuye
   /// al usuario del token.
@@ -105,4 +143,7 @@ abstract interface class GatewayInformes {
     required String testigoId,
     required FotoLocal foto,
   });
+
+  /// Agrega una nota aclaratoria al registro: `inspeccion`, `hallazgo` o `transferencia`. Cada uno tiene su ruta.
+  Future<void> agregarNota({required String entidad, required String entidadId, required String texto});
 }

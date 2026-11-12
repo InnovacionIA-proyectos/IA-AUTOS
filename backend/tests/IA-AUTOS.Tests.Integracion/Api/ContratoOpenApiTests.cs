@@ -173,7 +173,7 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Contains("EntregaPuntoDto", rutas["/api/viajes/{id}/entregas/{lugar}"]!["get"]!["responses"]!["200"]!.ToJsonString());
         Assert.Contains("FirmarEntregaRequest", rutas["/api/viajes/{id}/entregas/{lugar}/firma"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
         Assert.Contains("CerrarEntregaUnaFirmaRequest", rutas["/api/viajes/{id}/entregas/{lugar}/una-firma"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
-        Assert.Equal(["vehiculo_id", "vin", "estado", "inspeccion_id", "tipo_cierre", "entrega_firmada_at", "recibe_firmada_at", "no_firma_parte"], Propiedades(esquemas["EntregaUnidadDto"]!));
+        Assert.Equal(["vehiculo_id", "vin", "estado", "inspeccion_id", "tipo_cierre", "entrega_firmada_at", "recibe_firmada_at", "no_firma_parte", "motivo_cierre", "recibe_externo_nombre", "recibe_externo_cedula"], Propiedades(esquemas["EntregaUnidadDto"]!));
     }
 
     [Fact]
@@ -227,7 +227,7 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.DoesNotContain("con_personal_apoyo", contrato.ToJsonString());
         Assert.Contains("novedades_proceso", esquemas["ViajeDto"]!["properties"]!.AsObject().Select(p => p.Key));
         Assert.Equal(
-            ["tipo", "motivo_codigo", "motivo", "texto", "usuario_nombre", "fecha", "vin", "inspeccion_id"],
+            ["tipo", "motivo_codigo", "motivo", "texto", "usuario_nombre", "fecha", "vin", "inspeccion_id", "permiso"],
             esquemas["NovedadDelViajeDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList());
     }
 
@@ -299,6 +299,8 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     [InlineData("/api/viajes/{id}/vehiculos/{vin}/novedades", "post", "409", "ETAPA_PREVIA_SIN_CIERRE")]
     [InlineData("/api/viajes/{id}/vehiculos/{vin}/llegada", "post", "409", "LLEGADA_YA_CERRADA")]
     [InlineData("/api/hallazgos/{id}/revision", "post", "409", "HALLAZGO_YA_REVISADO")]
+    [InlineData("/api/inspecciones/{id}/corregir", "post", "403", "CORRECCION_SOLO_AUTOR")]
+    [InlineData("/api/inspecciones/{id}/corregir", "post", "409", "INSPECCION_YA_FIRMADA")]
     [InlineData("/api/uploads/{archivo}", "get", "403", "URL_FIRMADA_INVALIDA")]
     [InlineData("/api/auth/login-conductor", "post", "423", "ACCOUNT_LOCKED")]
     [InlineData("/api/auth/login-portal", "post", "403", "PORTAL_USER_NOT_LINKED")]

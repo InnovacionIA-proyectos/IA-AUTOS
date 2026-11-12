@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/features/vehiculos/domain/etiquetas.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
-import 'package:traza_autos/features/vehiculos/domain/partes.dart';
 
 Map<String, dynamic> inspeccionJson(
   String id,
@@ -74,7 +73,10 @@ void main() {
       final inv = inventario([
         etapaJson('e1', 1, 'cargue', inspecciones: [
           inspeccionJson('i1', '2026-01-02T10:00:00Z', hallazgos: [
-            {'id': 'h1', 'parte_vehiculo': 'Capot', 'clase_dano': 'golpe', 'tamano_dano': '1_5cm', 'coords_diagrama': {'x': 0.5, 'y': 0.66}},
+            {
+              'id': 'h1', 'parte_vehiculo': null, 'coords_diagrama': null, 'clase_dano': 'golpe', 'tamano_dano': '1_5cm',
+              'cuadrante_numero': 26, 'lado': 'derecho', 'zona': 'Derecho 26 · Llanta trasera', 'nivel_severidad': 'v2',
+            },
           ]),
         ]),
       ]);
@@ -82,8 +84,78 @@ void main() {
       expect(inv.vin, 'VIN00000000000001');
       final insp = inv.etapas.single.inspecciones.single;
       expect(insp.cerrada, isTrue);
-      expect(insp.hallazgos.single.coords!.y, 0.66);
+      final h = insp.hallazgos.single;
+      expect((h.cuadranteNumero, h.lado, h.zona, h.nivel), (26, 'derecho', 'Derecho 26 · Llanta trasera', 'v2'));
       expect(insp.evidencias.single.url, '/api/uploads/i1.jpg');
+    });
+
+    test('un hallazgo histórico (solo parte) y una novedad del conductor (sin clase ni zona) se leen sin romper', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [
+          inspeccionJson('i1', '2026-01-02T10:00:00Z', hallazgos: [
+            {'id': 'h1', 'parte_vehiculo': 'Capot', 'clase_dano': 'golpe', 'tamano_dano': '1_5cm', 'coords_diagrama': {'x': 0.5, 'y': 0.66}},
+            {'id': 'h2', 'parte_vehiculo': null, 'clase_dano': null, 'tamano_dano': '5_10cm', 'zona': null, 'tipo_novedad': 'piedra'},
+          ]),
+        ]),
+      ]);
+
+      final [historico, novedad] = inv.etapas.single.inspecciones.single.hallazgos;
+      expect((historico.zona, historico.cuadranteNumero), ('Capot', null));
+      expect((novedad.clase, novedad.cuadranteNumero, novedad.tamano), (null, null, '5_10cm'));
+    });
+
+    // Un VIN puede haber andado en varios viajes y el inventario los trae todos. Quien abre la unidad lo hace
+    // desde un viaje: mezclar las etapas de otro haría ver como pendiente lo que ya se cerró en su momento.
+    test('con un viaje, solo se ven sus etapas', () {
+      final inv = inventario([
+        {'id': 'e1', 'orden': 1, 'proceso': 'cargue', 'requiere_inspeccion': true, 'viaje_id': 'via-1'},
+        {'id': 'e2', 'orden': 1, 'proceso': 'cargue', 'requiere_inspeccion': true, 'viaje_id': 'via-2'},
+        {'id': 'e3', 'orden': 2, 'proceso': 'transporte', 'requiere_inspeccion': true, 'viaje_id': 'via-1'},
+      ]);
+
+      expect([for (final e in inv.delViaje('via-1').etapas) e.id], ['e1', 'e3']);
+      expect(inv.delViaje('via-1').vin, inv.vin, reason: 'lo demás del inventario no cambia');
+    });
+
+    test('sin viaje se ven todas: se llegó sin saber desde cuál', () {
+      final inv = inventario([
+        {'id': 'e1', 'orden': 1, 'proceso': 'cargue', 'requiere_inspeccion': true, 'viaje_id': 'via-1'},
+        {'id': 'e2', 'orden': 1, 'proceso': 'cargue', 'requiere_inspeccion': true, 'viaje_id': 'via-2'},
+      ]);
+
+      expect(inv.delViaje(null).etapas, hasLength(2));
+    });
+
+    // Un informe cerrado no se edita: lo que se aclara después llega al lado, con su autor y su fecha.
+    test('las notas aclaratorias del informe se leen con su autor', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [
+          {
+            ...inspeccionJson('i1', '2026-01-02T10:00:00Z'),
+            'notas_aclaratorias': [
+              {
+                'id': 'n1',
+                'texto': 'La placa estaba mal escrita',
+                'autor_nombre': 'Ana Pérez',
+                'autor_rol': 'inspector',
+                'created_at': '2026-01-03T08:00:00Z',
+              },
+            ],
+          },
+        ]),
+      ]);
+
+      final nota = inv.etapas.single.inspecciones.single.notasAclaratorias.single;
+      expect((nota.texto, nota.autorNombre), ('La placa estaba mal escrita', 'Ana Pérez'));
+      expect(nota.creadoEn, DateTime.utc(2026, 1, 3, 8));
+    });
+
+    test('un informe sin notas aclaratorias no rompe', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('i1', '2026-01-02T10:00:00Z')]),
+      ]);
+
+      expect(inv.etapas.single.inspecciones.single.notasAclaratorias, isEmpty);
     });
 
     test('la etapa trae su lugar y su viaje, que la API ya resuelve', () {
@@ -178,38 +250,6 @@ void main() {
     test('etapa de solo firma sin ningún informe en el VIN: no hay nada que firmar', () {
       final inv = inventario([etapaJson('e1', 1, 'punto_origen', requiere: false)]);
       expect(accionDeEtapa(inv.etapas.single, inv), isA<SinInforme>());
-    });
-  });
-
-  group('catálogo de partes', () {
-    final todas = <(String, double, double)>[
-      for (final p in catalogoPartes) ...[
-        if (p.coords != null) (p.base, p.coords!.x, p.coords!.y),
-        for (final pos in p.posiciones) ('${p.base} ${pos.etiqueta}', pos.coords.x, pos.coords.y),
-      ],
-    ];
-
-    test('todas las coordenadas están normalizadas entre 0 y 1', () {
-      for (final (nombre, x, y) in todas) {
-        expect(x, inInclusiveRange(0, 1), reason: nombre);
-        expect(y, inInclusiveRange(0, 1), reason: nombre);
-      }
-    });
-
-    test('cada parte tiene coordenadas propias o posiciones, nunca ambas ni ninguna', () {
-      for (final p in catalogoPartes) {
-        expect(p.coords != null, p.posiciones.isEmpty, reason: p.base);
-      }
-    });
-
-    test('no hay etiquetas repetidas', () {
-      final etiquetas = todas.map((t) => t.$1).toList();
-      expect(etiquetas.toSet().length, etiquetas.length);
-    });
-
-    test('etiquetaParte compone parte y posición en minúsculas', () {
-      expect(etiquetaParte('Guardafango', 'Delantero derecho'), 'Guardafango delantero derecho');
-      expect(etiquetaParte('Capot'), 'Capot');
     });
   });
 
@@ -393,26 +433,71 @@ void main() {
     });
   });
 
-  group('quien captura la etapa', () {
-    // La API se lo permitiria igual; es la app la que no se lo ofrece, porque ese cargue lo inspecciona el
-    // personal de apoyo y el conductor solo firma lo que recibe.
-    test('el conductor no captura un cargue con personal de apoyo', () {
+  group('quien hace la salida del cargue', () {
+    // La salida del cargue la hace un inspector. Si no hay, el conductor activa «No hay inspector» y da el motivo:
+    // en vez de «Capturar» se le ofrece esa excepción.
+    test('con la marca de personal de apoyo, el conductor usa la excepción en la salida del cargue', () {
       final inv = inventario([etapaJson('e1', 1, 'cargue', conApoyo: true)]);
 
-      expect(puedeCapturar(inv.etapas.single, rol: 'conductor'), isFalse);
-      expect(puedeCapturar(inv.etapas.single, rol: 'inspector'), isTrue, reason: 'a el si le toca');
+      expect(conductorUsaExcepcion(inv.etapas.single, rol: 'conductor', momento: 'salida'), isTrue);
+      expect(conductorUsaExcepcion(inv.etapas.single, rol: 'inspector', momento: 'salida'), isFalse, reason: 'a el si le toca');
     });
 
-    test('sin personal de apoyo el conductor si captura: no hay quien lo haga por el', () {
+    test('sin la marca en la respuesta (contrato 2.10) la regla es la misma para todos los cargues', () {
+      final json = etapaJson('e1', 1, 'cargue')..remove('con_personal_apoyo');
+      final etapa = inventario([json]).etapas.single;
+
+      expect(etapa.traeMarcaApoyo, isFalse);
+      expect(conductorUsaExcepcion(etapa, rol: 'conductor', momento: 'salida'), isTrue);
+    });
+
+    test('con la marca en falso el conductor captura: no hay quien lo haga por el', () {
       final inv = inventario([etapaJson('e1', 1, 'cargue')]);
 
-      expect(puedeCapturar(inv.etapas.single, rol: 'conductor'), isTrue);
+      expect(conductorUsaExcepcion(inv.etapas.single, rol: 'conductor', momento: 'salida'), isFalse);
+    });
+
+    test('solo es de la salida: la llegada del cargue la captura como siempre', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue', conApoyo: true)]);
+
+      expect(conductorUsaExcepcion(inv.etapas.single, rol: 'conductor', momento: 'llegada'), isFalse);
     });
 
     test('solo aplica al cargue: en descargue el conductor captura igual', () {
-      final inv = inventario([etapaJson('e1', 1, 'descargue', conApoyo: true)]);
+      final json = etapaJson('e1', 1, 'descargue', conApoyo: true)..remove('con_personal_apoyo');
+      final inv = inventario([json]);
 
-      expect(puedeCapturar(inv.etapas.single, rol: 'conductor'), isTrue);
+      expect(conductorUsaExcepcion(inv.etapas.single, rol: 'conductor', momento: 'salida'), isFalse);
+    });
+  });
+
+  group('lo que trae la inspección sin inspector', () {
+    test('lee el motivo y las novedades de proceso', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [
+          {
+            ...inspeccionJson('i1', '2026-01-01T08:00:00Z', cerradaEn: '2026-01-01T09:00:00Z'),
+            'motivo_sin_inspector': {'codigo': 'otro', 'nombre': 'Otro', 'texto': 'El inspector se enfermó'},
+            'novedades_proceso': [
+              {'tipo': 'cargue_sin_inspector', 'motivo_codigo': 'otro', 'motivo': 'Otro', 'texto': 'El inspector se enfermó', 'usuario_nombre': 'Carlos', 'fecha': '2026-01-01T08:00:00Z'},
+            ],
+          },
+        ]),
+      ]);
+
+      final inspeccion = inv.etapas.single.inspecciones.single;
+      expect(inspeccion.fueSinInspector, isTrue);
+      expect(inspeccion.motivoSinInspector!.resumen, 'Otro: El inspector se enfermó');
+      expect(inspeccion.novedadesProceso.single.tipo, 'cargue_sin_inspector');
+      expect(inspeccion.novedadesProceso.single.resumen, 'Otro: El inspector se enfermó');
+    });
+
+    test('una inspección normal no trae ni motivo ni novedades', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('i1', '2026-01-01T08:00:00Z')])]);
+
+      final inspeccion = inv.etapas.single.inspecciones.single;
+      expect(inspeccion.fueSinInspector, isFalse);
+      expect(inspeccion.novedadesProceso, isEmpty);
     });
   });
 }

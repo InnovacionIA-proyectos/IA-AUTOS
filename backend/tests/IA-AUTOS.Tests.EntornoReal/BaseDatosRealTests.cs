@@ -853,6 +853,121 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_entrega_admite_un_firmante_externo_y_el_aviso_lleva_sus_datos()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/35-firmante-externo-y-datos-del-aviso.sql.
+        await using var conexion = await AbrirAsync();
+
+        var externas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND name IN (N'RecibeExternoNombre', N'RecibeExternoCedula')");
+        var recibeAdmiteNulo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND name = N'RecibeUsuarioId' AND is_nullable = 1");
+        var restriccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Recibe' AND parent_object_id = OBJECT_ID(N'tblTransferenciasCustodia')");
+        var datos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblNotificaciones') AND name = N'Datos'");
+
+        Assert.True(
+            externas == 2 && recibeAdmiteNulo == 1 && restriccion == 1 && datos == 1,
+            "Falta el firmante externo de la entrega o los datos del aviso. Ejecute database/cambios-esquema/35-firmante-externo-y-datos-del-aviso.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task Las_vistas_de_los_indicadores_cuentan_el_dano_sin_calificar()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/36-dano-sin-calificar-en-los-conteos.sql.
+        await using var conexion = await AbrirAsync();
+
+        var indicador = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'vwIndicadorDiario') AND name = N'SinCalificar'");
+        var vistasSinFiltro = await EscalarAsync<int>(
+            conexion,
+            "SELECT COUNT(*) FROM sys.sql_modules m WHERE m.object_id IN (OBJECT_ID(N'vwHallazgosVentanaUmbral'), OBJECT_ID(N'vwAveriasPorConfiguracion')) AND m.definition NOT LIKE N'%RevisadoAt IS NULL%'");
+
+        Assert.True(indicador == 1 && vistasSinFiltro == 2, "Las vistas de los indicadores aun excluyen el dano sin calificar. Ejecute database/cambios-esquema/36-dano-sin-calificar-en-los-conteos.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task El_dano_de_un_extra_tiene_donde_guardarse()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/37-dano-en-los-extras.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblHallazgos') AND name = N'ExtraId'");
+        var restriccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_Extra' AND parent_object_id = OBJECT_ID(N'tblHallazgos')");
+        var indice = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UQ_tblHallazgos_Extra' AND object_id = OBJECT_ID(N'tblHallazgos')");
+
+        Assert.True(columna == 1 && restriccion == 1 && indice == 1, "Falta el dano de los extras. Ejecute database/cambios-esquema/37-dano-en-los-extras.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task La_capacidad_de_la_ninera_tiene_donde_guardarse()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/38-capacidad-de-la-ninera.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columnas = await EscalarAsync<int>(
+            conexion,
+            "SELECT COUNT(*) FROM sys.columns WHERE (object_id = OBJECT_ID(N'tblViajes') AND name = N'Capacidad') OR (object_id = OBJECT_ID(N'tblTiposUnidadTransportadora') AND name = N'Puestos') OR (object_id = OBJECT_ID(N'tblEvidencias') AND name = N'EsAcomodacion')");
+        var posicion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_Posicion' AND parent_object_id = OBJECT_ID(N'tblViajeVehiculos') AND definition LIKE N'%(20)%'");
+
+        Assert.True(columnas == 3 && posicion == 1, "Falta la capacidad de la ninera. Ejecute database/cambios-esquema/38-capacidad-de-la-ninera.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task El_permiso_de_la_excepcion_sin_inspector_tiene_donde_guardarse()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/39-permiso-sin-inspector.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblPermisosSinInspector'");
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblNovedadesProceso') AND name = N'PermisoId'");
+        var tipo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%permiso_sin_inspector%'");
+
+        Assert.True(tabla == 1 && columna == 1 && tipo == 1, "Falta el permiso de la excepcion sin inspector. Ejecute database/cambios-esquema/39-permiso-sin-inspector.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task Todo_usuario_de_aplicacion_de_la_base_tiene_negado_el_borrado_de_la_evidencia_y_el_historial()
+    {
+        // Solo lectura. Un usuario de aplicacion es el que puede escribir datos (db_datawriter) y NO es propietario (db_owner ni dbo): donde la API se conecta como propietario no hay ninguno y no hay nada que exigir.
+        // Si hay uno y le falta el DENY DELETE, avisa: ejecute database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql (o 01-crear-usuario-app.sql en una base nueva).
+        await using var conexion = await AbrirAsync();
+
+        var usuariosDeAplicacion = await EscalarAsync<int>(
+            conexion,
+            """
+            SELECT COUNT(*)
+            FROM sys.database_principals p
+            WHERE p.type IN ('S', 'U', 'G') AND p.name NOT IN ('dbo', 'guest', 'INFORMATION_SCHEMA', 'sys')
+              AND IS_ROLEMEMBER(N'db_datawriter', p.name) = 1 AND IS_ROLEMEMBER(N'db_owner', p.name) = 0
+            """);
+        var sinElDeny = await EscalarAsync<int>(
+            conexion,
+            """
+            SELECT COUNT(*)
+            FROM sys.database_principals p
+            CROSS JOIN (VALUES (N'tblEvidencias'), (N'tblHallazgos'), (N'tblHallazgoSeguimiento'), (N'tblNotasAclaratorias'), (N'tblTransferenciasCustodia'), (N'tblNotificaciones'), (N'tblAuditLog'), (N'tblVehiculos')) AS t (tabla)
+            WHERE p.type IN ('S', 'U', 'G') AND p.name NOT IN ('dbo', 'guest', 'INFORMATION_SCHEMA', 'sys')
+              AND IS_ROLEMEMBER(N'db_datawriter', p.name) = 1 AND IS_ROLEMEMBER(N'db_owner', p.name) = 0
+              AND NOT EXISTS (SELECT 1 FROM sys.database_permissions d
+                              WHERE d.grantee_principal_id = p.principal_id AND d.class = 1 AND d.major_id = OBJECT_ID(t.tabla) AND d.permission_name = N'DELETE' AND d.state = N'D')
+            """);
+
+        Assert.True(
+            sinElDeny == 0,
+            $"Hay {usuariosDeAplicacion} usuario(s) de aplicacion y a alguno le falta el DENY DELETE sobre la evidencia y el historial. Ejecute database/cambios-esquema/41-usuario-de-la-app-sin-borrado.sql con el usuario de la aplicacion en @usuarioApp.");
+    }
+
+    [FactEntornoReal]
+    public async Task La_adopcion_cuenta_solo_salidas_cerradas_y_tiene_su_vista_por_camion()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/40-adopcion-por-carro-y-por-camion.sql.
+        await using var conexion = await AbrirAsync();
+
+        var destino = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'vwAdopcion') AND name = N'LugarDestinoId'");
+        var soloCerradas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.sql_modules m WHERE m.object_id = OBJECT_ID(N'vwAdopcion') AND m.definition LIKE N'%i.Estado = ''cerrada''%'");
+        var porCamion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE name = N'vwAdopcionPorCamion' AND schema_id = SCHEMA_ID()");
+
+        Assert.True(destino == 1 && soloCerradas == 1 && porCamion == 1, "Falta la adopcion por camion y por carro. Ejecute database/cambios-esquema/40-adopcion-por-carro-y-por-camion.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

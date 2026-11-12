@@ -14,6 +14,7 @@ namespace IAAutos.Aplicacion.Vehiculos;
 /// <summary>Carga masiva de VINs, busqueda, listados del tablero e inventario por VIN.</summary>
 public sealed class clsVehiculosService(
     IVehiculoRepository vehiculos,
+    IViajeRepository viajes,
     IConsultasVehiculos consultas,
     IConsultasViajes consultasViajes,
     ICatalogosLectura catalogos,
@@ -91,7 +92,8 @@ public sealed class clsVehiculosService(
 
     /// <summary>
     /// Baja logica del vehiculo: queda inactivo (<c>activo = false</c>) y ya no se busca ni se agrega a un viaje, pero conserva sus etapas, inspecciones y evidencias. 404 si el VIN no existe;
-    /// 403 si es de otro cliente. Darlo de baja otra vez responde igual y no cambia nada. Queda en la auditoria.
+    /// 403 si es de otro cliente; 409 (<c>details.motivo: vehiculo_en_viaje_activo</c>, con <c>viaje_id</c> y <c>codigo_mtrack</c>) si esta en un viaje programado o en curso: se saca del viaje antes. Darlo de baja otra vez
+    /// responde igual y no cambia nada. Queda en la auditoria.
     /// </summary>
     public async Task<BajaVehiculoResponse> DarDeBajaAsync(string vin, CancellationToken ct = default)
     {
@@ -104,6 +106,15 @@ public sealed class clsVehiculosService(
 
         if (vehiculo.Activo)
         {
+            if ((await viajes.ViajesActivosPorVehiculoAsync([vehiculo.Id], null, ct)).TryGetValue(vehiculo.Id, out var enViaje))
+            {
+                var codigo = enViaje.CodigoMtrack ?? enViaje.ViajeId.ToString();
+                throw new clsConflictoException(
+                    $"El vehículo {vehiculo.Vin} está en el viaje {codigo} (programado o en curso): sáquelo del viaje antes de darlo de baja",
+                    clsMotivosRechazo.VEHICULO_EN_VIAJE_ACTIVO,
+                    new Dictionary<string, object> { ["viaje_id"] = enViaje.ViajeId, ["codigo_mtrack"] = enViaje.CodigoMtrack ?? string.Empty });
+            }
+
             vehiculo.DarDeBaja(reloj.Ahora);
             auditor.Registrar(
                 "vehiculo.baja",
@@ -115,6 +126,34 @@ public sealed class clsVehiculosService(
         }
 
         return new BajaVehiculoResponse("inactivado");
+    }
+
+    /// <summary>
+    /// Deshace la baja: el vehiculo vuelve a estar activo (se busca y se agrega a viajes otra vez) con todo su historial. 404 si el VIN no existe; 403 si es de otro cliente. Reactivar uno que ya esta activo responde igual y
+    /// no cambia nada. Queda en la auditoria con quien lo hizo y cuando.
+    /// </summary>
+    public async Task<ReactivarVehiculoResponse> ReactivarAsync(string vin, CancellationToken ct = default)
+    {
+        var vehiculo = await vehiculos.ObtenerPorVinAsync(vin, ct)
+            ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado", clsMotivosRechazo.VEHICULO_NO_EXISTE);
+        if (actual.ClienteRestringido() is { } cliente && vehiculo.ClienteId != cliente)
+        {
+            throw new clsProhibidoException("El VIN no es de su cliente", clsMotivosRechazo.OTRO_CLIENTE);
+        }
+
+        if (!vehiculo.Activo)
+        {
+            vehiculo.Reactivar(reloj.Ahora);
+            auditor.Registrar(
+                "vehiculo.reactivar",
+                "vehiculos",
+                vehiculo.Id,
+                detalle: new DetalleAuditoria(new { vehiculo.Vin, activo = false }, new { vehiculo.Vin, activo = true }),
+                clienteId: vehiculo.ClienteId);
+            await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        }
+
+        return new ReactivarVehiculoResponse("reactivado");
     }
 
     /// <summary>

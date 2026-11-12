@@ -40,7 +40,7 @@ public class PosicionDeLaUnidadTests
         var ex = Assert.Throws<clsValidacionException>(() => unidad.AsignarPosicion(posicion, AHORA));
 
         Assert.Equal("posicion", CampoDelError(ex));
-        Assert.Contains("La posición debe estar entre 1 y 7", ((Dictionary<string, string[]>)((Dictionary<string, object>)ex.Detalles!)["fieldErrors"])["posicion"]);
+        Assert.Contains("La niñera tiene 7 puestos: la posición debe estar entre 1 y 7", ((Dictionary<string, string[]>)((Dictionary<string, object>)ex.Detalles!)["fieldErrors"])["posicion"]);
         Assert.Equal((byte)3, unidad.Posicion);
     }
 
@@ -98,5 +98,38 @@ public class PosicionDeLaUnidadTests
         Assert.Null(foto.HallazgoId);
         Assert.False(foto.EsConstancia);
         Assert.False(foto.EsSello);
+    }
+
+    // ------------------------------------------------------------------ capacidad de la ninera (S7-HU-05)
+
+    [Fact]
+    public void La_posicion_se_valida_contra_la_capacidad_de_la_ninera_y_el_mensaje_la_nombra()
+    {
+        var unidad = Unidad();
+
+        unidad.AsignarPosicion(9, AHORA, capacidad: 9);
+        var ex = Assert.Throws<clsValidacionException>(() => unidad.AsignarPosicion(9, AHORA, capacidad: 8));
+
+        Assert.Equal((byte)9, unidad.Posicion);
+        Assert.Contains("La niñera tiene 8 puestos: la posición debe estar entre 1 y 8", ((Dictionary<string, string[]>)((Dictionary<string, object>)ex.Detalles!)["fieldErrors"])["posicion"]);
+    }
+
+    [Fact]
+    public void Un_viaje_sin_capacidad_rige_como_de_7_y_la_capacidad_valida_va_de_1_a_20()
+    {
+        var viaje = clsViaje.Crear("MTK-1", Guid.NewGuid(), "ABC123", null, null, null, null, null, null, AHORA);
+
+        Assert.Null(viaje.Capacidad);
+        Assert.Equal(7, viaje.CapacidadEfectiva);
+        viaje.CambiarCapacidad(9, AHORA);
+        Assert.Equal(9, viaje.CapacidadEfectiva);
+        foreach (var invalida in new[] { 0, 21, -1 })
+        {
+            Assert.Throws<clsValidacionException>(() => viaje.CambiarCapacidad(invalida, AHORA));
+        }
+
+        Assert.Equal((byte)20, clsViaje.CapacidadValida(20));
+        Assert.Throws<clsValidacionException>(() => clsViaje.CapacidadValida(null));
+        Assert.Equal((byte)8, clsViaje.Crear("MTK-2", Guid.NewGuid(), "ABC123", null, null, null, null, null, null, AHORA, capacidad: 8).Capacidad);
     }
 }

@@ -59,6 +59,17 @@ class ErrorApi implements Exception {
   String toString() => 'ErrorApi($status $code: $message)';
 }
 
+/// Lo que se le dice a quien abre un VIN o un informe de un viaje que no es suyo.
+const mensajeFueraDeMisViajes = 'Esta unidad no está en tus viajes.';
+
+/// Si el error es porque la unidad o el informe son de un viaje ajeno.
+///
+/// Un 403 así no es un fallo de la app ni de la red, y no se arregla reintentando ni volviendo a entrar: la API
+/// solo deja ver lo de los viajes propios. Por eso ni se reintenta ni se ofrece reintentar, y no se cierra la
+/// sesión. El 403 del PIN temporal es otra cosa: ese sí se levanta cambiando el PIN.
+bool esFueraDeMisViajes(Object error) =>
+    error is ErrorApi && error.status == 403 && !error.esCambioPinRequerido;
+
 /// Mensaje legible para el usuario a partir de cualquier error.
 String mensajeDeError(Object error, [String porDefecto = 'Ocurrió un error inesperado.']) {
   if (error is ErrorApi) return error.message;

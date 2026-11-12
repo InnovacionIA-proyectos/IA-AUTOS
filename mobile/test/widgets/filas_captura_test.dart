@@ -106,7 +106,9 @@ void main() {
         tester,
         FilaHallazgo(
           hallazgo: const HallazgoLocal(
-            parte: 'Capot',
+            cuadranteNumero: 52,
+            lado: null,
+            zona: 'Capot',
             clase: 'golpe',
             tamano: '1_5cm',
             foto: FotoLocal(ruta: 'dano.jpg', selloFecha: '2026-01-02T10:00:00.000Z'),
@@ -125,7 +127,7 @@ void main() {
       await montar(
         tester,
         FilaHallazgo(
-          hallazgo: const HallazgoLocal(parte: 'Capot', clase: 'golpe', tamano: '1_5cm'),
+          hallazgo: const HallazgoLocal(cuadranteNumero: 52, lado: null, zona: 'Capot', clase: 'golpe', tamano: '1_5cm'),
           clase: 'Golpe',
           tamano: 'De 1 a 5 cm',
           alQuitar: () {},
@@ -133,6 +135,27 @@ void main() {
       );
 
       expect(find.byType(Image), findsNothing);
+    });
+
+    testWidgets('la observación se ve debajo de la zona', (tester) async {
+      await montar(
+        tester,
+        FilaHallazgo(
+          hallazgo: const HallazgoLocal(
+            cuadranteNumero: 52,
+            lado: null,
+            zona: 'Capot',
+            clase: 'golpe',
+            tamano: '1_5cm',
+            nota: 'golpe cerca de la bisagra',
+          ),
+          clase: 'Golpe',
+          tamano: 'De 1 a 5 cm',
+          alQuitar: () {},
+        ),
+      );
+
+      expect(find.text('golpe cerca de la bisagra'), findsOneWidget);
     });
   });
 
@@ -161,7 +184,9 @@ void main() {
         tester,
         FilaHallazgo(
           hallazgo: const HallazgoLocal(
-            parte: 'Capot',
+            cuadranteNumero: 52,
+            lado: null,
+            zona: 'Capot',
             clase: 'golpe',
             tamano: '1_5cm',
             foto: FotoLocal(ruta: 'dano.jpg', selloFecha: '2026-01-02T10:00:00.000Z'),
@@ -178,5 +203,35 @@ void main() {
       expect(find.byType(InteractiveViewer), findsOneWidget);
       expect(find.text('Novedad en Capot'), findsOneWidget);
     });
+  });
+
+  // Lo que se vio en el celular con varias novedades: las fotos quedaban una encima de otra, casi tocandose, y
+  // la lista se leia como un solo bloque.
+  testWidgets('varias novedades no quedan pegadas una a otra', (tester) async {
+    FilaHallazgo fila(String zona) => FilaHallazgo(
+          hallazgo: HallazgoLocal(
+            cuadranteNumero: 52,
+            lado: null,
+            zona: zona,
+            clase: 'golpe',
+            tamano: '1_5cm',
+            foto: const FotoLocal(ruta: 'dano.jpg', selloFecha: '2026-01-02T10:00:00.000Z'),
+          ),
+          clase: 'Golpe',
+          tamano: 'De 1 a 5 cm',
+          alQuitar: () {},
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: crearTema(),
+        home: Scaffold(body: ListView(children: [fila('Capot'), fila('Parabrisas')])),
+      ),
+    );
+
+    // El hueco entre las dos fotos es lo que se ve pegado en la pantalla.
+    final arriba = tester.getRect(find.byType(Image).first);
+    final abajo = tester.getRect(find.byType(Image).last);
+    expect(abajo.top - arriba.bottom, greaterThanOrEqualTo(Espacio.sm), reason: 'las fotos no pueden tocarse');
   });
 }

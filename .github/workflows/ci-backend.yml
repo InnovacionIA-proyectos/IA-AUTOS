@@ -80,6 +80,8 @@ jobs:
 
       - name: Conservar resultados de las pruebas
         if: always()
+        # Es solo una copia de consulta: si el runner no logra subirla (a veces falla con "self-signed certificate in certificate chain"), no debe tumbar un CI cuyas pruebas pasaron.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: resultados-pruebas-backend

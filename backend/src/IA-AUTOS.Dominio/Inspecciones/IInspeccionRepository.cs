@@ -39,6 +39,9 @@ public interface IInspeccionRepository
     /// <summary>Id de la version que corrige a esta inspeccion, o nulo si nadie la ha corregido.</summary>
     Task<Guid?> ObtenerCorreccionIdAsync(Guid inspeccionId, CancellationToken ct = default);
 
+    /// <summary>True si una correccion CERRADA ya reemplazo a esta inspeccion (una correccion en borrador todavia no la reemplaza: la vigente sigue siendo esta).</summary>
+    Task<bool> TieneCorreccionCerradaAsync(Guid inspeccionId, CancellationToken ct = default);
+
     Task<bool> ExisteHallazgoEnInspeccionAsync(Guid hallazgoId, Guid inspeccionId, CancellationToken ct = default);
 
     /// <summary>
@@ -61,6 +64,9 @@ public interface IInspeccionRepository
 
     /// <summary>El hallazgo (para modificarlo), o nulo si no existe.</summary>
     Task<clsHallazgo?> ObtenerHallazgoAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>El hallazgo que nacio del dano de un extra, o nulo si el extra no esta danado.</summary>
+    Task<clsHallazgo?> ObtenerHallazgoDeExtraAsync(Guid extraId, CancellationToken ct = default);
 
     /// <summary>Los hallazgos de la inspeccion (para recalcular su evidencia).</summary>
     Task<IReadOnlyList<clsHallazgo>> ObtenerHallazgosDeInspeccionAsync(Guid inspeccionId, CancellationToken ct = default);

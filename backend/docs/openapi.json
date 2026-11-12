@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.0.0"
+    "version": "3.12.0"
   },
   "paths": {
     "/api/viajes": {
@@ -262,6 +262,13 @@
           },
           {
             "name": "orden",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "destino_unidad_id",
             "in": "query",
             "schema": {
               "type": "string"
@@ -640,12 +647,43 @@
                             "usuario_nombre": "texto",
                             "fecha": "2026-10-22T14:30:00.000Z",
                             "vin": "9FBHSR4E8PM000001",
-                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "permiso": null
                           }
                         ],
                         "fecha_programada": "2026-10-22T14:30:00.000Z",
                         "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                        "lugar_cargue": "texto"
+                        "lugar_cargue": "texto",
+                        "capacidad": 1,
+                        "disposicion": {
+                          "puestos": []
+                        },
+                        "fotos_acomodacion": [
+                          {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "sello_fecha": "2026-10-22T14:30:00.000Z",
+                            "sello_lat": 1.5,
+                            "sello_lng": 1.5,
+                            "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                            "url_expira_at": "2026-10-22T14:30:00.000Z",
+                            "created_at": "2026-10-22T14:30:00.000Z",
+                            "updated_at": "2026-10-22T14:30:00.000Z",
+                            "vista_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                            "sello_servidor_at": "2026-10-22T14:30:00.000Z",
+                            "precision": 1.5,
+                            "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "nota": "Mensaje de ejemplo",
+                            "sin_ubicacion": true,
+                            "es_constancia": true,
+                            "es_sello": true,
+                            "ruta_archivo": "texto",
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "es_acomodacion": true
+                          }
+                        ]
                       }
                     ]
                   ],
@@ -712,12 +750,43 @@
                             "usuario_nombre": "texto",
                             "fecha": "2026-10-22T14:30:00.000Z",
                             "vin": "9FBHSR4E8PM000001",
-                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "permiso": null
                           }
                         ],
                         "fecha_programada": "2026-10-22T14:30:00.000Z",
                         "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                        "lugar_cargue": "texto"
+                        "lugar_cargue": "texto",
+                        "capacidad": 1,
+                        "disposicion": {
+                          "puestos": []
+                        },
+                        "fotos_acomodacion": [
+                          {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "sello_fecha": "2026-10-22T14:30:00.000Z",
+                            "sello_lat": 1.5,
+                            "sello_lng": 1.5,
+                            "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                            "url_expira_at": "2026-10-22T14:30:00.000Z",
+                            "created_at": "2026-10-22T14:30:00.000Z",
+                            "updated_at": "2026-10-22T14:30:00.000Z",
+                            "vista_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                            "sello_servidor_at": "2026-10-22T14:30:00.000Z",
+                            "precision": 1.5,
+                            "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "nota": "Mensaje de ejemplo",
+                            "sin_ubicacion": true,
+                            "es_constancia": true,
+                            "es_sello": true,
+                            "ruta_archivo": "texto",
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "es_acomodacion": true
+                          }
+                        ]
                       }
                     ]
                   ],
@@ -784,12 +853,43 @@
                             "usuario_nombre": "texto",
                             "fecha": "2026-10-22T14:30:00.000Z",
                             "vin": "9FBHSR4E8PM000001",
-                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "permiso": null
                           }
                         ],
                         "fecha_programada": "2026-10-22T14:30:00.000Z",
                         "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                        "lugar_cargue": "texto"
+                        "lugar_cargue": "texto",
+                        "capacidad": 1,
+                        "disposicion": {
+                          "puestos": []
+                        },
+                        "fotos_acomodacion": [
+                          {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "sello_fecha": "2026-10-22T14:30:00.000Z",
+                            "sello_lat": 1.5,
+                            "sello_lng": 1.5,
+                            "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                            "url_expira_at": "2026-10-22T14:30:00.000Z",
+                            "created_at": "2026-10-22T14:30:00.000Z",
+                            "updated_at": "2026-10-22T14:30:00.000Z",
+                            "vista_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                            "sello_servidor_at": "2026-10-22T14:30:00.000Z",
+                            "precision": 1.5,
+                            "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "nota": "Mensaje de ejemplo",
+                            "sin_ubicacion": true,
+                            "es_constancia": true,
+                            "es_sello": true,
+                            "ruta_archivo": "texto",
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "es_acomodacion": true
+                          }
+                        ]
                       }
                     ]
                   ],
@@ -3797,6 +3897,554 @@
         ]
       }
     },
+    "/api/viajes/{id}/permiso-sin-inspector": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_SolicitarPermisoSinInspector",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SolicitarPermisoSinInspectorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermisoSinInspectorDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermisoSinInspectorDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermisoSinInspectorDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "get": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_ObtenerPermisoSinInspector",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermisoSinInspectorDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermisoSinInspectorDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermisoSinInspectorDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/permiso-sin-inspector/conceder": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_ConcederPermisoSinInspector",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermisoSinInspectorDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermisoSinInspectorDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermisoSinInspectorDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/viajes/{id}/vehiculos/{vin}/posicion": {
       "put": {
         "tags": [
@@ -5334,6 +5982,192 @@
         ]
       }
     },
+    "/api/vehiculos/{vin}/reactivar": {
+      "post": {
+        "tags": [
+          "Vehiculos"
+        ],
+        "operationId": "Vehiculos_Reactivar",
+        "parameters": [
+          {
+            "name": "vin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReactivarVehiculoResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReactivarVehiculoResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReactivarVehiculoResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/vehiculos": {
       "get": {
         "tags": [
@@ -6058,6 +6892,563 @@
         ]
       }
     },
+    "/api/usuarios/{id}/puntos": {
+      "get": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_ListarPuntos",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuntosDeInspectorDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuntosDeInspectorDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuntosDeInspectorDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
+      "post": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_AsignarPuntos",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AsignarPuntosRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuntosDeInspectorDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuntosDeInspectorDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuntosDeInspectorDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/usuarios/{id}/puntos/{lugar}": {
+      "delete": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_QuitarPunto",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "lugar",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuntosDeInspectorDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuntosDeInspectorDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PuntosDeInspectorDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/usuarios": {
       "get": {
         "tags": [
@@ -6407,6 +7798,170 @@
       }
     },
     "/api/usuarios/{id}": {
+      "get": {
+        "tags": [
+          "Usuarios"
+        ],
+        "operationId": "Usuarios_Obtener",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsuarioDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      },
       "patch": {
         "tags": [
           "Usuarios"
@@ -12023,7 +13578,8 @@
                           "es_constancia": true,
                           "es_sello": true,
                           "ruta_archivo": "texto",
-                          "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                          "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                          "es_acomodacion": true
                         },
                         "detalle": {},
                         "created_at": "2026-10-22T14:30:00.000Z"
@@ -12069,7 +13625,8 @@
                           "es_constancia": true,
                           "es_sello": true,
                           "ruta_archivo": "texto",
-                          "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                          "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                          "es_acomodacion": true
                         },
                         "detalle": {},
                         "created_at": "2026-10-22T14:30:00.000Z"
@@ -12115,7 +13672,8 @@
                           "es_constancia": true,
                           "es_sello": true,
                           "ruta_archivo": "texto",
-                          "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                          "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                          "es_acomodacion": true
                         },
                         "detalle": {},
                         "created_at": "2026-10-22T14:30:00.000Z"
@@ -12777,7 +14335,7 @@
             }
           },
           "403": {
-            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED, CORRECCION_SOLO_AUTOR",
             "content": {
               "application/json": {
                 "schema": {
@@ -12799,6 +14357,15 @@
                       "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
                       "code": "PIN_CHANGE_REQUIRED",
                       "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "CORRECCION_SOLO_AUTOR": {
+                    "summary": "La inspeccion la hizo otra persona y quien intenta no es administrador: la corrigen quien la hizo y los administradores",
+                    "value": {
+                      "error": "La inspeccion la hizo otra persona y quien intenta no es administrador: la corrigen quien la hizo y los administradores",
+                      "code": "CORRECCION_SOLO_AUTOR",
+                      "message": "La inspeccion la hizo otra persona y quien intenta no es administrador: la corrigen quien la hizo y los administradores",
                       "timestamp": "2026-10-22T14:30:00.000Z"
                     }
                   }
@@ -12828,7 +14395,7 @@
             }
           },
           "409": {
-            "description": "Error 409: CONFLICT",
+            "description": "Error 409: CONFLICT, INSPECCION_YA_FIRMADA",
             "content": {
               "application/json": {
                 "schema": {
@@ -12841,6 +14408,15 @@
                       "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
                       "code": "CONFLICT",
                       "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "INSPECCION_YA_FIRMADA": {
+                    "summary": "La transferencia de la inspeccion ya tiene una firma o un cierre: ya no se corrige (se aclara con una nota)",
+                    "value": {
+                      "error": "La transferencia de la inspeccion ya tiene una firma o un cierre: ya no se corrige (se aclara con una nota)",
+                      "code": "INSPECCION_YA_FIRMADA",
+                      "message": "La transferencia de la inspeccion ya tiene una firma o un cierre: ya no se corrige (se aclara con una nota)",
                       "timestamp": "2026-10-22T14:30:00.000Z"
                     }
                   }
@@ -13658,7 +15234,8 @@
                             "es_constancia": true,
                             "es_sello": true,
                             "ruta_archivo": "texto",
-                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "es_acomodacion": true
                           }
                         ],
                         "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -13692,7 +15269,9 @@
                         "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "revisado_at": "2026-10-22T14:30:00.000Z",
                         "created_at": "2026-10-22T14:30:00.000Z",
-                        "updated_at": "2026-10-22T14:30:00.000Z"
+                        "updated_at": "2026-10-22T14:30:00.000Z",
+                        "sin_calificar": true,
+                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                       }
                     ]
                   ],
@@ -13734,7 +15313,8 @@
                             "es_constancia": true,
                             "es_sello": true,
                             "ruta_archivo": "texto",
-                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "es_acomodacion": true
                           }
                         ],
                         "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -13768,7 +15348,9 @@
                         "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "revisado_at": "2026-10-22T14:30:00.000Z",
                         "created_at": "2026-10-22T14:30:00.000Z",
-                        "updated_at": "2026-10-22T14:30:00.000Z"
+                        "updated_at": "2026-10-22T14:30:00.000Z",
+                        "sin_calificar": true,
+                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                       }
                     ]
                   ],
@@ -13810,7 +15392,8 @@
                             "es_constancia": true,
                             "es_sello": true,
                             "ruta_archivo": "texto",
-                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "es_acomodacion": true
                           }
                         ],
                         "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -13844,7 +15427,9 @@
                         "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "revisado_at": "2026-10-22T14:30:00.000Z",
                         "created_at": "2026-10-22T14:30:00.000Z",
-                        "updated_at": "2026-10-22T14:30:00.000Z"
+                        "updated_at": "2026-10-22T14:30:00.000Z",
+                        "sin_calificar": true,
+                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                       }
                     ]
                   ],
@@ -18498,7 +20083,8 @@
                         "estado": "borrador",
                         "decidida_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "decidida_at": "2026-10-22T14:30:00.000Z",
-                        "created_at": "2026-10-22T14:30:00.000Z"
+                        "created_at": "2026-10-22T14:30:00.000Z",
+                        "decidida_por_nombre": "texto"
                       }
                     ]
                   ],
@@ -18524,7 +20110,8 @@
                         "estado": "borrador",
                         "decidida_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "decidida_at": "2026-10-22T14:30:00.000Z",
-                        "created_at": "2026-10-22T14:30:00.000Z"
+                        "created_at": "2026-10-22T14:30:00.000Z",
+                        "decidida_por_nombre": "texto"
                       }
                     ]
                   ],
@@ -18550,7 +20137,8 @@
                         "estado": "borrador",
                         "decidida_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "decidida_at": "2026-10-22T14:30:00.000Z",
-                        "created_at": "2026-10-22T14:30:00.000Z"
+                        "created_at": "2026-10-22T14:30:00.000Z",
+                        "decidida_por_nombre": "texto"
                       }
                     ]
                   ],
@@ -20733,7 +22321,11 @@
           {
             "tipo": "texto",
             "texto": "texto",
-            "observacion": "texto"
+            "observacion": "texto",
+            "danado": true,
+            "clase_dano": "golpe",
+            "tamano_dano": "5_10cm",
+            "nivel_severidad": "v1"
           }
         ],
         "required": [
@@ -20756,6 +22348,30 @@
             ]
           },
           "observacion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "danado": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "clase_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tamano_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_severidad": {
             "type": [
               "null",
               "string"
@@ -20971,6 +22587,52 @@
           }
         }
       },
+      "AdopcionDestinoDto": {
+        "examples": [
+          {
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar": "texto",
+            "programados": 1,
+            "con_salida_digital": 1,
+            "adopcion": 1.5
+          }
+        ],
+        "required": [
+          "lugar_id",
+          "lugar",
+          "programados",
+          "con_salida_digital",
+          "adopcion"
+        ],
+        "type": "object",
+        "properties": {
+          "lugar_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "lugar": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "programados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_salida_digital": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "adopcion": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "AdopcionDiaDto": {
         "examples": [
           {
@@ -21037,7 +22699,35 @@
                 "con_salida_digital": 1,
                 "adopcion": 1.5
               }
-            ]
+            ],
+            "por_camion": {
+              "programados": 1,
+              "con_salida_digital": 1,
+              "adopcion": 1.5,
+              "por_destino": [
+                {
+                  "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "lugar": "texto",
+                  "programados": 1,
+                  "con_salida_digital": 1,
+                  "adopcion": 1.5
+                }
+              ]
+            },
+            "por_carro": {
+              "programados": 1,
+              "con_salida_digital": 1,
+              "adopcion": 1.5,
+              "por_destino": [
+                {
+                  "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "lugar": "texto",
+                  "programados": 1,
+                  "con_salida_digital": 1,
+                  "adopcion": 1.5
+                }
+              ]
+            }
           }
         ],
         "required": [
@@ -21083,6 +22773,71 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AdopcionClienteDto"
+            }
+          },
+          "por_camion": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AdopcionMedidaDto"
+              }
+            ]
+          },
+          "por_carro": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AdopcionMedidaDto"
+              }
+            ]
+          }
+        }
+      },
+      "AdopcionMedidaDto": {
+        "examples": [
+          {
+            "programados": 1,
+            "con_salida_digital": 1,
+            "adopcion": 1.5,
+            "por_destino": [
+              {
+                "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "lugar": "texto",
+                "programados": 1,
+                "con_salida_digital": 1,
+                "adopcion": 1.5
+              }
+            ]
+          }
+        ],
+        "required": [
+          "programados",
+          "con_salida_digital",
+          "adopcion",
+          "por_destino"
+        ],
+        "type": "object",
+        "properties": {
+          "programados": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "con_salida_digital": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "adopcion": {
+            "type": "number",
+            "format": "double"
+          },
+          "por_destino": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdopcionDestinoDto"
             }
           }
         }
@@ -21259,6 +23014,31 @@
               "integer"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "AsignarPuntosRequest": {
+        "examples": [
+          {
+            "lugar_ids": [
+              "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            ]
+          }
+        ],
+        "required": [
+          "lugar_ids"
+        ],
+        "type": "object",
+        "properties": {
+          "lugar_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         }
       },
@@ -21570,7 +23350,8 @@
                 "nivel": "v1",
                 "total": 1
               }
-            ]
+            ],
+            "sin_calificar": 1
           }
         ],
         "required": [
@@ -21625,6 +23406,11 @@
             "items": {
               "$ref": "#/components/schemas/ConteoNivelTableroDto"
             }
+          },
+          "sin_calificar": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -22471,7 +24257,8 @@
                   "motivo": "Mensaje de ejemplo",
                   "texto": "texto",
                   "usuario_nombre": "texto",
-                  "fecha": "2026-10-22T14:30:00.000Z"
+                  "fecha": "2026-10-22T14:30:00.000Z",
+                  "permiso": null
                 }
               ]
             },
@@ -22984,7 +24771,11 @@
           {
             "tipo": "texto",
             "texto": "texto",
-            "observacion": "texto"
+            "observacion": "texto",
+            "danado": true,
+            "clase_dano": "golpe",
+            "tamano_dano": "5_10cm",
+            "nivel_severidad": "v1"
           }
         ],
         "required": [
@@ -23007,6 +24798,30 @@
             ]
           },
           "observacion": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "danado": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "clase_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tamano_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nivel_severidad": {
             "type": [
               "null",
               "string"
@@ -23340,13 +25155,15 @@
             "trailer": "TR-1",
             "conductor_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "inspector_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "origen_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "unidades": [
               {
                 "vin": "9FBHSR4E8PM000001",
                 "lugar_destino_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
               }
-            ]
+            ],
+            "fecha_programada": "2026-10-22T14:30:00.000Z",
+            "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "capacidad": 1
           }
         ],
         "required": [
@@ -23356,7 +25173,6 @@
           "trailer",
           "conductor_id",
           "inspector_id",
-          "origen_id",
           "unidades"
         ],
         "type": "object",
@@ -23400,13 +25216,6 @@
             ],
             "format": "uuid"
           },
-          "origen_id": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
           "unidades": {
             "type": [
               "null",
@@ -23440,6 +25249,60 @@
                 }
               }
             }
+          },
+          "fecha_programada": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lugar_cargue_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "capacidad": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "DestinoDeUnidadesDto": {
+        "examples": [
+          {
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar": "texto",
+            "unidades": 1
+          }
+        ],
+        "required": [
+          "lugar_id",
+          "lugar",
+          "unidades"
+        ],
+        "type": "object",
+        "properties": {
+          "lugar_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "lugar": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unidades": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -23475,6 +25338,31 @@
                 "$ref": "#/components/schemas/JsonElement"
               }
             ]
+          }
+        }
+      },
+      "DisposicionDeNiniera": {
+        "examples": [
+          {
+            "puestos": [
+              {
+                "numero": 1,
+                "etiqueta": "texto",
+                "vin": "9FBHSR4E8PM000001"
+              }
+            ]
+          }
+        ],
+        "required": [
+          "puestos"
+        ],
+        "type": "object",
+        "properties": {
+          "puestos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PuestoDeNiniera"
+            }
           }
         }
       },
@@ -23577,7 +25465,10 @@
                 "tipo_cierre": "texto",
                 "entrega_firmada_at": "2026-10-22T14:30:00.000Z",
                 "recibe_firmada_at": "2026-10-22T14:30:00.000Z",
-                "no_firma_parte": "texto"
+                "no_firma_parte": "texto",
+                "motivo_cierre": "texto",
+                "recibe_externo_nombre": "texto",
+                "recibe_externo_cedula": "texto"
               }
             ]
           }
@@ -23692,7 +25583,10 @@
             "tipo_cierre": "texto",
             "entrega_firmada_at": "2026-10-22T14:30:00.000Z",
             "recibe_firmada_at": "2026-10-22T14:30:00.000Z",
-            "no_firma_parte": "texto"
+            "no_firma_parte": "texto",
+            "motivo_cierre": "texto",
+            "recibe_externo_nombre": "texto",
+            "recibe_externo_cedula": "texto"
           }
         ],
         "required": [
@@ -23737,6 +25631,24 @@
             "format": "date-time"
           },
           "no_firma_parte": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_cierre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recibe_externo_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recibe_externo_cedula": {
             "type": [
               "null",
               "string"
@@ -23843,7 +25755,8 @@
             "es_constancia": true,
             "es_sello": true,
             "ruta_archivo": "texto",
-            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "es_acomodacion": true
           }
         ],
         "required": [
@@ -23960,6 +25873,45 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "es_acomodacion": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "ExtraDanoDto": {
+        "examples": [
+          {
+            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "clase_dano": "golpe",
+            "tamano_dano": "5_10cm",
+            "nivel_severidad": "v1"
+          }
+        ],
+        "required": [
+          "hallazgo_id",
+          "clase_dano",
+          "tamano_dano",
+          "nivel_severidad"
+        ],
+        "type": "object",
+        "properties": {
+          "hallazgo_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "clase_dano": {
+            "type": "string"
+          },
+          "tamano_dano": {
+            "type": "string"
+          },
+          "nivel_severidad": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -23997,9 +25949,16 @@
                 "es_constancia": true,
                 "es_sello": true,
                 "ruta_archivo": "texto",
-                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "es_acomodacion": true
               }
-            ]
+            ],
+            "dano": {
+              "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "clase_dano": "golpe",
+              "tamano_dano": "5_10cm",
+              "nivel_severidad": "v1"
+            }
           }
         ],
         "required": [
@@ -24056,6 +26015,16 @@
             "items": {
               "$ref": "#/components/schemas/EvidenciaDto"
             }
+          },
+          "dano": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExtraDanoDto"
+              }
+            ]
           }
         }
       },
@@ -24172,7 +26141,8 @@
             "errores": [
               "texto"
             ],
-            "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "codigo_generado": true
           }
         ],
         "required": [
@@ -24216,6 +26186,10 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "codigo_generado": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -24307,7 +26281,10 @@
           {
             "firma": "texto",
             "entrega_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "recibe_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "recibe_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "recibe_nombre": "texto",
+            "recibe_cedula": "texto",
+            "firma_recibe": "texto"
           }
         ],
         "required": [
@@ -24336,6 +26313,24 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "recibe_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recibe_cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "firma_recibe": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -24400,7 +26395,8 @@
               "es_constancia": true,
               "es_sello": true,
               "ruta_archivo": "texto",
-              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "es_acomodacion": true
             },
             "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -24433,7 +26429,9 @@
             "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
-            "updated_at": "2026-10-22T14:30:00.000Z"
+            "updated_at": "2026-10-22T14:30:00.000Z",
+            "sin_calificar": true,
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -24594,6 +26592,16 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "sin_calificar": {
+            "type": "boolean"
+          },
+          "extra_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -24630,7 +26638,8 @@
                   "es_constancia": true,
                   "es_sello": true,
                   "ruta_archivo": "texto",
-                  "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "es_acomodacion": true
                 },
                 "detalle": {},
                 "created_at": "2026-10-22T14:30:00.000Z"
@@ -24676,7 +26685,14 @@
               "es_constancia": true,
               "es_sello": true,
               "ruta_archivo": "texto",
-              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "es_acomodacion": true
+            },
+            "conductor_nombre": "texto",
+            "motivo_sin_inspector": {
+              "codigo": "codigo_de_ejemplo",
+              "nombre": "Nombre de ejemplo",
+              "texto": "texto"
             },
             "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -24709,7 +26725,9 @@
             "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
-            "updated_at": "2026-10-22T14:30:00.000Z"
+            "updated_at": "2026-10-22T14:30:00.000Z",
+            "sin_calificar": true,
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -24762,6 +26780,22 @@
               },
               {
                 "$ref": "#/components/schemas/EvidenciaDto"
+              }
+            ]
+          },
+          "conductor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_sin_inspector": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MotivoSinInspectorDto"
               }
             ]
           },
@@ -24915,6 +26949,16 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "sin_calificar": {
+            "type": "boolean"
+          },
+          "extra_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -24952,7 +26996,9 @@
             "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
-            "updated_at": "2026-10-22T14:30:00.000Z"
+            "updated_at": "2026-10-22T14:30:00.000Z",
+            "sin_calificar": true,
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -25136,6 +27182,17 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "sin_calificar": {
+            "type": "boolean",
+            "default": false
+          },
+          "extra_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -25170,7 +27227,14 @@
               "es_constancia": true,
               "es_sello": true,
               "ruta_archivo": "texto",
-              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "es_acomodacion": true
+            },
+            "conductor_nombre": "texto",
+            "motivo_sin_inspector": {
+              "codigo": "codigo_de_ejemplo",
+              "nombre": "Nombre de ejemplo",
+              "texto": "texto"
             },
             "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -25203,7 +27267,9 @@
             "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
-            "updated_at": "2026-10-22T14:30:00.000Z"
+            "updated_at": "2026-10-22T14:30:00.000Z",
+            "sin_calificar": true,
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -25250,6 +27316,22 @@
               },
               {
                 "$ref": "#/components/schemas/EvidenciaDto"
+              }
+            ]
+          },
+          "conductor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_sin_inspector": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MotivoSinInspectorDto"
               }
             ]
           },
@@ -25403,6 +27485,16 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "sin_calificar": {
+            "type": "boolean"
+          },
+          "extra_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -25436,7 +27528,8 @@
                 "es_constancia": true,
                 "es_sello": true,
                 "ruta_archivo": "texto",
-                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "es_acomodacion": true
               }
             ],
             "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -25470,7 +27563,9 @@
             "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "revisado_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
-            "updated_at": "2026-10-22T14:30:00.000Z"
+            "updated_at": "2026-10-22T14:30:00.000Z",
+            "sin_calificar": true,
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -25658,6 +27753,16 @@
           },
           "updated_at": {
             "format": "date-time"
+          },
+          "sin_calificar": {
+            "type": "boolean"
+          },
+          "extra_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -25668,7 +27773,8 @@
             "cliente_nombre": "texto",
             "despachados": 1,
             "con_novedad": 1,
-            "porcentaje": 1.25
+            "porcentaje": 1.25,
+            "sin_calificar": 1
           }
         ],
         "required": [
@@ -25701,6 +27807,11 @@
           "porcentaje": {
             "type": "number",
             "format": "double"
+          },
+          "sin_calificar": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -25717,7 +27828,8 @@
                 "operacion": "nacional",
                 "despachados": 1,
                 "con_novedad": 1,
-                "porcentaje": 1.25
+                "porcentaje": 1.25,
+                "sin_calificar": 1
               }
             ],
             "por_cliente": [
@@ -25726,9 +27838,11 @@
                 "cliente_nombre": "texto",
                 "despachados": 1,
                 "con_novedad": 1,
-                "porcentaje": 1.25
+                "porcentaje": 1.25,
+                "sin_calificar": 1
               }
-            ]
+            ],
+            "sin_calificar": 1
           }
         ],
         "required": [
@@ -25773,6 +27887,11 @@
             "items": {
               "$ref": "#/components/schemas/IndicadorClienteDto"
             }
+          },
+          "sin_calificar": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -25782,7 +27901,8 @@
             "operacion": "nacional",
             "despachados": 1,
             "con_novedad": 1,
-            "porcentaje": 1.25
+            "porcentaje": 1.25,
+            "sin_calificar": 1
           }
         ],
         "required": [
@@ -25807,6 +27927,11 @@
           "porcentaje": {
             "type": "number",
             "format": "double"
+          },
+          "sin_calificar": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -25871,7 +27996,9 @@
                 "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "revisado_at": "2026-10-22T14:30:00.000Z",
                 "created_at": "2026-10-22T14:30:00.000Z",
-                "updated_at": "2026-10-22T14:30:00.000Z"
+                "updated_at": "2026-10-22T14:30:00.000Z",
+                "sin_calificar": true,
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
               }
             ],
             "evidencias": [
@@ -25896,7 +28023,8 @@
                 "es_constancia": true,
                 "es_sello": true,
                 "ruta_archivo": "texto",
-                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "es_acomodacion": true
               }
             ],
             "transferencia": {
@@ -25934,7 +28062,8 @@
                   "texto": "texto",
                   "created_at": "2026-10-22T14:30:00.000Z"
                 }
-              ]
+              ],
+              "recibe_externo_cedula": "texto"
             },
             "iniciada_at": "2026-10-22T14:30:00.000Z",
             "cerrada_at": "2026-10-22T14:30:00.000Z",
@@ -25965,7 +28094,16 @@
                 "motivo": "Mensaje de ejemplo",
                 "texto": "texto",
                 "usuario_nombre": "texto",
-                "fecha": "2026-10-22T14:30:00.000Z"
+                "fecha": "2026-10-22T14:30:00.000Z",
+                "permiso": {
+                  "solicitado_por_nombre": "texto",
+                  "solicitado_at": "2026-10-22T14:30:00.000Z",
+                  "solicitado_lat": 1.5,
+                  "solicitado_lng": 1.5,
+                  "concedido_por_nombre": "texto",
+                  "concedido_at": "2026-10-22T14:30:00.000Z",
+                  "autorizado_por_tiempo": true
+                }
               }
             ],
             "extras": [
@@ -25979,7 +28117,13 @@
                 "observacion": "texto",
                 "created_at": "2026-10-22T14:30:00.000Z",
                 "updated_at": "2026-10-22T14:30:00.000Z",
-                "fotos": []
+                "fotos": [],
+                "dano": {
+                  "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "clase_dano": "golpe",
+                  "tamano_dano": "5_10cm",
+                  "nivel_severidad": "v1"
+                }
               }
             ],
             "confirmacion_sitio": {
@@ -26444,7 +28588,16 @@
                 "motivo": "Mensaje de ejemplo",
                 "texto": "texto",
                 "usuario_nombre": "texto",
-                "fecha": "2026-10-22T14:30:00.000Z"
+                "fecha": "2026-10-22T14:30:00.000Z",
+                "permiso": {
+                  "solicitado_por_nombre": "texto",
+                  "solicitado_at": "2026-10-22T14:30:00.000Z",
+                  "solicitado_lat": 1.5,
+                  "solicitado_lng": 1.5,
+                  "concedido_por_nombre": "texto",
+                  "concedido_at": "2026-10-22T14:30:00.000Z",
+                  "autorizado_por_tiempo": true
+                }
               }
             ]
           }
@@ -26606,7 +28759,10 @@
             "cerrada_at": "2026-10-22T14:30:00.000Z",
             "version": 1,
             "corrige_inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "momento_nombre": "texto"
+            "momento_nombre": "texto",
+            "lugar": "texto",
+            "codigo_mtrack": "MTK-0001",
+            "unidad": "texto"
           }
         ],
         "required": [
@@ -26729,6 +28885,24 @@
           },
           "momento_nombre": {
             "type": "string"
+          },
+          "lugar": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "codigo_mtrack": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unidad": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -26899,7 +29073,9 @@
                   "no_firma_parte": "texto",
                   "motivo_no_firma": "texto",
                   "testigo_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                  "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "recibe_externo_nombre": "texto",
+                  "recibe_externo_cedula": "texto"
                 },
                 "notas_aclaratorias": [],
                 "motivo_sin_inspector": {
@@ -27042,7 +29218,9 @@
                 "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "revisado_at": "2026-10-22T14:30:00.000Z",
                 "created_at": "2026-10-22T14:30:00.000Z",
-                "updated_at": "2026-10-22T14:30:00.000Z"
+                "updated_at": "2026-10-22T14:30:00.000Z",
+                "sin_calificar": true,
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
               }
             ],
             "evidencias": [
@@ -27067,7 +29245,8 @@
                 "es_constancia": true,
                 "es_sello": true,
                 "ruta_archivo": "texto",
-                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "es_acomodacion": true
               }
             ],
             "transferencia": {
@@ -27086,7 +29265,9 @@
               "no_firma_parte": "texto",
               "motivo_no_firma": "texto",
               "testigo_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-              "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "recibe_externo_nombre": "texto",
+              "recibe_externo_cedula": "texto"
             },
             "notas_aclaratorias": [
               {
@@ -27112,7 +29293,16 @@
                 "motivo": "Mensaje de ejemplo",
                 "texto": "texto",
                 "usuario_nombre": "texto",
-                "fecha": "2026-10-22T14:30:00.000Z"
+                "fecha": "2026-10-22T14:30:00.000Z",
+                "permiso": {
+                  "solicitado_por_nombre": "texto",
+                  "solicitado_at": "2026-10-22T14:30:00.000Z",
+                  "solicitado_lat": 1.5,
+                  "solicitado_lng": 1.5,
+                  "concedido_por_nombre": "texto",
+                  "concedido_at": "2026-10-22T14:30:00.000Z",
+                  "autorizado_por_tiempo": true
+                }
               }
             ],
             "extras": [
@@ -27126,7 +29316,13 @@
                 "observacion": "texto",
                 "created_at": "2026-10-22T14:30:00.000Z",
                 "updated_at": "2026-10-22T14:30:00.000Z",
-                "fotos": []
+                "fotos": [],
+                "dano": {
+                  "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "clase_dano": "golpe",
+                  "tamano_dano": "5_10cm",
+                  "nivel_severidad": "v1"
+                }
               }
             ]
           }
@@ -27396,7 +29592,14 @@
                   "es_constancia": true,
                   "es_sello": true,
                   "ruta_archivo": "texto",
-                  "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                  "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "es_acomodacion": true
+                },
+                "conductor_nombre": "texto",
+                "motivo_sin_inspector": {
+                  "codigo": "codigo_de_ejemplo",
+                  "nombre": "Nombre de ejemplo",
+                  "texto": "texto"
                 },
                 "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
@@ -27429,7 +29632,9 @@
                 "revisado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "revisado_at": "2026-10-22T14:30:00.000Z",
                 "created_at": "2026-10-22T14:30:00.000Z",
-                "updated_at": "2026-10-22T14:30:00.000Z"
+                "updated_at": "2026-10-22T14:30:00.000Z",
+                "sin_calificar": true,
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
               }
             ],
             "total": 1,
@@ -27487,7 +29692,8 @@
                   "usuario_nombre": "texto",
                   "fecha": "2026-10-22T14:30:00.000Z"
                 },
-                "created_at": "2026-10-22T14:30:00.000Z"
+                "created_at": "2026-10-22T14:30:00.000Z",
+                "datos": []
               }
             ],
             "total": 1,
@@ -27691,7 +29897,8 @@
                   "motivo": "Mensaje de ejemplo",
                   "texto": "texto",
                   "usuario_nombre": "texto",
-                  "fecha": "2026-10-22T14:30:00.000Z"
+                  "fecha": "2026-10-22T14:30:00.000Z",
+                  "permiso": null
                 }
               ]
             },
@@ -27930,7 +30137,8 @@
             "estado_ubicacion": "texto",
             "ubicacion_fijada_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "ubicacion_fijada_at": "2026-10-22T14:30:00.000Z",
-            "precision_m": 1.5
+            "precision_m": 1.5,
+            "ubicacion_fijada_por_nombre": "texto"
           }
         ],
         "required": [
@@ -27992,6 +30200,12 @@
               "number"
             ],
             "format": "double"
+          },
+          "ubicacion_fijada_por_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -28189,7 +30403,13 @@
               "usuario_nombre": "texto",
               "fecha": "2026-10-22T14:30:00.000Z"
             },
-            "created_at": "2026-10-22T14:30:00.000Z"
+            "created_at": "2026-10-22T14:30:00.000Z",
+            "datos": [
+              {
+                "key": "texto",
+                "value": {}
+              }
+            ]
           }
         ],
         "required": [
@@ -28273,6 +30493,12 @@
           },
           "created_at": {
             "format": "date-time"
+          },
+          "datos": {
+            "type": [
+              "null",
+              "object"
+            ]
           }
         }
       },
@@ -28286,7 +30512,16 @@
             "usuario_nombre": "texto",
             "fecha": "2026-10-22T14:30:00.000Z",
             "vin": "9FBHSR4E8PM000001",
-            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "permiso": {
+              "solicitado_por_nombre": "texto",
+              "solicitado_at": "2026-10-22T14:30:00.000Z",
+              "solicitado_lat": 1.5,
+              "solicitado_lng": 1.5,
+              "concedido_por_nombre": "texto",
+              "concedido_at": "2026-10-22T14:30:00.000Z",
+              "autorizado_por_tiempo": true
+            }
           }
         ],
         "required": [
@@ -28337,6 +30572,16 @@
           "inspeccion_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "permiso": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PermisoDeLaNovedadDto"
+              }
+            ]
           }
         }
       },
@@ -28450,7 +30695,16 @@
             "motivo": "Mensaje de ejemplo",
             "texto": "texto",
             "usuario_nombre": "texto",
-            "fecha": "2026-10-22T14:30:00.000Z"
+            "fecha": "2026-10-22T14:30:00.000Z",
+            "permiso": {
+              "solicitado_por_nombre": "texto",
+              "solicitado_at": "2026-10-22T14:30:00.000Z",
+              "solicitado_lat": 1.5,
+              "solicitado_lng": 1.5,
+              "concedido_por_nombre": "texto",
+              "concedido_at": "2026-10-22T14:30:00.000Z",
+              "autorizado_por_tiempo": true
+            }
           }
         ],
         "required": [
@@ -28492,6 +30746,16 @@
           },
           "fecha": {
             "format": "date-time"
+          },
+          "permiso": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PermisoDeLaNovedadDto"
+              }
+            ]
           }
         }
       },
@@ -28775,7 +31039,10 @@
                 "cerrada_at": "2026-10-22T14:30:00.000Z",
                 "version": 1,
                 "corrige_inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                "momento_nombre": "texto"
+                "momento_nombre": "texto",
+                "lugar": "texto",
+                "codigo_mtrack": "MTK-0001",
+                "unidad": "texto"
               }
             ],
             "total": 1,
@@ -28951,7 +31218,8 @@
                 "updated_at": "2026-10-22T14:30:00.000Z",
                 "fecha_programada": "2026-10-22T14:30:00.000Z",
                 "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                "lugar_cargue": "texto"
+                "lugar_cargue": "texto",
+                "destinos": []
               }
             ],
             "total": 1,
@@ -29078,7 +31346,8 @@
                 "nombre": "Nombre de ejemplo",
                 "zona": "texto",
                 "total": 1,
-                "supera_umbral": true
+                "supera_umbral": true,
+                "extra": true
               }
             ],
             "por_region_proceso": [
@@ -29089,7 +31358,8 @@
                 "zona": "texto",
                 "proceso": "cargue",
                 "total": 1,
-                "supera_umbral": true
+                "supera_umbral": true,
+                "extra": true
               }
             ],
             "por_nivel": [
@@ -29113,7 +31383,8 @@
             "umbral": {
               "cantidad": 1,
               "ventana_dias": 1
-            }
+            },
+            "sin_calificar": 1
           }
         ],
         "required": [
@@ -29170,6 +31441,11 @@
           },
           "umbral": {
             "$ref": "#/components/schemas/UmbralPatronDto"
+          },
+          "sin_calificar": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -29233,7 +31509,8 @@
             "nombre": "Nombre de ejemplo",
             "zona": "texto",
             "total": 1,
-            "supera_umbral": true
+            "supera_umbral": true,
+            "extra": true
           }
         ],
         "required": [
@@ -29277,6 +31554,10 @@
           },
           "supera_umbral": {
             "type": "boolean"
+          },
+          "extra": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -29289,7 +31570,8 @@
             "zona": "texto",
             "proceso": "cargue",
             "total": 1,
-            "supera_umbral": true
+            "supera_umbral": true,
+            "extra": true
           }
         ],
         "required": [
@@ -29337,6 +31619,10 @@
           },
           "supera_umbral": {
             "type": "boolean"
+          },
+          "extra": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -29536,6 +31822,203 @@
           }
         }
       },
+      "PermisoDeLaNovedadDto": {
+        "examples": [
+          {
+            "solicitado_por_nombre": "texto",
+            "solicitado_at": "2026-10-22T14:30:00.000Z",
+            "solicitado_lat": 1.5,
+            "solicitado_lng": 1.5,
+            "concedido_por_nombre": "texto",
+            "concedido_at": "2026-10-22T14:30:00.000Z",
+            "autorizado_por_tiempo": true
+          }
+        ],
+        "required": [
+          "solicitado_por_nombre",
+          "solicitado_at",
+          "solicitado_lat",
+          "solicitado_lng",
+          "concedido_por_nombre",
+          "concedido_at",
+          "autorizado_por_tiempo"
+        ],
+        "type": "object",
+        "properties": {
+          "solicitado_por_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "solicitado_at": {
+            "format": "date-time"
+          },
+          "solicitado_lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "solicitado_lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "concedido_por_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "concedido_at": {
+            "format": "date-time"
+          },
+          "autorizado_por_tiempo": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PermisoSinInspectorDto": {
+        "examples": [
+          {
+            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "estado": "borrador",
+            "solicitado_at": "2026-10-22T14:30:00.000Z",
+            "vence_at": "2026-10-22T14:30:00.000Z",
+            "conductor_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "conductor_nombre": "texto",
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar": "texto",
+            "motivo_codigo": "texto",
+            "motivo": "Mensaje de ejemplo",
+            "motivo_texto": "texto",
+            "fecha": "2026-10-22T14:30:00.000Z",
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "concedido_at": "2026-10-22T14:30:00.000Z",
+            "concedido_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "concedido_por_nombre": "texto",
+            "autorizado_por_tiempo": true
+          }
+        ],
+        "required": [
+          "id",
+          "viaje_id",
+          "estado",
+          "solicitado_at",
+          "vence_at",
+          "conductor_id",
+          "conductor_nombre",
+          "lugar_id",
+          "lugar",
+          "motivo_codigo",
+          "motivo",
+          "motivo_texto",
+          "fecha",
+          "lat",
+          "lng",
+          "concedido_at",
+          "concedido_por",
+          "concedido_por_nombre",
+          "autorizado_por_tiempo"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "viaje_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "solicitado_at": {
+            "format": "date-time"
+          },
+          "vence_at": {
+            "format": "date-time"
+          },
+          "conductor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "conductor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lugar_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lugar": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_codigo": {
+            "type": "string"
+          },
+          "motivo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_texto": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fecha": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "concedido_at": {
+            "format": "date-time"
+          },
+          "concedido_por": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "concedido_por_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "autorizado_por_tiempo": {
+            "type": "boolean"
+          }
+        }
+      },
       "PropuestaUbicacionDto": {
         "examples": [
           {
@@ -29550,7 +32033,8 @@
             "estado": "borrador",
             "decidida_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "decidida_at": "2026-10-22T14:30:00.000Z",
-            "created_at": "2026-10-22T14:30:00.000Z"
+            "created_at": "2026-10-22T14:30:00.000Z",
+            "decidida_por_nombre": "texto"
           }
         ],
         "required": [
@@ -29615,6 +32099,128 @@
           },
           "created_at": {
             "format": "date-time"
+          },
+          "decidida_por_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "PuestoDeNiniera": {
+        "examples": [
+          {
+            "numero": 1,
+            "etiqueta": "texto",
+            "vin": "9FBHSR4E8PM000001"
+          }
+        ],
+        "required": [
+          "numero",
+          "etiqueta",
+          "vin"
+        ],
+        "type": "object",
+        "properties": {
+          "numero": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "etiqueta": {
+            "type": "string"
+          },
+          "vin": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "PuntoDeInspectorDto": {
+        "examples": [
+          {
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar": "texto",
+            "ciudad": "texto",
+            "asignado_at": "2026-10-22T14:30:00.000Z"
+          }
+        ],
+        "required": [
+          "lugar_id",
+          "lugar",
+          "ciudad",
+          "asignado_at"
+        ],
+        "type": "object",
+        "properties": {
+          "lugar_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lugar": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "ciudad": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "asignado_at": {
+            "format": "date-time"
+          }
+        }
+      },
+      "PuntosDeInspectorDto": {
+        "examples": [
+          {
+            "usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "puntos": [
+              {
+                "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "lugar": "texto",
+                "ciudad": "texto",
+                "asignado_at": "2026-10-22T14:30:00.000Z"
+              }
+            ]
+          }
+        ],
+        "required": [
+          "usuario_id",
+          "puntos"
+        ],
+        "type": "object",
+        "properties": {
+          "usuario_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "puntos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PuntoDeInspectorDto"
+            }
+          }
+        }
+      },
+      "ReactivarVehiculoResponse": {
+        "examples": [
+          {
+            "modo": "texto"
+          }
+        ],
+        "required": [
+          "modo"
+        ],
+        "type": "object",
+        "properties": {
+          "modo": {
+            "type": "string"
           }
         }
       },
@@ -30346,7 +32952,8 @@
                 "errores": [
                   "texto"
                 ],
-                "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "codigo_generado": true
               }
             ]
           }
@@ -30565,7 +33172,8 @@
               "es_constancia": true,
               "es_sello": true,
               "ruta_archivo": "texto",
-              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "es_acomodacion": true
             },
             "detalle": {},
             "created_at": "2026-10-22T14:30:00.000Z"
@@ -30633,6 +33241,59 @@
           "detalle": {},
           "created_at": {
             "format": "date-time"
+          }
+        }
+      },
+      "SolicitarPermisoSinInspectorRequest": {
+        "examples": [
+          {
+            "motivo_sin_inspector": "texto",
+            "motivo_sin_inspector_texto": "texto",
+            "fecha": "2026-10-22T14:30:00.000Z",
+            "lat": 4.6097,
+            "lng": -74.0817
+          }
+        ],
+        "required": [
+          "motivo_sin_inspector",
+          "motivo_sin_inspector_texto",
+          "fecha",
+          "lat",
+          "lng"
+        ],
+        "type": "object",
+        "properties": {
+          "motivo_sin_inspector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_sin_inspector_texto": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fecha": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
           }
         }
       },
@@ -30955,7 +33616,8 @@
                 "texto": "texto",
                 "created_at": "2026-10-22T14:30:00.000Z"
               }
-            ]
+            ],
+            "recibe_externo_cedula": "texto"
           }
         ],
         "required": [
@@ -31002,7 +33664,10 @@
             "format": "uuid"
           },
           "recibe_usuario_id": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "uuid"
           },
           "firmada": {
@@ -31108,6 +33773,12 @@
             "items": {
               "$ref": "#/components/schemas/NotaAclaratoriaDto"
             }
+          },
+          "recibe_externo_cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -31129,7 +33800,9 @@
             "no_firma_parte": "texto",
             "motivo_no_firma": "texto",
             "testigo_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "recibe_externo_nombre": "texto",
+            "recibe_externo_cedula": "texto"
           }
         ],
         "required": [
@@ -31168,7 +33841,10 @@
             "format": "uuid"
           },
           "recibe_usuario_id": {
-            "type": "string",
+            "type": [
+              "null",
+              "string"
+            ],
             "format": "uuid"
           },
           "firmada": {
@@ -31226,6 +33902,18 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "recibe_externo_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "recibe_externo_cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -31510,12 +34198,57 @@
                 "usuario_nombre": "texto",
                 "fecha": "2026-10-22T14:30:00.000Z",
                 "vin": "9FBHSR4E8PM000001",
-                "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "permiso": {
+                  "solicitado_por_nombre": "texto",
+                  "solicitado_at": "2026-10-22T14:30:00.000Z",
+                  "solicitado_lat": 1.5,
+                  "solicitado_lng": 1.5,
+                  "concedido_por_nombre": "texto",
+                  "concedido_at": "2026-10-22T14:30:00.000Z",
+                  "autorizado_por_tiempo": true
+                }
               }
             ],
             "fecha_programada": "2026-10-22T14:30:00.000Z",
             "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "lugar_cargue": "texto"
+            "lugar_cargue": "texto",
+            "capacidad": 1,
+            "disposicion": {
+              "puestos": [
+                {
+                  "numero": 1,
+                  "etiqueta": "texto",
+                  "vin": "9FBHSR4E8PM000001"
+                }
+              ]
+            },
+            "fotos_acomodacion": [
+              {
+                "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "inspeccion_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "sello_fecha": "2026-10-22T14:30:00.000Z",
+                "sello_lat": 1.5,
+                "sello_lng": 1.5,
+                "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                "url_expira_at": "2026-10-22T14:30:00.000Z",
+                "created_at": "2026-10-22T14:30:00.000Z",
+                "updated_at": "2026-10-22T14:30:00.000Z",
+                "vista_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "sello_servidor_at": "2026-10-22T14:30:00.000Z",
+                "precision": 1.5,
+                "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "nota": "Mensaje de ejemplo",
+                "sin_ubicacion": true,
+                "es_constancia": true,
+                "es_sello": true,
+                "ruta_archivo": "texto",
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "es_acomodacion": true
+              }
+            ]
           }
         ],
         "required": [
@@ -31669,6 +34402,30 @@
               "null",
               "string"
             ]
+          },
+          "capacidad": {
+            "type": "integer",
+            "format": "int32",
+            "default": 7
+          },
+          "disposicion": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DisposicionDeNiniera"
+              }
+            ]
+          },
+          "fotos_acomodacion": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/EvidenciaDto"
+            }
           }
         }
       },
@@ -31703,7 +34460,14 @@
             "updated_at": "2026-10-22T14:30:00.000Z",
             "fecha_programada": "2026-10-22T14:30:00.000Z",
             "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "lugar_cargue": "texto"
+            "lugar_cargue": "texto",
+            "destinos": [
+              {
+                "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "lugar": "texto",
+                "unidades": 1
+              }
+            ]
           }
         ],
         "required": [
@@ -31853,6 +34617,15 @@
               "null",
               "string"
             ]
+          },
+          "destinos": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/DestinoDeUnidadesDto"
+            }
           }
         }
       },

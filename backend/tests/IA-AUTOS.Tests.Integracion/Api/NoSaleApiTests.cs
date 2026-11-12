@@ -209,6 +209,61 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Contains("borrador", Mensaje(await ComoJsonAsync(r)));
     }
 
+    /// <summary>La version siguiente de la inspeccion, ya cerrada (la que reemplaza a la anterior), con un hallazgo V1+ propio. Devuelve el id de ese hallazgo.</summary>
+    private async Task<Guid> CorreccionCerradaConHallazgoAsync(Escenario e)
+    {
+        var correccion = Guid.NewGuid();
+        var hallazgo = Guid.NewGuid();
+        await Sembrador.EjecutarAsync(
+            """
+            ALTER TABLE dbo.tblInspecciones DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblHallazgos DISABLE TRIGGER ALL;
+            INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, IniciadaAt, Version, CorrigeInspeccionId, Estado, CerradaAt)
+            SELECT @c, EtapaId, ViajeId, UsuarioId, Momento, SYSDATETIMEOFFSET(), DATEADD(MINUTE, -5, SYSDATETIMEOFFSET()), 2, Id, 'cerrada', SYSDATETIMEOFFSET() FROM dbo.tblInspecciones WHERE Id = @i;
+            INSERT dbo.tblHallazgos (Id, InspeccionId, ZonaId, ClaseDano, TamanoDano, NivelSeveridad) VALUES (@h, @c, @z, 'golpe', '5_10cm', 'v1_plus');
+            ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
+            """,
+            ("@c", correccion), ("@h", hallazgo), ("@i", e.Inspeccion), ("@z", e.Zona));
+        return hallazgo;
+    }
+
+    [Fact]
+    public async Task Un_hallazgo_de_una_version_que_una_correccion_cerrada_ya_reemplazo_se_rechaza_y_la_unidad_sigue_activa()
+    {
+        var e = await UnidadConV1PlusAsync();
+        var delaVigente = await CorreccionCerradaConHallazgoAsync(e);
+
+        var r = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe estructural", hallazgo_id = e.Hallazgo });
+
+        Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
+        var error = await ComoJsonAsync(r);
+        Assert.Equal("CONFLICT", error.GetProperty("code").GetString());
+        Assert.Equal("hallazgo_de_version_reemplazada", error.GetProperty("details").GetProperty("motivo").GetString());
+        Assert.Contains("versión reemplazada", Mensaje(error));
+        // La unidad no cambia de estado y no queda ninguna huella de la marca.
+        Assert.Equal("activa", (string?)await Sembrador.EscalarAsync("SELECT EstadoUnidad FROM dbo.tblViajeVehiculos WHERE ViajeId = @v AND VehiculoId = @h", ("@v", e.Viaje), ("@h", e.Vehiculo)));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgoSeguimiento WHERE Accion = 'no_sale'"));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'viaje.no_sale'"));
+        // CA-3: el hallazgo de la version vigente si la saca del viaje.
+        var vigente = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe estructural", hallazgo_id = delaVigente });
+        Assert.Equal(HttpStatusCode.OK, vigente.StatusCode);
+    }
+
+    [Fact]
+    public async Task Un_hallazgo_de_una_inspeccion_cuya_correccion_sigue_en_borrador_funciona_como_hoy()
+    {
+        var e = await UnidadConV1PlusAsync();
+        // Quien hizo la inspeccion la corrige: la version 2 queda en borrador, asi que la vigente sigue siendo la 1.
+        var correccion = await Cliente(e.Inspector.Token).PostAsync($"/api/inspecciones/{e.Inspeccion}/corregir", null);
+        Assert.Equal(HttpStatusCode.Created, correccion.StatusCode);
+
+        var r = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe estructural", hallazgo_id = e.Hallazgo });
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal("no_sale", Unidad(await ComoJsonAsync(r), "VIN-NS-A").GetProperty("estado_unidad").GetString());
+    }
+
     [Fact]
     public async Task Una_unidad_que_ya_no_sale_no_se_marca_otra_vez()
     {

@@ -1,33 +1,90 @@
-import 'coords_diagrama.dart';
+import '../../inspecciones/domain/nota_aclaratoria.dart';
 
+/// Un hallazgo tal como lo devuelve la API (`HallazgoDto`).
+///
+/// Con el modelo de zonas, `parte_vehiculo` y `coords_diagrama` llegan nulos en todo hallazgo nuevo y la clase llega
+/// nula en una novedad del conductor sin revisar: aquí nada de eso se lee como obligatorio, o un solo hallazgo así
+/// tumbaría la página entera del VIN.
 class HallazgoVista {
-  const HallazgoVista({required this.id, required this.parte, required this.clase, required this.tamano, this.coords});
+  const HallazgoVista({
+    required this.id,
+    required this.zona,
+    this.cuadranteNumero,
+    this.lado,
+    this.clase,
+    required this.tamano,
+    this.nivel,
+    this.esPreexistente = false,
+    this.origen,
+    this.revisadoEn,
+  });
 
   factory HallazgoVista.fromJson(Map<String, dynamic> json) => HallazgoVista(
         id: json['id'] as String,
-        parte: json['parte_vehiculo'] as String,
-        clase: json['clase_dano'] as String,
-        tamano: json['tamano_dano'] as String,
-        coords: json['coords_diagrama'] == null ? null : CoordsDiagrama.fromJson(json['coords_diagrama'] as Map<String, dynamic>),
+        // `zona` es el texto que arma el servidor («Izquierdo 7 · Puerta delantera»); en un hallazgo histórico sin
+        // ubicar es la parte que se escribió entonces.
+        zona: json['zona'] as String? ?? json['parte_vehiculo'] as String? ?? 'Sin zona',
+        cuadranteNumero: (json['cuadrante_numero'] as num?)?.toInt(),
+        lado: json['lado'] as String?,
+        clase: json['clase_dano'] as String?,
+        tamano: json['tamano_dano'] as String? ?? '',
+        nivel: json['nivel_severidad'] as String?,
+        esPreexistente: json['es_preexistente'] as bool? ?? false,
+        origen: json['origen'] as String?,
+        revisadoEn: switch (json['revisado_at']) { final String f => DateTime.tryParse(f), _ => null },
       );
 
   final String id;
-  final String parte;
-  final String clase;
+  final String zona;
+
+  /// Número y lado de la zona; nulos en una zona provisional, en un hallazgo histórico sin ubicar y en la novedad
+  /// del conductor sin revisar. Con ellos se marca la zona en el dibujo.
+  final int? cuadranteNumero;
+  final String? lado;
+
+  final String? clase;
   final String tamano;
-  final CoordsDiagrama? coords;
+  final String? nivel;
+
+  /// El daño ya venía de antes y así lo confirmó quien inspeccionó: no ocurrió en esta etapa.
+  final bool esPreexistente;
+
+  /// Quién lo registró: `inspector` o `conductor`. Una novedad del conductor ya revisada se ve como cualquier
+  /// otro hallazgo, pero sigue diciendo de dónde salió.
+  final String? origen;
+
+  bool get loRegistroElConductor => origen == 'conductor';
+
+  /// Cuándo lo revisó un inspector. Null si nadie lo ha hecho **o** si a quien pregunta no se le muestra: al
+  /// conductor el servidor le oculta la revisión entera.
+  final DateTime? revisadoEn;
+
+  /// Qué decir del nivel cuando no hay nivel que decir. Revisado sin nivel a la vista es el caso del conductor:
+  /// alguien ya lo clasificó, pero a él no se le muestra con qué.
+  bool get yaLoRevisaron => revisadoEn != null;
 }
 
 class EvidenciaVista {
-  const EvidenciaVista({required this.id, this.url});
+  const EvidenciaVista({required this.id, this.url, this.hallazgoId, this.venceEn});
 
   factory EvidenciaVista.fromJson(Map<String, dynamic> json) =>
-      EvidenciaVista(id: json['id'] as String, url: json['url'] as String?);
+      EvidenciaVista(
+        id: json['id'] as String,
+        url: json['url'] as String?,
+        hallazgoId: json['hallazgo_id'] as String?,
+        venceEn: switch (json['url_expira_at']) { final String f => DateTime.tryParse(f), _ => null },
+      );
 
   final String id;
 
   /// Ruta relativa o absoluta de la imagen; null si no es servible.
   final String? url;
+
+  /// El daño que retrata. Null en las fotos del checklist de vistas, que no son de ningún daño.
+  final String? hallazgoId;
+
+  /// Hasta cuándo vale el enlace firmado. Pasada esa hora el servidor responde 403 y hay que pedir uno nuevo.
+  final DateTime? venceEn;
 }
 
 /// Los dos momentos de una etapa. Son valores fijos del contrato: la API solo acepta estos dos.
@@ -44,6 +101,9 @@ abstract final class TipoCierre {
   static const firmada = 'firmada';
   static const conReservas = 'con_reservas';
   static const noFirma = 'no_firma';
+
+  /// El conductor hizo la salida del cargue sin inspector y nadie de la empresa entregó: firma solo quien recibe.
+  static const reciboSinEntrega = 'recibo_sin_entrega';
 }
 
 /// La transferencia de un informe tal como la ve la pantalla. Lo que importa aquí es **quién falta por
@@ -98,6 +158,48 @@ class TransferenciaVista {
       };
 }
 
+/// El motivo por el que el conductor hizo la salida del cargue sin inspector.
+class MotivoSinInspector {
+  const MotivoSinInspector({required this.codigo, required this.nombre, this.texto});
+
+  factory MotivoSinInspector.fromJson(Map<String, dynamic> json) => MotivoSinInspector(
+        codigo: json['codigo'] as String? ?? '',
+        nombre: json['nombre'] as String? ?? '',
+        texto: json['texto'] as String?,
+      );
+
+  final String codigo;
+  final String nombre;
+
+  /// Lo que escribió quien lo registró, cuando el motivo lo pide («Otro»).
+  final String? texto;
+
+  /// «Otro: El inspector se enfermó», o solo el nombre.
+  String get resumen => texto == null || texto!.isEmpty ? nombre : '$nombre: $texto';
+}
+
+/// Algo del proceso que no es un daño: no tiene zona, clase ni nivel. Por ahora, el cargue sin inspector y el recibo
+/// sin entrega.
+class NovedadProceso {
+  const NovedadProceso({required this.tipo, required this.motivo, this.texto, this.usuarioNombre, this.fecha});
+
+  factory NovedadProceso.fromJson(Map<String, dynamic> json) => NovedadProceso(
+        tipo: json['tipo'] as String? ?? '',
+        motivo: json['motivo'] as String? ?? '',
+        texto: json['texto'] as String?,
+        usuarioNombre: json['usuario_nombre'] as String?,
+        fecha: switch (json['fecha']) { final String f => DateTime.tryParse(f), _ => null },
+      );
+
+  final String tipo;
+  final String motivo;
+  final String? texto;
+  final String? usuarioNombre;
+  final DateTime? fecha;
+
+  String get resumen => texto == null || texto!.isEmpty ? motivo : '$motivo: $texto';
+}
+
 class InspeccionVista {
   const InspeccionVista({
     required this.id,
@@ -111,6 +213,11 @@ class InspeccionVista {
     this.hallazgos = const [],
     this.evidencias = const [],
     this.transferencia,
+    this.notasAclaratorias = const [],
+    this.motivoSinInspector,
+    this.novedadesProceso = const [],
+    this.version = 1,
+    this.corrigeInspeccionId,
   });
 
   factory InspeccionVista.fromJson(Map<String, dynamic> json) {
@@ -127,6 +234,20 @@ class InspeccionVista {
       hallazgos: [for (final h in (json['hallazgos'] as List<dynamic>? ?? [])) HallazgoVista.fromJson(h as Map<String, dynamic>)],
       evidencias: [for (final e in (json['evidencias'] as List<dynamic>? ?? [])) EvidenciaVista.fromJson(e as Map<String, dynamic>)],
       transferencia: transferencia == null ? null : TransferenciaVista.fromJson(transferencia),
+      notasAclaratorias: [
+        for (final n in (json['notas_aclaratorias'] as List<dynamic>? ?? []))
+          NotaAclaratoria.fromJson(n as Map<String, dynamic>),
+      ],
+      motivoSinInspector: switch (json['motivo_sin_inspector']) {
+        final Map<String, dynamic> m => MotivoSinInspector.fromJson(m),
+        _ => null,
+      },
+      novedadesProceso: [
+        for (final n in (json['novedades_proceso'] as List<dynamic>? ?? []))
+          NovedadProceso.fromJson(n as Map<String, dynamic>),
+      ],
+      version: json['version'] as int? ?? 1,
+      corrigeInspeccionId: json['corrige_inspeccion_id'] as String?,
     );
   }
 
@@ -153,6 +274,24 @@ class InspeccionVista {
   /// Null mientras nadie haya empezado la transferencia de este informe.
   final TransferenciaVista? transferencia;
 
+  /// Lo que se aclaró después de cerrarlo. El informe no cambia; las notas se suman al lado. Distinto de
+  /// [notas], que son las que se escribieron al capturar.
+  final List<NotaAclaratoria> notasAclaratorias;
+
+  /// Por qué la hizo el conductor sin inspector; null en las demás inspecciones.
+  final MotivoSinInspector? motivoSinInspector;
+
+  /// Lo que pasó en el proceso alrededor de esta inspección (cargue sin inspector, recibo sin entrega).
+  final List<NovedadProceso> novedadesProceso;
+
+  /// 1 en la original; 2, 3… en las correcciones. Corregir una inspección cerrada no la cambia: crea la versión
+  /// siguiente, que la referencia en [corrigeInspeccionId].
+  final int version;
+  final String? corrigeInspeccionId;
+
+  /// La hizo el conductor porque no había inspector.
+  bool get fueSinInspector => motivoSinInspector != null;
+
   bool get transferenciaFirmada => transferencia?.completa ?? false;
   String? get transferenciaTipoCierre => transferencia?.tipoCierre;
 
@@ -168,6 +307,7 @@ class EtapaVista {
     this.lugar,
     this.viajeId,
     this.conPersonalApoyo = false,
+    this.traeMarcaApoyo = true,
     this.inspecciones = const [],
   });
 
@@ -179,6 +319,7 @@ class EtapaVista {
         lugar: json['lugar'] as String?,
         viajeId: json['viaje_id'] as String?,
         conPersonalApoyo: json['con_personal_apoyo'] as bool? ?? false,
+        traeMarcaApoyo: json.containsKey('con_personal_apoyo'),
         inspecciones: [for (final i in (json['inspecciones'] as List<dynamic>? ?? [])) InspeccionVista.fromJson(i as Map<String, dynamic>)],
       );
 
@@ -198,7 +339,22 @@ class EtapaVista {
   /// En el cargue hay inspector o embarcador. Entonces el conductor no captura: solo firma el recibo.
   final bool conPersonalApoyo;
 
+  /// La API manda la marca `con_personal_apoyo`. El contrato 2.10 la retiró: la salida del cargue la hace siempre un
+  /// inspector, y el conductor solo la hace con la excepción «No hay inspector».
+  final bool traeMarcaApoyo;
+
   final List<InspeccionVista> inspecciones;
+
+  /// ¿Esta versión ya tiene una corrección encima? Entonces no es la que vale.
+  bool fueCorregida(InspeccionVista inspeccion) => inspecciones.any((o) => o.corrigeInspeccionId == inspeccion.id);
+}
+
+/// Cómo se dice, en una línea, dónde está una inspección en su cadena de versiones. Null en la versión 1 que nadie
+/// corrigió: no hay nada que decir.
+String? textoDeVersion(InspeccionVista inspeccion, {bool corregida = false}) {
+  if (inspeccion.version > 1) return 'Versión ${inspeccion.version} · corrige la versión ${inspeccion.version - 1}';
+  if (corregida) return 'Versión ${inspeccion.version} · ya fue corregida';
+  return null;
 }
 
 class Inventario {
@@ -230,6 +386,21 @@ class Inventario {
     }
     return mejor;
   }
+
+  /// El mismo inventario con solo las etapas de [viajeId]; tal cual si no se pide ninguno.
+  ///
+  /// Un VIN puede haber andado en varios viajes y su inventario los trae todos. Quien abre la unidad lo hace
+  /// desde un viaje, y mezclar las etapas de otro haría ver como pendiente lo que ya se cerró en su momento.
+  Inventario delViaje(String? viajeId) => viajeId == null
+      ? this
+      : Inventario(
+          id: id,
+          vin: vin,
+          marca: marca,
+          modelo: modelo,
+          operacion: operacion,
+          etapas: [for (final e in etapas) if (e.viajeId == viajeId) e],
+        );
 }
 
 /// Por qué todavía no se puede crear la salida de una etapa.
@@ -266,15 +437,19 @@ class MomentoEtapa {
   bool get sePuedeCapturar => inspeccion == null && bloqueo == null;
 }
 
-/// Quién captura esta etapa: el conductor solo cuando no hay quien lo haga por él.
+/// La salida del cargue no la hace el conductor: la hace un inspector, y si no hay ninguno el conductor activa en el
+/// momento la excepción «No hay inspector» y da el motivo. Vale con la marca de personal de apoyo (contrato anterior)
+/// y sin ella (contrato 2.10 en adelante, donde la regla es para todos los cargues).
 ///
-/// La API se lo permitiría igual; es la app la que no se lo ofrece, porque el cargue con personal de apoyo lo
-/// inspecciona ese personal y el conductor solo firma lo que recibe.
-bool puedeCapturar(EtapaVista etapa, {required String rol}) =>
-    !(rol == 'conductor' && etapa.proceso == 'cargue' && etapa.conPersonalApoyo);
+/// La llegada y las demás etapas no cambian: ahí el conductor captura como siempre.
+bool conductorUsaExcepcion(EtapaVista etapa, {required String rol, required String momento}) =>
+    rol == 'conductor' &&
+    etapa.proceso == 'cargue' &&
+    momento == Momento.salida &&
+    (etapa.conPersonalApoyo || !etapa.traeMarcaApoyo);
 
-/// Lo que se le dice al conductor cuando no le toca a él.
-const mensajeCargueConApoyo = 'Este cargue tiene personal de apoyo: solo firmas el recibo.';
+/// Lo que se dice en una etapa de un viaje que ya cerró. Se puede mirar lo que quedó, no agregar nada.
+const mensajeViajeTerminado = 'Este viaje ya terminó: solo se puede consultar.';
 
 /// Los dos momentos de una etapa que exige inspección, en orden. Una etapa que no la exige no tiene ninguno:
 /// ahí solo se firma.
@@ -285,7 +460,11 @@ List<MomentoEtapa> momentosDeEtapa(EtapaVista etapa, Inventario inventario) {
     for (final momento in Momento.todos)
       MomentoEtapa(
         momento: momento,
-        inspeccion: etapa.inspecciones.where((i) => i.momento == momento).lastOrNull,
+        // La versión que vale es la más alta: las anteriores quedan encadenadas debajo, sin cambios.
+        inspeccion: etapa.inspecciones.where((i) => i.momento == momento).fold<InspeccionVista?>(
+          null,
+          (mejor, i) => mejor == null || i.version >= mejor.version ? i : mejor,
+        ),
         // Solo la salida espera a la etapa anterior. La llegada no espera a nada: ni la app ni la API exigen
         // que la salida de esta misma etapa esté capturada antes (comprobado contra la API el 26-oct-2026).
         bloqueo: momento == Momento.salida ? bloqueoSalida : null,

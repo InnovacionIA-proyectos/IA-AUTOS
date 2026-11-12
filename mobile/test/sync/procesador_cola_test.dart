@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
+import 'package:traza_autos/features/inspecciones/domain/nota_aclaratoria.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
@@ -107,6 +108,32 @@ void main() {
 
       expect(r.enviados, 0);
       expect((cola.jobs.single).fallido, isTrue);
+    });
+
+    // Lo que el servidor rechaza campo a campo tiene que llegar así a la pantalla de envíos: «Datos inválidos» a
+    // secas no le dice a nadie qué arreglar, y un 400 no se reintenta solo.
+    test('un 400 con fieldErrors deja el job fallido con una línea por campo', () async {
+      await cola.agregar(informe(hallazgos: [hallazgoEjemplo]));
+      gateway.errores['agregarHallazgo'] = [
+        const ErrorApi(
+          message: 'Datos inválidos',
+          code: 'VALIDATION_ERROR',
+          status: 400,
+          details: {
+            'fieldErrors': {
+              'cuadrante_numero': ['El cuadrante indicado no existe o está inactivo'],
+              'nivel_severidad': ['El conductor no asigna el nivel'],
+            },
+          },
+        ),
+      ];
+
+      await procesador.procesar(usuarioPrueba);
+
+      final job = cola.jobs.single;
+      expect(job.fallido, isTrue, reason: 'un 400 no se arregla reintentando');
+      expect(job.error, contains('El cuadrante indicado no existe o está inactivo'));
+      expect(job.error, contains('El conductor no asigna el nivel'));
     });
 
     test('un fallo al borrar un archivo local no invalida un envío exitoso', () async {
@@ -369,6 +396,42 @@ void main() {
     });
   });
 
+  group('la nota aclaratoria', () {
+    NotaJob nota() => const NotaJob(
+          id: 'n1',
+          etiqueta: 'Nota del informe cargue',
+          creadoEn: 1,
+          usuarioId: usuarioPrueba,
+          entidad: EntidadNota.inspeccion,
+          entidadId: 'i1',
+          texto: 'La placa estaba mal escrita',
+        );
+
+    test('se envía al registro que aclara y sale de la cola', () async {
+      await cola.agregar(nota());
+
+      final r = await procesador.procesar(usuarioPrueba);
+
+      expect(r.enviados, 1);
+      expect(gateway.notasEnviadas.single, (entidad: 'inspeccion', entidadId: 'i1', texto: 'La placa estaba mal escrita'));
+      expect(cola.jobs, isEmpty);
+    });
+
+    // El servidor solo se la acepta a quien registró el informe y a los administradores.
+    test('un 403 la deja fallida con su mensaje, sin reintentar', () async {
+      await cola.agregar(nota());
+      gateway.errores['agregarNota'] = [
+        const ErrorApi(message: 'Solo el autor de la inspección puede aclararla', code: 'FORBIDDEN', status: 403),
+      ];
+
+      await procesador.procesar(usuarioPrueba);
+
+      final job = cola.jobs.single;
+      expect(job.fallido, isTrue);
+      expect(job.error, contains('Solo el autor de la inspección'));
+    });
+  });
+
   group('trabajos fallidos (mejora sobre la app original: visibles, con reintento manual)', () {
     test('un job fallido no se reintenta solo ni cuenta como pendiente', () async {
       await cola.agregar(informe(fallido: true, intentos: 8));
@@ -440,7 +503,9 @@ void main() {
       await cola.agregar(informe(
         hallazgos: [
           HallazgoLocal(
-            parte: 'Capot',
+            cuadranteNumero: 52,
+            lado: null,
+            zona: 'Capó, centro adelante',
             clase: 'golpe',
             tamano: '1_5cm',
             foto: FotoLocal(ruta: 'a.jpg', selloFecha: '2026-01-02T10:01:00.000Z', selloLat: 6.2, selloLng: -75.5),
@@ -460,7 +525,9 @@ void main() {
       await cola.agregar(informe(
         hallazgos: [
           HallazgoLocal(
-            parte: 'Capot',
+            cuadranteNumero: 52,
+            lado: null,
+            zona: 'Capó, centro adelante',
             clase: 'golpe',
             tamano: '1_5cm',
             foto: const FotoLocal(

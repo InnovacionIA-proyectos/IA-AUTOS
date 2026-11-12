@@ -108,6 +108,75 @@ internal sealed class clsCatalogoSimple<T>(
 }
 
 /// <summary>
+/// Los tipos de unidad transportadora con sus <c>puestos</c> por defecto (1 a 20; nulo = sin definir). Un viaje nuevo toma esos puestos como su capacidad; cambiarlos no mueve los viajes ya creados.
+/// </summary>
+internal sealed class clsCatalogoTiposUnidad(clsAppDbContext contexto, IReloj reloj) : clsCatalogoEf<clsTipoUnidadTransportadora>(contexto, reloj, clsNombresCatalogo.TIPOS_UNIDAD)
+{
+    protected override IReadOnlyList<string> CamposPermitidos { get; } = [.. clsCamposCatalogo.COMUNES, "puestos"];
+
+    protected override ValorCatalogo Mapear(clsTipoUnidadTransportadora t)
+    {
+        var valor = Comunes(t);
+        valor["puestos"] = t.Puestos;
+        return valor;
+    }
+
+    protected override Task<clsTipoUnidadTransportadora> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct)
+    {
+        var tipo = clsTipoUnidadTransportadora.Crear(campos.Texto("codigo"), campos.Texto("nombre"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora);
+        if (campos.Tiene("puestos"))
+        {
+            tipo.CambiarPuestos(campos.Entero("puestos"), Reloj.Ahora);
+        }
+
+        return Task.FromResult(tipo);
+    }
+
+    protected override Task AplicarAsync(clsTipoUnidadTransportadora entidad, clsCamposCatalogo campos, CancellationToken ct)
+    {
+        if (campos.Tiene("puestos"))
+        {
+            entidad.CambiarPuestos(campos.Entero("puestos"), Reloj.Ahora);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// Los tipos de extra del vehiculo. El tipo «otro» esta protegido: es el que describe un extra con texto libre y no tiene reemplazo, asi que no se inactiva, no se borra y no cambia de nombre (409).
+/// </summary>
+internal sealed class clsCatalogoTiposExtra(clsAppDbContext contexto, IReloj reloj) : clsCatalogoEf<clsTipoExtra>(contexto, reloj, clsNombresCatalogo.TIPOS_EXTRA)
+{
+    protected override IReadOnlyList<string> CamposPermitidos => clsCamposCatalogo.COMUNES;
+
+    protected override ValorCatalogo Mapear(clsTipoExtra entidad) => Comunes(entidad);
+
+    protected override Task<clsTipoExtra> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct) =>
+        Task.FromResult(clsTipoExtra.Crear(campos.Texto("codigo"), campos.Texto("nombre"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora));
+
+    protected override Task AplicarAsync(clsTipoExtra entidad, clsCamposCatalogo campos, CancellationToken ct)
+    {
+        if (entidad.Codigo == clsTipoExtra.OTRO && (!entidad.Activo || !string.Equals(entidad.Nombre, clsTipoExtra.NOMBRE_OTRO, StringComparison.Ordinal)))
+        {
+            throw new clsConflictoException("El tipo «otro» está protegido: no se puede inactivar ni cambiar de nombre");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public override async Task EliminarAsync(Guid id, CancellationToken ct = default)
+    {
+        if (await Conjunto.AnyAsync(t => t.Id == id && t.Codigo == clsTipoExtra.OTRO, ct))
+        {
+            throw new clsConflictoException("El tipo «otro» está protegido: no se puede borrar");
+        }
+
+        await base.EliminarAsync(id, ct);
+    }
+}
+
+/// <summary>
 /// Los estados de las ordenes Sofasa: codigo (el <c>StatusCode</c> real), nombre (la etiqueta), orden y activo. Un estado que alguna orden usa no se borra (409): se inactiva.
 /// </summary>
 internal sealed class clsCatalogoEstadosSofasa(clsAppDbContext contexto, IReloj reloj) : clsCatalogoEf<clsEstadoSofasa>(contexto, reloj, clsNombresCatalogo.ESTADOS_SOFASA)
@@ -152,7 +221,13 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj,
     private async Task<Dictionary<Guid, (string Codigo, string Nombre)>> TiposAsync(CancellationToken ct) =>
         (await Contexto.PuntosCustodia.AsNoTracking().Select(p => new { p.Id, p.Codigo, p.Nombre }).ToListAsync(ct)).ToDictionary(p => p.Id, p => (p.Codigo, p.Nombre));
 
-    private static ValorCatalogo Armar(clsLugar l, IReadOnlyDictionary<Guid, (string Codigo, string Nombre)> tipos) => new()
+    private async Task<Dictionary<Guid, string>> NombresDeQuienFijoAsync(IEnumerable<clsLugar> lugares, CancellationToken ct)
+    {
+        var ids = lugares.Where(l => l.UbicacionFijadaPor is not null).Select(l => l.UbicacionFijadaPor!.Value).Distinct().ToList();
+        return ids.Count == 0 ? [] : await Contexto.Usuarios.AsNoTracking().Where(u => ids.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Nombre, ct);
+    }
+
+    private static ValorCatalogo Armar(clsLugar l, IReadOnlyDictionary<Guid, (string Codigo, string Nombre)> tipos, IReadOnlyDictionary<Guid, string>? nombres = null) => new()
     {
         ["id"] = l.Id,
         ["nombre"] = l.Nombre,
@@ -167,18 +242,20 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj,
         ["sin_ubicacion"] = l.SinUbicacion,
         ["estado_ubicacion"] = l.EstadoUbicacion,
         ["ubicacion_fijada_por"] = l.UbicacionFijadaPor,
+        ["ubicacion_fijada_por_nombre"] = l.UbicacionFijadaPor is { } fijador && nombres is not null ? nombres.GetValueOrDefault(fijador) : null,
         ["ubicacion_fijada_at"] = l.UbicacionFijadaAt,
     };
 
     protected override ValorCatalogo Mapear(clsLugar l) => Armar(l, new Dictionary<Guid, (string, string)>());
 
-    protected override async Task<ValorCatalogo> MapearAsync(clsLugar entidad, CancellationToken ct) => Armar(entidad, await TiposAsync(ct));
+    protected override async Task<ValorCatalogo> MapearAsync(clsLugar entidad, CancellationToken ct) => Armar(entidad, await TiposAsync(ct), await NombresDeQuienFijoAsync([entidad], ct));
 
     public override async Task<IReadOnlyList<ValorCatalogo>> ListarAsync(CancellationToken ct = default)
     {
         var tipos = await TiposAsync(ct);
         var filas = await Conjunto.AsNoTracking().OrderBy(l => l.Orden).ThenBy(l => l.Nombre).ToListAsync(ct);
-        return filas.Select(l => Armar(l, tipos)).ToList();
+        var nombres = await NombresDeQuienFijoAsync(filas, ct);
+        return filas.Select(l => Armar(l, tipos, nombres)).ToList();
     }
 
     protected override async Task<clsLugar> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct)

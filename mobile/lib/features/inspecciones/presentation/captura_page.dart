@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../../app/proveedores.dart';
 import '../../../core/dispositivo/servicios.dart';
 import '../../../core/errores/error_api.dart';
+import '../../../core/http/urls_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../auth/presentation/auth_controller.dart';
@@ -13,21 +14,36 @@ import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
-import '../../vehiculos/domain/coords_diagrama.dart';
+import '../../dibujo_dano/domain/dibujo_dano.dart';
+import '../../dibujo_dano/presentation/dibujo_dano_controller.dart';
+import '../../dibujo_dano/presentation/selector_zona_dano.dart';
 import '../../vehiculos/domain/etiquetas.dart';
-import '../../vehiculos/presentation/diagrama_vehiculo.dart';
+import '../../viajes/domain/viaje.dart';
 import '../../viajes/providers.dart';
+import '../domain/acomodacion.dart';
 import '../domain/checklist_vistas.dart';
+import '../domain/extra_local.dart';
 import '../domain/foto_local.dart';
 import '../domain/hallazgo_local.dart';
+import '../domain/hallazgo_previo.dart';
 import '../domain/reglas_informe.dart';
+import '../providers.dart';
+import 'aviso_preexistente.dart';
 import 'camara_page.dart';
 import 'filas_captura.dart';
 import 'nota_foto.dart';
+import 'seccion_acomodacion.dart';
+import 'seccion_extras.dart';
 import 'sellado.dart';
 import 'selector_dano.dart';
 
-/// Captura de un informe: datos del transporte, novedades sobre el diagrama, fotos selladas y notas.
+/// La selección del dibujo de daños de esta pantalla (ver [seleccionZonaProvider]).
+const _contextoDibujo = 'captura';
+
+/// Lo que se puede hacer con un daño ya registrado al tocar su zona.
+enum _AccionDano { corregir, quitar }
+
+/// Captura de un informe: datos del transporte, novedades sobre el dibujo de daños, fotos selladas y notas.
 ///
 /// Funciona sin señal: al cerrar, el informe completo se guarda en la cola persistente y se envía cuando la conexión
 /// sea estable.
@@ -39,6 +55,11 @@ class CapturaPage extends ConsumerStatefulWidget {
     required this.proceso,
     required this.momento,
     this.viajeId,
+    this.motivoSinInspector,
+    this.motivoSinInspectorTexto,
+    this.fechaMotivo,
+    this.latMotivo,
+    this.lngMotivo,
   });
 
   final String vin;
@@ -51,6 +72,15 @@ class CapturaPage extends ConsumerStatefulWidget {
   /// Viaje del que cuelga la etapa. De él salen la placa, el tráiler, la unidad y el conductor.
   final String? viajeId;
 
+  /// «No hay inspector»: el conductor hace la salida del cargue por la excepción. Es el código del motivo, lo que
+  /// escribió si el motivo lo pide, y la fecha y el lugar del momento en que lo eligió (con ellos se registra la
+  /// novedad, aunque el informe se envíe después).
+  final String? motivoSinInspector;
+  final String? motivoSinInspectorTexto;
+  final DateTime? fechaMotivo;
+  final double? latMotivo;
+  final double? lngMotivo;
+
   @override
   ConsumerState<CapturaPage> createState() => _EstadoCapturaPage();
 }
@@ -62,6 +92,17 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 
   final _fotos = <FotoLocal>[];
   final _hallazgos = <HallazgoLocal>[];
+
+  /// Los daños que ya traía el vehículo, para proponer un daño nuevo como «ya estaba registrado». Vacía mientras
+  /// se cargan, y también cuando no hay copia guardada y no hay señal: entonces no se propone nada.
+  var _previos = const <HallazgoPrevio>[];
+  final _extras = <ExtraLocal>[];
+
+  /// Solo en la segunda inspección del cargue: las unidades del viaje (null mientras no se conozcan), el lugar que
+  /// cada una tiene y el que ya tenía el viaje al abrir esta pantalla.
+  List<ViajeVehiculo>? _unidades;
+  final _posiciones = <String, int>{};
+  var _posicionesPrevias = const <String, int>{};
   bool _guardandoFoto = false;
   bool _cerrando = false;
 
@@ -71,6 +112,31 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   void initState() {
     super.initState();
     _buscarUbicacion();
+    _cargarPrevios();
+    final viajeId = widget.viajeId;
+    if (_esAcomodacion && viajeId != null) {
+      ref.listenManual(viajeDeEtapaProvider(viajeId), (_, viaje) => viaje.whenData(_alLlegarElViaje), fireImmediately: true);
+    }
+  }
+
+  /// Trae los hallazgos previos del VIN. No bloquea la captura: si fallan, simplemente no se propone nada.
+  Future<void> _cargarPrevios() async {
+    final previos = await ref.read(hallazgosPreviosRepositorioProvider).de(widget.vin);
+    if (mounted) setState(() => _previos = previos);
+  }
+
+  bool get _esAcomodacion => esSegundaInspeccionDelCargue(proceso: widget.proceso, momento: widget.momento);
+
+  /// Las unidades del viaje y los lugares que ya tienen, la primera vez que el viaje llega. Si no se pueden
+  /// traer, la sección lo dice y el cierre queda bloqueado: sin saber cuáles son no se puede comprobar que cada
+  /// una tenga su lugar. Lo que ya se eligió no se pisa si el viaje vuelve a llegar.
+  void _alLlegarElViaje(Viaje? viaje) {
+    if (viaje == null || _unidades != null) return;
+    setState(() {
+      _unidades = viaje.vehiculos;
+      _posicionesPrevias = posicionesDelViaje(viaje);
+      _posiciones.addAll(_posicionesPrevias);
+    });
   }
 
   @override
@@ -115,6 +181,19 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     if (foto != null && mounted) setState(() => _fotos.add(foto));
   }
 
+  /// Toma una foto de la acomodación: no cubre ninguna vista ni hallazgo, y cuenta para el mínimo del cierre.
+  Future<void> _tomarFotoAcomodacion() async {
+    final temporal = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const CamaraPage(titulo: 'Foto de la acomodación')),
+    );
+    if (temporal == null || !mounted) return;
+    final foto = await _sellar(temporal);
+    if (foto != null && mounted) setState(() => _fotos.add(foto));
+  }
+
+  int get _fotosAcomodacionMinimas =>
+      ref.read(entornoProvider).acomodacionFotosMinimas ?? acomodacionFotosMinimasPorDefecto;
+
   /// Guarda la foto y le pone su sello: fecha, ubicación, precisión y equipo.
   ///
   /// Devuelve null si no se pudo guardar. El sello es de cuando se tomó, y sin GPS **no se hereda** el del
@@ -137,16 +216,34 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 
   /// Hay con que registrar una novedad. Si no, no se puede cerrar el informe: uno cerrado sin hallazgos dice
   /// que el vehiculo venia sano.
+  /// El conductor no asigna el nivel de severidad: lo asigna el inspector (el servidor responde 400 si lo envía).
+  bool get _esConductor => ref.read(authControllerProvider).sesion?.usuario.rol == 'conductor';
+
+  /// Niveles que se ofrecen en la hoja del daño; vacío para el conductor.
+  List<ValorCatalogo> _niveles(Catalogos catalogos) =>
+      _esConductor ? const [] : catalogos.seleccionables(Catalogo.nivelesSeveridad);
+
   bool get _catalogosListos {
     final catalogos = ref.read(catalogosProvider);
-    return catalogos.seleccionables(Catalogo.clasesDano).isNotEmpty && catalogos.seleccionables(Catalogo.tamanosDano).isNotEmpty;
+    return catalogos.seleccionables(Catalogo.clasesDano).isNotEmpty &&
+        catalogos.seleccionables(Catalogo.tamanosDano).isNotEmpty &&
+        (_esConductor || catalogos.seleccionables(Catalogo.nivelesSeveridad).isNotEmpty);
   }
 
-  Future<void> _elegirNovedad(String etiqueta, CoordsDiagrama coords) async {
+  int _indiceDe(ZonaDano zona) => _hallazgos.indexWhere((h) => h.clave == zona.clave);
+
+  void _soltarZona() => ref.read(seleccionZonaProvider(_contextoDibujo).notifier).deseleccionar();
+
+  /// Registra el daño de la zona elegida en el dibujo: clase, tamaño y nivel, y su foto.
+  ///
+  /// Un daño por zona: si la zona ya tiene uno, se abre ese registro en vez de crear otro.
+  Future<void> _registrarDano(ZonaDano zona) async {
+    if (_indiceDe(zona) >= 0) return _abrirDano(zona);
     final catalogos = ref.read(catalogosProvider);
     final clases = catalogos.seleccionables(Catalogo.clasesDano);
     final tamanos = catalogos.seleccionables(Catalogo.tamanosDano);
-    if (clases.isEmpty || tamanos.isEmpty) {
+    final niveles = _niveles(catalogos);
+    if (!_catalogosListos) {
       // Mejor avisar que abrir una hoja sin opciones: los catálogos se descargan al entrar, con señal.
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Los catálogos de daño aún no se han descargado. Conéctate e inténtalo de nuevo.')),
@@ -154,33 +251,174 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       return;
     }
 
-    final dano = await pedirDano(context, titulo: etiqueta, clases: clases, tamanos: tamanos);
+    final dano = await pedirDano(
+      context,
+      titulo: zona.nombreCompleto,
+      subtitulo: zona.descripcion,
+      clases: clases,
+      tamanos: tamanos,
+      niveles: niveles,
+    );
     if (dano == null || !mounted) return;
+
+    // ¿Es el mismo daño que ya traía el vehículo? Solo se pregunta si hay uno previo de esa zona y esa clase. El
+    // conductor no responde esto: marcar un daño como preexistente es criterio de quien inspecciona, y la API
+    // tampoco le deja ver los hallazgos previos.
+    final previo = _esConductor ? null : previoDe(_previos, clave: zona.clave, clase: dano.clase);
+    var esPreexistente = false;
+    if (previo != null) {
+      final respuesta = await _preguntarPreexistente(previo);
+      if (respuesta == null || !mounted) return;
+      esPreexistente = respuesta;
+    }
 
     // Un daño sin foto es la palabra de alguien contra la del siguiente, y el servidor lo rechaza con 400. Se
     // pide aquí, con la novedad recién marcada, y si no se toma no se registra nada.
     final temporal = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => CamaraPage(titulo: 'Foto de la novedad: $etiqueta')),
+      MaterialPageRoute(builder: (_) => CamaraPage(titulo: 'Foto del daño: ${zona.nombreCompleto}')),
     );
     if (temporal == null || !mounted) return;
     final foto = await _sellar(temporal);
     if (foto == null || !mounted) return;
 
     setState(() => _hallazgos.add(
-          HallazgoLocal(parte: etiqueta, clase: dano.clase, tamano: dano.tamano, coords: coords, foto: foto),
+          HallazgoLocal(
+            cuadranteNumero: zona.numero,
+            lado: zona.lado,
+            zona: zona.nombreCompleto,
+            clase: dano.clase,
+            tamano: dano.tamano,
+            nivel: dano.nivel,
+            nota: dano.nota,
+            esPreexistente: esPreexistente,
+            hallazgoOrigenId: esPreexistente ? previo!.id : null,
+            foto: foto,
+          ),
         ));
+    _soltarZona();
+  }
+
+  /// Muestra el daño previo con su foto y deja decidir si es el mismo. Null si se sale sin responder.
+  Future<bool?> _preguntarPreexistente(HallazgoPrevio previo) {
+    return preguntarPreexistente(
+      context,
+      previo: previo,
+      catalogos: ref.read(catalogosProvider),
+      urlFoto: resolverUrlImagen(ref.read(entornoProvider).apiUrl, previo.fotoUrl),
+      // Guardados para el patio, sus enlaces casi siempre llegan vencidos: se vuelven a pedir.
+      alVencerFoto: _cargarPrevios,
+      sinSenal: !ref.read(syncControllerProvider).online,
+    );
+  }
+
+  /// El daño ya registrado en una zona: se corrige su clase, tamaño, nivel u observación, o se quita. La foto se
+  /// conserva.
+  Future<void> _abrirDano(ZonaDano zona) async {
+    final i = _indiceDe(zona);
+    if (i < 0) return;
+    final catalogos = ref.read(catalogosProvider);
+    final hallazgo = _hallazgos[i];
+    final accion = await showModalBottomSheet<_AccionDano>(
+      context: context,
+      showDragHandle: true,
+      builder: (contexto) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(Espacio.lg, 0, Espacio.lg, Espacio.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(zona.nombreCompleto, style: Theme.of(contexto).textTheme.titleMedium),
+              Text('${zona.descripcion}. Ya tiene un daño registrado.', style: Theme.of(contexto).textTheme.bodySmall),
+              const SizedBox(height: Espacio.md),
+              FilaHallazgo(
+                hallazgo: hallazgo,
+                clase: catalogos.etiqueta(Catalogo.clasesDano, hallazgo.clase),
+                tamano: catalogos.etiqueta(Catalogo.tamanosDano, hallazgo.tamano),
+                nivel: hallazgo.nivel == null ? null : catalogos.etiqueta(Catalogo.nivelesSeveridad, hallazgo.nivel!),
+                alQuitar: () => Navigator.of(contexto).pop(_AccionDano.quitar),
+              ),
+              const SizedBox(height: Espacio.md),
+              OutlinedButton(
+                onPressed: () => Navigator.of(contexto).pop(_AccionDano.corregir),
+                child: const Text('Cambiar clase, tamaño, nivel u observación'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (accion == null) {
+      _soltarZona();
+      return;
+    }
+    switch (accion) {
+      case _AccionDano.quitar:
+        setState(() => _hallazgos.removeAt(i));
+      case _AccionDano.corregir:
+        final dano = await pedirDano(
+          context,
+          titulo: zona.nombreCompleto,
+          subtitulo: zona.descripcion,
+          clases: catalogos.seleccionables(Catalogo.clasesDano),
+          tamanos: catalogos.seleccionables(Catalogo.tamanosDano),
+          niveles: _niveles(catalogos),
+          inicial: (clase: hallazgo.clase, tamano: hallazgo.tamano, nivel: hallazgo.nivel, nota: hallazgo.nota),
+        );
+        // Se busca de nuevo: mientras la hoja estaba abierta la lista pudo cambiar.
+        final j = _indiceDe(zona);
+        if (dano == null || !mounted || j < 0) break;
+        setState(() => _hallazgos[j] = _hallazgos[j].copiar(
+              clase: dano.clase,
+              tamano: dano.tamano,
+              nivel: () => dano.nivel,
+              nota: () => dano.nota,
+            ));
+    }
+    if (mounted) _soltarZona();
+  }
+
+  /// Agrega un extra (tipo y observación) y pide de una vez su primera foto: sin foto no se puede cerrar.
+  Future<void> _agregarExtra() async {
+    final datos = await pedirExtra(context, tipos: ref.read(catalogosProvider).seleccionables(Catalogo.tiposExtra));
+    if (datos == null || !mounted) return;
+    setState(() => _extras.add(ExtraLocal(
+          tipo: datos.tipo,
+          nombre: datos.nombre,
+          textoOtro: datos.textoOtro,
+          observacion: datos.observacion,
+        )));
+    await _tomarFotoExtra(_extras.length - 1);
+  }
+
+  Future<void> _tomarFotoExtra(int i) async {
+    final extra = _extras[i];
+    final temporal = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => CamaraPage(titulo: 'Foto del extra: ${extra.nombre}')),
+    );
+    if (temporal == null || !mounted) return;
+    final foto = await _sellar(temporal);
+    // Se busca de nuevo: mientras la cámara estaba abierta el extra pudo quitarse.
+    final j = _extras.indexOf(extra);
+    if (foto == null || !mounted || j < 0) return;
+    setState(() => _extras[j] = _extras[j].conFoto(foto));
   }
 
   /// Las vistas que pide esta etapa. Transporte no pide ninguna.
   List<VistaChecklist> get _checklist =>
-      pideChecklist(widget.proceso) ? checklistDeVistas(ref.read(catalogosProvider)) : const [];
+      pideChecklist(widget.proceso) && !_esAcomodacion ? checklistDeVistas(ref.read(catalogosProvider)) : const [];
 
   BloqueoCierre? get _bloqueo => bloqueoDeCierre(
         hayUbicacion: _gps != null,
         fotos: _fotos,
         hallazgos: _hallazgos,
+        extras: _extras,
         checklist: _checklist,
         catalogosListos: _catalogosListos,
+        acomodacion: _esAcomodacion
+            ? Acomodacion(unidades: _unidades, posiciones: _posiciones, fotosMinimas: _fotosAcomodacionMinimas)
+            : null,
       );
 
   Future<void> _cerrar() async {
@@ -191,6 +429,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     setState(() => _cerrando = true);
     try {
       final ahora = DateTime.now();
+      final sinInspector = widget.motivoSinInspector != null;
       final job = construirInformeJob(
         id: const Uuid().v4(),
         creadoEn: ahora.millisecondsSinceEpoch,
@@ -199,12 +438,19 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         vin: widget.vin,
         proceso: ref.read(catalogosProvider).etiqueta(Catalogo.etapas, widget.proceso),
         etapaId: widget.etapaId,
-        fecha: ahora,
-        lat: gps.lat,
-        lng: gps.lng,
+        // Sin inspector, la fecha y el lugar son los del momento en que se eligió el motivo, no los del cierre.
+        fecha: sinInspector ? (widget.fechaMotivo ?? ahora) : ahora,
+        lat: sinInspector ? (widget.latMotivo ?? gps.lat) : gps.lat,
+        lng: sinInspector ? (widget.lngMotivo ?? gps.lng) : gps.lng,
         notas: _notas.text,
         fotos: _fotos,
         hallazgos: _hallazgos,
+        extras: _extras,
+        motivoSinInspector: widget.motivoSinInspector,
+        motivoSinInspectorTexto: widget.motivoSinInspectorTexto,
+        viajeId: _esAcomodacion ? widget.viajeId : null,
+        posiciones: _esAcomodacion ? {..._posiciones} : const {},
+        posicionesPrevias: _esAcomodacion ? _posicionesPrevias : const {},
       );
       await ref.read(colaRepositorioProvider).agregar(job);
       final sync = ref.read(syncControllerProvider.notifier);
@@ -266,7 +512,6 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     final catalogos = ref.watch(catalogosProvider);
     final descargandoCatalogos = ref.watch(catalogosControllerProvider).fase == FaseCatalogos.cargando;
     final checklist = _checklist;
-
     return Scaffold(
       // `proceso` es el código (con él se decide el checklist); lo que se lee sale del catálogo, y si todavía
       // no está descargado cae al propio código.
@@ -281,6 +526,17 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
               padding: const EdgeInsets.all(Espacio.lg),
               children: [
                 Text(widget.vin, style: tema.bodySmall?.copyWith(fontFamily: 'monospace')),
+                if (widget.motivoSinInspector case final codigo?) ...[
+                  const SizedBox(height: Espacio.md),
+                  Tarjeta(
+                    child: Text(
+                      'Sin inspector: ${catalogos.etiqueta(Catalogo.motivosSinInspector, codigo)}'
+                      '${widget.motivoSinInspectorTexto == null ? '' : ' · ${widget.motivoSinInspectorTexto}'}. '
+                      'Se avisará al coordinador.',
+                      style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: Espacio.md),
                 Text('Datos del transporte', style: tema.titleMedium),
                 const SizedBox(height: Espacio.md),
@@ -290,9 +546,14 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                 _FilaUbicacion(gps: _gps, error: _errorGps, buscando: _buscandoGps, alReintentar: _buscarUbicacion, alAbrirAjustes: ref.read(servicioUbicacionProvider).abrirAjustes),
                 const SizedBox(height: Espacio.lg),
                 Text('Novedades', style: tema.titleMedium),
-                Text('Toca una parte para registrar un daño. Si no hay novedades, puedes cerrar sin fotos.', style: tema.bodySmall),
+                Text('Toca el cuadrante donde está el daño. Si no hay novedades, puedes cerrar sin fotos.', style: tema.bodySmall),
                 const SizedBox(height: Espacio.md),
-                DiagramaVehiculo(marcas: [for (final h in _hallazgos) if (h.coords != null) h.coords!], onElegir: _elegirNovedad),
+                SelectorZonaDano(
+                  contexto: _contextoDibujo,
+                  danos: {for (final h in _hallazgos) ?h.clave: h.nivel},
+                  alRegistrar: _registrarDano,
+                  alAbrirDano: _abrirDano,
+                ),
                 if (_hallazgos.isNotEmpty) ...[
                   const SizedBox(height: Espacio.md),
                   for (var i = 0; i < _hallazgos.length; i++)
@@ -300,11 +561,41 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                       hallazgo: _hallazgos[i],
                       clase: catalogos.etiqueta(Catalogo.clasesDano, _hallazgos[i].clase),
                       tamano: catalogos.etiqueta(Catalogo.tamanosDano, _hallazgos[i].tamano),
+                      nivel: switch (_hallazgos[i].nivel) {
+                        final n? => catalogos.etiqueta(Catalogo.nivelesSeveridad, n),
+                        null => null,
+                      },
                       alQuitar: () => setState(() => _hallazgos.removeAt(i)),
                     ),
                 ],
+                if (ref.watch(entornoProvider).extrasHabilitados) ...[
+                  const SizedBox(height: Espacio.lg),
+                  SeccionExtras(
+                    extras: _extras,
+                    alAgregar: _guardandoFoto ? null : _agregarExtra,
+                    alTomarFoto: _guardandoFoto ? null : _tomarFotoExtra,
+                    alQuitar: (i) => setState(() => _extras.removeAt(i)),
+                  ),
+                ],
                 const SizedBox(height: Espacio.lg),
-                if (checklist.isEmpty)
+                if (_esAcomodacion)
+                  SeccionAcomodacion(
+                    unidades: _unidades,
+                    posiciones: _posiciones,
+                    fotos: _fotos,
+                    fotosMinimas: _fotosAcomodacionMinimas,
+                    alElegir: (vin, posicion) => setState(() {
+                      if (posicion == null) {
+                        _posiciones.remove(vin);
+                      } else {
+                        _posiciones[vin] = posicion;
+                      }
+                    }),
+                    alTomarFoto: _guardandoFoto ? null : _tomarFotoAcomodacion,
+                    alReintentar: () => ref.invalidate(viajeDeEtapaProvider(widget.viajeId!)),
+                    precisionBaja: ref.watch(entornoProvider).precisionBajaMetros,
+                  )
+                else if (checklist.isEmpty)
                   Text(
                     'Esta etapa no pide fotos por vista; basta la ubicación del registro.',
                     style: tema.bodySmall,
@@ -321,6 +612,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                       vista: vista,
                       foto: _fotos.ultimaDeLaVista(vista.id),
                       alTomar: _guardandoFoto ? null : () => _tomarFoto(vista),
+                      precisionBaja: ref.watch(entornoProvider).precisionBajaMetros,
                     ),
                     const SizedBox(height: Espacio.sm),
                   ],

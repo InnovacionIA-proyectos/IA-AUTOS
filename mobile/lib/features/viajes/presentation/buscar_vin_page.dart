@@ -80,7 +80,10 @@ class _EstadoBuscarVinPage extends ConsumerState<BuscarVinPage> {
                       final (viaje, vehiculo) = resultados[i];
                       final descripcion = [vehiculo.marca, vehiculo.modelo, vehiculo.color].whereType<String>().join(' ');
                       return Tarjeta(
-                        onTap: () => context.push('/inspecciones/vin/${Uri.encodeComponent(vehiculo.vin)}'),
+                        onTap: () => context.push(
+                          '/inspecciones/vin/${Uri.encodeComponent(vehiculo.vin)}'
+                          '?viajeId=${Uri.encodeQueryComponent(viaje.id)}',
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [

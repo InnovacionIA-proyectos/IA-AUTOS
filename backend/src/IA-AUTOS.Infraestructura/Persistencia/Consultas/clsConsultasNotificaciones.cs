@@ -20,6 +20,9 @@ internal sealed class clsConsultasNotificaciones(clsAppDbContext contexto) : ICo
         public string? RespondidaPorNombre { get; init; }
     }
 
+    /// <summary>Lo que la clave de una copia de la bandeja lleva despues del hecho: <c>:{destinatario}:bandeja</c> (ver <c>clsEmisorNotificaciones</c>).</summary>
+    private static readonly int COLA_DE_LA_CLAVE = 1 + Guid.Empty.ToString().Length + 1 + clsCanalNotificacion.BANDEJA.Length;
+
     private IQueryable<Fila> Base(Guid? soloDeUsuario) =>
         from n in contexto.Notificaciones.AsNoTracking()
         join v in contexto.Viajes on n.ViajeId equals v.Id into viajes
@@ -35,6 +38,17 @@ internal sealed class clsConsultasNotificaciones(clsAppDbContext contexto) : ICo
         FiltrosNotificaciones f, Guid? soloDeUsuario, int desplazamiento, int tamano, CancellationToken ct = default)
     {
         var alcance = Base(soloDeUsuario);
+        if (soloDeUsuario is null)
+        {
+            // Quien ve las de todos (el super administrador) ve una sola copia de cada aviso, aunque se haya enviado a varias personas: la clave de cada copia es «hecho:destinatario:canal», asi que el
+            // hecho es la clave sin esa cola, y de cada hecho queda la primera copia.
+            var unaPorAviso = contexto.Notificaciones.AsNoTracking()
+                .Where(n => n.Canal == clsCanalNotificacion.BANDEJA)
+                .GroupBy(n => n.ClaveDedupe.Substring(0, n.ClaveDedupe.Length - COLA_DE_LA_CLAVE))
+                .Select(g => g.Min(n => n.ClaveDedupe));
+            alcance = alcance.Where(x => unaPorAviso.Contains(x.Notificacion.ClaveDedupe));
+        }
+
         var noLeidas = await alcance.CountAsync(x => x.Notificacion.LeidaAt == null, ct);
 
         var consulta = alcance;
@@ -71,6 +85,24 @@ internal sealed class clsConsultasNotificaciones(clsAppDbContext contexto) : ICo
             ? new RespuestaNotificacionDto(texto, medio, f.RespondidaPorNombre, fecha)
             : null;
         return new NotificacionDto(
-            n.Id, n.Tipo, n.Urgencia, n.Titulo, n.Mensaje, n.ViajeId, f.CodigoMtrack, f.Vin, n.HallazgoId, n.InspeccionId, n.LeidaAt, respuesta, n.CreatedAt);
+            n.Id, n.Tipo, n.Urgencia, n.Titulo, n.Mensaje, n.ViajeId, f.CodigoMtrack, f.Vin, n.HallazgoId, n.InspeccionId, n.LeidaAt, respuesta, n.CreatedAt, DatosDelAviso(n.Datos));
+    }
+
+    /// <summary>Los campos propios del aviso guardados como JSON, como un objeto; nulo si no lleva o si el texto guardado no es un objeto.</summary>
+    private static Dictionary<string, object?>? DatosDelAviso(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(json);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
     }
 }

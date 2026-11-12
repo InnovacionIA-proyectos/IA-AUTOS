@@ -116,7 +116,7 @@ public sealed partial class ExtrasApiTests(clsBaseDatosFixture bd) : clsPruebaAp
         var foto2 = await FotoDeExtraAsync(e.Inspector, e.Inspeccion, extra);
 
         Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
-        Assert.Equal(["id", "inspeccion_id", "tipo", "tipo_nombre", "texto", "nombre", "observacion", "created_at", "updated_at", "fotos"], dto.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["id", "inspeccion_id", "tipo", "tipo_nombre", "texto", "nombre", "observacion", "created_at", "updated_at", "fotos", "dano"], dto.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("platon", dto.GetProperty("tipo").GetString());
         Assert.Equal("Platón", dto.GetProperty("nombre").GetString());
         Assert.Equal("rayón en la compuerta trasera", dto.GetProperty("observacion").GetString());
@@ -379,4 +379,200 @@ public sealed partial class ExtrasApiTests(clsBaseDatosFixture bd) : clsPruebaAp
 
     private static int ColumnaDe(string referencia) =>
         referencia.TakeWhile(char.IsLetter).Aggregate(0, (acumulado, c) => (acumulado * 26) + (c - 'A' + 1)) - 1;
+
+    // ------------------------------------------------------------------------------ S7-HU-04: el dano en un extra cuenta
+
+    private Task<HttpResponseMessage> AgregarExtraDanadoAsync(Sesion quien, Guid inspeccion, string tipo, object? cuerpoDano) =>
+        Como(quien).PostAsync(
+            $"/api/inspecciones/{inspeccion}/extras",
+            Cuerpo(cuerpoDano is null ? new { tipo } : new { tipo, danado = true, clase_dano = "golpe", tamano_dano = "5_10cm", nivel_severidad = "v3" }));
+
+    private async Task<(Guid Extra, Guid Hallazgo)> ExtraDanadoAsync(Sesion quien, Guid inspeccion, string tipo = "platon")
+    {
+        var r = await AgregarExtraDanadoAsync(quien, inspeccion, tipo, new { });
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+        var dto = await JsonAsync(r);
+        return (dto.GetProperty("id").GetGuid(), dto.GetProperty("dano").GetProperty("hallazgo_id").GetGuid());
+    }
+
+    [Fact]
+    public async Task Un_extra_danado_se_guarda_con_clase_tamano_y_nivel_y_aparece_en_la_lista_de_danos_sin_zona()
+    {
+        var e = await EscenarioAsync();
+
+        var r = await AgregarExtraDanadoAsync(e.Inspector, e.Inspeccion, "platon", new { });
+
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+        var extra = await JsonAsync(r);
+        var dano = extra.GetProperty("dano");
+        Assert.Equal("golpe", dano.GetProperty("clase_dano").GetString());
+        Assert.Equal("5_10cm", dano.GetProperty("tamano_dano").GetString());
+        Assert.Equal("v3", dano.GetProperty("nivel_severidad").GetString());
+
+        // El dano es un hallazgo de siempre, sin zona del dibujo, del inspector y ligado a su extra.
+        var hallazgo = dano.GetProperty("hallazgo_id").GetGuid();
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos WHERE Id = @h AND ExtraId = @e AND ZonaId IS NULL AND Origen = 'inspector' AND NivelSeveridad = 'v3'", ("@h", hallazgo), ("@e", extra.GetProperty("id").GetGuid())));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'hallazgo.crear' AND EntidadId = @h", ("@h", hallazgo)));
+
+        // ESC-01: aparece en la lista de danos; la ausencia de zona viaja como nulos y el nombre del extra en la zona de texto.
+        var lista = await JsonAsync(await Como(e.Coordinador).GetAsync($"/api/hallazgos?inspeccion_id={e.Inspeccion}"));
+        var fila = Assert.Single(lista.GetProperty("items").EnumerateArray());
+        Assert.Equal(hallazgo, fila.GetProperty("id").GetGuid());
+        Assert.Equal(extra.GetProperty("id").GetGuid(), fila.GetProperty("extra_id").GetGuid());
+        Assert.Equal("Platón", fila.GetProperty("zona").GetString());
+        Assert.Equal(JsonValueKind.Null, fila.GetProperty("cuadrante_numero").ValueKind);
+        Assert.Equal(JsonValueKind.Null, fila.GetProperty("lado").ValueKind);
+        Assert.False(fila.GetProperty("sin_calificar").GetBoolean());
+        Assert.Equal("v3", fila.GetProperty("nivel_severidad").GetString());
+    }
+
+    [Fact]
+    public async Task Marcar_un_extra_como_danado_exige_clase_tamano_y_nivel_y_sin_marcarlo_no_se_admiten()
+    {
+        var e = await EscenarioAsync();
+
+        var sinNada = await Como(e.Inspector).PostAsync($"/api/inspecciones/{e.Inspeccion}/extras", Cuerpo(new { tipo = "platon", danado = true }));
+        var sinNivel = await Como(e.Inspector).PostAsync($"/api/inspecciones/{e.Inspeccion}/extras", Cuerpo(new { tipo = "platon", danado = true, clase_dano = "golpe", tamano_dano = "5_10cm" }));
+        var invalidos = await Como(e.Inspector).PostAsync($"/api/inspecciones/{e.Inspeccion}/extras", Cuerpo(new { tipo = "platon", danado = true, clase_dano = "inventada", tamano_dano = "gigante", nivel_severidad = "v9" }));
+        var sinMarcar = await Como(e.Inspector).PostAsync($"/api/inspecciones/{e.Inspeccion}/extras", Cuerpo(new { tipo = "platon", clase_dano = "golpe", nivel_severidad = "v3" }));
+        var noDanado = await Como(e.Inspector).PostAsync($"/api/inspecciones/{e.Inspeccion}/extras", Cuerpo(new { tipo = "platon", danado = false, tamano_dano = "5_10cm" }));
+
+        foreach (var r in new[] { sinNada, sinNivel, invalidos, sinMarcar, noDanado })
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
+        }
+
+        static List<string> Campos(JsonElement c) => c.GetProperty("details").GetProperty("fieldErrors").EnumerateObject().Select(p => p.Name).Order().ToList();
+        Assert.Equal(["clase_dano", "nivel_severidad", "tamano_dano"], Campos(await JsonAsync(sinNada)));
+        Assert.Equal(["nivel_severidad"], Campos(await JsonAsync(sinNivel)));
+        Assert.Equal(["clase_dano", "nivel_severidad", "tamano_dano"], Campos(await JsonAsync(invalidos)));
+        Assert.Equal(["clase_dano", "nivel_severidad"], Campos(await JsonAsync(sinMarcar)));
+        Assert.Equal(["tamano_dano"], Campos(await JsonAsync(noDanado)));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspeccionExtras"));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
+    }
+
+    [Fact]
+    public async Task El_dano_del_extra_cuenta_en_los_patrones_y_se_cierra_con_la_foto_del_extra_y_uno_sin_dano_no_cuenta()
+    {
+        var e = await EscenarioAsync();
+        var (extra, hallazgo) = await ExtraDanadoAsync(e.Inspector, e.Inspeccion);
+        var barras = await ExtraAsync(e.Inspector, e.Inspeccion, "barras_techo");
+        Assert.Equal(HttpStatusCode.Created, (await FotoDeExtraAsync(e.Inspector, e.Inspeccion, extra)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await FotoDeExtraAsync(e.Inspector, e.Inspeccion, barras)).StatusCode);
+        var antes = await JsonAsync(await Como(e.Coordinador).GetAsync("/api/reportes/patrones"));
+        Assert.Equal(0, antes.GetProperty("total").GetInt32());
+
+        // El dano no pide foto propia: la foto del extra es la suya (el cierre no se bloquea).
+        var cierre = await CerrarAsync(e.Inspector, e.Inspeccion);
+        Assert.Equal(HttpStatusCode.OK, cierre.StatusCode);
+
+        // CA-2: cuenta en los patrones (por clase, nivel y proceso; sin zona) y las barras sin dano no cuentan.
+        var patrones = await JsonAsync(await Como(e.Coordinador).GetAsync("/api/reportes/patrones"));
+        Assert.Equal(1, patrones.GetProperty("total").GetInt32());
+        Assert.Equal("golpe", Assert.Single(patrones.GetProperty("por_clase").EnumerateArray()).GetProperty("clase").GetString());
+        Assert.Equal("v3", Assert.Single(patrones.GetProperty("por_nivel").EnumerateArray()).GetProperty("nivel").GetString());
+        Assert.Equal(0, patrones.GetProperty("sin_calificar").GetInt32());
+        var averias = await JsonAsync(await Como(e.Coordinador).GetAsync("/api/reportes/averias"));
+        Assert.Equal("golpe", Assert.Single(averias.GetProperty("por_clase").EnumerateArray()).GetProperty("clase").GetString());
+
+        // Su evidencia: la foto es la del extra; solo falta el cierre de la transferencia.
+        var fila = Assert.Single((await JsonAsync(await Como(e.Coordinador).GetAsync($"/api/hallazgos?inspeccion_id={e.Inspeccion}"))).GetProperty("items").EnumerateArray());
+        Assert.Equal(hallazgo, fila.GetProperty("id").GetGuid());
+        Assert.Equal(["transferencia_sin_cierre"], fila.GetProperty("evidencia_faltante").EnumerateArray().Select(x => x.GetString()).ToList());
+        // ESC-04: las barras sin dano no son un hallazgo.
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos WHERE ExtraId = @e", ("@e", barras)));
+    }
+
+    [Fact]
+    public async Task Un_extra_sin_dano_no_cambia_ninguna_cifra_y_los_extras_de_antes_siguen_validos_sin_dano()
+    {
+        var e = await EscenarioAsync();
+        // Un extra de antes del cambio: sin dano y sin migracion (ningun hallazgo ligado).
+        var viejo = await ExtraAsync(e.Inspector, e.Inspeccion, "platon", observacion: "reportado antes");
+        Assert.Equal(HttpStatusCode.Created, (await FotoDeExtraAsync(e.Inspector, e.Inspeccion, viejo)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(e.Inspector, e.Inspeccion)).StatusCode);
+
+        var informe = await InformeAsync(e.Inspector, e.Inspeccion);
+
+        // ESC-06: sigue con su foto y su observacion y no aparece como dano.
+        var extra = Assert.Single(informe.GetProperty("extras").EnumerateArray());
+        Assert.Equal("reportado antes", extra.GetProperty("observacion").GetString());
+        Assert.Equal(1, extra.GetProperty("fotos").GetArrayLength());
+        Assert.Equal(JsonValueKind.Null, extra.GetProperty("dano").ValueKind);
+        Assert.Equal(0, informe.GetProperty("hallazgos").GetArrayLength());
+        Assert.Equal(0, (await JsonAsync(await Como(e.Coordinador).GetAsync("/api/reportes/patrones"))).GetProperty("total").GetInt32());
+        Assert.Equal(0, (await JsonAsync(await Como(e.Coordinador).GetAsync("/api/hallazgos"))).GetProperty("total").GetInt32());
+    }
+
+    [Fact]
+    public async Task El_dano_de_un_extra_se_agrega_despues_pero_una_vez_guardado_no_se_quita_ni_se_cambia_y_el_extra_no_se_borra()
+    {
+        var e = await EscenarioAsync();
+        var extra = await ExtraAsync(e.Inspector, e.Inspeccion, "platon");
+
+        var agregar = await Como(e.Inspector).PutAsync(
+            $"/api/inspecciones/{e.Inspeccion}/extras/{extra}", Cuerpo(new { tipo = "platon", danado = true, clase_dano = "golpe", tamano_dano = "5_10cm", nivel_severidad = "v2" }));
+        Assert.Equal(HttpStatusCode.OK, agregar.StatusCode);
+        Assert.Equal("v2", (await JsonAsync(agregar)).GetProperty("dano").GetProperty("nivel_severidad").GetString());
+
+        var conservar = await Como(e.Inspector).PutAsync($"/api/inspecciones/{e.Inspeccion}/extras/{extra}", Cuerpo(new { tipo = "platon", observacion = "con el dano" }));
+        var mismo = await Como(e.Inspector).PutAsync(
+            $"/api/inspecciones/{e.Inspeccion}/extras/{extra}", Cuerpo(new { tipo = "platon", danado = true, clase_dano = "golpe", tamano_dano = "5_10cm", nivel_severidad = "v2" }));
+        var quitar = await Como(e.Inspector).PutAsync($"/api/inspecciones/{e.Inspeccion}/extras/{extra}", Cuerpo(new { tipo = "platon", danado = false }));
+        var cambiar = await Como(e.Inspector).PutAsync(
+            $"/api/inspecciones/{e.Inspeccion}/extras/{extra}", Cuerpo(new { tipo = "platon", danado = true, clase_dano = "golpe", tamano_dano = "5_10cm", nivel_severidad = "v1" }));
+        var borrar = await Como(e.Inspector).DeleteAsync($"/api/inspecciones/{e.Inspeccion}/extras/{extra}");
+
+        Assert.Equal(HttpStatusCode.OK, conservar.StatusCode);
+        Assert.NotEqual(JsonValueKind.Null, (await JsonAsync(conservar)).GetProperty("dano").ValueKind);
+        Assert.Equal(HttpStatusCode.OK, mismo.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, quitar.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, cambiar.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, borrar.StatusCode);
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos WHERE ExtraId = @e AND NivelSeveridad = 'v2'", ("@e", extra)));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspeccionExtras WHERE Id = @e", ("@e", extra)));
+    }
+
+    [Fact]
+    public async Task La_lista_general_de_evidencias_del_informe_incluye_las_fotos_de_los_extras_con_su_extra_id()
+    {
+        var e = await EscenarioAsync();
+        var extra = await ExtraAsync(e.Inspector, e.Inspeccion, "volco");
+        Assert.Equal(HttpStatusCode.Created, (await FotoDeExtraAsync(e.Inspector, e.Inspeccion, extra)).StatusCode);
+
+        var informe = await InformeAsync(e.Inspector, e.Inspeccion);
+
+        // CA-5: las fotos de los extras estan en la lista general, marcadas con su extra_id (y tambien en las fotos de cada extra).
+        var evidencia = Assert.Single(informe.GetProperty("evidencias").EnumerateArray());
+        Assert.Equal(extra, evidencia.GetProperty("extra_id").GetGuid());
+        Assert.Equal(JsonValueKind.Null, evidencia.GetProperty("vista_id").ValueKind);
+        Assert.Equal(JsonValueKind.Null, evidencia.GetProperty("hallazgo_id").ValueKind);
+        Assert.Equal(evidencia.GetProperty("id").GetGuid(), Assert.Single(informe.GetProperty("extras").EnumerateArray()).GetProperty("fotos")[0].GetProperty("id").GetGuid());
+    }
+
+    [Fact]
+    public async Task El_tipo_otro_esta_protegido_contra_la_inactivacion_el_cambio_de_nombre_y_el_borrado_y_los_demas_tipos_no()
+    {
+        var e = await EscenarioAsync();
+        var tipos = (await JsonAsync(await Como(e.Coordinador).GetAsync("/api/catalogos/tipos-extra"))).GetProperty("items").EnumerateArray().ToList();
+        var otro = tipos.Single(t => t.GetProperty("codigo").GetString() == "otro").GetProperty("id").GetGuid();
+        var barras = tipos.Single(t => t.GetProperty("codigo").GetString() == "barras_techo").GetProperty("id").GetGuid();
+
+        var inactivar = await Como(e.Coordinador).PatchAsync($"/api/catalogos/tipos-extra/{otro}", Cuerpo(new { activo = false }));
+        var renombrar = await Como(e.Coordinador).PatchAsync($"/api/catalogos/tipos-extra/{otro}", Cuerpo(new { nombre = "Otros accesorios" }));
+        var borrar = await Como(e.Coordinador).DeleteAsync($"/api/catalogos/tipos-extra/{otro}");
+
+        // CA-6: «otro» es el que describe un extra con texto libre y no tiene reemplazo.
+        Assert.Equal(HttpStatusCode.Conflict, inactivar.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, renombrar.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, borrar.StatusCode);
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTiposExtra WHERE Codigo = 'otro' AND Activo = 1 AND Nombre = N'Otro'"));
+        // Lo demas del catalogo no cambia: sus otros tipos se renombran e inactivan como siempre, y «otro» admite el orden.
+        Assert.Equal(HttpStatusCode.OK, (await Como(e.Coordinador).PatchAsync($"/api/catalogos/tipos-extra/{barras}", Cuerpo(new { nombre = "Barras del techo", activo = false }))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Como(e.Coordinador).PatchAsync($"/api/catalogos/tipos-extra/{otro}", Cuerpo(new { orden = 9 }))).StatusCode);
+        // El catalogo se comparte con las demas pruebas: lo que se cambio vuelve a como estaba.
+        Assert.Equal(HttpStatusCode.OK, (await Como(e.Coordinador).PatchAsync($"/api/catalogos/tipos-extra/{barras}", Cuerpo(new { nombre = "Barras de techo", activo = true }))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Como(e.Coordinador).PatchAsync($"/api/catalogos/tipos-extra/{otro}", Cuerpo(new { orden = 4 }))).StatusCode);
+    }
 }

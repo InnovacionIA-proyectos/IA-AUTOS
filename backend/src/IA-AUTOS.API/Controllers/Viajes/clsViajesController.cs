@@ -26,11 +26,13 @@ public sealed class clsViajesController(
     clsNoSaleService noSale,
     clsEntregasService entregas,
     clsReclamosService reclamos,
-    clsConductorService conductor) : clsControladorBase
+    clsConductorService conductor,
+    clsPermisosSinInspectorService permisosSinInspector) : clsControladorBase
 {
     /// <summary>
-    /// Crea un viaje con su unidad, placa, trailer, conductor, codigo MTrack y, opcionalmente, sus unidades (cada una con su <c>vin</c> y su <c>lugar_destino_id</c>; se crean sus etapas con el Descargue en el
-    /// destino de la unidad). 400 si una unidad no trae destino; <c>destino_id</c> y <c>vines</c> ya no se aceptan. 409 si el codigo MTrack ya existe.
+    /// Crea un viaje con su unidad, placa, trailer, conductor, codigo MTrack, <c>fecha_programada</c> y <c>lugar_cargue_id</c> (obligatorios) y, opcionalmente, sus unidades (cada una con su <c>vin</c> y su
+    /// <c>lugar_destino_id</c>; se crean sus etapas con el Descargue en el destino de la unidad). El tipo de origen se deduce del tipo del lugar de cargue. 400 si una unidad no trae destino y «Campo no admitido» con
+    /// todo campo que no se declara (<c>origen_id</c>, <c>destino_id</c>, <c>vines</c>, <c>con_personal_apoyo</c>...). 409 si el codigo MTrack ya existe.
     /// </summary>
     [HttpPost]
     [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
@@ -38,13 +40,15 @@ public sealed class clsViajesController(
     [CuerpoSolicitud(typeof(CrearViajeRequest))]
     public async Task<IActionResult> Crear(CancellationToken ct)
     {
-        var solicitud = await LeerCuerpoAsync<CrearViajeRequest>(ct, "destino_id", "vines");
+        var solicitud = await LeerCuerpoSoloAsync<CrearViajeRequest>(
+            ct, "codigo_mtrack", "tipo_unidad_id", "placa", "trailer", "conductor_id", "inspector_id", "unidades", "fecha_programada", "lugar_cargue_id", "capacidad");
         return Creado(await servicio.CrearAsync(solicitud, ct));
     }
 
     /// <summary>
     /// Una pagina de viajes <c>{items, total, pagina, tamano}</c> (mas recientes primero por defecto). Filtros: <c>estado</c>, <c>codigo_mtrack</c>, <c>vin</c>, <c>conductor_id</c>, <c>inspector_id</c>, <c>cliente_id</c>,
-    /// <c>origen_id</c>, <c>destino_id</c>, <c>desde</c> y <c>hasta</c>; <c>pagina</c>, <c>tamano</c> (50, maximo 200) y <c>orden</c> (<c>campo:asc|desc</c>). Inspectores y conductores ven solo sus viajes.
+    /// <c>origen_id</c>, <c>destino_id</c> (el tipo de destino del viaje, de los viajes anteriores), <c>destino_unidad_id</c> (un lugar de destino de alguna de sus unidades), <c>desde</c> y <c>hasta</c>; <c>pagina</c>,
+    /// <c>tamano</c> (50, maximo 200) y <c>orden</c> (<c>campo:asc|desc</c>). Cada fila trae <c>destinos</c>: los destinos distintos de sus unidades con cuantas van a cada uno. Inspectores y conductores ven solo sus viajes.
     /// <c>cliente_id</c> trae los viajes con algun VIN de ese cliente (solo el super administrador elige otro; el resto recibe siempre los de su cliente). Cada fila trae los clientes de sus VIN.
     /// </summary>
     [HttpGet]
@@ -63,9 +67,10 @@ public sealed class clsViajesController(
         [FromQuery] string? pagina,
         [FromQuery] string? tamano,
         [FromQuery] string? orden,
+        [FromQuery(Name = "destino_unidad_id")] string? destinoUnidadId,
         CancellationToken ct) =>
         Ok(await servicio.ListarAsync(
-            new FiltrosViajesRequest(estado, codigoMtrack, vin, conductorId, inspectorId, clienteId, origenId, destinoId, desde, hasta, pagina, tamano, orden), ct));
+            new FiltrosViajesRequest(estado, codigoMtrack, vin, conductorId, inspectorId, clienteId, origenId, destinoId, desde, hasta, pagina, tamano, orden, destinoUnidadId), ct));
 
     /// <summary>
     /// La lista de pendientes del inspector: los cargues programados para HOY en sus puntos y las entregas de viajes en curso que llegan a sus puntos, cada uno con su estado (<c>disponible</c>, <c>en_revision</c> con el nombre del
@@ -203,11 +208,34 @@ public sealed class clsViajesController(
     }
 
     /// <summary>
+    /// El conductor del viaje pide el permiso de la excepcion «No hay inspector» cuando el punto de cargue tiene inspectores: <c>motivo_sin_inspector</c>, su texto si el motivo lo pide, la <c>fecha</c> y el GPS (<c>lat</c>,
+    /// <c>lng</c>) del momento en que lo pide. Avisa al inspector del punto y al coordinador del cliente. 409 si el punto no tiene inspectores (ahi la excepcion se activa directamente); 403 si no es el conductor del viaje.
+    /// </summary>
+    [HttpPost("{id:guid}/permiso-sin-inspector")]
+    [RolesPermitidos(clsRol.CONDUCTOR)]
+    [ProducesResponseType<PermisoSinInspectorDto>(StatusCodes.Status201Created)]
+    [CuerpoSolicitud(typeof(SolicitarPermisoSinInspectorRequest))]
+    public async Task<IActionResult> SolicitarPermisoSinInspector(Guid id, CancellationToken ct) =>
+        Creado(await permisosSinInspector.SolicitarAsync(id, await LeerCuerpoAsync<SolicitarPermisoSinInspectorRequest>(ct), ct));
+
+    /// <summary>La solicitud del permiso del viaje y su estado (pendiente o concedido, y quien lo concedio o si fue el reloj). 404 si no hay.</summary>
+    [HttpGet("{id:guid}/permiso-sin-inspector")]
+    [RolesPermitidos(clsRol.CONDUCTOR, clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType<PermisoSinInspectorDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ObtenerPermisoSinInspector(Guid id, CancellationToken ct) => Ok(await permisosSinInspector.ObtenerAsync(id, ct));
+
+    /// <summary>El coordinador de calidad o un administrador concede el permiso: el conductor queda habilitado de inmediato, sin esperar al inspector. 404 si no hay solicitud; 409 si ya esta concedido.</summary>
+    [HttpPost("{id:guid}/permiso-sin-inspector/conceder")]
+    [RolesPermitidos(clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType<PermisoSinInspectorDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ConcederPermisoSinInspector(Guid id, CancellationToken ct) => Ok(await permisosSinInspector.ConcederAsync(id, ct));
+
+    /// <summary>
     /// Registra la posicion de la unidad en la ninera (<c>posicion</c> de 1 a 7; <c>null</c> la libera) durante la segunda inspeccion del cargue. 400 «La posicion debe estar entre 1 y 7»; 409 «La posicion N ya esta
     /// ocupada por otra unidad de este viaje» (con dos solicitudes simultaneas por la misma, gana una), si la unidad no sale o si el viaje no tiene su segunda inspeccion del cargue en curso. Responde con el viaje.
     /// </summary>
     [HttpPut("{id:guid}/vehiculos/{vin}/posicion")]
-    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
     [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]
     [CuerpoSolicitud(typeof(AsignarPosicionRequest))]
     public async Task<IActionResult> AsignarPosicion(Guid id, string vin, CancellationToken ct) =>

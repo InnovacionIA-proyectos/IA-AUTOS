@@ -445,14 +445,15 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         } }));
 
         var lugar = await LugarRealAsync(cliente, "Destino de la ruta");
+        var cargue = await LugarRealAsync(cliente, "CEDI de la ruta", "cedi_1");
         await cliente.PatchAsync($"/api/catalogos/etapas/{descargue.GetProperty("id").GetGuid()}", Cuerpo(new { activo = false }));
-        var sinDescargue = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-RUTA-1", tipo_unidad_id = unidad, placa = "ABC123", unidades = new[] { new { vin = "9FBHSR4E8PM000001", lugar_destino_id = lugar } } }));
+        var sinDescargue = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-RUTA-1", tipo_unidad_id = unidad, placa = "ABC123", fecha_programada = "2026-11-18T06:00:00-05:00", lugar_cargue_id = cargue, unidades = new[] { new { vin = "9FBHSR4E8PM000001", lugar_destino_id = lugar } } }));
         Assert.Equal(HttpStatusCode.Created, sinDescargue.StatusCode);
         Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = '9FBHSR4E8PM000001'"));
 
         await cliente.PatchAsync($"/api/catalogos/etapas/{descargue.GetProperty("id").GetGuid()}", Cuerpo(new { activo = true }));
         await cliente.PostAsync("/api/catalogos/etapas", Cuerpo(new { codigo = "entrega_final", nombre = "Entrega final", orden = 4 }));
-        var conCuatro = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-RUTA-2", tipo_unidad_id = unidad, placa = "ABC123", unidades = new[] { new { vin = "9FBHSR4E8PM000002", lugar_destino_id = lugar } } }));
+        var conCuatro = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-RUTA-2", tipo_unidad_id = unidad, placa = "ABC123", fecha_programada = "2026-11-18T06:00:00-05:00", lugar_cargue_id = cargue, unidades = new[] { new { vin = "9FBHSR4E8PM000002", lugar_destino_id = lugar } } }));
         Assert.Equal(HttpStatusCode.Created, conCuatro.StatusCode);
         Assert.Equal(4, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = '9FBHSR4E8PM000002'"));
     }
@@ -463,20 +464,20 @@ public sealed class CatalogosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var token = await TokenAsync();
         var cliente = Cliente(token);
         var unidad = await ValorAsync(token, "tipos-unidad", "nodriza");
-        var origen = await ValorAsync(token, "puntos-custodia", "origen");
-        await cliente.PatchAsync($"/api/catalogos/puntos-custodia/{origen.GetProperty("id").GetGuid()}", Cuerpo(new { activo = false }));
+        var lugarDeCargue = await LugarRealAsync(cliente, "CEDI inactivo", "cedi_1");
+        await cliente.PatchAsync($"/api/catalogos/lugares/{lugarDeCargue}", Cuerpo(new { activo = false }));
         await cliente.PatchAsync($"/api/catalogos/tipos-unidad/{unidad.GetProperty("id").GetGuid()}", Cuerpo(new { activo = false }));
 
         var inactivos = await cliente.PostAsync(
             "/api/viajes",
-            Cuerpo(new { codigo_mtrack = "MTK-INACT", tipo_unidad_id = unidad.GetProperty("id").GetGuid(), placa = "ABC123", origen_id = origen.GetProperty("id").GetGuid() }));
+            Cuerpo(new { codigo_mtrack = "MTK-INACT", tipo_unidad_id = unidad.GetProperty("id").GetGuid(), placa = "ABC123", fecha_programada = "2026-11-18T06:00:00-05:00", lugar_cargue_id = lugarDeCargue }));
         var inexistente = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-INEX", tipo_unidad_id = Guid.NewGuid(), placa = "ABC123" }));
         var sinUnidad = await cliente.PostAsync("/api/viajes", Cuerpo(new { codigo_mtrack = "MTK-SIN", placa = "ABC123" }));
 
         Assert.Equal(HttpStatusCode.BadRequest, inactivos.StatusCode);
         var errores = (await LeerJsonAsync(inactivos)).GetProperty("details").GetProperty("fieldErrors");
         Assert.True(errores.TryGetProperty("tipo_unidad_id", out _));
-        Assert.True(errores.TryGetProperty("origen_id", out _));
+        Assert.True(errores.TryGetProperty("lugar_cargue_id", out _));
         Assert.Equal(HttpStatusCode.BadRequest, inexistente.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, sinUnidad.StatusCode);
     }

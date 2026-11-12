@@ -15,6 +15,8 @@ public static class clsCuerpoError
         clsCodigosError.UNAUTHORIZED => StatusCodes.Status401Unauthorized,
         clsCodigosError.FORBIDDEN => StatusCodes.Status403Forbidden,
         clsCodigosError.PORTAL_USER_NOT_LINKED => StatusCodes.Status403Forbidden,
+        clsCodigosError.CORRECCION_SOLO_AUTOR => StatusCodes.Status403Forbidden,
+        clsCodigosError.INSPECCION_YA_FIRMADA => StatusCodes.Status409Conflict,
         clsCodigosError.URL_FIRMADA_INVALIDA => StatusCodes.Status403Forbidden,
         clsCodigosError.PIN_CHANGE_REQUIRED => StatusCodes.Status403Forbidden,
         clsCodigosError.ACCOUNT_LOCKED => StatusCodes.Status423Locked,

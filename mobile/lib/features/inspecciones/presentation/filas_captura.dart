@@ -14,13 +14,22 @@ import '../domain/reglas_informe.dart';
 
 /// Una fila del checklist: qué vista es, si ya tiene foto y cómo está esa foto.
 class FilaVista extends StatelessWidget {
-  const FilaVista({super.key, required this.vista, required this.foto, required this.alTomar});
+  const FilaVista({
+    super.key,
+    required this.vista,
+    required this.foto,
+    required this.alTomar,
+    this.precisionBaja,
+  });
 
   final VistaChecklist vista;
 
   /// La última foto de la vista; null si todavía no hay.
   final FotoLocal? foto;
   final VoidCallback? alTomar;
+
+  /// Desde cuántos metros se avisa de precisión baja. Null deja el valor inicial de la regla.
+  final double? precisionBaja;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +68,7 @@ class FilaVista extends StatelessWidget {
               if (actual != null && actual.sinUbicacion)
                 // El sello es lo que da valor a la evidencia: sin ubicación hay que repetirla antes de cerrar.
                 Text('Sin ubicación: repítela', style: tema.bodySmall?.copyWith(color: Colores.peligro))
-              else if (actual != null && (actual.precision ?? 0) > precisionBajaMetros)
+              else if (actual != null && (actual.precision ?? 0) > (precisionBaja ?? precisionBajaMetrosPorDefecto))
                 // Avisa, no bloquea: en un patio techado el GPS siempre es malo.
                 Text(
                   'Ubicación poco precisa (±${actual.precision!.round()} m)',
@@ -82,6 +91,7 @@ class FilaHallazgo extends StatelessWidget {
     required this.hallazgo,
     required this.clase,
     required this.tamano,
+    this.nivel,
     required this.alQuitar,
   });
 
@@ -90,45 +100,62 @@ class FilaHallazgo extends StatelessWidget {
   /// Nombres ya resueltos con el catálogo por quien construye la fila.
   final String clase;
   final String tamano;
+
+  /// Nombre del nivel («V2»); null si no se asignó (el conductor no lo asigna).
+  final String? nivel;
   final VoidCallback alQuitar;
 
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
-    return Row(
-      children: [
-        // La foto del daño se ve: si no, quien la tomó no tiene cómo comprobar que quedó bien y se entera
-        // cuando ya no está delante del vehículo.
-        if (hallazgo.foto case final foto?)
-          Padding(
-            padding: const EdgeInsets.only(right: Espacio.sm),
-            child: GestureDetector(
-              onTap: () => mostrarVisorImagen(
-                context,
-                imagen: FileImage(File(foto.ruta)),
-                titulo: 'Novedad en ${hallazgo.parte}',
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.file(
-                  File(foto.ruta),
-                  // 48 de alto: es una zona táctil desde que la foto se puede abrir.
-                  width: 56,
-                  height: 48,
-                  fit: BoxFit.cover,
-                  semanticLabel: 'Foto de la novedad en ${hallazgo.parte}',
+    // Su propio aire arriba y abajo: con varias novedades las fotos quedaban pegadas una a otra y la lista se
+    // leía como un bloque, sin saber dónde termina una novedad y empieza la siguiente.
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Espacio.xs),
+      child: Row(
+        children: [
+          // La foto del daño se ve: si no, quien la tomó no tiene cómo comprobar que quedó bien y se entera
+          // cuando ya no está delante del vehículo.
+          if (hallazgo.foto case final foto?)
+            Padding(
+              padding: const EdgeInsets.only(right: Espacio.sm),
+              child: GestureDetector(
+                onTap: () => mostrarVisorImagen(
+                  context,
+                  imagen: FileImage(File(foto.ruta)),
+                  titulo: 'Novedad en ${hallazgo.zona}',
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    File(foto.ruta),
+                    // 48 de alto: es una zona táctil desde que la foto se puede abrir.
+                    width: 56,
+                    height: 48,
+                    fit: BoxFit.cover,
+                    semanticLabel: 'Foto de la novedad en ${hallazgo.zona}',
+                  ),
                 ),
               ),
             ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${hallazgo.zona}: $clase ($tamano)${nivel == null ? '' : ' · $nivel'}',
+                  style: tema.bodySmall?.copyWith(color: Colores.textoPrimario),
+                ),
+                if (hallazgo.nota case final nota?) Text(nota, style: tema.bodySmall),
+              ],
+            ),
           ),
-        Expanded(
-          child: Text('${hallazgo.parte}: $clase ($tamano)', style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
-        ),
-        TextButton(
-          onPressed: alQuitar,
-          child: Semantics(label: 'Quitar hallazgo ${hallazgo.parte}', child: const Text('Quitar', style: TextStyle(color: Colores.peligro))),
-        ),
-      ],
+          TextButton(
+            onPressed: alQuitar,
+            child: Semantics(label: 'Quitar hallazgo ${hallazgo.zona}', child: const Text('Quitar', style: TextStyle(color: Colores.peligro))),
+          ),
+        ],
+      ),
     );
   }
 }

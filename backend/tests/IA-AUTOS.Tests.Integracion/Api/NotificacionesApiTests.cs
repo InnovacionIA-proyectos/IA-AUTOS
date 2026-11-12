@@ -178,7 +178,12 @@ public sealed class NotificacionesApiTests(clsBaseDatosFixture bd) : clsPruebaAp
         var deComercial = await Como(comercial).GetAsync("/api/notificaciones");
         var anonimo = await Cliente(fabrica: _api).GetAsync("/api/notificaciones");
 
-        Assert.Equal(2, bandeja.GetProperty("total").GetInt32());
+        // La novedad se envio a dos personas (el coordinador y el administrador) y el super administrador ve ese aviso una sola vez.
+        Assert.Equal(1, bandeja.GetProperty("total").GetInt32());
+        Assert.Equal(1, bandeja.GetProperty("no_leidas").GetInt32());
+        Assert.Equal(1, (await BandejaAsync(e.Coordinador)).GetProperty("total").GetInt32());
+        Assert.Equal(1, (await BandejaAsync(e.Admin)).GetProperty("total").GetInt32());
+        Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Canal = 'bandeja' AND Tipo = 'novedad_conductor'"));
         Assert.Equal(HttpStatusCode.Forbidden, deComercial.StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, anonimo.StatusCode);
     }

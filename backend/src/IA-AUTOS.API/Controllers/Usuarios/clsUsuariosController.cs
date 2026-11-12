@@ -13,8 +13,31 @@ namespace IAAutos.API.Controllers.Usuarios;
 /// solo lo asigna un super administrador). Los demas roles solo consultan la lista reducida.
 /// </summary>
 [Route("api/usuarios")]
-public sealed class clsUsuariosController(clsUsuariosService servicio, clsCargaConductoresService carga, IAAutos.Aplicacion.Comun.IUsuarioActual actual) : clsControladorBase
+public sealed class clsUsuariosController(
+    clsUsuariosService servicio, clsCargaConductoresService carga, clsPuntosDeInspectorService puntos, IAAutos.Aplicacion.Comun.IUsuarioActual actual) : clsControladorBase
 {
+    /// <summary>Los puntos del inspector (lugares reales donde trabaja), por nombre. Los consultan el coordinador de calidad y los administradores y el propio inspector. 404 si el usuario no existe; 400 si no es inspector.</summary>
+    [HttpGet("{id:guid}/puntos")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD, clsRol.INSPECTOR)]
+    [ProducesResponseType<PuntosDeInspectorDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> ListarPuntos(Guid id, CancellationToken ct) => Ok(await puntos.ListarAsync(id, ct));
+
+    /// <summary>
+    /// Asigna uno o varios puntos al inspector (<c>lugar_ids</c>: ids de lugares activos del catalogo <c>lugares</c>); los que ya tenia se conservan. Quien no tiene permiso recibe 403; 404 si el usuario no existe; 400 si no
+    /// es inspector o si algun lugar no existe. Responde con sus puntos y queda en la auditoria.
+    /// </summary>
+    [HttpPost("{id:guid}/puntos")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<PuntosDeInspectorDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(AsignarPuntosRequest))]
+    public async Task<IActionResult> AsignarPuntos(Guid id, CancellationToken ct) => Ok(await puntos.AsignarAsync(id, await LeerCuerpoAsync<AsignarPuntosRequest>(ct), ct));
+
+    /// <summary>Quita un punto del inspector. 404 si el usuario no existe o no tiene ese punto. Responde con sus puntos y queda en la auditoria.</summary>
+    [HttpDelete("{id:guid}/puntos/{lugar:guid}")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<PuntosDeInspectorDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> QuitarPunto(Guid id, Guid lugar, CancellationToken ct) => Ok(await puntos.QuitarAsync(id, lugar, ct));
+
     /// <summary>
     /// Quien administra usuarios recibe una pagina de usuarios completos <c>{items, total, pagina, tamano}</c>, con filtros <c>q</c> (nombre, correo o cedula), <c>rol</c>,
     /// <c>activo</c> y, solo el super administrador, <c>cliente_id</c>; <c>pagina</c>, <c>tamano</c> (50, maximo 200) y <c>orden</c> (<c>campo:asc|desc</c>). Los demas roles reciben solo id, nombre y rol de los usuarios activos
@@ -34,6 +57,17 @@ public sealed class clsUsuariosController(clsUsuariosService servicio, clsCargaC
         actual.Rol is { } r && clsRol.GESTION_USUARIOS.Contains(r)
             ? Ok(await servicio.ListarAsync(new FiltrosUsuariosRequest(q, rol, activo, clienteId, pagina, tamano, orden), ct))
             : Ok(await servicio.ListarBasicoAsync(ct));
+
+    /// <summary>
+    /// Un usuario por su identificador, con la misma visibilidad por cliente que el listado: quien administra usuarios recibe el usuario completo (como cada elemento de <c>GET /api/usuarios</c>) y los demas roles solo
+    /// <c>id</c>, <c>nombre</c> y <c>rol</c> de un usuario activo de su cliente. 404 si no existe o es de otro cliente.
+    /// </summary>
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType<UsuarioDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Obtener(Guid id, CancellationToken ct) =>
+        actual.Rol is { } r && clsRol.GESTION_USUARIOS.Contains(r)
+            ? Ok(await servicio.ObtenerAsync(id, ct))
+            : Ok(await servicio.ObtenerBasicoAsync(id, ct));
 
     /// <summary>
     /// Crea un usuario. Con <c>password</c> entra con correo y contrasena; sin ella, con cedula y PIN (conductor o inspector): si no se

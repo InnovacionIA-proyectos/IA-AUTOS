@@ -9,7 +9,11 @@ import '../../sync/presentation/barra_sync.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../vehiculos/domain/etiquetas.dart';
 import '../domain/viaje.dart';
+import '../providers.dart';
+import 'acciones_conductor.dart';
+import 'entrega_punto_page.dart';
 import 'mis_viajes_controller.dart';
+import 'seccion_pendientes.dart';
 
 /// Entrada principal del trabajo de campo: los viajes donde la persona es conductor o inspector, con sus VIN.
 ///
@@ -22,6 +26,9 @@ class MisViajesPage extends ConsumerStatefulWidget {
 }
 
 class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
+  /// Los terminados se miran aparte: no se guardan y no se trabajan, solo se consultan.
+  bool _verTerminados = false;
+
   @override
   void initState() {
     super.initState();
@@ -86,7 +93,18 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
               ),
             ),
             const BarraSync(),
-            Expanded(child: _cuerpo(estado)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(Espacio.lg, Espacio.sm, Espacio.lg, 0),
+              child: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Activos')),
+                  ButtonSegment(value: true, label: Text('Terminados')),
+                ],
+                selected: {_verTerminados},
+                onSelectionChanged: (s) => setState(() => _verTerminados = s.first),
+              ),
+            ),
+            Expanded(child: _verTerminados ? _terminados() : _cuerpo(estado)),
           ],
         ),
       ),
@@ -100,8 +118,61 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
     );
   }
 
+  /// Los viajes ya terminados. Solo con señal: no hay copia guardada de ellos a propósito.
+  Widget _terminados() {
+    return switch (ref.watch(viajesTerminadosProvider)) {
+      AsyncLoading() => const EstadoCargando(),
+      AsyncError() => EstadoMensaje(
+          icono: Icons.wifi_off_rounded,
+          colorIcono: Colores.advertencia,
+          titulo: 'No pudimos cargar los terminados',
+          descripcion: 'Los viajes terminados solo se consultan con señal; no se guardan en este dispositivo.',
+          accion: FilledButton(
+            onPressed: () => ref.invalidate(viajesTerminadosProvider),
+            child: const Text('Reintentar'),
+          ),
+        ),
+      AsyncData(value: final viajes) when viajes.isEmpty => const EstadoMensaje(
+          icono: Icons.inventory_2_outlined,
+          titulo: 'No tienes viajes terminados',
+          descripcion: 'Aquí van quedando los viajes que ya se cerraron.',
+        ),
+      AsyncData(value: final viajes) => ListView.separated(
+          padding: const EdgeInsets.fromLTRB(Espacio.lg, Espacio.md, Espacio.lg, 88),
+          itemCount: viajes.length,
+          separatorBuilder: (_, _) => const SizedBox(height: Espacio.sm),
+          itemBuilder: (_, i) => _TarjetaViaje(viajes[i]),
+        ),
+    };
+  }
+
   Widget _cuerpo(EstadoViajes estado) {
     final cargar = ref.read(misViajesControllerProvider.notifier).cargar;
+    // Solo el inspector reclama camiones: a los demás la API les responde 403. Con la lista lista, los pendientes de
+    // su punto van arriba, también cuando todavía no tiene viajes propios, que es justo cuando más los necesita.
+    final inspector = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol)) == 'inspector';
+    if (inspector && estado.fase == FaseViajes.listo) {
+      final tema = Theme.of(context).textTheme;
+      return RefreshIndicator(
+        onRefresh: () async {
+          ref.invalidate(pendientesProvider);
+          await cargar();
+        },
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(Espacio.lg, Espacio.md, Espacio.lg, 88),
+          children: [
+            const SeccionPendientes(),
+            const SizedBox(height: Espacio.lg),
+            Text('Mis viajes', style: tema.titleMedium),
+            const SizedBox(height: Espacio.sm),
+            if (estado.viajes.isEmpty)
+              Text('Cuando reclames un camión o se te asigne un viaje aparecerá aquí con sus unidades.', style: tema.bodySmall)
+            else
+              for (final viaje in estado.viajes) ...[_TarjetaViaje(viaje), const SizedBox(height: Espacio.sm)],
+          ],
+        ),
+      );
+    }
     return switch (estado.fase) {
       FaseViajes.cargando => const EstadoCargando(),
       FaseViajes.error => EstadoMensaje(
@@ -176,42 +247,77 @@ class _TarjetaViaje extends StatelessWidget {
           if (viaje.vehiculos.isEmpty)
             Text('Este viaje todavía no tiene unidades.', style: tema.bodySmall)
           else
-            for (final vehiculo in viaje.vehiculos) _FilaVehiculo(vehiculo),
+            for (final vehiculo in viaje.vehiculos) _FilaVehiculo(vehiculo, viaje: viaje),
+          // Entregar es lo que se hace con un viaje en ruta: en cada punto se firma una vez para todas sus unidades.
+          if (viaje.estado == 'en_curso' && viaje.vehiculos.isNotEmpty) ...[
+            const SizedBox(height: Espacio.sm),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute(builder: (_) => EntregasViajePage(viajeId: viaje.id)),
+              ),
+              child: const Text('Entrega por punto'),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-class _FilaVehiculo extends StatelessWidget {
-  const _FilaVehiculo(this.vehiculo);
+class _FilaVehiculo extends ConsumerWidget {
+  const _FilaVehiculo(this.vehiculo, {required this.viaje});
 
   final ViajeVehiculo vehiculo;
 
+  /// El viaje desde el que se abre: la unidad puede haber andado en varios y solo interesan sus etapas.
+  final Viaje viaje;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
     final descripcion = [vehiculo.marca, vehiculo.modelo, vehiculo.color].whereType<String>().join(' ');
+    // Las acciones de la ruta son del conductor, mientras el viaje admita trabajo y la unidad siga saliendo. Un
+    // viaje programado también: la primera novedad es la que lo pone en curso.
+    final rol = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol));
+    final conAcciones = rol == 'conductor' && viaje.admiteTrabajo && vehiculo.sale;
 
-    return InkWell(
-      onTap: () => context.push('/inspecciones/vin/${Uri.encodeComponent(vehiculo.vin)}'),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: Espacio.sm),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextoMono(vehiculo.vin),
-                  if (descripcion.isNotEmpty) Text(descripcion, style: tema.bodySmall),
-                ],
-              ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => context.push(
+            '/inspecciones/vin/${Uri.encodeComponent(vehiculo.vin)}?viajeId=${Uri.encodeQueryComponent(viaje.id)}',
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: Espacio.sm),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TextoMono(vehiculo.vin),
+                      if (descripcion.isNotEmpty) Text(descripcion, style: tema.bodySmall),
+                      // La unidad sigue en la lista: conserva sus etapas y sus informes, pero ya no se captura
+                      // sobre ella y no cuenta para que el viaje esté completo.
+                      if (!vehiculo.sale)
+                        Text(
+                          switch (vehiculo.noSale?.vinReemplazo) {
+                            final reemplazo? when reemplazo.isNotEmpty => 'No sale · la reemplaza $reemplazo',
+                            _ => 'No sale',
+                          },
+                          style: tema.bodySmall?.copyWith(color: Colores.peligro),
+                        ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, size: 20, color: Colores.textoSecundario),
+              ],
             ),
-            const Icon(Icons.chevron_right, size: 20, color: Colores.textoSecundario),
-          ],
+          ),
         ),
-      ),
+        if (conAcciones) AccionesConductor(viaje: viaje, unidad: vehiculo),
+      ],
     );
   }
 }

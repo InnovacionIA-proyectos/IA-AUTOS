@@ -28,7 +28,8 @@ public sealed record FiltrosReporteRequest(
 /// <summary>Unidades despachadas de un cliente, operacion, origen y destino, y cuantas tienen sus seis registros cerrados.</summary>
 public sealed record FilaCobertura(Guid ClienteId, string Operacion, Guid? OrigenId, Guid? DestinoId, int Despachadas, int Completas);
 
-public sealed record FilaAdopcion(DateOnly Fecha, Guid ClienteId, string Operacion, int Programados, int ConSalidaDigital);
+/// <summary>Una fila de adopcion: el dia, el cliente, la operacion y el destino (lugar) de las unidades o del viaje, con cuantas estaban programadas y cuantas tienen su salida cerrada.</summary>
+public sealed record FilaAdopcion(DateOnly Fecha, Guid ClienteId, string Operacion, int Programados, int ConSalidaDigital, Guid? LugarDestinoId = null);
 
 public sealed record FilaTiempo(string Proceso, Guid UsuarioId, decimal Minutos);
 
@@ -43,7 +44,7 @@ public sealed record FilaUnidad(
     string Marca,
     int Hallazgos);
 
-/// <summary>Los hallazgos de un grupo (proceso, zona, nivel, clase y tamano).</summary>
+/// <summary>Los hallazgos de un grupo (proceso, zona, nivel, clase y tamano). <c>EsExtra</c> marca el dano de un extra del vehiculo (no tiene zona en el dibujo).</summary>
 public sealed record FilaConteoHallazgo(
     string Proceso,
     int? Numero,
@@ -53,9 +54,11 @@ public sealed record FilaConteoHallazgo(
     string? Nivel,
     string? Clase,
     string Tamano,
-    int Total);
+    int Total,
+    bool EsExtra = false);
 
-public sealed record FilaIndicador(Guid ClienteId, string Operacion, int Despachados, int ConNovedad);
+/// <summary><c>SinCalificar</c> son los danos sin nivel de esas unidades ese dia: una cifra aparte que no se suma a <c>ConNovedad</c>.</summary>
+public sealed record FilaIndicador(Guid ClienteId, string Operacion, int Despachados, int ConNovedad, int SinCalificar = 0);
 
 public sealed record UsuarioReporte(Guid Id, string Nombre, string? Cedula);
 
@@ -73,7 +76,11 @@ public interface IConsultasIndicadores
 
     Task<IReadOnlyList<FilaCobertura>> CoberturaAsync(FiltrosReporte filtros, CancellationToken ct = default);
 
+    /// <summary>La adopcion por carro (cada VIN programado cuenta en el destino de su unidad; adoptado si su salida esta cerrada).</summary>
     Task<IReadOnlyList<FilaAdopcion>> AdopcionAsync(FiltrosReporte filtros, CancellationToken ct = default);
+
+    /// <summary>La adopcion por camion (cada viaje cuenta una sola vez, en el destino del viaje; adoptado si alguna de sus unidades tiene su salida cerrada).</summary>
+    Task<IReadOnlyList<FilaAdopcion>> AdopcionPorCamionAsync(FiltrosReporte filtros, CancellationToken ct = default);
 
     Task<IReadOnlyList<FilaTiempo>> TiemposDeCapturaAsync(FiltrosReporte filtros, CancellationToken ct = default);
 

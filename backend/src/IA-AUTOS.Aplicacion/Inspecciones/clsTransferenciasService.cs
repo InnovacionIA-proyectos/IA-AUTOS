@@ -112,7 +112,7 @@ public sealed class clsTransferenciasService(
     public async Task<TransferenciaDto> RegistrarReciboSinEntregaAsync(Guid inspeccionId, ReciboSinEntregaRequest solicitud, ContextoCliente cliente, CancellationToken ct = default)
     {
         await validadorSinEntrega.ValidarOLanzarAsync(solicitud, ct);
-        var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct) ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
+        var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct) ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada", clsMotivosRechazo.INSPECCION_NO_EXISTE);
         var viaje = await viajes.ObtenerPorIdAsync(inspeccion.ViajeId, ct) ?? throw new clsEntidadNoEncontradaException("El viaje de la inspección no existe");
         var actorId = actual.IdObligatorio();
         if (viaje.ConductorId != actorId)
@@ -168,7 +168,7 @@ public sealed class clsTransferenciasService(
     /// <summary>Audita la accion sobre la transferencia con su estado antes y despues, en el viaje y el cliente de la inspeccion.</summary>
     private async Task RegistrarAsync(string accion, Guid inspeccionId, clsTransferenciaCustodia transferencia, object antes, CancellationToken ct)
     {
-        var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct) ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
+        var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct) ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada", clsMotivosRechazo.INSPECCION_NO_EXISTE);
         await auditor.RegistrarDeViajeAsync(
             accion, "transferencias_custodia", transferencia.Id, inspeccion.ViajeId, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(transferencia)), ct: ct);
     }
@@ -180,20 +180,25 @@ public sealed class clsTransferenciasService(
     public async Task<byte[]> ObtenerConstanciaPdfAsync(Guid inspeccionId, CancellationToken ct = default)
     {
         var informe = await consultas.ObtenerInformeAsync(inspeccionId, ct)
-            ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
+            ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada", clsMotivosRechazo.INSPECCION_NO_EXISTE);
         await AsegurarVisibleAsync(informe.ViajeId, ct);
         if (actual.ClienteRestringido() is { } cliente && !await consultas.EsDeClienteAsync(inspeccionId, cliente, ct))
         {
-            throw new clsProhibidoException("La inspección es de un VIN de otro cliente");
+            throw new clsProhibidoException("La inspección es de un VIN de otro cliente", clsMotivosRechazo.INSPECCION_DE_OTRO_CLIENTE);
         }
 
         var transferencia = await transferencias.ObtenerPorInspeccionAsync(inspeccionId, ct)
-            ?? throw new clsEntidadNoEncontradaException("La inspección no tiene transferencia de custodia");
+            ?? throw new clsEntidadNoEncontradaException("La inspección no tiene transferencia de custodia", clsMotivosRechazo.INSPECCION_SIN_TRANSFERENCIA);
 
         var entrega = transferencia.EntregaUsuarioId is { } entregaId
             ? await ArmarFirmaAsync(entregaId, transferencia.FirmaEntrega, transferencia.FirmaEntregaAt, transferencia.FirmaEntregaIp, ct)
             : new FirmaConstancia("Sin entrega", null, null, null, null);
-        var recibe = await ArmarFirmaAsync(transferencia.RecibeUsuarioId, transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct);
+        var recibe = transferencia.RecibeEsExterno
+            ? await clsArmadorFirmas.ArmarAsync(
+                almacen, $"{transferencia.RecibeExternoNombre} (documento {transferencia.RecibeExternoCedula})", transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct)
+            : transferencia.RecibeUsuarioId is { } recibeId
+                ? await ArmarFirmaAsync(recibeId, transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct)
+                : new FirmaConstancia("Nadie recibió", null, null, null, null);
         string? testigo = null;
         var fotos = new List<FotoConstancia>();
         if (transferencia.TestigoUsuarioId is { } testigoId)
@@ -253,7 +258,7 @@ public sealed class clsTransferenciasService(
     private async Task<clsTransferenciaCustodia> ObtenerOCrearAsync(Guid inspeccionId, Guid? entregaId, Guid? recibeId, CancellationToken ct)
     {
         var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct)
-            ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
+            ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada", clsMotivosRechazo.INSPECCION_NO_EXISTE);
         var existente = await transferencias.ObtenerPorInspeccionAsync(inspeccionId, ct);
         if (existente is not null)
         {
@@ -328,7 +333,7 @@ public sealed class clsTransferenciasService(
     {
         if (actual.SoloSusViajes() is { } usuarioViaje && !await acceso.ParticipaOReclamaAsync(viaje, usuarioViaje, ct))
         {
-            throw new clsProhibidoException("El viaje no está asignado a su usuario");
+            throw new clsProhibidoException("El viaje no está asignado a su usuario", clsMotivosRechazo.VIAJE_NO_ASIGNADO);
         }
     }
 

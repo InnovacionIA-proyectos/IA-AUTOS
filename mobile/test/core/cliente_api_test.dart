@@ -221,6 +221,31 @@ void main() {
       expect(const Entorno(flavor: Flavor.dev, apiUrl: '').configurado, isFalse);
       expect(const Entorno(flavor: Flavor.prod, apiUrl: 'https://x').esProduccion, isTrue);
     });
+
+    // Sin fijarlo al compilar queda nulo, y entonces manda el valor inicial que vive en la regla del informe.
+    test('el umbral de precisión es opcional', () {
+      expect(const Entorno(flavor: Flavor.dev, apiUrl: 'https://x').precisionBajaMetros, isNull);
+      expect(const Entorno(flavor: Flavor.dev, apiUrl: 'https://x', precisionBajaMetros: 50).precisionBajaMetros, 50);
+    });
+  });
+
+  group('un viaje que no es mío', () {
+    test('un 403 es de permiso: no se reintenta ni se vuelve a entrar', () {
+      expect(esFueraDeMisViajes(const ErrorApi(message: 'x', code: 'FORBIDDEN', status: 403)), isTrue);
+    });
+
+    test('el 403 del PIN temporal no lo es: ese se levanta cambiando el PIN', () {
+      expect(
+        esFueraDeMisViajes(const ErrorApi(message: 'x', code: codigoCambioPinRequerido, status: 403)),
+        isFalse,
+      );
+    });
+
+    test('404 y 500 no son de permiso', () {
+      expect(esFueraDeMisViajes(const ErrorApi(message: 'x', code: 'NOT_FOUND', status: 404)), isFalse);
+      expect(esFueraDeMisViajes(const ErrorApi(message: 'x', code: 'X', status: 500)), isFalse);
+      expect(esFueraDeMisViajes(Exception('otra cosa')), isFalse);
+    });
   });
 
   group('el detalle del servidor', () {

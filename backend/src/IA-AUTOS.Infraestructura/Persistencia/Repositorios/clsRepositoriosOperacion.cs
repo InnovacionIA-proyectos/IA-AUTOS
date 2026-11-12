@@ -27,6 +27,14 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
     public Task<clsUsuario?> ObtenerPorPortalIdAsync(long portalUsuarioId, CancellationToken ct = default) =>
         contexto.Usuarios.FirstOrDefaultAsync(u => u.PortalUsuarioId == portalUsuarioId, ct);
 
+    public async Task<IReadOnlyDictionary<Guid, string>> NombresAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        var distintos = ids.Distinct().ToList();
+        return distintos.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await contexto.Usuarios.AsNoTracking().Where(u => distintos.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Nombre, ct);
+    }
+
     public async Task<IReadOnlyDictionary<string, clsUsuario>> ObtenerPorCedulasAsync(IReadOnlyCollection<string> cedulas, CancellationToken ct = default)
     {
         var resultado = new Dictionary<string, clsUsuario>(StringComparer.OrdinalIgnoreCase);
@@ -133,9 +141,10 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
     {
         var evidencias = await contexto.Evidencias.AsNoTracking()
             .Where(e => e.InspeccionId == inspeccionId && !e.EsConstancia && !e.EsSello)
-            .Select(e => new { e.Id, e.VistaId, e.HallazgoId, e.SelloLat, e.SelloLng, e.SelloServidorAt })
+            .Select(e => new { e.Id, e.VistaId, e.HallazgoId, e.ExtraId, e.SelloLat, e.SelloLng, e.SelloServidorAt })
             .ToListAsync(ct);
-        var hallazgos = await contexto.Hallazgos.AsNoTracking().Where(h => h.InspeccionId == inspeccionId).Select(h => h.Id).ToListAsync(ct);
+        var hallazgosConExtra = await contexto.Hallazgos.AsNoTracking().Where(h => h.InspeccionId == inspeccionId).Select(h => new { h.Id, h.ExtraId }).ToListAsync(ct);
+        var hallazgos = hallazgosConExtra.Select(h => h.Id).ToList();
 
         // Una foto repetida reemplaza a la anterior de la misma vista (o del mismo hallazgo): lo que cuenta para la ubicacion es la ultima.
         // Las fotos anteriores quedan guardadas (son evidencia) pero ya no bloquean el cierre.
@@ -145,6 +154,9 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
             .ToList();
         var sinUbicacion = ultimas.Count(e => e.SelloLat == 0 && e.SelloLng == 0);
         var conFoto = evidencias.Where(e => e.HallazgoId is not null).Select(e => e.HallazgoId!.Value).ToHashSet();
+        // El dano de un extra no lleva foto propia: su foto es la del extra.
+        var extrasConFoto = evidencias.Where(e => e.ExtraId is not null).Select(e => e.ExtraId!.Value).ToHashSet();
+        conFoto.UnionWith(hallazgosConExtra.Where(h => h.ExtraId is { } extra && extrasConFoto.Contains(extra)).Select(h => h.Id));
         var vistas = evidencias.Where(e => e.VistaId is not null).Select(e => e.VistaId!.Value).Distinct().ToList();
         return new clsResumenCierre(evidencias.Count, sinUbicacion, hallazgos.Count, hallazgos.Count(h => !conFoto.Contains(h)), vistas);
     }
@@ -185,6 +197,9 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
 
     public Task<Guid?> ObtenerCorreccionIdAsync(Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Inspecciones.AsNoTracking().Where(i => i.CorrigeInspeccionId == inspeccionId).Select(i => (Guid?)i.Id).FirstOrDefaultAsync(ct);
+
+    public Task<bool> TieneCorreccionCerradaAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        contexto.Inspecciones.AsNoTracking().AnyAsync(i => i.CorrigeInspeccionId == inspeccionId && i.Estado == clsEstadoInspeccion.CERRADA, ct);
 
     public Task<bool> ExisteHallazgoEnInspeccionAsync(Guid hallazgoId, Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Hallazgos.AnyAsync(h => h.Id == hallazgoId && h.InspeccionId == inspeccionId, ct);
@@ -227,13 +242,13 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
 
     public Task<clsHallazgo?> ObtenerHallazgoAsync(Guid id, CancellationToken ct = default) => contexto.Hallazgos.FirstOrDefaultAsync(h => h.Id == id, ct);
 
+    public Task<clsHallazgo?> ObtenerHallazgoDeExtraAsync(Guid extraId, CancellationToken ct = default) => contexto.Hallazgos.FirstOrDefaultAsync(h => h.ExtraId == extraId, ct);
+
     public async Task<IReadOnlyList<clsHallazgo>> ObtenerHallazgosDeInspeccionAsync(Guid inspeccionId, CancellationToken ct = default) =>
         await contexto.Hallazgos.Where(h => h.InspeccionId == inspeccionId).ToListAsync(ct);
 
     public async Task<IReadOnlySet<Guid>> HallazgosConFotoAsync(IReadOnlyCollection<Guid> hallazgoIds, CancellationToken ct = default) =>
-        (await contexto.Evidencias.AsNoTracking()
-            .Where(e => e.HallazgoId != null && hallazgoIds.Contains(e.HallazgoId.Value) && !e.EsSello && !e.EsConstancia)
-            .Select(e => e.HallazgoId!.Value).Distinct().ToListAsync(ct)).ToHashSet();
+        await clsFotosDeHallazgos.ConFotoAsync(contexto, hallazgoIds, ct);
 
     public void Agregar(clsInspeccion inspeccion) => contexto.Inspecciones.Add(inspeccion);
 

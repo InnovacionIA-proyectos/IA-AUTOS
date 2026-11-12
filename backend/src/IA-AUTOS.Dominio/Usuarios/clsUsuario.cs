@@ -329,7 +329,7 @@ public sealed partial class clsUsuario : clsEntidadBase
     {
         if (Id == actorId)
         {
-            throw new clsConflictoException("No puedes eliminar tu propio usuario");
+            throw new clsConflictoException("No puedes eliminar tu propio usuario", clsMotivosRechazo.USUARIO_PROPIO);
         }
     }
 

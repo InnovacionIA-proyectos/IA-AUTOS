@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using IAAutos.Dominio.Comun;
 
 namespace IAAutos.Dominio.Custodia;
@@ -34,9 +35,12 @@ public static class clsParteFirmante
 /// su titular (quien entrega o quien recibe) y guarda su fecha e IP; las firmas pueden llegar por separado, incluso desde dispositivos
 /// distintos. La transferencia se cierra con un <see cref="clsTipoCierre"/> y, cerrada, es inmutable.
 /// </summary>
-public sealed class clsTransferenciaCustodia : clsEntidadBase
+public sealed partial class clsTransferenciaCustodia : clsEntidadBase
 {
     public const int RESERVAS_MAX = 1000;
+    public const int NOMBRE_EXTERNO_MIN = 3;
+    public const int NOMBRE_EXTERNO_MAX = 150;
+    public const int CEDULA_EXTERNA_MAX = 30;
     public const int MOTIVO_MAX = 1000;
 
     /// <summary>El motivo del recibo sin entrega del cargue: el conductor hizo la salida porque el inspector previsto no estaba, asi que nadie de Botero Soto entrego.</summary>
@@ -52,7 +56,17 @@ public sealed class clsTransferenciaCustodia : clsEntidadBase
     /// <summary>Quien entrega; nulo solo en el cierre «recibo sin entrega».</summary>
     public Guid? EntregaUsuarioId { get; private set; }
 
-    public Guid RecibeUsuarioId { get; private set; }
+    /// <summary>Quien recibe cuando es un usuario. Nulo si recibe una persona externa (<see cref="RecibeExternoNombre"/>) o si la entrega se cerro con la sola firma de quien entrega porque nadie recibio.</summary>
+    public Guid? RecibeUsuarioId { get; private set; }
+
+    /// <summary>Nombre de la persona que recibe cuando NO es un usuario (el punto de entrega no tiene inspector: por ejemplo quien recibe en el concesionario). Va siempre con <see cref="RecibeExternoCedula"/>.</summary>
+    public string? RecibeExternoNombre { get; private set; }
+
+    /// <summary>Cedula (o documento) de la persona externa que recibe. Dato personal: no viaja en los textos de los avisos.</summary>
+    public string? RecibeExternoCedula { get; private set; }
+
+    /// <summary>True si quien recibe es una persona externa y no un usuario.</summary>
+    public bool RecibeEsExterno => RecibeExternoNombre is not null;
 
     public string? FirmaEntrega { get; private set; }
 
@@ -90,6 +104,107 @@ public sealed class clsTransferenciaCustodia : clsEntidadBase
 
     /// <summary>True si ya tiene tipo de cierre: no admite mas cambios.</summary>
     public bool EstaCerrada => TipoCierre is not null;
+
+    /// <summary>
+    /// Ya hay una firma (de quien entrega o de quien recibe) o un cierre (firmada, con reservas, con constancia de no firma o recibo sin entrega). Desde entonces la inspeccion ya no se corrige: se aclara con una nota.
+    /// </summary>
+    public bool TieneFirmaOCierre =>
+        EstaCerrada || FirmaEntregaAt is not null || FirmaRecibeAt is not null || !string.IsNullOrEmpty(FirmaEntrega) || !string.IsNullOrEmpty(FirmaRecibe);
+
+    [GeneratedRegex(@"^[0-9A-Za-z][0-9A-Za-z .\-]*$")]
+    private static partial Regex FormatoDeCedula();
+
+    /// <summary>
+    /// Los errores de los datos de la persona externa que recibe, por campo (<c>recibe_nombre</c>, <c>recibe_cedula</c>): vacio si estan bien. El nombre lleva de 3 a 150 caracteres; la cedula es un documento de hasta 30
+    /// caracteres (numeros, letras, espacios, puntos o guiones) con al menos un numero.
+    /// </summary>
+    public static Dictionary<string, string[]> ErroresDelExterno(string? nombre, string? cedula)
+    {
+        var errores = new Dictionary<string, string[]>();
+        var n = clsValidador.Opcional(nombre);
+        if (n is null)
+        {
+            errores["recibe_nombre"] = ["El nombre de quien recibe es obligatorio"];
+        }
+        else if (n.Length < NOMBRE_EXTERNO_MIN || n.Length > NOMBRE_EXTERNO_MAX)
+        {
+            errores["recibe_nombre"] = [$"El nombre de quien recibe debe tener entre {NOMBRE_EXTERNO_MIN} y {NOMBRE_EXTERNO_MAX} caracteres"];
+        }
+
+        var c = clsValidador.Opcional(cedula);
+        if (c is null)
+        {
+            errores["recibe_cedula"] = ["La cédula de quien recibe es obligatoria"];
+        }
+        else if (c.Length > CEDULA_EXTERNA_MAX || !FormatoDeCedula().IsMatch(c) || !c.Any(char.IsDigit))
+        {
+            errores["recibe_cedula"] = [$"La cédula de quien recibe debe tener números, letras, espacios, puntos o guiones (máximo {CEDULA_EXTERNA_MAX} caracteres) y al menos un número"];
+        }
+
+        return errores;
+    }
+
+    /// <summary>
+    /// Crea la transferencia de una entrega que recibe una persona externa (sin usuario): se registra su nombre y su cedula, y las firmas se agregan despues. 400 en <c>recibe_nombre</c> o <c>recibe_cedula</c> si
+    /// faltan o son invalidos.
+    /// </summary>
+    public static clsTransferenciaCustodia CrearConExterno(Guid inspeccionId, Guid entregaUsuarioId, string? nombre, string? cedula, DateTimeOffset ahora)
+    {
+        var errores = ErroresDelExterno(nombre, cedula);
+        if (errores.Count > 0)
+        {
+            throw clsErroresCampos.Varios(errores);
+        }
+
+        var transferencia = new clsTransferenciaCustodia
+        {
+            InspeccionId = inspeccionId,
+            EntregaUsuarioId = entregaUsuarioId,
+            RecibeExternoNombre = clsValidador.Opcional(nombre),
+            RecibeExternoCedula = clsValidador.Opcional(cedula),
+        };
+        transferencia.Inicializar(ahora);
+        return transferencia;
+    }
+
+    /// <summary>
+    /// Crea la transferencia de una entrega en la que nadie recibe (el punto no tiene inspector ni persona que reciba): solo se puede cerrar con la firma de quien entrega y su motivo
+    /// (<see cref="CerrarConUnaFirma"/>).
+    /// </summary>
+    public static clsTransferenciaCustodia CrearSinReceptor(Guid inspeccionId, Guid entregaUsuarioId, DateTimeOffset ahora)
+    {
+        var transferencia = new clsTransferenciaCustodia { InspeccionId = inspeccionId, EntregaUsuarioId = entregaUsuarioId };
+        transferencia.Inicializar(ahora);
+        return transferencia;
+    }
+
+    /// <summary>
+    /// La persona externa que recibe firma su parte con su propio trazo (la firma la envia quien entrega, que esta con ella): con la firma de quien entrega ya puesta, la transferencia se cierra como «firmada». 409 si la
+    /// transferencia no es de una persona externa. Una transferencia ya cerrada solo acepta repetir exactamente la misma firma (reintento idempotente).
+    /// </summary>
+    public void FirmarComoExterno(string? firma, string? ip, DateTimeOffset ahora)
+    {
+        if (!RecibeEsExterno)
+        {
+            throw new clsConflictoException("La transferencia no es de una persona externa: quien recibe es un usuario y firma por sí mismo");
+        }
+
+        var limpia = string.IsNullOrEmpty(firma) ? throw clsErroresCampos.De("firma_recibe", "La firma de quien recibe es obligatoria") : firma;
+        if (EstaCerrada)
+        {
+            if (TipoCierre != clsTipoCierre.FIRMADA || limpia != FirmaRecibe)
+            {
+                throw ConflictoPorCierre();
+            }
+
+            return;
+        }
+
+        PonerFirma(clsParteFirmante.RECIBE, limpia, ip, ahora);
+        ReservasTexto = null;
+        CerrarSiEstanAmbas(ahora);
+        Tocar(ahora);
+    }
 
     /// <summary>Crea la transferencia vacia entre dos usuarios distintos; las firmas se agregan despues, cada una por su titular.</summary>
     public static clsTransferenciaCustodia Crear(Guid inspeccionId, Guid entregaUsuarioId, Guid recibeUsuarioId, DateTimeOffset ahora)
@@ -211,7 +326,7 @@ public sealed class clsTransferenciaCustodia : clsEntidadBase
 
     /// <summary><see cref="clsParteFirmante"/> del usuario en esta transferencia, o nulo si no es ninguna de las dos partes.</summary>
     public string? ParteDe(Guid usuarioId) =>
-        EntregaUsuarioId is not null && usuarioId == EntregaUsuarioId ? clsParteFirmante.ENTREGA : usuarioId == RecibeUsuarioId ? clsParteFirmante.RECIBE : null;
+        EntregaUsuarioId is not null && usuarioId == EntregaUsuarioId ? clsParteFirmante.ENTREGA : RecibeUsuarioId is not null && usuarioId == RecibeUsuarioId ? clsParteFirmante.RECIBE : null;
 
     /// <summary>
     /// El usuario firma su propia parte (entrega o recibe segun quien sea); nadie firma por otro (403). Mientras este abierta puede

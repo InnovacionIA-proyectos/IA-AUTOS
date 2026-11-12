@@ -31,6 +31,12 @@ public static class clsEstadoViaje
 public sealed partial class clsViaje : clsEntidadBase
 {
     public const int CODIGO_MAX = 50;
+
+    /// <summary>El <c>codigo</c> del tipo de unidad que toma un viaje de la carga por archivo cuando el archivo no trae la unidad.</summary>
+    public const string TIPO_UNIDAD_POR_DEFECTO = "ninera";
+
+    /// <summary>El prefijo del codigo que el sistema genera para el viaje de un archivo que no trae el codigo MTrack.</summary>
+    public const string PREFIJO_CODIGO_GENERADO = "AUTO-";
     public const int PLACA_MAX = 50;
     public const int TRAILER_MAX = 50;
 
@@ -61,6 +67,30 @@ public sealed partial class clsViaje : clsEntidadBase
     /// <summary>El lugar real de cargue (catalogo <c>lugares</c>). Nulo en los viajes anteriores; <see cref="OrigenId"/> y <see cref="DestinoId"/> (tipos de lugar) quedan para el historico.</summary>
     public Guid? LugarCargueId { get; private set; }
 
+    /// <summary>Los puestos de la ninera de ESTE viaje: los toma del tipo de unidad al crearse y no se mueven si el tipo cambia sus puestos. Nulo en los viajes anteriores, que se comportan como de <see cref="CAPACIDAD_POR_DEFECTO"/>.</summary>
+    public byte? Capacidad { get; private set; }
+
+    /// <summary>La capacidad que rige: la guardada o, en un viaje sin capacidad definida, <see cref="CAPACIDAD_POR_DEFECTO"/> puestos.</summary>
+    public int CapacidadEfectiva => Capacidad ?? CAPACIDAD_POR_DEFECTO;
+
+    public const int CAPACIDAD_POR_DEFECTO = 7;
+    public const int CAPACIDAD_MINIMA = 1;
+    public const int CAPACIDAD_MAXIMA = 20;
+
+    /// <summary>La capacidad valida (de 1 a 20 puestos), o 400 en <c>capacidad</c>.</summary>
+    public static byte CapacidadValida(int? capacidad) =>
+        capacidad is { } valor && valor >= CAPACIDAD_MINIMA && valor <= CAPACIDAD_MAXIMA
+            ? (byte)valor
+            : throw clsErroresCampos.De("capacidad", $"La capacidad debe ser un entero de {CAPACIDAD_MINIMA} a {CAPACIDAD_MAXIMA} puestos");
+
+    /// <summary>Cambia la capacidad de la ninera (400 si no esta entre 1 y 20). La aplicacion verifica antes que no quede por debajo de las unidades ni de la posicion mas alta usada.</summary>
+    public void CambiarCapacidad(int capacidad, DateTimeOffset ahora)
+    {
+        AsegurarActivo();
+        Capacidad = CapacidadValida(capacidad);
+        Tocar(ahora);
+    }
+
     public string Estado { get; private set; } = clsEstadoViaje.PROGRAMADO;
 
     public Guid? CreadoPor { get; private set; }
@@ -79,7 +109,8 @@ public sealed partial class clsViaje : clsEntidadBase
         Guid? creadoPor,
         DateTimeOffset ahora,
         DateTimeOffset? fechaProgramada = null,
-        Guid? lugarCargueId = null)
+        Guid? lugarCargueId = null,
+        int? capacidad = null)
     {
         var viaje = new clsViaje
         {
@@ -94,6 +125,7 @@ public sealed partial class clsViaje : clsEntidadBase
             CreadoPor = creadoPor,
             FechaProgramada = fechaProgramada,
             LugarCargueId = lugarCargueId,
+            Capacidad = capacidad is null ? null : CapacidadValida(capacidad),
         };
         viaje.Inicializar(ahora);
         return viaje;
@@ -170,7 +202,7 @@ public sealed partial class clsViaje : clsEntidadBase
     {
         if (Estado != clsEstadoViaje.PROGRAMADO)
         {
-            throw new clsConflictoException($"El viaje está {Estado.Replace('_', ' ')}: la fecha programada y el lugar de cargue solo se corrigen mientras está programado");
+            throw new clsConflictoException($"El viaje está {Estado.Replace('_', ' ')}: la fecha programada y el lugar de cargue solo se corrigen mientras está programado", clsMotivosRechazo.ViajeEn(Estado));
         }
 
         if (cambiaFecha)
@@ -203,7 +235,7 @@ public sealed partial class clsViaje : clsEntidadBase
 
         if (!clsEstadoViaje.PuedePasar(Estado, nuevo))
         {
-            throw new clsConflictoException($"Un viaje {Estado.Replace('_', ' ')} no puede pasar a {nuevo.Replace('_', ' ')}");
+            throw new clsConflictoException($"Un viaje {Estado.Replace('_', ' ')} no puede pasar a {nuevo.Replace('_', ' ')}", clsMotivosRechazo.TRANSICION_DE_ESTADO_INVALIDA);
         }
 
         Estado = nuevo;
@@ -225,7 +257,7 @@ public sealed partial class clsViaje : clsEntidadBase
     {
         if (!EstaActivo)
         {
-            throw new clsConflictoException($"El viaje está {Estado} y no admite cambios");
+            throw new clsConflictoException($"El viaje está {Estado} y no admite cambios", clsMotivosRechazo.ViajeEn(Estado));
         }
     }
 
@@ -333,16 +365,18 @@ public sealed class clsViajeVehiculo : clsEntidadBase
     public byte? Posicion { get; private set; }
 
     public const int POSICION_MINIMA = 1;
-    public const int POSICION_MAXIMA = 7;
+    public const int POSICION_MAXIMA = clsViaje.CAPACIDAD_MAXIMA;
 
     public bool NoSale => EstadoUnidad == clsEstadoUnidad.NO_SALE;
 
-    /// <summary>Registra la posicion de la unidad (400 si no esta entre 1 y 7; nulo la libera). Una unidad que no sale del viaje no tiene posicion (409).</summary>
-    public void AsignarPosicion(int? posicion, DateTimeOffset ahora)
+    /// <summary>
+    /// Registra la posicion de la unidad (400 si no esta entre 1 y la <paramref name="capacidad"/> de la ninera del viaje, 7 por defecto; nulo la libera). Una unidad que no sale del viaje no tiene posicion (409).
+    /// </summary>
+    public void AsignarPosicion(int? posicion, DateTimeOffset ahora, int capacidad = clsViaje.CAPACIDAD_POR_DEFECTO)
     {
-        if (posicion is { } valor && (valor < POSICION_MINIMA || valor > POSICION_MAXIMA))
+        if (posicion is { } valor && (valor < POSICION_MINIMA || valor > capacidad))
         {
-            throw clsErroresCampos.De("posicion", $"La posición debe estar entre {POSICION_MINIMA} y {POSICION_MAXIMA}");
+            throw clsErroresCampos.De("posicion", $"La niñera tiene {capacidad} puestos: la posición debe estar entre {POSICION_MINIMA} y {capacidad}");
         }
 
         if (posicion is not null && NoSale)

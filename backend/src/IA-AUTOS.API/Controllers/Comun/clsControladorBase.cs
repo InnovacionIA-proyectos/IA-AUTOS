@@ -16,7 +16,14 @@ public abstract class clsControladorBase : ControllerBase
     /// Lee el cuerpo como <typeparamref name="T"/>. Con <paramref name="noAdmitidos"/>, un cuerpo que traiga alguno de esos campos responde 400 con
     /// «Campo no admitido» en ese campo (son los campos de un modelo anterior que ya no se aceptan).
     /// </summary>
-    protected async Task<T> LeerCuerpoAsync<T>(CancellationToken ct, params string[] noAdmitidos)
+    protected Task<T> LeerCuerpoAsync<T>(CancellationToken ct, params string[] noAdmitidos) => LeerCuerpoAsync<T>(ct, noAdmitidos, null);
+
+    /// <summary>
+    /// Lee el cuerpo como <typeparamref name="T"/> y rechaza con «Campo no admitido» (400, en ese campo) todo campo que no este en <paramref name="permitidos"/>: asi un campo retirado o desconocido no se ignora en silencio.
+    /// </summary>
+    protected Task<T> LeerCuerpoSoloAsync<T>(CancellationToken ct, params string[] permitidos) => LeerCuerpoAsync<T>(ct, [], permitidos);
+
+    private async Task<T> LeerCuerpoAsync<T>(CancellationToken ct, string[] noAdmitidos, string[]? permitidos)
     {
         JsonDocument documento;
         try
@@ -35,7 +42,9 @@ public abstract class clsControladorBase : ControllerBase
                 throw new clsValidacionException("El cuerpo debe ser un objeto JSON");
             }
 
-            var presentes = noAdmitidos.Where(c => documento.RootElement.TryGetProperty(c, out _)).ToList();
+            var presentes = permitidos is null
+                ? noAdmitidos.Where(c => documento.RootElement.TryGetProperty(c, out _)).ToList()
+                : documento.RootElement.EnumerateObject().Select(p => p.Name).Where(c => !permitidos.Contains(c, StringComparer.Ordinal)).Order(StringComparer.Ordinal).ToList();
             if (presentes.Count > 0)
             {
                 throw new clsValidacionException(

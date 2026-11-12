@@ -37,6 +37,9 @@ public sealed partial class MigracionEncadenadaTests(MigracionEncadenadaTests.cl
                 FilasAntes[tabla] = await ContarAsync(Migrada, $"SELECT COUNT(*) FROM dbo.{tabla}");
             }
 
+            // El usuario de la aplicacion existe en un entorno real (01-crear-usuario-app.sql); el script 41 le niega el DELETE sobre la evidencia. Aqui, sin login: la cadena solo compara esquema.
+            await EjecutarAsync(Migrada, "CREATE USER [iaautos_app] WITHOUT LOGIN WITH DEFAULT_SCHEMA = [dbo]; ALTER ROLE db_datawriter ADD MEMBER [iaautos_app];");
+
             // Cada script se aplica tal como se entrega; solo se cambia el esquema de destino (db_IA_AUTOS en el script, dbo en estas bases).
             var scripts = Directory.GetFiles(Path.Combine(raiz, "database", "cambios-esquema"), "*.sql")
                 .Select(Path.GetFileName).OfType<string>().Where(n => int.Parse(n[..2]) >= PRIMER_SCRIPT).Order(StringComparer.Ordinal).ToList();
@@ -241,6 +244,7 @@ public sealed partial class MigracionEncadenadaTests(MigracionEncadenadaTests.cl
         {
             await clsServidorSql.EjecutarScriptAsync(otra, Path.Combine(AppContext.BaseDirectory, "Infraestructura", "Esquemas", "ddl-previo-a-viajes.sql"));
             await EjecutarAsync(otra, MigracionViajesTests.DATOS_PREVIOS);
+            await EjecutarAsync(otra, "CREATE USER [iaautos_app] WITHOUT LOGIN WITH DEFAULT_SCHEMA = [dbo]; ALTER ROLE db_datawriter ADD MEMBER [iaautos_app];");
             foreach (var nombre in bases.Scripts)
             {
                 await EjecutarAsync(otra, LeerScript(nombre));
