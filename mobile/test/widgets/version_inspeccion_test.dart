@@ -19,6 +19,10 @@ import '../support/dobles_viajes.dart';
 /// en el inventario y en el listado. Corregir no cambia lo cerrado: crea la versión siguiente.
 
 class _InventarioFalso implements VehiculosRepositorio {
+
+  /// No se busca en estas pruebas: la pantalla que la usa tiene las suyas.
+  @override
+  Future<List<VehiculoBusqueda>> buscar(String termino) async => const [];
   _InventarioFalso(this.respuesta);
 
   final Map<String, dynamic> respuesta;

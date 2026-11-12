@@ -641,6 +641,9 @@ class EntregaPuntoJob extends Job {
     required this.lugarId,
     this.firma,
     this.motivo,
+    this.recibeNombre,
+    this.recibeCedula,
+    this.firmaRecibe,
   });
 
   factory EntregaPuntoJob.fromJson(Map<String, dynamic> json) => EntregaPuntoJob(
@@ -656,6 +659,9 @@ class EntregaPuntoJob extends Job {
         lugarId: json['lugar_id'] as String,
         firma: json['firma'] as String?,
         motivo: json['motivo'] as String?,
+        recibeNombre: json['recibe_nombre'] as String?,
+        recibeCedula: json['recibe_cedula'] as String?,
+        firmaRecibe: json['firma_recibe'] as String?,
       );
 
   final String viajeId;
@@ -667,7 +673,18 @@ class EntregaPuntoJob extends Job {
   /// Con motivo es el cierre con una sola firma; sin él, la firma de una de las partes.
   final String? motivo;
 
+  /// Quién recibió en un punto sin inspector: una persona que no es usuario del sistema. Los tres van juntos
+  /// —el servidor los exige juntos— y entonces [firma] es la de quien entrega.
+  final String? recibeNombre;
+  final String? recibeCedula;
+
+  /// El trazo de esa persona. Es la otra firma: con ella la entrega queda cerrada en el mismo envío.
+  final String? firmaRecibe;
+
   bool get unaSolaFirma => motivo != null;
+
+  /// Recibe alguien de fuera: se mira el nombre porque los tres viajan juntos o no viaja ninguno.
+  bool get recibeExterno => recibeNombre != null;
 
   @override
   String get tipo => 'entrega_punto';
@@ -693,6 +710,9 @@ class EntregaPuntoJob extends Job {
         lugarId: lugarId,
         firma: firma,
         motivo: motivo,
+        recibeNombre: recibeNombre,
+        recibeCedula: recibeCedula,
+        firmaRecibe: firmaRecibe,
       );
 
   @override
@@ -710,6 +730,9 @@ class EntregaPuntoJob extends Job {
         'lugar_id': lugarId,
         'firma': firma,
         'motivo': motivo,
+        'recibe_nombre': recibeNombre,
+        'recibe_cedula': recibeCedula,
+        'firma_recibe': firmaRecibe,
       };
 }
 

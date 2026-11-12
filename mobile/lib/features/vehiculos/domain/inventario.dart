@@ -5,6 +5,20 @@ import '../../inspecciones/domain/nota_aclaratoria.dart';
 /// Con el modelo de zonas, `parte_vehiculo` y `coords_diagrama` llegan nulos en todo hallazgo nuevo y la clase llega
 /// nula en una novedad del conductor sin revisar: aquí nada de eso se lee como obligatorio, o un solo hallazgo así
 /// tumbaría la página entera del VIN.
+/// Un extra del informe, lo justo para nombrarlo: «Platón», «Otro: portabicicletas».
+class ExtraVista {
+  const ExtraVista({required this.id, required this.nombre});
+
+  factory ExtraVista.fromJson(Map<String, dynamic> json) => ExtraVista(
+        // Nada se lee como obligatorio: un extra raro no puede tumbar la página entera del VIN.
+        id: json['id'] as String? ?? '',
+        nombre: json['nombre'] as String? ?? json['tipo_nombre'] as String? ?? 'Extra',
+      );
+
+  final String id;
+  final String nombre;
+}
+
 class HallazgoVista {
   const HallazgoVista({
     required this.id,
@@ -17,6 +31,7 @@ class HallazgoVista {
     this.esPreexistente = false,
     this.origen,
     this.revisadoEn,
+    this.extraId,
   });
 
   factory HallazgoVista.fromJson(Map<String, dynamic> json) => HallazgoVista(
@@ -29,6 +44,7 @@ class HallazgoVista {
         clase: json['clase_dano'] as String?,
         tamano: json['tamano_dano'] as String? ?? '',
         nivel: json['nivel_severidad'] as String?,
+        extraId: json['extra_id'] as String?,
         esPreexistente: json['es_preexistente'] as bool? ?? false,
         origen: json['origen'] as String?,
         revisadoEn: switch (json['revisado_at']) { final String f => DateTime.tryParse(f), _ => null },
@@ -52,6 +68,9 @@ class HallazgoVista {
   /// Quién lo registró: `inspector` o `conductor`. Una novedad del conductor ya revisada se ve como cualquier
   /// otro hallazgo, pero sigue diciendo de dónde salió.
   final String? origen;
+
+  /// El extra del que es este daño, cuando no es de una zona del dibujo. Null en los demás, que son casi todos.
+  final String? extraId;
 
   bool get loRegistroElConductor => origen == 'conductor';
 
@@ -212,6 +231,7 @@ class InspeccionVista {
     this.cerradaEn,
     this.hallazgos = const [],
     this.evidencias = const [],
+    this.extras = const [],
     this.transferencia,
     this.notasAclaratorias = const [],
     this.motivoSinInspector,
@@ -233,6 +253,7 @@ class InspeccionVista {
       cerradaEn: switch (json['cerrada_at']) { final String f => DateTime.tryParse(f), _ => null },
       hallazgos: [for (final h in (json['hallazgos'] as List<dynamic>? ?? [])) HallazgoVista.fromJson(h as Map<String, dynamic>)],
       evidencias: [for (final e in (json['evidencias'] as List<dynamic>? ?? [])) EvidenciaVista.fromJson(e as Map<String, dynamic>)],
+      extras: [for (final e in (json['extras'] as List<dynamic>? ?? [])) ExtraVista.fromJson(e as Map<String, dynamic>)],
       transferencia: transferencia == null ? null : TransferenciaVista.fromJson(transferencia),
       notasAclaratorias: [
         for (final n in (json['notas_aclaratorias'] as List<dynamic>? ?? []))
@@ -269,6 +290,10 @@ class InspeccionVista {
   final DateTime? cerradaEn;
 
   final List<HallazgoVista> hallazgos;
+
+  /// Los extras reportados en este informe. Sirven para nombrar el daño de un extra en la lista de daños: el
+  /// hallazgo trae el id, no el nombre.
+  final List<ExtraVista> extras;
   final List<EvidenciaVista> evidencias;
 
   /// Null mientras nadie haya empezado la transferencia de este informe.
@@ -375,6 +400,31 @@ String? textoDeVersion(InspeccionVista inspeccion, {bool corregida = false}) {
   return null;
 }
 
+/// Un carro como lo devuelve el autocompletado del inventario (`GET /api/vehiculos?vin=`): lo justo para
+/// reconocerlo en una lista y abrir su ficha. El servidor ya recorta lo que cada quien puede ver.
+class VehiculoBusqueda {
+  const VehiculoBusqueda({required this.vin, required this.marca, this.modelo, this.color, this.activo = true});
+
+  factory VehiculoBusqueda.fromJson(Map<String, dynamic> json) => VehiculoBusqueda(
+        vin: json['vin'] as String,
+        marca: json['marca'] as String? ?? '',
+        modelo: json['modelo'] as String?,
+        color: json['color'] as String?,
+        activo: json['activo'] as bool? ?? true,
+      );
+
+  final String vin;
+  final String marca;
+  final String? modelo;
+  final String? color;
+
+  /// Un carro dado de baja conserva su historial y se sigue consultando; se dice para no confundirlo con uno en uso.
+  final bool activo;
+
+  /// «Renault Kwid Blanco», sin los huecos de lo que no venga.
+  String get descripcion => [marca, modelo, color].whereType<String>().where((t) => t.isNotEmpty).join(' ');
+}
+
 class Inventario {
   const Inventario({required this.id, required this.vin, required this.marca, this.modelo, required this.operacion, this.etapas = const []});
 
@@ -397,18 +447,21 @@ class Inventario {
   /// La inspección más reciente de cualquier etapa (la que se revisa antes del cambio de responsabilidad), **de las
   /// que valen**: es la que la ficha muestra como estado del carro.
   ///
-  /// Quedan fuera las dos clases de versión que no son el estado del carro: la que ya reemplazó una corrección
-  /// cerrada, porque sus daños los reemplazó la siguiente, y la corrección que sigue en borrador, porque todavía
-  /// está a medio llenar y contarla haría ver limpio un carro con daños. El respaldo es para un inventario que no
-  /// traiga ninguna que valga: antes de decir «no tiene informes» se muestra la que haya.
+  /// Quedan fuera las dos clases de inspección que no describen el carro: la que ya reemplazó una corrección
+  /// cerrada, porque sus daños los reemplazó la siguiente, y **cualquier borrador**, porque está a medio llenar.
+  /// Un borrador recién empezado en otra etapa es lo más reciente que hay y no dice nada todavía: tomarlo por
+  /// estado del carro mostraba un carro con un solo daño sin zona donde la verdad eran cuatro, y escondía la
+  /// versión corregida que sí los cuenta. El borrador se sigue viendo —y se sigue trabajando— en su etapa.
+  ///
+  /// El respaldo es para un inventario sin ninguna cerrada: antes de decir «no tiene informes» se muestra la que
+  /// haya, que es el borrador que se está llenando.
   ({EtapaVista etapa, InspeccionVista inspeccion})? get ultimaInspeccion {
     ({EtapaVista etapa, InspeccionVista inspeccion})? mejor;
     ({EtapaVista etapa, InspeccionVista inspeccion})? respaldo;
     for (final etapa in etapas) {
       for (final inspeccion in etapa.inspecciones) {
         if (respaldo == null || inspeccion.fecha.isAfter(respaldo.inspeccion.fecha)) respaldo = (etapa: etapa, inspeccion: inspeccion);
-        if (etapa.fueCorregida(inspeccion)) continue;
-        if (!inspeccion.cerrada && inspeccion.corrigeInspeccionId != null) continue;
+        if (!inspeccion.cerrada || etapa.fueCorregida(inspeccion)) continue;
         if (mejor == null || inspeccion.fecha.isAfter(mejor.inspeccion.fecha)) mejor = (etapa: etapa, inspeccion: inspeccion);
       }
     }
@@ -512,13 +565,17 @@ BloqueoMomento? _bloqueoDeLaPrevia(EtapaVista etapa, Inventario inventario) {
     if (otra.viajeId != etapa.viajeId || otra.orden >= etapa.orden) continue;
     if (previa == null || otra.orden > previa.orden) previa = otra;
   }
-  if (previa == null) return null; // la primera etapa no tiene anterior
+  final anterior = previa;
+  if (anterior == null) return null; // la primera etapa no tiene anterior
 
-  if (!previa.inspecciones.any((i) => i.momento == Momento.llegada && i.cerrada)) {
-    return BloqueoMomento(motivo: BloqueoMomento.sinLlegada, procesoPrevio: previa.proceso);
+  if (!anterior.inspecciones.any((i) => i.momento == Momento.llegada && i.cerrada)) {
+    return BloqueoMomento(motivo: BloqueoMomento.sinLlegada, procesoPrevio: anterior.proceso);
   }
-  if (previa.inspecciones.any((i) => i.transferencia?.cerrada == false)) {
-    return BloqueoMomento(motivo: BloqueoMomento.transferenciaAbierta, procesoPrevio: previa.proceso);
+  // La transferencia de una versión ya reemplazada no bloquea: la firma pasó a la versión vigente, nadie va a
+  // volver a firmar aquella, y exigirla dejaba la etapa siguiente trancada con «falta cerrar la transferencia»
+  // para siempre. Es la misma regla que ya aplican la ficha, «no sale» y la acción de la etapa.
+  if (anterior.inspecciones.any((i) => !anterior.fueCorregida(i) && i.transferencia?.cerrada == false)) {
+    return BloqueoMomento(motivo: BloqueoMomento.transferenciaAbierta, procesoPrevio: anterior.proceso);
   }
   return null;
 }
@@ -537,10 +594,20 @@ sealed class AccionEtapa {
 /// Hay un informe sobre el que firmar la transferencia. [soloFirma] = la etapa no exige informe propio y se firma
 /// sobre el último informe del VIN.
 class FirmarTransferencia extends AccionEtapa {
-  const FirmarTransferencia({required this.inspeccionId, required this.soloFirma, required this.transferencia});
+  const FirmarTransferencia({
+    required this.inspeccionId,
+    required this.soloFirma,
+    required this.transferencia,
+    this.momentoNombre,
+  });
 
   final String inspeccionId;
   final bool soloFirma;
+
+  /// De qué momento es el informe sobre el que se firma. La transferencia cuelga de **un informe**, no de la
+  /// etapa, así que una etapa con sus dos momentos puede tener uno firmado y el otro no. Sin decir cuál, la
+  /// tarjeta parecía hablar de toda la etapa y contradecía al «Corregir» que seguía ofreciendo el otro.
+  final String? momentoNombre;
 
   /// Null mientras no haya firmado nadie.
   final TransferenciaVista? transferencia;
@@ -558,12 +625,26 @@ class SinInforme extends AccionEtapa {
 /// que son dos por etapa.
 AccionEtapa accionDeEtapa(EtapaVista etapa, Inventario inventario) {
   final inspecciones = etapa.inspecciones;
-  final referencia = inspecciones.where((i) => i.cerrada).firstOrNull ?? inspecciones.firstOrNull;
+  // La primera cerrada **que siga valiendo**. El servidor las entrega de la más antigua a la más reciente, así
+  // que tras una corrección la primera es la que quedó atrás: firmar sobre ella sería firmar un informe que ya
+  // no describe el carro.
+  final referencia =
+      inspecciones.where((i) => i.cerrada && !etapa.fueCorregida(i)).firstOrNull ?? inspecciones.firstOrNull;
   if (etapa.requiereInspeccion) {
     if (referencia == null) return const SinInforme();
-    return FirmarTransferencia(inspeccionId: referencia.id, soloFirma: false, transferencia: referencia.transferencia);
+    return FirmarTransferencia(
+      inspeccionId: referencia.id,
+      soloFirma: false,
+      transferencia: referencia.transferencia,
+      momentoNombre: referencia.momentoNombre,
+    );
   }
   final base = referencia ?? inventario.ultimaInspeccion?.inspeccion;
   if (base == null) return const SinInforme();
-  return FirmarTransferencia(inspeccionId: base.id, soloFirma: true, transferencia: base.transferencia);
+  return FirmarTransferencia(
+    inspeccionId: base.id,
+    soloFirma: true,
+    transferencia: base.transferencia,
+    momentoNombre: base.momentoNombre,
+  );
 }

@@ -140,6 +140,10 @@ BloqueoCierre? bloqueoDeCierre({
     if (acomodacion.unidades == null) return const SinUnidadesDelViaje();
     final sin = vinesSinPosicion(acomodacion.unidades!, acomodacion.posiciones);
     if (sin.isNotEmpty) return FaltaPosicion(sin.first);
+    // Solo las de ESTE informe. El viaje ya tenga o no fotos de la acomodación, el servidor las cuenta por
+    // inspección (`ContarFotosLibresAsync(inspeccion.Id)`), así que contarlas por viaje dejaría cerrar aquí lo
+    // que allá vuelve con un 400 y deja el informe a medias. Que la niñera se fotografíe una sola vez por viaje
+    // (S7-HU-05 CA-2) necesita primero ese cambio en el servidor.
     final hay = fotosDeAcomodacion(fotos).length;
     if (hay < acomodacion.fotosMinimas) return FaltanFotosDeAcomodacion(minimas: acomodacion.fotosMinimas, hay: hay);
   }

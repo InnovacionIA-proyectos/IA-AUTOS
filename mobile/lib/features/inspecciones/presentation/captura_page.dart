@@ -38,7 +38,7 @@ import 'nota_foto.dart';
 import 'seccion_acomodacion.dart';
 import 'seccion_extras.dart';
 import 'sellado.dart';
-import 'selector_dano.dart';
+import 'hoja_dano.dart';
 
 /// La selección del dibujo de daños de esta pantalla (ver [seleccionZonaProvider]).
 const _contextoDibujo = 'captura';
@@ -149,9 +149,15 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   /// Las unidades del viaje y los lugares que ya tienen, la primera vez que el viaje llega. Si no se pueden
   /// traer, la sección lo dice y el cierre queda bloqueado: sin saber cuáles son no se puede comprobar que cada
   /// una tenga su lugar. Lo que ya se eligió no se pisa si el viaje vuelve a llegar.
+  /// El viaje de la etapa, tal como lo manda el servidor. Null hasta que llega.
+  Viaje? _viaje;
+
   void _alLlegarElViaje(Viaje? viaje) {
     if (viaje == null || _unidades != null) return;
     setState(() {
+      // El viaje entero, no solo sus unidades: de él salen los puestos que se dibujan, cuántos hay y cuántas
+      // fotos de la acomodación ya tiene.
+      _viaje = viaje;
       _unidades = viaje.vehiculos;
       _posicionesPrevias = posicionesDelViaje(viaje);
       _posiciones.addAll(_posicionesPrevias);
@@ -197,17 +203,20 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   /// Cada foto lleva su PROPIO sello de fecha y ubicación (el de cuando se tomó), no el del cierre del informe.
   /// Repetir una vista no borra lo anterior: se agrega otra foto de la misma vista y la última es la que cuenta.
   Future<void> _tomarFoto(VistaChecklist vista) async {
-    final temporal = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => CamaraPage(titulo: vista.nombre, guia: guiaDe(vista.codigo))),
-    );
-    if (temporal == null || !mounted) return;
-
-    // Las adicionales exigen nota: sin ella el servidor responde 400 y el informe moriría al enviarse.
+    // Las adicionales exigen nota: sin ella el servidor responde 400 y el informe moriría al enviarse. Se pide
+    // ANTES de abrir la cámara: pedirla después dejaba la foto ya tomada en el aire si se cancelaba —se perdía
+    // sin decir nada— y obligaba a repetirla con el carro ya cerrado. Primero se dice qué se va a fotografiar
+    // y por qué; la foto viene después.
     String? nota;
     if (!vista.obligatoria) {
       nota = await pedirNotaDeFoto(context, vista: vista.nombre);
       if (nota == null || !mounted) return;
     }
+
+    final temporal = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => CamaraPage(titulo: vista.nombre, guia: guiaDe(vista.codigo))),
+    );
+    if (temporal == null || !mounted) return;
 
     final foto = await _sellar(temporal, vistaId: vista.id, nota: nota);
     if (foto != null && mounted) setState(() => _fotos.add(foto));
@@ -412,15 +421,36 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     if (mounted) _soltarZona();
   }
 
-  /// Agrega un extra (tipo y observación) y pide de una vez su primera foto: sin foto no se puede cerrar.
+  /// Agrega un extra (tipo, observación y su daño si lo tiene) y pide de una vez su primera foto: sin foto no
+  /// se puede cerrar.
   Future<void> _agregarExtra() async {
-    final datos = await pedirExtra(context, tipos: ref.read(catalogosProvider).seleccionables(Catalogo.tiposExtra));
+    final catalogos = ref.read(catalogosProvider);
+    if (!_catalogosListos) {
+      // Lo mismo que en el daño de una zona: sin catálogos la hoja se abre sin fichas que elegir y marcar el
+      // extra como dañado se vuelve un callejón.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Los catálogos de daño aún no se han descargado. Conéctate e inténtalo de nuevo.')),
+      );
+      return;
+    }
+    final datos = await pedirExtra(
+      context,
+      tipos: catalogos.seleccionables(Catalogo.tiposExtra),
+      clases: catalogos.seleccionables(Catalogo.clasesDano),
+      tamanos: catalogos.seleccionables(Catalogo.tamanosDano),
+      // Los niveles completos, no los del rol: en el daño de un **extra** el servidor los exige a todo el
+      // mundo. A quien no asigna niveles no se le ofrece marcarlo como dañado, que es lo que decide
+      // `puedeMarcarDano`.
+      niveles: catalogos.seleccionables(Catalogo.nivelesSeveridad),
+      puedeMarcarDano: !_esConductor,
+    );
     if (datos == null || !mounted) return;
     setState(() => _extras.add(ExtraLocal(
           tipo: datos.tipo,
           nombre: datos.nombre,
           textoOtro: datos.textoOtro,
           observacion: datos.observacion,
+          dano: datos.dano,
         )));
     await _tomarFotoExtra(_extras.length - 1);
   }
@@ -633,6 +663,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                 if (ref.watch(entornoProvider).extrasHabilitados) ...[
                   const SizedBox(height: Espacio.lg),
                   SeccionExtras(
+                    catalogos: catalogos,
                     extras: _extras,
                     alAgregar: _guardandoFoto ? null : _agregarExtra,
                     alTomarFoto: _guardandoFoto ? null : _tomarFotoExtra,
@@ -642,6 +673,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                 const SizedBox(height: Espacio.lg),
                 if (_esAcomodacion)
                   SeccionAcomodacion(
+                    viaje: _viaje,
                     unidades: _unidades,
                     posiciones: _posiciones,
                     fotos: _fotos,

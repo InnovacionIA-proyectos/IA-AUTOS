@@ -60,6 +60,28 @@ void main() {
     expect(arnes.auth.intentos.single, ('ana@boterosoto.com.co', 'Clave-Segura-1'));
   });
 
+  /// El teclado del equipo llega con el bloqueo de mayúsculas puesto —el campo de la cédula las pide, y no lo
+  /// suelta al cambiar de pestaña— y escribir el correo se volvía una pelea. El servidor no distingue, pero el
+  /// campo tiene que mostrar lo que la persona reconoce como su correo.
+  testWidgets('el correo se ve en minúsculas aunque se escriba en mayúsculas', (tester) async {
+    final arnes = Arnes(sesion: null);
+    await montar(tester, arnes);
+    await modoCorreo(tester);
+
+    final campo = tester.widget<TextField>(find.widgetWithText(TextField, 'Correo'));
+
+    expect(campo.inputFormatters, contains(formateadorCorreo), reason: 'el campo lleva el formateador');
+  });
+
+  test('el formateador del correo baja a minúsculas lo que llegue del teclado', () {
+    final resultado = formateadorCorreo.formatEditUpdate(
+      const TextEditingValue(),
+      const TextEditingValue(text: 'MARTA@TRAZAAUTOS.LOCAL'),
+    );
+
+    expect(resultado.text, 'marta@trazaautos.local');
+  });
+
   testWidgets('credenciales incorrectas muestran el mensaje y permiten reintentar', (tester) async {
     final arnes = Arnes(sesion: null)..auth.error = errorApi(401);
     await montar(tester, arnes);

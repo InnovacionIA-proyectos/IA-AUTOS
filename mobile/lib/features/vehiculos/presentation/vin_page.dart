@@ -20,6 +20,7 @@ import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
 import '../../dibujo_dano/domain/dibujo_dano.dart';
 import '../../custodia/presentation/recibo_sin_entrega_page.dart';
+import '../../inspecciones/domain/acomodacion.dart';
 import '../../inspecciones/domain/novedad_pendiente.dart';
 import '../../inspecciones/presentation/hoja_sin_inspector.dart';
 import '../../inspecciones/presentation/revision_novedad_page.dart';
@@ -34,6 +35,7 @@ import '../../viajes/presentation/mis_viajes_controller.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../viajes/providers.dart';
 import '../domain/etiquetas.dart';
+import '../domain/consulta.dart';
 import '../domain/inventario.dart';
 import '../domain/no_sale.dart';
 import 'detalle_hallazgo.dart';
@@ -55,13 +57,17 @@ class VinPage extends ConsumerWidget {
 
   Future<void> _ir(BuildContext context, WidgetRef ref, String ruta) async {
     await context.push(ruta);
-    // Al volver de capturar o firmar, el inventario puede haber cambiado.
+    // Al volver de capturar o firmar, el inventario puede haber cambiado. Y el viaje también: la acomodación
+    // escribe la posición de cada unidad, que vive en el viaje y no en el inventario.
     ref.invalidate(inventarioProvider(vin));
+    final viajeId = ref.read(inventarioProvider(vin)).value?.etapas.map((e) => e.viajeId).nonNulls.firstOrNull;
+    if (viajeId != null) ref.invalidate(viajeDeEtapaProvider(viajeId));
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final inventario = ref.watch(inventarioProvider(vin));
+    final rol = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol));
     return Scaffold(
       appBar: AppBar(title: TextoMono(vin)),
       body: inventario.when(
@@ -69,9 +75,9 @@ class VinPage extends ConsumerWidget {
         error: (error, _) => EstadoMensaje(
           icono: Icons.warning_amber_rounded,
           colorIcono: Colores.peligro,
-          titulo: esFueraDeMisViajes(error) ? mensajeFueraDeMisViajes : 'No se pudo cargar el VIN',
+          titulo: esFueraDeMisViajes(error) ? mensajeSinAcceso(rol) : 'No se pudo cargar el VIN',
           descripcion: switch (error) {
-            _ when esFueraDeMisViajes(error) => 'Solo se abren las unidades de los viajes en los que estás.',
+            _ when esFueraDeMisViajes(error) => detalleSinAcceso(rol),
             ErrorApi(status: 404) => 'Este VIN no está registrado. Pide al administrador que lo cargue.',
             _ => mensajeDeError(error),
           },
@@ -81,7 +87,12 @@ class VinPage extends ConsumerWidget {
               : FilledButton(onPressed: () => ref.invalidate(inventarioProvider(vin)), child: const Text('Reintentar')),
         ),
         data: (inv) => RefreshIndicator(
-          onRefresh: () => ref.refresh(inventarioProvider(vin).future),
+          // Tirar de la pantalla es pedir a mano que se reintente, así que las fotos que no estaban vuelven a
+          // tener su oportunidad: el almacén pudo estar caído un momento.
+          onRefresh: () {
+            olvidarFotosQueFaltan();
+            return ref.refresh(inventarioProvider(vin).future);
+          },
           child: _Detalle(inventario: inv.delViaje(viajeId), alIr: (ruta) => _ir(context, ref, ruta)),
         ),
       ),
@@ -153,6 +164,11 @@ class _Detalle extends ConsumerWidget {
     final viajeId = inventario.etapas.map((e) => e.viajeId).nonNulls.firstOrNull;
     final viaje = viajeId == null ? null : ref.watch(viajeDeEtapaProvider(viajeId)).value;
     final viajeTerminado = viaje != null && !viaje.admiteTrabajo;
+    // Quien consulta no captura ni firma: el servidor le responde 403 y la ruta de captura ni se abre. Se dice en
+    // la tarjeta, en vez de ofrecer botones muertos.
+    final puedeTrabajar =
+        ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.puede(Capacidad.registrarInspecciones))) ??
+            false;
 
     return ListView(
       padding: const EdgeInsets.all(Espacio.lg),
@@ -171,12 +187,19 @@ class _Detalle extends ConsumerWidget {
         ),
         const SizedBox(height: Espacio.md),
         _NoSale(inventario: inventario),
-        _NovedadesPorRevisar(inventario: inventario),
+        _NovedadesPorRevisar(inventario: inventario, viajeTerminado: viajeTerminado),
         const SizedBox(height: Espacio.lg),
         Text('Último informe', style: tema.titleMedium),
         const SizedBox(height: Espacio.sm),
         if (ultima == null)
-          Tarjeta(child: Text('Este VIN aún no tiene informes.', style: tema.bodySmall))
+          // Con el viaje terminado no es que «aún» falten: ya no va a haber ninguno, y decirlo como un
+          // pendiente manda a buscar un trabajo que nadie puede hacer.
+          Tarjeta(
+            child: Text(
+              viajeTerminado ? 'En este viaje no se registró ningún informe.' : 'Este VIN aún no tiene informes.',
+              style: tema.bodySmall,
+            ),
+          )
         else
           _UltimoInforme(
             vin: inventario.vin,
@@ -203,8 +226,10 @@ class _Detalle extends ConsumerWidget {
               etapa: etapa,
               procesoNombre: catalogos.etiqueta(Catalogo.etapas, etapa.proceso),
               momentos: momentosDeEtapa(etapa, inventario),
+              viajeTerminado: viajeTerminado,
               motivoSoloLectura: switch (etapa) {
                 _ when viajeTerminado => mensajeViajeTerminado,
+                _ when !puedeTrabajar => mensajeSoloConsulta,
                 _ => null,
               },
               sinInspector: (momento) => conductorUsaExcepcion(etapa, rol: rol, momento: momento),
@@ -220,6 +245,13 @@ class _Detalle extends ConsumerWidget {
                 '/inspecciones/vin/$vinRuta/captura/${etapa.id}?proceso=${Uri.encodeQueryComponent(etapa.proceso)}'
                 '&momento=$momento'
                 '${etapa.viajeId == null ? '' : '&viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}'}',
+              ),
+              alAbrirInforme: (momento) => _mostrarInforme(
+                context,
+                vin: inventario.vin,
+                etapa: etapa,
+                inspeccion: momento.inspeccion!,
+                viajeTerminado: viajeTerminado,
               ),
               alFirmar: (accion) => alIr(
                 '/inspecciones/vin/$vinRuta/firma/${accion.inspeccionId}?proceso=${Uri.encodeQueryComponent(catalogos.etiqueta(Catalogo.etapas, etapa.proceso))}'
@@ -267,7 +299,11 @@ class _HistorialDeDanos extends ConsumerWidget {
 /// Solo se le muestran a quien puede revisarlas. Mientras estén aquí, el hallazgo existe pero le falta lo que
 /// decide qué pasa con el vehículo: su zona, su clase y su nivel.
 class _NovedadesPorRevisar extends ConsumerWidget {
-  const _NovedadesPorRevisar({required this.inventario});
+  const _NovedadesPorRevisar({required this.inventario, this.viajeTerminado = false});
+
+  /// Se piden por VIN, no por viaje: en un viaje terminado las que salen son de **otro** viaje, el que sigue
+  /// en curso, y nadie las va a revisar desde aquí.
+  final bool viajeTerminado;
 
   final Inventario inventario;
 
@@ -286,7 +322,7 @@ class _NovedadesPorRevisar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rol = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol));
-    if (!puedeRevisarNovedades(rol)) return const SizedBox.shrink();
+    if (viajeTerminado || !puedeRevisarNovedades(rol)) return const SizedBox.shrink();
 
     final novedades = ref.watch(novedadesPorRevisarProvider(vin)).value ?? const <NovedadPendiente>[];
     if (novedades.isEmpty) return const SizedBox.shrink();
@@ -431,12 +467,50 @@ class _EstadoNoSale extends ConsumerState<_NoSale> {
   }
 }
 
+/// Abre un informe sin salir de la ficha: el mismo contenido de «Último informe», con su dibujo, sus fotos, su
+/// cadena de versiones y lo que explique por qué no se corrige.
+///
+/// Hace falta porque la ficha solo le da tarjeta al informe vigente. Los demás —el del cargue que ya se firmó, la
+/// llegada de una etapa anterior— no tenían dónde abrirse, así que su mensaje no se leía nunca por mucho que el
+/// código lo pusiera.
+Future<void> _mostrarInforme(
+  BuildContext context, {
+  required String vin,
+  required EtapaVista etapa,
+  required InspeccionVista inspeccion,
+  required bool viajeTerminado,
+}) =>
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(Espacio.lg, 0, Espacio.lg, Espacio.lg),
+          child: _UltimoInforme(
+            vin: vin,
+            etapa: etapa,
+            inspeccion: inspeccion,
+            anteriores: etapa.versionesAnteriores(inspeccion),
+            viajeTerminado: viajeTerminado,
+            enHoja: true,
+          ),
+        ),
+      ),
+    );
+
 /// «Llanta trasera derecha: Golpe (De 1 a 5 cm) · V2». La clase y el nivel faltan en una novedad del conductor
 /// que todavía no revisa un inspector.
-String _lineaHallazgo(HallazgoVista h, Catalogos catalogos) {
+///
+/// El daño de un extra no tiene zona —no está en el dibujo—, así que en su lugar va el extra: «Platón: Golpe…».
+/// Decir «Sin zona» ahí seria esconder de qué se está hablando.
+String _lineaHallazgo(HallazgoVista h, Catalogos catalogos, {List<ExtraVista> extras = const []}) {
   final clase = h.clase == null ? 'Sin clase' : catalogos.etiqueta(Catalogo.clasesDano, h.clase!);
-  final nivel = h.nivel == null ? '' : ' · ${catalogos.etiqueta(Catalogo.nivelesSeveridad, h.nivel!)}';
-  return '${h.zona}: $clase (${catalogos.etiqueta(Catalogo.tamanosDano, h.tamano)})$nivel';
+  // Un daño sin nivel no se deja en blanco: se dice que está sin calificar. En blanco parecía un daño leve, y
+  // es justo al revés: es uno del que todavía no se sabe qué tan grave es.
+  final nivel = h.nivel == null ? ' · Sin calificar' : ' · ${catalogos.etiqueta(Catalogo.nivelesSeveridad, h.nivel!)}';
+  final donde = extras.where((e) => e.id == h.extraId).firstOrNull?.nombre ?? h.zona;
+  return '$donde: $clase (${catalogos.etiqueta(Catalogo.tamanosDano, h.tamano)})$nivel';
 }
 
 class _UltimoInforme extends ConsumerWidget {
@@ -446,10 +520,15 @@ class _UltimoInforme extends ConsumerWidget {
     required this.inspeccion,
     this.anteriores = const [],
     this.viajeTerminado = false,
+    this.enHoja = false,
   });
 
   /// Un viaje finalizado o cancelado no admite correcciones: el servidor responde 409.
   final bool viajeTerminado;
+
+  /// Se está viendo dentro de la hoja que abre un momento, no en la ficha. Entonces hay que cerrarla antes de
+  /// irse a otra pantalla: una hoja imperativa no se va sola y se queda encima de la cámara.
+  final bool enHoja;
 
   /// El VIN del inventario: es la clave con la que se vuelve a pedir, cuando un enlace de foto vence.
   final String vin;
@@ -504,12 +583,17 @@ class _UltimoInforme extends ConsumerWidget {
   /// pide al enviar, porque el servidor no deja descartar una versión vacía y una corrección abandonada dejaría
   /// la etapa con un borrador que impide volver a corregirla.
   Future<void> _corregir(BuildContext context) async {
+    // Lo que hay que rehacer no es lo mismo en todas: la salida del cargue es la acomodación, que no pide las
+    // siete vistas sino volver a ubicar cada unidad en la niñera. Prometer «todas las fotos obligatorias» y
+    // abrir otra cosa deja dudando de si se pulso lo que se quería.
+    final esAcomodacion = esSegundaInspeccionDelCargue(proceso: etapa.proceso, momento: inspeccion.momento);
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (contexto) => AlertDialog(
         title: const Text('Corregir este informe'),
-        content: const Text(
-          'Vas a rehacer la inspección completa: hay que volver a tomar todas las fotos obligatorias. '
+        content: Text(
+          'Vas a rehacer la inspección completa: hay que volver a '
+          '${esAcomodacion ? 'ubicar todas las unidades en la niñera y a fotografiar la acomodación' : 'tomar todas las fotos obligatorias'}. '
           'La versión anterior no cambia: conserva sus fotos, sus hallazgos y su firma, y queda guardada '
           'como la versión anterior de esta.',
         ),
@@ -526,9 +610,17 @@ class _UltimoInforme extends ConsumerWidget {
       if (etapa.viajeId != null) 'viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}',
       'corrige=${Uri.encodeQueryComponent(inspeccion.id)}',
     ].join('&');
-    if (context.mounted) {
-      context.go('/inspecciones/vin/${Uri.encodeComponent(vin)}/captura/${etapa.id}?$consulta');
-    }
+    // Todo esto se toma **antes** de cerrar la hoja: después este widget ya no está montado y su `context` no
+    // sirve ni para navegar ni para llegar a los proveedores.
+    final enrutador = GoRouter.of(context);
+    final contenedor = ProviderScope.containerOf(context, listen: false);
+    if (enHoja) Navigator.of(context).pop();
+    await enrutador.push<void>('/inspecciones/vin/${Uri.encodeComponent(vin)}/captura/${etapa.id}?$consulta');
+    // Al volver de la captura, la ficha seguía mostrando la versión anterior como vigente, con su botón de
+    // corregir. Si la corrección quedó en cola —sin señal— y alguien lo volvía a tocar, se encolaba una
+    // segunda corrección de la misma inspección: el servidor la mata por el índice único, después de haber
+    // repetido las siete fotos. Es la misma recarga que hace el resto de la pantalla al volver de capturar.
+    contenedor.invalidate(inventarioProvider(vin));
   }
 
   @override
@@ -548,15 +640,23 @@ class _UltimoInforme extends ConsumerWidget {
     // responde 403, así que a ellos no se les ofrece.
     final puedeAclarar =
         !ajeno && (inspeccion.usuarioId == yo?.id || yo?.rol == 'admin' || yo?.rol == 'super_admin');
-    // Corregir es rehacer la inspección: solo la ofrece quien puede registrarlas. El servidor además exige que
-    // el viaje sea suyo (o ser administrador) y responde 409 si la inspección no está cerrada, si ya fue
-    // corregida o si el viaje terminó. Aquí se comprueba lo que la app ya sabe; lo que no, lo dice su rechazo.
+    // Corregir es rehacer la inspección: la corrigen quien la hizo y los administradores, y solo mientras nadie
+    // la haya firmado. Son las mismas reglas que el servidor hace cumplir desde el contrato 3.11.0 (403
+    // CORRECCION_SOLO_AUTOR y 409 INSPECCION_YA_FIRMADA). Comprobarlas aquí no es duplicarlas: sin esto la
+    // persona rehace las siete fotos obligatorias y el envío muere en el rechazo.
     final yaCorregida = etapa.fueCorregida(inspeccion);
-    final puedeCorregir = !ajeno &&
+    final suya = inspeccion.usuarioId != null && inspeccion.usuarioId == yo?.id;
+    final esAdministrador = yo?.rol == 'admin' || yo?.rol == 'super_admin';
+    // Cuenta cualquier firma y cualquiera de las cuatro formas de cierre. Una transferencia ya creada pero sin
+    // ninguna firma no impide corregir.
+    final transferencia = inspeccion.transferencia;
+    final yaFirmada =
+        transferencia != null && (transferencia.firmoEntrega || transferencia.firmoRecibe || transferencia.cerrada);
+    final puedeCorregir = (suya || esAdministrador) &&
         inspeccion.cerrada &&
         !yaCorregida &&
-        !viajeTerminado &&
-        (yo?.puede(Capacidad.registrarInspecciones) ?? false);
+        !yaFirmada &&
+        !viajeTerminado;
 
     return Tarjeta(
       child: Column(
@@ -637,7 +737,10 @@ class _UltimoInforme extends ConsumerWidget {
               Text('Sin hallazgos registrados.', style: tema.bodySmall)
             else
               for (final h in inspeccion.hallazgos)
-                Text('• ${_lineaHallazgo(h, catalogos)}', style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
+                Text(
+                  '• ${_lineaHallazgo(h, catalogos, extras: inspeccion.extras)}',
+                  style: tema.bodySmall?.copyWith(color: Colores.textoPrimario),
+                ),
           ],
           // Lo que una corrección cerrada dejó atrás. No suma al estado del carro, pero se sigue pudiendo abrir
           // con sus daños y sus fotos: es lo que responde «¿y los otros tres golpes que vi ayer?». Va plegado
@@ -691,6 +794,15 @@ class _UltimoInforme extends ConsumerWidget {
               'Esta versión ya fue corregida: la que vale es la siguiente, que es la que estás viendo arriba.',
               style: tema.bodySmall?.copyWith(color: Colores.advertencia),
             ),
+          ] else if (yaFirmada && inspeccion.cerrada && (suya || esAdministrador)) ...[
+            const SizedBox(height: Espacio.sm),
+            // El botón de la nota aclaratoria está justo encima y sus condiciones son las mismas: quien la hizo
+            // o un administrador. Por eso se nombra sin repetirlo.
+            Text(
+              'Esta inspección ya fue firmada: ya no admite correcciones. Si hay algo que precisar, agrégalo como '
+              'nota aclaratoria.',
+              style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+            ),
           ] else if (!ajeno && inspeccion.cerrada && viajeTerminado) ...[
             const SizedBox(height: Espacio.sm),
             Text('El viaje ya terminó: este informe no admite correcciones.', style: tema.bodySmall),
@@ -715,9 +827,14 @@ class _TarjetaEtapa extends StatelessWidget {
     required this.alSinInspector,
     required this.reciboSinEntrega,
     required this.alReciboSinEntrega,
+    required this.alAbrirInforme,
+    this.viajeTerminado = false,
   });
 
   final EtapaVista etapa;
+
+  /// El viaje ya termino: esta etapa no espera nada de nadie.
+  final bool viajeTerminado;
 
   /// Nombre de la etapa segun el catalogo, ya resuelto por quien la construye.
   final String procesoNombre;
@@ -740,6 +857,10 @@ class _TarjetaEtapa extends StatelessWidget {
   final InspeccionVista? reciboSinEntrega;
   final VoidCallback alReciboSinEntrega;
 
+  /// Abre el informe de ese momento. Se ofrece en cualquier etapa, también en las que ya no se trabajan: leer lo
+  /// que quedó registrado no es trabajar el carro.
+  final void Function(MomentoEtapa momento) alAbrirInforme;
+
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
@@ -760,25 +881,34 @@ class _TarjetaEtapa extends StatelessWidget {
                   ],
                 ),
               ),
-              Insignia(etapa.requiereInspeccion ? 'Requiere informe' : 'Solo firma', tono: etapa.requiereInspeccion ? TonoInsignia.info : TonoInsignia.neutro),
+              // Dice lo que la etapa espera. Con el viaje terminado ya no espera nada, y dejarla puesta se lee
+              // como un pendiente: fue lo primero que se busco al abrir una unidad de un viaje cerrado.
+              if (!viajeTerminado)
+                Insignia(
+                  etapa.requiereInspeccion ? 'Requiere informe' : 'Solo firma',
+                  tono: etapa.requiereInspeccion ? TonoInsignia.info : TonoInsignia.neutro,
+                ),
             ],
           ),
+          // El motivo se dice, pero los momentos se siguen viendo: esconderlos dejaba sin forma de abrir lo que ya
+          // está registrado, que es justo lo que viene a leer quien consulta y lo que queda de un viaje terminado.
           if (motivoSoloLectura case final motivo?)
             Padding(
               padding: const EdgeInsets.only(top: Espacio.sm),
               child: Text(motivo, style: tema.bodySmall),
-            )
-          else
-            for (final momento in momentos) ...[
-              const SizedBox(height: Espacio.sm),
-              _FilaMomento(
-                momento: momento,
-                nombreDeEtapa: nombreDeEtapa,
-                alCapturar: () => alCapturar(momento.momento),
-                sinInspector: sinInspector(momento.momento),
-                alSinInspector: alSinInspector,
-              ),
-            ],
+            ),
+          for (final momento in momentos) ...[
+            const SizedBox(height: Espacio.sm),
+            _FilaMomento(
+              momento: momento,
+              nombreDeEtapa: nombreDeEtapa,
+              alCapturar: () => alCapturar(momento.momento),
+              sinInspector: sinInspector(momento.momento),
+              alSinInspector: alSinInspector,
+              soloLectura: motivoSoloLectura != null,
+              alAbrir: momento.inspeccion == null ? null : () => alAbrirInforme(momento),
+            ),
+          ],
           // Lo que pasó en el proceso alrededor de estas inspecciones: cargue sin inspector, recibo sin entrega.
           for (final inspeccion in etapa.inspecciones)
             for (final novedad in inspeccion.novedadesProceso)
@@ -794,9 +924,21 @@ class _TarjetaEtapa extends StatelessWidget {
             switch (accion) {
             // Cerrada de cualquiera de las tres formas: ya no admite firmas, y ofrecerlas solo llevaría al 409
             // del servidor.
-            FirmarTransferencia(cerrada: true, transferencia: final t?) => Insignia(
-                etiquetar(etiquetaTipoCierre, t.tipoCierre!),
-                tono: t.tipoCierre == TipoCierre.noFirma ? TonoInsignia.advertencia : TonoInsignia.exito,
+            FirmarTransferencia(cerrada: true, transferencia: final t?, momentoNombre: final cual) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Insignia(
+                    etiquetar(etiquetaTipoCierre, t.tipoCierre!),
+                    tono: t.tipoCierre == TipoCierre.noFirma ? TonoInsignia.advertencia : TonoInsignia.exito,
+                  ),
+                  // Cuál, y no solo que sí: el cambio de responsabilidad se firma sobre un informe concreto. En
+                  // una etapa con la llegada firmada y la salida sin firmar, la insignia sola se leía como si
+                  // toda la etapa estuviera cerrada, y al lado seguía el «Corregir» de la otra.
+                  if (cual != null) ...[
+                    const SizedBox(height: Espacio.xs),
+                    Text('Es la firma de la ${cual.toLowerCase()}.', style: tema.bodySmall),
+                  ],
+                ],
               ),
             final FirmarTransferencia a => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -837,6 +979,8 @@ class _FilaMomento extends StatelessWidget {
     required this.alCapturar,
     required this.sinInspector,
     required this.alSinInspector,
+    required this.soloLectura,
+    required this.alAbrir,
   });
 
   final MomentoEtapa momento;
@@ -847,6 +991,12 @@ class _FilaMomento extends StatelessWidget {
   final bool sinInspector;
   final VoidCallback alSinInspector;
 
+  /// Esta etapa ya no se trabaja: se lee lo que hay, pero no se ofrece capturar.
+  final bool soloLectura;
+
+  /// Abre el informe de este momento; null cuando todavía no hay ninguno que abrir.
+  final VoidCallback? alAbrir;
+
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
@@ -855,38 +1005,43 @@ class _FilaMomento extends StatelessWidget {
     final nombre = inspeccion?.momentoNombre ?? etiquetar(etiquetaMomento, momento.momento);
     final versionTexto = inspeccion == null ? null : textoDeVersion(inspeccion);
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(nombre, style: tema.bodyMedium?.copyWith(color: Colores.textoPrimario)),
-              if (versionTexto != null) Text(versionTexto, style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
-              if (momento.cerrada && inspeccion?.cerradaEn != null)
-                Text('Cerrada el ${formatearFecha(inspeccion!.cerradaEn)}', style: tema.bodySmall)
-              else if (momento.enBorrador)
-                Text('Empezada el ${formatearFecha(inspeccion!.fecha)}', style: tema.bodySmall)
-              else if (momento.bloqueo case final bloqueo?)
-                Text(
-                  mensajeBloqueo(bloqueo.motivo, nombreDeEtapa(bloqueo.procesoPrevio)),
-                  style: tema.bodySmall?.copyWith(color: Colores.advertencia),
-                ),
-            ],
+    return InkWell(
+      onTap: alAbrir,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(nombre, style: tema.bodyMedium?.copyWith(color: Colores.textoPrimario)),
+                if (versionTexto != null) Text(versionTexto, style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
+                if (momento.cerrada && inspeccion?.cerradaEn != null)
+                  Text('Cerrada el ${formatearFecha(inspeccion!.cerradaEn)}', style: tema.bodySmall)
+                else if (momento.enBorrador)
+                  Text('Empezada el ${formatearFecha(inspeccion!.fecha)}', style: tema.bodySmall)
+                else if (momento.bloqueo case final bloqueo?)
+                  Text(
+                    mensajeBloqueo(bloqueo.motivo, nombreDeEtapa(bloqueo.procesoPrevio)),
+                    style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+                  ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(width: Espacio.sm),
-        if (momento.cerrada)
-          const Insignia('Cerrada', tono: TonoInsignia.exito)
-        else if (momento.enBorrador)
-          const Insignia('Borrador', tono: TonoInsignia.info)
-        else
-          // Deshabilitado, no escondido: que se vea que falta y por qué.
-          sinInspector
-              ? BotonEnFila(texto: 'No hay inspector', onPressed: momento.sePuedeCapturar ? alSinInspector : null)
-              : BotonEnFila(texto: 'Capturar', onPressed: momento.sePuedeCapturar ? alCapturar : null),
-      ],
+          const SizedBox(width: Espacio.sm),
+          if (momento.cerrada)
+            const Insignia('Cerrada', tono: TonoInsignia.exito)
+          else if (momento.enBorrador)
+            const Insignia('Borrador', tono: TonoInsignia.info)
+          else if (!soloLectura)
+            // Deshabilitado, no escondido: que se vea que falta y por qué.
+            sinInspector
+                ? BotonEnFila(texto: 'No hay inspector', onPressed: momento.sePuedeCapturar ? alSinInspector : null)
+                : BotonEnFila(texto: 'Capturar', onPressed: momento.sePuedeCapturar ? alCapturar : null),
+          // La punta de flecha es lo único que dice que la fila se abre; sin ella nadie la toca.
+          if (alAbrir != null) const Icon(Icons.chevron_right, size: 20, color: Colores.textoSecundario),
+        ],
+      ),
     );
   }
 }

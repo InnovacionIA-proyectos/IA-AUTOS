@@ -60,9 +60,9 @@ void main() {
     test('GET /api/inspecciones', () async {
       final adaptador = AdaptadorFalso((_) => json(200, paginaDe(const [inspeccion])));
 
-      final lista = await InspeccionesRepositorio(apiCon(adaptador), cache).listarRemoto('u1');
+      final pagina = await InspeccionesRepositorio(apiCon(adaptador), cache).listarRemoto('u1');
 
-      expect(lista.single.id, 'ins-1');
+      expect((pagina.items.single.id, pagina.total), ('ins-1', 1));
     });
 
     test('GET /api/sofasa/ordenes', () async {

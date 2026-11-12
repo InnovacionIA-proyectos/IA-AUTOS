@@ -11,6 +11,7 @@ import 'package:traza_autos/features/catalogos/providers.dart';
 import 'package:traza_autos/features/inspecciones/domain/novedad_pendiente.dart';
 import 'package:traza_autos/features/dibujo_dano/presentation/selector_zona_dano.dart';
 import 'package:traza_autos/features/vehiculos/data/vehiculos_repositorio.dart';
+import 'package:traza_autos/features/vehiculos/domain/consulta.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
 import 'package:traza_autos/features/vehiculos/presentation/vin_page.dart';
 import 'package:traza_autos/features/vehiculos/providers.dart';
@@ -32,8 +33,16 @@ class VehiculosRepositorioFalso implements VehiculosRepositorio {
   /// Lo que lanza en vez de responder; un 403 es el VIN de un viaje ajeno.
   final Object? error;
 
+  /// Cuántas veces se pidió el inventario: con eso se ve si la ficha se recargó al volver de otra pantalla.
+  int llamadas = 0;
+
+  /// No se busca en estas pruebas: la pantalla que la usa tiene las suyas.
+  @override
+  Future<List<VehiculoBusqueda>> buscar(String termino) async => const [];
+
   @override
   Future<Inventario> inventario(String vin) async {
+    llamadas++;
     if (error != null) throw error!;
     return Inventario.fromJson(respuesta);
   }
@@ -95,6 +104,93 @@ const conductor = Sesion(
   token: 'jwt',
   usuario: Usuario(id: 'conductor-1', nombre: 'Luis Gómez', email: '', rol: 'conductor'),
 );
+
+/// Corrige lo que hizo otra persona, mientras nadie haya firmado.
+const administrador = Sesion(
+  token: 'jwt',
+  usuario: Usuario(id: 'admin-1', nombre: 'Marta Ruiz', email: '', rol: 'admin'),
+);
+
+/// Consulta los carros de su cliente: no captura, no firma y no corrige.
+const coordinador = Sesion(
+  token: 'jwt',
+  usuario: Usuario(id: 'coord-1', nombre: 'Sara Calderón', email: '', rol: 'coordinador_calidad'),
+);
+
+/// Una transferencia con la firma de quien entrega y nada más: basta una para que no se corrija.
+const firmaDeEntrega = <String, dynamic>{
+  'entrega_usuario_id': 'u-entrega',
+  'recibe_usuario_id': 'u-recibe',
+  'entrega_firmada_at': '2026-01-02T12:00:00Z',
+  'recibe_firmada_at': null,
+  'tipo_cierre': null,
+};
+
+/// El mismo inventario con la salida cerrada en otras manos o ya firmada: las dos cosas deciden quién corrige.
+/// Por defecto la hizo quien está en sesión (`u1`), que es el caso en que sí se corrige.
+Map<String, dynamic> inventarioSalida({String usuarioId = 'u1', Map<String, dynamic>? transferencia, String? momento}) {
+  final json = inventarioJson();
+  final etapa = (json['etapas'] as List<dynamic>).first as Map<String, dynamic>;
+  final salida = (etapa['inspecciones'] as List<dynamic>).first as Map<String, dynamic>;
+  salida['usuario_id'] = usuarioId;
+  salida['transferencia'] = transferencia;
+  // La salida del cargue es la acomodacion y se corrige distinto; con `momento` se pasa al otro caso.
+  if (momento != null) {
+    salida['momento'] = momento;
+    salida['momento_nombre'] = momento == 'salida' ? 'Inspección de salida' : 'Inspección de llegada';
+  }
+  return json;
+}
+
+/// Las etapas tal cual, pero sin un solo informe: es lo que se ve al abrir una unidad de un viaje en el que
+/// nunca se capturó nada.
+Map<String, dynamic> inventarioSinInformes() {
+  final json = inventarioJson();
+  for (final etapa in json['etapas'] as List<dynamic>) {
+    (etapa as Map<String, dynamic>)['inspecciones'] = <Map<String, dynamic>>[];
+  }
+  return json;
+}
+
+/// Una novedad del conductor a medio describir: le faltan la zona, la clase y el nivel.
+const novedadSinClasificar = NovedadPendiente(
+  id: 'n1',
+  vin: 'VIN00000000000001',
+  proceso: 'transporte',
+  momento: 'llegada',
+  clase: 'golpe',
+  tamano: 'mas_20cm',
+  foto: FotoNovedad(tomadaEn: null, sinUbicacion: true),
+);
+
+/// Dos informes cerrados: el del cargue, ya firmado, y otro posterior en el transporte. El de arriba es el
+/// posterior, así que el firmado solo se ve abriéndolo desde su fila.
+Map<String, dynamic> inventarioConDosInformes() {
+  final json = inventarioSalida(transferencia: firmaDeEntrega);
+  final transporte = (json['etapas'] as List<dynamic>)[1] as Map<String, dynamic>;
+  transporte['inspecciones'] = [
+    {
+      'id': 'i2',
+      'momento': 'salida',
+      'momento_nombre': 'Inspección de salida',
+      'fecha': '2026-01-05T10:00:00Z',
+      'cerrada_at': '2026-01-05T11:00:00Z',
+      'estado': 'cerrada',
+      'usuario_id': 'u1',
+      'hallazgos': <Map<String, dynamic>>[],
+      'evidencias': <Map<String, dynamic>>[],
+      'transferencia': null,
+    },
+  ];
+  return json;
+}
+
+/// Los mismos pumps de [abrir], para lo que se abre después de tocar algo.
+Future<void> asentar(WidgetTester tester) async {
+  for (var i = 0; i < 10; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
 
 Future<void> abrir(
   WidgetTester tester, {
@@ -286,15 +382,7 @@ void main() {
 
   group('las novedades del conductor por revisar', () {
     // Como la registra el conductor: con su clase y su tamaño, sin nivel y, en este caso, sin GPS.
-    const sinClasificar = NovedadPendiente(
-      id: 'n1',
-      vin: 'VIN00000000000001',
-      proceso: 'transporte',
-      momento: 'llegada',
-      clase: 'golpe',
-      tamano: 'mas_20cm',
-      foto: FotoNovedad(tomadaEn: null, sinUbicacion: true),
-    );
+    const sinClasificar = novedadSinClasificar;
 
     testWidgets('quien inspecciona las ve, con lo que el conductor alcanzó a decir', (tester) async {
       await abrir(tester, novedades: const [sinClasificar]);
@@ -317,6 +405,95 @@ void main() {
       await abrir(tester);
 
       expect(find.text('Novedades por revisar'), findsNothing);
+    });
+  });
+
+  /// S7-HU-18/20: la ficha solo le da tarjeta al informe vigente. Los demás —el del cargue que ya se firmó, la
+  /// llegada de una etapa anterior— se abren desde su fila, que es donde se lee lo que explica por qué no se
+  /// corrigen. Sin esto el mensaje estaba escrito pero no se leía nunca.
+  group('abrir el informe de un momento', () {
+    ViajesRepositorioFalso enCurso() => ViajesRepositorioFalso()
+      ..viajeDeEtapa = Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: 'en_curso',
+        inspectorId: 'u1',
+        vehiculos: const [ViajeVehiculo(vin: 'VIN00000000000001')],
+      );
+
+    testWidgets('el informe firmado se abre desde su fila y dice por qué no se corrige', (tester) async {
+      await abrir(tester, inventario: inventarioConDosInformes(), viajes: enCurso());
+
+      expect(find.textContaining('ya fue firmada'), findsNothing, reason: 'arriba está el informe posterior');
+
+      await tester.tap(find.byIcon(Icons.chevron_right).first);
+      await asentar(tester);
+
+      // El «Corregir» que queda en pantalla es el de la tarjeta de abajo, que es otro informe y sí se corrige.
+      expect(find.textContaining('ya fue firmada'), findsOneWidget);
+    });
+
+    testWidgets('un momento sin informe no se abre: no hay nada que leer', (tester) async {
+      await abrir(tester, inventario: inventarioConDosInformes(), viajes: enCurso());
+
+      // Cuatro momentos (dos por etapa) y solo dos tienen informe.
+      expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
+    });
+  });
+
+  /// S7-HU-09: el coordinador de calidad abre la ficha para mirarla. Lo que el servidor le va a rechazar no se le
+  /// ofrece, y lo que no puede ver se le explica por su cliente, no por un viaje que nunca tuvo.
+  group('el coordinador consulta, no trabaja', () {
+    ViajesRepositorioFalso enCurso() => ViajesRepositorioFalso()
+      ..viajeDeEtapa = Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: 'en_curso',
+        inspectorId: 'u1',
+        vehiculos: const [ViajeVehiculo(vin: 'VIN00000000000001')],
+      );
+
+    testWidgets('la ficha dice que es de consulta y no ofrece capturar ni firmar', (tester) async {
+      await abrir(tester, viajes: enCurso(), sesion: coordinador);
+
+      expect(find.text(mensajeSoloConsulta), findsWidgets);
+      // «Capturar» es un BotonEnFila, que por dentro es un OutlinedButton: buscarlo como FilledButton no
+      // encuentra nada ni cuando el botón está ahí, y la prueba pasaría sin blindaje ninguno.
+      expect(find.widgetWithText(OutlinedButton, 'Capturar'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Firmar transferencia'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Agregar nota aclaratoria'), findsNothing);
+    });
+
+    testWidgets('los momentos se le siguen mostrando, para poder abrir lo que ya está registrado', (tester) async {
+      await abrir(tester, viajes: enCurso(), sesion: coordinador);
+
+      expect(find.text('Inspección de salida'), findsWidgets);
+      expect(find.byIcon(Icons.chevron_right), findsWidgets);
+      expect(find.widgetWithText(OutlinedButton, 'Capturar'), findsNothing);
+    });
+
+    // El control positivo del grupo: sobre el MISMO inventario, al inspector del viaje sí le sale el botón. Sin
+    // esto, las ausencias de arriba no dicen nada: podrían serlo por el fixture y no por el rol.
+    testWidgets('el inspector del viaje sí sigue viendo sus botones', (tester) async {
+      await abrir(tester, viajes: enCurso());
+
+      expect(find.text(mensajeSoloConsulta), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Capturar'), findsWidgets);
+    });
+
+    testWidgets('un carro de otro cliente se explica por el cliente, no por el viaje', (tester) async {
+      await abrir(
+        tester,
+        sesion: coordinador,
+        error: const ErrorApi(message: 'Prohibido', code: 'FORBIDDEN', status: 403),
+      );
+
+      expect(find.text('Este carro no es de tu cliente.'), findsOneWidget);
+      expect(find.textContaining('cliente al que perteneces'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Reintentar'), findsNothing);
     });
   });
 
@@ -352,14 +529,52 @@ void main() {
         vehiculos: const [ViajeVehiculo(vin: 'VIN00000000000001')],
       );
 
-    testWidgets('una cerrada de un viaje en curso la ofrece', (tester) async {
-      await abrir(tester, viajes: enEstado('en_curso'));
+    testWidgets('una cerrada y sin firmas la ofrece a quien la hizo', (tester) async {
+      await abrir(tester, inventario: inventarioSalida(), viajes: enEstado('en_curso'));
 
       expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsOneWidget);
     });
 
+    // S7-HU-19: el servidor responde 403 CORRECCION_SOLO_AUTOR. Ofrecer el botón costaría siete fotos para nada.
+    testWidgets('no se la ofrece a otro inspector del mismo viaje', (tester) async {
+      await abrir(tester, inventario: inventarioSalida(usuarioId: 'inspector-1'), viajes: enEstado('en_curso'));
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
+    });
+
+    testWidgets('el administrador sí corrige lo que hizo otra persona', (tester) async {
+      await abrir(
+        tester,
+        inventario: inventarioSalida(usuarioId: 'inspector-1'),
+        viajes: enEstado('en_curso'),
+        sesion: administrador,
+      );
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsOneWidget);
+    });
+
+    // S7-HU-19: 409 INSPECCION_YA_FIRMADA. Basta una firma, y después de ella lo que queda es la nota aclaratoria.
+    testWidgets('con una sola firma ya no se corrige, y lo dice', (tester) async {
+      await abrir(tester, inventario: inventarioSalida(transferencia: firmaDeEntrega), viajes: enEstado('en_curso'));
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
+      expect(find.textContaining('ya fue firmada'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Agregar nota aclaratoria'), findsOneWidget);
+    });
+
+    testWidgets('tampoco la corrige el administrador con una firma de por medio', (tester) async {
+      await abrir(
+        tester,
+        inventario: inventarioSalida(usuarioId: 'inspector-1', transferencia: firmaDeEntrega),
+        viajes: enEstado('en_curso'),
+        sesion: administrador,
+      );
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
+    });
+
     testWidgets('con el viaje terminado dice por qué no, en vez de dejar el botón gris', (tester) async {
-      await abrir(tester, viajes: enEstado('finalizado'));
+      await abrir(tester, inventario: inventarioSalida(), viajes: enEstado('finalizado'));
 
       expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
       expect(find.text('El viaje ya terminó: este informe no admite correcciones.'), findsOneWidget);
@@ -368,13 +583,25 @@ void main() {
     // Rehacer la inspección cuesta siete fotos: quien lo pulsa tiene que saber a qué se compromete, y que lo
     // que ya firmó no se pierde.
     testWidgets('avisa que hay que repetir las fotos y que la versión anterior no cambia', (tester) async {
-      await abrir(tester, viajes: enEstado('en_curso'));
+      await abrir(tester, inventario: inventarioSalida(momento: 'llegada'), viajes: enEstado('en_curso'));
 
       await tester.tap(find.widgetWithText(OutlinedButton, 'Corregir'));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('volver a tomar todas las fotos obligatorias'), findsOneWidget);
       expect(find.textContaining('La versión anterior no cambia'), findsOneWidget);
+    });
+
+    // La salida del cargue es la acomodacion: no pide las siete vistas, pide volver a ubicar cada unidad. El
+    // aviso tiene que decir lo que de verdad va a pedir la pantalla siguiente.
+    testWidgets('al corregir la salida del cargue avisa de la acomodación, no de las siete fotos', (tester) async {
+      await abrir(tester, inventario: inventarioSalida(), viajes: enEstado('en_curso'));
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Corregir'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('ubicar todas las unidades en la niñera'), findsOneWidget);
+      expect(find.textContaining('todas las fotos obligatorias'), findsNothing);
     });
 
     testWidgets('al conductor que solo recibe no se le ofrece corregir lo del inspector', (tester) async {
@@ -399,13 +626,296 @@ void main() {
       await abrir(tester, viajes: enEstado('finalizado'));
 
       expect(find.text(mensajeViajeTerminado), findsWidgets);
-      expect(find.widgetWithText(FilledButton, 'Capturar'), findsNothing);
+      // «Capturar» es un BotonEnFila, que por dentro es un OutlinedButton.
+      expect(find.widgetWithText(OutlinedButton, 'Capturar'), findsNothing);
+    });
+
+
+    // Lo que se vio en el celular al abrir una unidad de un viaje cerrado: la pantalla decia «solo se puede
+    // consultar» y al mismo tiempo pedia informes por todos lados. Nada de eso lo va a hacer ya nadie.
+    testWidgets('ninguna etapa pide informe: ya no espera nada de nadie', (tester) async {
+      await abrir(tester, viajes: enEstado('finalizado'));
+
+      expect(find.text('Requiere informe'), findsNothing);
+      expect(find.text('Solo firma'), findsNothing);
+    });
+
+    testWidgets('con el viaje en curso la insignia sigue ahi', (tester) async {
+      await abrir(tester, viajes: enEstado('en_curso'));
+
+      expect(find.text('Requiere informe'), findsWidgets);
+    });
+
+    testWidgets('sin informes en ese viaje lo dice sin sonar a pendiente', (tester) async {
+      await abrir(tester, inventario: inventarioSinInformes(), viajes: enEstado('finalizado'));
+
+      expect(find.text('En este viaje no se registró ningún informe.'), findsOneWidget);
+      expect(find.textContaining('aún no tiene informes'), findsNothing);
+    });
+
+    testWidgets('sin informes y con el viaje vivo sigue diciendo que faltan', (tester) async {
+      await abrir(tester, inventario: inventarioSinInformes(), viajes: enEstado('en_curso'));
+
+      expect(find.text('Este VIN aún no tiene informes.'), findsOneWidget);
+    });
+
+    // Se piden por VIN: la que sale en un viaje cerrado es de otro viaje, el que sigue en curso.
+    testWidgets('no ofrece revisar novedades de otro viaje', (tester) async {
+      await abrir(tester, viajes: enEstado('finalizado'), novedades: const [novedadSinClasificar]);
+
+      expect(find.text('Novedades por revisar'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Revisar'), findsNothing);
+    });
+
+    testWidgets('con el viaje en curso sí las ofrece', (tester) async {
+      await abrir(tester, viajes: enEstado('en_curso'), novedades: const [novedadSinClasificar]);
+
+      expect(find.text('Novedades por revisar'), findsOneWidget);
     });
 
     testWidgets('en curso sí se trabaja', (tester) async {
       await abrir(tester, viajes: enEstado('en_curso'));
 
       expect(find.text(mensajeViajeTerminado), findsNothing);
+    });
+  });
+
+  /// S7-HU-18: al volver de la captura, la ficha tiene que recargarse.
+  ///
+  /// Hace falta un enrutador de verdad porque el defecto estaba justamente en cómo navegaba: con `go` la ficha
+  /// se quedaba debajo, intacta, mostrando la versión anterior como vigente y con su botón de corregir. Si la
+  /// corrección había quedado en cola —sin señal—, volver a tocarlo encolaba una segunda corrección de la misma
+  /// inspección, que el servidor mata por el índice único, después de repetir las siete fotos.
+  group('volver de corregir', () {
+    late VehiculosRepositorioFalso vehiculos;
+
+    ViajesRepositorioFalso enCurso() => ViajesRepositorioFalso()
+      ..viajeDeEtapa = Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: 'en_curso',
+        inspectorId: 'u1',
+        vehiculos: const [ViajeVehiculo(vin: 'VIN00000000000001')],
+      );
+
+    Future<void> abrirConRutas(WidgetTester tester, {Map<String, dynamic>? inventario}) async {
+      await tester.binding.setSurfaceSize(const Size(600, 2400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      vehiculos = VehiculosRepositorioFalso(inventario ?? inventarioSalida());
+      final rutas = GoRouter(
+        initialLocation: '/inspecciones/vin/VIN00000000000001',
+        routes: [
+          GoRoute(
+            path: '/inspecciones/vin/:vin',
+            builder: (_, estado) => VinPage(vin: estado.pathParameters['vin']!),
+            routes: [
+              GoRoute(
+                path: 'captura/:etapaId',
+                builder: (contexto, _) => Scaffold(
+                  body: Center(
+                    child: TextButton(onPressed: () => contexto.pop(), child: const Text('cerrar la captura')),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+      addTearDown(rutas.dispose);
+      await tester.pumpWidget(
+        ProviderScope(
+          retry: (_, _) => null,
+          overrides: [
+            ...Arnes().overrides,
+            catalogosRepositorioProvider.overrideWithValue(CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe')),
+            vehiculosRepositorioProvider.overrideWithValue(vehiculos),
+            viajesRepositorioProvider.overrideWithValue(enCurso()),
+          ],
+          child: MaterialApp.router(theme: crearTema(), routerConfig: rutas),
+        ),
+      );
+      await asentar(tester);
+    }
+
+    /// Pulsa «Corregir» y confirma. [dentroDe] acota de cuál de las dos tarjetas: la hoja tapa la de la ficha,
+    /// pero las dos siguen en el árbol.
+    Future<void> corregir(WidgetTester tester, {Finder? dentroDe}) async {
+      final boton = find.widgetWithText(OutlinedButton, 'Corregir');
+      await tester.tap(dentroDe == null ? boton.first : find.descendant(of: dentroDe, matching: boton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Corregir'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('la ficha se vuelve a pedir, para no ofrecer corregir lo que ya se corrigió', (tester) async {
+      await abrirConRutas(tester);
+      final antes = vehiculos.llamadas;
+
+      await corregir(tester);
+      expect(find.text('cerrar la captura'), findsOneWidget, reason: 'se abrió la captura');
+
+      await tester.tap(find.text('cerrar la captura'));
+      await tester.pumpAndSettle();
+
+      expect(vehiculos.llamadas, greaterThan(antes));
+    });
+
+    // La hoja es imperativa: no se va sola al navegar, y se quedaba encima de la cámara.
+    testWidgets('si se corrige desde la hoja de un momento, la hoja se cierra antes', (tester) async {
+      await abrirConRutas(tester);
+
+      await tester.tap(find.byIcon(Icons.chevron_right).first);
+      await tester.pumpAndSettle();
+      expect(find.byType(BottomSheet), findsOneWidget);
+
+      await corregir(tester, dentroDe: find.byType(BottomSheet));
+
+      expect(find.text('cerrar la captura'), findsOneWidget);
+      expect(find.byType(BottomSheet), findsNothing, reason: 'si no, se queda encima de la cámara');
+    });
+  });
+
+  /// S7-HU-04.2: el daño de un extra cuenta como daño del carro, pero no tiene zona.
+  group('el daño de un extra en la ficha', () {
+    /// El informe con un daño normal (cuadrante 7) y uno del platón (sin cuadrante, con su extra_id).
+    Map<String, dynamic> inventarioConExtraDanado() {
+      final json = inventarioJson();
+      final etapa = (json['etapas'] as List<dynamic>).first as Map<String, dynamic>;
+      final inspeccion = (etapa['inspecciones'] as List<dynamic>).first as Map<String, dynamic>;
+      inspeccion['extras'] = [
+        {'id': 'x-1', 'nombre': 'Platón', 'tipo': 'platon', 'tipo_nombre': 'Platón'},
+      ];
+      // Uno de zona, que si se marca en el dibujo, y el del platon, que no tiene donde marcarse. Se reemplaza
+      // la lista entera: la del fixture es de Map<String, String> y no admite ni numeros ni nulos.
+      inspeccion['hallazgos'] = <Map<String, dynamic>>[
+        {
+          'id': 'h-zona',
+          'zona': 'Izquierdo 7',
+          'cuadrante_numero': 7,
+          'lado': 'izquierdo',
+          'clase_dano': 'golpe',
+          'tamano_dano': '1_5cm',
+          'nivel_severidad': 'v2',
+        },
+        {
+          'id': 'h-extra',
+          'zona': null,
+          'cuadrante_numero': null,
+          'lado': null,
+          'clase_dano': 'golpe',
+          'tamano_dano': '1_5cm',
+          'nivel_severidad': 'v2',
+          'extra_id': 'x-1',
+        },
+      ];
+      return json;
+    }
+
+    testWidgets('se lista con el nombre del extra, no como «Sin zona»', (tester) async {
+      await abrir(tester, inventario: inventarioConExtraDanado());
+
+      expect(find.textContaining('Platón: Golpe'), findsOneWidget);
+      expect(find.textContaining('Sin zona'), findsNothing);
+    });
+
+    testWidgets('no pone ningún punto en el dibujo: el extra no tiene zona', (tester) async {
+      await abrir(tester, inventario: inventarioConExtraDanado());
+
+      final selector = tester.widget<SelectorZonaDano>(find.byType(SelectorZonaDano).first);
+      expect(
+        selector.danos.length,
+        1,
+        reason: 'el del cuadrante sí se marca; el del platón no tiene dónde marcarse',
+      );
+    });
+  });
+
+  /// S7-HU-03.2 CA-2: un daño sin nivel se ve marcado, no vacío. En blanco parecía leve; es justo al revés.
+  group('un daño sin calificar en la ficha', () {
+    Map<String, dynamic> inventarioConSinCalificar() {
+      final json = inventarioJson();
+      final etapa = (json['etapas'] as List<dynamic>).first as Map<String, dynamic>;
+      final inspeccion = (etapa['inspecciones'] as List<dynamic>).first as Map<String, dynamic>;
+      inspeccion['hallazgos'] = <Map<String, dynamic>>[
+        {
+          'id': 'h-sin',
+          'zona': 'Izquierdo 4',
+          'cuadrante_numero': 4,
+          'lado': 'izquierdo',
+          'clase_dano': 'golpe',
+          'tamano_dano': '1_5cm',
+          'nivel_severidad': null,
+        },
+        {
+          'id': 'h-con',
+          'zona': 'Izquierdo 7',
+          'cuadrante_numero': 7,
+          'lado': 'izquierdo',
+          'clase_dano': 'golpe',
+          'tamano_dano': '1_5cm',
+          'nivel_severidad': 'v2',
+        },
+      ];
+      return json;
+    }
+
+    testWidgets('se lista como «Sin calificar», no con el nivel en blanco', (tester) async {
+      await abrir(tester, inventario: inventarioConSinCalificar());
+
+      expect(find.textContaining('Sin calificar'), findsOneWidget);
+      expect(find.textContaining('Izquierdo 4: Golpe'), findsOneWidget);
+    });
+
+    // El dibujo ya lo distingue por color: lo que importa aquí es que la zona llegue marcada, con nivel nulo.
+    testWidgets('en el dibujo la zona queda marcada, sin nivel', (tester) async {
+      await abrir(tester, inventario: inventarioConSinCalificar());
+
+      final selector = tester.widget<SelectorZonaDano>(find.byType(SelectorZonaDano).first);
+      expect(selector.danos.length, 2, reason: 'las dos zonas tienen daño');
+      expect(selector.danos.values.where((n) => n == null), hasLength(1), reason: 'la que no está calificada');
+    });
+  });
+
+  /// La transferencia cuelga de un informe, no de la etapa: una etapa puede tener la llegada firmada y la salida
+  /// no. La insignia sola se leía como si toda la etapa estuviera cerrada, al lado del «Corregir» de la otra.
+  group('una etapa firmada dice cuál informe lo está', () {
+    ViajesRepositorioFalso enCurso() => ViajesRepositorioFalso()
+      ..viajeDeEtapa = Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: 'en_curso',
+        inspectorId: 'u1',
+        vehiculos: const [ViajeVehiculo(vin: 'VIN00000000000001')],
+      );
+
+    const cerradaFirmada = <String, dynamic>{
+      'entrega_usuario_id': 'u-entrega',
+      'recibe_usuario_id': 'u-recibe',
+      'entrega_firmada_at': '2026-01-02T12:00:00Z',
+      'recibe_firmada_at': '2026-01-02T12:30:00Z',
+      'tipo_cierre': 'firmada',
+    };
+
+    testWidgets('la insignia va con el momento del informe que se firmó', (tester) async {
+      await abrir(
+        tester,
+        inventario: inventarioSalida(momento: 'llegada', transferencia: cerradaFirmada),
+        viajes: enCurso(),
+      );
+
+      expect(find.text('Es la firma de la inspección de llegada.'), findsOneWidget);
+    });
+
+    testWidgets('y nombra la salida cuando es ella la firmada', (tester) async {
+      await abrir(
+        tester,
+        inventario: inventarioSalida(momento: 'salida', transferencia: cerradaFirmada),
+        viajes: enCurso(),
+      );
+
+      expect(find.text('Es la firma de la inspección de salida.'), findsOneWidget);
     });
   });
 }

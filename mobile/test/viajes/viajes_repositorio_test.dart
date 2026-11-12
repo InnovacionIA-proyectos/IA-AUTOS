@@ -149,7 +149,20 @@ void main() {
   });
 
   group('deLaEtapa', () {
-    test('sale de la copia guardada, sin tocar la red: es lo que hace que la captura funcione sin señal', () async {
+    // S7-HU-05 CA-4: la posición de cada unidad, la capacidad y la disposición de la niñera cambian mientras se
+    // trabaja el viaje. Leyendo primero la copia, la acomodación mostraba «sin posición» tres unidades que ya
+    // tenían puesto. La copia sigue ahí para no quedarse en blanco sin señal, pero no decide.
+    test('pregunta al servidor: la copia guardada puede estar vieja', () async {
+      await repositorio(AdaptadorFalso((_) => json(200, [viajeJson('v1')]))).listarRemoto('u1');
+      final conRed = AdaptadorFalso((_) => json(200, viajeJson('v1', placa: 'NUEVA99')));
+
+      final viaje = await repositorio(conRed).deLaEtapa('u1', 'v1');
+
+      expect(viaje!.placa, 'NUEVA99', reason: 'lo que vale es lo que hay en el servidor');
+      expect(conRed.peticiones.single.uri.path, '/api/viajes/v1');
+    });
+
+    test('sin señal cae a la copia guardada: la captura sigue funcionando', () async {
       await repositorio(AdaptadorFalso((_) => json(200, [viajeJson('v1')]))).listarRemoto('u1');
       final sinRed = AdaptadorFalso((o) => throw DioException.connectionError(requestOptions: o, reason: 'sin red'));
 
@@ -157,7 +170,6 @@ void main() {
 
       expect(viaje!.placa, 'ABC123');
       expect(viaje.conductorNombre, 'Ana Pérez');
-      expect(sinRed.peticiones, isEmpty);
     });
 
     test('si no está entre mis viajes se pide suelto (un administrador no es conductor ni inspector)', () async {

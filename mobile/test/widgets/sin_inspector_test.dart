@@ -21,6 +21,10 @@ import '../support/dobles_viajes.dart';
 /// S6-HU-02.18: «No hay inspector» en el cargue, «Firmar recibo sin entrega» y la novedad de proceso en la ficha.
 
 class _InventarioFalso implements VehiculosRepositorio {
+
+  /// No se busca en estas pruebas: la pantalla que la usa tiene las suyas.
+  @override
+  Future<List<VehiculoBusqueda>> buscar(String termino) async => const [];
   _InventarioFalso(this.respuesta);
 
   final Map<String, dynamic> respuesta;

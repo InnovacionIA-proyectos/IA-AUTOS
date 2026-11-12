@@ -18,7 +18,7 @@ import '../domain/hallazgo_previo.dart';
 import '../domain/novedad_pendiente.dart';
 import '../providers.dart';
 import 'aviso_preexistente.dart';
-import 'selector_dano.dart';
+import 'hoja_dano.dart';
 
 /// «Golpe · 1 a 5 cm · Piedra»: la clase que eligió el conductor, el tamaño y, si lo dijo, qué causó la novedad.
 ///

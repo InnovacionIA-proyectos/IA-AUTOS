@@ -32,7 +32,8 @@ class ListaHallazgosPrevios extends ConsumerWidget {
   final List<HallazgoPrevio> previos;
 
   /// Mientras se traen. Se distingue de «no hay» a propósito: decir «sin daños anteriores» antes de saberlo sería
-  /// afirmar algo que todavía no consta.
+  /// afirmar algo que todavía no consta. Solo manda cuando no hay nada que mostrar: si ya hay una lista en la
+  /// mano, se deja puesta mientras llega la nueva.
   final bool cargando;
 
   /// Los enlaces de las fotos vencen; al vencer se vuelve a pedir la lista, que trae unos nuevos.
@@ -61,7 +62,9 @@ class ListaHallazgosPrevios extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: Espacio.xs),
-        if (cargando)
+        // Solo cuando todavía no hay nada que enseñar. Cambiar la lista por este renglón cada vez que se
+        // revalida no solo parpadea: desmonta las fotos, y con ellas la guarda que impide volver a pedirlas.
+        if (cargando && previos.isEmpty)
           Text('Buscando con qué venía el vehículo…', style: tema.bodySmall)
         else if (previos.isEmpty)
           // Un hueco en blanco se lee como «esto no cargó». Decirlo cierra la pregunta —pero solo se puede

@@ -1,3 +1,5 @@
+import '../../inspecciones/domain/acomodacion.dart';
+
 /// Un viaje: la unidad transportadora, su placa y quién lo conduce e inspecciona.
 ///
 /// Es el eje del trabajo de campo: cada etapa y cada informe cuelgan de un viaje, y de él salen la placa, el
@@ -16,6 +18,9 @@ class Viaje {
     this.origen,
     this.destino,
     this.vehiculos = const [],
+    this.capacidad,
+    this.disposicion = const [],
+    this.fotosAcomodacion = 0,
   });
 
   factory Viaje.fromJson(Map<String, dynamic> json) => Viaje(
@@ -34,10 +39,28 @@ class Viaje {
           for (final v in (json['vehiculos'] as List<dynamic>? ?? []))
             ViajeVehiculo.fromJson(v as Map<String, dynamic>),
         ],
+        capacidad: (json['capacidad'] as num?)?.toInt(),
+        disposicion: [
+          for (final p in ((json['disposicion'] as Map<String, dynamic>?)?['puestos'] as List<dynamic>? ?? []))
+            PuestoNinera.fromJson(p as Map<String, dynamic>),
+        ],
+        fotosAcomodacion: (json['fotos_acomodacion'] as List<dynamic>?)?.length ?? 0,
       );
 
   final String id;
   final String codigoMtrack;
+
+  /// Cuántos puestos tiene su niñera. Null en los viajes de antes de que el viaje guardara su capacidad; para
+  /// esos se usa el valor por defecto, que es 7.
+  final int? capacidad;
+
+  /// Los puestos tal como los manda el servidor. Vacía en un viaje antiguo: entonces se dibuja una lista
+  /// numerada hasta la capacidad, no un esquema inventado aquí.
+  final List<PuestoNinera> disposicion;
+
+  /// Cuántas fotos de la acomodación tiene ya el viaje. Cuelgan del viaje, no de la unidad: la acomodación se
+  /// fotografía una vez, y las demás unidades no la vuelven a pedir.
+  final int fotosAcomodacion;
   final String placa;
   final String estado;
 
@@ -74,6 +97,11 @@ class Viaje {
         'origen': origen,
         'destino': destino,
         'vehiculos': [for (final v in vehiculos) v.toJson()],
+        // Se guardan con la copia: sin ellos, sin señal una niñera de nueve se dibujaba de siete y las unidades
+        // de los puestos 8 y 9 se veían sin puesto marcado y sin decir por qué.
+        'capacidad': capacidad,
+        'disposicion': {'puestos': [for (final p in disposicion) p.toJson()]},
+        'fotos_acomodacion': [for (var i = 0; i < fotosAcomodacion; i++) const <String, dynamic>{}],
       };
 }
 
@@ -121,7 +149,7 @@ class ViajeVehiculo {
   /// Por qué no sale y quién lo decidió. Null mientras la unidad esté activa.
   final NoSale? noSale;
 
-  /// El lugar (1 a 7) que la unidad tiene en la niñera, o null mientras no se haya registrado.
+  /// El puesto que la unidad tiene en la niñera, o null mientras no se haya registrado.
   final int? posicion;
 
   /// Qué ha registrado el conductor de esta unidad en el transporte, y cuántas novedades.

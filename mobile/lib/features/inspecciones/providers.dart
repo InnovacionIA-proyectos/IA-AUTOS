@@ -44,3 +44,9 @@ final informesDelViajeProvider =
 final novedadesPorRevisarProvider = FutureProvider.autoDispose.family<List<NovedadPendiente>, String>(
   (ref, vin) => ref.watch(novedadesRepositorioProvider).porRevisar(vin: vin),
 );
+
+/// Los daños sin calificar de todas las unidades de un viaje, del más antiguo al más reciente. Alimenta la lista
+/// del inspector y el contador de su botón en Mis viajes.
+final sinCalificarDelViajeProvider = FutureProvider.autoDispose.family<List<NovedadPendiente>, String>(
+  (ref, viajeId) => ref.watch(novedadesRepositorioProvider).sinCalificarDelViaje(viajeId),
+);

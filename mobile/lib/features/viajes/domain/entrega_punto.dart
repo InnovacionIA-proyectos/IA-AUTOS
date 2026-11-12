@@ -65,6 +65,7 @@ class UnidadEntrega {
     this.tipoCierre,
     this.entregaFirmada = false,
     this.recibeFirmada = false,
+    this.recibioExterno,
   });
 
   factory UnidadEntrega.fromJson(Map<String, dynamic> json) => UnidadEntrega(
@@ -73,6 +74,7 @@ class UnidadEntrega {
         tipoCierre: json['tipo_cierre'] as String?,
         entregaFirmada: json['entrega_firmada_at'] != null,
         recibeFirmada: json['recibe_firmada_at'] != null,
+        recibioExterno: json['recibe_externo_nombre'] as String?,
       );
 
   final String vin;
@@ -80,6 +82,12 @@ class UnidadEntrega {
   final String? tipoCierre;
   final bool entregaFirmada;
   final bool recibeFirmada;
+
+  /// Quién recibió cuando no fue un usuario del sistema, sino una persona del punto de entrega.
+  ///
+  /// Se muestra el nombre y no la cédula: la cédula es un dato personal y para saber quién recibió basta el
+  /// nombre. Queda guardada en la entrega y en la auditoría, que es donde hace falta.
+  final String? recibioExterno;
 
   bool get cerrada => estado == EstadoEntrega.cerrada;
 }

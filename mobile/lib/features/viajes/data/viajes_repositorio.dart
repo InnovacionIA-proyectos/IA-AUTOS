@@ -68,16 +68,21 @@ class ViajesRepositorio {
   /// Primero la copia guardada, que es lo que hace que funcione sin señal. Si no está ahí —la copia es vieja, o
   /// quien captura no es el conductor ni el inspector del viaje, como un administrador— se pide ese viaje suelto.
   /// Devuelve null si tampoco se puede: la pantalla lo muestra sin los datos en vez de impedir la captura.
+  /// El viaje de una etapa: primero el servidor, y la copia guardada solo si no se pudo.
+  ///
+  /// Era al revés, y de ahí salía el fallo de la acomodación: con tres unidades ya posicionadas, la pantalla las
+  /// mostraba «sin posición» porque leía la copia que se bajó antes de asignarlas. La posición, la capacidad y la
+  /// disposición de la niñera cambian mientras se trabaja el viaje; la copia sirve para no quedarse en blanco sin
+  /// señal, no para decidir.
   Future<Viaje?> deLaEtapa(String usuarioId, String viajeId) async {
-    final guardados = await leerCache(usuarioId);
-    for (final viaje in guardados ?? const <Viaje>[]) {
-      if (viaje.id == viajeId) return viaje;
-    }
-
     try {
       final r = await _api.get('/api/viajes/${Uri.encodeComponent(viajeId)}');
       return Viaje.fromJson(r as Map<String, dynamic>);
     } catch (_) {
+      final guardados = await leerCache(usuarioId);
+      for (final viaje in guardados ?? const <Viaje>[]) {
+        if (viaje.id == viajeId) return viaje;
+      }
       return null;
     }
   }

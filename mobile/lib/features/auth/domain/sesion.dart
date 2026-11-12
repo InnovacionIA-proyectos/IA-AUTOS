@@ -32,6 +32,14 @@ List<String> capacidadesDeRol(String rol) => [
         Capacidad.verAlertas,
     ];
 
+/// Quien solo alcanza lo de sus viajes: el inspector y el conductor. Los demás —coordinador de calidad,
+/// comercial, administradores— alcanzan lo de su cliente.
+///
+/// Es el `SoloSusViajes()` del servidor, que es quien de verdad recorta cada respuesta; aquí se repite para no
+/// pedir filtros que sobran ni ofrecer pantallas que luego responden 403. Si allá cambia la lista de roles, esta
+/// se queda corta: por eso se usa para decidir qué pedir, nunca para dar por bueno un acceso.
+bool soloSusViajes(String? rol) => rol == 'inspector' || rol == 'conductor';
+
 class Usuario {
   const Usuario({
     required this.id,

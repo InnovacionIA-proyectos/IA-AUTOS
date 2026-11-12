@@ -182,4 +182,81 @@ void main() {
     final f = FotoLocal.fromJson(foto('e1.jpg').toJson());
     expect(f.selloFecha, foto('e1.jpg').selloFecha);
   });
+
+  /// S7-HU-04.2: el daño del extra viaja con él, en la misma llamada que lo crea.
+  group('el extra dañado', () {
+    test('sobrevive al guardarse y volverse a leer en la cola', () {
+      final conDano = ExtraLocal(
+        tipo: 'platon',
+        nombre: 'Platón',
+        dano: const DanoExtra(clase: 'golpe', tamano: '1_5cm', nivel: 'v2'),
+        fotos: [foto('e1.jpg')],
+      );
+
+      final leido = ExtraLocal.fromJson(conDano.toJson());
+
+      expect((leido.dano?.clase, leido.dano?.tamano, leido.dano?.nivel), ('golpe', '1_5cm', 'v2'));
+      expect(leido.estaDanado, isTrue);
+      expect(ExtraLocal.fromJson(extra('Platón').toJson()).estaDanado, isFalse);
+    });
+
+    test('sale con el extra, no en una llamada aparte', () async {
+      await cola.agregar(conExtras([
+        ExtraLocal(
+          tipo: 'platon',
+          nombre: 'Platón',
+          dano: const DanoExtra(clase: 'golpe', tamano: '1_5cm', nivel: 'v2'),
+          fotos: [foto('e1.jpg')],
+        ),
+      ]));
+
+      await procesador.procesar(usuarioPrueba);
+
+      expect(gateway.extrasEnviados.single.dano?.clase, 'golpe');
+      expect(gateway.extrasEnviados.single.dano?.nivel, 'v2');
+      expect(gateway.llamadas.where((l) => l == 'agregarHallazgo'), isEmpty,
+          reason: 'el hallazgo lo crea el servidor a partir del extra');
+    });
+
+    test('un extra sin daño sigue saliendo sin nada de eso', () async {
+      await cola.agregar(conExtras([extra('Platón')]));
+
+      await procesador.procesar(usuarioPrueba);
+
+      expect(gateway.extrasEnviados.single.dano, isNull);
+    });
+
+    test('al servidor le llegan los tres campos con sus nombres del contrato', () async {
+      final adaptador = AdaptadorFalso((_) => json(201, {'id': 'x-1'}));
+      final api = ClienteApi(baseUrl: 'https://api.test', token: () async => 'jwt', dio: Dio()..httpClientAdapter = adaptador);
+
+      await GatewayInformesApi(api).crearExtra(
+        'i-1',
+        tipo: 'platon',
+        dano: const DanoExtra(clase: 'golpe', tamano: '1_5cm', nivel: 'v2'),
+      );
+
+      final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
+      expect(cuerpo['danado'], isTrue);
+      expect((cuerpo['clase_dano'], cuerpo['tamano_dano'], cuerpo['nivel_severidad']), ('golpe', '1_5cm', 'v2'));
+    });
+
+    // El servidor exige los tres con `danado: true`, sin excepcion por rol. Un cuerpo con `danado` y sin nivel
+    // vuelve con 400, que no es transitorio: el job queda fallido con la inspeccion abierta. Por eso la pantalla
+    // no deja armar un dano sin nivel; si alguna vez llegara uno, aqui se ve que el cuerpo sale incompleto.
+    test('un dano sin nivel sale incompleto: es el cuerpo que el servidor rechaza', () async {
+      final adaptador = AdaptadorFalso((_) => json(201, {'id': 'x-1'}));
+      final api = ClienteApi(baseUrl: 'https://api.test', token: () async => 'jwt', dio: Dio()..httpClientAdapter = adaptador);
+
+      await GatewayInformesApi(api).crearExtra(
+        'i-1',
+        tipo: 'platon',
+        dano: const DanoExtra(clase: 'golpe', tamano: '1_5cm'),
+      );
+
+      final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
+      expect(cuerpo['danado'], isTrue);
+      expect(cuerpo.containsKey('nivel_severidad'), isFalse, reason: 'el 400 vendria por este campo');
+    });
+  });
 }

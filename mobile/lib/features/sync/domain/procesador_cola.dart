@@ -288,6 +288,7 @@ class ProcesadorCola {
           tipo: extra.tipo,
           texto: extra.textoOtro,
           observacion: extra.observacion,
+          dano: extra.dano,
         );
         extra = extra.conId(id);
         job = job.conProgreso(extras: _reemplazar(job.extras, i, extra));
@@ -450,7 +451,14 @@ class ProcesadorCola {
       if (job.motivo case final motivo?) {
         await gateway.cerrarEntregaConUnaFirma(job.viajeId, job.lugarId, motivo: motivo, firma: job.firma);
       } else {
-        await gateway.firmarEntregaPunto(job.viajeId, job.lugarId, firma: job.firma!);
+        await gateway.firmarEntregaPunto(
+          job.viajeId,
+          job.lugarId,
+          firma: job.firma!,
+          recibeNombre: job.recibeNombre,
+          recibeCedula: job.recibeCedula,
+          firmaRecibe: job.firmaRecibe,
+        );
       }
     } on ErrorApi catch (e) {
       if (e.status != 409 || !e.message.startsWith(mensajeSinPendientes)) rethrow;

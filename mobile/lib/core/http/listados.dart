@@ -3,6 +3,15 @@ import '../errores/error_api.dart';
 /// Código del error que levanta la app cuando un listado de la API no viene ni como arreglo ni como página.
 const codigoFormaInesperada = 'FORMA_INESPERADA';
 
+/// Cuántos elementos dice tener el listado completo, para saber si queda una página más por pedir.
+///
+/// `null` cuando la respuesta vino como arreglo pelado: ahí no hay páginas y lo que llegó es todo. No se cae al
+/// número de elementos recibidos, porque eso diría «ya está completo» con una página de 50 de 120.
+int? totalDe(Object? respuesta) => switch (respuesta) {
+      {'total': final int total} => total,
+      _ => null,
+    };
+
 /// Los elementos de un listado de la API, venga como arreglo pelado o envuelto en una página
 /// `{items, total, pagina, tamano}`.
 ///

@@ -74,6 +74,15 @@ void main() {
     expect(find.text('Sin daños anteriores registrados.'), findsNothing);
   });
 
+  // Cambiar la lista por «buscando…» cada vez que se revalida no solo parpadea: desmonta las fotos, y con ellas
+  // la guarda que impide volver a pedir una que ya no está. Así empezaba el bucle del patio.
+  testWidgets('mientras se vuelven a buscar, lo que ya se sabe sigue en pantalla', (tester) async {
+    await montar(tester, previos: [previo], cargando: true);
+
+    expect(find.text('Izquierdo 7 · Espejo retrovisor'), findsOneWidget);
+    expect(find.text('Buscando con qué venía el vehículo…'), findsNothing);
+  });
+
   testWidgets('un vehículo sin historial lo dice, en vez de dejar un hueco', (tester) async {
     await montar(tester);
 
