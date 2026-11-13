@@ -118,6 +118,70 @@ void main() {
       'id', 'vin', 'status_code', 'model_description', 'orden_number', 'orden_sap', 'origin_cedi', 'destination_city',
       'destination_address', 'loading_date', 'appointment', 'loading_dock', 'weight',
     ],
+
+    // ---------------------------------------------------------------- la entrega por punto (S6-HU-11, S7-HU-02)
+    // El sobre: la app solo saca los puntos. El resto del viaje ya lo tiene de otra parte.
+    'EntregasDelViajeDto': ['puntos'],
+    // Cada unidad del punto: su estado decide si falta descargarla, y las dos marcas de firma, quién ya firmó.
+    // `recibe_externo_nombre` es lo que se enseña de quien recibió sin ser usuario; la cédula no se muestra.
+    'EntregaUnidadDto': [
+      'vin', 'estado', 'tipo_cierre', 'entrega_firmada_at', 'recibe_firmada_at', 'recibe_externo_nombre',
+    ],
+
+    // ---------------------------------------------------------------- los extras del vehículo (S6-HU-16)
+    // `tipo_nombre` es el respaldo cuando el extra no trae nombre propio: un extra raro no puede dejar la ficha
+    // con un renglón en blanco.
+    'ExtraDto': ['id', 'nombre', 'tipo_nombre'],
+
+    // ---------------------------------------------------------------- la acomodación en la niñera (S7-HU-05)
+    // Los puestos los manda el servidor: dibujarlos con un esquema fijo pintaba siete donde había nueve.
+    'DisposicionDeNiniera': ['puestos'],
+    'PuestoDeNiniera': ['numero', 'etiqueta'],
+
+    // ---------------------------------------------------------------- los avisos (S6-HU-02)
+    // `no_leidas` es el número de la pestaña; sin él habría que contar la página que se trajo, que no es lo mismo.
+    'ListadoNotificacionesDto': ['items', 'total', 'no_leidas'],
+    'NotificacionDto': [
+      'id', 'tipo', 'urgencia', 'titulo', 'mensaje', 'viaje_id', 'codigo_mtrack', 'vin', 'leida_at', 'respuesta',
+      'created_at',
+    ],
+    'RespuestaNotificacionDto': ['texto', 'medio', 'usuario_nombre', 'fecha'],
+
+    // ---------------------------------------------------------------- la historia de daños del VIN (S7-HU-14)
+    // La foto sale de la primera evidencia, con su vencimiento: la URL va firmada y caduca.
+    'HallazgoPrevioDto': [
+      'id', 'zona', 'proceso', 'momento', 'cuadrante_numero', 'lado', 'clase_dano', 'tamano_dano',
+      'nivel_severidad', 'codigo_mtrack', 'cerrada_at', 'evidencias',
+    ],
+
+    // ---------------------------------------------------------------- reclamar un camión (S6-HU-12)
+    'PendienteDto': [
+      'viaje_id', 'codigo_mtrack', 'placa', 'proceso', 'lugar', 'fecha_programada', 'estado',
+      'reclamado_por_nombre', 'unidades',
+    ],
+
+    // ---------------------------------------------------------------- la ubicación de un lugar (S6-HU-17)
+    // Del catálogo `lugares` la app saca el estado de ubicación de cada uno; de la respuesta al fijarla, el nuevo.
+    'CatalogoDto': ['items'],
+    'LugarUbicacionDto': ['estado_ubicacion'],
+
+    // ---------------------------------------------------------------- buscar un vehículo (S7-HU-09)
+    'VehiculoBusquedaDto': ['vin', 'marca', 'modelo', 'color', 'activo'],
+
+    // ---------------------------------------------------------------- lo que pasó alrededor del informe
+    // El motivo ya resuelto a su nombre: la app no traduce códigos que el servidor ya tradujo.
+    'NovedadProcesoDto': ['tipo', 'motivo', 'texto', 'usuario_nombre', 'fecha'],
+
+    // ---------------------------------------------------------------- las respuestas paginadas (S7-HU-13)
+    // La app las lee por `items`; el resto de la envoltura lo usa quien pagina de verdad.
+    'PaginaDtoOfInspeccionListadoDto': ['items', 'total', 'pagina', 'tamano'],
+    'ListadoHallazgosDto': ['items'],
+    'ListadoUsuariosDto': ['items'],
+    'PaginaDtoOfOrdenSofasaDto': ['items'],
+
+    // Lo que NO está aquí, y por qué: `HallazgoCreadoDto`, `CerrarInspeccionResponse`, `LlegadaDto` y
+    // `ReclamoDto` son respuestas que la app recibe y **no lee** —envía y sigue—, así que atarlas sería fijar
+    // algo que no usa. La imagen de un panel (`FileContentResult`) no es JSON: se pide por su URL.
   };
 
   // Campos que la app ENVÍA en cada petición.
@@ -164,6 +228,26 @@ void main() {
     'RegistrarNovedadRequest': ['fecha', 'lat', 'lng', 'tipo_novedad', 'tamano_dano', 'evidencia'],
     // «Llegué»: la fecha y el lugar del momento.
     'RegistrarLlegadaRequest': ['fecha', 'lat', 'lng'],
+    // Corregir un informe cerrado: nace uno nuevo con la fecha y el lugar de la corrección (S7-HU-18).
+    'CorregirInspeccionRequest': ['fecha', 'lat', 'lng', 'notas'],
+    // El extra del vehículo. Su daño no son columnas del extra: van `danado` y los tres campos del hallazgo,
+    // que es como el servidor lo guarda (S7-HU-04).
+    'CrearExtraRequest': ['tipo', 'texto', 'observacion', 'danado', 'clase_dano', 'tamano_dano', 'nivel_severidad'],
+    // El recibo sin entrega: la salida que hizo el conductor sin inspector la firma solo quien recibe.
+    'ReciboSinEntregaRequest': ['firma'],
+    // La entrega de un punto. `recibe_nombre`, `recibe_cedula` y `firma_recibe` solo van cuando recibe alguien
+    // que no es usuario de la app; el servidor los rechaza donde el punto tiene inspector (S7-HU-02).
+    'FirmarEntregaRequest': ['firma', 'recibe_nombre', 'recibe_cedula', 'firma_recibe'],
+    // Cerrar el punto con una sola firma, diciendo por qué falta la otra parte.
+    'CerrarEntregaUnaFirmaRequest': ['motivo', 'firma'],
+    // El puesto de una unidad en la niñera. Va presente aunque sea nulo: nulo es lo que libera el puesto.
+    'AsignarPosicionRequest': ['posicion'],
+    // Reclamar el camión de un proceso.
+    'ReclamarViajeRequest': ['proceso'],
+    // «Fijar ubicación aquí»: deja la posición del teléfono como la del lugar.
+    'FijarUbicacionRequest': ['lat', 'lng', 'precision'],
+    // Responder un aviso desde la app.
+    'ResponderNotificacionRequest': ['texto', 'medio'],
     // La app sube multipart, no base64: `SubirArchivoRequest` ya no se usa.
   };
 
@@ -219,6 +303,32 @@ void main() {
       ('post', '/api/hallazgos/{}/notas'),
       ('post', '/api/inspecciones/{}/transferencia/notas'),
       ('get', '/api/sofasa/ordenes'),
+      // El catálogo se pide por su nombre: la app lee `lugares` para saber cuáles tienen ubicación.
+      ('get', '/api/catalogos/{}'),
+      ('post', '/api/lugares/{}/ubicacion'),
+      // Corregir un informe cerrado, y los extras del vehículo con su daño.
+      ('post', '/api/inspecciones/{}/corregir'),
+      ('post', '/api/inspecciones/{}/extras'),
+      // El recibo sin entrega: la salida sin inspector la firma solo quien recibe.
+      ('post', '/api/inspecciones/{}/transferencia/sin-entrega'),
+      // Los avisos del inspector y del coordinador.
+      ('get', '/api/notificaciones'),
+      ('post', '/api/notificaciones/{}/leida'),
+      ('post', '/api/notificaciones/{}/respuesta'),
+      // Buscar un vehículo por VIN, y su historia completa de daños.
+      ('get', '/api/vehiculos'),
+      ('get', '/api/vehiculos/{}/hallazgos-previos'),
+      // Reclamar un camión pendiente y soltarlo.
+      ('get', '/api/viajes/pendientes'),
+      ('post', '/api/viajes/{}/reclamos'),
+      ('delete', '/api/viajes/{}/reclamos/{}'),
+      // La entrega por punto: lo que hay que entregar y las dos maneras de firmarlo.
+      ('get', '/api/viajes/{}/entregas'),
+      ('post', '/api/viajes/{}/entregas/{}/firma'),
+      ('post', '/api/viajes/{}/entregas/{}/una-firma'),
+      // El puesto de una unidad en la niñera. Es PUT, no POST: la clave va presente aunque sea nula, y mandarla
+      // nula es lo que libera el puesto.
+      ('put', '/api/viajes/{}/vehiculos/{}/posicion'),
     ];
     for (final (metodo, ruta) in usos) {
       test('${metodo.toUpperCase()} $ruta', () {
