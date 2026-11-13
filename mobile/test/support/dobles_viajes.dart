@@ -2,10 +2,12 @@ import 'package:traza_autos/core/dispositivo/servicios.dart';
 import 'package:traza_autos/features/viajes/data/entregas_repositorio.dart';
 import 'package:traza_autos/features/viajes/data/lugares_repositorio.dart';
 import 'package:traza_autos/features/viajes/data/reclamos_repositorio.dart';
+import 'package:traza_autos/features/viajes/data/permisos_repositorio.dart';
 import 'package:traza_autos/features/viajes/domain/entrega_punto.dart';
 import 'package:traza_autos/features/viajes/domain/ubicacion_lugar.dart';
 import 'package:traza_autos/features/viajes/data/viajes_repositorio.dart';
 import 'package:traza_autos/features/viajes/domain/pendiente.dart';
+import 'package:traza_autos/features/viajes/domain/permiso_sin_inspector.dart';
 import 'package:traza_autos/features/viajes/domain/viaje.dart';
 
 Viaje viaje(
@@ -18,6 +20,7 @@ Viaje viaje(
   String? conductor,
   String estado = 'en_curso',
   Map<String, int> posiciones = const {},
+  bool cargueTieneInspector = false,
 }) =>
     Viaje(
       id: id,
@@ -27,6 +30,7 @@ Viaje viaje(
       unidad: unidad,
       trailer: trailer,
       conductorNombre: conductor,
+      cargueTieneInspector: cargueTieneInspector,
       vehiculos: [for (final v in vines) ViajeVehiculo(vin: v, marca: 'Renault', modelo: 'Kwid', posicion: posiciones[v])],
     );
 
@@ -203,6 +207,9 @@ EntregaPunto puntoDe(
   List<String> vines = const ['VINAAAAAAAAAAAAA1', 'VINBBBBBBBBBBBBB2'],
   EstadoEntrega estado = EstadoEntrega.pendiente,
   String viajeId = 'v1',
+  // El punto corriente tiene inspector asignado y la entrega la firma él: así, quien prueba otra cosa no se
+  // encuentra de regalo la pantalla pidiendo nombre y cédula.
+  bool tieneInspector = true,
 }) =>
     EntregaPunto(
       viajeId: viajeId,
@@ -211,6 +218,7 @@ EntregaPunto puntoDe(
       unidades: [for (final v in vines) UnidadEntrega(vin: v, estado: estado)],
       pendientes: estado == EstadoEntrega.cerrada ? 0 : vines.length,
       entregada: estado == EstadoEntrega.cerrada,
+      tieneInspector: tieneInspector,
     );
 
 /// La ubicación de los lugares de mentira.
@@ -233,4 +241,66 @@ class LugaresRepositorioFalso implements LugaresRepositorio {
     estadosPorLugar = {...estadosPorLugar, lugarId: EstadoUbicacionLugar.pendienteConfirmar};
     return EstadoUbicacionLugar.pendienteConfirmar;
   }
+}
+
+/// El permiso de la excepción «No hay inspector»: lo que hay y lo que se pidió.
+class PermisosRepositorioFalso implements PermisosRepositorio {
+  /// Lo que responde la consulta. Null es «este viaje no tiene solicitud», que es el 404 del servidor.
+  PermisoSinInspector? permiso;
+
+  /// Lo que lanza al pedirlo: el 409 de un punto que resultó no tener inspectores, por ejemplo.
+  Object? errorAlSolicitar;
+
+  final List<Map<String, Object?>> solicitudes = [];
+  int consultas = 0;
+
+  @override
+  Future<PermisoSinInspector?> delViaje(String viajeId) async {
+    consultas++;
+    return permiso;
+  }
+
+  @override
+  Future<PermisoSinInspector> solicitar(
+    String viajeId, {
+    required String motivo,
+    required DateTime fecha,
+    String? motivoTexto,
+    double? lat,
+    double? lng,
+  }) async {
+    solicitudes.add({'viajeId': viajeId, 'motivo': motivo, 'texto': motivoTexto, 'lat': lat, 'lng': lng});
+    if (errorAlSolicitar != null) throw errorAlSolicitar!;
+    return permiso ??= permisoDe(viajeId: viajeId, motivoCodigo: motivo, motivoTexto: motivoTexto);
+  }
+}
+
+PermisoSinInspector permisoDe({
+  String viajeId = 'viaje-1',
+  bool concedido = false,
+  bool porTiempo = false,
+  String motivoCodigo = 'otro',
+  String? motivoTexto = 'El inspector se enfermó',
+  String? concedidoPorNombre,
+  Duration falta = const Duration(minutes: 7, seconds: 30),
+  DateTime? ahora,
+}) {
+  final momento = ahora ?? DateTime.now().toUtc();
+  return PermisoSinInspector(
+    id: 'permiso-1',
+    viajeId: viajeId,
+    estado: concedido ? EstadoPermiso.concedido : EstadoPermiso.pendiente,
+    solicitadoAt: momento,
+    venceAt: momento.add(falta),
+    motivoCodigo: motivoCodigo,
+    lugar: 'CEDI 1',
+    motivo: 'Otro',
+    motivoTexto: motivoTexto,
+    fecha: momento,
+    lat: 6.2442,
+    lng: -75.5812,
+    concedidoAt: concedido ? momento : null,
+    concedidoPorNombre: concedidoPorNombre,
+    porTiempo: porTiempo,
+  );
 }

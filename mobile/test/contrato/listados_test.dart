@@ -168,6 +168,30 @@ void main() {
 
       expect(puntos.single.lugarId, 'lug-1');
     });
+
+    // S7-HU-22.1: quién recibe lo decide el servidor por punto de entrega. La app lo lee de aquí en vez de
+    // deducirlo del inspector del viaje, que es otra cosa.
+    test('cada punto dice si tiene inspector, y sin el campo se asume que no', () async {
+      Map<String, dynamic> punto(Map<String, dynamic> extra) => {
+            'viaje_id': 'via-1',
+            'lugar_id': 'lug-1',
+            'lugar': 'Concesionario',
+            'unidades': <dynamic>[],
+            ...extra,
+          };
+      final adaptador = AdaptadorFalso((_) => json(200, {
+            'viaje_id': 'via-1',
+            'puntos': [
+              punto(const {'lugar_tiene_inspector': true}),
+              punto(const {'lugar_tiene_inspector': false}),
+              punto(const {}),
+            ],
+          }));
+
+      final puntos = await EntregasRepositorio(apiCon(adaptador)).delViaje('via-1');
+
+      expect(puntos.map((p) => p.tieneInspector), [true, false, false]);
+    });
   });
 
   group('una respuesta que no es ninguna de las dos formas', () {

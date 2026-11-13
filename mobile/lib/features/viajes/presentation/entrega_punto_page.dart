@@ -26,13 +26,9 @@ const cedulaExternaMax = 30;
 
 /// Las entregas de un viaje, una por lugar de destino: «Aquí entregas estas N unidades».
 class EntregasViajePage extends ConsumerWidget {
-  const EntregasViajePage({super.key, required this.viajeId, this.viajeSinInspector = false});
+  const EntregasViajePage({super.key, required this.viajeId});
 
   final String viajeId;
-
-  /// El viaje no tiene inspector asignado: entonces nadie del sistema puede recibir y la entrega la firma quien
-  /// esté en el punto. Viene de quien abre la pantalla, que ya tiene el viaje en la mano.
-  final bool viajeSinInspector;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -70,8 +66,7 @@ class EntregasViajePage extends ConsumerWidget {
                           alFirmar: () async {
                             await Navigator.of(context).push<void>(
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    FirmaEntregaPuntoPage(punto: punto, viajeSinInspector: viajeSinInspector),
+                                builder: (_) => FirmaEntregaPuntoPage(punto: punto),
                               ),
                             );
                             ref.invalidate(entregasDelViajeProvider(viajeId));
@@ -182,12 +177,9 @@ class _FilaUnidad extends StatelessWidget {
 /// Firma de la entrega de un punto: una para todas las unidades, o el cierre con una sola firma cuando la otra
 /// parte no está. Se encola: sin señal se envía al volver, y repetirla no duplica nada.
 class FirmaEntregaPuntoPage extends ConsumerStatefulWidget {
-  const FirmaEntregaPuntoPage({super.key, required this.punto, this.viajeSinInspector = false});
+  const FirmaEntregaPuntoPage({super.key, required this.punto});
 
   final EntregaPunto punto;
-
-  /// Sin inspector en el viaje no hay a quién preguntarle: recibe quien esté en el punto.
-  final bool viajeSinInspector;
 
   @override
   ConsumerState<FirmaEntregaPuntoPage> createState() => _EstadoFirmaEntregaPunto();
@@ -199,14 +191,15 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
   bool _guardando = false;
   final _motivo = TextEditingController();
 
-  /// Recibe alguien del punto que no es usuario de la app. Lo dice quien está allí: el contrato no trae si el
-  /// punto tiene inspector asignado, eso solo lo sabe el servidor —y rechaza con 400 los datos de un externo en
-  /// un punto que sí lo tiene—.
+  /// Recibe alguien del punto que no es usuario de la app.
   ///
-  /// Sin inspector en el viaje empieza encendido, porque es lo normal; pero se puede apagar. Dejarlo fijo
-  /// encerraba al conductor de un viaje sin inspector que entrega en un punto que sí tiene inspectores de
-  /// planta: allí el servidor rechaza los datos del externo y no había cómo quitarlos.
-  late bool _recibeExterno = widget.viajeSinInspector;
+  /// Empieza como lo dice el servidor para **este punto** (`lugar_tiene_inspector`): donde no hay inspector
+  /// asignado recibe quien esté allí, y donde lo hay firma él. Es el mismo dato con el que el servidor rechaza
+  /// la firma, así que lo que se ofrece aquí y lo que se acepta allá ya no pueden discrepar de entrada.
+  ///
+  /// Se puede cambiar a mano: el dato del punto pudo cambiar después de abrir la pantalla, y dejarlo fijo
+  /// encerraría a quien está allí. Cuando eso pasa, el servidor corrige y el CA-6 de abajo lo recoge.
+  late bool _recibeExterno = !widget.punto.tieneInspector;
   final _nombreRecibe = TextEditingController();
   final _cedulaRecibe = TextEditingController();
   String? _firmaRecibe;
@@ -297,8 +290,8 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
       // CA-6: quién firma aquí lo decide el servidor **por punto de entrega**, y ese dato pudo cambiar desde que
       // se abrió la pantalla. El rechazo no es transitorio —reintentar manda exactamente lo mismo—, así que el
       // envío se descarta, el interruptor se pone como el servidor dice y se vuelve a firmar aquí, sin perder lo
-      // escrito ni salir de la pantalla. Mientras `lugar_tiene_inspector` no llegue al contrato (S7-HU-22.1),
-      // esta corrección es lo único con lo que la app se entera.
+      // escrito ni salir de la pantalla. El punto llega con `lugar_tiene_inspector`, así que ya no se abre la
+      // pantalla a ciegas; esto cubre lo que cambió entre abrirla y firmar.
       if (_caminoDelPunto(desenlace) case final camino?) {
         await ref.read(colaRepositorioProvider).eliminar(jobId);
         await sync.refrescar();
@@ -400,7 +393,7 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
     final sinInspeccion = _punto.sinInspeccion;
-    final sinInspector = widget.viajeSinInspector;
+    final puntoSinInspector = !_punto.tieneInspector;
     final externo = _recibeExterno;
     return Scaffold(
       appBar: AppBar(title: Text('Entrega · ${_punto.lugar}')),
@@ -438,17 +431,18 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
             ),
             const SizedBox(height: Espacio.lg),
             if (!_unaSolaFirma) ...[
-              // Quién está del otro lado lo sabe quien está allí: el contrato no dice si el punto tiene inspector
-              // asignado. Si se marca por error, el servidor lo rechaza nombrando los tres campos; y si se deja
-              // sin marcar donde hacía falta, la entrega se queda esperando una firma que no va a llegar.
+              // Quién está del otro lado lo dice el servidor para este punto, y así viene ya puesto. Se deja
+              // cambiar porque el dato pudo cambiar después: si se marca donde no toca, el servidor lo rechaza
+              // nombrando los tres campos; y si se deja sin marcar donde hacía falta, la entrega se queda
+              // esperando una firma que no va a llegar.
               SwitchListTile(
                 value: _recibeExterno,
                 onChanged: _guardando ? null : (v) => setState(() => _recibeExterno = v),
                 title: const Text('Recibe una persona del punto'),
                 subtitle: Text(
-                  sinInspector
-                      ? 'Este viaje no tiene inspector, así que lo normal es que reciba quien esté en el punto.'
-                      : 'Alguien que no es usuario de la app: firma aquí, con su nombre y su cédula.',
+                  puntoSinInspector
+                      ? 'Este punto no tiene inspector asignado, así que recibe quien esté allí.'
+                      : 'Este punto tiene inspector asignado: lo normal es que firme él desde su sesión.',
                   style: tema.bodySmall,
                 ),
                 contentPadding: EdgeInsets.zero,

@@ -4,10 +4,12 @@ import '../../app/proveedores.dart';
 import '../../core/db/cache_lecturas.dart';
 import 'data/entregas_repositorio.dart';
 import 'data/lugares_repositorio.dart';
+import 'data/permisos_repositorio.dart';
 import 'data/reclamos_repositorio.dart';
 import 'data/viajes_repositorio.dart';
 import 'domain/entrega_punto.dart';
 import 'domain/pendiente.dart';
+import 'domain/permiso_sin_inspector.dart';
 import 'domain/ubicacion_lugar.dart';
 import 'domain/viaje.dart';
 import '../auth/presentation/auth_controller.dart';
@@ -53,6 +55,18 @@ final entregasRepositorioProvider = Provider<EntregasRepositorio>(
 /// Los puntos de entrega de un viaje. Se consulta con señal: lo que está pendiente lo dice el servidor.
 final entregasDelViajeProvider = FutureProvider.autoDispose.family<List<EntregaPunto>, String>(
   (ref, viajeId) => ref.watch(entregasRepositorioProvider).delViaje(viajeId),
+);
+
+final permisosRepositorioProvider = Provider<PermisosRepositorio>(
+  (ref) => PermisosRepositorio(ref.watch(clienteApiProvider)),
+);
+
+/// El permiso de la excepción «No hay inspector» de un viaje, o null si no se ha pedido.
+///
+/// Se consulta con señal y cada vez que se entra: quien concede es el servidor —un coordinador o el reloj—, así
+/// que el estado de verdad vive allá y no en esta pantalla.
+final permisoSinInspectorProvider = FutureProvider.autoDispose.family<PermisoSinInspector?, String>(
+  (ref, viajeId) => ref.watch(permisosRepositorioProvider).delViaje(viajeId),
 );
 
 final lugaresRepositorioProvider = Provider<LugaresRepositorio>(

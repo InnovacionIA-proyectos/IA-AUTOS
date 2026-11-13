@@ -60,6 +60,17 @@ void main() {
       'origen', 'destino', 'vehiculos',
       // Con el inspector del viaje se sabe a quién se le ofrece marcar que una unidad no sale.
       'inspector_id',
+      // Si el punto de cargue tiene inspectores: con eso el botón de la salida pide permiso en vez de activar
+      // la excepción, que allí el servidor rechaza.
+      'lugar_cargue_tiene_inspector',
+    ],
+    // Quién recibe en un punto lo decide el servidor por punto, no por viaje.
+    'EntregaPuntoDto': ['viaje_id', 'lugar_id', 'lugar', 'unidades', 'unidades_pendientes', 'entregada', 'lugar_tiene_inspector'],
+    // El permiso de la excepción: su estado, hasta cuándo corre el plazo y con qué motivo se pidió, que es el
+    // que se reusa al seguir con la captura.
+    'PermisoSinInspectorDto': [
+      'id', 'viaje_id', 'estado', 'solicitado_at', 'vence_at', 'lugar', 'motivo_codigo', 'motivo', 'motivo_texto',
+      'fecha', 'lat', 'lng', 'concedido_at', 'concedido_por_nombre', 'autorizado_por_tiempo',
     ],
     // La nota se lee bajo el registro que aclara: sin su autor y su fecha no aclara nada.
     'NotaAclaratoriaDto': ['id', 'texto', 'autor_nombre', 'autor_rol', 'created_at'],
@@ -128,6 +139,11 @@ void main() {
     ],
     // Una sola firma: el servidor la atribuye al usuario del token.
     'FirmarTransferenciaRequest': ['entrega_usuario_id', 'recibe_usuario_id', 'firma'],
+    // Pedir la excepción donde el punto tiene inspectores: el motivo, y el momento y el lugar en que se pidió,
+    // que son los que después documentan la novedad.
+    'SolicitarPermisoSinInspectorRequest': [
+      'motivo_sin_inspector', 'motivo_sin_inspector_texto', 'fecha', 'lat', 'lng',
+    ],
     // Revisar la novedad del conductor: se la ubica, se la clasifica y se le pone el nivel, y el tamaño que
     // eligió el conductor se puede corregir.
     'RevisarHallazgoRequest': [
@@ -194,6 +210,10 @@ void main() {
       ('post', '/api/hallazgos/{}/revision'),
       // La unidad que no sale del viaje.
       ('post', '/api/viajes/{}/vehiculos/{}/no-sale'),
+      // El permiso de la excepción «No hay inspector» donde el punto de cargue sí tiene inspectores. Conceder no
+      // está: eso se hace desde el portal, y la app solo pide y espera.
+      ('post', '/api/viajes/{}/permiso-sin-inspector'),
+      ('get', '/api/viajes/{}/permiso-sin-inspector'),
       // Las notas aclaratorias, una ruta por registro.
       ('post', '/api/inspecciones/{}/notas'),
       ('post', '/api/hallazgos/{}/notas'),

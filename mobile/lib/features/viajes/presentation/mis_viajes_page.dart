@@ -275,8 +275,7 @@ class _TarjetaViaje extends ConsumerWidget {
             OutlinedButton(
               onPressed: () => Navigator.of(context).push<void>(
                 MaterialPageRoute(
-                  builder: (_) =>
-                      EntregasViajePage(viajeId: viaje.id, viajeSinInspector: viaje.inspectorId == null),
+                  builder: (_) => EntregasViajePage(viajeId: viaje.id),
                 ),
               ),
               child: const Text('Entrega por punto'),

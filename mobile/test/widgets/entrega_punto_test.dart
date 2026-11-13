@@ -24,7 +24,6 @@ Future<Arnes> abrir(
   WidgetTester tester,
   EntregasRepositorioFalso entregas, {
   Arnes? arnes,
-  bool sinInspector = false,
   Size tamano = const Size(600, 2400),
 }) async {
   await tester.binding.setSurfaceSize(tamano);
@@ -34,7 +33,7 @@ Future<Arnes> abrir(
     ProviderScope(
       retry: (_, _) => null,
       overrides: [...usado.overrides, entregasRepositorioProvider.overrideWithValue(entregas)],
-      child: MaterialApp(theme: crearTema(), home: _Arranque(sinInspector: sinInspector)),
+      child: MaterialApp(theme: crearTema(), home: const _Arranque()),
     ),
   );
   await avanzar(tester);
@@ -42,14 +41,12 @@ Future<Arnes> abrir(
 }
 
 class _Arranque extends ConsumerWidget {
-  const _Arranque({required this.sinInspector});
-
-  final bool sinInspector;
+  const _Arranque();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
       ref.watch(authControllerProvider.select((e) => e.fase)) == FaseAuth.autenticado
-          ? EntregasViajePage(viajeId: 'v1', viajeSinInspector: sinInspector)
+          ? const EntregasViajePage(viajeId: 'v1')
           : const SizedBox();
 }
 
@@ -149,6 +146,7 @@ void main() {
               lugar: 'Autonorte',
               pendientes: 2,
               entregada: false,
+              tieneInspector: true,
               unidades: const [
                 UnidadEntrega(vin: 'VINAAAAAAAAAAAAA1', estado: EstadoEntrega.pendiente),
                 UnidadEntrega(vin: 'VINBBBBBBBBBBBBB2', estado: EstadoEntrega.sinInspeccion),
@@ -179,6 +177,7 @@ void main() {
               lugar: 'Autonorte',
               pendientes: 3,
               entregada: false,
+              tieneInspector: true,
               unidades: const [
                 UnidadEntrega(vin: 'VINAAAAAAAAAAAAA1', estado: EstadoEntrega.pendiente),
                 UnidadEntrega(vin: 'VINBBBBBBBBBBBBB2', estado: EstadoEntrega.sinInspeccion),
@@ -257,9 +256,9 @@ void main() {
     Future<Arnes> abrirFirma(WidgetTester tester, {required bool sinInspector, Arnes? arnes}) async {
       final usado = await abrir(
         tester,
-        EntregasRepositorioFalso()..puntos = [puntoDe('Autonorte')],
+        // Lo que decide quién firma es el punto, no el viaje: así lo manda el servidor en `lugar_tiene_inspector`.
+        EntregasRepositorioFalso()..puntos = [puntoDe('Autonorte', tieneInspector: !sinInspector)],
         arnes: arnes,
-        sinInspector: sinInspector,
       );
       await tester.tap(find.widgetWithText(FilledButton, 'Firmar la entrega'));
       await avanzar(tester);
@@ -273,7 +272,7 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('sin inspector en el viaje pide los tres datos y no deja registrar sin ellos', (tester) async {
+    testWidgets('el punto sin inspector pide los tres datos y no deja registrar sin ellos', (tester) async {
       await abrirFirma(tester, sinInspector: true);
 
       expect(find.widgetWithText(TextField, 'Nombre de quien recibe'), findsOneWidget);
@@ -369,7 +368,7 @@ void main() {
 
     // CA-2: el punto que sí tiene inspector firma como siempre. Que el servidor rechace los datos del externo
     // en ese caso es justo la razón de no mandarlos por si acaso.
-    testWidgets('con inspector en el viaje no se pide nada de nadie más', (tester) async {
+    testWidgets('el punto con inspector no pide nada de nadie más', (tester) async {
       final arnes = Arnes();
       await abrirFirma(tester, sinInspector: false, arnes: arnes);
 
@@ -384,8 +383,8 @@ void main() {
       expect(find.text('Entrega registrada'), findsOneWidget);
     });
 
-    // El contrato no dice si el punto tiene inspector: lo sabe quien está allí.
-    testWidgets('aun con inspector en el viaje se puede decir que recibe alguien del punto', (tester) async {
+    // El dato del punto pudo cambiar desde que se abrió la pantalla: el interruptor viene puesto, no clavado.
+    testWidgets('aun en un punto con inspector se puede decir que recibe alguien de allí', (tester) async {
       await abrirFirma(tester, sinInspector: false);
 
       expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse);
@@ -504,7 +503,6 @@ void main() {
               ],
             ),
           ],
-        sinInspector: true,
         tamano: const Size(320, 6000),
       );
       await tester.tap(find.widgetWithText(FilledButton, 'Firmar la entrega'));

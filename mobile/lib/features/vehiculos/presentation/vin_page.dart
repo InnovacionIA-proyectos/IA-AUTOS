@@ -31,7 +31,9 @@ import '../../inspecciones/providers.dart';
 import '../../sync/domain/job.dart';
 import '../../sync/providers.dart';
 import '../../dibujo_dano/presentation/selector_zona_dano.dart';
+import '../../viajes/domain/permiso_sin_inspector.dart';
 import '../../viajes/presentation/mis_viajes_controller.dart';
+import '../../viajes/presentation/permiso_sin_inspector_page.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../viajes/providers.dart';
 import '../domain/etiquetas.dart';
@@ -106,33 +108,159 @@ class _Detalle extends ConsumerWidget {
   final Inventario inventario;
   final void Function(String ruta) alIr;
 
+  /// La excepción «No hay inspector» en la salida del cargue.
+  ///
+  /// Dos caminos, y los separa el servidor: donde el punto de cargue **no** tiene inspectores la excepción se
+  /// activa en el momento, como siempre; donde los tiene hay que pedir permiso y esperar (S7-HU-06.2). Quién es
+  /// cuál lo dice el viaje en `lugar_cargue_tiene_inspector`, no una suposición de la app.
+  Future<void> _excepcion(
+    BuildContext context,
+    WidgetRef ref,
+    EtapaVista etapa,
+    String vinRuta, {
+    required bool cargueConInspector,
+    required PermisoSinInspector? permiso,
+  }) async {
+    if (!cargueConInspector) return _sinInspector(context, ref, etapa, vinRuta);
+    // Ya concedido: se sigue con el motivo que se pidió, sin volver a preguntar nada (CA-4).
+    if (permiso != null) {
+      if (permiso.concedido) return _continuarConPermiso(etapa, vinRuta, permiso);
+      return _abrirEspera(context, etapa, vinRuta);
+    }
+    return _pedirPermiso(context, ref, etapa, vinRuta);
+  }
+
   /// «No hay inspector»: el conductor elige el motivo, se toma la fecha y el lugar de ese momento, y sigue la captura
   /// de la salida del cargue. Esos tres datos viajan con la inspección: la novedad de proceso los guarda tal cual,
   /// aunque el informe se envíe horas después.
   Future<void> _sinInspector(BuildContext context, WidgetRef ref, EtapaVista etapa, String vinRuta) async {
-    final motivos = ref.read(catalogosProvider).seleccionables(Catalogo.motivosSinInspector);
-    final motivo = await pedirMotivoSinInspector(context, motivos: motivos);
-    if (motivo == null || !context.mounted) return;
-    final Posicion posicion;
+    if (await _pedirMotivoYLugar(context, ref) case (final motivo, final posicion)) {
+      _irACaptura(
+        etapa,
+        vinRuta,
+        motivo: motivo.codigo,
+        motivoTexto: motivo.texto,
+        fecha: DateTime.now().toUtc(),
+        lat: posicion.lat,
+        lng: posicion.lng,
+      );
+    }
+  }
+
+  /// Donde el punto de cargue tiene inspectores, la excepción se pide: el motivo y el lugar son los mismos, pero
+  /// en vez de seguir a la captura se queda esperando a que alguien la conceda, o a que la conceda el tiempo.
+  Future<void> _pedirPermiso(BuildContext context, WidgetRef ref, EtapaVista etapa, String vinRuta) async {
+    final datos = await _pedirMotivoYLugar(context, ref);
+    if (datos == null || etapa.viajeId == null) return;
+    final (motivo, posicion) = datos;
     try {
-      posicion = await ref.read(servicioUbicacionProvider).obtenerActual();
-    } on UbicacionNoDisponible catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.motivo)));
+      await ref.read(permisosRepositorioProvider).solicitar(
+            etapa.viajeId!,
+            motivo: motivo.codigo,
+            motivoTexto: motivo.texto,
+            fecha: DateTime.now().toUtc(),
+            lat: posicion.lat,
+            lng: posicion.lng,
+          );
+    } on ErrorApi catch (e) {
+      if (!context.mounted) return;
+      // CA-6: el punto dejó de tener inspectores entre que se abrió la ficha y se pidió el permiso. Reintentar
+      // daría lo mismo; lo que corresponde es el otro camino, y con el motivo ya elegido: no se vuelve a pedir.
+      if (e.status == 409 && e.message.contains('no tiene inspectores')) {
+        await _avisar(
+          context,
+          'Aquí ya no hace falta permiso',
+          'El servidor dice que este punto de cargue no tiene inspectores asignados, así que la excepción se '
+              'activa en el momento. Sigues con el motivo que ya elegiste.',
+        );
+        if (!context.mounted) return;
+        _irACaptura(
+          etapa,
+          vinRuta,
+          motivo: motivo.codigo,
+          motivoTexto: motivo.texto,
+          fecha: DateTime.now().toUtc(),
+          lat: posicion.lat,
+          lng: posicion.lng,
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensajeDeError(e))));
       return;
     }
     if (!context.mounted) return;
+    ref.invalidate(permisoSinInspectorProvider(etapa.viajeId!));
+    await _abrirEspera(context, etapa, vinRuta);
+  }
+
+  /// El motivo del catálogo y dónde se está ahora. Null si se canceló o si no hay ubicación: sin cualquiera de
+  /// los dos no se sigue, porque el servidor los exige.
+  Future<(MotivoElegido, Posicion)?> _pedirMotivoYLugar(BuildContext context, WidgetRef ref) async {
+    final motivos = ref.read(catalogosProvider).seleccionables(Catalogo.motivosSinInspector);
+    final motivo = await pedirMotivoSinInspector(context, motivos: motivos);
+    if (motivo == null || !context.mounted) return null;
+    try {
+      return (motivo, await ref.read(servicioUbicacionProvider).obtenerActual());
+    } on UbicacionNoDisponible catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.motivo)));
+      return null;
+    }
+  }
+
+  Future<void> _abrirEspera(BuildContext context, EtapaVista etapa, String vinRuta) async {
+    if (etapa.viajeId == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => PermisoSinInspectorPage(
+          viajeId: etapa.viajeId!,
+          alContinuar: (permiso) => _continuarConPermiso(etapa, vinRuta, permiso),
+        ),
+      ),
+    );
+  }
+
+  /// Sigue a la captura con lo que quedó guardado en el permiso: el motivo, su texto, y el momento y el lugar
+  /// desde donde se pidió. No los de ahora: lo que documenta la novedad es cuándo y dónde faltó el inspector.
+  void _continuarConPermiso(EtapaVista etapa, String vinRuta, PermisoSinInspector permiso) => _irACaptura(
+        etapa,
+        vinRuta,
+        motivo: permiso.motivoCodigo,
+        motivoTexto: permiso.motivoTexto,
+        fecha: permiso.fecha ?? permiso.solicitadoAt,
+        lat: permiso.lat,
+        lng: permiso.lng,
+      );
+
+  void _irACaptura(
+    EtapaVista etapa,
+    String vinRuta, {
+    required String motivo,
+    required DateTime fecha,
+    String? motivoTexto,
+    double? lat,
+    double? lng,
+  }) {
     final consulta = [
       'proceso=${Uri.encodeQueryComponent(etapa.proceso)}',
       'momento=${Momento.salida}',
       if (etapa.viajeId != null) 'viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}',
-      'motivo=${Uri.encodeQueryComponent(motivo.codigo)}',
-      if (motivo.texto != null) 'motivoTexto=${Uri.encodeQueryComponent(motivo.texto!)}',
-      'fechaMotivo=${Uri.encodeQueryComponent(DateTime.now().toUtc().toIso8601String())}',
-      'latMotivo=${posicion.lat}',
-      'lngMotivo=${posicion.lng}',
+      'motivo=${Uri.encodeQueryComponent(motivo)}',
+      if (motivoTexto != null) 'motivoTexto=${Uri.encodeQueryComponent(motivoTexto)}',
+      'fechaMotivo=${Uri.encodeQueryComponent(fecha.toUtc().toIso8601String())}',
+      if (lat != null) 'latMotivo=$lat',
+      if (lng != null) 'lngMotivo=$lng',
     ].join('&');
     alIr('/inspecciones/vin/$vinRuta/captura/${etapa.id}?$consulta');
   }
+
+  Future<void> _avisar(BuildContext context, String titulo, String cuerpo) => showDialog<void>(
+        context: context,
+        builder: (contexto) => AlertDialog(
+          title: Text(titulo),
+          content: Text(cuerpo),
+          actions: [TextButton(onPressed: () => Navigator.of(contexto).pop(), child: const Text('Entendido'))],
+        ),
+      );
 
   /// La salida del cargue que hizo el conductor sin inspector, cuando todavía falta cerrar su transferencia: ahí no
   /// hay quien entregue, y quien recibe firma solo.
@@ -164,6 +292,12 @@ class _Detalle extends ConsumerWidget {
     final viajeId = inventario.etapas.map((e) => e.viajeId).nonNulls.firstOrNull;
     final viaje = viajeId == null ? null : ref.watch(viajeDeEtapaProvider(viajeId)).value;
     final viajeTerminado = viaje != null && !viaje.admiteTrabajo;
+    // Donde el punto de cargue tiene inspectores, la excepción se pide y se espera. Solo entonces se consulta:
+    // en los demás viajes ese permiso no existe y preguntarlo sería un 404 por cada ficha que se abre.
+    final cargueConInspector = viaje?.cargueTieneInspector ?? false;
+    final permiso = viajeId != null && cargueConInspector && rol == 'conductor'
+        ? ref.watch(permisoSinInspectorProvider(viajeId)).value
+        : null;
     // Quien consulta no captura ni firma: el servidor le responde 403 y la ruta de captura ni se abre. Se dice en
     // la tarjeta, en vez de ofrecer botones muertos.
     final puedeTrabajar =
@@ -233,7 +367,15 @@ class _Detalle extends ConsumerWidget {
                 _ => null,
               },
               sinInspector: (momento) => conductorUsaExcepcion(etapa, rol: rol, momento: momento),
-              alSinInspector: () => _sinInspector(context, ref, etapa, vinRuta),
+              etiquetaSinInspector: etiquetaExcepcion(cargueConInspector: cargueConInspector, permiso: permiso),
+              alSinInspector: () => _excepcion(
+                context,
+                ref,
+                etapa,
+                vinRuta,
+                cargueConInspector: cargueConInspector,
+                permiso: permiso,
+              ),
               reciboSinEntrega: _reciboSinEntrega(etapa, rol),
               alReciboSinEntrega: () => _firmarReciboSinEntrega(context, ref, etapa),
               accion: accionDeEtapa(etapa, inventario),
@@ -824,6 +966,7 @@ class _TarjetaEtapa extends StatelessWidget {
     required this.alCapturar,
     required this.alFirmar,
     required this.sinInspector,
+    required this.etiquetaSinInspector,
     required this.alSinInspector,
     required this.reciboSinEntrega,
     required this.alReciboSinEntrega,
@@ -851,6 +994,9 @@ class _TarjetaEtapa extends StatelessWidget {
 
   /// ¿En este momento el conductor no captura sino que activa «No hay inspector»?
   final bool Function(String momento) sinInspector;
+
+  /// Qué dice ese botón: activar, pedir el permiso, mirar cómo va, o seguir con el que ya se concedió.
+  final String etiquetaSinInspector;
   final VoidCallback alSinInspector;
 
   /// La salida sin inspector cuya transferencia espera la firma del conductor; null si no aplica.
@@ -904,6 +1050,7 @@ class _TarjetaEtapa extends StatelessWidget {
               nombreDeEtapa: nombreDeEtapa,
               alCapturar: () => alCapturar(momento.momento),
               sinInspector: sinInspector(momento.momento),
+              etiquetaSinInspector: etiquetaSinInspector,
               alSinInspector: alSinInspector,
               soloLectura: motivoSoloLectura != null,
               alAbrir: momento.inspeccion == null ? null : () => alAbrirInforme(momento),
@@ -978,6 +1125,7 @@ class _FilaMomento extends StatelessWidget {
     required this.nombreDeEtapa,
     required this.alCapturar,
     required this.sinInspector,
+    required this.etiquetaSinInspector,
     required this.alSinInspector,
     required this.soloLectura,
     required this.alAbrir,
@@ -987,8 +1135,11 @@ class _FilaMomento extends StatelessWidget {
   final String Function(String codigoEtapa) nombreDeEtapa;
   final VoidCallback alCapturar;
 
-  /// La salida del cargue del conductor: en vez de «Capturar», «No hay inspector».
+  /// La salida del cargue del conductor: en vez de «Capturar», la excepción.
   final bool sinInspector;
+
+  /// Lo que dice ese botón, que no siempre es lo mismo: donde el punto tiene inspectores hay que pedir permiso.
+  final String etiquetaSinInspector;
   final VoidCallback alSinInspector;
 
   /// Esta etapa ya no se trabaja: se lee lo que hay, pero no se ofrece capturar.
@@ -1036,7 +1187,7 @@ class _FilaMomento extends StatelessWidget {
           else if (!soloLectura)
             // Deshabilitado, no escondido: que se vea que falta y por qué.
             sinInspector
-                ? BotonEnFila(texto: 'No hay inspector', onPressed: momento.sePuedeCapturar ? alSinInspector : null)
+                ? BotonEnFila(texto: etiquetaSinInspector, onPressed: momento.sePuedeCapturar ? alSinInspector : null)
                 : BotonEnFila(texto: 'Capturar', onPressed: momento.sePuedeCapturar ? alCapturar : null),
           // La punta de flecha es lo único que dice que la fila se abre; sin ella nadie la toca.
           if (alAbrir != null) const Icon(Icons.chevron_right, size: 20, color: Colores.textoSecundario),

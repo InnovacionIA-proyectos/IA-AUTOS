@@ -21,6 +21,7 @@ class Viaje {
     this.capacidad,
     this.disposicion = const [],
     this.fotosAcomodacion = 0,
+    this.cargueTieneInspector = false,
   });
 
   factory Viaje.fromJson(Map<String, dynamic> json) => Viaje(
@@ -45,6 +46,7 @@ class Viaje {
             PuestoNinera.fromJson(p as Map<String, dynamic>),
         ],
         fotosAcomodacion: (json['fotos_acomodacion'] as List<dynamic>?)?.length ?? 0,
+        cargueTieneInspector: json['lugar_cargue_tiene_inspector'] as bool? ?? false,
       );
 
   final String id;
@@ -79,6 +81,10 @@ class Viaje {
 
   final List<ViajeVehiculo> vehiculos;
 
+  /// El punto de cargue tiene inspectores asignados, y por eso la excepción «No hay inspector» allí se pide y no
+  /// se activa en el momento (S7-HU-22.1). Falso también cuando el viaje no tiene lugar de cargue.
+  final bool cargueTieneInspector;
+
   /// Si todavía se puede trabajar en él. Un viaje terminado o cancelado conserva sus etapas y sus informes, pero
   /// el servidor no admite inspecciones nuevas: ofrecerlas sería mandar a alguien a capturar siete fotos para
   /// que el envío muera con un 409.
@@ -100,6 +106,9 @@ class Viaje {
         // Se guardan con la copia: sin ellos, sin señal una niñera de nueve se dibujaba de siete y las unidades
         // de los puestos 8 y 9 se veían sin puesto marcado y sin decir por qué.
         'capacidad': capacidad,
+        // Sin él, sin señal el botón del cargue volvía a ofrecer la activación directa en un punto que sí tiene
+        // inspectores, y el envío moría con un 403.
+        'lugar_cargue_tiene_inspector': cargueTieneInspector,
         'disposicion': {'puestos': [for (final p in disposicion) p.toJson()]},
         'fotos_acomodacion': [for (var i = 0; i < fotosAcomodacion; i++) const <String, dynamic>{}],
       };
