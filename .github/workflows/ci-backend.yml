@@ -27,37 +27,24 @@ jobs:
   # No se ejecuta en PR de forks: ese codigo externo correria en el runner corporativo con acceso a los secretos.
   build-and-test:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, dokploy_]
-    # Este runner solo tiene Windows PowerShell (politica de ejecucion restringida) y cmd. Sin este default, cualquier
-    # "run:" sin "shell:" cae en PowerShell y falla con "la ejecucion de scripts esta deshabilitada".
-    defaults:
-      run:
-        shell: cmd
+    runs-on: [self-hosted, srv-linux]
     steps:
       - uses: actions/checkout@v4
 
-      # DOTNET_INSTALL_DIR explicito: por defecto setup-dotnet instala en "C:\Program Files\dotnet" y la cuenta del runner
-      # no tiene permiso de escritura ahi. runner.tool_cache si es escribible por esa cuenta. El paso siguiente agrega esa
-      # carpeta al PATH porque setup-dotnet solo lo hace automaticamente para la ubicacion por defecto.
       - name: Instalar .NET SDK
         uses: actions/setup-dotnet@v4
-        env:
-          DOTNET_INSTALL_DIR: ${{ runner.tool_cache }}\dotnet
         with:
           dotnet-version: "10.0.x"
 
-      - name: Agregar dotnet al PATH
-        run: echo ${{ runner.tool_cache }}\dotnet>>"%GITHUB_PATH%"
-
       - name: Restaurar dependencias
-        run: dotnet restore backend\IA-AUTOS.slnx
+        run: dotnet restore backend/IA-AUTOS.slnx
 
       - name: Compilar (Release)
-        run: dotnet build backend\IA-AUTOS.slnx -c Release --no-restore
+        run: dotnet build backend/IA-AUTOS.slnx -c Release --no-restore
 
       # No tocan ninguna base ni servicio externo.
       - name: Pruebas unitarias
-        run: dotnet test backend\tests\IA-AUTOS.Tests.Unitarios -c Release --no-build --logger "trx;LogFileName=unitarias.trx" --results-directory TestResults
+        run: dotnet test backend/tests/IA-AUTOS.Tests.Unitarios -c Release --no-build --logger "trx;LogFileName=unitarias.trx" --results-directory TestResults
 
       # SOLO LECTURA contra la base y el MinIO reales: solo SELECT y listados, sin insertar, actualizar ni borrar nada.
       # Usan los mismos nombres de variable que backend/.env (ASP.NET Core las mapea solo, doble guion bajo). Los valores
@@ -76,7 +63,7 @@ jobs:
           Storage__S3__AccessKey: ${{ secrets.STORAGE_S3_ACCESSKEY }}
           Storage__S3__SecretKey: ${{ secrets.STORAGE_S3_SECRETKEY }}
           PortalTi__ConnectionString: ${{ secrets.PORTALTI_CONNECTIONSTRING }}
-        run: dotnet test backend\tests\IA-AUTOS.Tests.EntornoReal -c Release --no-build --logger "trx;LogFileName=entorno-real.trx" --results-directory TestResults
+        run: dotnet test backend/tests/IA-AUTOS.Tests.EntornoReal -c Release --no-build --logger "trx;LogFileName=entorno-real.trx" --results-directory TestResults
 
       - name: Conservar resultados de las pruebas
         if: always()
@@ -95,10 +82,9 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     # Self-hosted (no ubuntu-latest): el webhook de Dokploy vive en la red privada corporativa y no es alcanzable desde
     # los runners en la nube de GitHub.
-    runs-on: [self-hosted, dokploy_]
+    runs-on: [self-hosted, srv-linux]
     steps:
       - name: Mostrar informacion del deploy
-        shell: cmd
         run: |
           echo Branch: ${{ github.ref }}
           echo Commit: ${{ github.sha }}
@@ -107,9 +93,8 @@ jobs:
       # DOKPLOY_DEPLOY_WEBHOOK_URL es un secreto del repositorio (Dokploy > aplicacion > Deployments > Webhook URL).
       # -f hace que el job falle si Dokploy responde con error (4xx/5xx).
       - name: Disparar despliegue en Dokploy
-        shell: cmd
         run: |
-          curl -f -X POST "${{ secrets.DOKPLOY_DEPLOY_WEBHOOK_URL }}" ^
-            -H "Content-Type: application/json" ^
-            -H "X-GitHub-Event: push" ^
-            -d "{\"ref\":\"${{ github.ref }}\",\"repository\":{\"full_name\":\"${{ github.repository }}\"}}"
+          curl -f -X POST "${{ secrets.DOKPLOY_DEPLOY_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -H "X-GitHub-Event: push" \
+            -d '{"ref":"${{ github.ref }}","repository":{"full_name":"${{ github.repository }}"}}'

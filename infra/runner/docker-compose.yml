@@ -1,0 +1,15 @@
+# Runner de GitHub Actions para el CI/CD del backend (etiqueta srv-linux). Va en un servidor Linux con Docker dentro de
+# la red corporativa: debe alcanzar la base SQL Server, el MinIO y el webhook de Dokploy.
+# Uso: copiar .env.example a .env, poner el token y ejecutar "docker compose up -d".
+services:
+  runner:
+    image: myoung34/github-runner:latest
+    restart: always
+    environment:
+      REPO_URL: https://github.com/InnovacionIA-proyectos/IA-AUTOS
+      RUNNER_SCOPE: repo
+      ACCESS_TOKEN: ${GH_PAT:?falta GH_PAT en .env}
+      RUNNER_NAME: srv-linux-1
+      LABELS: srv-linux
+      # Borra el token del entorno antes de arrancar: los jobs no pueden leerlo.
+      UNSET_CONFIG_VARS: "true"
