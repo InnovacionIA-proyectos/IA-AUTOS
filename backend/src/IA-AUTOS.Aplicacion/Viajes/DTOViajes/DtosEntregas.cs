@@ -19,7 +19,10 @@ public sealed record EntregaUnidadDto(
     string? RecibeExternoNombre = null,
     string? RecibeExternoCedula = null);
 
-/// <summary>Las unidades del viaje que se entregan en un lugar de destino, con lo que falta de cada una. <c>Entregada</c> es verdadero cuando ninguna esta pendiente.</summary>
+/// <summary>
+/// Las unidades del viaje que se entregan en un lugar de destino, con lo que falta de cada una. <c>Entregada</c> es verdadero cuando ninguna esta pendiente. <c>LugarTieneInspector</c> dice si el punto de destino tiene
+/// al menos un inspector activo asignado (la misma regla con la que el servidor decide quien firma la entrega); nunca trae quienes son.
+/// </summary>
 public sealed record EntregaPuntoDto(
     Guid ViajeId,
     string ViajeEstado,
@@ -29,7 +32,8 @@ public sealed record EntregaPuntoDto(
     int UnidadesTotal,
     int UnidadesPendientes,
     bool Entregada,
-    IReadOnlyList<EntregaUnidadDto> Unidades);
+    IReadOnlyList<EntregaUnidadDto> Unidades,
+    bool LugarTieneInspector = false);
 
 /// <summary>Todas las entregas del viaje, una por lugar de destino. <c>UnidadesSinDestino</c> cuenta las unidades activas de viajes anteriores al destino por unidad (sin lugar).</summary>
 public sealed record EntregasDelViajeDto(Guid ViajeId, string ViajeEstado, int UnidadesSinDestino, IReadOnlyList<EntregaPuntoDto> Puntos);

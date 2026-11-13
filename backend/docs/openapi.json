@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.12.0"
+    "version": "3.13.0"
   },
   "paths": {
     "/api/viajes": {
@@ -683,7 +683,8 @@
                             "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                             "es_acomodacion": true
                           }
-                        ]
+                        ],
+                        "lugar_cargue_tiene_inspector": true
                       }
                     ]
                   ],
@@ -786,7 +787,8 @@
                             "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                             "es_acomodacion": true
                           }
-                        ]
+                        ],
+                        "lugar_cargue_tiene_inspector": true
                       }
                     ]
                   ],
@@ -889,7 +891,8 @@
                             "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                             "es_acomodacion": true
                           }
-                        ]
+                        ],
+                        "lugar_cargue_tiene_inspector": true
                       }
                     ]
                   ],
@@ -25470,7 +25473,8 @@
                 "recibe_externo_nombre": "texto",
                 "recibe_externo_cedula": "texto"
               }
-            ]
+            ],
+            "lugar_tiene_inspector": true
           }
         ],
         "required": [
@@ -25522,6 +25526,10 @@
             "items": {
               "$ref": "#/components/schemas/EntregaUnidadDto"
             }
+          },
+          "lugar_tiene_inspector": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -25541,7 +25549,8 @@
                 "unidades_total": 1,
                 "unidades_pendientes": 1,
                 "entregada": true,
-                "unidades": []
+                "unidades": [],
+                "lugar_tiene_inspector": true
               }
             ]
           }
@@ -31219,7 +31228,8 @@
                 "fecha_programada": "2026-10-22T14:30:00.000Z",
                 "lugar_cargue_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "lugar_cargue": "texto",
-                "destinos": []
+                "destinos": [],
+                "lugar_cargue_tiene_inspector": true
               }
             ],
             "total": 1,
@@ -34248,7 +34258,8 @@
                 "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "es_acomodacion": true
               }
-            ]
+            ],
+            "lugar_cargue_tiene_inspector": true
           }
         ],
         "required": [
@@ -34426,6 +34437,10 @@
             "items": {
               "$ref": "#/components/schemas/EvidenciaDto"
             }
+          },
+          "lugar_cargue_tiene_inspector": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -34467,7 +34482,8 @@
                 "lugar": "texto",
                 "unidades": 1
               }
-            ]
+            ],
+            "lugar_cargue_tiene_inspector": true
           }
         ],
         "required": [
@@ -34626,6 +34642,10 @@
             "items": {
               "$ref": "#/components/schemas/DestinoDeUnidadesDto"
             }
+          },
+          "lugar_cargue_tiene_inspector": {
+            "type": "boolean",
+            "default": false
           }
         }
       },

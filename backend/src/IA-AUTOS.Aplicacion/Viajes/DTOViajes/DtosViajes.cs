@@ -159,7 +159,8 @@ public sealed record ViajeDto(
     string? LugarCargue = null,
     int Capacidad = 7,
     DisposicionDeNiniera? Disposicion = null,
-    IReadOnlyList<IAAutos.Aplicacion.Inspecciones.DTOInspecciones.EvidenciaDto>? FotosAcomodacion = null);
+    IReadOnlyList<IAAutos.Aplicacion.Inspecciones.DTOInspecciones.EvidenciaDto>? FotosAcomodacion = null,
+    bool LugarCargueTieneInspector = false);
 
 /// <summary>Un puesto de la ninera: su <c>Numero</c> (el que se envia como posicion de una unidad), la <c>Etiqueta</c> con que se muestra (hoy el mismo numero) y el <c>Vin</c> de la unidad que lo ocupa (nulo si esta libre).</summary>
 public sealed record PuestoDeNiniera(int Numero, string Etiqueta, string? Vin);
@@ -201,7 +202,8 @@ public sealed record ViajeResumenDto(
     DateTimeOffset? FechaProgramada = null,
     Guid? LugarCargueId = null,
     string? LugarCargue = null,
-    IReadOnlyList<DestinoDeUnidadesDto>? Destinos = null);
+    IReadOnlyList<DestinoDeUnidadesDto>? Destinos = null,
+    bool LugarCargueTieneInspector = false);
 
 /// <summary>
 /// Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio. <c>Pagina</c>, <c>Tamano</c> y <c>Orden</c> son el formato comun de los listados; la exportacion a Excel los
