@@ -1,22 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/features/inspecciones/domain/inspeccion_resumen.dart';
 import 'package:traza_autos/features/inspecciones/presentation/lista_inspecciones_page.dart';
+import 'package:traza_autos/features/catalogos/providers.dart';
 import 'package:traza_autos/features/sync/presentation/sync_controller.dart';
 
 import '../support/arnes.dart';
+import '../support/dobles_catalogos.dart';
 
 /// La pestaña de Inspecciones vive dentro del shell: una vez construida no se vuelve a construir al volver a
 /// ella, así que lo que muestra se queda como estaba cuando se abrió por primera vez.
-Future<Arnes> abrir(WidgetTester tester, {Arnes? conArnes}) async {
+Future<Arnes> abrir(WidgetTester tester, {Arnes? conArnes, List<Override> extra = const []}) async {
   final arnes = conArnes ?? Arnes();
   await tester.pumpWidget(
     ProviderScope(
       retry: (_, _) => null,
-      overrides: arnes.overrides,
+      overrides: [...arnes.overrides, ...extra],
       child: MaterialApp(theme: crearTema(), home: const ListaInspeccionesPage()),
     ),
   );
@@ -86,6 +89,43 @@ void main() {
     });
   });
 
+  // #394: la coordinadora ve los informes de todo el mundo. Sin decir de qué viaje es cada uno, la lista es una
+  // pila de VINes repetidos. El servidor ya manda estos tres datos; solo había que pintarlos.
+  group('cada fila dice de qué viaje es', () {
+    // El proceso llega como código («cargue») y se enseña con el nombre del catálogo («Cargue»).
+    Arnes conEtapas() => Arnes(sesion: sesionCoordinador);
+
+    List<Override> catalogos() => [
+          catalogosRepositorioProvider.overrideWithValue(
+            CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe', etapas: etapasDePrueba),
+          ),
+        ];
+
+    testWidgets('el proceso con su nombre, el código MTrack y el lugar', (tester) async {
+      await abrir(
+        tester,
+        conArnes: conEtapas()
+          ..inspecciones.remoto = [
+            _resumen('1', 'VIN00000000000001', proceso: 'cargue', codigo: 'MTK-2026-001', lugar: 'CEDI Envigado'),
+          ],
+        extra: catalogos(),
+      );
+
+      expect(find.text('Cargue · MTK-2026-001 · CEDI Envigado'), findsOneWidget);
+    });
+
+    // Una inspección suelta no tiene viaje: antes que un renglón vacío o separadores sueltos, nada.
+    testWidgets('un informe sin viaje no pinta el renglón', (tester) async {
+      await abrir(
+        tester,
+        conArnes: conEtapas()..inspecciones.remoto = [_resumen('1', 'VIN00000000000001')],
+        extra: catalogos(),
+      );
+
+      expect(find.textContaining(' · '), findsOneWidget, reason: 'solo el del momento y la fecha');
+    });
+  });
+
   testWidgets('al inspector no le cambia nada: su pestaña sigue siendo la suya y sin buscador', (tester) async {
     await abrir(tester, conArnes: Arnes()..inspecciones.remoto = [_resumen('1', 'VIN00000000000001')]);
 
@@ -94,11 +134,15 @@ void main() {
   });
 }
 
-InspeccionResumen _resumen(String id, String vin) => InspeccionResumen(
+InspeccionResumen _resumen(String id, String vin, {String? proceso, String? codigo, String? lugar}) =>
+    InspeccionResumen(
       id: id,
       vin: vin,
       momento: 'salida',
       momentoNombre: 'Inspección de salida',
       fecha: '2026-01-0$id' 'T10:00:00Z',
       estado: 'cerrada',
+      proceso: proceso,
+      codigoMtrack: codigo,
+      lugar: lugar,
     );

@@ -7,6 +7,8 @@ import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
 import '../../auth/domain/sesion.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../catalogos/domain/catalogos.dart';
+import '../../catalogos/presentation/catalogos_controller.dart';
 import '../../sync/presentation/barra_sync.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../vehiculos/domain/etiquetas.dart';
@@ -223,14 +225,29 @@ class _EstadoListaInspeccionesPage extends ConsumerState<ListaInspeccionesPage> 
   }
 }
 
-class _FilaInspeccion extends StatelessWidget {
+class _FilaInspeccion extends ConsumerWidget {
   const _FilaInspeccion(this.item);
 
   final InspeccionResumen item;
 
+  /// De qué viaje es el informe: la etapa con su nombre del catálogo, el código MTrack y el lugar.
+  ///
+  /// Se arma con lo que haya: en un informe sin viaje —una inspección suelta— no se enseña un renglón vacío ni
+  /// separadores sueltos.
+  String? _deQueViaje(String Function(String) nombreDeEtapa) {
+    final partes = [
+      if (item.proceso case final p?) nombreDeEtapa(p),
+      if (item.codigoMtrack case final c? when c.isNotEmpty) c,
+      if (item.lugar case final l? when l.isNotEmpty) l,
+    ];
+    return partes.isEmpty ? null : partes.join(' · ');
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
+    final catalogos = ref.watch(catalogosProvider);
+    final deQueViaje = _deQueViaje((codigo) => catalogos.etiqueta(Catalogo.etapas, codigo));
     return Tarjeta(
       onTap: item.vin == null ? null : () => context.push('/inspecciones/vin/${Uri.encodeComponent(item.vin!)}'),
       child: Row(
@@ -240,6 +257,10 @@ class _FilaInspeccion extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (item.vin != null) TextoMono(item.vin!),
+                // Primero de qué viaje es, que es lo que distingue una fila de la siguiente cuando se ven los
+                // informes de todo el mundo; después el momento y la fecha.
+                if (deQueViaje != null)
+                  Text(deQueViaje, style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
                 Text('${item.momentoNombre} · ${formatearFechaIso(item.fecha)}', style: tema.bodySmall),
                 if (item.version > 1)
                   Text('Versión ${item.version} · corrige la versión ${item.version - 1}', style: tema.bodySmall?.copyWith(color: Colores.advertencia)),

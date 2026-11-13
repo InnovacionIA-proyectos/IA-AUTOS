@@ -109,7 +109,12 @@ void main() {
     // El sello de la foto de la novedad: cuándo y dónde se tomó.
     'EvidenciaDto': ['id', 'url', 'hallazgo_id', 'sello_fecha', 'sello_lat', 'sello_lng', 'sin_ubicacion'],
 
-    'InspeccionListadoDto': ['id', 'vin', 'momento', 'momento_nombre', 'fecha', 'estado'],
+    // La fila del listado. `proceso`, `codigo_mtrack` y `lugar` son lo que distingue una fila de la siguiente
+    // cuando se ven los informes de todo el mundo y no solo los propios (#394).
+    'InspeccionListadoDto': [
+      'id', 'vin', 'momento', 'momento_nombre', 'fecha', 'estado', 'version', 'corrige_inspeccion_id',
+      'proceso', 'codigo_mtrack', 'lugar',
+    ],
     // Los catálogos maestros no son listas fijas en la app: se descargan y se guardan con su versión.
     'CatalogosDto': ['version', 'catalogos'],
     'InspeccionDto': ['id'],
