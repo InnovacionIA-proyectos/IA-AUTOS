@@ -1,9 +1,13 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza_autos/core/http/cliente_api.dart';
+import 'package:traza_autos/features/auth/data/auth_repositorio_api.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/auth/presentation/auth_controller.dart';
 
 import '../support/arnes.dart';
+import '../support/dio_falso.dart';
 
 /// El menú sale de lo que el servidor dice que la persona puede hacer, no de una tabla de roles repetida en la app.
 /// Se piden al entrar y se guardan con la sesión para que el menú exista también sin señal.
@@ -41,6 +45,29 @@ void main() {
       await contenedor.read(authControllerProvider.notifier).iniciarSesionConPin('1234567', '482915');
 
       expect(usuarioDe(contenedor).capacidades, [Capacidad.verViajes]);
+    });
+
+    // La sesión todavía no está en el estado cuando se pide el perfil, y de ahí saca el cliente HTTP su token.
+    // Sin pasárselo a mano la petición salía sin `Authorization`, el servidor la rechazaba y todo el mundo
+    // terminaba con el respaldo por rol: el menú era el del rol, no el que el servidor autoriza.
+    test('la consulta del perfil va con el token de la sesión recién abierta', () async {
+      final arnes = Arnes(sesion: null)..auth.capacidadesDelPerfil = [Capacidad.verViajes];
+      final contenedor = await iniciar(arnes);
+
+      await contenedor.read(authControllerProvider.notifier).iniciarSesion('ana@boterosoto.com.co', 'x');
+
+      expect(arnes.auth.tokenDelPerfil, sesionPrueba.token);
+    });
+
+    test('y con cédula y PIN va el token de esa sesión', () async {
+      final arnes = Arnes(sesion: null)
+        ..auth.sesionConPin = sesionConPinTemporal
+        ..auth.capacidadesDelPerfil = [Capacidad.verViajes];
+      final contenedor = await iniciar(arnes);
+
+      await contenedor.read(authControllerProvider.notifier).iniciarSesionConPin('1234567', '482915');
+
+      expect(arnes.auth.tokenDelPerfil, sesionConPinTemporal.token);
     });
 
     // Entrar no puede depender de una segunda petición: si /me no responde, se entra igual.
@@ -111,6 +138,33 @@ void main() {
       final c = capacidadesDeRol('rol_que_no_existe_todavia');
       expect(c, contains(Capacidad.verViajes));
       expect(c, isNot(contains(Capacidad.registrarInspecciones)));
+    });
+  });
+
+  group('la petición a /api/auth/me', () {
+    AuthRepositorioApi repositorio(AdaptadorFalso adaptador, {String? tokenDelCliente}) => AuthRepositorioApi(
+          ClienteApi(
+            baseUrl: 'https://api.test',
+            token: () async => tokenDelCliente,
+            dio: Dio()..httpClientAdapter = adaptador,
+          ),
+        );
+
+    test('lleva el token que se le pasa, aunque el cliente todavía no tenga sesión', () async {
+      final adaptador = AdaptadorFalso((_) => json(200, const {'capacidades': ['ver_viajes']}));
+
+      final capacidades = await repositorio(adaptador).capacidades(token: 'jwt-recien-emitido');
+
+      expect(adaptador.peticiones.single.headers['Authorization'], 'Bearer jwt-recien-emitido');
+      expect(capacidades, ['ver_viajes']);
+    });
+
+    test('sin token explícito usa el del cliente, para la sesión ya abierta', () async {
+      final adaptador = AdaptadorFalso((_) => json(200, const {'capacidades': <String>[]}));
+
+      await repositorio(adaptador, tokenDelCliente: 'jwt-de-la-sesion').capacidades();
+
+      expect(adaptador.peticiones.single.headers['Authorization'], 'Bearer jwt-de-la-sesion');
     });
   });
 

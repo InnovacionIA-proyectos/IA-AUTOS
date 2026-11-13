@@ -10,6 +10,7 @@ class EntregaPunto {
     required this.pendientes,
     required this.entregada,
     this.ciudad,
+    this.tieneInspector = false,
   });
 
   factory EntregaPunto.fromJson(Map<String, dynamic> json) {
@@ -24,6 +25,7 @@ class EntregaPunto {
       unidades: unidades,
       pendientes: json['unidades_pendientes'] as int? ?? unidades.where((u) => !u.cerrada).length,
       entregada: json['entregada'] as bool? ?? false,
+      tieneInspector: json['lugar_tiene_inspector'] as bool? ?? false,
     );
   }
 
@@ -36,6 +38,13 @@ class EntregaPunto {
   /// «Aquí entregas estas N unidades».
   final int pendientes;
   final bool entregada;
+
+  /// Este lugar tiene inspectores asignados, y por eso la entrega la recibe uno de ellos y no quien esté allí.
+  ///
+  /// Lo decide el servidor **por punto de entrega** —no por viaje— y es el mismo dato con el que rechaza la firma
+  /// (`lugar_tiene_inspector`, S7-HU-22.1). Antes la app lo adivinaba mirando si el viaje tenía inspector, que es
+  /// otra cosa: un viaje sin inspector puede entregar en un punto que sí los tiene.
+  final bool tieneInspector;
 
   /// Las que se entregan en este punto y todavía no están cerradas: sobre ellas va la firma.
   List<UnidadEntrega> get porEntregar => [...unidades.where((u) => !u.cerrada)];
@@ -65,6 +74,7 @@ class UnidadEntrega {
     this.tipoCierre,
     this.entregaFirmada = false,
     this.recibeFirmada = false,
+    this.recibioExterno,
   });
 
   factory UnidadEntrega.fromJson(Map<String, dynamic> json) => UnidadEntrega(
@@ -73,6 +83,7 @@ class UnidadEntrega {
         tipoCierre: json['tipo_cierre'] as String?,
         entregaFirmada: json['entrega_firmada_at'] != null,
         recibeFirmada: json['recibe_firmada_at'] != null,
+        recibioExterno: json['recibe_externo_nombre'] as String?,
       );
 
   final String vin;
@@ -80,6 +91,12 @@ class UnidadEntrega {
   final String? tipoCierre;
   final bool entregaFirmada;
   final bool recibeFirmada;
+
+  /// Quién recibió cuando no fue un usuario del sistema, sino una persona del punto de entrega.
+  ///
+  /// Se muestra el nombre y no la cédula: la cédula es un dato personal y para saber quién recibió basta el
+  /// nombre. Queda guardada en la entrega y en la auditoría, que es donde hace falta.
+  final String? recibioExterno;
 
   bool get cerrada => estado == EstadoEntrega.cerrada;
 }

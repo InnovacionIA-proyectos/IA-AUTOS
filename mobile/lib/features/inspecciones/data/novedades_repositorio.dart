@@ -22,6 +22,28 @@ class NovedadesRepositorio {
     return [for (final h in items) NovedadPendiente.fromJson(h as Map<String, dynamic>)];
   }
 
+  /// Los daños del viaje que nadie ha calificado, del más antiguo al más reciente.
+  ///
+  /// Se piden como las novedades del conductor sin revisar, porque **el contrato no tiene un filtro de «sin
+  /// nivel»**: `nivel` solo admite v1_plus, v1, v2 y v3. Es el mejor proxy que hay y cubre lo que la app produce
+  /// hoy —quien inspecciona siempre pone nivel—, pero no es lo mismo: un hallazgo histórico puede tener el nivel
+  /// vacío con origen «inspector» y entonces no sale en esta lista. El arreglo de fondo es un filtro de verdad
+  /// en el servidor (S7-HU-03.1).
+  ///
+  /// Por viaje entero y al revés que la ficha: lo viejo primero, que es lo que lleva más tiempo esperando. El
+  /// servidor ya recorta por quién pregunta: a un inspector que no es del viaje le responde la lista vacía.
+  Future<List<NovedadPendiente>> sinCalificarDelViaje(String viajeId) async {
+    final r = await _api.get('/api/hallazgos', query: {
+      'viaje_id': viajeId,
+      'origen': 'conductor',
+      'revisado': 'false',
+      'orden': 'antiguos',
+      'tamano': '200',
+    });
+    final items = (r as Map<String, dynamic>)['items'] as List<dynamic>? ?? const [];
+    return [for (final h in items) NovedadPendiente.fromJson(h as Map<String, dynamic>)];
+  }
+
   /// Completa la novedad: su zona, su clase, su nivel y el tamaño ya corregido.
   ///
   /// Las claves de la zona, la clase, el nivel, el tamaño y la nota van presentes aunque sean nulas, que es lo

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza_autos/core/tema/tema.dart';
+import 'package:traza_autos/features/sync/domain/desenlace_envio.dart';
 import 'package:traza_autos/features/sync/presentation/barra_sync.dart';
 import 'package:traza_autos/features/sync/presentation/sync_controller.dart';
 
@@ -72,5 +73,43 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('PANTALLA COLA'), findsOneWidget);
+  });
+
+  // Esta barra es lo único que el conductor ve de su cola: no tiene la pestaña de Inspecciones. «2 en cola» a
+  // secas lo dejaba sin saber si eso iba a moverse alguna vez o se había quedado ahí para siempre.
+  group('cuándo se vuelve a intentar', () {
+    testWidgets('lo pendiente dice cuándo se reintenta, no solo cuánto hay', (tester) async {
+      await montar(tester, EstadoSync(pendientes: 2, proximoIntento: DateTime.now().add(const Duration(minutes: 2))));
+
+      expect(find.textContaining('2 en cola'), findsOneWidget);
+      expect(find.textContaining('se reintenta en 2 minutos'), findsOneWidget);
+    });
+
+    // Culpar a la señal con el wifi perfecto manda a revisar el router en vez del servidor.
+    testWidgets('con el servidor caído lo dice, en vez de hablar de la señal', (tester) async {
+      await montar(tester, EstadoSync(
+        pendientes: 1,
+        pausa: MotivoPausa.apiCaida,
+        proximoIntento: DateTime.now().add(const Duration(seconds: 15)),
+      ));
+
+      expect(find.textContaining('El servidor no responde'), findsOneWidget);
+      expect(find.textContaining('se reintenta en 15 segundos'), findsOneWidget);
+      expect(find.textContaining('Sin señal'), findsNothing);
+    });
+
+    testWidgets('sin nada pendiente no se promete ningún reintento', (tester) async {
+      await montar(tester, const EstadoSync());
+
+      expect(find.textContaining('se reintenta'), findsNothing);
+    });
+
+    // Sin señal el reloj no se programa: prometer una hora que no se va a cumplir es peor que no prometer nada.
+    testWidgets('sin señal se habla de la señal y no se promete hora', (tester) async {
+      await montar(tester, const EstadoSync(online: false, pendientes: 4));
+
+      expect(find.text('Sin señal estable · 4 en cola'), findsOneWidget);
+      expect(find.textContaining('se reintenta'), findsNothing);
+    });
   });
 }

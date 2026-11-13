@@ -204,7 +204,9 @@ El grueso está: los modelos, el gateway, los repositorios y `contrato_api_test.
 contrato, y la prueba pasa contra `backend/docs/openapi.json` (hoy en 3.0.0, absorbido en `185e0ad`).
 
 Dos salvedades del CA-4, que conviene corregir en el criterio y no en el código:
-- `selector_dano.dart` sigue existiendo porque se usa, y #193 pide reutilizarlo.
+- La hoja de daño sigue existiendo porque se usa, y #193 pide reutilizarla. **Desde el 12-nov-2026 se llama
+  `hoja_dano.dart`**: el CA-4 de IA-AUTOS#216 pedía que `selector_dano.dart` no existiera, y el archivo ya no
+  tenía ninguna lista fija —lee los catálogos del servidor—, así que se renombró en vez de rehacerlo.
 - `etiquetas.dart` conserva más de los tres mapas que el criterio nombra: también momento, tipo de
   cierre, estado de viaje y tipo de novedad. Todos son valores fijos del contrato que la API no
   traduce, así que están donde deben.

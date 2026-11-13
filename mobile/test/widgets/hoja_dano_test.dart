@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/features/catalogos/domain/catalogos.dart';
-import 'package:traza_autos/features/inspecciones/presentation/selector_dano.dart';
+import 'package:traza_autos/features/inspecciones/presentation/hoja_dano.dart';
 
 final clases = [ValorCatalogo({'id': 'c1', 'codigo': 'golpe', 'nombre': 'Golpe', 'orden': 1, 'activo': true})];
 final tamanos = [ValorCatalogo({'id': 't1', 'codigo': '1_5cm', 'nombre': 'De 1 a 5 cm', 'orden': 1, 'activo': true})];

@@ -23,9 +23,14 @@ class SeccionAcomodacion extends StatelessWidget {
     required this.fotosMinimas,
     required this.alElegir,
     required this.alTomarFoto,
+    this.viaje,
     this.alReintentar,
     this.precisionBaja,
   });
+
+  /// El viaje tal como lo manda el servidor: de él salen los puestos que se dibujan y cuántos hay. Null mientras
+  /// no se haya podido traer.
+  final Viaje? viaje;
 
   final List<ViajeVehiculo>? unidades;
   final Map<String, int> posiciones;
@@ -47,9 +52,12 @@ class SeccionAcomodacion extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Acomodación en la niñera', style: tema.titleMedium),
-        Text('Elige el lugar de cada unidad según el esquema de la Orden de Cargue.', style: tema.bodySmall),
+        Text(
+          'Elige el lugar de cada unidad. Los puestos son los de esta niñera: ${capacidadDe(viaje)} en total.',
+          style: tema.bodySmall,
+        ),
         const SizedBox(height: Espacio.md),
-        _Esquema(posiciones: posiciones),
+        _Esquema(posiciones: posiciones, puestos: puestosDe(viaje)),
         const SizedBox(height: Espacio.md),
         if (lista == null)
           Tarjeta(
@@ -66,6 +74,7 @@ class SeccionAcomodacion extends StatelessWidget {
             _FilaUnidad(
               unidad: unidad,
               posiciones: posiciones,
+              puestos: puestosDe(viaje),
               alElegir: (posicion) => alElegir(unidad.vin, posicion),
             ),
             const SizedBox(height: Espacio.sm),
@@ -99,29 +108,40 @@ class SeccionAcomodacion extends StatelessWidget {
   }
 }
 
-/// El esquema de la Orden de Cargue con quién ocupa cada lugar: arriba 4-3-2-1 (A1) y abajo 7-6-5 (B1).
+/// La niñera dibujada con quién ocupa cada puesto.
+///
+/// Los puestos y su orden llegan del servidor: la app no lleva escrita ninguna disposición. Con una niñera de
+/// nueve se dibujan nueve; con un viaje antiguo que no trae disposición, tantos como su capacidad.
 class _Esquema extends StatelessWidget {
-  const _Esquema({required this.posiciones});
+  const _Esquema({required this.posiciones, required this.puestos});
 
   final Map<String, int> posiciones;
+  final List<PuestoNinera> puestos;
 
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
     return Semantics(
-      label: 'Esquema de la niñera: arriba 4, 3, 2, 1 y abajo 7, 6, 5',
+      label: 'Niñera de ${puestos.length} puestos: ${puestos.map((p) => p.etiqueta).join(', ')}',
       child: Tarjeta(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final fila in esquemaNinera) ...[
-              Row(
-                children: [
-                  for (final posicion in fila) Expanded(child: _Lugar(posicion: posicion, vin: ocupante(posiciones, posicion))),
-                ],
-              ),
-              const SizedBox(height: Espacio.xs),
-            ],
-            Text('Arriba (A1): 4-3-2-1 · Abajo (B1): 7-6-5', style: tema.bodySmall),
+            // Se envuelven en vez de repartirse en filas fijas: la disposición puede traer cualquier cantidad y
+            // forzarla a un alto y un ancho inventados aquí es volver al esquema escrito en el código.
+            Wrap(
+              spacing: Espacio.xs,
+              runSpacing: Espacio.xs,
+              children: [
+                for (final puesto in puestos)
+                  SizedBox(
+                    width: 80,
+                    child: _Lugar(puesto: puesto, vin: ocupante(posiciones, puesto.numero)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: Espacio.xs),
+            Text('${puestos.length} puestos, en el orden de la Orden de Cargue.', style: tema.bodySmall),
           ],
         ),
       ),
@@ -130,9 +150,9 @@ class _Esquema extends StatelessWidget {
 }
 
 class _Lugar extends StatelessWidget {
-  const _Lugar({required this.posicion, required this.vin});
+  const _Lugar({required this.puesto, required this.vin});
 
-  final int posicion;
+  final PuestoNinera puesto;
   final String? vin;
 
   @override
@@ -149,7 +169,7 @@ class _Lugar extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Text('$posicion', style: tema.titleMedium),
+          Text(puesto.etiqueta, style: tema.titleMedium),
           Text(
             ocupante == null ? 'libre' : ocupante.substring(ocupante.length > 6 ? ocupante.length - 6 : 0),
             style: tema.labelSmall,
@@ -162,10 +182,11 @@ class _Lugar extends StatelessWidget {
 }
 
 class _FilaUnidad extends StatelessWidget {
-  const _FilaUnidad({required this.unidad, required this.posiciones, required this.alElegir});
+  const _FilaUnidad({required this.unidad, required this.posiciones, required this.puestos, required this.alElegir});
 
   final ViajeVehiculo unidad;
   final Map<String, int> posiciones;
+  final List<PuestoNinera> puestos;
   final void Function(int? posicion) alElegir;
 
   @override
@@ -187,12 +208,14 @@ class _FilaUnidad extends StatelessWidget {
               spacing: Espacio.sm,
               runSpacing: Espacio.sm,
               children: [
-                for (var p = posicionMinima; p <= posicionMaxima; p++)
+                // Solo los puestos que la niñera tiene: uno mayor que la capacidad lo rechaza el servidor
+                // nombrando cuántos hay, así que ni se ofrece.
+                for (final puesto in puestos)
                   _ChipPosicion(
-                    posicion: p,
-                    seleccionada: actual == p,
+                    puesto: puesto,
+                    seleccionada: actual == puesto.numero,
                     // Una posición que ya tiene otra unidad no se ofrece: el servidor la rechazaría con 409.
-                    ocupadaPor: ocupante(posiciones, p, except: unidad.vin),
+                    ocupadaPor: ocupante(posiciones, puesto.numero, except: unidad.vin),
                     alElegir: alElegir,
                   ),
               ],
@@ -206,9 +229,9 @@ class _FilaUnidad extends StatelessWidget {
 }
 
 class _ChipPosicion extends StatelessWidget {
-  const _ChipPosicion({required this.posicion, required this.seleccionada, required this.ocupadaPor, required this.alElegir});
+  const _ChipPosicion({required this.puesto, required this.seleccionada, required this.ocupadaPor, required this.alElegir});
 
-  final int posicion;
+  final PuestoNinera puesto;
   final bool seleccionada;
   final String? ocupadaPor;
   final void Function(int? posicion) alElegir;
@@ -216,11 +239,11 @@ class _ChipPosicion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: ocupadaPor == null ? 'Posición $posicion' : 'Posición $posicion, ocupada por $ocupadaPor',
+      label: ocupadaPor == null ? 'Puesto ${puesto.etiqueta}' : 'Puesto ${puesto.etiqueta}, ocupado por $ocupadaPor',
       child: ChoiceChip(
-        label: SizedBox(width: 24, child: Text('$posicion', textAlign: TextAlign.center)),
+        label: SizedBox(width: 32, child: Text(puesto.etiqueta, textAlign: TextAlign.center)),
         selected: seleccionada,
-        onSelected: ocupadaPor != null ? null : (elegida) => alElegir(elegida ? posicion : null),
+        onSelected: ocupadaPor != null ? null : (elegida) => alElegir(elegida ? puesto.numero : null),
       ),
     );
   }
@@ -237,6 +260,8 @@ class _Miniatura extends StatelessWidget {
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
     final sinUbicacion = foto.sinUbicacion;
+    // Sin precisión no es «precisa»: es que la lectura no era de ese momento y nadie la comprobó.
+    final sinComprobar = !sinUbicacion && foto.precision == null;
     final imprecisa = !sinUbicacion && (foto.precision ?? 0) > (precisionBaja ?? precisionBajaMetrosPorDefecto);
     return SizedBox(
       width: 88,
@@ -264,6 +289,8 @@ class _Miniatura extends StatelessWidget {
           ),
           if (sinUbicacion)
             Text('Sin ubicación: repítela', style: tema.labelSmall?.copyWith(color: Colores.peligro))
+          else if (sinComprobar)
+            Text('Sin comprobar', style: tema.labelSmall?.copyWith(color: Colores.advertencia))
           else if (imprecisa)
             Text('±${foto.precision!.round()} m', style: tema.labelSmall?.copyWith(color: Colores.advertencia)),
         ],

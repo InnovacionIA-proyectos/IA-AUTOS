@@ -45,6 +45,55 @@ Future<DatosDano?> pedirDano(
   );
 }
 
+/// Un grupo de opciones del catálogo: su título y sus fichas. Lo usan la hoja del daño de una zona y la del
+/// extra dañado, que piden exactamente lo mismo y tienen que verse igual.
+class GrupoDeOpciones extends StatelessWidget {
+  const GrupoDeOpciones({
+    super.key,
+    required this.titulo,
+    required this.opciones,
+    required this.elegido,
+    required this.alElegir,
+    this.tooltip,
+  });
+
+  final String titulo;
+  final List<ValorCatalogo> opciones;
+  final String? elegido;
+  final ValueChanged<String> alElegir;
+
+  /// Lo que se lee al dejar el dedo encima; en los niveles es su acción («Se rechaza el vehículo»).
+  final String? Function(ValorCatalogo)? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(titulo, style: tema.titleMedium?.copyWith(fontSize: 15)),
+        const SizedBox(height: Espacio.sm),
+        Wrap(
+          spacing: Espacio.sm,
+          runSpacing: Espacio.sm,
+          children: [
+            // Una opcion sin codigo no se puede enviar al servidor, asi que no se ofrece: antes se dejaba ver
+            // y al tocarla no pasaba nada.
+            for (final o in opciones)
+              if (o.codigo case final codigo?)
+                ChoiceChip(
+                  label: Text(o.nombre),
+                  tooltip: tooltip?.call(o),
+                  selected: elegido == codigo,
+                  onSelected: (_) => alElegir(codigo),
+                ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _HojaDano extends StatefulWidget {
   const _HojaDano({
     required this.titulo,
@@ -105,52 +154,28 @@ class _EstadoHojaDano extends State<_HojaDano> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const SizedBox(height: Espacio.md),
-                      Text('Clase de daño', style: tema.titleMedium?.copyWith(fontSize: 15)),
-                      const SizedBox(height: Espacio.sm),
-                      Wrap(
-                        spacing: Espacio.sm,
-                        runSpacing: Espacio.sm,
-                        children: [
-                          for (final c in widget.clases)
-                            ChoiceChip(
-                              label: Text(c.nombre),
-                              selected: _clase == c.codigo,
-                              onSelected: (_) => setState(() => _clase = c.codigo),
-                            ),
-                        ],
+                      GrupoDeOpciones(
+                        titulo: 'Clase de daño',
+                        opciones: widget.clases,
+                        elegido: _clase,
+                        alElegir: (codigo) => setState(() => _clase = codigo),
                       ),
                       const SizedBox(height: Espacio.lg),
-                      Text('Tamaño', style: tema.titleMedium?.copyWith(fontSize: 15)),
-                      const SizedBox(height: Espacio.sm),
-                      Wrap(
-                        spacing: Espacio.sm,
-                        runSpacing: Espacio.sm,
-                        children: [
-                          for (final t in widget.tamanos)
-                            ChoiceChip(
-                              label: Text(t.nombre),
-                              selected: _tamano == t.codigo,
-                              onSelected: (_) => setState(() => _tamano = t.codigo),
-                            ),
-                        ],
+                      GrupoDeOpciones(
+                        titulo: 'Tamaño',
+                        opciones: widget.tamanos,
+                        elegido: _tamano,
+                        alElegir: (codigo) => setState(() => _tamano = codigo),
                       ),
                       if (widget.niveles.isNotEmpty) ...[
                         const SizedBox(height: Espacio.lg),
-                        Text('Nivel de severidad', style: tema.titleMedium?.copyWith(fontSize: 15)),
-                        const SizedBox(height: Espacio.sm),
-                        Wrap(
-                          spacing: Espacio.sm,
-                          runSpacing: Espacio.sm,
-                          children: [
-                            for (final n in widget.niveles)
-                              ChoiceChip(
-                                label: Text(n.nombre),
-                                // La acción del nivel («Se rechaza el vehículo») ayuda a no elegirlo a la ligera.
-                                tooltip: n.campo<String>('accion'),
-                                selected: _nivel == n.codigo,
-                                onSelected: (_) => setState(() => _nivel = n.codigo),
-                              ),
-                          ],
+                        GrupoDeOpciones(
+                          titulo: 'Nivel de severidad',
+                          opciones: widget.niveles,
+                          elegido: _nivel,
+                          alElegir: (codigo) => setState(() => _nivel = codigo),
+                          // La acción del nivel («Se rechaza el vehículo») ayuda a no elegirlo a la ligera.
+                          tooltip: (n) => n.campo<String>('accion'),
                         ),
                       ],
                       const SizedBox(height: Espacio.lg),

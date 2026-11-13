@@ -1,4 +1,5 @@
 import '../../../core/http/cliente_api.dart';
+import '../../../core/http/listados.dart';
 import '../domain/pendiente.dart';
 import '../domain/viaje.dart';
 
@@ -14,7 +15,7 @@ class ReclamosRepositorio {
   /// Los camiones pendientes de los puntos del inspector. Un inspector sin puntos recibe una lista vacía.
   Future<List<Pendiente>> pendientes() async {
     final r = await _api.get('/api/viajes/pendientes');
-    return [for (final p in r as List<dynamic>) Pendiente.fromJson(p as Map<String, dynamic>)];
+    return [for (final p in elementosDe(r, ruta: '/api/viajes/pendientes')) Pendiente.fromJson(p as Map<String, dynamic>)];
   }
 
   /// «Revisar este». El servidor responde 409 si ya lo tomó otro («Ya fue tomado por otro inspector») o si el

@@ -37,13 +37,45 @@ void main() {
     });
   });
 
-  group('lugares de la niñera', () {
-    test('el esquema trae los siete lugares, 4-3-2-1 arriba y 7-6-5 abajo', () {
-      expect(esquemaNinera, [
-        [4, 3, 2, 1],
-        [7, 6, 5],
-      ]);
-      expect(esquemaNinera.expand((f) => f).toList()..sort(), [1, 2, 3, 4, 5, 6, 7]);
+  /// S7-HU-05: los puestos los manda el viaje. La app ya no lleva escrito ningún esquema: con una niñera de
+  /// nueve dibujaba siete, que es otra niñera.
+  group('los puestos de la niñera', () {
+    test('se dibujan los que manda el servidor, con su etiqueta y en su orden', () {
+      final viaje = Viaje(
+        id: 'v1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: 'en_curso',
+        capacidad: 3,
+        disposicion: const [
+          PuestoNinera(numero: 3, etiqueta: 'A1-3'),
+          PuestoNinera(numero: 1, etiqueta: 'A1-1'),
+          PuestoNinera(numero: 2, etiqueta: 'A1-2'),
+        ],
+      );
+
+      expect(puestosDe(viaje).map((p) => p.etiqueta), ['A1-3', 'A1-1', 'A1-2'], reason: 'el orden es el suyo');
+      expect(capacidadDe(viaje), 3);
+    });
+
+    // ESC-06: los viajes de antes de que el viaje guardara su capacidad no se mueven.
+    test('un viaje sin capacidad ni disposición se dibuja de siete puestos', () {
+      const viaje = Viaje(id: 'v1', codigoMtrack: 'MTK-1', placa: 'ABC123', estado: 'en_curso');
+
+      expect(capacidadDe(viaje), 7);
+      expect(puestosDe(viaje).map((p) => p.numero), [1, 2, 3, 4, 5, 6, 7]);
+      expect(puestosDe(viaje).map((p) => p.etiqueta), ['1', '2', '3', '4', '5', '6', '7']);
+    });
+
+    test('con capacidad pero sin disposición se numeran hasta la capacidad', () {
+      const viaje = Viaje(id: 'v1', codigoMtrack: 'MTK-1', placa: 'ABC123', estado: 'en_curso', capacidad: 9);
+
+      expect(puestosDe(viaje).map((p) => p.numero), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    });
+
+    test('sin viaje todavía, se dibuja la niñera por defecto', () {
+      expect(capacidadDe(null), 7);
+      expect(puestosDe(null), hasLength(7));
     });
 
     test('ocupante dice quién tiene un lugar, sin contar a quien lo está eligiendo', () {
@@ -135,6 +167,77 @@ void main() {
       final job = informe(viajeId: 'v1', posiciones: {_a.vin: 4}).conProgreso(posicionesEnviadas: true);
       expect(job.posicionesEnviadas, isTrue);
       expect(job.conIntento(intentos: 1, error: null, fallido: false).posiciones, {_a.vin: 4});
+    });
+  });
+
+  /// S7-HU-05 CA-2: la niñera debería fotografiarse una sola vez por viaje. **Todavía no se puede**: el servidor
+  /// cuenta las fotos de la acomodación por inspección (`ContarFotosLibresAsync(inspeccion.Id)`), no por viaje,
+  /// así que relajarlo aquí dejaría cerrar lo que allá vuelve con un 400 y deja el informe a medias. Estas
+  /// pruebas fijan que la app pide lo mismo que el servidor, que es lo único que puede hacer hasta que cambie.
+  group('la foto de la acomodación se cuenta por informe, como en el servidor', () {
+    test('sin foto en este informe no deja cerrar, aunque el viaje ya tenga otras', () {
+      final bloqueo = bloqueoDeCierre(
+        hayUbicacion: true,
+        fotos: const [],
+        hallazgos: const [],
+        acomodacion: Acomodacion(unidades: [_a, _b], posiciones: {_a.vin: 1, _b.vin: 2}, fotosMinimas: 1),
+      );
+
+      expect(bloqueo, isA<FaltanFotosDeAcomodacion>());
+    });
+
+    test('con la foto de este informe, cierra', () {
+      final bloqueo = bloqueoDeCierre(
+        hayUbicacion: true,
+        fotos: [_foto()],
+        hallazgos: const [],
+        acomodacion: Acomodacion(unidades: [_a], posiciones: {_a.vin: 1}, fotosMinimas: 1),
+      );
+
+      expect(bloqueo, isNull);
+    });
+
+    test('la foto no tapa que a una unidad le falte el puesto', () {
+      final bloqueo = bloqueoDeCierre(
+        hayUbicacion: true,
+        fotos: [_foto()],
+        hallazgos: const [],
+        acomodacion: Acomodacion(unidades: [_a, _b], posiciones: {_a.vin: 1}, fotosMinimas: 1),
+      );
+
+      expect(bloqueo, isA<FaltaPosicion>());
+    });
+  });
+
+  /// La copia local tiene que conservar la niñera: sin señal, una de nueve se dibujaba de siete.
+  group('el viaje guardado', () {
+    test('conserva capacidad, disposición y cuántas fotos de acomodación tiene', () {
+      const original = Viaje(
+        id: 'v1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: 'en_curso',
+        capacidad: 9,
+        disposicion: [PuestoNinera(numero: 1, etiqueta: 'A1-1'), PuestoNinera(numero: 2, etiqueta: 'A1-2')],
+        fotosAcomodacion: 2,
+      );
+
+      final leido = Viaje.fromJson(original.toJson());
+
+      expect(leido.capacidad, 9);
+      expect(leido.disposicion.map((p) => p.etiqueta), ['A1-1', 'A1-2']);
+      expect(leido.fotosAcomodacion, 2);
+      expect(puestosDe(leido), hasLength(2), reason: 'se dibuja la que trae, no una inventada');
+    });
+
+    test('un viaje sin nada de eso se lee igual que siempre', () {
+      const original = Viaje(id: 'v1', codigoMtrack: 'MTK-1', placa: 'ABC123', estado: 'en_curso');
+
+      final leido = Viaje.fromJson(original.toJson());
+
+      expect(leido.capacidad, isNull);
+      expect(leido.disposicion, isEmpty);
+      expect(capacidadDe(leido), 7);
     });
   });
 }

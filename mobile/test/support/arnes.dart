@@ -31,6 +31,19 @@ const sesionPrueba = Sesion(
   usuario: Usuario(id: 'u1', nombre: 'Ana Pérez', email: 'ana@boterosoto.com.co', rol: 'inspector'),
 );
 
+/// El conductor del viaje, ya con su PIN cambiado: ve lo de sus viajes y nada más.
+const sesionConductor = Sesion(
+  token: 'jwt-conductor',
+  usuario: Usuario(id: 'u9', nombre: 'Luis Gómez', email: '', rol: 'conductor', cedula: '1234567'),
+);
+
+/// Quien revisa los informes de su cliente sin tener viajes propios: no captura ninguno, así que pedir «solo los
+/// míos» por él le deja la pestaña vacía.
+const sesionCoordinador = Sesion(
+  token: 'jwt-coordinadora',
+  usuario: Usuario(id: 'coord-1', nombre: 'Sara Calderón', email: 'sara@trazaautos.local', rol: 'coordinador_calidad'),
+);
+
 /// Personal de campo que entró con un PIN asignado por un administrador: tiene sesión, pero el resto de la API
 /// le responde 403 hasta que lo cambie.
 const sesionConPinTemporal = Sesion(
@@ -101,9 +114,13 @@ class AuthRepositorioFalso implements AuthRepositorio {
   Object? errorCapacidades;
   int consultasDePerfil = 0;
 
+  /// El token con que se pidió el perfil. Null si se pidió sin él, que es lo que hacía que el servidor respondiera 401.
+  String? tokenDelPerfil;
+
   @override
-  Future<List<String>> capacidades() async {
+  Future<List<String>> capacidades({String? token}) async {
     consultasDePerfil++;
+    tokenDelPerfil = token;
     if (errorCapacidades != null) throw errorCapacidades!;
     return capacidadesDelPerfil;
   }
@@ -133,18 +150,49 @@ class RedConectividadFalsa implements EstadoRed {
 class InspeccionesRepositorioFalso implements InspeccionesRepositorio {
   List<InspeccionResumen>? cache;
   List<InspeccionResumen> remoto = const [];
+
+  /// Cuando la prueba necesita varias páginas: qué devuelve cada una. Vacío, todas devuelven [remoto].
+  Map<int, List<InspeccionResumen>> paginas = const {};
+
+  /// Cuántos dice el servidor que hay con esos filtros. Sin ponerlo, los que trae la página: una sola página y
+  /// nada más que pedir.
+  int? totalRemoto;
   Object? errorRemoto;
   int llamadasRemotas = 0;
+
+  /// Con qué se pidió cada página. `usuarioId` llega nulo cuando no se mandó el filtro de autor, que es lo que
+  /// distingue al coordinador de calidad del inspector.
+  final peticiones = <({String? usuarioId, String? vin, int pagina})>[];
 
   @override
   Future<List<InspeccionResumen>?> leerCache(String usuarioId) async => cache;
 
   @override
-  Future<List<InspeccionResumen>> listarRemoto(String usuarioId) async {
+  Future<PaginaInspecciones> listarRemoto(
+    String usuarioId, {
+    bool soloSuyas = true,
+    String? vin,
+    int pagina = 1,
+  }) async {
     llamadasRemotas++;
+    peticiones.add((usuarioId: soloSuyas ? usuarioId : null, vin: vin, pagina: pagina));
     if (errorRemoto != null) throw errorRemoto!;
-    cache = remoto;
-    return remoto;
+    final items = paginas.isEmpty ? remoto : (paginas[pagina] ?? const <InspeccionResumen>[]);
+    // Como el de verdad: solo se guarda la primera página de la lista sin buscar.
+    if (pagina == 1 && (vin == null || vin.isEmpty)) cache = items;
+    return PaginaInspecciones(items: items, total: totalRemoto ?? items.length);
+  }
+
+  /// Los informes del viaje, para la lista de unidades del cargue. Con qué se pidió, para comprobar que el
+  /// proceso que viaja es el del pendiente y no otro.
+  List<InspeccionResumen> delViajeResultado = const [];
+  final consultasDeViaje = <({String viajeId, String proceso})>[];
+
+  @override
+  Future<List<InspeccionResumen>> delViaje(String viajeId, {required String proceso}) async {
+    consultasDeViaje.add((viajeId: viajeId, proceso: proceso));
+    if (errorRemoto != null) throw errorRemoto!;
+    return delViajeResultado;
   }
 }
 
@@ -154,8 +202,16 @@ class DispositivoFalso implements ServicioDispositivo {
 }
 
 class UbicacionFalsa implements ServicioUbicacion {
-  Posicion? posicion = const Posicion(6.2, -75.5);
+  /// Por defecto, una lectura de ahora: es lo normal y es lo que se sella con su precisión.
+  Posicion? posicion = Posicion(6.2, -75.5, tomadaEn: DateTime.now());
   UbicacionNoDisponible? error;
+
+  /// El interruptor del GPS del teléfono. Como el real, solo avisa de los CAMBIOS: no emite el estado actual al
+  /// suscribirse, que es lo que evita que quien lo escucha se reinvoque en bucle.
+  final _gps = StreamController<bool>.broadcast();
+
+  void encenderGps() => _gps.add(true);
+  void apagarGps() => _gps.add(false);
 
   @override
   Future<Posicion> obtenerActual() async {
@@ -165,6 +221,9 @@ class UbicacionFalsa implements ServicioUbicacion {
 
   @override
   Future<Posicion?> obtenerRapida() async => posicion;
+
+  @override
+  Stream<bool> get servicioActivo => _gps.stream;
 
   @override
   Future<void> abrirAjustes() async {}
@@ -240,8 +299,18 @@ class NovedadesFalso implements NovedadesRepositorio {
   Object? errorAlRevisar;
   final List<Map<String, Object?>> revisadas = [];
 
+  /// Lo que devuelve la lista del viaje; por defecto, lo mismo que la de un VIN.
+  List<NovedadPendiente>? delViaje;
+  final List<String> viajesConsultados = [];
+
   @override
   Future<List<NovedadPendiente>> porRevisar({required String vin, String? viajeId}) async => lista;
+
+  @override
+  Future<List<NovedadPendiente>> sinCalificarDelViaje(String viajeId) async {
+    viajesConsultados.add(viajeId);
+    return delViaje ?? lista;
+  }
 
   @override
   Future<void> revisar(

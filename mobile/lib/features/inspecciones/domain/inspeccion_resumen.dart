@@ -9,6 +9,9 @@ class InspeccionResumen {
     required this.estado,
     this.version = 1,
     this.corrigeInspeccionId,
+    this.proceso,
+    this.codigoMtrack,
+    this.lugar,
   });
 
   factory InspeccionResumen.fromJson(Map<String, dynamic> json) => InspeccionResumen(
@@ -20,6 +23,9 @@ class InspeccionResumen {
         estado: json['estado'] as String,
         version: json['version'] as int? ?? 1,
         corrigeInspeccionId: json['corrige_inspeccion_id'] as String?,
+        proceso: json['proceso'] as String?,
+        codigoMtrack: json['codigo_mtrack'] as String?,
+        lugar: json['lugar'] as String?,
       );
 
   final String id;
@@ -36,6 +42,14 @@ class InspeccionResumen {
   final int version;
   final String? corrigeInspeccionId;
 
+  /// De qué viaje y de qué momento del viaje es este informe. Quien ve los informes de todo el mundo lee una
+  /// pila de VINes repetidos si no se le dice esto; el servidor ya lo manda.
+  ///
+  /// `proceso` es el código del catálogo de etapas, no su nombre: lo traduce quien pinta.
+  final String? proceso;
+  final String? codigoMtrack;
+  final String? lugar;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'vin': vin,
@@ -45,6 +59,9 @@ class InspeccionResumen {
         'estado': estado,
         'version': version,
         'corrige_inspeccion_id': corrigeInspeccionId,
+        'proceso': proceso,
+        'codigo_mtrack': codigoMtrack,
+        'lugar': lugar,
       };
 
   DateTime? get fechaLocal => DateTime.tryParse(fecha)?.toLocal();

@@ -1,4 +1,5 @@
 import '../../../core/http/cliente_api.dart';
+import '../../../core/http/listados.dart';
 import '../domain/orden_sofasa.dart';
 
 class SofasaRepositorio {
@@ -10,6 +11,8 @@ class SofasaRepositorio {
   Future<List<OrdenSofasa>> ordenes({String? vin}) async {
     final filtro = vin?.trim().toUpperCase() ?? '';
     final r = await _api.get('/api/sofasa/ordenes', query: filtro.isEmpty ? null : {'vin': filtro});
-    return [for (final o in r as List<dynamic>) OrdenSofasa.fromJson(o as Map<String, dynamic>)];
+    return [
+      for (final o in elementosDe(r, ruta: '/api/sofasa/ordenes')) OrdenSofasa.fromJson(o as Map<String, dynamic>),
+    ];
   }
 }

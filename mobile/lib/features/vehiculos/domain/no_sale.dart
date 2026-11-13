@@ -11,12 +11,15 @@ import 'inventario.dart';
 const nivelV1Plus = 'v1_plus';
 
 /// Los hallazgos de este VIN que permiten marcar que la unidad no sale de [viajeId]: nivel V1+, en una
-/// inspección **cerrada** de una etapa **de ese viaje**.
+/// inspección **cerrada** y **vigente** de una etapa **de ese viaje**.
+///
+/// Vigente quiere decir que ninguna corrección cerrada la reemplazó. Un daño que la corrección ya no trae no
+/// existe: no describe el carro de hoy y no puede justificar que la unidad se quede.
 List<HallazgoVista> hallazgosQueImpidenSalir(Inventario inventario, {required String viajeId}) => [
       for (final etapa in inventario.etapas)
         if (etapa.viajeId == viajeId)
           for (final inspeccion in etapa.inspecciones)
-            if (inspeccion.cerrada)
+            if (inspeccion.cerrada && !etapa.fueCorregida(inspeccion))
               for (final hallazgo in inspeccion.hallazgos)
                 if (hallazgo.nivel == nivelV1Plus) hallazgo,
     ];

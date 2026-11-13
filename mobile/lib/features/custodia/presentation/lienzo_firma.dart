@@ -34,7 +34,15 @@ class _EstadoLienzoFirma extends State<LienzoFirma> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(widget.etiqueta, style: tema.titleMedium?.copyWith(fontSize: 15)),
+            // La etiqueta cede el espacio que haga falta: en un teléfono angosto, «Firma de quien recibe» y
+            // «Limpiar» no caben lado a lado y la fila se desbordaba.
+            Expanded(
+              child: Text(
+                widget.etiqueta,
+                style: tema.titleMedium?.copyWith(fontSize: 15),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             TextButton(onPressed: _limpiar, child: const Text('Limpiar')),
           ],
         ),

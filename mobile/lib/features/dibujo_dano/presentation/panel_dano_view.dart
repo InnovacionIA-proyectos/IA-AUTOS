@@ -26,12 +26,17 @@ class PanelDanoView extends StatelessWidget {
     required this.alTocar,
     this.alturaMaxima = 420,
     this.cuadricula = true,
+    this.anteriores = const {},
   });
 
   final PanelDano panel;
   final List<RegionDano> regiones;
   /// Clave de la zona con daño al nivel de ese daño (nulo si nadie lo clasificó).
   final Map<String, String?> danos;
+
+  /// Zonas que ya traían un daño de una inspección anterior del vehículo.
+  final Set<String> anteriores;
+
   final String? seleccionada;
 
   /// El zoom de este panel. Lo crea y lo libera quien contiene el panel, para que cada vista conserve el suyo al
@@ -84,10 +89,16 @@ class PanelDanoView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final conDanoAqui = regiones.where((r) => danos.containsKey(r.clave)).length;
+    // Los anteriores se cuentan aparte: quien usa lector de pantalla no ve ni el color ni el rayado, así que la
+    // distinción que pide el criterio tiene que estar también en el texto.
+    final conDanoAnterior = regiones.where((r) => anteriores.contains(r.clave) && !danos.containsKey(r.clave)).length;
     return Semantics(
-      label: conDanoAqui == 0
-          ? 'Vista ${panel.nombre} del vehículo, sin daños'
-          : 'Vista ${panel.nombre} del vehículo, $conDanoAqui cuadrantes con daño',
+      label: [
+        'Vista ${panel.nombre} del vehículo',
+        if (conDanoAqui == 0 && conDanoAnterior == 0) 'sin daños',
+        if (conDanoAqui > 0) '$conDanoAqui cuadrantes con daño',
+        if (conDanoAnterior > 0) '$conDanoAnterior con daño anterior',
+      ].join(', '),
       child: Center(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: alturaMaxima),
@@ -124,6 +135,7 @@ class PanelDanoView extends StatelessWidget {
                                         panel: panel,
                                         regiones: regiones,
                                         danos: danos,
+                                        anteriores: anteriores,
                                         seleccionada: seleccionada,
                                         escala: escala,
                                         cuadricula: cuadricula,

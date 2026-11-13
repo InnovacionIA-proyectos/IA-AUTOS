@@ -31,6 +31,10 @@ Future<int> montar(
 }
 
 void main() {
+  // La memoria de las fotos que no estaban vive fuera del widget, para que sobreviva al redibujo. Entre pruebas
+  // hay que limpiarla, o una prueba heredaría lo que falló en la anterior.
+  setUp(olvidarFotosQueFaltan);
+
   testWidgets('el enlace firmado va solo, sin Authorization', (tester) async {
     await montar(tester, venceEn: DateTime.now().add(const Duration(minutes: 10)));
 
@@ -58,6 +62,88 @@ void main() {
     await montar(tester, url: null);
 
     expect(find.text('Sin foto'), findsOneWidget);
+  });
+
+  // Lo que se vio en el patio: una foto que ya no está en el almacén dejaba la pantalla parpadeando entre
+  // «buscando» y el resultado, y el teléfono hizo casi seiscientas peticiones en unos minutos. La guarda que
+  // había era por enlace, y cada refresco firma una URL distinta: se reiniciaba sola en cada vuelta.
+  group('una foto que ya no está no puede entrar en bucle', () {
+    /// Reconstruye como lo hace la app al refrescar: enlace nuevo cada vez, y la imagen siempre falla.
+    Future<int> vueltas(WidgetTester tester, int cuantas) async {
+      var refrescos = 0;
+      for (var i = 0; i < cuantas; i++) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: crearTema(),
+            home: Scaffold(
+              body: FotoEvidencia(
+                // Cada refresco trae otra firma, igual que el servidor.
+                url: 'https://api.test/api/uploads/x.jpg?exp=$i&firma=f$i',
+                alto: 100,
+                venceEn: DateTime.now().add(const Duration(minutes: 10)),
+                alVencer: () => refrescos++,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+      }
+      return refrescos;
+    }
+
+    testWidgets('se pide un enlace nuevo una sola vez, por más vueltas que dé', (tester) async {
+      expect(await vueltas(tester, 6), 1, reason: 'si el enlace nuevo también falla, el problema no es el enlace');
+    });
+
+    testWidgets('y se dice que ya no está, en vez de quedarse intentando', (tester) async {
+      await vueltas(tester, 3);
+
+      expect(find.text('La foto ya no está disponible'), findsOneWidget);
+    });
+
+    /// Lo que hacía la pantalla de verdad, y que las vueltas de arriba no reproducen: mientras vuelve a buscar,
+    /// la lista se cambia por un renglón de «buscando…». La foto sale del árbol y su estado se va con ella, así
+    /// que a la vuelta nace una nueva, sin memoria de que el archivo ya había fallado.
+    Future<int> vueltasVaciando(WidgetTester tester, int cuantas) async {
+      var refrescos = 0;
+      for (var i = 0; i < cuantas; i++) {
+        await tester.pumpWidget(
+          MaterialApp(theme: crearTema(), home: const Scaffold(body: Text('Buscando…'))),
+        );
+        await tester.pump();
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: crearTema(),
+            home: Scaffold(
+              body: FotoEvidencia(
+                url: 'https://api.test/api/uploads/x.jpg?exp=$i&firma=f$i',
+                alto: 100,
+                venceEn: DateTime.now().add(const Duration(minutes: 10)),
+                alVencer: () => refrescos++,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump();
+      }
+      return refrescos;
+    }
+
+    testWidgets('tampoco si la pantalla se vacía mientras busca y la foto se vuelve a montar', (tester) async {
+      expect(
+        await vueltasVaciando(tester, 6),
+        1,
+        reason: 'el archivo es el mismo aunque cambien la firma y el widget: pedir otro enlace no lo trae',
+      );
+    });
+
+    testWidgets('y al volver ya se sabe que no está, sin pedir nada', (tester) async {
+      await vueltasVaciando(tester, 2);
+
+      expect(find.text('La foto ya no está disponible'), findsOneWidget);
+    });
   });
 
   // Refrescar la fuente vuelve a construir este widget; sin el control, cada reconstrucción pediría otra vez.

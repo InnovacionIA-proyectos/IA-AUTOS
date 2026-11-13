@@ -7,27 +7,59 @@ import '../../../core/ui/visor_imagen.dart';
 import '../../../core/ui/widgets.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../domain/extra_local.dart';
+import 'hoja_dano.dart';
 
 /// Lo que se elige en la hoja de un extra. Las fotos se toman después, desde su fila.
-typedef DatosExtra = ({String tipo, String nombre, String? textoOtro, String? observacion});
+typedef DatosExtra = ({String tipo, String nombre, String? textoOtro, String? observacion, DanoExtra? dano});
 
-/// Pide el tipo de extra y su observación. Devuelve null si se cancela.
+/// Pide el tipo de extra, su observación y, si está dañado, los tres datos del daño. Null si se cancela.
 ///
 /// Los tipos salen del catálogo (solo los activos, en su orden) y siempre se ofrece «Otro», que exige decir qué es:
 /// un elemento que nadie configuró se reporta igual, sin esperar a que Calidad lo agregue.
-Future<DatosExtra?> pedirExtra(BuildContext context, {required List<ValorCatalogo> tipos}) {
+///
+/// El daño se pide aquí mismo y no en otra hoja encima: son tres fichas más, y partirlo en dos pasos dejaría un
+/// extra guardado a medias si se cancela el segundo.
+///
+/// [puedeMarcarDano] en falso esconde el interruptor: es el caso del conductor. En el daño de un **extra** el
+/// servidor exige los tres —clase, tamaño y **nivel**— sin excepción por rol, al revés que en el daño de una
+/// zona, donde el conductor no manda nivel. Así que o se piden los tres o no se marca el daño; dejarlo a medias
+/// manda un cuerpo que el servidor rechaza con 400 y tumba el informe entero.
+Future<DatosExtra?> pedirExtra(
+  BuildContext context, {
+  required List<ValorCatalogo> tipos,
+  required List<ValorCatalogo> clases,
+  required List<ValorCatalogo> tamanos,
+  required List<ValorCatalogo> niveles,
+  bool puedeMarcarDano = true,
+}) {
   return showModalBottomSheet<DatosExtra>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => _HojaExtra(tipos: [...tipos.where((t) => t.codigo != tipoExtraOtro)]),
+    builder: (_) => _HojaExtra(
+      tipos: [...tipos.where((t) => t.codigo != tipoExtraOtro)],
+      clases: clases,
+      tamanos: tamanos,
+      niveles: niveles,
+      puedeMarcarDano: puedeMarcarDano,
+    ),
   );
 }
 
 class _HojaExtra extends StatefulWidget {
-  const _HojaExtra({required this.tipos});
+  const _HojaExtra({
+    required this.tipos,
+    required this.clases,
+    required this.tamanos,
+    required this.niveles,
+    required this.puedeMarcarDano,
+  });
 
   final List<ValorCatalogo> tipos;
+  final List<ValorCatalogo> clases;
+  final List<ValorCatalogo> tamanos;
+  final List<ValorCatalogo> niveles;
+  final bool puedeMarcarDano;
 
   @override
   State<_HojaExtra> createState() => _EstadoHojaExtra();
@@ -37,6 +69,10 @@ class _EstadoHojaExtra extends State<_HojaExtra> {
   String? _tipo;
   final _textoOtro = TextEditingController();
   final _observacion = TextEditingController();
+  bool _danado = false;
+  String? _clase;
+  String? _tamano;
+  String? _nivel;
 
   @override
   void dispose() {
@@ -47,7 +83,21 @@ class _EstadoHojaExtra extends State<_HojaExtra> {
 
   bool get _esOtro => _tipo == tipoExtraOtro;
 
-  bool get _completo => _tipo != null && (!_esOtro || _textoOtro.text.trim().isNotEmpty);
+  /// Qué falta por elegir, o null si ya se puede agregar. Se dice de uno en uno, junto al botón: un extra
+  /// marcado como dañado al que le falta el nivel no se guarda a medias, y el servidor lo rechazaría.
+  String? get _loQueFalta {
+    if (_tipo == null) return null; // todavía no ha elegido nada: no hay nada que reclamar
+    if (_esOtro && _textoOtro.text.trim().isEmpty) return 'Escribe qué es.';
+    if (_danado) {
+      if (_clase == null) return 'Elige la clase del daño.';
+      if (_tamano == null) return 'Elige el tamaño del daño.';
+      // El nivel es obligatorio siempre: en un extra el servidor lo exige a todo el mundo.
+      if (_nivel == null) return 'Elige el nivel de severidad.';
+    }
+    return null;
+  }
+
+  bool get _completo => _tipo != null && _loQueFalta == null;
 
   DatosExtra _datos() {
     final observacion = _observacion.text.trim();
@@ -57,6 +107,7 @@ class _EstadoHojaExtra extends State<_HojaExtra> {
       nombre: _esOtro ? 'Otro: $textoOtro' : widget.tipos.firstWhere((t) => t.codigo == _tipo).nombre,
       textoOtro: _esOtro ? textoOtro : null,
       observacion: observacion.isEmpty ? null : observacion,
+      dano: _danado ? DanoExtra(clase: _clase!, tamano: _tamano!, nivel: _nivel) : null,
     );
   }
 
@@ -110,6 +161,53 @@ class _EstadoHojaExtra extends State<_HojaExtra> {
                         ),
                       ],
                       const SizedBox(height: Espacio.md),
+                      // El golpe de un platón es un golpe del carro: con sus tres datos cuenta en las
+                      // estadísticas como cualquier otro. Sin ellos solo quedaba una foto y un texto.
+                      if (widget.puedeMarcarDano)
+                        SwitchListTile(
+                          value: _danado,
+                          onChanged: (v) => setState(() => _danado = v),
+                          title: const Text('Está dañado'),
+                          subtitle: Text(
+                            'Cuenta como un daño del carro. No se marca en el dibujo: el extra no tiene zona.',
+                            style: tema.bodySmall,
+                          ),
+                          contentPadding: EdgeInsets.zero,
+                        )
+                      else
+                        // El servidor exige el nivel para el daño de un extra, y el conductor no asigna niveles:
+                        // ofrecérselo sería dejarle armar un envío que vuelve rechazado.
+                        Text(
+                          'Si está dañado, dilo en la observación: el daño lo califica quien inspecciona.',
+                          style: tema.bodySmall,
+                        ),
+                      if (_danado) ...[
+                        const SizedBox(height: Espacio.sm),
+                        GrupoDeOpciones(
+                          titulo: 'Clase de daño',
+                          opciones: widget.clases,
+                          elegido: _clase,
+                          alElegir: (codigo) => setState(() => _clase = codigo),
+                        ),
+                        const SizedBox(height: Espacio.lg),
+                        GrupoDeOpciones(
+                          titulo: 'Tamaño',
+                          opciones: widget.tamanos,
+                          elegido: _tamano,
+                          alElegir: (codigo) => setState(() => _tamano = codigo),
+                        ),
+                        if (widget.niveles.isNotEmpty) ...[
+                          const SizedBox(height: Espacio.lg),
+                          GrupoDeOpciones(
+                            titulo: 'Nivel de severidad',
+                            opciones: widget.niveles,
+                            elegido: _nivel,
+                            alElegir: (codigo) => setState(() => _nivel = codigo),
+                            tooltip: (n) => n.campo<String>('accion'),
+                          ),
+                        ],
+                      ],
+                      const SizedBox(height: Espacio.md),
                       TextField(
                         controller: _observacion,
                         maxLength: observacionExtraMax,
@@ -122,6 +220,14 @@ class _EstadoHojaExtra extends State<_HojaExtra> {
                   ),
                 ),
               ),
+              if (_loQueFalta case final falta?)
+                Padding(
+                  padding: const EdgeInsets.only(top: Espacio.sm),
+                  child: Semantics(
+                    liveRegion: true,
+                    child: Text(falta, style: tema.bodySmall?.copyWith(color: Colores.peligro)),
+                  ),
+                ),
               const SizedBox(height: Espacio.md),
               Row(
                 children: [
@@ -151,6 +257,7 @@ class SeccionExtras extends StatelessWidget {
     required this.alAgregar,
     required this.alTomarFoto,
     required this.alQuitar,
+    this.catalogos,
   });
 
   final List<ExtraLocal> extras;
@@ -159,6 +266,9 @@ class SeccionExtras extends StatelessWidget {
   final VoidCallback? alAgregar;
   final void Function(int indice)? alTomarFoto;
   final void Function(int indice) alQuitar;
+
+  /// Para leer el daño de cada extra con los nombres del catálogo.
+  final Catalogos? catalogos;
 
   @override
   Widget build(BuildContext context) {
@@ -172,6 +282,7 @@ class SeccionExtras extends StatelessWidget {
           const SizedBox(height: Espacio.sm),
           _FilaExtra(
             extra: extras[i],
+            catalogos: catalogos,
             alTomarFoto: alTomarFoto == null ? null : () => alTomarFoto!(i),
             alQuitar: () => alQuitar(i),
           ),
@@ -184,7 +295,10 @@ class SeccionExtras extends StatelessWidget {
 }
 
 class _FilaExtra extends StatelessWidget {
-  const _FilaExtra({required this.extra, required this.alTomarFoto, required this.alQuitar});
+  const _FilaExtra({required this.extra, required this.alTomarFoto, required this.alQuitar, this.catalogos});
+
+  /// Para leer el daño con sus nombres. Null en las pruebas que no lo necesitan.
+  final Catalogos? catalogos;
 
   final ExtraLocal extra;
   final VoidCallback? alTomarFoto;
@@ -206,6 +320,17 @@ class _FilaExtra extends StatelessWidget {
               ),
             ],
           ),
+          // El daño, para poder releer lo que se marcó. Sin esto, quien lo puso no tenía dónde comprobarlo y la
+          // única salida era quitar el extra entero y volver a empezar.
+          if (extra.dano case final dano?)
+            Text(
+              catalogos == null
+                  ? 'Dañado'
+                  : 'Dañado · ${catalogos!.etiqueta(Catalogo.clasesDano, dano.clase)} '
+                      '(${catalogos!.etiqueta(Catalogo.tamanosDano, dano.tamano)})'
+                      '${dano.nivel == null ? '' : ' · ${catalogos!.etiqueta(Catalogo.nivelesSeveridad, dano.nivel!)}'}',
+              style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+            ),
           if (extra.observacion case final observacion?) Text(observacion, style: tema.bodySmall),
           const SizedBox(height: Espacio.sm),
           Wrap(
