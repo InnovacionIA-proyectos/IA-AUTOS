@@ -96,7 +96,8 @@ Future<Montaje> abrir(
         path: '/inspecciones/vin/:vin/captura/:etapaId',
         builder: (_, state) {
           capturas.add(state.uri);
-          return const Scaffold(body: Text('captura'));
+          // Con barra, para que la prueba pueda volver atrás como se vuelve en el equipo.
+          return Scaffold(appBar: AppBar(title: const Text('captura')), body: const SizedBox());
         },
       ),
     ],
@@ -273,6 +274,36 @@ void main() {
       expect(find.text('Permiso concedido'), findsOneWidget);
       expect(find.textContaining('lo concedió el tiempo'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, 'Continuar el cargue'), findsOneWidget);
+      await cerrar(tester);
+    });
+
+    // El defecto visto en el equipo: tras cerrar el cargue se volvía a la espera, que seguía diciendo
+    // «Continuar el cargue» y mandaba a capturar otra vez un informe ya cerrado.
+    testWidgets('al seguir desde la espera, la espera se cierra y no se vuelve a ella', (tester) async {
+      final m = await abrir(tester, cargueConInspector: true, permiso: permisoDe(concedido: true));
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Continuar el cargue'));
+      await avanzar(tester);
+      expect(m.capturas, hasLength(1), reason: 'el botón de la ficha va directo, sin pasar por la espera');
+
+      // Y por el otro camino, el de quien estaba esperando: abre la espera y sigue desde ella.
+      final n = await abrir(tester, cargueConInspector: true, permiso: permisoDe());
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Ver el permiso'));
+      await avanzar(tester);
+      n.permisos.permiso = permisoDe(concedido: true);
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Actualizar'));
+      await avanzar(tester);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Continuar el cargue'));
+      await avanzar(tester);
+      expect(n.capturas, hasLength(1));
+
+      // Lo que de verdad falla si la espera se queda debajo: al terminar la captura se vuelve a ella.
+      await tester.pageBack();
+      await avanzar(tester);
+
+      expect(find.text('Permiso para el cargue'), findsNothing, reason: 'se vuelve a la ficha, no a la espera');
+      expect(find.text('Esperando respuesta'), findsNothing);
       await cerrar(tester);
     });
   });

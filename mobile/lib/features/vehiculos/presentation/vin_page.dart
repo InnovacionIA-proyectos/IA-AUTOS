@@ -211,9 +211,14 @@ class _Detalle extends ConsumerWidget {
     if (etapa.viajeId == null) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => PermisoSinInspectorPage(
+        builder: (deLaEspera) => PermisoSinInspectorPage(
           viajeId: etapa.viajeId!,
-          alContinuar: (permiso) => _continuarConPermiso(etapa, vinRuta, permiso),
+          // La espera se cierra al seguir. Si se quedara debajo, al terminar la captura se volvería a ella y
+          // ofrecería «Continuar el cargue» otra vez, sobre un informe que ya quedó cerrado.
+          alContinuar: (permiso) {
+            Navigator.of(deLaEspera).pop();
+            _continuarConPermiso(etapa, vinRuta, permiso);
+          },
         ),
       ),
     );
