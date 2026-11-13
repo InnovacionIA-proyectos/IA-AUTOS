@@ -28,10 +28,13 @@ internal sealed class clsRepositorioReclamos(clsAppDbContext contexto) : IReclam
                select u.Id).Distinct().ToListAsync(ct);
 
     public async Task<bool> LugarTieneInspectoresAsync(Guid lugarId, CancellationToken ct = default) =>
-        await (from p in contexto.InspectorLugares.AsNoTracking()
-               join u in contexto.Usuarios.AsNoTracking() on p.UsuarioId equals u.Id
-               where p.LugarId == lugarId && u.Activo
-               select p.LugarId).AnyAsync(ct);
+        await clsReglaInspectorDelPunto.LugaresConInspector(contexto).AnyAsync(l => l == lugarId, ct);
+
+    public async Task<IReadOnlySet<Guid>> LugaresConInspectoresAsync(IReadOnlyCollection<Guid> lugarIds, CancellationToken ct = default)
+    {
+        var ids = lugarIds.Distinct().ToList();
+        return ids.Count == 0 ? new HashSet<Guid>() : (await clsReglaInspectorDelPunto.LugaresConInspector(contexto).Where(l => ids.Contains(l)).Distinct().ToListAsync(ct)).ToHashSet();
+    }
 
     public void Agregar(clsReclamo reclamo) => contexto.Reclamos.Add(reclamo);
 }

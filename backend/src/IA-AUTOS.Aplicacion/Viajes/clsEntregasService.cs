@@ -76,10 +76,11 @@ public sealed class clsEntregasService(
         await AsegurarVisibleAsync(viaje, ct);
         var unidades = await CargarUnidadesAsync(viaje, ct);
         var lugares = await LugaresAsync(ct);
+        var conInspector = await reclamos.LugaresConInspectoresAsync([.. unidades.Where(u => u.Enlace.LugarDestinoId is not null).Select(u => u.Enlace.LugarDestinoId!.Value)], ct);
         var puntos = unidades
             .Where(u => u.Enlace.LugarDestinoId is not null)
             .GroupBy(u => u.Enlace.LugarDestinoId!.Value)
-            .Select(g => ArmarPunto(viaje, g.Key, g.ToList(), lugares))
+            .Select(g => ArmarPunto(viaje, g.Key, g.ToList(), lugares, conInspector.Contains(g.Key)))
             .OrderBy(p => p.Lugar, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
         return new EntregasDelViajeDto(viaje.Id, viaje.Estado, unidades.Count(u => u.Enlace.LugarDestinoId is null), puntos);
@@ -91,7 +92,7 @@ public sealed class clsEntregasService(
         var viaje = await ObtenerViajeAsync(viajeId, ct);
         await AsegurarVisibleAsync(viaje, ct);
         var unidades = await CargarUnidadesAsync(viaje, ct);
-        return ArmarPunto(viaje, lugarId, DelPunto(unidades, lugarId), await LugaresAsync(ct));
+        return ArmarPunto(viaje, lugarId, DelPunto(unidades, lugarId), await LugaresAsync(ct), await reclamos.LugarTieneInspectoresAsync(lugarId, ct));
     }
 
     // ------------------------------------------------------------------------------------------------ firmas
@@ -143,7 +144,7 @@ public sealed class clsEntregasService(
 
         await FinalizarSiCompletoAsync(viaje, unidades, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        return ArmarPunto(viaje, lugarId, DelPunto(unidades, lugarId), await LugaresAsync(ct));
+        return ArmarPunto(viaje, lugarId, DelPunto(unidades, lugarId), await LugaresAsync(ct), await reclamos.LugarTieneInspectoresAsync(lugarId, ct));
     }
 
     /// <summary>
@@ -191,7 +192,7 @@ public sealed class clsEntregasService(
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
 
         await AvisarAsync(viaje, lugarId, pendientes, motivo, actorId, ct);
-        return ArmarPunto(viaje, lugarId, DelPunto(unidades, lugarId), await LugaresAsync(ct));
+        return ArmarPunto(viaje, lugarId, DelPunto(unidades, lugarId), await LugaresAsync(ct), await reclamos.LugarTieneInspectoresAsync(lugarId, ct));
     }
 
     // ----------------------------------------------------------------------------------------------- internos
@@ -422,7 +423,7 @@ public sealed class clsEntregasService(
         (await catalogos.ValoresAsync(clsNombresCatalogo.LUGARES, ct)).ToDictionary(
             l => l.Id, l => (l.TryGetValue("nombre", out var nombre) ? nombre as string ?? string.Empty : string.Empty, l.TryGetValue("ciudad", out var ciudad) ? ciudad as string : null));
 
-    private static EntregaPuntoDto ArmarPunto(clsViaje viaje, Guid lugarId, List<Unidad> delPunto, IReadOnlyDictionary<Guid, (string Nombre, string? Ciudad)> lugares)
+    private static EntregaPuntoDto ArmarPunto(clsViaje viaje, Guid lugarId, List<Unidad> delPunto, IReadOnlyDictionary<Guid, (string Nombre, string? Ciudad)> lugares, bool lugarTieneInspector)
     {
         var lugar = lugares.TryGetValue(lugarId, out var datos) ? datos : (Nombre: string.Empty, Ciudad: null);
         var filas = delPunto
@@ -441,7 +442,7 @@ public sealed class clsEntregasService(
                 u.Transferencia?.RecibeExternoCedula))
             .ToList();
         var pendientes = filas.Count(f => f.Estado != "cerrada");
-        return new EntregaPuntoDto(viaje.Id, viaje.Estado, lugarId, lugar.Nombre, lugar.Ciudad, filas.Count, pendientes, pendientes == 0, filas);
+        return new EntregaPuntoDto(viaje.Id, viaje.Estado, lugarId, lugar.Nombre, lugar.Ciudad, filas.Count, pendientes, pendientes == 0, filas, lugarTieneInspector);
     }
 
     /// <summary>
