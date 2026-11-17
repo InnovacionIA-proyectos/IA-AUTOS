@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/features/auth/presentation/auth_controller.dart';
 import 'package:traza_autos/features/custodia/presentation/lienzo_firma.dart';
@@ -398,16 +399,32 @@ void main() {
     // CA-6: el servidor decide por punto, y ese dato pudo cambiar desde que se abrió la pantalla. El rechazo no
     // es transitorio, así que no sirve dejarlo en la cola: se descarta, se corrige el camino y se firma aquí.
     group('cuando el punto resulta no ser el que se creía', () {
-      // Los tres mensajes de `clsEntregasService.FirmantesAsync`, como los guarda la cola: el mensaje y una
-      // línea por cada campo rechazado.
-      const conInspector = 'El punto de entrega tiene inspector asignado: la entrega la firma él, no una persona externa';
-      const sinQuienReciba = 'Indique quién recibe: el viaje no tiene inspector';
-      const faltanDatos = 'Uno o más campos no son válidos\n· El nombre de quien recibe es obligatorio\n'
-          '· La cédula de quien recibe es obligatoria';
+      // Los tres rechazos de `clsEntregasService.FirmantesAsync` con la forma que tienen de verdad: «Datos
+      // inválidos» y una línea por campo en `details.fieldErrors`, que es de donde la app saca el texto. Con todo
+      // metido en `message` las pruebas pasaban igual, pero no probaban el camino real.
+      ErrorApi rechazo(Map<String, List<String>> porCampo) => ErrorApi(
+            message: 'Datos inválidos',
+            code: 'VALIDATION_ERROR',
+            status: 400,
+            details: {'formErrors': <String>[], 'fieldErrors': porCampo},
+          );
+      const textoConInspector = 'El punto de entrega tiene inspector asignado: la entrega la firma él, no una persona externa';
+      final conInspector = rechazo({
+        'recibe_nombre': [textoConInspector],
+        'recibe_cedula': [textoConInspector],
+        'firma_recibe': [textoConInspector],
+      });
+      final sinQuienReciba = rechazo({
+        'recibe_usuario_id': ['Indique quién recibe: el viaje no tiene inspector'],
+      });
+      final faltanDatos = rechazo({
+        'recibe_nombre': ['El nombre de quien recibe es obligatorio'],
+        'recibe_cedula': ['La cédula de quien recibe es obligatoria'],
+      });
 
       testWidgets('rechazado por tener inspector, se apaga el interruptor y no se pierde lo escrito', (tester) async {
         final arnes = Arnes();
-        arnes.gateway.errores['firmarEntregaPunto'] = [errorApi(400, conInspector)];
+        arnes.gateway.errores['firmarEntregaPunto'] = [conInspector];
         await abrirFirma(tester, sinInspector: true, arnes: arnes);
 
         await firmarEn(tester, 0);
@@ -416,7 +433,7 @@ void main() {
         await tester.tap(find.widgetWithText(FilledButton, 'Registrar la entrega'));
         await avanzar(tester);
 
-        expect(find.text('Cambió quién recibe aquí'), findsOneWidget);
+        expect(find.text('Aquí firma el inspector del punto'), findsOneWidget);
         expect(find.textContaining('sí tiene inspector'), findsOneWidget);
         expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse, reason: 'corregido');
         expect(arnes.cola.jobs, isEmpty, reason: 'reintentarlo mandaría exactamente lo mismo');
@@ -425,19 +442,22 @@ void main() {
       // El punto dejó de tener inspector después de abrir la pantalla: el servidor pide los datos de quien recibe.
       testWidgets('rechazado por faltar los datos de quien recibe, se encienden los del externo', (tester) async {
         final arnes = Arnes();
-        arnes.gateway.errores['firmarEntregaPunto'] = [errorApi(400, faltanDatos)];
+        arnes.gateway.errores['firmarEntregaPunto'] = [faltanDatos];
         await abrirFirma(tester, sinInspector: false, arnes: arnes);
 
         await firmarEn(tester, 0);
         await tester.tap(find.widgetWithText(FilledButton, 'Registrar mi firma'));
         await avanzar(tester);
 
-        expect(find.text('Cambió quién recibe aquí'), findsOneWidget);
-        expect(find.textContaining('no tiene inspector'), findsOneWidget);
+        expect(find.text('Aquí recibe alguien del punto'), findsOneWidget);
+        expect(find.textContaining('El servidor dice que este punto no tiene inspector'), findsOneWidget);
         await tester.tap(find.widgetWithText(TextButton, 'Entendido'));
         await avanzar(tester);
 
         expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isTrue);
+        // El subtítulo sigue a lo que dijo el servidor, no al dato con que se abrió la pantalla: antes se quedaba
+        // diciendo que el punto tenía inspector justo debajo de un aviso que decía lo contrario.
+        expect(find.text('Este punto no tiene inspector asignado, así que recibe quien esté allí.'), findsOneWidget);
         expect(find.widgetWithText(TextField, 'Nombre de quien recibe'), findsOneWidget);
         expect(arnes.cola.jobs, isEmpty);
       });
@@ -447,7 +467,7 @@ void main() {
       // conductor los datos de alguien del punto que el servidor rechazaba en el envío siguiente.
       testWidgets('sin quien reciba, se dice de una vez que lo reclame el inspector del punto', (tester) async {
         final arnes = Arnes();
-        arnes.gateway.errores['firmarEntregaPunto'] = [errorApi(400, sinQuienReciba)];
+        arnes.gateway.errores['firmarEntregaPunto'] = [sinQuienReciba];
         await abrirFirma(tester, sinInspector: false, arnes: arnes);
 
         await firmarEn(tester, 0);
@@ -465,11 +485,44 @@ void main() {
         expect(arnes.cola.jobs, isEmpty, reason: 'reintentarlo mandaría exactamente lo mismo');
       });
 
+      // El ciclo de QA empujado a mano: el conductor enciende el interruptor una y otra vez en un punto con
+      // inspector que nadie reclamó. El servidor responde siempre lo mismo, así que la app no puede acusarlo de
+      // contradecirse; y cada vez que se mandan los datos del externo, el interruptor vuelve a apagarse.
+      testWidgets('moviendo el interruptor a mano, no dice que el servidor se contradijo', (tester) async {
+        final arnes = Arnes();
+        arnes.gateway.errores['firmarEntregaPunto'] = [sinQuienReciba, conInspector, sinQuienReciba, conInspector];
+        await abrirFirma(tester, sinInspector: false, arnes: arnes);
+        Future<void> entendido() async {
+          await tester.tap(find.widgetWithText(TextButton, 'Entendido'));
+          await avanzar(tester);
+        }
+
+        await firmarEn(tester, 0);
+        for (var vuelta = 1; vuelta <= 2; vuelta++) {
+          await tester.tap(find.widgetWithText(FilledButton, 'Registrar mi firma'));
+          await avanzar(tester);
+          expect(find.textContaining('reclamarla'), findsOneWidget, reason: 'vuelta $vuelta: no hay quien reciba');
+          await entendido();
+
+          await tester.tap(find.byType(SwitchListTile));
+          await tester.pump();
+          await escribirDatos(tester);
+          await firmarEn(tester, 1);
+          await tester.tap(find.widgetWithText(FilledButton, 'Registrar la entrega'));
+          await avanzar(tester);
+
+          expect(find.textContaining('la contraria'), findsNothing, reason: 'vuelta $vuelta: el servidor no cambió');
+          expect(find.text('Aquí firma el inspector del punto'), findsOneWidget, reason: 'vuelta $vuelta');
+          await entendido();
+          expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse, reason: 'vuelta $vuelta');
+        }
+      });
+
       // El dato del punto cambió entre un envío y el siguiente: las dos correcciones se pisan, así que girar otra
       // vez sería dejar al conductor dando vueltas.
       testWidgets('corregido dos veces al revés, se dice que esta entrega no se puede cerrar', (tester) async {
         final arnes = Arnes();
-        arnes.gateway.errores['firmarEntregaPunto'] = [errorApi(400, faltanDatos), errorApi(400, conInspector)];
+        arnes.gateway.errores['firmarEntregaPunto'] = [faltanDatos, conInspector];
         await abrirFirma(tester, sinInspector: false, arnes: arnes);
 
         await firmarEn(tester, 0);

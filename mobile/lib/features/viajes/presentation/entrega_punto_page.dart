@@ -20,6 +20,18 @@ const motivoUnaFirmaMax = 300;
 
 /// Lo que admite el servidor en el nombre y la cédula de quien recibe sin ser usuario. Los mínimos también son
 /// suyos: comprobarlos aquí evita firmar, encolar y recibir un 400 con el carro ya entregado.
+/// Los trozos de los tres rechazos de `clsEntregasService.FirmantesAsync` con los que se reconoce quién recibe
+/// en un punto, ya en minúsculas porque se comparan contra el motivo en minúsculas.
+///
+/// El 400 no trae un código propio, así que se reconoce por el texto. Por eso viven aquí, a la vista, y la prueba
+/// `test/contrato/rechazos_entrega_test.dart` los busca en el código del backend: si allá cambian, la prueba se
+/// pone roja en vez de que la app deje de reconocerlos sin que nadie se entere.
+const rechazosDelPunto = (
+  conInspector: 'tiene inspector asignado',
+  sinQuienReciba: 'indique quién recibe',
+  faltanDatos: 'de quien recibe es obligatori',
+);
+
 const nombreExternoMin = 3;
 const nombreExternoMax = 150;
 const cedulaExternaMax = 30;
@@ -204,9 +216,13 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
   final _cedulaRecibe = TextEditingController();
   String? _firmaRecibe;
 
-  /// Si el servidor ya corrigió una vez quién recibe en este punto. A la segunda, corrigiendo al revés, no hay
-  /// camino: es el viaje sin inspector entregando donde sí lo hay, y entonces se dice en vez de volver a girar.
-  bool _puntoYaCorregido = false;
+  /// Lo último que dijo el servidor sobre este punto: `true` recibe alguien del punto, `false` firma el
+  /// inspector. Null mientras no haya corregido nada.
+  ///
+  /// Se guarda aparte del interruptor a propósito. El interruptor lo puede mover el conductor; esto no. Comparar
+  /// con el interruptor hacía decir «el servidor dijo una cosa y después la contraria» cuando lo único que había
+  /// cambiado era la mano del conductor, y además dejaba el interruptor donde él lo había puesto.
+  bool? _veredicto;
 
   @override
   void dispose() {
@@ -302,19 +318,27 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
           _CaminoDelPunto.entreLasPartes => false,
           _CaminoDelPunto.sinQuienReciba => null,
         };
-        // Las dos correcciones se pisan: el dato del punto cambió entre un envío y el siguiente. Girar otra vez
-        // sería dejar al conductor dando vueltas, así que no se toca y se dice.
-        final sePisan = externo != null && _puntoYaCorregido && externo != _recibeExterno;
+        // El servidor se contradice a sí mismo: el dato del punto cambió entre un envío y el siguiente. Girar otra
+        // vez sería dejar al conductor dando vueltas, así que no se toca y se dice. Lo que cuenta es lo que dijo el
+        // servidor antes, no dónde esté el interruptor: ese lo puede haber movido el conductor.
+        final sePisan = externo != null && _veredicto != null && externo != _veredicto;
         if (externo != null && !sePisan) {
           setState(() {
             _recibeExterno = externo;
-            _puntoYaCorregido = true;
+            _veredicto = externo;
           });
         }
         await showDialog<void>(
           context: context,
           builder: (contexto) => AlertDialog(
-            title: Text(externo == null || sePisan ? 'Esta entrega no la puedes cerrar' : 'Cambió quién recibe aquí'),
+            // El título dice cómo es el punto, no que algo «cambió»: si fue el conductor quien movió el
+            // interruptor, del lado del servidor no cambió nada.
+            title: Text(switch (externo) {
+              null => 'Esta entrega no la puedes cerrar',
+              _ when sePisan => 'Esta entrega no la puedes cerrar',
+              true => 'Aquí recibe alguien del punto',
+              false => 'Aquí firma el inspector del punto',
+            }),
             content: Text(switch (externo) {
               // No es un error del conductor ni del interruptor: el punto tiene inspectores, pero ninguno reclamó
               // esta entrega y el viaje no trae el suyo. Desde aquí no hay arreglo, y pedirle los datos de alguien
@@ -405,9 +429,9 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
     if (desenlace.fase != FaseEnvio.rechazado) return null;
     final motivo = desenlace.motivo?.toLowerCase();
     if (motivo == null) return null;
-    if (motivo.contains('tiene inspector asignado')) return _CaminoDelPunto.entreLasPartes;
-    if (motivo.contains('indique quién recibe')) return _CaminoDelPunto.sinQuienReciba;
-    if (motivo.contains('de quien recibe es obligatori')) return _CaminoDelPunto.externo;
+    if (motivo.contains(rechazosDelPunto.conInspector)) return _CaminoDelPunto.entreLasPartes;
+    if (motivo.contains(rechazosDelPunto.sinQuienReciba)) return _CaminoDelPunto.sinQuienReciba;
+    if (motivo.contains(rechazosDelPunto.faltanDatos)) return _CaminoDelPunto.externo;
     return null;
   }
 
@@ -415,7 +439,8 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
     final sinInspeccion = _punto.sinInspeccion;
-    final puntoSinInspector = !_punto.tieneInspector;
+    // Si el servidor ya corrigió, manda él: el dato con el que se abrió la pantalla quedó viejo.
+    final puntoSinInspector = _veredicto ?? !_punto.tieneInspector;
     final externo = _recibeExterno;
     return Scaffold(
       appBar: AppBar(title: Text('Entrega · ${_punto.lugar}')),
