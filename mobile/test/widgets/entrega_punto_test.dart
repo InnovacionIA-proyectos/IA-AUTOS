@@ -398,8 +398,12 @@ void main() {
     // CA-6: el servidor decide por punto, y ese dato pudo cambiar desde que se abrió la pantalla. El rechazo no
     // es transitorio, así que no sirve dejarlo en la cola: se descarta, se corrige el camino y se firma aquí.
     group('cuando el punto resulta no ser el que se creía', () {
+      // Los tres mensajes de `clsEntregasService.FirmantesAsync`, como los guarda la cola: el mensaje y una
+      // línea por cada campo rechazado.
       const conInspector = 'El punto de entrega tiene inspector asignado: la entrega la firma él, no una persona externa';
       const sinQuienReciba = 'Indique quién recibe: el viaje no tiene inspector';
+      const faltanDatos = 'Uno o más campos no son válidos\n· El nombre de quien recibe es obligatorio\n'
+          '· La cédula de quien recibe es obligatoria';
 
       testWidgets('rechazado por tener inspector, se apaga el interruptor y no se pierde lo escrito', (tester) async {
         final arnes = Arnes();
@@ -418,7 +422,30 @@ void main() {
         expect(arnes.cola.jobs, isEmpty, reason: 'reintentarlo mandaría exactamente lo mismo');
       });
 
-      testWidgets('rechazado por no haber quien reciba, se encienden los datos del externo', (tester) async {
+      // El punto dejó de tener inspector después de abrir la pantalla: el servidor pide los datos de quien recibe.
+      testWidgets('rechazado por faltar los datos de quien recibe, se encienden los del externo', (tester) async {
+        final arnes = Arnes();
+        arnes.gateway.errores['firmarEntregaPunto'] = [errorApi(400, faltanDatos)];
+        await abrirFirma(tester, sinInspector: false, arnes: arnes);
+
+        await firmarEn(tester, 0);
+        await tester.tap(find.widgetWithText(FilledButton, 'Registrar mi firma'));
+        await avanzar(tester);
+
+        expect(find.text('Cambió quién recibe aquí'), findsOneWidget);
+        expect(find.textContaining('no tiene inspector'), findsOneWidget);
+        await tester.tap(find.widgetWithText(TextButton, 'Entendido'));
+        await avanzar(tester);
+
+        expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isTrue);
+        expect(find.widgetWithText(TextField, 'Nombre de quien recibe'), findsOneWidget);
+        expect(arnes.cola.jobs, isEmpty);
+      });
+
+      // El hallazgo de QA en el PR #404: «Indique quién recibe» sale cuando el punto SÍ tiene inspector y nadie
+      // reclamó la entrega. Antes se leía al revés, como «el punto no tiene inspector», y se le pedían al
+      // conductor los datos de alguien del punto que el servidor rechazaba en el envío siguiente.
+      testWidgets('sin quien reciba, se dice de una vez que lo reclame el inspector del punto', (tester) async {
         final arnes = Arnes();
         arnes.gateway.errores['firmarEntregaPunto'] = [errorApi(400, sinQuienReciba)];
         await abrirFirma(tester, sinInspector: false, arnes: arnes);
@@ -427,19 +454,22 @@ void main() {
         await tester.tap(find.widgetWithText(FilledButton, 'Registrar mi firma'));
         await avanzar(tester);
 
-        expect(find.text('Cambió quién recibe aquí'), findsOneWidget);
+        expect(find.text('Esta entrega no la puedes cerrar'), findsOneWidget);
+        expect(find.textContaining('reclamarla'), findsOneWidget);
+        expect(find.textContaining('no tiene inspector:'), findsNothing, reason: 'el punto sí lo tiene');
         await tester.tap(find.widgetWithText(TextButton, 'Entendido'));
         await avanzar(tester);
 
-        expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isTrue);
-        expect(find.widgetWithText(TextField, 'Nombre de quien recibe'), findsOneWidget);
+        expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse, reason: 'no es el interruptor');
+        expect(find.widgetWithText(TextField, 'Nombre de quien recibe'), findsNothing);
+        expect(arnes.cola.jobs, isEmpty, reason: 'reintentarlo mandaría exactamente lo mismo');
       });
 
-      // El callejón sin salida: viaje sin inspector entregando donde sí lo hay. Las dos correcciones se pisan,
-      // así que girar otra vez sería dejar al conductor dando vueltas.
+      // El dato del punto cambió entre un envío y el siguiente: las dos correcciones se pisan, así que girar otra
+      // vez sería dejar al conductor dando vueltas.
       testWidgets('corregido dos veces al revés, se dice que esta entrega no se puede cerrar', (tester) async {
         final arnes = Arnes();
-        arnes.gateway.errores['firmarEntregaPunto'] = [errorApi(400, sinQuienReciba), errorApi(400, conInspector)];
+        arnes.gateway.errores['firmarEntregaPunto'] = [errorApi(400, faltanDatos), errorApi(400, conInspector)];
         await abrirFirma(tester, sinInspector: false, arnes: arnes);
 
         await firmarEn(tester, 0);
@@ -454,7 +484,7 @@ void main() {
         await avanzar(tester);
 
         expect(find.text('Esta entrega no la puedes cerrar'), findsOneWidget);
-        expect(find.textContaining('reclamar el inspector del punto'), findsOneWidget);
+        expect(find.textContaining('una cosa y después la contraria'), findsOneWidget);
         expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isTrue, reason: 'ya no gira más');
       });
     });

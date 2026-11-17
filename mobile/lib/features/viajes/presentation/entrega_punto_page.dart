@@ -296,26 +296,42 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
         await ref.read(colaRepositorioProvider).eliminar(jobId);
         await sync.refrescar();
         if (!mounted) return;
-        final sinSalida = _puntoYaCorregido && camino != _recibeExterno;
-        if (!sinSalida) {
+        // Qué debería mostrar el interruptor; null cuando el problema no es el interruptor.
+        final externo = switch (camino) {
+          _CaminoDelPunto.externo => true,
+          _CaminoDelPunto.entreLasPartes => false,
+          _CaminoDelPunto.sinQuienReciba => null,
+        };
+        // Las dos correcciones se pisan: el dato del punto cambió entre un envío y el siguiente. Girar otra vez
+        // sería dejar al conductor dando vueltas, así que no se toca y se dice.
+        final sePisan = externo != null && _puntoYaCorregido && externo != _recibeExterno;
+        if (externo != null && !sePisan) {
           setState(() {
-            _recibeExterno = camino;
+            _recibeExterno = externo;
             _puntoYaCorregido = true;
           });
         }
         await showDialog<void>(
           context: context,
           builder: (contexto) => AlertDialog(
-            title: Text(sinSalida ? 'Esta entrega no la puedes cerrar' : 'Cambió quién recibe aquí'),
-            content: Text(switch ((sinSalida, camino)) {
-              (true, _) =>
-                'Este punto tiene inspector asignado y el viaje no tiene inspector, así que no hay a quién poner '
-                    'como quien recibe. La entrega la tiene que reclamar el inspector del punto: llámalo antes de '
-                    'seguir. Lo que escribiste se queda aquí.',
-              (false, true) =>
+            title: Text(externo == null || sePisan ? 'Esta entrega no la puedes cerrar' : 'Cambió quién recibe aquí'),
+            content: Text(switch (externo) {
+              // No es un error del conductor ni del interruptor: el punto tiene inspectores, pero ninguno reclamó
+              // esta entrega y el viaje no trae el suyo. Desde aquí no hay arreglo, y pedirle los datos de alguien
+              // del punto no serviría: el servidor los rechaza donde hay inspector.
+              null =>
+                'Este punto tiene inspector asignado, pero ninguno ha reclamado esta entrega y el viaje no tiene '
+                    'inspector propio, así que no hay quién la reciba. El inspector del punto tiene que reclamarla '
+                    'desde Pendientes; avísale y vuelve a firmar cuando lo haya hecho. Lo que escribiste se queda '
+                    'aquí.',
+              _ when sePisan =>
+                'El servidor dijo una cosa y después la contraria sobre quién recibe en este punto. Para no '
+                    'dejarte dando vueltas no lo vuelvo a cambiar: avisa al coordinador antes de seguir. Lo que '
+                    'escribiste se queda aquí.',
+              true =>
                 'El servidor dice que este punto no tiene inspector: la entrega la firma quien esté allí. Escribe '
                     'su nombre y su cédula y pídele la firma. La tuya se conserva.',
-              (false, false) =>
+              false =>
                 'El servidor dice que este punto sí tiene inspector: la entrega la firma él, no una persona '
                     'externa. Apagué «Recibe una persona del punto»; lo que escribiste no se borra, solo deja de '
                     'enviarse. Tu firma se conserva.',
@@ -373,19 +389,25 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
     }
   }
 
-  /// Cuál es el camino bueno según el rechazo: `true` pedir los datos de quien recibe en el punto, `false`
-  /// firmar entre las partes del viaje. Null si no hubo rechazo o si fue por otra cosa.
+  /// Qué dice el rechazo sobre quién recibe en este punto. Null si no hubo rechazo o si fue por otra cosa.
   ///
-  /// El servidor decide por punto (`LugarTieneInspectoresAsync`), que es un dato distinto del inspector del
-  /// viaje, y su 400 no trae un código propio: hay que reconocerlo por el motivo. Están los dos mensajes de
-  /// `clsEntregasService` porque el rechazo puede caer de cualquiera de los dos lados: mandar los datos del
-  /// externo donde hay inspector, o no mandarlos donde no lo hay.
-  bool? _caminoDelPunto(DesenlaceEnvio desenlace) {
+  /// El servidor decide por punto (`LugarTieneInspectoresAsync`) y su 400 no trae un código propio: hay que
+  /// reconocerlo por el motivo, que llega con las líneas de cada campo. Son **tres** mensajes de
+  /// `clsEntregasService.FirmantesAsync`, y cada uno quiere decir una cosa distinta:
+  ///
+  /// - «…tiene inspector asignado…»: se mandaron los datos de un externo donde hay inspector.
+  /// - «…de quien recibe es obligatorio/a»: no se mandaron donde no hay inspector ni nadie que reciba.
+  /// - «Indique quién recibe…»: el punto **sí** tiene inspector, pero no hay nadie a quien poner como receptor
+  ///   —ninguno reclamó la entrega y el viaje no trae el suyo—. Leerlo como «el punto no tiene inspector», que es
+  ///   como se leía antes, mandaba al conductor a pedirle los datos a alguien del punto para que el servidor los
+  ///   rechazara en el envío siguiente.
+  _CaminoDelPunto? _caminoDelPunto(DesenlaceEnvio desenlace) {
     if (desenlace.fase != FaseEnvio.rechazado) return null;
     final motivo = desenlace.motivo?.toLowerCase();
     if (motivo == null) return null;
-    if (motivo.contains('tiene inspector asignado')) return false;
-    if (motivo.contains('indique quién recibe')) return true;
+    if (motivo.contains('tiene inspector asignado')) return _CaminoDelPunto.entreLasPartes;
+    if (motivo.contains('indique quién recibe')) return _CaminoDelPunto.sinQuienReciba;
+    if (motivo.contains('de quien recibe es obligatori')) return _CaminoDelPunto.externo;
     return null;
   }
 
@@ -548,4 +570,17 @@ class _MotivoDelBoton extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// Lo que el rechazo del servidor dice sobre quién recibe en un punto de entrega.
+enum _CaminoDelPunto {
+  /// El punto tiene inspector: se firma entre las partes del viaje, sin datos de una persona externa.
+  entreLasPartes,
+
+  /// El punto no tiene inspector ni nadie que reciba: recibe una persona del punto, con nombre, cédula y firma.
+  externo,
+
+  /// El punto tiene inspector, pero ninguno reclamó la entrega y el viaje no trae el suyo. No lo arregla el
+  /// interruptor: lo arregla el inspector del punto reclamándola.
+  sinQuienReciba,
 }
