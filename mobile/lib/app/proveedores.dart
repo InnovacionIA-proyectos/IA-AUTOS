@@ -27,6 +27,7 @@ final clienteApiProvider = Provider<ClienteApi>((ref) {
   final entorno = ref.watch(entornoProvider);
   return ClienteApi(
     baseUrl: entorno.apiUrl,
+    encabezadosBase: entorno.encabezadosEnrutamiento,
     token: () async => ref.read(authControllerProvider).sesion?.token,
     alNoAutorizado: () => ref.read(authControllerProvider.notifier).sesionExpirada(),
     alRequerirCambioDePin: () => ref.read(authControllerProvider.notifier).requiereCambioDePin(),

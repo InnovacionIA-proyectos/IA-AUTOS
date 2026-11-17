@@ -13,9 +13,13 @@ Map<String, dynamic> inspeccionJson(
   /// Solo firmó quien entrega: la otra firma queda pendiente, que es el estado normal entre una y otra.
   bool soloEntrega = false,
   List<Map<String, dynamic>> hallazgos = const [],
+  int version = 1,
+  String? corrige,
 }) =>
     {
       'id': id,
+      'version': version,
+      'corrige_inspeccion_id': corrige,
       'momento': momento,
       'momento_nombre': momento == Momento.salida ? 'Inspeccion de salida' : 'Inspeccion de llegada',
       'fecha': fecha,
@@ -185,6 +189,32 @@ void main() {
   });
 
   group('ultimaInspeccion', () {
+    /// El caso del patio (Duster, 11-nov-2026): la llegada del cargue estaba corregida —4 daños en la versión 1 y
+    /// 1 en la 2— y el transporte tenía un borrador recién empezado con una novedad sin zona. La ficha tomaba ese
+    /// borrador como último informe, así que no se veía ni la cuenta corregida ni la versión reemplazada.
+    test('un borrador posterior de otra etapa no es el estado del carro', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [
+          inspeccionJson('v1', '2026-11-09T21:04:00Z', momento: Momento.llegada, cerradaEn: '2026-11-09T21:30:00Z'),
+          inspeccionJson('v2', '2026-11-10T02:58:00Z',
+              momento: Momento.llegada, cerradaEn: '2026-11-10T03:00:00Z', version: 2, corrige: 'v1'),
+        ]),
+        etapaJson('e2', 2, 'transporte', inspecciones: [
+          inspeccionJson('borrador', '2026-11-10T03:38:00Z', estado: 'borrador'),
+        ]),
+      ]);
+
+      expect(inv.ultimaInspeccion!.inspeccion.id, 'v2', reason: 'la versión vigente, no el borrador recién empezado');
+    });
+
+    test('sin ninguna cerrada sí se muestra el borrador: es lo único que hay', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('solo', '2026-11-10T03:38:00Z', estado: 'borrador')]),
+      ]);
+
+      expect(inv.ultimaInspeccion!.inspeccion.id, 'solo');
+    });
+
     test('es la de fecha más reciente entre todas las etapas', () {
       final inv = inventario([
         etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('vieja', '2026-01-01T10:00:00Z')]),
@@ -236,6 +266,30 @@ void main() {
         etapaJson('e1', 1, 'cargue', inspecciones: [inspeccionJson('borrador', '2026-01-02T10:00:00Z', estado: 'borrador'), inspeccionJson('cerrado', '2026-01-01T10:00:00Z')]),
       ]);
       expect((accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia).inspeccionId, 'cerrado');
+    });
+
+    test('tras una corrección cerrada, la firma se pide sobre la versión vigente', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [
+          inspeccionJson('v1', '2026-01-01T10:00:00Z', cerradaEn: '2026-01-01T11:00:00Z'),
+          inspeccionJson('v2', '2026-01-02T10:00:00Z', cerradaEn: '2026-01-02T11:00:00Z', version: 2, corrige: 'v1'),
+        ]),
+      ]);
+      expect(
+        (accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia).inspeccionId,
+        'v2',
+        reason: 'S7-HU-18 CA-11: la versión 1 ya no describe el carro',
+      );
+    });
+
+    test('con la corrección todavía en borrador la firma sigue siendo la de la versión 1', () {
+      final inv = inventario([
+        etapaJson('e1', 1, 'cargue', inspecciones: [
+          inspeccionJson('v1', '2026-01-01T10:00:00Z', cerradaEn: '2026-01-01T11:00:00Z'),
+          inspeccionJson('v2', '2026-01-02T10:00:00Z', estado: 'borrador', version: 2, corrige: 'v1'),
+        ]),
+      ]);
+      expect((accionDeEtapa(inv.etapas.single, inv) as FirmarTransferencia).inspeccionId, 'v1');
     });
 
     test('etapa de solo firma: firma sobre el último informe del VIN', () {
@@ -381,6 +435,37 @@ void main() {
         ]);
 
         expect(momentosDeEtapa(inv.etapas[1], inv).first.bloqueo, isNull);
+      });
+
+      // S7-HU-18/20: tras corregir, la firma se pide sobre la versión vigente. La transferencia a medias que
+      // quedó colgando de la versión reemplazada no la va a cerrar nadie, así que si bloqueara, la etapa
+      // siguiente se quedaba trancada para siempre con «falta cerrar la transferencia».
+      test('la transferencia de una versión ya reemplazada no bloquea la etapa siguiente', () {
+        final inv = inventario([
+          etapaJson('e1', 1, 'cargue', inspecciones: [
+            inspeccionJson('v1', '2026-01-01T10:00:00Z',
+                momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z', soloEntrega: true),
+            inspeccionJson('v2', '2026-01-02T10:00:00Z',
+                momento: Momento.llegada, cerradaEn: '2026-01-02T11:00:00Z', version: 2, corrige: 'v1'),
+          ]),
+          etapaJson('e2', 2, 'transporte'),
+        ]);
+
+        expect(momentosDeEtapa(inv.etapas[1], inv).first.bloqueo, isNull);
+      });
+
+      test('con la corrección todavía en borrador, la transferencia de la v1 sigue bloqueando', () {
+        final inv = inventario([
+          etapaJson('e1', 1, 'cargue', inspecciones: [
+            inspeccionJson('v1', '2026-01-01T10:00:00Z',
+                momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z', soloEntrega: true),
+            inspeccionJson('v2', '2026-01-02T10:00:00Z',
+                momento: Momento.llegada, estado: 'borrador', version: 2, corrige: 'v1'),
+          ]),
+          etapaJson('e2', 2, 'transporte'),
+        ]);
+
+        expect(momentosDeEtapa(inv.etapas[1], inv).first.bloqueo!.motivo, BloqueoMomento.transferenciaAbierta);
       });
 
       test('una sola firma no alcanza: la transferencia sigue abierta', () {

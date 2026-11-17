@@ -60,6 +60,10 @@ Future<Arnes> abrir(WidgetTester tester, Viaje viaje, {Sesion sesion = _conducto
 }
 
 class _SinInventario implements VehiculosRepositorio {
+
+  /// No se busca en estas pruebas: la pantalla que la usa tiene las suyas.
+  @override
+  Future<List<VehiculoBusqueda>> buscar(String termino) async => const [];
   @override
   Future<Inventario> inventario(String vin) async => throw const ErrorApi.red();
 }

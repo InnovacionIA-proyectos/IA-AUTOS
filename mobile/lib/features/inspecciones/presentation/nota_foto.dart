@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../../core/tema/tema.dart';
 
-/// Pide la nota de una foto adicional (baúl, cojinería). Devuelve null si se cancela.
+/// Pide la nota de una foto adicional (baúl, cojinería). Devuelve null si se cancela, y entonces no se toma
+/// la foto.
 ///
 /// Se pide aquí y no al cerrar porque el servidor la exige: una evidencia de vista no obligatoria sin nota
-/// responde 400. Mejor pedirla con la foto recién tomada, cuando la persona todavía está viendo lo que fotografió,
-/// que descubrirlo al final con todo el informe hecho.
+/// responde 400. Y se pide **antes** de la cámara: cancelarla después de disparar tiraba la foto sin decir nada
+/// y obligaba a repetirla. Primero se escribe qué falta o qué daño hay, y con eso claro se fotografía.
 Future<String?> pedirNotaDeFoto(BuildContext context, {required String vista}) => showDialog<String>(
       context: context,
       builder: (_) => _DialogoNota(vista: vista),
@@ -37,7 +38,8 @@ class _EstadoDialogoNota extends State<_DialogoNota> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Esta foto necesita una nota: qué falta o qué daño se ve.', style: Theme.of(context).textTheme.bodySmall),
+            Text('Esta foto necesita una nota: qué falta o qué daño vas a fotografiar.',
+                style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: Espacio.md),
             TextField(
               controller: _texto,
@@ -52,9 +54,9 @@ class _EstadoDialogoNota extends State<_DialogoNota> {
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancelar')),
           FilledButton(
-            // Sin nota no se guarda la foto: el servidor la rechazaría y el informe moriría al enviarse.
+            // Sin nota no se toma la foto: el servidor la rechazaría y el informe moriría al enviarse.
             onPressed: _texto.text.trim().isEmpty ? null : () => Navigator.of(context).pop(_texto.text.trim()),
-            child: const Text('Guardar'),
+            child: const Text('Tomar la foto'),
           ),
         ],
       );

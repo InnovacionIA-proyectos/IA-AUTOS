@@ -1,4 +1,5 @@
 import '../../../core/http/cliente_api.dart';
+import '../../inspecciones/domain/extra_local.dart';
 import '../../inspecciones/domain/foto_local.dart';
 import '../../inspecciones/domain/hallazgo_local.dart';
 import '../../inspecciones/domain/nota_aclaratoria.dart';
@@ -32,6 +33,23 @@ class GatewayInformesApi implements GatewayInformes {
       // Solo en la excepción «No hay inspector»: en cualquier otro caso el servidor responde 400 «Campo no admitido».
       'motivo_sin_inspector': ?motivoSinInspector,
       'motivo_sin_inspector_texto': ?motivoSinInspectorTexto,
+    });
+    return (r as Map<String, dynamic>)['id'] as String;
+  }
+
+  @override
+  Future<String> corregirInspeccion(
+    String inspeccionId, {
+    required String fecha,
+    required double lat,
+    required double lng,
+    String? notas,
+  }) async {
+    final r = await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/corregir', cuerpo: {
+      'fecha': fecha,
+      'lat': lat,
+      'lng': lng,
+      'notas': notas,
     });
     return (r as Map<String, dynamic>)['id'] as String;
   }
@@ -75,12 +93,25 @@ class GatewayInformesApi implements GatewayInformes {
   }
 
   @override
-  Future<String> crearExtra(String inspeccionId, {required String tipo, String? texto, String? observacion}) async {
+  Future<String> crearExtra(
+    String inspeccionId, {
+    required String tipo,
+    String? texto,
+    String? observacion,
+    DanoExtra? dano,
+  }) async {
     // `texto` solo con «otro» y `observacion` solo si la hay: el servidor responde 400 «Campo no admitido» al resto.
+    // Los tres del daño viajan juntos o no viaja ninguno, que es como el servidor los exige.
     final r = await _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/extras', cuerpo: {
       'tipo': tipo,
       'texto': ?texto,
       'observacion': ?observacion,
+      if (dano != null) ...{
+        'danado': true,
+        'clase_dano': dano.clase,
+        'tamano_dano': dano.tamano,
+        'nivel_severidad': ?dano.nivel,
+      },
     });
     return (r as Map<String, dynamic>)['id'] as String;
   }
@@ -176,8 +207,20 @@ class GatewayInformesApi implements GatewayInformes {
   }
 
   @override
-  Future<void> firmarEntregaPunto(String viajeId, String lugarId, {required String firma}) async {
-    await _api.post('${_rutaEntrega(viajeId, lugarId)}/firma', cuerpo: {'firma': firma});
+  Future<void> firmarEntregaPunto(
+    String viajeId,
+    String lugarId, {
+    required String firma,
+    String? recibeNombre,
+    String? recibeCedula,
+    String? firmaRecibe,
+  }) async {
+    await _api.post('${_rutaEntrega(viajeId, lugarId)}/firma', cuerpo: {
+      'firma': firma,
+      'recibe_nombre': ?recibeNombre,
+      'recibe_cedula': ?recibeCedula,
+      'firma_recibe': ?firmaRecibe,
+    });
   }
 
   @override

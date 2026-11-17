@@ -128,10 +128,14 @@ class AuthController extends Notifier<EstadoAuth> {
   ///
   /// Un fallo de `/me` no puede impedir entrar: se cae al respaldo por rol, que es lo que la app hacía antes de
   /// que el servidor publicara capacidades. Con un PIN temporal sí responde: el endpoint está exento del 403.
+  ///
+  /// El token se le pasa a mano: aquí la sesión todavía no está en el estado —se guarda y se publica después— y el
+  /// cliente HTTP saca el suyo justamente de ahí. Mientras no se le pasó, la primera consulta de permisos salía sin
+  /// `Authorization`, el servidor la rechazaba con 401 y todo el mundo entraba con el respaldo por rol.
   Future<Sesion> _conCapacidades(Sesion sesion) async {
     if (sesion.usuario.capacidades.isNotEmpty) return sesion;
     try {
-      final capacidades = await ref.read(authRepositorioProvider).capacidades();
+      final capacidades = await ref.read(authRepositorioProvider).capacidades(token: sesion.token);
       if (capacidades.isNotEmpty) return sesion.conUsuario(sesion.usuario.copiar(capacidades: capacidades));
     } catch (_) {
       // Sin señal o con el servidor caído: se entra igual y manda el respaldo por rol.

@@ -10,11 +10,14 @@ bool esEstable(List<ConnectivityResult> resultados) => resultados.any(
     );
 
 class EstadoRedConectividad implements EstadoRed {
-  EstadoRedConectividad({required this.apiUrl, Connectivity? conectividad, Dio? dio})
+  EstadoRedConectividad({required this.apiUrl, this.encabezados = const {}, Connectivity? conectividad, Dio? dio})
       : _conectividad = conectividad ?? Connectivity(),
         _dio = dio ?? Dio();
 
   final String apiUrl;
+
+  /// Encabezados de enrutamiento de la pasarela: sin ellos /health responde 404 y la cola nunca sincronizaría.
+  final Map<String, String> encabezados;
   final Connectivity _conectividad;
   final Dio _dio;
 
@@ -33,6 +36,7 @@ class EstadoRedConectividad implements EstadoRed {
       final r = await _dio.get<dynamic>(
         '$apiUrl/health',
         options: Options(
+          headers: encabezados,
           sendTimeout: const Duration(seconds: 5),
           receiveTimeout: const Duration(seconds: 5),
           validateStatus: (_) => true,

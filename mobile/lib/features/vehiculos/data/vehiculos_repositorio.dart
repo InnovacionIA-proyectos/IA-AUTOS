@@ -35,6 +35,13 @@ class VehiculosRepositorio {
     }
   }
 
+  /// Los carros que coinciden con un fragmento de VIN o de marca, hasta 8, tal como los recorta el servidor para
+  /// quien pregunta. No se guarda copia: es una búsqueda, no un dato que sirva sin señal.
+  Future<List<VehiculoBusqueda>> buscar(String termino) async {
+    final r = await _api.get('/api/vehiculos', query: {'vin': termino});
+    return [for (final v in (r as List<dynamic>)) VehiculoBusqueda.fromJson(v as Map<String, dynamic>)];
+  }
+
   Future<void> _guardar(String vin, Object? respuesta) async {
     final clave = _clave(vin);
     if (_cache == null || clave == null) return;

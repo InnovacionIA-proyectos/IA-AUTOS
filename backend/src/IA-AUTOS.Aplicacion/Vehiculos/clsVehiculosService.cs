@@ -2,6 +2,7 @@ using FluentValidation;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones;
+using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
 using IAAutos.Dominio.Comun;
 using IAAutos.Aplicacion.Viajes;
@@ -17,6 +18,7 @@ public sealed class clsVehiculosService(
     IViajeRepository viajes,
     IConsultasVehiculos consultas,
     IConsultasViajes consultasViajes,
+    IConsultasInspecciones consultasInspecciones,
     ICatalogosLectura catalogos,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
@@ -236,6 +238,28 @@ public sealed class clsVehiculosService(
         var inventario = await consultas.ObtenerInventarioAsync(vin, soloDeUsuario, ct)
             ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
         return inventario.ParaConductor(actual);
+    }
+
+    /// <summary>
+    /// Los hallazgos de las inspecciones cerradas del VIN, de cualquier viaje. El inspector solo lo pide de un VIN de sus viajes (403 si no) y quien se limita a su
+    /// cliente, de VIN de su cliente. El inventario no sirve para esto: va recortado a los viajes propios, asi que un dano que el vehiculo trae de un viaje anterior
+    /// —de otra tripulacion— no aparece ahi, y es justo el que hay que proponer como preexistente.
+    /// </summary>
+    public async Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosAsync(string vin, CancellationToken ct = default)
+    {
+        var vehiculo = await vehiculos.ObtenerPorVinAsync(vin, ct)
+            ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vin} no encontrado");
+        if (actual.ClienteRestringido() is { } cliente && vehiculo.ClienteId != cliente)
+        {
+            throw new clsProhibidoException("El VIN no es de su cliente");
+        }
+
+        if (actual.SoloSusViajes() is { } usuarioId && !await consultasViajes.UsuarioVeVinAsync(vin, usuarioId, ct))
+        {
+            throw new clsProhibidoException("El VIN no pertenece a ninguno de sus viajes");
+        }
+
+        return await consultasInspecciones.ObtenerHallazgosPreviosDeVehiculoAsync(vehiculo.Id, ct);
     }
 
     private string MensajeSeguro(Exception ex, string vin)

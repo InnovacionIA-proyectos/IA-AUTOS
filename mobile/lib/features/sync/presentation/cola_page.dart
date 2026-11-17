@@ -5,6 +5,7 @@ import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../domain/desenlace_envio.dart';
 import '../domain/job.dart';
 import '../providers.dart';
 import 'sync_controller.dart';
@@ -118,6 +119,10 @@ class _FilaJob extends StatelessWidget {
           Text(formatearFecha(creado), style: tema.bodySmall),
           if (job.intentos > 0) Text('Intentos: ${job.intentos}', style: tema.bodySmall),
           if (job.error != null) Padding(padding: const EdgeInsets.only(top: Espacio.xs), child: Text(job.error!, style: tema.bodySmall?.copyWith(color: Colores.peligro))),
+          // Lo intentó y falló por algo pasajero: decir cuándo vuelve a intentarlo evita el «no está haciendo
+          // nada» de quien mira una cola que, por dentro, sí espera.
+          if (!job.fallido && !ajeno && job.error != null)
+            Text('Se vuelve a intentar ${enPalabras(esperaTrasIntentos(job.intentos))}.', style: tema.bodySmall),
           if (ajeno)
             Padding(
               padding: const EdgeInsets.only(top: Espacio.xs),

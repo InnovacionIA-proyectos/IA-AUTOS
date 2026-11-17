@@ -22,9 +22,35 @@ Resumen de dónde cae cada uno:
 
 ---
 
-## 1. Un extra con daño no se puede clasificar
+## Estado al 12-nov-2026
 
-**Hoy.** Al elegir «Barras de techo», «Volco» o «Platón» se pide una observación (opcional) y una foto, y
+Tres de los ocho se resolvieron con el sprint 7, y conviene leerlos ya como historia y no como pendientes:
+
+| # | Qué pasó |
+|---|---|
+| **1** | **Resuelto.** La S7-HU-04 lo recogió y se eligió el camino **a** ampliado: el extra lleva `danado`, `clase_dano`, `tamano_dano` y `nivel_severidad`, y su daño sale en la lista de daños del carro con el nombre del extra (sin punto en el dibujo, porque un extra no tiene zona). En la app es IA-AUTOS#346. Ojo con lo que no es obvio: el servidor exige el nivel **de todo el mundo**, también del conductor, al revés que en el daño de una zona. |
+| **3c** | **Resuelto.** Ya no «desaparece»: un daño sin nivel se ve marcado como «Sin calificar» en la ficha y en el dibujo (IA-AUTOS#343), y el inspector del viaje los tiene todos juntos en una lista, el más viejo primero. |
+| **5** | **Resuelto.** Los daños anteriores se pintan y se listan al inspeccionar, y también en la ficha (IA-AUTOS#367). La pregunta que dejaba abierta —«¿solo los del viaje o todo el historial?»— quedó respondida: **todo el historial del VIN**, por la ruta `GET /api/vehiculos/{vin}/hallazgos-previos`. |
+
+El **2** quedó respondido a medias: la decisión se tomó —una acomodación por viaje, S7-HU-05— y la app ya dibuja
+la disposición real de la niñera y conserva las posiciones, así que no hay que reacomodar. Lo que **no** se
+pudo cerrar es la foto única: el servidor sigue contándolas por inspección. Está en
+[dudas-del-celular-sprint7.md](dudas-del-celular-sprint7.md), punto 5, con el código y la sub-HU que hace falta.
+
+El **3b** sigue abierto y es el CA-1 de IA-AUTOS#369: además de decidir desde cuándo responde el conductor por
+una unidad, hace falta un campo nuevo en la respuesta del viaje. Está en el punto 4 del mismo documento.
+
+Los demás —**3**, **4**, **6**, **7** y **8**— siguen como estaban.
+
+---
+
+## 1. Un extra con daño no se puede clasificar — RESUELTO (S7-HU-04)
+
+> Lo de abajo es el estado del 3-nov-2026 y se conserva como registro. Se resolvió ampliando el extra con
+> `danado`, `clase_dano`, `tamano_dano` y `nivel_severidad` (camino **a**), y el daño cuenta en la lista del
+> carro. En la app, IA-AUTOS#346.
+
+**Hoy (3-nov).** Al elegir «Barras de techo», «Volco» o «Platón» se pide una observación (opcional) y una foto, y
 nada más. El modelo del extra no tiene dónde guardar un daño:
 
 ```dart
@@ -144,9 +170,9 @@ quedó en borrador, y por el punto 3 no hay cómo cerrarlo.
 «Reportar novedad» y «Llegué»? Si basta, el informe de transporte sobra para él y habría que quitárselo
 de la pantalla, que es de donde sale la ambigüedad.
 
-### 3c. La novedad del conductor desaparece al revisarla
+### 3c. La novedad del conductor desaparece al revisarla — RESUELTO (S7-HU-03 y S7-HU-14)
 
-**Hoy.** El inspector ve las novedades que reportó el conductor en una lista que pide
+**Hoy (3-nov).** El inspector ve las novedades que reportó el conductor en una lista que pide
 `GET /api/hallazgos?...&origen=conductor&revisado=false`. Al revisarla —ponerle zona, clase y nivel— deja
 de cumplir el filtro y **desaparece de la lista**. Es el comportamiento buscado para la bandeja de
 pendientes, pero deja la sensación de que se perdió. Se arregla solo con el punto 5.
@@ -187,9 +213,12 @@ espejo en la app, igual que se hizo con la acomodación.
 
 ---
 
-## 5. Los daños no se arrastran: en el descargue el dibujo sale en blanco
+## 5. Los daños no se arrastran: en el descargue el dibujo sale en blanco — RESUELTO (S7-HU-14)
 
-**Hoy.** El dibujo solo pinta los daños **de la captura que se está haciendo**:
+> Se hizo lo que decía la propuesta, y la pregunta del final quedó respondida: se arrastra **todo el historial
+> del VIN**, no solo el viaje en curso. En la app, IA-AUTOS#367.
+
+**Hoy (3-nov).** El dibujo solo pinta los daños **de la captura que se está haciendo**:
 
 ```dart
 // mobile/lib/features/inspecciones/presentation/captura_page.dart:553
@@ -350,12 +379,29 @@ cuando se fija, no solo cuando hay propuesta de autocalibración.
 
 ## Lo que hay que preguntarle a negocio, en una lista
 
-1. Un daño sobre un extra, ¿cuenta como daño del vehículo (nivel, «no sale», indicadores) o es informativo?
-2. La acomodación, ¿se registra una vez por viaje o cada unidad confirma su lugar?
+1. ~~Un daño sobre un extra, ¿cuenta como daño del vehículo?~~ **Respondida:** sí, con sus tres datos (S7-HU-04).
+2. ~~La acomodación, ¿se registra una vez por viaje o cada unidad confirma su lugar?~~ **Respondida:** una vez
+   por viaje (S7-HU-05). Falta que el servidor cuente así también las fotos.
 3. ¿Debe poder descartarse un informe en borrador? ¿Quién?
 4. El conductor en ruta, ¿necesita el informe de transporte, o le bastan «Reportar novedad» y «Llegué»?
 5. En el descargue, ¿qué documenta la salida y qué la llegada? ¿Cuál de las dos pide las 7 fotos?
-6. Los daños que se arrastran, ¿solo los del viaje actual o todo el historial del VIN?
-7. En el descargue, ¿quién recibe la custodia y firma? ¿Es transferencia o es entrega por punto?
+6. ~~Los daños que se arrastran, ¿solo los del viaje actual o todo el historial del VIN?~~ **Respondida:** todo
+   el historial del VIN (S7-HU-14).
+7. En el descargue, ¿quién recibe la custodia y firma? ¿Es transferencia o es entrega por punto? **Respondida
+   en parte:** para el destino es la entrega por punto, y ya admite a quien recibe sin ser usuario de la app
+   (S7-HU-02). Sigue sin decidirse si «Firmar transferencia» debe desaparecer del descargue.
 8. ¿El conductor debe ver el V1 y el V1+, o solo que la unidad no sale?
 9. ¿El inspector también puede fijar la ubicación de un lugar?
+10. Desde cuándo responde el conductor por una unidad: ¿cargue cerrado, transferencia firmada, o viaje
+    arrancado? (bloquea el CA-1 de IA-AUTOS#369, y arrastra un campo nuevo en el contrato).
+11. ¿Cada tamaño de daño pertenece a una clase, o hay tamaños que sirven para varias?
+12. Cuando se firma el cambio de responsabilidad de una etapa, ¿quedan congelados todos sus informes o solo el
+    firmado? (punto 1 de [dudas-del-celular-sprint7.md](dudas-del-celular-sprint7.md)).
+13. ¿La transferencia de una etapa se puede firmar con un momento de esa etapa todavía sin capturar? Hoy sí, y
+    así se firma el cargue sin que nadie haya acomodado las unidades en la niñera (punto 2 del mismo documento).
+14. En un punto con inspectores asignados y un viaje sin inspector, ¿quién firma la entrega? Hoy no hay salida
+    desde el teléfono: con los datos del externo responde 400 y sin ellos también. La IA-AUTOS#401 lo dejó
+    fuera de alcance a propósito. Está entero en [duda-inspector-por-punto.md](duda-inspector-por-punto.md).
+
+> **Esta lista es el consolidado.** Las dudas con su código, su archivo y su línea están en los otros tres
+> documentos; aquí queda solo la pregunta, para llevarla a negocio sin arrastrar el detalle técnico.

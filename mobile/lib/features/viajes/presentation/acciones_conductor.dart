@@ -11,6 +11,7 @@ import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
 import '../../inspecciones/presentation/camara_page.dart';
 import '../../inspecciones/presentation/sellado.dart';
+import '../../sync/domain/desenlace_envio.dart';
 import '../../sync/domain/job.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
@@ -19,9 +20,17 @@ import '../domain/viaje.dart';
 import 'mis_viajes_controller.dart';
 
 /// Dónde está el teléfono ahora, o null si todavía no hay señal de GPS. «Llegué» no se habilita sin él.
+///
+/// Se vuelve a preguntar sola en cuanto el GPS se enciende: quien está en la carretera lo activa y espera que
+/// el botón se habilite, no que haya que buscar un «Reintentar» en la pantalla.
 final ubicacionActualProvider = FutureProvider.autoDispose<Posicion?>((ref) async {
+  final servicio = ref.read(servicioUbicacionProvider);
+  final suscripcion = servicio.servicioActivo.listen((encendido) {
+    if (encendido) ref.invalidateSelf();
+  });
+  ref.onDispose(suscripcion.cancel);
   try {
-    return await ref.read(servicioUbicacionProvider).obtenerActual();
+    return await servicio.obtenerActual();
   } on UbicacionNoDisponible {
     return null;
   }
@@ -99,7 +108,8 @@ class AccionesConductor extends ConsumerWidget {
         title: Text('Llegué: ${unidad.vin}'),
         content: Text(
           tieneNovedades
-              ? 'Se confirmará «Llegada con novedad»: la unidad tiene ${unidad.novedades} ${unidad.novedades == 1 ? 'novedad' : 'novedades'} registradas.'
+              ? 'Se confirmará «Llegada con novedad»: la unidad tiene '
+                  '${unidad.novedades == 1 ? '1 novedad registrada' : '${unidad.novedades} novedades registradas'}.'
               : 'Se confirmará «Sin novedad».',
         ),
         actions: [
@@ -112,8 +122,9 @@ class AccionesConductor extends ConsumerWidget {
     final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
     if (usuarioId == null) return;
     // La fecha y el lugar son los de ahora, que es cuando llegó: el envío puede salir horas después.
+    final jobId = const Uuid().v4();
     await ref.read(colaRepositorioProvider).agregar(LlegadaJob(
-          id: const Uuid().v4(),
+          id: jobId,
           etiqueta: 'Llegada ${unidad.vin}',
           creadoEn: DateTime.now().millisecondsSinceEpoch,
           usuarioId: usuarioId,
@@ -123,7 +134,7 @@ class AccionesConductor extends ConsumerWidget {
           lat: posicion.lat,
           lng: posicion.lng,
         ));
-    if (context.mounted) await _enviar(context, ref, 'Llegada');
+    if (context.mounted) await _enviar(context, ref, 'Llegada', jobId);
   }
 
   Future<void> _reportarNovedad(BuildContext context, WidgetRef ref) async {
@@ -156,8 +167,9 @@ class AccionesConductor extends ConsumerWidget {
     final lat = foto.selloLat;
     final lng = foto.selloLng;
     if (usuarioId == null || lat == null || lng == null) return;
+    final jobId = const Uuid().v4();
     await ref.read(colaRepositorioProvider).agregar(NovedadJob(
-          id: const Uuid().v4(),
+          id: jobId,
           etiqueta: 'Novedad ${unidad.vin}',
           creadoEn: DateTime.now().millisecondsSinceEpoch,
           usuarioId: usuarioId,
@@ -171,24 +183,35 @@ class AccionesConductor extends ConsumerWidget {
           lng: lng,
           foto: foto,
         ));
-    if (context.mounted) await _enviar(context, ref, 'Novedad');
+    if (context.mounted) await _enviar(context, ref, 'Novedad', jobId);
   }
 
-  /// Intenta enviar ya y dice cómo quedó: enviada, en cola o rechazada. Sin señal queda guardada.
-  Future<void> _enviar(BuildContext context, WidgetRef ref, String que) async {
+  /// Intenta enviar ya y dice cómo quedó **este** envío: registrado, en cola, en espera o rechazado.
+  ///
+  /// Mira el job y no el contador de la cola: con otra novedad pendiente de otra unidad, el contador hacía que
+  /// una llegada que el servidor acababa de aceptar se anunciara como «se enviará cuando haya señal», y que una
+  /// novedad rechazada se anunciara como registrada. El motivo del rechazo se dice aquí, donde se originó, sin
+  /// tener que entrar a la cola a averiguarlo.
+  Future<void> _enviar(BuildContext context, WidgetRef ref, String que, String jobId) async {
     final mensajes = ScaffoldMessenger.of(context);
     final sync = ref.read(syncControllerProvider.notifier);
     await sync.refrescar();
     await sync.sincronizar();
-    final estado = ref.read(syncControllerProvider);
+    final desenlace = desenlaceDe(
+      await ref.read(colaRepositorioProvider).listar(),
+      jobId,
+      pausa: ref.read(syncControllerProvider).pausa,
+    );
     mensajes.showSnackBar(SnackBar(
-      content: Text(
-        estado.fallidos > 0
-            ? '$que rechazada por el servidor. Quedó en Inspecciones › Cola.'
-            : estado.pendientes > 0
-                ? '$que guardada; se enviará cuando la señal sea estable.'
-                : '$que registrada.',
-      ),
+      duration: desenlace.salio ? const Duration(seconds: 4) : const Duration(seconds: 8),
+      content: Text(switch (desenlace.fase) {
+        FaseEnvio.registrado => '$que registrada.',
+        FaseEnvio.rechazado =>
+          '$que rechazada por el servidor${desenlace.motivo == null ? '' : ': ${desenlace.motivo}'}. Quedó en Inspecciones › Cola.',
+        FaseEnvio.enEspera =>
+          '$que en espera${desenlace.motivo == null ? '' : ': ${desenlace.motivo}'}. Se reintenta sola ${enPalabras(desenlace.espera!)}.',
+        FaseEnvio.enCola => '$que guardada; se enviará cuando la señal sea estable.',
+      }),
     ));
     await ref.read(misViajesControllerProvider.notifier).cargar();
   }

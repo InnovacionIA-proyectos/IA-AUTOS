@@ -68,7 +68,11 @@ class FilaVista extends StatelessWidget {
               if (actual != null && actual.sinUbicacion)
                 // El sello es lo que da valor a la evidencia: sin ubicación hay que repetirla antes de cerrar.
                 Text('Sin ubicación: repítela', style: tema.bodySmall?.copyWith(color: Colores.peligro))
-              else if (actual != null && (actual.precision ?? 0) > (precisionBaja ?? precisionBajaMetrosPorDefecto))
+              else if (actual != null && actual.precision == null)
+                // Hay coordenadas, pero son de la última lectura conocida: nadie comprobó la exactitud en el
+                // momento de la foto, y decir un número prestado sería peor que decir que no se sabe.
+                Text('Ubicación sin comprobar', style: tema.bodySmall?.copyWith(color: Colores.advertencia))
+              else if (actual != null && actual.precision! > (precisionBaja ?? precisionBajaMetrosPorDefecto))
                 // Avisa, no bloquea: en un patio techado el GPS siempre es malo.
                 Text(
                   'Ubicación poco precisa (±${actual.precision!.round()} m)',

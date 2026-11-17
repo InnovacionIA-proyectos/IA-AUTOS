@@ -8,6 +8,7 @@ import '../../../core/ui/widgets.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../custodia/presentation/lienzo_firma.dart';
 import '../../sync/domain/job.dart';
+import '../../sync/domain/desenlace_envio.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
 import '../domain/entrega_punto.dart';
@@ -16,6 +17,24 @@ import 'fijar_ubicacion.dart';
 
 /// Lo que admite el servidor en el motivo de un cierre con una sola firma.
 const motivoUnaFirmaMax = 300;
+
+/// Lo que admite el servidor en el nombre y la cédula de quien recibe sin ser usuario. Los mínimos también son
+/// suyos: comprobarlos aquí evita firmar, encolar y recibir un 400 con el carro ya entregado.
+/// Los trozos de los tres rechazos de `clsEntregasService.FirmantesAsync` con los que se reconoce quién recibe
+/// en un punto, ya en minúsculas porque se comparan contra el motivo en minúsculas.
+///
+/// El 400 no trae un código propio, así que se reconoce por el texto. Por eso viven aquí, a la vista, y la prueba
+/// `test/contrato/rechazos_entrega_test.dart` los busca en el código del backend: si allá cambian, la prueba se
+/// pone roja en vez de que la app deje de reconocerlos sin que nadie se entere.
+const rechazosDelPunto = (
+  conInspector: 'tiene inspector asignado',
+  sinQuienReciba: 'indique quién recibe',
+  faltanDatos: 'de quien recibe es obligatori',
+);
+
+const nombreExternoMin = 3;
+const nombreExternoMax = 150;
+const cedulaExternaMax = 30;
 
 /// Las entregas de un viaje, una por lugar de destino: «Aquí entregas estas N unidades».
 class EntregasViajePage extends ConsumerWidget {
@@ -58,7 +77,9 @@ class EntregasViajePage extends ConsumerWidget {
                           punto: punto,
                           alFirmar: () async {
                             await Navigator.of(context).push<void>(
-                              MaterialPageRoute(builder: (_) => FirmaEntregaPuntoPage(punto: punto)),
+                              MaterialPageRoute(
+                                builder: (_) => FirmaEntregaPuntoPage(punto: punto),
+                              ),
                             );
                             ref.invalidate(entregasDelViajeProvider(viajeId));
                           },
@@ -134,14 +155,31 @@ class _FilaUnidad extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: Espacio.xs),
-      child: Row(
+      // Un VIN son diecisiete caracteres en monoespaciada y no se parte por ninguna parte; la insignia más larga
+      // se lleva otro tanto. En un teléfono angosto no caben lado a lado, y en una fila se comían el VIN. Así la
+      // insignia baja a la línea siguiente cuando no cabe, y cuando cabe se queda a la derecha como siempre.
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: TextoMono(unidad.vin)),
-          switch (unidad.estado) {
-            EstadoEntrega.cerrada => const Insignia('Cerrada', tono: TonoInsignia.exito),
-            EstadoEntrega.pendiente => const Insignia('Por firmar', tono: TonoInsignia.info),
-            EstadoEntrega.sinInspeccion => const Insignia('Sin inspección de llegada', tono: TonoInsignia.advertencia),
-          },
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: Espacio.sm,
+            runSpacing: Espacio.xs,
+            children: [
+              TextoMono(unidad.vin),
+              switch (unidad.estado) {
+                EstadoEntrega.cerrada => const Insignia('Cerrada', tono: TonoInsignia.exito),
+                EstadoEntrega.pendiente => const Insignia('Por firmar', tono: TonoInsignia.info),
+                EstadoEntrega.sinInspeccion =>
+                  const Insignia('Sin inspección de llegada', tono: TonoInsignia.advertencia),
+              },
+            ],
+          ),
+          // Quién recibió, cuando no fue un usuario del sistema. Es lo que hay que poder mirar después: una
+          // entrega cerrada sin un nombre al lado no dice a quién se le entregó el carro.
+          if (unidad.recibioExterno case final nombre?)
+            Text('Recibió: $nombre', style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
     );
@@ -165,28 +203,84 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
   bool _guardando = false;
   final _motivo = TextEditingController();
 
+  /// Recibe alguien del punto que no es usuario de la app.
+  ///
+  /// Empieza como lo dice el servidor para **este punto** (`lugar_tiene_inspector`): donde no hay inspector
+  /// asignado recibe quien esté allí, y donde lo hay firma él. Es el mismo dato con el que el servidor rechaza
+  /// la firma, así que lo que se ofrece aquí y lo que se acepta allá ya no pueden discrepar de entrada.
+  ///
+  /// Se puede cambiar a mano: el dato del punto pudo cambiar después de abrir la pantalla, y dejarlo fijo
+  /// encerraría a quien está allí. Cuando eso pasa, el servidor corrige y el CA-6 de abajo lo recoge.
+  late bool _recibeExterno = !widget.punto.tieneInspector;
+  final _nombreRecibe = TextEditingController();
+  final _cedulaRecibe = TextEditingController();
+  String? _firmaRecibe;
+
+  /// Lo último que dijo el servidor sobre este punto: `true` recibe alguien del punto, `false` firma el
+  /// inspector. Null mientras no haya corregido nada.
+  ///
+  /// Se guarda aparte del interruptor a propósito. El interruptor lo puede mover el conductor; esto no. Comparar
+  /// con el interruptor hacía decir «el servidor dijo una cosa y después la contraria» cuando lo único que había
+  /// cambiado era la mano del conductor, y además dejaba el interruptor donde él lo había puesto.
+  bool? _veredicto;
+
   @override
   void dispose() {
     _motivo.dispose();
+    _nombreRecibe.dispose();
+    _cedulaRecibe.dispose();
     super.dispose();
   }
 
   EntregaPunto get _punto => widget.punto;
 
-  bool get _puedeEnviar =>
-      !_guardando &&
-      _punto.sinInspeccion.isEmpty &&
-      _firma != null &&
-      (!_unaSolaFirma || _motivo.text.trim().isNotEmpty);
+  /// Por qué no se puede firmar todavía, o null si sí se puede.
+  ///
+  /// Un botón gris sin motivo deja a quien está en el punto adivinando. La cuenta va primero porque es lo que
+  /// se necesita para decidir qué hacer ahora: dos unidades por descargar es un rato, ocho es otra cosa.
+  String? _motivoSinFirmar({required bool externo}) {
+    final faltan = _punto.sinInspeccion.length;
+    if (faltan > 0) {
+      return faltan == 1
+          ? 'Falta 1 unidad por descargar: hazle la inspección de llegada antes de firmar.'
+          : 'Faltan $faltan unidades por descargar: hazles la inspección de llegada antes de firmar.';
+    }
+    if (_firma == null) return 'Dibuja tu firma arriba.';
+    if (_unaSolaFirma) {
+      return _motivo.text.trim().isEmpty ? 'Escribe por qué no firma la otra parte.' : null;
+    }
+    // Los tres datos de quien recibe van juntos o no va ninguno: el servidor los exige juntos y rechaza el
+    // envío entero. Se reclaman de uno en uno, en el orden en que están en pantalla.
+    if (externo) {
+      final nombre = _nombreRecibe.text.trim();
+      final cedula = _cedulaRecibe.text.trim();
+      if (nombre.isEmpty) return 'Escribe el nombre de quien recibe.';
+      if (nombre.length < nombreExternoMin) return 'El nombre de quien recibe es muy corto: escríbelo completo.';
+      if (cedula.isEmpty) return 'Escribe la cédula de quien recibe.';
+      // Lo mismo que exige el servidor: puede llevar puntos, guiones o espacios, pero algún número tiene que
+      // haber. Sin esto se firma, se encola y vuelve un 400 con el carro ya entregado.
+      if (!cedula.contains(RegExp('[0-9]'))) return 'La cédula de quien recibe tiene que llevar números.';
+      if (_firmaRecibe == null) return 'Falta la firma de quien recibe.';
+    }
+    return null;
+  }
 
-  Future<void> _registrar() async {
+  /// Una sola regla: se envía cuando no queda nada que reclamar. Tenerla por duplicado era tener dos que se
+  /// desalinean, y entonces el botón se habilita con el motivo todavía en pantalla.
+  bool _puedeEnviar({required bool externo}) => !_guardando && _motivoSinFirmar(externo: externo) == null;
+
+  Future<void> _registrar({required bool externo}) async {
     final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
     final firma = _firma;
-    if (usuarioId == null || firma == null || !_puedeEnviar) return;
+    if (usuarioId == null || firma == null || !_puedeEnviar(externo: externo)) return;
+    // Solo cuando recibe de verdad una persona de fuera: en el cierre con una sola firma no hay receptor, y en
+    // un punto con inspector el servidor rechaza estos campos con 400.
+    final conExterno = externo && !_unaSolaFirma;
     setState(() => _guardando = true);
     try {
+      final jobId = const Uuid().v4();
       await ref.read(colaRepositorioProvider).agregar(EntregaPuntoJob(
-            id: const Uuid().v4(),
+            id: jobId,
             etiqueta: 'Entrega ${_punto.lugar}',
             creadoEn: DateTime.now().millisecondsSinceEpoch,
             usuarioId: usuarioId,
@@ -194,24 +288,111 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
             lugarId: _punto.lugarId,
             firma: firma,
             motivo: _unaSolaFirma ? _motivo.text.trim() : null,
+            recibeNombre: conExterno ? _nombreRecibe.text.trim() : null,
+            recibeCedula: conExterno ? _cedulaRecibe.text.trim() : null,
+            firmaRecibe: conExterno ? _firmaRecibe : null,
           ));
       final sync = ref.read(syncControllerProvider.notifier);
       await sync.refrescar();
       await sync.sincronizar();
+      // Se mira ESTE envío y no el contador de la cola: con dos pendientes de otra cosa, una entrega que el
+      // servidor acababa de aceptar se anunciaba como «quedó en cola».
+      final desenlace = desenlaceDe(
+        await ref.read(colaRepositorioProvider).listar(),
+        jobId,
+        pausa: ref.read(syncControllerProvider).pausa,
+      );
       if (!mounted) return;
-      final enCola = ref.read(syncControllerProvider).pendientes > 0;
-      final fallida = ref.read(syncControllerProvider).fallidos > 0;
+      // CA-6: quién firma aquí lo decide el servidor **por punto de entrega**, y ese dato pudo cambiar desde que
+      // se abrió la pantalla. El rechazo no es transitorio —reintentar manda exactamente lo mismo—, así que el
+      // envío se descarta, el interruptor se pone como el servidor dice y se vuelve a firmar aquí, sin perder lo
+      // escrito ni salir de la pantalla. El punto llega con `lugar_tiene_inspector`, así que ya no se abre la
+      // pantalla a ciegas; esto cubre lo que cambió entre abrirla y firmar.
+      if (_caminoDelPunto(desenlace) case final camino?) {
+        await ref.read(colaRepositorioProvider).eliminar(jobId);
+        await sync.refrescar();
+        if (!mounted) return;
+        // Qué debería mostrar el interruptor; null cuando el problema no es el interruptor.
+        final externo = switch (camino) {
+          _CaminoDelPunto.externo => true,
+          _CaminoDelPunto.entreLasPartes => false,
+          _CaminoDelPunto.sinQuienReciba => null,
+        };
+        // El servidor se contradice a sí mismo: el dato del punto cambió entre un envío y el siguiente. Girar otra
+        // vez sería dejar al conductor dando vueltas, así que no se toca y se dice. Lo que cuenta es lo que dijo el
+        // servidor antes, no dónde esté el interruptor: ese lo puede haber movido el conductor.
+        final sePisan = externo != null && _veredicto != null && externo != _veredicto;
+        if (externo != null && !sePisan) {
+          setState(() {
+            _recibeExterno = externo;
+            _veredicto = externo;
+          });
+        }
+        await showDialog<void>(
+          context: context,
+          builder: (contexto) => AlertDialog(
+            // El título dice cómo es el punto, no que algo «cambió»: si fue el conductor quien movió el
+            // interruptor, del lado del servidor no cambió nada.
+            title: Text(switch (externo) {
+              null => 'Esta entrega no la puedes cerrar',
+              _ when sePisan => 'Esta entrega no la puedes cerrar',
+              true => 'Aquí recibe alguien del punto',
+              false => 'Aquí firma el inspector del punto',
+            }),
+            content: Text(switch (externo) {
+              // No es un error del conductor ni del interruptor: el punto tiene inspectores, pero ninguno reclamó
+              // esta entrega y el viaje no trae el suyo. Desde aquí no hay arreglo, y pedirle los datos de alguien
+              // del punto no serviría: el servidor los rechaza donde hay inspector.
+              null =>
+                'Este punto tiene inspector asignado, pero ninguno ha reclamado esta entrega y el viaje no tiene '
+                    'inspector propio, así que no hay quién la reciba. El inspector del punto tiene que reclamarla '
+                    'desde Pendientes; avísale y vuelve a firmar cuando lo haya hecho. Lo que escribiste se queda '
+                    'aquí.',
+              _ when sePisan =>
+                'El servidor dijo una cosa y después la contraria sobre quién recibe en este punto. Para no '
+                    'dejarte dando vueltas no lo vuelvo a cambiar: avisa al coordinador antes de seguir. Lo que '
+                    'escribiste se queda aquí.',
+              true =>
+                'El servidor dice que este punto no tiene inspector: la entrega la firma quien esté allí. Escribe '
+                    'su nombre y su cédula y pídele la firma. La tuya se conserva.',
+              false =>
+                'El servidor dice que este punto sí tiene inspector: la entrega la firma él, no una persona '
+                    'externa. Apagué «Recibe una persona del punto»; lo que escribiste no se borra, solo deja de '
+                    'enviarse. Tu firma se conserva.',
+            }),
+            actions: [TextButton(onPressed: () => Navigator.of(contexto).pop(), child: const Text('Entendido'))],
+          ),
+        );
+        return;
+      }
+      final (titulo, mensaje) = switch (desenlace.fase) {
+        // Con la firma de quien recibe no falta nadie más: las dos firmas viajaron juntas y la entrega cierra.
+        FaseEnvio.registrado when conExterno => (
+            'Entrega cerrada',
+            'Recibió ${_nombreRecibe.text.trim()}. Quedó registrada para ${_deLaUnidad(_punto.porEntregar.length)} del punto.',
+          ),
+        FaseEnvio.registrado => (
+            'Entrega registrada',
+            'Quedó registrada para ${_deLaUnidad(_punto.porEntregar.length)} del punto.',
+          ),
+        FaseEnvio.rechazado => (
+            'No se pudo enviar',
+            'El servidor rechazó la entrega${desenlace.motivo == null ? '' : ': ${desenlace.motivo}'}. '
+                'Quedó en Inspecciones › Cola para reintentarla o descartarla.',
+          ),
+        // Falló por algo pasajero: lo que hace falta saber es por qué y cuándo se vuelve a intentar solo.
+        FaseEnvio.enEspera => (
+            'Entrega en espera',
+            'No se pudo enviar${desenlace.motivo == null ? '' : ': ${desenlace.motivo}'}. '
+                'Se vuelve a intentar sola ${enPalabras(desenlace.espera!)}.',
+          ),
+        FaseEnvio.enCola => ('Entrega guardada', 'Quedó en cola; se enviará cuando la señal sea estable.'),
+      };
       await showDialog<void>(
         context: context,
         builder: (contexto) => AlertDialog(
-          title: Text(fallida ? 'No se pudo enviar' : (enCola ? 'Entrega guardada' : 'Entrega registrada')),
-          content: Text(
-            fallida
-                ? 'El servidor rechazó la entrega. Quedó en Inspecciones › Cola para reintentarla o descartarla.'
-                : enCola
-                    ? 'Quedó en cola; se enviará cuando la señal sea estable.'
-                    : 'Quedó registrada para ${_deLaUnidad(_punto.porEntregar.length)} del punto.',
-          ),
+          title: Text(titulo),
+          content: Text(mensaje),
           actions: [TextButton(onPressed: () => Navigator.of(contexto).pop(), child: const Text('OK'))],
         ),
       );
@@ -232,10 +413,35 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
     }
   }
 
+  /// Qué dice el rechazo sobre quién recibe en este punto. Null si no hubo rechazo o si fue por otra cosa.
+  ///
+  /// El servidor decide por punto (`LugarTieneInspectoresAsync`) y su 400 no trae un código propio: hay que
+  /// reconocerlo por el motivo, que llega con las líneas de cada campo. Son **tres** mensajes de
+  /// `clsEntregasService.FirmantesAsync`, y cada uno quiere decir una cosa distinta:
+  ///
+  /// - «…tiene inspector asignado…»: se mandaron los datos de un externo donde hay inspector.
+  /// - «…de quien recibe es obligatorio/a»: no se mandaron donde no hay inspector ni nadie que reciba.
+  /// - «Indique quién recibe…»: el punto **sí** tiene inspector, pero no hay nadie a quien poner como receptor
+  ///   —ninguno reclamó la entrega y el viaje no trae el suyo—. Leerlo como «el punto no tiene inspector», que es
+  ///   como se leía antes, mandaba al conductor a pedirle los datos a alguien del punto para que el servidor los
+  ///   rechazara en el envío siguiente.
+  _CaminoDelPunto? _caminoDelPunto(DesenlaceEnvio desenlace) {
+    if (desenlace.fase != FaseEnvio.rechazado) return null;
+    final motivo = desenlace.motivo?.toLowerCase();
+    if (motivo == null) return null;
+    if (motivo.contains(rechazosDelPunto.conInspector)) return _CaminoDelPunto.entreLasPartes;
+    if (motivo.contains(rechazosDelPunto.sinQuienReciba)) return _CaminoDelPunto.sinQuienReciba;
+    if (motivo.contains(rechazosDelPunto.faltanDatos)) return _CaminoDelPunto.externo;
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
     final sinInspeccion = _punto.sinInspeccion;
+    // Si el servidor ya corrigió, manda él: el dato con el que se abrió la pantalla quedó viejo.
+    final puntoSinInspector = _veredicto ?? !_punto.tieneInspector;
+    final externo = _recibeExterno;
     return Scaffold(
       appBar: AppBar(title: Text('Entrega · ${_punto.lugar}')),
       body: SafeArea(
@@ -255,8 +461,8 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
               Semantics(
                 liveRegion: true,
                 child: Text(
-                  'Aún no tienen la inspección de llegada del descargue: ${sinInspeccion.map((u) => u.vin).join(', ')}. '
-                      'Hazla antes de firmar.',
+                  '${sinInspeccion.length == 1 ? 'Falta 1 unidad' : 'Faltan ${sinInspeccion.length} unidades'} por descargar. '
+                      'Aún no tienen la inspección de llegada: ${sinInspeccion.map((u) => u.vin).join(', ')}.',
                   style: tema.bodySmall?.copyWith(color: Colores.peligro),
                 ),
               ),
@@ -265,17 +471,65 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
             LienzoFirma(etiqueta: 'Tu firma', onCambio: (p) => setState(() => _firma = p)),
             const SizedBox(height: Espacio.sm),
             Text(
-              'Firmas tú desde tu sesión; la otra parte firma desde la suya. La firma queda en ${_deLaUnidad(_punto.porEntregar.length)}.',
+              externo && !_unaSolaFirma
+                  ? 'Firmas tú y firma quien recibe, aquí mismo. Las firmas quedan en ${_deLaUnidad(_punto.porEntregar.length)}.'
+                  : 'Firmas tú desde tu sesión; la otra parte firma desde la suya. La firma queda en ${_deLaUnidad(_punto.porEntregar.length)}.',
               style: tema.bodySmall,
             ),
             const SizedBox(height: Espacio.lg),
             if (!_unaSolaFirma) ...[
+              // Quién está del otro lado lo dice el servidor para este punto, y así viene ya puesto. Se deja
+              // cambiar porque el dato pudo cambiar después: si se marca donde no toca, el servidor lo rechaza
+              // nombrando los tres campos; y si se deja sin marcar donde hacía falta, la entrega se queda
+              // esperando una firma que no va a llegar.
+              SwitchListTile(
+                value: _recibeExterno,
+                onChanged: _guardando ? null : (v) => setState(() => _recibeExterno = v),
+                title: const Text('Recibe una persona del punto'),
+                subtitle: Text(
+                  puntoSinInspector
+                      ? 'Este punto no tiene inspector asignado, así que recibe quien esté allí.'
+                      : 'Este punto tiene inspector asignado: lo normal es que firme él desde su sesión.',
+                  style: tema.bodySmall,
+                ),
+                contentPadding: EdgeInsets.zero,
+              ),
+              if (externo) ...[
+                const SizedBox(height: Espacio.sm),
+                TextField(
+                  controller: _nombreRecibe,
+                  onChanged: (_) => setState(() {}),
+                  maxLength: nombreExternoMax,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Nombre de quien recibe', counterText: ''),
+                ),
+                const SizedBox(height: Espacio.sm),
+                TextField(
+                  controller: _cedulaRecibe,
+                  onChanged: (_) => setState(() {}),
+                  maxLength: cedulaExternaMax,
+                  // No es solo números: el servidor admite puntos, guiones y espacios, y hay documentos que los
+                  // llevan. El teclado se abre en números, que es lo normal, pero deja escribir el resto.
+                  keyboardType: TextInputType.text,
+                  decoration: const InputDecoration(labelText: 'Cédula de quien recibe', counterText: ''),
+                ),
+                const SizedBox(height: Espacio.md),
+                LienzoFirma(etiqueta: 'Firma de quien recibe', onCambio: (p) => setState(() => _firmaRecibe = p)),
+                const SizedBox(height: Espacio.sm),
+                Text(
+                  'Con las dos firmas la entrega queda cerrada: no falta nadie más. Su nombre y su cédula quedan '
+                  'registrados con la entrega.',
+                  style: tema.bodySmall,
+                ),
+              ],
+              const SizedBox(height: Espacio.lg),
               FilledButton(
-                onPressed: _puedeEnviar ? _registrar : null,
+                onPressed: _puedeEnviar(externo: externo) ? () => _registrar(externo: externo) : null,
                 child: _guardando
                     ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                    : const Text('Registrar mi firma'),
+                    : Text(externo ? 'Registrar la entrega' : 'Registrar mi firma'),
               ),
+              if (_motivoSinFirmar(externo: externo) case final motivo?) _MotivoDelBoton(motivo),
               const SizedBox(height: Espacio.sm),
               TextButton(
                 onPressed: _guardando ? null : () => setState(() => _unaSolaFirma = true),
@@ -303,11 +557,12 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
               ),
               const SizedBox(height: Espacio.md),
               FilledButton(
-                onPressed: _puedeEnviar ? _registrar : null,
+                onPressed: _puedeEnviar(externo: externo) ? () => _registrar(externo: externo) : null,
                 child: _guardando
                     ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
                     : const Text('Cerrar con una sola firma'),
               ),
+              if (_motivoSinFirmar(externo: externo) case final motivo?) _MotivoDelBoton(motivo),
               const SizedBox(height: Espacio.sm),
               TextButton(
                 onPressed: _guardando ? null : () => setState(() => _unaSolaFirma = false),
@@ -319,4 +574,38 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
       ),
     );
   }
+}
+
+/// Por qué el botón de arriba está gris. Va pegado a él: el aviso del principio de la pantalla ya no se ve
+/// cuando se ha bajado hasta la firma.
+class _MotivoDelBoton extends StatelessWidget {
+  const _MotivoDelBoton(this.motivo);
+
+  final String motivo;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: Espacio.xs),
+        child: Semantics(
+          liveRegion: true,
+          child: Text(
+            motivo,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colores.advertencia),
+          ),
+        ),
+      );
+}
+
+/// Lo que el rechazo del servidor dice sobre quién recibe en un punto de entrega.
+enum _CaminoDelPunto {
+  /// El punto tiene inspector: se firma entre las partes del viaje, sin datos de una persona externa.
+  entreLasPartes,
+
+  /// El punto no tiene inspector ni nadie que reciba: recibe una persona del punto, con nombre, cédula y firma.
+  externo,
+
+  /// El punto tiene inspector, pero ninguno reclamó la entrega y el viaje no trae el suyo. No lo arregla el
+  /// interruptor: lo arregla el inspector del punto reclamándola.
+  sinQuienReciba,
 }
