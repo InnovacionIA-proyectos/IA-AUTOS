@@ -161,6 +161,22 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
         return new clsResumenCierre(evidencias.Count, sinUbicacion, hallazgos.Count, hallazgos.Count(h => !conFoto.Contains(h)), vistas);
     }
 
+    public Task<int> ContarFotosDeAcomodacionDelViajeAsync(Guid viajeId, CancellationToken ct = default) =>
+        (from e in contexto.Evidencias.AsNoTracking()
+         join i in contexto.Inspecciones.AsNoTracking() on e.InspeccionId equals i.Id
+         join et in contexto.Etapas.AsNoTracking() on i.EtapaId equals et.Id
+         join c in contexto.EtapasCatalogo.AsNoTracking() on et.EtapaCatalogoId equals c.Id
+         where i.ViajeId == viajeId && i.Momento == clsMomento.SALIDA && c.Codigo == IAAutos.Dominio.Vehiculos.clsCodigosEtapa.CARGUE
+            && e.VistaId == null && e.HallazgoId == null && e.ExtraId == null && !e.EsConstancia && !e.EsSello
+         select e.Id).CountAsync(ct);
+
+    public Task<bool> EtapaTieneFirmaOCierreAsync(Guid etapaId, CancellationToken ct = default) =>
+        (from t in contexto.Transferencias.AsNoTracking()
+         join i in contexto.Inspecciones.AsNoTracking() on t.InspeccionId equals i.Id
+         where i.EtapaId == etapaId
+            && (t.TipoCierre != null || t.FirmaEntregaAt != null || t.FirmaRecibeAt != null || (t.FirmaEntrega != null && t.FirmaEntrega != "") || (t.FirmaRecibe != null && t.FirmaRecibe != ""))
+         select t.Id).AnyAsync(ct);
+
     public Task<int> ContarFotosLibresAsync(Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Evidencias.CountAsync(e => e.InspeccionId == inspeccionId && e.VistaId == null && e.HallazgoId == null && e.ExtraId == null && !e.EsConstancia && !e.EsSello, ct);
 

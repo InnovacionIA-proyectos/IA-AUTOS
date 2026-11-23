@@ -15,6 +15,7 @@ Todas se guardan como notificaciones (ver [notificaciones.md](notificaciones.md)
 | `captura_incompleta` | operativo | media | quien inicio la inspeccion | proceso **cada 10 minutos** | `captura_incompleta:{inspeccion}`: una por inspeccion |
 | `transferencia_pendiente` | operativo | media | el firmante que falta | proceso **cada 10 minutos** | `transferencia_pendiente:{inspeccion}`: una por inspeccion y destinatario |
 | `cargue_sin_reclamar` | operativo | media | coordinador de calidad del cliente | proceso **cada 10 minutos** | `cargue_sin_reclamar:{viaje}`: una por viaje |
+| `firma_cargue_pendiente` | operativo | media | inspector del viaje (si falta quien entrega) o conductor (si falta quien recibe) | proceso **cada 10 minutos** | `firma_cargue_pendiente:{viaje}:{parte}`: una por viaje y parte |
 | `propuesta_ubicacion` | operativo | media | coordinador de calidad del cliente | proceso **cada hora** | `propuesta_ubicacion:{propuesta}`: una por propuesta |
 
 ## Parametros
@@ -29,6 +30,7 @@ Se leen en cada ejecucion con una cache de **un minuto**: un cambio se aplica en
 | `captura_incompleta_minutos` | 30 | minutos que una captura puede seguir abierta antes de avisar |
 | `transferencia_pendiente_minutos` | 240 | minutos que una llegada puede seguir con la transferencia sin cierre antes de avisar |
 | `cargue_sin_reclamar_minutos` | 30 | minutos pasada la hora programada de un cargue sin reclamar antes de avisar |
+| `firma_cargue_pendiente_minutos` | 30 | minutos que la salida del cargue de un carro puede seguir cerrada sin la firma de una parte de la niñera antes de avisarle (el valor definitivo lo confirma el negocio) |
 | `valvula_precision_m` | 500 | precision (metros) desde la que una foto ya no sirve para la autocalibracion de la ubicacion |
 
 Si la tabla de parametros no se puede leer, los procesos usan estos valores iniciales y lo registran en el log.

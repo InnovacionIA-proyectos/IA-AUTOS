@@ -160,7 +160,10 @@ public sealed record ViajeDto(
     int Capacidad = 7,
     DisposicionDeNiniera? Disposicion = null,
     IReadOnlyList<IAAutos.Aplicacion.Inspecciones.DTOInspecciones.EvidenciaDto>? FotosAcomodacion = null,
-    bool LugarCargueTieneInspector = false);
+    bool LugarCargueTieneInspector = false,
+    DateTimeOffset? CargueFirmadoPorNineraAt = null,
+    DateTimeOffset? CargueNoFirmadoAt = null,
+    string? CargueNoFirmaParte = null);
 
 /// <summary>Un puesto de la ninera: su <c>Numero</c> (el que se envia como posicion de una unidad), la <c>Etiqueta</c> con que se muestra (hoy el mismo numero) y el <c>Vin</c> de la unidad que lo ocupa (nulo si esta libre).</summary>
 public sealed record PuestoDeNiniera(int Numero, string Etiqueta, string? Vin);

@@ -968,6 +968,20 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_transferencia_guarda_el_momento_y_el_gps_de_la_firma_y_hay_aviso_y_parametro_del_cargue()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/42-firma-del-cargue-por-ninera.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columnas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND name IN (N'FirmaEntregaMomentoAt', N'FirmaEntregaLat', N'FirmaEntregaLng', N'FirmaEntregaPrecisionM', N'FirmaRecibeMomentoAt', N'FirmaRecibeLat', N'FirmaRecibeLng', N'FirmaRecibePrecisionM', N'FirmaPorNinera')");
+        var restricciones = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblTransferencias_GpsEntrega', N'CK_tblTransferencias_GpsRecibe') AND parent_object_id = OBJECT_ID(N'tblTransferenciasCustodia')");
+        var aviso = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%firma_cargue_pendiente%'");
+        var parametro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave = N'firma_cargue_pendiente_minutos'");
+
+        Assert.True(columnas == 9 && restricciones == 2 && aviso == 1 && parametro == 1, "Falta la firma del cargue por niñera. Ejecute database/cambios-esquema/42-firma-del-cargue-por-ninera.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

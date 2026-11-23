@@ -27,6 +27,12 @@ public static class clsMotivosRechazo
 
     public const string HALLAZGO_DE_VERSION_REEMPLAZADA = "hallazgo_de_version_reemplazada";
 
+    // ---- El cargue por ninera
+    public const string CARGUE_INCOMPLETO = "cargue_incompleto";
+    public const string FIRMA_POR_NINERA = "firma_por_ninera";
+    public const string ACOMODACION_CERRADA = "acomodacion_cerrada";
+    public const string FIRMANTES_DE_LA_TRANSFERENCIA = "firmantes_de_la_transferencia";
+
     // ---- Vehiculos
     public const string VEHICULO_EN_VIAJE_ACTIVO = "vehiculo_en_viaje_activo";
 

@@ -41,6 +41,11 @@ public interface IViajeRepository
     Task<IReadOnlySet<Guid>> EtapasConInformeCerradoAsync(Guid viajeId, CancellationToken ct = default);
 
     /// <summary>True si alguna unidad del viaje tiene en borrador la inspeccion de salida del Cargue (la segunda inspeccion del cargue, donde se registra la acomodacion).</summary>
+    /// <summary>
+    /// La acomodacion del viaje esta cerrada: alguna salida del cargue esta cerrada y ninguna (ni la correccion de una) sigue en borrador. Con una correccion de la acomodacion en borrador los puestos se pueden reasignar.
+    /// </summary>
+    Task<bool> TieneAcomodacionCerradaAsync(Guid viajeId, CancellationToken ct = default);
+
     Task<bool> TieneSegundaInspeccionDelCargueEnCursoAsync(Guid viajeId, CancellationToken ct = default);
 
     /// <summary>Id del viaje activo de un VIN, o el de un viaje con ese codigo MTrack que lo lleve (para vincular ordenes Sofasa).</summary>

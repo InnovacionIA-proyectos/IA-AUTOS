@@ -22,6 +22,9 @@ namespace IAAutos.Aplicacion.Inspecciones;
 /// <summary>Consultas de solo lectura de inspecciones (listado e informe detallado).</summary>
 public interface IConsultasInspecciones
 {
+    /// <summary>Las fotos de la acomodacion del viaje (las fotos libres de todas las salidas del cargue de sus carros), de la mas antigua a la mas reciente: el informe de acomodacion de cada carro muestra las del viaje.</summary>
+    Task<IReadOnlyList<EvidenciaDto>> FotosDeAcomodacionDelViajeAsync(Guid viajeId, CancellationToken ct = default);
+
     /// <summary>
     /// Una pagina del listado y el total que cumple los filtros; con <paramref name="soloDeUsuario"/>, solo informes de los viajes de ese usuario y, con <paramref name="soloDeCliente"/>, solo los de VIN
     /// de ese cliente. Sin <paramref name="orden"/>, las mas recientes primero.
@@ -68,7 +71,6 @@ public interface IDescriptorHallazgos
 /// </summary>
 public sealed class clsInspeccionesService(
     IInspeccionRepository inspecciones,
-    ITransferenciaCustodiaRepository transferencias,
     IEtapaRepository etapas,
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
@@ -296,8 +298,8 @@ public sealed class clsInspeccionesService(
             throw new clsConflictoException($"Esta inspección ya fue corregida (versión {corregidaPor}): corrija la última versión");
         }
 
-        // Una inspeccion firmada ya no se corrige, sea quien sea; antes de eso, solo quien la hizo o un administrador.
-        if (await transferencias.ObtenerPorInspeccionAsync(inspeccionId, ct) is { TieneFirmaOCierre: true })
+        // Una etapa firmada ya no se corrige, sea quien sea y de cual de sus informes sea la firma (la de la llegada o la de la salida, en cualquiera de sus versiones); antes de eso, solo quien la hizo o un administrador.
+        if (await inspecciones.EtapaTieneFirmaOCierreAsync(original.EtapaId, ct))
         {
             throw new clsInspeccionYaFirmadaException();
         }
@@ -703,7 +705,8 @@ public sealed class clsInspeccionesService(
 
         errores.AddRange(sinPosicion.Order(StringComparer.Ordinal).Select(vin => $"Falta la posición de la unidad {vin}"));
         var minimas = Math.Max(await parametros.EnteroAsync(clsClavesParametros.ACOMODACION_FOTOS_MINIMAS, 1, ct), 0);
-        var fotos = await inspecciones.ContarFotosLibresAsync(inspeccion.Id, ct);
+        // Una foto de la niñera sirve para todos los carros: se cuentan las del viaje (las salidas del cargue de todos sus carros), no solo las de esta inspeccion.
+        var fotos = await inspecciones.ContarFotosDeAcomodacionDelViajeAsync(inspeccion.ViajeId, ct);
         if (fotos < minimas)
         {
             errores.Add($"Faltan fotos de la acomodación: se exige al menos {minimas} y hay {fotos}");

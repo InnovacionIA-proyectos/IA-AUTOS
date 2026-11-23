@@ -102,6 +102,16 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
         return (filas, total);
     }
 
+    public async Task<IReadOnlyList<EvidenciaDto>> FotosDeAcomodacionDelViajeAsync(Guid viajeId, CancellationToken ct = default) =>
+        (await (from e in contexto.Evidencias.AsNoTracking()
+                join i in contexto.Inspecciones.AsNoTracking() on e.InspeccionId equals i.Id
+                join et in contexto.Etapas.AsNoTracking() on i.EtapaId equals et.Id
+                join c in contexto.EtapasCatalogo.AsNoTracking() on et.EtapaCatalogoId equals c.Id
+                where i.ViajeId == viajeId && i.Momento == clsMomento.SALIDA && c.Codigo == clsCodigosEtapa.CARGUE
+                   && e.VistaId == null && e.HallazgoId == null && e.ExtraId == null && !e.EsConstancia && !e.EsSello
+                orderby e.CreatedAt
+                select e).ToListAsync(ct)).Select(clsMapeadorInspecciones.AEvidencia).ToList();
+
     public async Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosAsync(Guid inspeccionId, CancellationToken ct = default)
     {
         var actual = await (from i in contexto.Inspecciones.AsNoTracking()

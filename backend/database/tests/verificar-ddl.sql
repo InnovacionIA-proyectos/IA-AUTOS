@@ -1434,6 +1434,16 @@ UPDATE dbo.tblInspecciones SET ConfirmacionSitio = NULL, ConfirmacionDistanciaM 
 DELETE FROM dbo.tblLugares WHERE Id IN (@lugUbi, @lugUbi2);
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_UBI';
 
+-- 7b) Firma del cargue por ninera: el momento y el GPS de cada firma, el tipo de aviso y el parametro
+INSERT #r SELECT N'Cargue por ninera: la transferencia guarda el momento y el GPS de cada firma y la marca de ninera',
+    CASE WHEN (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND name IN (N'FirmaEntregaMomentoAt', N'FirmaEntregaLat', N'FirmaEntregaLng', N'FirmaEntregaPrecisionM', N'FirmaRecibeMomentoAt', N'FirmaRecibeLat', N'FirmaRecibeLng', N'FirmaRecibePrecisionM', N'FirmaPorNinera')) = 9 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Cargue por ninera: la latitud y la longitud de cada firma van juntas y dentro de rango',
+    CASE WHEN (SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblTransferencias_GpsEntrega', N'CK_tblTransferencias_GpsRecibe') AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia')) = 2 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Cargue por ninera: la notificacion admite el tipo firma_cargue_pendiente',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%firma_cargue_pendiente%') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Cargue por ninera: el parametro firma_cargue_pendiente_minutos existe',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblParametros WHERE Clave = 'firma_cargue_pendiente_minutos') THEN 1 ELSE 0 END, NULL;
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';

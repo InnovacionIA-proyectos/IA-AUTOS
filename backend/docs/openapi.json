@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.14.0"
+    "version": "3.15.0"
   },
   "paths": {
     "/api/viajes": {
@@ -684,7 +684,10 @@
                             "es_acomodacion": true
                           }
                         ],
-                        "lugar_cargue_tiene_inspector": true
+                        "lugar_cargue_tiene_inspector": true,
+                        "cargue_firmado_por_ninera_at": "2026-10-22T14:30:00.000Z",
+                        "cargue_no_firmado_at": "2026-10-22T14:30:00.000Z",
+                        "cargue_no_firma_parte": "texto"
                       }
                     ]
                   ],
@@ -788,7 +791,10 @@
                             "es_acomodacion": true
                           }
                         ],
-                        "lugar_cargue_tiene_inspector": true
+                        "lugar_cargue_tiene_inspector": true,
+                        "cargue_firmado_por_ninera_at": "2026-10-22T14:30:00.000Z",
+                        "cargue_no_firmado_at": "2026-10-22T14:30:00.000Z",
+                        "cargue_no_firma_parte": "texto"
                       }
                     ]
                   ],
@@ -892,7 +898,10 @@
                             "es_acomodacion": true
                           }
                         ],
-                        "lugar_cargue_tiene_inspector": true
+                        "lugar_cargue_tiene_inspector": true,
+                        "cargue_firmado_por_ninera_at": "2026-10-22T14:30:00.000Z",
+                        "cargue_no_firmado_at": "2026-10-22T14:30:00.000Z",
+                        "cargue_no_firma_parte": "texto"
                       }
                     ]
                   ],
@@ -1405,6 +1414,400 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EntregaPuntoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/cargue/firma": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_FirmarCargue",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FirmarCargueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CargueNineraDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CargueNineraDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CargueNineraDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/cargue/no-firma": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_RegistrarNoFirmaDelCargue",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoFirmaDelCargueRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/CargueNineraDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CargueNineraDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CargueNineraDto"
                 }
               }
             }
@@ -24370,6 +24773,85 @@
           }
         }
       },
+      "CargueNineraDto": {
+        "examples": [
+          {
+            "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "parte": "texto",
+            "unidades": 1,
+            "cerradas": 1,
+            "cargue_firmado_por_ninera_at": "2026-10-22T14:30:00.000Z",
+            "detalle": [
+              {
+                "vin": "9FBHSR4E8PM000001",
+                "tipo_cierre": "texto",
+                "por_ninera": true
+              }
+            ]
+          }
+        ],
+        "required": [
+          "viaje_id",
+          "parte",
+          "unidades",
+          "cerradas",
+          "cargue_firmado_por_ninera_at",
+          "detalle"
+        ],
+        "type": "object",
+        "properties": {
+          "viaje_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "parte": {
+            "type": "string"
+          },
+          "unidades": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cerradas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cargue_firmado_por_ninera_at": {
+            "format": "date-time"
+          },
+          "detalle": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CargueUnidadDto"
+            }
+          }
+        }
+      },
+      "CargueUnidadDto": {
+        "examples": [
+          {
+            "vin": "9FBHSR4E8PM000001",
+            "tipo_cierre": "texto",
+            "por_ninera": true
+          }
+        ],
+        "required": [
+          "vin",
+          "tipo_cierre",
+          "por_ninera"
+        ],
+        "type": "object",
+        "properties": {
+          "vin": {
+            "type": "string"
+          },
+          "tipo_cierre": {
+            "type": "string"
+          },
+          "por_ninera": {
+            "type": "boolean"
+          }
+        }
+      },
       "CatalogoDto": {
         "examples": [
           {
@@ -26669,6 +27151,108 @@
           },
           "rol": {
             "type": "string"
+          }
+        }
+      },
+      "FirmarCargueRequest": {
+        "examples": [
+          {
+            "firma": "texto",
+            "parte": "texto",
+            "fecha_momento": "2026-10-22T14:30:00.000Z",
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "precision_m": 1.5,
+            "reservas": [
+              {
+                "vin": "9FBHSR4E8PM000001",
+                "observaciones": "texto"
+              }
+            ]
+          }
+        ],
+        "required": [
+          "firma",
+          "parte",
+          "fecha_momento",
+          "lat",
+          "lng",
+          "precision_m",
+          "reservas"
+        ],
+        "type": "object",
+        "properties": {
+          "firma": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parte": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fecha_momento": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "precision_m": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "reservas": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "examples": [
+                {
+                  "vin": "9FBHSR4E8PM000001",
+                  "observaciones": "texto"
+                }
+              ],
+              "required": [
+                "vin",
+                "observaciones"
+              ],
+              "type": "object",
+              "properties": {
+                "vin": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "observaciones": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
           }
         }
       },
@@ -29471,7 +30055,16 @@
                   "testigo_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                   "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                   "recibe_externo_nombre": "texto",
-                  "recibe_externo_cedula": "texto"
+                  "recibe_externo_cedula": "texto",
+                  "firma_por_ninera": true,
+                  "entrega_momento_at": "2026-10-22T14:30:00.000Z",
+                  "entrega_lat": 1.5,
+                  "entrega_lng": 1.5,
+                  "entrega_precision_m": 1.5,
+                  "recibe_momento_at": "2026-10-22T14:30:00.000Z",
+                  "recibe_lat": 1.5,
+                  "recibe_lng": 1.5,
+                  "recibe_precision_m": 1.5
                 },
                 "notas_aclaratorias": [],
                 "motivo_sin_inspector": {
@@ -29663,7 +30256,16 @@
               "testigo_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
               "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
               "recibe_externo_nombre": "texto",
-              "recibe_externo_cedula": "texto"
+              "recibe_externo_cedula": "texto",
+              "firma_por_ninera": true,
+              "entrega_momento_at": "2026-10-22T14:30:00.000Z",
+              "entrega_lat": 1.5,
+              "entrega_lng": 1.5,
+              "entrega_precision_m": 1.5,
+              "recibe_momento_at": "2026-10-22T14:30:00.000Z",
+              "recibe_lat": 1.5,
+              "recibe_lng": 1.5,
+              "recibe_precision_m": 1.5
             },
             "notas_aclaratorias": [
               {
@@ -30667,6 +31269,163 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "NoFirmaDelCargueRequest": {
+        "examples": [
+          {
+            "parte": "texto",
+            "motivo": "Mensaje de ejemplo",
+            "testigo_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "evidencia": {
+              "storage_path": "ejemplo.jpg",
+              "sello_fecha": "2026-10-22T14:30:00.000Z",
+              "sello_lat": 1.5,
+              "sello_lng": 1.5,
+              "precision": 1.5,
+              "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "nota": "Mensaje de ejemplo",
+              "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "fecha_momento": "2026-10-22T14:30:00.000Z",
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "precision_m": 1.5
+          }
+        ],
+        "required": [
+          "parte",
+          "motivo",
+          "testigo_usuario_id",
+          "evidencia",
+          "fecha_momento",
+          "lat",
+          "lng",
+          "precision_m"
+        ],
+        "type": "object",
+        "properties": {
+          "parte": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "testigo_usuario_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "evidencia": {
+            "examples": [
+              {
+                "storage_path": "ejemplo.jpg",
+                "sello_fecha": "2026-10-22T14:30:00.000Z",
+                "sello_lat": 1.5,
+                "sello_lng": 1.5,
+                "precision": 1.5,
+                "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "nota": "Mensaje de ejemplo",
+                "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            ],
+            "required": [
+              "storage_path",
+              "sello_fecha",
+              "sello_lat",
+              "sello_lng",
+              "precision",
+              "dispositivo_id",
+              "nota",
+              "hash_sha256"
+            ],
+            "type": "object",
+            "properties": {
+              "storage_path": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "sello_fecha": {
+                "format": "date-time"
+              },
+              "sello_lat": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "sello_lng": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "precision": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "dispositivo_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "nota": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "hash_sha256": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            }
+          },
+          "fecha_momento": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "precision_m": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
           }
         }
       },
@@ -34199,7 +34958,16 @@
             "testigo_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "evidencia_constancia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "recibe_externo_nombre": "texto",
-            "recibe_externo_cedula": "texto"
+            "recibe_externo_cedula": "texto",
+            "firma_por_ninera": true,
+            "entrega_momento_at": "2026-10-22T14:30:00.000Z",
+            "entrega_lat": 1.5,
+            "entrega_lng": 1.5,
+            "entrega_precision_m": 1.5,
+            "recibe_momento_at": "2026-10-22T14:30:00.000Z",
+            "recibe_lat": 1.5,
+            "recibe_lng": 1.5,
+            "recibe_precision_m": 1.5
           }
         ],
         "required": [
@@ -34311,6 +35079,54 @@
               "null",
               "string"
             ]
+          },
+          "firma_por_ninera": {
+            "type": "boolean",
+            "default": false
+          },
+          "entrega_momento_at": {},
+          "entrega_lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "entrega_lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "entrega_precision_m": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "recibe_momento_at": {},
+          "recibe_lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "recibe_lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "recibe_precision_m": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
           }
         }
       },
@@ -34646,7 +35462,10 @@
                 "es_acomodacion": true
               }
             ],
-            "lugar_cargue_tiene_inspector": true
+            "lugar_cargue_tiene_inspector": true,
+            "cargue_firmado_por_ninera_at": "2026-10-22T14:30:00.000Z",
+            "cargue_no_firmado_at": "2026-10-22T14:30:00.000Z",
+            "cargue_no_firma_parte": "texto"
           }
         ],
         "required": [
@@ -34828,6 +35647,14 @@
           "lugar_cargue_tiene_inspector": {
             "type": "boolean",
             "default": false
+          },
+          "cargue_firmado_por_ninera_at": {},
+          "cargue_no_firmado_at": {},
+          "cargue_no_firma_parte": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

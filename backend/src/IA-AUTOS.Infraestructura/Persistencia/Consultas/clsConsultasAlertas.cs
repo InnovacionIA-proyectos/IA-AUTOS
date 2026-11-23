@@ -247,6 +247,8 @@ internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultas
                            from t in transferencias.DefaultIfEmpty()
                            where i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA && i.CerradaAt < cerradasAntesDe
                               && (t == null || t.TipoCierre == null)
+                              // El cargue se firma por niñera y su transferencia cuelga de la salida del cargue: la llegada del cargue sin transferencia propia no avisa de «transferencia pendiente» (de eso avisa firma_cargue_pendiente).
+                              && !(p.Codigo == clsCodigosEtapa.CARGUE && t == null)
                               && vv.EstadoUnidad == clsEstadoUnidad.ACTIVA
                               && (vj.Estado == clsEstadoViaje.PROGRAMADO || vj.Estado == clsEstadoViaje.EN_CURSO)
                               && !contexto.Inspecciones.Any(c => c.CorrigeInspeccionId == i.Id)
@@ -275,5 +277,33 @@ internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultas
         return filas.Select(f => new clsTransferenciaPendiente(
             f.InspeccionId, f.ViajeId, f.VehiculoId, f.ClienteId, f.Vin, f.Proceso, f.ExisteTransferencia, f.EntregaUsuarioId, f.FaltaEntrega, f.RecibeUsuarioId, f.FaltaRecibe,
             f.ProcesoSiguiente, f.ConductorId, f.InspectorId)).ToList();
+    }
+
+    public async Task<IReadOnlyList<clsFirmaCarguePendiente>> FirmasDelCarguePendientesAsync(DateTimeOffset cerradasAntesDe, int limite, CancellationToken ct = default)
+    {
+        var filas = await (from i in contexto.Inspecciones.AsNoTracking()
+                           join e in contexto.Etapas on i.EtapaId equals e.Id
+                           join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id
+                           join v in contexto.Vehiculos on e.VehiculoId equals v.Id
+                           join vj in contexto.Viajes on i.ViajeId equals vj.Id
+                           join vv in contexto.ViajeVehiculos on new { ViajeId = vj.Id, VehiculoId = v.Id } equals new { vv.ViajeId, vv.VehiculoId }
+                           join t in contexto.Transferencias on i.Id equals t.InspeccionId into transferencias
+                           from t in transferencias.DefaultIfEmpty()
+                           where p.Codigo == clsCodigosEtapa.CARGUE && i.Momento == clsMomento.SALIDA && i.Estado == clsEstadoInspeccion.CERRADA && i.CerradaAt < cerradasAntesDe
+                              && (t == null || t.TipoCierre == null)
+                              && vv.EstadoUnidad == clsEstadoUnidad.ACTIVA
+                              && (vj.Estado == clsEstadoViaje.PROGRAMADO || vj.Estado == clsEstadoViaje.EN_CURSO)
+                              && !contexto.Inspecciones.Any(c => c.CorrigeInspeccionId == i.Id)
+                              // Un carro cuyo cargue ya se entrego cerrado (de cualquier forma, en cualquiera de los informes de la etapa) no espera ninguna firma.
+                              && !(from t2 in contexto.Transferencias join i2 in contexto.Inspecciones on t2.InspeccionId equals i2.Id where i2.EtapaId == e.Id && t2.TipoCierre != null select t2.Id).Any()
+                           orderby i.CerradaAt
+                           select new
+                           {
+                               ViajeId = vj.Id, v.ClienteId, VehiculoId = v.Id, v.Vin,
+                               FaltaEntrega = t == null || t.FirmaEntrega == null,
+                               FaltaRecibe = t == null || t.FirmaRecibe == null,
+                               vj.InspectorId, vj.ConductorId,
+                           }).Take(limite).ToListAsync(ct);
+        return filas.Select(f => new clsFirmaCarguePendiente(f.ViajeId, f.ClienteId, f.VehiculoId, f.Vin, f.FaltaEntrega, f.FaltaRecibe, f.InspectorId, f.ConductorId)).ToList();
     }
 }

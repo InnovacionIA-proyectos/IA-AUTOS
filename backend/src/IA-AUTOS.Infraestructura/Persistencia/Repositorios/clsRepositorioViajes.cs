@@ -76,6 +76,16 @@ internal sealed class clsViajeRepository(clsAppDbContext contexto) : IViajeRepos
             && i.Estado == IAAutos.Dominio.Inspecciones.clsEstadoInspeccion.BORRADOR && c.Codigo == IAAutos.Dominio.Vehiculos.clsCodigosEtapa.CARGUE
          select i.Id).AnyAsync(ct);
 
+    public async Task<bool> TieneAcomodacionCerradaAsync(Guid viajeId, CancellationToken ct = default)
+    {
+        var estados = await (from i in contexto.Inspecciones.AsNoTracking()
+                             join e in contexto.Etapas.AsNoTracking() on i.EtapaId equals e.Id
+                             join c in contexto.EtapasCatalogo.AsNoTracking() on e.EtapaCatalogoId equals c.Id
+                             where i.ViajeId == viajeId && i.Momento == IAAutos.Dominio.Inspecciones.clsMomento.SALIDA && c.Codigo == IAAutos.Dominio.Vehiculos.clsCodigosEtapa.CARGUE
+                             select i.Estado).Distinct().ToListAsync(ct);
+        return estados.Contains(IAAutos.Dominio.Inspecciones.clsEstadoInspeccion.CERRADA) && !estados.Contains(IAAutos.Dominio.Inspecciones.clsEstadoInspeccion.BORRADOR);
+    }
+
     public Task<bool> TieneInspeccionesAsync(Guid viajeId, Guid? vehiculoId, CancellationToken ct = default) =>
         contexto.Inspecciones.AsNoTracking().AnyAsync(
             i => i.ViajeId == viajeId
