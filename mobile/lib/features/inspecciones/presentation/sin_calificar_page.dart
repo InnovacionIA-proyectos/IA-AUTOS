@@ -60,7 +60,7 @@ class SinCalificarPage extends ConsumerWidget {
           AsyncData(value: final novedades) when novedades.isEmpty => const EstadoMensaje(
               icono: Icons.check_circle_outline,
               colorIcono: Colores.exito,
-              titulo: 'Nada sin calificar',
+              titulo: 'No hay daños por calificar en este viaje',
               descripcion: 'Todos los daños de las unidades de este viaje ya tienen su clase y su nivel.',
             ),
           AsyncData(value: final novedades) => RefreshIndicator(

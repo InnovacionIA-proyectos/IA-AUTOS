@@ -110,10 +110,11 @@ void main() {
       expect(primero, lessThan(segundo));
     });
 
+    // S8-HU-08.2 ESC-05.
     testWidgets('sin nada pendiente lo dice, en vez de una lista vacía', (tester) async {
       await abrir(tester, const SinCalificarPage(viajeId: 'v1', codigoMtrack: 'MTK-1'));
 
-      expect(find.text('Nada sin calificar'), findsOneWidget);
+      expect(find.text('No hay daños por calificar en este viaje'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, 'Calificar'), findsNothing);
     });
 
@@ -181,10 +182,14 @@ void main() {
       expect(find.textContaining('Sin calificar'), findsNothing);
     });
 
-    testWidgets('sin nada pendiente no se ofrece una pantalla vacía', (tester) async {
+    // S8-HU-08.2 CA-3: con cero también se ofrece, y dice cero.
+    testWidgets('sin nada pendiente dice «Sin calificar (0)» y la lista lo confirma', (tester) async {
       await abrir(tester, const MisViajesPage());
 
-      expect(find.textContaining('Sin calificar'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Sin calificar (0)'), findsOneWidget);
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Sin calificar (0)'));
+      await avanzar(tester);
+      expect(find.text('No hay daños por calificar en este viaje'), findsOneWidget);
     });
   });
 }

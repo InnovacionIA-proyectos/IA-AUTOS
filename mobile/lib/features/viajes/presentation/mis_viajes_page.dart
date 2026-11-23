@@ -256,9 +256,9 @@ class _TarjetaViaje extends ConsumerWidget {
             for (final vehiculo in viaje.vehiculos) _FilaVehiculo(vehiculo, viaje: viaje),
           // Los daños que el conductor registró y nadie ha calificado. Solo al inspector del viaje: es el único
           // que puede ponerles clase y nivel —a otro, el listado le responde 200 con la lista vacía y la
-          // revisión le responde 403—. El botón aparece cuando hay algo que hacer; con cero no se ofrece una
-          // pantalla vacía.
-          if (_sinCalificar(ref) case final cuantos? when cuantos > 0) ...[
+          // revisión le responde 403—. Con cero también se ofrece (S8-HU-08.2 CA-3): «Sin calificar (0)» dice
+          // que no falta nada, y la lista lo confirma.
+          if (_sinCalificar(ref) case final cuantos?) ...[
             const SizedBox(height: Espacio.sm),
             OutlinedButton(
               onPressed: () => Navigator.of(context).push<void>(
