@@ -2485,5 +2485,29 @@ BEGIN
 END
 GO
 
+/* -----------------------------------------------------------------------------
+   El mapeo de columnas de la carga de viajes, compartido por cliente. tblMapeosCargaViajes: un mapeo por cliente y por forma del archivo (Huella: los titulos normalizados con su numero de repeticion, ordenados).
+   Columnas y Campos son JSON con solo titulos y el campo elegido para cada uno, nunca valores de las filas.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblMapeosCargaViajes', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblMapeosCargaViajes
+    (
+        Id             uniqueidentifier  NOT NULL CONSTRAINT PK_tblMapeosCargaViajes PRIMARY KEY,
+        ClienteId      uniqueidentifier  NOT NULL,
+        Huella         char(64)          NOT NULL,
+        Columnas       nvarchar(max)     NOT NULL,
+        Campos         nvarchar(max)     NOT NULL,
+        ActualizadoPor uniqueidentifier NOT NULL,
+        CreatedAt      datetimeoffset(3) NOT NULL CONSTRAINT DF_tblMapeosCargaViajes_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt      datetimeoffset(3) NOT NULL CONSTRAINT DF_tblMapeosCargaViajes_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblMapeosCargaViajes_Cliente FOREIGN KEY (ClienteId) REFERENCES dbo.tblClientes (Id),
+        CONSTRAINT FK_tblMapeosCargaViajes_ActualizadoPor FOREIGN KEY (ActualizadoPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT UQ_tblMapeosCargaViajes_Cliente_Huella UNIQUE (ClienteId, Huella),
+        CONSTRAINT CK_tblMapeosCargaViajes_Json CHECK (ISJSON(Columnas) = 1 AND ISJSON(Campos) = 1)
+    );
+END
+GO
+
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';
 GO

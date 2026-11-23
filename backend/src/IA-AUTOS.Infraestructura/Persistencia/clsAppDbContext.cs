@@ -69,6 +69,8 @@ public sealed class clsAppDbContext : DbContext
 
     public DbSet<clsPermisoSinInspector> PermisosSinInspector => Set<clsPermisoSinInspector>();
 
+    public DbSet<clsMapeoCargaViajes> MapeosCargaViajes => Set<clsMapeoCargaViajes>();
+
     public DbSet<clsEvidencia> Evidencias => Set<clsEvidencia>();
 
     public DbSet<clsInspeccionExtra> InspeccionExtras => Set<clsInspeccionExtra>();

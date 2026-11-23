@@ -82,6 +82,7 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             DELETE FROM dbo.tblEtapas;
             DELETE FROM dbo.tblViajes;
             DELETE FROM dbo.tblVehiculos;
+            DELETE FROM dbo.tblMapeosCargaViajes;
             UPDATE dbo.tblParametros SET ActualizadoPor = NULL;
             DELETE FROM dbo.tblUsuarios;
             ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;

@@ -1010,6 +1010,19 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task El_mapeo_de_columnas_de_la_carga_de_viajes_existe()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/45-mapeo-de-columnas-de-la-carga-de-viajes.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'tblMapeosCargaViajes')");
+        var unico = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.key_constraints WHERE name = N'UQ_tblMapeosCargaViajes_Cliente_Huella'");
+        var soloJson = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblMapeosCargaViajes_Json'");
+
+        Assert.True(tabla == 1 && unico == 1 && soloJson == 1, "Falta el mapeo de columnas de la carga de viajes. Ejecute database/cambios-esquema/45-mapeo-de-columnas-de-la-carga-de-viajes.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();
