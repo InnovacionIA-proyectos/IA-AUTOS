@@ -74,11 +74,57 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, 'Abrir'), findsOneWidget);
   });
 
-  testWidgets('sin pendientes lo dice, y los viajes propios siguen debajo', (tester) async {
+  testWidgets('sin pendientes las dos listas siguen ahí y lo dicen, y los viajes propios siguen debajo', (tester) async {
     await abrir(tester, ReclamosRepositorioFalso(), vinesDeMisViajes: ['VINAAAAAAAAAAAAA1']);
 
-    expect(find.text('No hay camiones pendientes en tus puntos para hoy.'), findsOneWidget);
+    expect(find.text('Por recibir (0)'), findsOneWidget);
+    expect(find.text('Nada por recibir'), findsOneWidget);
+    expect(find.text('Por cargar (0)'), findsOneWidget);
+    expect(find.text('Nada por cargar'), findsOneWidget);
     expect(find.text('VINAAAAAAAAAAAAA1'), findsOneWidget);
+  });
+
+  // S8-HU-10.2 ESC-01: entregas en «Por recibir», cargues en «Por cargar», y ninguno en las dos.
+  testWidgets('los pendientes se parten en «Por recibir» y «Por cargar», cada uno en una sola', (tester) async {
+    await abrir(
+      tester,
+      ReclamosRepositorioFalso()
+        ..pendientesActuales = [
+          pendienteDe('v1', placa: 'ENT001', proceso: 'entrega'),
+          pendienteDe('v2', placa: 'CAR001'),
+          pendienteDe('v3', placa: 'ENT002', proceso: 'entrega', estado: EstadoPendiente.mio),
+          // Un proceso que la app no conoce no se pierde: cae con lo que se carga, como lo lee `Pendiente.fromJson`.
+          pendienteDe('v4', placa: 'RAR001', proceso: 'otro'),
+        ],
+    );
+
+    expect(find.text('Por recibir (2)'), findsOneWidget);
+    expect(find.text('Por cargar (2)'), findsOneWidget);
+    expect(find.text('RAR001'), findsOneWidget);
+    expect(find.text('Nada por recibir'), findsNothing);
+    expect(find.text('Nada por cargar'), findsNothing);
+    for (final placa in ['ENT001', 'CAR001', 'ENT002']) {
+      expect(find.text(placa), findsOneWidget, reason: '$placa sale en una sola lista');
+    }
+
+    // El orden en pantalla: primero lo que llega, después lo que sale.
+    double y(String texto) => tester.getTopLeft(find.text(texto)).dy;
+    expect(y('Por recibir (2)'), lessThan(y('ENT001')));
+    expect(y('ENT002'), lessThan(y('Por cargar (2)')));
+    expect(y('Por cargar (2)'), lessThan(y('CAR001')));
+    // Las acciones no cambian (CA-7): lo disponible se reclama y lo propio se abre.
+    expect(find.widgetWithText(FilledButton, 'Revisar este'), findsNWidgets(3));
+    expect(find.widgetWithText(OutlinedButton, 'Abrir'), findsOneWidget);
+  });
+
+  // S8-HU-10.2 ESC-02: una lista vacía no desaparece.
+  testWidgets('con solo un cargue, «Por recibir» sigue visible y dice que no hay nada', (tester) async {
+    await abrir(tester, ReclamosRepositorioFalso()..pendientesActuales = [pendienteDe('v1', placa: 'CAR001')]);
+
+    expect(find.text('Por cargar (1)'), findsOneWidget);
+    expect(find.text('CAR001'), findsOneWidget);
+    expect(find.text('Por recibir (0)'), findsOneWidget);
+    expect(find.text('Nada por recibir'), findsOneWidget);
   });
 
   testWidgets('sin señal avisa que se consulta con conexión y deja reintentar', (tester) async {

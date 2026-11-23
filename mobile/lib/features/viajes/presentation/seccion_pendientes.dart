@@ -69,21 +69,71 @@ class SeccionPendientes extends ConsumerWidget {
               ],
             ),
           ),
-          data: (lista) => lista.isEmpty
-              ? Tarjeta(child: Text('No hay camiones pendientes en tus puntos para hoy.', style: tema.bodySmall))
-              : Column(
-                  children: [
-                    for (final pendiente in lista) ...[
-                      _TarjetaPendiente(
-                        pendiente: pendiente,
-                        alReclamar: () => _reclamar(context, ref, pendiente),
-                        alAbrir: () => _abrir(context, ref, pendiente),
-                      ),
-                      const SizedBox(height: Espacio.sm),
-                    ],
-                  ],
-                ),
+          // S8-HU-10.2: dos listas, siempre visibles. Cada pendiente es un (viaje, proceso), así que cae en una sola:
+          // lo que no es entrega se carga (un proceso desconocido también, como lo lee `Pendiente.fromJson`).
+          data: (lista) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _ListaPendientes(
+                titulo: 'Por recibir',
+                vacia: 'Nada por recibir',
+                pendientes: [for (final p in lista) if (p.esEntrega) p],
+                alReclamar: (p) => _reclamar(context, ref, p),
+                alAbrir: (p) => _abrir(context, ref, p),
+              ),
+              const SizedBox(height: Espacio.md),
+              _ListaPendientes(
+                titulo: 'Por cargar',
+                vacia: 'Nada por cargar',
+                pendientes: [for (final p in lista) if (!p.esEntrega) p],
+                alReclamar: (p) => _reclamar(context, ref, p),
+                alAbrir: (p) => _abrir(context, ref, p),
+              ),
+            ],
+          ),
         ),
+      ],
+    );
+  }
+}
+
+/// Una de las dos listas del punto, con su conteo. Vacía no desaparece: dice que no hay nada.
+class _ListaPendientes extends StatelessWidget {
+  const _ListaPendientes({
+    required this.titulo,
+    required this.vacia,
+    required this.pendientes,
+    required this.alReclamar,
+    required this.alAbrir,
+  });
+
+  final String titulo;
+  final String vacia;
+  final List<Pendiente> pendientes;
+  final void Function(Pendiente) alReclamar;
+  final void Function(Pendiente) alAbrir;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: Espacio.sm),
+          child: Text('$titulo (${pendientes.length})', style: tema.titleSmall),
+        ),
+        if (pendientes.isEmpty)
+          Tarjeta(child: Text(vacia, style: tema.bodySmall))
+        else
+          for (final pendiente in pendientes) ...[
+            _TarjetaPendiente(
+              pendiente: pendiente,
+              alReclamar: () => alReclamar(pendiente),
+              alAbrir: () => alAbrir(pendiente),
+            ),
+            const SizedBox(height: Espacio.sm),
+          ],
       ],
     );
   }
