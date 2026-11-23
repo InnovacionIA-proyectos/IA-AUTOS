@@ -26,6 +26,7 @@ public sealed class clsViajesController(
     clsNoSaleService noSale,
     clsEntregasService entregas,
     clsCargueNineraService cargueNinera,
+    clsInformeNineraPdfService informeNinera,
     clsReclamosService reclamos,
     clsConductorService conductor,
     clsPermisosSinInspectorService permisosSinInspector) : clsControladorBase
@@ -124,6 +125,20 @@ public sealed class clsViajesController(
     [CuerpoSolicitud(typeof(FirmarCargueRequest))]
     public async Task<IActionResult> FirmarCargue(Guid id, CancellationToken ct) =>
         Ok(await cargueNinera.FirmarAsync(id, await LeerCuerpoAsync<FirmarCargueRequest>(ct), Cliente(), ct));
+
+    /// <summary>
+    /// El informe de la niñera del viaje en PDF, como descarga, armado al pedirlo con los informes del cargue de sus carros (no se guarda aparte): los puestos con el VIN de cada uno, los daños de cada carro, las fotos de la
+    /// niñera, la firma unica del cargue de cada parte con la hora y el GPS del momento en que firmo (o la constancia de no firma) y los carros que no salen marcados con su motivo. Lo ve quien puede ver el viaje (403 si es de otro
+    /// cliente o de un viaje ajeno) y al conductor se le quitan el nivel y la nota de cada daño. Con la acomodacion sin cerrar o el cargue sin firmar sale igual, con lo que hay y avisandolo. Un carro que se baja del viaje
+    /// deja de salir en el siguiente informe.
+    /// </summary>
+    [HttpGet("{id:guid}/ninera/pdf")]
+    [Produces("application/pdf")]
+    public async Task<IActionResult> InformeNinera(Guid id, CancellationToken ct)
+    {
+        var informe = await informeNinera.GenerarAsync(id, ct);
+        return File(informe.Contenido, "application/pdf", informe.Nombre);
+    }
 
     /// <summary>
     /// La constancia de no firma de toda la niñera: la deja la parte que si esta (nunca la que se nego, 403) con el motivo, un testigo con usuario, la foto y la hora y el GPS del momento; cierra como «no firma» el cargue de cada

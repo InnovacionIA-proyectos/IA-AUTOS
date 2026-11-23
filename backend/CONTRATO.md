@@ -1949,6 +1949,17 @@ Inspector o conductor del viaje: la **constancia de no firma de toda la niñera*
 
 `parte` es la que **se negó** (la deja la otra: `403` a quien declara su propia negativa o a quien no es del viaje). Mismas reglas del motivo, el testigo con usuario y la foto que la constancia por carro. Cierra como `no_firma` la transferencia de **cada carro activo**: no hay constancia para solo algunos carros (para eso están las reservas). Una sola foto de la constancia sirve a todos. `409` si la parte que se negó ya firmó o si el cargue está incompleto. Avisa **una vez por viaje** al coordinador de calidad y al administrador del cliente (`novedad_proceso`, `datos.hecho: "cargue_no_firmado"`, sin cédulas). Reenviar la misma constancia no crea otra.
 
+### `GET /api/viajes/{id}/ninera/pdf`
+Informe de la niñera del viaje en PDF, como descarga (`application/pdf`, archivo `ninera-{codigo_mtrack}.pdf`). Se **arma al pedirlo** con los informes del cargue de sus carros: no se guarda aparte, así que si un carro se baja del viaje el siguiente informe sale solo con los que van, sin tocar lo ya firmado. El nombre de la ruta está **a confirmar por backend** con la app.
+
+Lleva:
+- los **puestos** de la niñera en orden con el VIN de cada uno («Puesto 3 — VIN …», «Puesto 1 — libre»), los carros sin puesto y los carros que **no salen** marcados con su motivo («NO SALE — VIN …: motivo»);
+- los **daños de cada carro** (de su llegada y su salida del cargue vigentes, sin versiones reemplazadas): zona, clase y tamaño y, para quien puede verlos, el **nivel** y la **nota del inspector**;
+- las **fotos de la niñera** (las mismas que cuenta el cierre de la acomodación, hasta 20);
+- la **firma única del cargue** de cada parte con su nombre, la **hora y el GPS del momento** en que firmó y el trazo; o la **constancia de no firma** (parte que se negó, motivo y testigo).
+
+Permiso: **el mismo del detalle del viaje** (`GET /api/viajes/{id}`): `403` si el viaje es de otro cliente o no está asignado a quien lo pide y `404` si no existe. **Al conductor se le quitan el nivel y la nota de cada daño**; el coordinador, el inspector y los administradores lo reciben con ellos. Un viaje con la acomodación sin cerrar o el cargue sin firmar **no falla**: devuelve el PDF con lo que hay y dice «Acomodación sin cerrar», «Cargue sin firmar» o «Cargue sin firmar por esta parte» donde corresponde.
+
 ### El cargue en el viaje
 `GET /api/viajes/{id}` (y el listado) trae tres campos **calculados** de las transferencias, sin datos aparte que puedan quedar desincronizados: `cargue_firmado_por_ninera_at` (cuándo se cerró la firma por niñera, nulo si no se firmó así), `cargue_no_firmado_at` (cuándo se dejó la constancia de no firma, nulo si no hay) y `cargue_no_firma_parte` (`entrega` o `recibe`, la parte que se negó).
 
