@@ -281,8 +281,9 @@ public sealed class clsViajesController(
         Ok(await servicio.AsignarPosicionAsync(id, vin, await LeerCuerpoAsync<AsignarPosicionRequest>(ct), ct));
 
     /// <summary>
-    /// Marca que la unidad no sale del viaje por un hallazgo V1+ de una inspeccion cerrada (<c>motivo</c>, <c>hallazgo_id</c> y, si ya lo hay, <c>vin_reemplazo</c>). Solo el inspector del viaje
-    /// y el coordinador de calidad (403 a los demas, incluidos admin y comercial). La unidad conserva sus etapas e inspecciones y el viaje sigue; responde con el viaje.
+    /// Marca que la unidad no sale del viaje con un motivo del catalogo <c>motivos-no-sale</c> (<c>motivo_codigo</c>, <c>motivo_texto</c> obligatorio solo con <c>otro</c> y de hasta 300 caracteres, <c>hallazgo_id</c> obligatorio solo
+    /// con los motivos de daño y, si ya lo hay, <c>vin_reemplazo</c>). Solo el inspector del viaje y el coordinador de calidad (403 a los demas, incluidos admin, super admin y comercial). La unidad conserva sus etapas e inspecciones
+    /// y el viaje sigue; responde con el viaje. 400 «Motivo desconocido» o «Escribe el motivo»; 409 si el hallazgo no corresponde al motivo o si el motivo no aplica en el lugar de cargue (<c>motivo_no_aplica</c>).
     /// </summary>
     [HttpPost("{id:guid}/vehiculos/{vin}/no-sale")]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD)]
@@ -290,6 +291,27 @@ public sealed class clsViajesController(
     [CuerpoSolicitud(typeof(MarcarNoSaleRequest))]
     public async Task<IActionResult> MarcarNoSale(Guid id, string vin, CancellationToken ct) =>
         Ok(await noSale.MarcarAsync(id, vin, await LeerCuerpoAsync<MarcarNoSaleRequest>(ct), ct));
+
+    /// <summary>
+    /// «Vuelve a salir»: devuelve a la unidad que no sale a <c>activa</c>, sin posicion, y borra su marca (el historial queda en la auditoria). Solo el inspector del viaje y el coordinador de calidad (403 a los demas, incluidos
+    /// admin y super admin). 409 <c>cargue_firmado</c> si la entrega del cargue del viaje ya se cerro, <c>tiene_reemplazo</c> si el carro ya tiene su reemplazo y <c>sin_cupo</c> si la niñera no tiene puesto libre.
+    /// </summary>
+    [HttpPost("{id:guid}/vehiculos/{vin}/vuelve-a-salir")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> VolverASalir(Guid id, string vin, CancellationToken ct) =>
+        Ok(await noSale.VolverASalirAsync(id, vin, ct));
+
+    /// <summary>
+    /// «Bajar del viaje»: saca al carro del viaje (estado <c>bajado</c>) conservando su historia, con su <c>motivo</c> (obligatorio, hasta 300 caracteres). Solo el coordinador de calidad (403 a inspector, conductor, admin y super
+    /// admin). Libera su puesto y deja de contar en la cobertura, las entregas y los pendientes; el mismo VIN se puede agregar a otro viaje. 409 <c>cargue_firmado</c> si la entrega del cargue del viaje o la de ese carro ya se cerro.
+    /// </summary>
+    [HttpPost("{id:guid}/vehiculos/{vin}/bajar")]
+    [RolesPermitidos(clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(BajarDelViajeRequest))]
+    public async Task<IActionResult> BajarDelViaje(Guid id, string vin, CancellationToken ct) =>
+        Ok(await noSale.BajarAsync(id, vin, await LeerCuerpoAsync<BajarDelViajeRequest>(ct), ct));
 
     /// <summary>
     /// El conductor del viaje registra una novedad del recorrido de la unidad (<c>fecha</c>, <c>lat</c>, <c>lng</c>, <c>tipo_novedad</c>, <c>tamano_dano</c> y la <c>evidencia</c> con su foto sellada), sin texto libre

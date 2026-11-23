@@ -42,7 +42,7 @@ internal sealed class clsViajeRepository(clsAppDbContext contexto) : IViajeRepos
                                where lote.Contains(vv.VehiculoId)
                                   && (v.Estado == clsEstadoViaje.PROGRAMADO || v.Estado == clsEstadoViaje.EN_CURSO)
                                   && (exceptoViajeId == null || v.Id != exceptoViajeId)
-                                  && vv.EstadoUnidad != clsEstadoUnidad.NO_SALE
+                                  && vv.EstadoUnidad == clsEstadoUnidad.ACTIVA
                                select new { vv.VehiculoId, ViajeId = v.Id, v.CodigoMtrack }).ToListAsync(ct);
             foreach (var fila in filas)
             {
@@ -75,6 +75,34 @@ internal sealed class clsViajeRepository(clsAppDbContext contexto) : IViajeRepos
          where i.ViajeId == viajeId && i.Momento == IAAutos.Dominio.Inspecciones.clsMomento.SALIDA
             && i.Estado == IAAutos.Dominio.Inspecciones.clsEstadoInspeccion.BORRADOR && c.Codigo == IAAutos.Dominio.Vehiculos.clsCodigosEtapa.CARGUE
          select i.Id).AnyAsync(ct);
+
+    public Task<bool> UnidadConEntregaDelCargueCerradaAsync(Guid viajeId, Guid vehiculoId, CancellationToken ct = default) =>
+        (from t in contexto.Transferencias.AsNoTracking()
+         join i in contexto.Inspecciones.AsNoTracking() on t.InspeccionId equals i.Id
+         join e in contexto.Etapas.AsNoTracking() on i.EtapaId equals e.Id
+         join c in contexto.EtapasCatalogo.AsNoTracking() on e.EtapaCatalogoId equals c.Id
+         where e.ViajeId == viajeId && e.VehiculoId == vehiculoId && c.Codigo == IAAutos.Dominio.Vehiculos.clsCodigosEtapa.CARGUE && t.TipoCierre != null
+         select t.Id).AnyAsync(ct);
+
+    public async Task<bool> EntregaDelCargueCerradaAsync(Guid viajeId, CancellationToken ct = default)
+    {
+        var activas = await contexto.ViajeVehiculos.AsNoTracking()
+            .Where(vv => vv.ViajeId == viajeId && vv.EstadoUnidad == clsEstadoUnidad.ACTIVA).Select(vv => vv.VehiculoId).ToListAsync(ct);
+        if (activas.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var vehiculoId in activas)
+        {
+            if (!await UnidadConEntregaDelCargueCerradaAsync(viajeId, vehiculoId, ct))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     public async Task<bool> TieneAcomodacionCerradaAsync(Guid viajeId, CancellationToken ct = default)
     {

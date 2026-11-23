@@ -42,6 +42,15 @@ public interface IViajeRepository
 
     /// <summary>True si alguna unidad del viaje tiene en borrador la inspeccion de salida del Cargue (la segunda inspeccion del cargue, donde se registra la acomodacion).</summary>
     /// <summary>
+    /// La entrega del cargue del viaje esta cerrada: tiene al menos una unidad activa y TODAS sus unidades activas tienen la transferencia del cargue cerrada (firmada, con reservas, constancia de no firma o recibo sin
+    /// entrega), que es lo que deja la firma por ninera. Ninguna novedad ni «Llegue» cuenta.
+    /// </summary>
+    Task<bool> EntregaDelCargueCerradaAsync(Guid viajeId, CancellationToken ct = default);
+
+    /// <summary>La transferencia del cargue de esta unidad en este viaje esta cerrada (en la salida o en la llegada del cargue).</summary>
+    Task<bool> UnidadConEntregaDelCargueCerradaAsync(Guid viajeId, Guid vehiculoId, CancellationToken ct = default);
+
+    /// <summary>
     /// La acomodacion del viaje esta cerrada: alguna salida del cargue esta cerrada y ninguna (ni la correccion de una) sigue en borrador. Con una correccion de la acomodacion en borrador los puestos se pueden reasignar.
     /// </summary>
     Task<bool> TieneAcomodacionCerradaAsync(Guid viajeId, CancellationToken ct = default);

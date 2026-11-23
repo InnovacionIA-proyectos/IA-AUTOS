@@ -61,7 +61,7 @@ public class PosicionDeLaUnidadTests
         var unidad = Unidad();
         unidad.AsignarPosicion(5, AHORA);
 
-        unidad.MarcarNoSale("Golpe en el capó", Guid.NewGuid(), Guid.NewGuid(), null, AHORA.AddMinutes(5));
+        unidad.MarcarNoSale("dano_v1_plus", "Golpe en el capó", Guid.NewGuid(), Guid.NewGuid(), null, AHORA.AddMinutes(5));
 
         Assert.Null(unidad.Posicion);
         Assert.Throws<clsConflictoException>(() => unidad.AsignarPosicion(2, AHORA.AddMinutes(6)));

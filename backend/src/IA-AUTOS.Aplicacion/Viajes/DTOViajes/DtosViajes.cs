@@ -79,16 +79,21 @@ public sealed record PermisoSinInspectorDto(
     bool AutorizadoPorTiempo);
 
 /// <summary>
-/// Una unidad que no sale del viaje: el motivo, el hallazgo que la causo, quien la marco (y su nombre), cuando y el VIN que la reemplaza (si ya se
-/// asigno).
+/// Una unidad que no sale del viaje: el codigo del motivo (<c>MotivoCodigo</c>, del catalogo <c>motivos-no-sale</c>), su etiqueta legible (<c>Motivo</c>), el texto que escribio quien la marco (<c>MotivoTexto</c>, obligatorio solo
+/// con «otro»), el hallazgo que la causo (nulo en los motivos que no lo exigen y para el conductor), quien la marco (y su nombre), cuando y el VIN que la reemplaza (si ya se asigno).
 /// </summary>
 public sealed record NoSaleDto(
+    string MotivoCodigo,
     string Motivo,
-    Guid HallazgoId,
+    string? MotivoTexto,
+    Guid? HallazgoId,
     Guid MarcadoPor,
     string? MarcadoPorNombre,
     DateTimeOffset Fecha,
     string? VinReemplazo);
+
+/// <summary>Una unidad bajada del viaje: por que, quien la bajo (y su nombre) y cuando. La unidad conserva su historia (etapas, inspecciones, fotos y firmas).</summary>
+public sealed record BajadoDto(string Motivo, Guid BajadoPor, string? BajadoPorNombre, DateTimeOffset Fecha);
 
 /// <summary>
 /// Un VIN del viaje con el avance de sus etapas dentro de el. <c>EstadoUnidad</c> es <c>activa</c> o <c>no_sale</c>; en ese caso <c>NoSale</c> trae
@@ -110,7 +115,8 @@ public sealed record ViajeVehiculoDto(
     int Novedades,
     Guid? LugarDestinoId = null,
     string? LugarDestino = null,
-    int? Posicion = null);
+    int? Posicion = null,
+    BajadoDto? Bajado = null);
 
 /// <summary>
 /// Algo que paso en el proceso del viaje y no es un dano (una novedad de proceso): <c>Tipo</c> es <c>cargue_sin_inspector</c> (la excepcion «No hay inspector» que el conductor activo en el momento) o

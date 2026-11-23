@@ -1476,7 +1476,7 @@ FROM (
     FROM dbo.tblEtapas e
 ) AS x
 WHERE NOT EXISTS (SELECT 1 FROM dbo.tblViajeVehiculos vv
-                   WHERE vv.ViajeId = x.ViajeId AND vv.VehiculoId = x.VehiculoId AND vv.EstadoUnidad = ''no_sale'')
+                   WHERE vv.ViajeId = x.ViajeId AND vv.VehiculoId = x.VehiculoId AND vv.EstadoUnidad IN (''no_sale'', ''bajado''))
 GROUP BY x.ViajeId, x.VehiculoId
 HAVING COUNT(*) > 0 AND COUNT(*) = SUM(x.Cerrada)');
 ELSE
@@ -1936,7 +1936,7 @@ CROSS APPLY (
         WHERE e.ViajeId = vv.ViajeId AND e.VehiculoId = vv.VehiculoId AND i.Estado = ''cerrada''
     ) AS registros
 ) r
-WHERE vv.EstadoUnidad <> ''no_sale'' AND d.FechaDespacho IS NOT NULL');
+WHERE vv.EstadoUnidad NOT IN (''no_sale'', ''bajado'') AND d.FechaDespacho IS NOT NULL');
     EXEC (N'CREATE OR ALTER VIEW dbo.vwAdopcion
 AS
 SELECT x.Fecha, x.ClienteId, x.Operacion, x.OrigenId, x.DestinoId, x.Marca, x.Trailer, x.LugarDestinoId,
@@ -2371,6 +2371,78 @@ FROM (VALUES
     ('firma_cargue_pendiente_minutos', N'30', 'numero', N'Minutos que la salida del cargue de un carro puede seguir cerrada sin la firma de una parte de la ninera antes de avisarle a esa parte (el valor definitivo lo confirma el negocio)')
 ) AS v (Clave, Valor, Tipo, Descripcion)
 WHERE NOT EXISTS (SELECT 1 FROM dbo.tblParametros p WHERE p.Clave = v.Clave);
+GO
+
+/* -----------------------------------------------------------------------------
+   "No sale" con motivo de catalogo y "bajar del viaje". tblMotivosNoSale: el catalogo de motivos (codigo, nombre, si exige hallazgo, si exige texto y si vale solo donde se admite el cargue sin inspector).
+   tblViajeVehiculos: NoSaleMotivoCodigo (el motivo; NoSaleMotivo queda como su texto) y, para el estado "bajado" (el carro sale del viaje conservando su historia), BajadoAt, BajadoPor y BajadoMotivo. Un "no sale"
+   ya no exige hallazgo ni texto (lo decide el motivo en la aplicacion); un "bajado" exige cuando, quien y el motivo y no tiene posicion. vwViajesCompletos y vwCobertura no cuentan a las unidades bajadas.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblMotivosNoSale', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblMotivosNoSale
+    (
+        Id               uniqueidentifier  NOT NULL CONSTRAINT PK_tblMotivosNoSale PRIMARY KEY,
+        Codigo           varchar(30)       NOT NULL,
+        Nombre           nvarchar(100)     NOT NULL,
+        ExigeHallazgo    bit               NOT NULL CONSTRAINT DF_tblMotivosNoSale_ExigeHallazgo DEFAULT (0),
+        ExigeTexto       bit               NOT NULL CONSTRAINT DF_tblMotivosNoSale_ExigeTexto DEFAULT (0),
+        SoloSinInspector bit               NOT NULL CONSTRAINT DF_tblMotivosNoSale_SoloSinInspector DEFAULT (0),
+        Orden            int               NOT NULL CONSTRAINT DF_tblMotivosNoSale_Orden DEFAULT (0),
+        Activo           bit               NOT NULL CONSTRAINT DF_tblMotivosNoSale_Activo DEFAULT (1),
+        CreatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblMotivosNoSale_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblMotivosNoSale_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblMotivosNoSale_Codigo UNIQUE (Codigo),
+        CONSTRAINT CK_tblMotivosNoSale_Nombre CHECK (LEN(LTRIM(RTRIM(Nombre))) > 0)
+    );
+END
+GO
+INSERT INTO dbo.tblMotivosNoSale (Id, Codigo, Nombre, ExigeHallazgo, ExigeTexto, SoloSinInspector, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.ExigeHallazgo, v.ExigeTexto, v.SoloSinInspector, v.Orden
+FROM (VALUES
+    ('dano_v1_plus', N'Da' + NCHAR(241) + N'o V1+', 1, 0, 0, 1),
+    ('dano_reportado_conductor', N'Da' + NCHAR(241) + N'o reportado por el conductor', 1, 0, 1, 2),
+    ('no_llego_al_patio', N'Carro no lleg' + NCHAR(243) + N' al patio', 0, 0, 0, 3),
+    ('faltan_documentos', N'Faltan documentos', 0, 0, 0, 4),
+    ('no_esta_listo', N'Carro no est' + NCHAR(225) + N' listo', 0, 0, 0, 5),
+    ('otro', N'Otro', 0, 1, 0, 6)
+) AS v (Codigo, Nombre, ExigeHallazgo, ExigeTexto, SoloSinInspector, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblMotivosNoSale m WHERE m.Codigo = v.Codigo);
+GO
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'NoSaleMotivoCodigo') IS NULL
+    ALTER TABLE dbo.tblViajeVehiculos ADD NoSaleMotivoCodigo varchar(30) NULL;
+GO
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'BajadoAt') IS NULL
+    ALTER TABLE dbo.tblViajeVehiculos ADD BajadoAt datetimeoffset(3) NULL;
+GO
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'BajadoPor') IS NULL
+    ALTER TABLE dbo.tblViajeVehiculos ADD BajadoPor uniqueidentifier NULL;
+GO
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'BajadoMotivo') IS NULL
+    ALTER TABLE dbo.tblViajeVehiculos ADD BajadoMotivo nvarchar(300) NULL;
+GO
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'NoSaleMotivoCodigo') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajeVehiculos_NoSaleMotivo' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
+    EXEC (N'ALTER TABLE dbo.tblViajeVehiculos ADD CONSTRAINT FK_tblViajeVehiculos_NoSaleMotivo FOREIGN KEY (NoSaleMotivoCodigo) REFERENCES dbo.tblMotivosNoSale (Codigo)');
+GO
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'BajadoPor') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajeVehiculos_BajadoPor' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
+    EXEC (N'ALTER TABLE dbo.tblViajeVehiculos ADD CONSTRAINT FK_tblViajeVehiculos_BajadoPor FOREIGN KEY (BajadoPor) REFERENCES dbo.tblUsuarios (Id)');
+GO
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'NoSaleMotivoCodigo') IS NOT NULL AND COL_LENGTH(N'dbo.tblViajeVehiculos', N'EstadoUnidad') IS NOT NULL
+    EXEC (N'UPDATE dbo.tblViajeVehiculos SET NoSaleMotivoCodigo = ''dano_v1_plus'' WHERE EstadoUnidad = ''no_sale'' AND NoSaleMotivoCodigo IS NULL');
+GO
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'EstadoUnidad') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_EstadoUnidad' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND definition LIKE N'%bajado%')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_EstadoUnidad' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
+        ALTER TABLE dbo.tblViajeVehiculos DROP CONSTRAINT CK_tblViajeVehiculos_EstadoUnidad;
+    EXEC (N'ALTER TABLE dbo.tblViajeVehiculos ADD CONSTRAINT CK_tblViajeVehiculos_EstadoUnidad CHECK (EstadoUnidad IN (''activa'', ''no_sale'', ''bajado''))');
+END
+GO
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'BajadoMotivo') IS NOT NULL AND COL_LENGTH(N'dbo.tblViajeVehiculos', N'EstadoUnidad') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_NoSale' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND definition LIKE N'%NoSaleMotivoCodigo%')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblViajeVehiculos_NoSale' AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos'))
+        ALTER TABLE dbo.tblViajeVehiculos DROP CONSTRAINT CK_tblViajeVehiculos_NoSale;
+    EXEC (N'ALTER TABLE dbo.tblViajeVehiculos ADD CONSTRAINT CK_tblViajeVehiculos_NoSale CHECK ((EstadoUnidad = ''activa'' AND NoSaleMotivo IS NULL AND NoSaleMotivoCodigo IS NULL AND NoSaleHallazgoId IS NULL AND NoSaleMarcadoPor IS NULL AND NoSaleAt IS NULL AND ReemplazoVehiculoId IS NULL AND BajadoAt IS NULL AND BajadoPor IS NULL AND BajadoMotivo IS NULL) OR (EstadoUnidad = ''no_sale'' AND NoSaleMotivoCodigo IS NOT NULL AND NoSaleMarcadoPor IS NOT NULL AND NoSaleAt IS NOT NULL AND BajadoAt IS NULL AND BajadoPor IS NULL AND BajadoMotivo IS NULL) OR (EstadoUnidad = ''bajado'' AND BajadoAt IS NOT NULL AND BajadoPor IS NOT NULL AND BajadoMotivo IS NOT NULL AND Posicion IS NULL))');
+END
 GO
 
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';

@@ -94,6 +94,8 @@ motivo y no de la frase, que puede cambiar. El `code` y el `message` no cambian.
 | `vin_ya_en_el_viaje`, `vin_en_otro_viaje_activo` | el VIN ya está en este viaje o en otro viaje programado o en curso |
 | `vehiculo_no_existe`, `vin_fuera_del_viaje` | el vehículo no existe o su VIN no está en ese viaje |
 | `hallazgo_de_version_reemplazada` | «no sale» con un hallazgo de una inspección que ya reemplazó una corrección cerrada |
+| `cargue_firmado`, `sin_cupo`, `tiene_reemplazo` | «vuelve a salir» y «bajar del viaje»: la entrega del cargue ya se cerró, la niñera no tiene puesto libre o el carro ya tiene reemplazo (ver «Unidad que no sale, vuelve a salir y bajar del viaje») |
+| `unidad_no_sale`, `unidad_bajada`, `motivo_no_aplica` | un carro que no sale o se bajó no se revisa ni se firma, y el motivo no aplica en el lugar de cargue |
 | `capacidad_no_baja`, `posicion_ocupada`, `sin_segunda_inspeccion_en_curso`, `descargue_con_informe_cerrado`, `conductor_sin_permiso_de_excepcion` | reglas de la niñera, el destino y el cargue sin inspector del viaje |
 | `cargue_incompleto`, `firma_por_ninera`, `acomodacion_cerrada` | el cargue por niñera: falta cerrar la llegada o la salida de algún carro, la firma carro por carro del cargue (se firma por niñera) y liberar un puesto con la acomodación cerrada (ver «Firma del cargue por niñera») |
 | `otro_cliente` | se pidió lo de un cliente que no es el suyo |
@@ -1430,29 +1432,70 @@ Mismos roles. El historial del hallazgo, del más antiguo al más reciente:
 
 `accion` es `seguimiento` (el coordinador cambia el estado), `revision` (un inspector revisa una novedad del conductor, con `detalle` en JSON) o `no_sale` (la unidad no sale del viaje por ese hallazgo; su `nota` es el motivo). Una fila no se modifica ni se borra.
 
-## Unidad que no sale
+## Unidad que no sale, vuelve a salir y bajar del viaje
 
-Una unidad con un hallazgo **V1+** puede no salir de su viaje sin bloquearlo: «se cambia por otra». La unidad conserva su vínculo con el viaje, sus etapas y sus inspecciones (para no perder su trazabilidad si más adelante vuelve a otro viaje), deja de contar como completa y el viaje sigue.
+Un carro tiene un **estado dentro del viaje** (`estado_unidad`): `activa`, `no_sale` o `bajado`. Solo una unidad **activa** se acomoda, se revisa, se firma y cuenta en la cobertura, las entregas, los pendientes del inspector, los avisos y la niñera.
+
+- **`no_sale`**: el carro se retira del viaje con un **motivo de catálogo**. Conserva su vínculo, sus etapas e inspecciones y el viaje sigue; libera su puesto. **Puede volver a salir** mientras no se firme el cargue.
+- **`bajado`**: el carro **sale del viaje** (un cambio de pedido) conservando su historia (etapas, inspecciones, fotos y firmas) con la marca de cuándo, quién y por qué. Libera su puesto y no cuenta en nada del viaje; el mismo VIN se puede agregar a otro viaje abierto.
+
+Los nombres de las rutas y de los motivos (`cargue_firmado`, `sin_cupo`, `tiene_reemplazo`, `unidad_no_sale`, `unidad_bajada`, `motivo_no_aplica`) están **a confirmar por backend** con la app, y la lista de motivos la confirma el negocio.
+
+### El catálogo `motivos-no-sale`
+Se lee en `GET /api/catalogos` y se administra con los mismos roles y rutas que los demás catálogos. Cada motivo trae `codigo`, `nombre`, `orden`, `activo` y tres marcas: `exige_hallazgo`, `exige_texto` y `solo_sin_inspector`.
+
+| `codigo` | `nombre` | `exige_hallazgo` | `exige_texto` | `solo_sin_inspector` |
+|---|---|---|---|---|
+| `dano_v1_plus` | Daño V1+ | sí | no | no |
+| `dano_reportado_conductor` | Daño reportado por el conductor | sí | no | **sí** |
+| `no_llego_al_patio` | Carro no llegó al patio | no | no | no |
+| `faltan_documentos` | Faltan documentos | no | no | no |
+| `no_esta_listo` | Carro no está listo | no | no | no |
+| `otro` | Otro | no | **sí** | no |
 
 ### `POST /api/viajes/{id}/vehiculos/{vin}/no-sale`
-Solo el **inspector del viaje** y el `coordinador_calidad` (de un viaje de su cliente); `403` a los demás, incluidos `admin`, `comercial` y `super_admin` (propuesta pendiente de confirmar por el negocio).
+Solo el **inspector del viaje** y el `coordinador_calidad` (de un viaje de su cliente); `403` a los demás, incluidos `admin`, `super_admin`, `comercial` y el conductor.
 
 ```json
-{ "motivo": "Golpe estructural en el frente", "hallazgo_id": "uuid", "vin_reemplazo": "9BWZZZ377VT004252" }
+{ "motivo_codigo": "dano_v1_plus", "motivo_texto": "Golpe estructural en el frente", "hallazgo_id": "uuid", "vin_reemplazo": "9BWZZZ377VT004252" }
 ```
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
-| `motivo` | sí | máximo 500 caracteres |
-| `hallazgo_id` | sí | un hallazgo **V1+** de una inspección **cerrada** de ese VIN en ese viaje y de su **versión vigente** (no de una versión que una corrección cerrada ya reemplazó) |
-| `vin_reemplazo` | no (propuesta pendiente de confirmar por el negocio: el negocio dijo que la unidad «se cambia por otra») | un VIN que existe en el inventario (`400` en `vin_reemplazo` si no); entra al viaje con sus etapas nuevas, con las reglas de `POST /api/viajes/{id}/vehiculos` |
+| `motivo_codigo` | sí | un código **activo** de `motivos-no-sale`; otro responde `400` «Motivo desconocido» |
+| `motivo_texto` | solo con `otro` | máximo 300 caracteres; `otro` sin texto responde `400` «Escribe el motivo». En los demás motivos es opcional |
+| `hallazgo_id` | solo en los motivos que lo exigen | `dano_v1_plus`: un hallazgo **V1+** de una inspección **cerrada** de ese VIN en ese viaje y de su **versión vigente**. `dano_reportado_conductor`: un hallazgo de origen conductor, con foto y sin calificar, de ese carro en ese viaje. En los demás motivos no se usa |
+| `vin_reemplazo` | no | un VIN que existe en el inventario (`400` en `vin_reemplazo` si no); entra al viaje con sus etapas nuevas, con las reglas de `POST /api/viajes/{id}/vehiculos` |
 
-Responde `200` con el `ViajeDto`: la unidad queda con `estado_unidad: "no_sale"` y `no_sale { motivo, hallazgo_id, marcado_por, marcado_por_nombre, fecha, vin_reemplazo }`. Queda una fila `no_sale` en el historial del hallazgo y en la auditoría.
+> Cambio respecto a la versión anterior: el cuerpo ya no trae `motivo` (texto libre de hasta 500 caracteres) y el hallazgo ya no es obligatorio siempre. Los «no sale» marcados antes del cambio se leen con `motivo_codigo: "dano_v1_plus"` y su texto de siempre en `motivo_texto`.
 
-`409` si el hallazgo **no es V1+**, no es de ese VIN en ese viaje, su inspección **no está cerrada**, **es de una versión reemplazada** (la inspección ya tiene una corrección **cerrada**: se rechaza con `details.motivo: "hallazgo_de_version_reemplazada"` y un mensaje que lo explica, y la unidad no cambia de estado; el hallazgo de una inspección cuya corrección sigue **en borrador** sí sirve, porque esa sigue siendo la vigente), la unidad **ya no sale**, el VIN de reemplazo **ya está en este viaje o en otro viaje activo**, o el reemplazo **antes no salió y el hallazgo V1+ que lo causó no está recuperado**
-(un VIN que no salió puede volver a entrar como reemplazo solo cuando ese hallazgo esté en estado `recuperado`). `404` si el viaje o el VIN no existen o el VIN no está en el viaje.
+Responde `200` con el `ViajeDto`: la unidad queda con `estado_unidad: "no_sale"`, sin posición, y `no_sale { motivo_codigo, motivo, motivo_texto, hallazgo_id, marcado_por, marcado_por_nombre, fecha, vin_reemplazo }` (`motivo` es la etiqueta legible del catálogo). Con un hallazgo, queda una fila `no_sale` en su historial; siempre queda en la auditoría.
 
-Una unidad que no sale no cuenta en `vehiculos_completos` ni en `vwViajesCompletos`, y su vínculo no cuenta como «viaje activo» del VIN: se puede asignar a otro viaje, y su inventario muestra el historial completo, incluido el viaje del que no salió y su hallazgo V1+.
+`409` si el hallazgo no corresponde al motivo (no es V1+, no es de ese VIN en ese viaje, su inspección no está cerrada, es de una versión reemplazada con `details.motivo: "hallazgo_de_version_reemplazada"`, o el daño del conductor ya está calificado o no tiene foto), si la unidad **ya no sale** o se bajó, si el VIN de reemplazo **ya está en este viaje o en otro viaje activo** o antes no salió y su hallazgo V1+ no está recuperado. `dano_reportado_conductor` responde `409` con `details.motivo: "motivo_no_aplica"` y «Ese motivo no aplica en este lugar de cargue» cuando el lugar de cargue del viaje no admite el cargue sin inspector (hoy ningún lugar lo admite). `404` si el viaje o el VIN no existen o el VIN no está en el viaje.
+
+**El conductor** recibe el «no sale» sin `hallazgo_id` ni ningún dato del nivel, y con una etiqueta que no lo revela: `motivo` dice «Daño que impide viajar» en el motivo `dano_v1_plus` (el inspector y el coordinador reciben «Daño V1+») y «Daño reportado por el conductor» en el que él reportó; en los demás motivos recibe la etiqueta del catálogo.
+
+### `POST /api/viajes/{id}/vehiculos/{vin}/vuelve-a-salir`
+«Vuelve a salir»: devuelve al carro que no sale a `activa`, **sin posición** (se acomoda otra vez) y borra la marca «no sale»; el histórico (motivo, texto, hallazgo, quién y cuándo) queda en la auditoría (`viaje.vuelve_a_salir`). Sin cuerpo. Solo el **inspector del viaje** y el `coordinador_calidad`; `403` a los demás, incluidos `admin` y `super_admin`. Responde `200` con el `ViajeDto`.
+
+`409` si el carro no está «no sale»; con `details.motivo: "cargue_firmado"` y «La entrega del cargue ya está cerrada: el carro va en otro viaje» si **la entrega del cargue del viaje ya se cerró** (la firma por niñera, es decir, todos sus carros activos con la transferencia del cargue cerrada); con `"tiene_reemplazo"` y «El carro ya tiene reemplazo: quita primero el reemplazo» si el carro ya tiene su reemplazo en el viaje; y con `"sin_cupo"` y «La niñera tiene 7 puestos y ya hay 7 unidades» si no hay puesto libre.
+
+### `POST /api/viajes/{id}/vehiculos/{vin}/bajar`
+«Bajar del viaje» (un cambio de pedido): saca al carro del viaje.
+
+```json
+{ "motivo": "Cambio de pedido" }
+```
+
+`motivo` es obligatorio (máximo 300 caracteres, `400` si falta o se pasa). Solo el `coordinador_calidad` (de un viaje de su cliente); `403` a inspector, conductor, `admin` y `super_admin`. Responde `200` con el `ViajeDto`: el carro queda con `estado_unidad: "bajado"`, sin posición, y `bajado { motivo, bajado_por, bajado_por_nombre, fecha }`; conserva sus etapas, inspecciones, fotos y firmas; la auditoría guarda `viaje.bajar_vin`. Un carro que no sale **también se puede bajar**, con o sin revisiones.
+
+`409` con `details.motivo: "cargue_firmado"` y «La entrega del cargue ya está cerrada: el camión ya salió y no se puede bajar ningún carro» si la entrega del cargue **del viaje o la de ese carro** ya se cerró (el mismo motivo que «vuelve a salir»: es lo mismo); ninguna novedad ni «Llegué» cuenta para esta regla. `409` con `"unidad_bajada"` si el carro ya estaba bajado.
+
+### Qué cuenta una unidad bajada
+Una unidad `bajado` **no cuenta**: en `vehiculos_completos` ni `total_vehiculos`, en `vwViajesCompletos` ni en `vwCobertura`, en la entrega por punto, en los pendientes del inspector, en «mis viajes» del conductor y del inspector (el viaje no la trae en `vehiculos`), en las unidades activas que limitan la capacidad de la niñera, en los avisos por carro (`transferencia_pendiente`, `captura_incompleta`, `firma_cargue_pendiente`), en la firma por niñera, ni en el informe de la niñera; y su VIN no cuenta como «ya está en otro viaje activo»: el mismo VIN se agrega a otro viaje mientras este sigue abierto. El detalle del viaje (`GET /api/viajes/{id}`) sí la lista, con `estado_unidad: "bajado"` y su `bajado`.
+
+### Un carro que no sale no se revisa ni se firma
+Crear, corregir, agregar hallazgos, extras o fotos, cerrar una inspección y firmar o cerrar la transferencia de un carro «no sale» responden `409` con `details.motivo: "unidad_no_sale"` y «La unidad no sale de este viaje»; de un carro bajado, `"unidad_bajada"` y «La unidad se bajó de este viaje». Vuelven a aceptarse después de «vuelve a salir». Una unidad que no sale no cuenta en `vehiculos_completos` ni en `vwViajesCompletos`, y su vínculo no cuenta como «viaje activo» del VIN: se puede asignar a otro viaje, y su inventario muestra el historial completo, incluido el viaje del que no salió.
 
 ### `PUT /api/viajes/{id}/vehiculos/{vin}/posicion`
 Registra la **posición de la unidad en la niñera** durante la segunda inspección del cargue. Lo hacen el inspector del viaje (o quien reclamó el cargue), el `coordinador_calidad` y los administradores; `403` a los demás.
@@ -1997,6 +2040,7 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | `clientes` | Las empresas a las que pertenecen los usuarios y los vehículos (hoy `sofasa`). El primero activo por `orden` es el cliente por defecto de lo que se crea sin cliente explícito | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `estados-sofasa` | Los estados de las órdenes Sofasa: el `codigo` es el `status_code` **real** de la orden y el `nombre`, su etiqueta (ver «Estados Sofasa» abajo). Empieza con los `status_code` que ya tienen las órdenes | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `tipos-extra` | Los tipos de extra del vehículo fuera del dibujo estándar: `barras_techo` «Barras de techo», `volco` «Volco», `platon` «Platón» y `otro` «Otro» (el único que admite un texto libre; **está protegido**: no se inactiva, no se borra y no cambia de nombre, `409`, porque no tiene reemplazo; sí admite cambiar su orden). Lo administra Calidad: lo crean y editan `admin`, `super_admin` y `coordinador_calidad` (`403` los demás); un tipo con extras reportados **no se borra** (`409`): se inactiva y los extras conservan su tipo, pero ya no se ofrece para extras nuevos | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `motivos-no-sale` | Los motivos por los que un carro no sale del viaje: `dano_v1_plus`, `dano_reportado_conductor`, `no_llego_al_patio`, `faltan_documentos`, `no_esta_listo` y `otro` (que exige texto) | `id`, `codigo`, `nombre`, `orden`, `activo`, `exige_hallazgo`, `exige_texto`, `solo_sin_inspector` |
 | `motivos-sin-inspector` | Los motivos por los que no hay inspector en un cargue (la excepción «No hay inspector», que activa el conductor en el momento): `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto) | `id`, `codigo`, `nombre`, `orden`, `activo`, `requiere_texto` |
 
 **Estados Sofasa (`estados-sofasa`).** `GET /api/sofasa/ordenes` sigue devolviendo `status_code` **sin traducir**; el portal lo traduce con este catálogo (`items.find(i => i.codigo === orden.status_code)?.nombre`; si el estado no está, muestra el código). A diferencia de los demás
@@ -2026,6 +2070,7 @@ Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inacti
       { "id": "uuid", "codigo": null, "tipo_vehiculo": null, "numero": 54, "nombre": "Parabrisas", "lleva_lado": false, "orden": 54, "activo": true,
         "zonas": [ { "id": "uuid", "lado": null, "nombre_completo": "Parabrisas", "aiag_area": "20" } ] }
     ],
+    "motivos-no-sale": [ { "id": "uuid", "codigo": "otro", "nombre": "Otro", "orden": 6, "activo": true, "exige_hallazgo": false, "exige_texto": true, "solo_sin_inspector": false } ],
     "motivos-sin-inspector": [ { "id": "uuid", "codigo": "otro", "nombre": "Otro", "orden": 3, "activo": true, "requiere_texto": true } ],
     "paneles-dano": [ { "id": "uuid", "codigo": "costado_izquierdo", "nombre": "Costado izquierdo", "orden": 1, "activo": true, "ancho_ref": 1071, "alto_ref": 491, "version": 6, "imagen_url": "/api/catalogos/paneles-dano/costado_izquierdo/imagen?v=3f2b…c1" } ],
     "cuadrante-regiones": [ { "id": "uuid", "panel": "costado_izquierdo", "cuadrante_id": "uuid", "numero": 1, "nombre": "Esquina del parachoques delantero", "lado": "izquierdo", "prioridad": 1, "geometria": { "puntos": [ [0.34, 0.30], [0.59, 0.30], [0.59, 0.48] ] } } ],

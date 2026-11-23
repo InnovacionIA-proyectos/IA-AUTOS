@@ -235,7 +235,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         var ids = filas.Select(f => f.Viaje.Id).ToList();
         var conteos = (await (from vv in contexto.ViajeVehiculos
                               join h in contexto.Vehiculos on vv.VehiculoId equals h.Id
-                              where ids.Contains(vv.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente)
+                              where ids.Contains(vv.ViajeId) && (soloDeCliente == null || h.ClienteId == soloDeCliente) && vv.EstadoUnidad != clsEstadoUnidad.BAJADO
                               group vv by vv.ViajeId into g
                               select new { ViajeId = g.Key, Total = g.Count(), Completos = g.Count(x => x.Completa) }).ToListAsync(ct))
             .ToDictionary(x => x.ViajeId);
@@ -309,6 +309,8 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                join h in contexto.Vehiculos on vv.VehiculoId equals h.Id
                                join um in contexto.Usuarios on vv.NoSaleMarcadoPor equals um.Id into marcadores
                                from um in marcadores.DefaultIfEmpty()
+                               join ub in contexto.Usuarios on vv.BajadoPor equals ub.Id into bajadores
+                               from ub in bajadores.DefaultIfEmpty()
                                join r in contexto.Vehiculos on vv.ReemplazoVehiculoId equals r.Id into reemplazos
                                from r in reemplazos.DefaultIfEmpty()
                                join ld in contexto.Lugares on vv.LugarDestinoId equals ld.Id into lugaresDestino
@@ -324,10 +326,15 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                        && contexto.Inspecciones.Any(x => x.EtapaId == e.Id && x.Estado == clsEstadoInspeccion.CERRADA)),
                                    vv.EstadoUnidad,
                                    vv.NoSaleMotivo,
+                                   vv.NoSaleMotivoCodigo,
                                    vv.NoSaleHallazgoId,
                                    vv.NoSaleMarcadoPor,
                                    MarcadoPorNombre = (string?)um.Nombre,
                                    vv.NoSaleAt,
+                                   vv.BajadoMotivo,
+                                   vv.BajadoPor,
+                                   BajadoPorNombre = (string?)ub.Nombre,
+                                   vv.BajadoAt,
                                    VinReemplazo = (string?)r.Vin,
                                    vv.LugarDestinoId,
                                    LugarDestino = (string?)ld.Nombre,
@@ -339,13 +346,15 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                        && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
                                            && contexto.EtapasCatalogo.Any(p => p.Id == e.EtapaCatalogoId && p.Codigo == clsCodigosEtapa.TRANSPORTE))),
                                }).ToListAsync(ct);
+        var motivosNoSale = await contexto.MotivosNoSale.AsNoTracking().ToDictionaryAsync(m => m.Codigo, m => m.Nombre, ct);
         var porViaje = vehiculos.ToLookup(
             v => v.ViajeId,
             v => new ViajeVehiculoDto(
                 v.Vehiculo.Id, v.Vehiculo.Vin, v.Vehiculo.Marca, v.Vehiculo.Modelo, v.Vehiculo.Color, v.Vehiculo.Operacion, v.Etapas, v.Completas,
                 v.EstadoUnidad,
-                clsMapeadorViajes.ANoSale(v.EstadoUnidad, v.NoSaleMotivo, v.NoSaleHallazgoId, v.NoSaleMarcadoPor, v.MarcadoPorNombre, v.NoSaleAt, v.VinReemplazo),
-                clsEstadoTransporte.De(v.LlegadaCerrada, v.Novedades), v.Novedades, v.LugarDestinoId, v.LugarDestino, v.Posicion));
+                clsMapeadorViajes.ANoSale(v.EstadoUnidad, v.NoSaleMotivoCodigo, v.NoSaleMotivo, v.NoSaleHallazgoId, v.NoSaleMarcadoPor, v.MarcadoPorNombre, v.NoSaleAt, v.VinReemplazo, motivosNoSale),
+                clsEstadoTransporte.De(v.LlegadaCerrada, v.Novedades), v.Novedades, v.LugarDestinoId, v.LugarDestino, v.Posicion,
+                clsMapeadorViajes.ABajado(v.EstadoUnidad, v.BajadoMotivo, v.BajadoPor, v.BajadoPorNombre, v.BajadoAt)));
         var clientes = await ClientesPorViajeAsync(ids, soloDeCliente, ct);
 
         // Las novedades de proceso de las unidades del viaje (las que quien consulta puede ver), de la mas antigua a la mas reciente.

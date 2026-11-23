@@ -89,6 +89,7 @@ public sealed class clsInspeccionesService(
     clsEmisorNotificaciones emisor,
     IDescriptorHallazgos descriptorHallazgos,
     clsAccesoViajes acceso,
+    clsGuardaDeUnidad guardaDeUnidad,
     IParametros parametros,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
@@ -123,6 +124,9 @@ public sealed class clsInspeccionesService(
         {
             throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite inspecciones nuevas");
         }
+
+        // Una unidad que no sale (o que se bajo) del viaje no se revisa.
+        await guardaDeUnidad.AsegurarActivaAsync(etapa.ViajeId, etapa.VehiculoId, ct);
 
         // La salida de un Cargue la hace siempre el inspector: el conductor solo firma el recibo. Si no hay inspector, el conductor del viaje la hace activando en el momento la excepcion
         // «No hay inspector» (con su motivo); sin motivo es 403 y en cualquier otro caso el motivo no se admite (400).
@@ -292,6 +296,8 @@ public sealed class clsInspeccionesService(
         {
             throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite correcciones");
         }
+
+        await guardaDeUnidad.AsegurarActivaDeInspeccionAsync(original, ct);
 
         if (await inspecciones.ObtenerCorreccionIdAsync(inspeccionId, ct) is { } corregidaPor)
         {
@@ -697,7 +703,7 @@ public sealed class clsInspeccionesService(
     {
         var errores = new List<string>();
         var sinPosicion = new List<string>();
-        foreach (var enlace in (await viajes.ObtenerVehiculosAsync(inspeccion.ViajeId, ct)).Where(v => !v.NoSale && v.Posicion is null))
+        foreach (var enlace in (await viajes.ObtenerVehiculosAsync(inspeccion.ViajeId, ct)).Where(v => v.EstaActiva && v.Posicion is null))
         {
             var vehiculo = await vehiculos.ObtenerPorIdAsync(enlace.VehiculoId, ct);
             sinPosicion.Add(vehiculo?.Vin ?? enlace.VehiculoId.ToString());
@@ -794,6 +800,7 @@ public sealed class clsInspeccionesService(
             throw new clsProhibidoException("No tiene permisos sobre esta inspección");
         }
 
+        await guardaDeUnidad.AsegurarActivaDeInspeccionAsync(inspeccion, ct);
         return inspeccion;
     }
 

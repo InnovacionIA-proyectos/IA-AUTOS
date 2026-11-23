@@ -2,6 +2,7 @@ using System.Text.Json;
 using FluentValidation;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
+using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Inspecciones;
@@ -50,7 +51,7 @@ public sealed class clsViajesService(
     private async Task AsegurarCapacidadAsync(clsViaje viaje, int nueva, CancellationToken ct)
     {
         var enlaces = await viajes.ObtenerVehiculosAsync(viaje.Id, ct);
-        var unidades = enlaces.Count(e => !e.NoSale);
+        var unidades = enlaces.Count(e => e.EstaActiva);
         var masAlta = enlaces.Where(e => e.Posicion is not null).Select(e => (int)e.Posicion!.Value).DefaultIfEmpty(0).Max();
         var impide = new List<string>();
         if (nueva < unidades)
@@ -150,7 +151,10 @@ public sealed class clsViajesService(
         }
 
         string[] estados = filtro is null ? clsEstadoViaje.ACTIVOS : [filtro];
-        return await consultas.MiosAsync(actual.IdObligatorio(), estados, ct);
+        // Un carro bajado del viaje no cuenta para quien trabaja el viaje: no sale en «mis viajes».
+        return (await consultas.MiosAsync(actual.IdObligatorio(), estados, ct))
+            .Select(v => (v with { Vehiculos = v.Vehiculos.Where(u => u.EstadoUnidad != clsEstadoUnidad.BAJADO).ToList() }).ParaConductor(actual))
+            .ToList();
     }
 
     public async Task<ViajeDto> ObtenerAsync(Guid id, CancellationToken ct = default)
@@ -419,7 +423,7 @@ public sealed class clsViajesService(
         await viajes.ObtenerPorIdAsync(id, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE);
 
     private async Task<ViajeDto> ObtenerDtoAsync(Guid id, CancellationToken ct) =>
-        await consultas.ObtenerAsync(id, ClienteRestringido, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE);
+        (await consultas.ObtenerAsync(id, ClienteRestringido, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE)).ParaConductor(actual);
 
     /// <summary>
     /// El viaje no tiene un cliente propio: se toma de sus VIN. Quien administra viajes sin ser super administrador (coordinador, administrador,

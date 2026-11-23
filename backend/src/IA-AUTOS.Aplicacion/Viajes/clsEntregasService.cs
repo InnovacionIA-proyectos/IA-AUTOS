@@ -369,7 +369,7 @@ public sealed class clsEntregasService(
         var codigosPorEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).ToDictionary(v => v.Id, v => v.Codigo);
         var etapas = await viajes.ObtenerEtapasAsync(viaje.Id, null, ct);
         var resultado = new List<Unidad>();
-        foreach (var enlace in (await viajes.ObtenerVehiculosAsync(viaje.Id, ct)).Where(e => !e.NoSale))
+        foreach (var enlace in (await viajes.ObtenerVehiculosAsync(viaje.Id, ct)).Where(e => e.EstaActiva))
         {
             var vehiculo = await vehiculos.ObtenerPorIdAsync(enlace.VehiculoId, ct) ?? throw new clsEntidadNoEncontradaException("El vehículo del viaje no existe");
             var descargue = etapas.FirstOrDefault(e => e.VehiculoId == enlace.VehiculoId && codigosPorEtapa.TryGetValue(e.EtapaCatalogoId, out var codigo) && codigo == clsCodigosEtapa.DESCARGUE);

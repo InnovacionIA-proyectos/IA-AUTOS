@@ -31,6 +31,14 @@ public static class clsMotivosRechazo
     public const string CARGUE_INCOMPLETO = "cargue_incompleto";
     public const string FIRMA_POR_NINERA = "firma_por_ninera";
     public const string ACOMODACION_CERRADA = "acomodacion_cerrada";
+
+    // ---- No sale, vuelve a salir y bajar del viaje
+    public const string CARGUE_FIRMADO = "cargue_firmado";
+    public const string SIN_CUPO = "sin_cupo";
+    public const string TIENE_REEMPLAZO = "tiene_reemplazo";
+    public const string UNIDAD_NO_SALE = "unidad_no_sale";
+    public const string UNIDAD_BAJADA = "unidad_bajada";
+    public const string MOTIVO_NO_APLICA = "motivo_no_aplica";
     public const string FIRMANTES_DE_LA_TRANSFERENCIA = "firmantes_de_la_transferencia";
 
     // ---- Vehiculos

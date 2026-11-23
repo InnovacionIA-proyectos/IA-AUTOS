@@ -72,7 +72,7 @@ public sealed class clsReclamosService(
         }
         else
         {
-            var destinos = (await viajes.ObtenerVehiculosAsync(viajeId, ct)).Where(v => !v.NoSale && v.LugarDestinoId is not null).Select(v => v.LugarDestinoId!.Value);
+            var destinos = (await viajes.ObtenerVehiculosAsync(viajeId, ct)).Where(v => v.EstaActiva && v.LugarDestinoId is not null).Select(v => v.LugarDestinoId!.Value);
             if (!destinos.Any(puntos.Contains))
             {
                 throw new clsProhibidoException("La entrega del viaje no llega a ninguno de sus puntos");

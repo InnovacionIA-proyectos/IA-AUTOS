@@ -44,7 +44,8 @@ public sealed class clsInformeNineraPdfService(
 
         var carros = new List<CarroNinera>();
         var transferenciasDeNinera = new List<clsTransferenciaCustodia>();
-        foreach (var unidad in viaje.Vehiculos)
+        // Un carro bajado del viaje conserva su historia pero ya no sale en el informe de la niñera.
+        foreach (var unidad in viaje.Vehiculos.Where(v => v.EstadoUnidad != clsEstadoUnidad.BAJADO))
         {
             var cargue = etapas.FirstOrDefault(e => e.VehiculoId == unidad.VehiculoId && codigos.TryGetValue(e.EtapaCatalogoId, out var codigo) && codigo == clsCodigosEtapa.CARGUE);
             var danos = new List<DanoNinera>();
@@ -67,7 +68,7 @@ public sealed class clsInformeNineraPdfService(
                 }
             }
 
-            carros.Add(new CarroNinera(unidad.Vin, unidad.Marca, unidad.Modelo, unidad.Color, unidad.Posicion, unidad.EstadoUnidad == clsEstadoUnidad.NO_SALE, unidad.NoSale?.Motivo, danos, !conInforme));
+            carros.Add(new CarroNinera(unidad.Vin, unidad.Marca, unidad.Modelo, unidad.Color, unidad.Posicion, unidad.EstadoUnidad == clsEstadoUnidad.NO_SALE, MotivoDeNoSale(unidad.NoSale), danos, !conInforme));
         }
 
         var puestos = (viaje.Disposicion?.Puestos ?? []).Select(p => new PuestoNinera(p.Numero, p.Etiqueta, p.Vin)).ToList();
@@ -99,6 +100,10 @@ public sealed class clsInformeNineraPdfService(
         var nombre = new string((viaje.CodigoMtrack ?? viajeId.ToString()).Select(c => char.IsLetterOrDigit(c) || c is '-' or '_' ? c : '-').ToArray());
         return new InformePdf(generador.Generar(datos), $"ninera-{nombre}.pdf");
     }
+
+    /// <summary>El motivo de «no sale» con su texto, si lo trae: «Otro: Llanta pinchada, sin repuesto».</summary>
+    private static string? MotivoDeNoSale(NoSaleDto? noSale) =>
+        noSale is null ? null : string.IsNullOrWhiteSpace(noSale.MotivoTexto) ? noSale.Motivo : $"{noSale.Motivo}: {noSale.MotivoTexto}";
 
     private static DanoNinera ADano(HallazgoDto h, string informe, bool mostrarNivel) =>
         new(
