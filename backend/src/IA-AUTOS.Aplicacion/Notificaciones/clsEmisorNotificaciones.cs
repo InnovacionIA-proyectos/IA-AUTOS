@@ -21,7 +21,8 @@ public sealed record clsAlerta(
     string Titulo,
     string Mensaje,
     string ClaveBase,
-    IReadOnlyDictionary<string, object?>? Datos = null);
+    IReadOnlyDictionary<string, object?>? Datos = null,
+    bool SoloBandeja = false);
 
 /// <summary>
 /// Crea las notificaciones de una alerta: una por destinatario en la bandeja y una por destinatario por push (FCM a todos sus dispositivos activos). El envio nunca rompe la peticion que
@@ -76,8 +77,9 @@ public sealed class clsEmisorNotificaciones(
                 creadas = true;
             }
 
+            // Un aviso solo de bandeja no sale al celular.
             var clavePush = Clave(alerta, destinatario, clsCanalNotificacion.PUSH);
-            if (existentes.Contains(clavePush))
+            if (alerta.SoloBandeja || existentes.Contains(clavePush))
             {
                 continue;
             }

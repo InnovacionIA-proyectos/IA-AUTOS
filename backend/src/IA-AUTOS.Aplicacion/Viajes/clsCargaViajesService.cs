@@ -158,6 +158,7 @@ public sealed class clsCargaViajesService(
 
         ValidarCoherenciaDeViajes(filas);
         await ValidarContraLaBaseAsync(filas, ct);
+        await ValidarCupoAsync(filas, ct);
     }
 
     private static void ValidarCampos(
@@ -393,6 +394,26 @@ public sealed class clsCargaViajesService(
                     {
                         vistos[fila.Vin] = fila.Numero;
                     }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// No hay mas carros que puestos: un viaje del archivo con mas VIN que los puestos de su unidad (los del tipo de unidad) no se crea, y sus filas dicen «8 carros para 7 puestos».
+    /// </summary>
+    private async Task ValidarCupoAsync(List<Fila> filas, CancellationToken ct)
+    {
+        foreach (var grupo in filas.Where(f => f.Codigo is not null && f.TipoUnidadId is not null).GroupBy(f => f.Codigo!, StringComparer.OrdinalIgnoreCase))
+        {
+            var cabecera = grupo.First();
+            var capacidad = await clsCapacidadDeViajes.InicialAsync(catalogos, cabecera.TipoUnidadId!.Value, null, ct);
+            var carros = grupo.Count(f => f.Vin is not null);
+            if (carros > capacidad)
+            {
+                foreach (var fila in grupo)
+                {
+                    fila.Errores.Add($"El viaje {grupo.Key} tiene {carros} carros para {capacidad} puestos: la niñera no los lleva todos");
                 }
             }
         }

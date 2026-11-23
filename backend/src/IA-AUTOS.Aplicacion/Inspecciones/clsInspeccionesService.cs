@@ -710,6 +710,13 @@ public sealed class clsInspeccionesService(
         }
 
         errores.AddRange(sinPosicion.Order(StringComparer.Ordinal).Select(vin => $"Falta la posición de la unidad {vin}"));
+        // Donde el lugar de cargue tiene al menos un muelle activo, el viaje necesita el suyo; en un lugar sin muelles no se pide.
+        if (await viajes.ObtenerPorIdAsync(inspeccion.ViajeId, ct) is { MuelleId: null, LugarCargueId: { } lugarDeCargue }
+            && (await catalogos.ValoresAsync(clsNombresCatalogo.MUELLES, ct)).Any(m => m.Activo && m.TryGetValue("lugar_id", out var lugar) && lugar is Guid l && l == lugarDeCargue))
+        {
+            errores.Add("Falta el muelle del viaje");
+        }
+
         var minimas = Math.Max(await parametros.EnteroAsync(clsClavesParametros.ACOMODACION_FOTOS_MINIMAS, 1, ct), 0);
         // Una foto de la niñera sirve para todos los carros: se cuentan las del viaje (las salidas del cargue de todos sus carros), no solo las de esta inspeccion.
         var fotos = await inspecciones.ContarFotosDeAcomodacionDelViajeAsync(inspeccion.ViajeId, ct);

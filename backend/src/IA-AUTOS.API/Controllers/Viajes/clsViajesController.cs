@@ -27,6 +27,7 @@ public sealed class clsViajesController(
     clsEntregasService entregas,
     clsCargueNineraService cargueNinera,
     clsInformeNineraPdfService informeNinera,
+    clsCambioCargueService cambioCargue,
     clsReclamosService reclamos,
     clsConductorService conductor,
     clsPermisosSinInspectorService permisosSinInspector) : clsControladorBase
@@ -206,6 +207,18 @@ public sealed class clsViajesController(
     [CuerpoSolicitud(typeof(ActualizarViajeRequest))]
     public async Task<IActionResult> Actualizar(Guid id, CancellationToken ct) =>
         Ok(await servicio.ActualizarAsync(id, await LeerCamposAsync(ct), ct));
+
+    /// <summary>
+    /// Cambia el <c>muelle_id</c> (uno activo del lugar de cargue del viaje; <c>null</c> lo quita) y el <c>trailer</c> durante el cargue. Lo hacen el inspector del viaje (o quien reclamo el cargue) y el coordinador de calidad (403 a conductor,
+    /// admin y super admin; TI conserva <c>PATCH /api/viajes/{id}</c>). Al inspector se le acepta solo mientras la entrega del cargue no se haya cerrado (409 <c>cargue_firmado</c>); un muelle de otro lugar responde 400. Cuando lo cambia el
+    /// inspector, el coordinador del cliente recibe un aviso <c>cambio_cargue_inspector</c> (urgencia media, solo bandeja).
+    /// </summary>
+    [HttpPatch("{id:guid}/cargue")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(CambiarCargueDelViajeRequest))]
+    public async Task<IActionResult> CambiarCargue(Guid id, CancellationToken ct) =>
+        Ok(await cambioCargue.CambiarAsync(id, await LeerCamposAsync(ct), ct));
 
     /// <summary>Cambia el estado: programado a en_curso, en_curso a finalizado, o cancelar un viaje programado o en curso.</summary>
     [HttpPatch("{id:guid}/estado")]

@@ -1432,6 +1432,41 @@ Mismos roles. El historial del hallazgo, del más antiguo al más reciente:
 
 `accion` es `seguimiento` (el coordinador cambia el estado), `revision` (un inspector revisa una novedad del conductor, con `detalle` en JSON) o `no_sale` (la unidad no sale del viaje por ese hallazgo; su `nota` es el motivo). Una fila no se modifica ni se borra.
 
+## El viaje y el patio: muelle, cupo, destino y eliminar
+
+Los nombres de las rutas, de los avisos y de los motivos (`sin_cupo`, `cargue_firmado`) están **a confirmar por backend** con la app.
+
+### El catálogo `muelles`
+Cada lugar tiene sus muelles. Se lee en `GET /api/catalogos` junto a los lugares y se administra con las mismas rutas y los mismos roles que ellos (`coordinador_calidad`, `admin` y `super_admin`; el resto solo lee). Un muelle trae `id`, `codigo` (único **dentro del lugar**: dos lugares pueden tener su «m1»), `nombre`, `orden`, `activo` y `lugar_id`. El `lugar_id` es obligatorio al crear (`400` si falta o el lugar no existe o está inactivo) y **no se cambia** después (`400`: se crea otro muelle y se inactiva este). Un muelle que un viaje usa no se borra (`409`): se inactiva. El catálogo **no viene sembrado**: los muelles de cada lugar los carga el negocio desde Catálogos.
+
+### El muelle del viaje
+`ViajeDto` y `ViajeResumenDto` traen `muelle_id` y `muelle` (el nombre); `null` mientras nadie lo asigna. En un lugar de cargue con **al menos un muelle activo**, el cierre de la acomodación (`POST /api/inspecciones/{id}/cerrar` de la segunda inspección del cargue) responde `400` con «Falta el muelle del viaje» en la misma lista de faltantes que «Falta la posición de la unidad …»; en un lugar sin muelles no se exige. Los viajes anteriores se leen con `muelle` nulo.
+
+### `PATCH /api/viajes/{id}/cargue`
+El inspector del viaje (o quien reclamó el cargue) y el `coordinador_calidad` cambian el `muelle_id` y el `trailer` durante el cargue. Conductor, `admin` y `super_admin` reciben `403` (TI conserva `PATCH /api/viajes/{id}`). `200` con el `ViajeDto`.
+
+```json
+{ "muelle_id": "uuid", "trailer": "TRX-202" }
+```
+
+| Campo | Regla |
+|---|---|
+| `muelle_id` | un muelle **activo del lugar de cargue del viaje** (`400` «El muelle no pertenece al lugar de cargue del viaje»); `null` lo quita |
+| `trailer` | el mismo texto de siempre; vacío lo borra |
+
+Se cambia solo lo que se envía; un cuerpo sin ninguno responde `400`. **Al inspector se le acepta solo mientras la entrega del cargue no se haya cerrado**: después responde `409` con `details.motivo: "cargue_firmado"` y «El tráiler y el muelle solo los cambia el inspector durante el cargue»; el coordinador sí puede. Ninguna novedad ni «Llegué» cuenta para esa regla. Queda en la auditoría (`viaje.cambiar_cargue`).
+
+**Aviso `cambio_cargue_inspector`.** Cuando lo cambia el **inspector**, el coordinador de calidad y los administradores del cliente reciben un aviso por cada cosa que cambió, de urgencia `media` y **solo en la bandeja (sin push)**: «{inspector} asignó el muelle 3 al viaje {código}», «… cambió el muelle del viaje {código} de {antes} a {después}» o «… cambió el tráiler del viaje {código} de TRX-101 a TRX-202». `datos`: `viaje_id`, `codigo_mtrack`, `campo` (`muelle` o `trailer`), `antes`, `despues` y `usuario_nombre`. Repetir lo mismo no avisa otra vez; los cambios del propio coordinador no generan aviso.
+
+### No hay más carros que puestos
+Crear un viaje, agregar unidades (`POST /api/viajes/{id}/vehiculos`), la carga por Excel y el reemplazo de un «no sale» responden `409` con `details.motivo: "sin_cupo"` cuando las unidades **activas** superarían la capacidad de la niñera, y no agregan ninguna: «La niñera tiene 7 puestos y ya hay 7 unidades: no cabe el VIN 9BWZZZ377VT004251». Una unidad que **no sale** y una **bajada** no cuentan (por eso el reemplazo cabe). En la carga por Excel, la previsualización marca **todas las filas** del viaje con «El viaje {código} tiene 8 carros para 7 puestos: la niñera no los lleva todos» y la carga no lo crea.
+
+### El destino de una unidad cambió
+`ViajeVehiculoDto` trae `lugar_destino_cambiado_at`: cuándo se cambió por última vez el destino de esa unidad (`null` si nunca), también en `GET /api/viajes/mios`. `PATCH /api/viajes/{id}/vehiculos/{vin}` con un destino nuevo emite el aviso **`cambio_destino_unidad`** (urgencia `media`, bandeja y push) al **conductor del viaje** y a los **inspectores asignados al lugar nuevo**: «Cambió el destino del VIN {vin}: ahora va a {lugar nuevo}», con `datos` `viaje_id`, `vin`, `lugar_anterior` y `lugar_nuevo`. El conductor lo lee en su bandeja.
+
+### El viaje dice si es eliminable
+`ViajeDto` y `ViajeResumenDto` traen `eliminable`: `true` solo si el viaje **no tiene ninguna inspección, en borrador o cerrada**. `DELETE /api/viajes/{id}` no cambia: con una inspección sigue respondiendo su `409`; la app decide además que un viaje finalizado o cancelado no ofrece eliminar.
+
 ## Unidad que no sale, vuelve a salir y bajar del viaje
 
 Un carro tiene un **estado dentro del viaje** (`estado_unidad`): `activa`, `no_sale` o `bajado`. Solo una unidad **activa** se acomoda, se revisa, se firma y cuenta en la cobertura, las entregas, los pendientes del inspector, los avisos y la niñera.
@@ -1602,7 +1637,7 @@ Nada de otros viajes del mismo VIN: el inventario solo trae las etapas de sus vi
 
 Las alertas y los avisos llegan a una **bandeja** (el portal y la app) y, las urgentes, también por **push** al celular. La capacidad `ver_alertas` de `GET /api/auth/me` la tienen `coordinador_calidad`, `admin` y `super_admin` (las alertas preventivas
 de su cliente), `inspector` (solo los avisos operativos dirigidos a él: `captura_incompleta` de una inspección que inició y `transferencia_pendiente` de su firma) y `conductor` (solo `respuesta_conductor`, `captura_incompleta` de una inspección que
-él inició en la salida de un cargue y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `permiso_sin_inspector` (urgencia alta: el conductor pide el permiso de esa excepción, al inspector del punto y al coordinador del cliente, o se avisa que se concedió; con `datos`: `hecho` `solicitud` o `concesion`), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente`, `cargue_sin_reclamar`, `propuesta_ubicacion` y `firma_cargue_pendiente` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
+él inició en la salida de un cargue y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `permiso_sin_inspector` (urgencia alta: el conductor pide el permiso de esa excepción, al inspector del punto y al coordinador del cliente, o se avisa que se concedió; con `datos`: `hecho` `solicitud` o `concesion`), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente`, `cargue_sin_reclamar`, `propuesta_ubicacion`, `firma_cargue_pendiente`, `cambio_cargue_inspector` y `cambio_destino_unidad` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
 Todo lo que se hace aquí queda en la auditoría.
 
 `NotificacionDto`:
@@ -1622,7 +1657,7 @@ Todo lo que se hace aquí queda en la auditoría.
 `{ "hecho": "entrega_con_una_firma", "lugar_id": "…", "lugar": "…", "parte_que_firmo": "entrega", "motivo": "…", "unidades": 3 }`. Y el de **umbral superado** (`umbral_patron`): `{ "tipo_umbral": "zona", "cuadrante_numero": 4, "lado": "izquierdo", "proceso": null, "total": 12, "umbral": 10, "ventana_dias": 30 }`
 cuando la zona (lado y número de cuadrante) llega al umbral, o `{ "tipo_umbral": "proceso", "cuadrante_numero": null, "lado": null, "proceso": "cargue", … }` cuando es el proceso; con esos campos el portal abre el tablero ya filtrado (`/api/reportes/patrones?proceso=…`). Un dato personal (como la cédula) nunca va en `datos`.
 
-`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar`, `propuesta_ubicacion`, `permiso_sin_inspector` o `firma_cargue_pendiente` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
+`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar`, `propuesta_ubicacion`, `permiso_sin_inspector`, `firma_cargue_pendiente`, `cambio_cargue_inspector` o `cambio_destino_unidad` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
 
 ### `GET /api/notificaciones`
 Una página de la bandeja, las más recientes primero: `{ "items": [NotificacionDto], "total": 3, "pagina": 1, "tamano": 50, "no_leidas": 2 }`.
@@ -2040,6 +2075,7 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | `clientes` | Las empresas a las que pertenecen los usuarios y los vehículos (hoy `sofasa`). El primero activo por `orden` es el cliente por defecto de lo que se crea sin cliente explícito | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `estados-sofasa` | Los estados de las órdenes Sofasa: el `codigo` es el `status_code` **real** de la orden y el `nombre`, su etiqueta (ver «Estados Sofasa» abajo). Empieza con los `status_code` que ya tienen las órdenes | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `tipos-extra` | Los tipos de extra del vehículo fuera del dibujo estándar: `barras_techo` «Barras de techo», `volco` «Volco», `platon` «Platón» y `otro` «Otro» (el único que admite un texto libre; **está protegido**: no se inactiva, no se borra y no cambia de nombre, `409`, porque no tiene reemplazo; sí admite cambiar su orden). Lo administra Calidad: lo crean y editan `admin`, `super_admin` y `coordinador_calidad` (`403` los demás); un tipo con extras reportados **no se borra** (`409`): se inactiva y los extras conservan su tipo, pero ya no se ofrece para extras nuevos | `id`, `codigo`, `nombre`, `orden`, `activo` |
+| `muelles` | Los muelles de cada lugar (hijo de `lugares`): `m1`… dentro de su lugar; no viene sembrado | `id`, `codigo`, `nombre`, `orden`, `activo`, `lugar_id` |
 | `motivos-no-sale` | Los motivos por los que un carro no sale del viaje: `dano_v1_plus`, `dano_reportado_conductor`, `no_llego_al_patio`, `faltan_documentos`, `no_esta_listo` y `otro` (que exige texto) | `id`, `codigo`, `nombre`, `orden`, `activo`, `exige_hallazgo`, `exige_texto`, `solo_sin_inspector` |
 | `motivos-sin-inspector` | Los motivos por los que no hay inspector en un cargue (la excepción «No hay inspector», que activa el conductor en el momento): `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto) | `id`, `codigo`, `nombre`, `orden`, `activo`, `requiere_texto` |
 
@@ -2070,6 +2106,7 @@ Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inacti
       { "id": "uuid", "codigo": null, "tipo_vehiculo": null, "numero": 54, "nombre": "Parabrisas", "lleva_lado": false, "orden": 54, "activo": true,
         "zonas": [ { "id": "uuid", "lado": null, "nombre_completo": "Parabrisas", "aiag_area": "20" } ] }
     ],
+    "muelles": [ { "id": "uuid", "codigo": "m1", "nombre": "Muelle 1", "orden": 0, "activo": true, "lugar_id": "uuid" } ],
     "motivos-no-sale": [ { "id": "uuid", "codigo": "otro", "nombre": "Otro", "orden": 6, "activo": true, "exige_hallazgo": false, "exige_texto": true, "solo_sin_inspector": false } ],
     "motivos-sin-inspector": [ { "id": "uuid", "codigo": "otro", "nombre": "Otro", "orden": 3, "activo": true, "requiere_texto": true } ],
     "paneles-dano": [ { "id": "uuid", "codigo": "costado_izquierdo", "nombre": "Costado izquierdo", "orden": 1, "activo": true, "ancho_ref": 1071, "alto_ref": 491, "version": 6, "imagen_url": "/api/catalogos/paneles-dano/costado_izquierdo/imagen?v=3f2b…c1" } ],

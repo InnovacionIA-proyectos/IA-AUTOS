@@ -1456,6 +1456,17 @@ INSERT #r SELECT N'No sale: el estado bajado y lo que lleva cada estado estan en
 INSERT #r SELECT N'No sale: las vistas de completos y de cobertura no cuentan a la unidad bajada',
     CASE WHEN (SELECT COUNT(*) FROM sys.sql_modules WHERE object_id IN (OBJECT_ID(N'dbo.vwViajesCompletos'), OBJECT_ID(N'dbo.vwCobertura')) AND definition LIKE N'%bajado%') = 2 THEN 1 ELSE 0 END, NULL;
 
+-- 7d) Muelles, destino cambiado y avisos del patio
+INSERT #r SELECT N'Muelles: la tabla, el muelle del viaje y la marca del cambio de destino existen',
+    CASE WHEN OBJECT_ID(N'dbo.tblMuelles', N'U') IS NOT NULL
+          AND COL_LENGTH(N'dbo.tblViajes', N'MuelleId') IS NOT NULL
+          AND COL_LENGTH(N'dbo.tblViajeVehiculos', N'LugarDestinoCambiadoAt') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajes_Muelle') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Muelles: el codigo es unico dentro del lugar',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblMuelles_Lugar_Codigo' AND parent_object_id = OBJECT_ID(N'dbo.tblMuelles')) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Muelles: la notificacion admite los tipos cambio_cargue_inspector y cambio_destino_unidad',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%cambio_cargue_inspector%' AND definition LIKE N'%cambio_destino_unidad%') THEN 1 ELSE 0 END, NULL;
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';

@@ -62,6 +62,7 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsCargueNineraService>();
         servicios.AddScoped<clsInformeNineraPdfService>();
         servicios.AddScoped<clsGuardaDeUnidad>();
+        servicios.AddScoped<clsCambioCargueService>();
         servicios.AddScoped<clsAuditoriaService>();
         servicios.AddScoped<clsReportesTableroService>();
         servicios.AddScoped<clsExportacionesService>();

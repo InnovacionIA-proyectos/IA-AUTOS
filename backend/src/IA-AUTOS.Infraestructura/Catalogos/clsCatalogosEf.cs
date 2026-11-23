@@ -372,6 +372,43 @@ internal sealed class clsCatalogoMotivosNoSale(clsAppDbContext contexto, IReloj 
     }
 }
 
+/// <summary>
+/// Los muelles de cada lugar (<c>lugar_id</c>, <c>codigo</c> unico dentro del lugar, <c>nombre</c>, <c>orden</c> y <c>activo</c>): se leen junto a los lugares y se administran con las mismas rutas y roles que ellos. El lugar de un
+/// muelle no se cambia (se crea otro e inactiva este); un muelle que un viaje usa no se borra (409): se inactiva.
+/// </summary>
+internal sealed class clsCatalogoMuelles(clsAppDbContext contexto, IReloj reloj) : clsCatalogoEf<clsMuelle>(contexto, reloj, clsNombresCatalogo.MUELLES)
+{
+    protected override IReadOnlyList<string> CamposPermitidos { get; } = [.. clsCamposCatalogo.COMUNES, "lugar_id"];
+
+    protected override ValorCatalogo Mapear(clsMuelle m)
+    {
+        var valor = Comunes(m);
+        valor["lugar_id"] = m.LugarId;
+        return valor;
+    }
+
+    protected override async Task<clsMuelle> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct)
+    {
+        var lugarId = campos.Identificador("lugar_id") ?? throw clsErroresCampos.De("lugar_id", "El lugar del muelle es requerido");
+        if (!await Contexto.Lugares.AsNoTracking().AnyAsync(l => l.Id == lugarId && l.Activo, ct))
+        {
+            throw clsErroresCampos.De("lugar_id", "El lugar no existe en el catálogo de lugares o está inactivo");
+        }
+
+        return clsMuelle.Crear(lugarId, campos.Texto("codigo"), campos.Texto("nombre"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora);
+    }
+
+    protected override Task AplicarAsync(clsMuelle entidad, clsCamposCatalogo campos, CancellationToken ct)
+    {
+        if (campos.Tiene("lugar_id") && campos.Identificador("lugar_id") != entidad.LugarId)
+        {
+            throw clsErroresCampos.De("lugar_id", "El lugar de un muelle no se cambia: cree un muelle nuevo e inactive este");
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
 internal sealed class clsCatalogoNiveles(clsAppDbContext contexto, IReloj reloj)
     : clsCatalogoEf<clsNivelSeveridad>(contexto, reloj, clsNombresCatalogo.NIVELES_SEVERIDAD)
 {

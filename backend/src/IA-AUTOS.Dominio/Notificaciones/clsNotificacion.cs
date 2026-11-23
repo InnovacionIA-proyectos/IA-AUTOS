@@ -38,9 +38,15 @@ public static class clsTipoNotificacion
     /// <summary>A una parte de la niñera: la salida del cargue de sus carros lleva cerrada el tiempo del parametro sin su firma.</summary>
     public const string FIRMA_CARGUE_PENDIENTE = "firma_cargue_pendiente";
 
+    /// <summary>Al coordinador: el inspector del viaje asigno o cambio el muelle o cambio el trailer durante el cargue (solo bandeja).</summary>
+    public const string CAMBIO_CARGUE_INSPECTOR = "cambio_cargue_inspector";
+
+    /// <summary>Al conductor del viaje y a los inspectores del lugar nuevo: se cambio el destino de una unidad.</summary>
+    public const string CAMBIO_DESTINO_UNIDAD = "cambio_destino_unidad";
+
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string>
     {
-        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD, FUERA_DE_RANGO, CARGUE_SIN_RECLAMAR, PROPUESTA_UBICACION, PERMISO_SIN_INSPECTOR, FIRMA_CARGUE_PENDIENTE,
+        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD, FUERA_DE_RANGO, CARGUE_SIN_RECLAMAR, PROPUESTA_UBICACION, PERMISO_SIN_INSPECTOR, FIRMA_CARGUE_PENDIENTE, CAMBIO_CARGUE_INSPECTOR, CAMBIO_DESTINO_UNIDAD,
     };
 }
 

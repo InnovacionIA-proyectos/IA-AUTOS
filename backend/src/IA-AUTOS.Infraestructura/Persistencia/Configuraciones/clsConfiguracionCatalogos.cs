@@ -124,6 +124,20 @@ internal sealed class clsConfiguracionMotivoNoSale : IEntityTypeConfiguration<cl
     public void Configure(EntityTypeBuilder<clsMotivoNoSale> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblMotivosNoSale");
 }
 
+internal sealed class clsConfiguracionMuelle : IEntityTypeConfiguration<clsMuelle>
+{
+    public void Configure(EntityTypeBuilder<clsMuelle> builder)
+    {
+        builder.ToTable("tblMuelles");
+        clsConfiguracionBase.Base(builder);
+        builder.Property(c => c.Codigo).HasColumnType("varchar(30)").IsRequired();
+        builder.Property(c => c.Nombre).HasMaxLength(clsCatalogoBase.NOMBRE_MAX).IsRequired();
+        builder.HasOne<clsLugar>().WithMany().HasForeignKey(m => m.LugarId).HasConstraintName("FK_tblMuelles_Lugar").OnDelete(DeleteBehavior.NoAction);
+        // El codigo es unico DENTRO del lugar (dos lugares pueden tener su «M1»).
+        builder.HasIndex(m => new { m.LugarId, m.Codigo }).IsUnique().HasDatabaseName("UQ_tblMuelles_Lugar_Codigo");
+    }
+}
+
 internal sealed class clsConfiguracionVistaFoto : IEntityTypeConfiguration<clsVistaFoto>
 {
     public void Configure(EntityTypeBuilder<clsVistaFoto> builder)

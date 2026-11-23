@@ -164,6 +164,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<ICatalogo, clsCatalogoEstadosSofasa>();
         servicios.AddScoped<ICatalogo, clsCatalogoMotivosSinInspector>();
         servicios.AddScoped<ICatalogo, clsCatalogoMotivosNoSale>();
+        servicios.AddScoped<ICatalogo, clsCatalogoMuelles>();
         servicios.AddScoped<ICatalogo, clsCatalogoLugares>();
         servicios.AddScoped<ICatalogo, clsCatalogoVistas>();
         servicios.AddScoped<ICatalogo, clsCatalogoCuadrantes>();
