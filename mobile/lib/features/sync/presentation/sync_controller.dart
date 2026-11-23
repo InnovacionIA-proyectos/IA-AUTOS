@@ -145,12 +145,18 @@ class SyncController extends Notifier<EstadoSync> {
     }
   }
 
-  Future<void> reintentar(String id) async {
+  /// Con [esperar], vuelve cuando la pasada terminó: la pantalla que originó el envío puede decir enseguida cómo
+  /// quedó ese envío en vez de adivinarlo.
+  Future<void> reintentar(String id, {bool esperar = false}) async {
     final usuario = _usuario;
     if (usuario == null) return;
     await ref.read(procesadorColaProvider).reintentar(id, usuario);
     await refrescar();
-    unawaited(sincronizar());
+    if (esperar) {
+      await sincronizar();
+    } else {
+      unawaited(sincronizar());
+    }
   }
 
   Future<void> descartar(String id) async {

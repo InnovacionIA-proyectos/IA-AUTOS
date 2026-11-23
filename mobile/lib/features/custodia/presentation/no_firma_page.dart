@@ -14,6 +14,7 @@ import '../../inspecciones/domain/foto_local.dart';
 import '../../inspecciones/presentation/camara_page.dart';
 import '../../inspecciones/presentation/sellado.dart';
 import '../../sync/domain/job.dart';
+import '../../sync/presentation/anuncio_desenlace.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
 import '../../vehiculos/domain/etiquetas.dart';
@@ -93,9 +94,10 @@ class _EstadoNoFirmaPage extends ConsumerState<NoFirmaPage> {
     final foto = _foto;
     if (!_completa || usuarioId == null || foto == null) return;
     setState(() => _guardando = true);
+    final jobId = const Uuid().v4();
     try {
       await ref.read(colaRepositorioProvider).agregar(NoFirmaJob(
-            id: const Uuid().v4(),
+            id: jobId,
             etiqueta: 'No firma ${widget.vin} · ${widget.proceso}',
             creadoEn: DateTime.now().millisecondsSinceEpoch,
             usuarioId: usuarioId,
@@ -111,20 +113,13 @@ class _EstadoNoFirmaPage extends ConsumerState<NoFirmaPage> {
       await sync.refrescar();
       await sync.sincronizar();
       if (!mounted) return;
-      final enCola = ref.read(syncControllerProvider).pendientes > 0;
-      await showDialog<void>(
-        context: context,
-        builder: (contexto) => AlertDialog(
-          icon: const Icon(Icons.assignment_turned_in_outlined, color: Colores.exito, size: 40),
-          title: const Text('Constancia registrada', style: TextStyle(color: Colores.exito)),
-          content: Text(
-            enCola
-                ? 'Quedó en cola; se enviará cuando la señal sea estable.'
-                : 'La transferencia queda cerrada con la constancia.',
-          ),
-          actions: [TextButton(onPressed: () => Navigator.of(contexto).pop(), child: const Text('OK'))],
-        ),
-      );
+      // «Constancia registrada» solo si el servidor la aceptó (S8-HU-11.2 CA-6): antes lo decía siempre, también
+      // con la constancia en cola o rechazada.
+      await anunciarDesenlace(context, ref, jobId, (
+        registrado: 'Constancia registrada',
+        detalleRegistrado: 'La transferencia queda cerrada con la constancia.',
+        noRegistrado: 'No se pudo registrar la constancia',
+      ));
       if (mounted) context.pop();
     } catch (e) {
       if (mounted) {
