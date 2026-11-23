@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -10,13 +11,16 @@ import 'package:traza_autos/features/auth/domain/almacen_sesion.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/auth/providers.dart';
 import 'package:traza_autos/features/dibujo_dano/providers.dart';
+import 'package:traza_autos/features/inspecciones/data/cierre_de_captura.dart';
 import 'package:traza_autos/features/inspecciones/data/hallazgos_previos_repositorio.dart';
 import 'package:traza_autos/features/inspecciones/data/inspecciones_repositorio.dart';
 import 'package:traza_autos/features/inspecciones/data/novedades_repositorio.dart';
+import 'package:traza_autos/features/inspecciones/domain/borrador_captura.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_previo.dart';
 import 'package:traza_autos/features/inspecciones/domain/novedad_pendiente.dart';
 import 'package:traza_autos/features/inspecciones/domain/inspeccion_resumen.dart';
 import 'package:traza_autos/features/inspecciones/providers.dart';
+import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
 import 'package:traza_autos/features/sync/domain/puertos.dart';
 import 'package:traza_autos/features/sync/providers.dart';
@@ -242,7 +246,8 @@ class Arnes {
         ubicacion = UbicacionFalsa(),
         dispositivo = DispositivoFalso(),
         previos = HallazgosPreviosFalso(),
-        novedades = NovedadesFalso();
+        novedades = NovedadesFalso(),
+        borradores = BorradoresEnMemoria();
 
   final Entorno entorno;
   final AlmacenSesionEnMemoria almacen;
@@ -262,6 +267,12 @@ class Arnes {
   /// Las novedades del conductor pendientes de revisión. Vacías por defecto: casi ninguna prueba las necesita.
   final NovedadesFalso novedades;
 
+  /// Las capturas sin cerrar guardadas en el teléfono. Vacío por defecto.
+  final BorradoresEnMemoria borradores;
+
+  /// Encolar el informe y soltar su borrador: en memoria, sobre esta misma cola y estos mismos borradores.
+  late final CierreEnMemoria cierre = CierreEnMemoria(cola, borradores);
+
   late final ProcesadorCola procesador = ProcesadorCola(cola: cola, gateway: gateway, red: red, archivos: archivos);
 
   List<Override> get overrides => [
@@ -278,6 +289,9 @@ class Arnes {
         almacenImagenesPanelProvider.overrideWithValue(AlmacenImagenesEnMemoria()),
         hallazgosPreviosRepositorioProvider.overrideWithValue(previos),
         novedadesRepositorioProvider.overrideWithValue(novedades),
+        almacenBorradoresProvider.overrideWithValue(borradores),
+        archivosLocalesProvider.overrideWithValue(archivos),
+        cierreDeCapturaProvider.overrideWithValue(cierre),
       ];
 
   ProviderContainer contenedor() => ProviderContainer(overrides: overrides, retry: (_, _) => null);
@@ -335,5 +349,39 @@ class NovedadesFalso implements NovedadesRepositorio {
       'hallazgo_origen_id': hallazgoOrigenId,
     });
     if (errorAlRevisar != null) throw errorAlRevisar!;
+  }
+}
+
+/// Los borradores de captura en memoria; se guardan como JSON, así la prueba también pasa por la lectura.
+class BorradoresEnMemoria implements AlmacenBorradores {
+  final Map<String, Map<String, dynamic>> guardados = {};
+
+  @override
+  Future<BorradorCaptura?> leer(String clave) async =>
+      guardados[clave] == null ? null : BorradorCaptura.fromJson(guardados[clave]!);
+
+  @override
+  Future<void> guardar(String clave, BorradorCaptura borrador) async =>
+      guardados[clave] = jsonDecode(jsonEncode(borrador.toJson())) as Map<String, dynamic>;
+
+  @override
+  Future<void> borrar(String clave) async => guardados.remove(clave);
+}
+
+/// El cierre de una captura en memoria: las dos cosas o ninguna, como la transacción de verdad.
+class CierreEnMemoria implements CierreDeCaptura {
+  CierreEnMemoria(this.cola, this.borradores);
+
+  final ColaRepositorio cola;
+  final BorradoresEnMemoria borradores;
+
+  /// Si se pone, encolar falla y no cambia nada.
+  Object? error;
+
+  @override
+  Future<void> encolar(Job job, {String? claveBorrador}) async {
+    if (error != null) throw error!;
+    await cola.agregar(job);
+    if (claveBorrador != null) await borradores.borrar(claveBorrador);
   }
 }

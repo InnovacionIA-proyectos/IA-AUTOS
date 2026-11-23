@@ -10,6 +10,10 @@ import 'domain/puertos.dart';
 
 final estadoRedProvider = Provider<EstadoRed>((ref) => EstadoRedConectividad(apiUrl: ref.watch(entornoProvider).apiUrl, encabezados: ref.watch(entornoProvider).encabezadosEnrutamiento));
 
+/// Los archivos del teléfono: la cola los sube y los borra al terminar, y la captura borra los que ya no son de
+/// nadie (S8-HU-11.2 CA-5).
+final archivosLocalesProvider = Provider<ArchivosLocales>((ref) => const ArchivosLocalesIo());
+
 final colaRepositorioProvider = Provider<ColaRepositorio>((ref) => ColaDrift(ref.watch(appDatabaseProvider)));
 
 final procesadorColaProvider = Provider<ProcesadorCola>(
@@ -17,6 +21,6 @@ final procesadorColaProvider = Provider<ProcesadorCola>(
     cola: ref.watch(colaRepositorioProvider),
     gateway: GatewayInformesApi(ref.watch(clienteApiProvider)),
     red: ref.watch(estadoRedProvider),
-    archivos: const ArchivosLocalesIo(),
+    archivos: ref.watch(archivosLocalesProvider),
   ),
 );

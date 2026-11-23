@@ -466,7 +466,13 @@ class ProcesadorCola {
   }
 
   Future<void> _borrarFotos(InformeJob job) async {
-    for (final foto in [...job.fotos, for (final e in job.extras) ...e.fotos]) {
+    // La foto de cada daño también: sin ella, cada informe con un daño dejaba un archivo sin dueño en el teléfono
+    // (S8-HU-11.2 CA-5).
+    for (final foto in [
+      ...job.fotos,
+      for (final h in job.hallazgos) ?h.foto,
+      for (final e in job.extras) ...e.fotos,
+    ]) {
       try {
         await archivos.borrar(foto.ruta);
       } catch (_) {

@@ -12,6 +12,8 @@ import '../../../core/http/urls_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../sync/domain/job.dart';
+import '../../sync/domain/puertos.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
 import '../../catalogos/domain/catalogos.dart';
@@ -23,6 +25,7 @@ import '../../vehiculos/domain/etiquetas.dart';
 import '../../viajes/domain/viaje.dart';
 import '../../viajes/providers.dart';
 import '../domain/acomodacion.dart';
+import '../domain/borrador_captura.dart';
 import '../domain/checklist_vistas.dart';
 import '../domain/extra_local.dart';
 import '../domain/foto_local.dart';
@@ -121,9 +124,47 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   final _notas = TextEditingController();
   StreamSubscription<bool>? _gpsEncendido;
 
+  // S8-HU-11.2 CA-4 y CA-5: lo capturado se guarda en el teléfono mientras se hace.
+
+  /// Se toma al abrir: al salir de la pantalla todavía hay que guardar, y para entonces `ref` ya no sirve.
+  late final AlmacenBorradores _almacen;
+  late final ArchivosLocales _archivosDelTelefono;
+
+  /// Null sin sesión: sin saber de quién es, no se guarda ni se ofrece nada.
+  String? _clave;
+
+  /// Mientras se mira si había algo guardado. No se deja capturar antes: lo nuevo pisaría lo guardado.
+  bool _leyendoBorrador = true;
+
+  /// Lo que se encontró guardado al abrir, mientras quien captura decide si continuarlo o empezar de nuevo.
+  BorradorCaptura? _ofrecido;
+
+  /// Cada archivo de foto tomado en esta captura, también el de un daño o extra que después se quitó.
+  final _archivos = <String>{};
+
+  /// El informe ya se encoló: desde aquí lo de esta pantalla es del job y no se vuelve a guardar como borrador.
+  bool _encolado = false;
+
+  /// Las escrituras van en fila: una que empezó antes no puede terminar después y dejar una versión vieja.
+  Future<void> _escritura = Future.value();
+  Timer? _notasPorGuardar;
+
   @override
   void initState() {
     super.initState();
+    _almacen = ref.read(almacenBorradoresProvider);
+    _archivosDelTelefono = ref.read(archivosLocalesProvider);
+    if (ref.read(authControllerProvider).sesion?.usuario.id case final usuarioId?) {
+      _clave = claveBorrador(
+        usuarioId: usuarioId,
+        vin: widget.vin,
+        etapaId: widget.etapaId,
+        momento: widget.momento,
+        corrigeInspeccionId: widget.corrigeInspeccionId,
+      );
+    }
+    _leerBorrador();
+    _notas.addListener(_alEscribirNotas);
     _buscarUbicacion();
     _escucharElGps();
     _cargarPrevios();
@@ -141,6 +182,135 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         _previos = previos;
         _cargandoPrevios = false;
       });
+    }
+  }
+
+  /// Mira si quedó algo guardado de este momento. Un guardado que ya no tiene nada que ofrecer (por ejemplo, se
+  /// quitó el único daño) solo deja archivos: se borran ahí mismo, sin preguntar.
+  Future<void> _leerBorrador() async {
+    final clave = _clave;
+    final guardado = clave == null ? null : await _almacen.leer(clave);
+    if (guardado != null && guardado.vacio) {
+      await _borrarArchivos(guardado.archivos);
+      await _almacen.borrar(clave!);
+    }
+    if (!mounted) return;
+    setState(() {
+      _leyendoBorrador = false;
+      if (guardado != null && !guardado.vacio) _ofrecido = guardado;
+    });
+  }
+
+  /// «Continuar lo guardado»: vuelve todo a la pantalla tal como quedó.
+  void _continuarLoGuardado() {
+    final guardado = _ofrecido;
+    if (guardado == null) return;
+    setState(() {
+      _fotos.addAll(guardado.fotos);
+      _hallazgos.addAll(guardado.hallazgos);
+      _extras.addAll(guardado.extras);
+      _archivos.addAll(guardado.archivos);
+      _ofrecido = null;
+    });
+    // Escribirlas dispara el guardado de las notas, que vuelve a escribir lo mismo.
+    _notas.text = guardado.notas;
+  }
+
+  /// «Empezar de nuevo»: con confirmación, porque borra del teléfono fotos que no se pueden volver a tomar igual.
+  Future<void> _empezarDeNuevo() async {
+    final guardado = _ofrecido;
+    final clave = _clave;
+    if (guardado == null || clave == null) return;
+    final fotos = guardado.cuantasFotos == 1 ? '1 foto' : '${guardado.cuantasFotos} fotos';
+    final danos = guardado.cuantosDanos == 1 ? '1 daño' : '${guardado.cuantosDanos} daños';
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (contexto) => AlertDialog(
+        title: const Text('¿Empezar de nuevo?'),
+        content: Text('Se borra lo guardado en este teléfono para esta captura: $fotos y $danos. No se puede recuperar.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(contexto).pop(false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.of(contexto).pop(true), child: const Text('Borrar y empezar')),
+        ],
+      ),
+    );
+    if (confirmado != true || !mounted) return;
+    await _borrarArchivos({...guardado.archivos, ..._rutasDe(guardado)});
+    await _almacen.borrar(clave);
+    if (mounted) setState(() => _ofrecido = null);
+  }
+
+  /// Las rutas que usa lo capturado. Al borrar se suman a `archivos` por si algo quedó sin anotar.
+  Set<String> _rutasDe(BorradorCaptura b) => {
+        for (final f in b.fotos) f.ruta,
+        for (final h in b.hallazgos) ?h.foto?.ruta,
+        for (final e in b.extras)
+          for (final f in e.fotos) f.ruta,
+      };
+
+  BorradorCaptura get _loCapturado => BorradorCaptura(
+        fotos: [..._fotos],
+        hallazgos: [..._hallazgos],
+        extras: [..._extras],
+        notas: _notas.text,
+        archivos: {..._archivos},
+      );
+
+  /// Cambia lo capturado y lo guarda en el teléfono.
+  void _cambiar(VoidCallback cambio) {
+    setState(cambio);
+    _guardarBorrador();
+  }
+
+  void _alEscribirNotas() {
+    _notasPorGuardar?.cancel();
+    _notasPorGuardar = Timer(const Duration(milliseconds: 400), _guardarBorrador);
+  }
+
+  /// Guarda lo capturado tal como está ahora. Sin nada que ofrecer pero con fotos ya tomadas, igual se guarda:
+  /// son esos archivos los que hay que borrar después.
+  void _guardarBorrador() {
+    final clave = _clave;
+    if (clave == null || _encolado || _leyendoBorrador || _ofrecido != null) return;
+    final borrador = _loCapturado;
+    _escritura = _escritura.then((_) async {
+      if (_encolado) return;
+      if (borrador.vacio && borrador.archivos.isEmpty) {
+        await _almacen.borrar(clave);
+      } else {
+        await _almacen.guardar(clave, borrador);
+      }
+    }).catchError((Object _) {
+      // No poder guardar el borrador no detiene la captura: lo que está en pantalla sigue ahí para cerrarlo.
+    });
+  }
+
+  /// Encola el informe y suelta su borrador en un solo paso. Desde ahí lo de esta pantalla es del job: los archivos
+  /// que usa los borra la cola cuando el servidor los recibe, y los que no usa (la foto de un daño o de un extra
+  /// que se quitó) se borran aquí. Si no se pudo encolar, el borrador sigue guardado como estaba.
+  Future<void> _encolarYSoltar(Job job) async {
+    // Desde aquí ninguna escritura del borrador corre: la que estaba en camino se espera, y las siguientes ven
+    // `_encolado` y no hacen nada.
+    _encolado = true;
+    _notasPorGuardar?.cancel();
+    await _escritura;
+    try {
+      await ref.read(cierreDeCapturaProvider).encolar(job, claveBorrador: _clave);
+    } catch (_) {
+      _encolado = false;
+      _guardarBorrador();
+      rethrow;
+    }
+    await _borrarArchivos(_archivos.difference(_rutasDe(_loCapturado)));
+  }
+
+  Future<void> _borrarArchivos(Iterable<String> rutas) async {
+    for (final ruta in rutas) {
+      try {
+        await _archivosDelTelefono.borrar(ruta);
+      } catch (_) {
+        // Un archivo que no se pudo borrar no detiene a los demás.
+      }
     }
   }
 
@@ -179,6 +349,12 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   @override
   void dispose() {
     unawaited(_gpsEncendido?.cancel());
+    // Lo último que se escribió en las notas todavía no se había guardado.
+    if (_notasPorGuardar?.isActive ?? false) {
+      _notasPorGuardar!.cancel();
+      _guardarBorrador();
+    }
+    _notas.removeListener(_alEscribirNotas);
     _notas.dispose();
     super.dispose();
   }
@@ -219,7 +395,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     if (temporal == null || !mounted) return;
 
     final foto = await _sellar(temporal, vistaId: vista.id, nota: nota);
-    if (foto != null && mounted) setState(() => _fotos.add(foto));
+    if (foto != null && mounted) _cambiar(() => _fotos.add(foto));
   }
 
   /// Toma una foto de la acomodación: no cubre ninguna vista ni hallazgo, y cuenta para el mínimo del cierre.
@@ -229,7 +405,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     );
     if (temporal == null || !mounted) return;
     final foto = await _sellar(temporal);
-    if (foto != null && mounted) setState(() => _fotos.add(foto));
+    if (foto != null && mounted) _cambiar(() => _fotos.add(foto));
   }
 
   int get _fotosAcomodacionMinimas =>
@@ -243,6 +419,9 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     setState(() => _guardandoFoto = true);
     try {
       final foto = await sellarFoto(ref, temporal, vistaId: vistaId, nota: nota);
+      // Anotada desde ya: si después no se usa (se quitó el daño, o el extra mientras la cámara estaba abierta),
+      // igual es de esta captura y se borra con ella.
+      if (foto != null) _archivos.add(foto.ruta);
       if (foto == null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No se pudo guardar la foto. Inténtalo de nuevo.')));
       }
@@ -322,7 +501,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     final foto = await _sellar(temporal);
     if (foto == null || !mounted) return;
 
-    setState(() => _hallazgos.add(
+    _cambiar(() => _hallazgos.add(
           HallazgoLocal(
             cuadranteNumero: zona.numero,
             lado: zona.lado,
@@ -397,7 +576,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     }
     switch (accion) {
       case _AccionDano.quitar:
-        setState(() => _hallazgos.removeAt(i));
+        _cambiar(() => _hallazgos.removeAt(i));
       case _AccionDano.corregir:
         final dano = await pedirDano(
           context,
@@ -411,7 +590,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         // Se busca de nuevo: mientras la hoja estaba abierta la lista pudo cambiar.
         final j = _indiceDe(zona);
         if (dano == null || !mounted || j < 0) break;
-        setState(() => _hallazgos[j] = _hallazgos[j].copiar(
+        _cambiar(() => _hallazgos[j] = _hallazgos[j].copiar(
               clase: dano.clase,
               tamano: dano.tamano,
               nivel: () => dano.nivel,
@@ -445,7 +624,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       puedeMarcarDano: !_esConductor,
     );
     if (datos == null || !mounted) return;
-    setState(() => _extras.add(ExtraLocal(
+    _cambiar(() => _extras.add(ExtraLocal(
           tipo: datos.tipo,
           nombre: datos.nombre,
           textoOtro: datos.textoOtro,
@@ -465,7 +644,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     // Se busca de nuevo: mientras la cámara estaba abierta el extra pudo quitarse.
     final j = _extras.indexOf(extra);
     if (foto == null || !mounted || j < 0) return;
-    setState(() => _extras[j] = _extras[j].conFoto(foto));
+    _cambiar(() => _extras[j] = _extras[j].conFoto(foto));
   }
 
   /// Las vistas que pide esta etapa. Transporte no pide ninguna.
@@ -488,7 +667,8 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     final gps = _gps;
     // El job se marca con quién lo encoló: la cola sobrevive al cierre de sesión y nadie debe enviar lo de otro.
     final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
-    if (gps == null || usuarioId == null || _bloqueo != null) return;
+    // Ya encolado, un segundo toque no puede encolar el mismo informe otra vez.
+    if (gps == null || usuarioId == null || _bloqueo != null || _encolado) return;
     setState(() => _cerrando = true);
     try {
       final ahora = DateTime.now();
@@ -516,7 +696,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         posicionesPrevias: _esAcomodacion ? _posicionesPrevias : const {},
         corrigeInspeccionId: widget.corrigeInspeccionId,
       );
-      await ref.read(colaRepositorioProvider).agregar(job);
+      await _encolarYSoltar(job);
       final sync = ref.read(syncControllerProvider.notifier);
       await sync.refrescar();
       await sync.sincronizar();
@@ -590,160 +770,189 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     final catalogos = ref.watch(catalogosProvider);
     final descargandoCatalogos = ref.watch(catalogosControllerProvider).fase == FaseCatalogos.cargando;
     final checklist = _checklist;
-    return Scaffold(
-      // `proceso` es el código (con él se decide el checklist); lo que se lee sale del catálogo, y si todavía
-      // no está descargado cae al propio código.
-      appBar: AppBar(
-        title: Text('${etiquetar(etiquetaMomento, widget.momento)} · ${catalogos.etiqueta(Catalogo.etapas, widget.proceso)}'),
-      ),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            ListView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.all(Espacio.lg),
-              children: [
-                Text(widget.vin, style: tema.bodySmall?.copyWith(fontFamily: 'monospace')),
-                if (widget.motivoSinInspector case final codigo?) ...[
-                  const SizedBox(height: Espacio.md),
-                  Tarjeta(
-                    child: Text(
-                      'Sin inspector: ${catalogos.etiqueta(Catalogo.motivosSinInspector, codigo)}'
-                      '${widget.motivoSinInspectorTexto == null ? '' : ' · ${widget.motivoSinInspectorTexto}'}. '
-                      'Se avisará al coordinador.',
-                      style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+    final ofrecido = _ofrecido;
+    final titulo = Text('${etiquetar(etiquetaMomento, widget.momento)} · ${catalogos.etiqueta(Catalogo.etapas, widget.proceso)}');
+    if (_leyendoBorrador) return Scaffold(appBar: AppBar(title: titulo), body: const EstadoCargando());
+    if (ofrecido != null) {
+      return Scaffold(
+        appBar: AppBar(title: titulo),
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(Espacio.lg),
+            children: [
+              Text(widget.vin, style: tema.bodySmall?.copyWith(fontFamily: 'monospace')),
+              const SizedBox(height: Espacio.md),
+              Text('Hay una captura guardada en este teléfono', style: tema.titleMedium),
+              Text('Quedó sin cerrar la última vez que saliste de esta pantalla.', style: tema.bodySmall),
+              const SizedBox(height: Espacio.lg),
+              FilledButton(onPressed: _continuarLoGuardado, child: Text(etiquetaContinuar(ofrecido))),
+              const SizedBox(height: Espacio.sm),
+              OutlinedButton(onPressed: _empezarDeNuevo, child: const Text('Empezar de nuevo')),
+            ],
+          ),
+        ),
+      );
+    }
+    // Salir sin cerrar no pierde nada, y se dice: quien sale tiene que saber que puede volver.
+    return PopScope<Object?>(
+      onPopInvokedWithResult: (salio, _) {
+        if (salio && _clave != null && !_encolado && !_loCapturado.vacio) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Queda guardado en este teléfono')));
+        }
+      },
+      child: Scaffold(
+        // `proceso` es el código (con él se decide el checklist); lo que se lee sale del catálogo, y si todavía
+        // no está descargado cae al propio código.
+        appBar: AppBar(title: titulo),
+        body: SafeArea(
+          child: Stack(
+            children: [
+              ListView(
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.all(Espacio.lg),
+                children: [
+                  Text(widget.vin, style: tema.bodySmall?.copyWith(fontFamily: 'monospace')),
+                  if (widget.motivoSinInspector case final codigo?) ...[
+                    const SizedBox(height: Espacio.md),
+                    Tarjeta(
+                      child: Text(
+                        'Sin inspector: ${catalogos.etiqueta(Catalogo.motivosSinInspector, codigo)}'
+                        '${widget.motivoSinInspectorTexto == null ? '' : ' · ${widget.motivoSinInspectorTexto}'}. '
+                        'Se avisará al coordinador.',
+                        style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+                      ),
                     ),
-                  ),
-                ],
-                const SizedBox(height: Espacio.md),
-                Text('Datos del transporte', style: tema.titleMedium),
-                const SizedBox(height: Espacio.md),
-                // Ya no se escriben: salen del viaje de la etapa y el servidor los toma de ahí.
-                _DatosDelViaje(viajeId: widget.viajeId),
-                const SizedBox(height: Espacio.md),
-                _FilaUbicacion(gps: _gps, error: _errorGps, buscando: _buscandoGps, alReintentar: _buscarUbicacion, alAbrirAjustes: ref.read(servicioUbicacionProvider).abrirAjustes),
-                const SizedBox(height: Espacio.lg),
-                Text('Novedades', style: tema.titleMedium),
-                Text('Toca el cuadrante donde está el daño. Si no hay novedades, puedes cerrar sin fotos.', style: tema.bodySmall),
-                const SizedBox(height: Espacio.md),
-                SelectorZonaDano(
-                  contexto: _contextoDibujo,
-                  danos: {for (final h in _hallazgos) ?h.clave: h.nivel},
-                  // Lo que el vehículo ya traía, rayado y con borde discontinuo. Al conductor no se le muestra:
-                  // la API le responde 403 a los previos y no es él quien decide si un daño ya venía de antes.
-                  anteriores: _esConductor ? const {} : {for (final p in _previos) ?p.clave},
-                  alRegistrar: _registrarDano,
-                  alAbrirDano: _abrirDano,
-                ),
-                if (_hallazgos.isNotEmpty) ...[
+                  ],
                   const SizedBox(height: Espacio.md),
-                  for (var i = 0; i < _hallazgos.length; i++)
-                    FilaHallazgo(
-                      hallazgo: _hallazgos[i],
-                      clase: catalogos.etiqueta(Catalogo.clasesDano, _hallazgos[i].clase),
-                      tamano: catalogos.etiqueta(Catalogo.tamanosDano, _hallazgos[i].tamano),
-                      nivel: switch (_hallazgos[i].nivel) {
-                        final n? => catalogos.etiqueta(Catalogo.nivelesSeveridad, n),
-                        null => null,
-                      },
-                      alQuitar: () => setState(() => _hallazgos.removeAt(i)),
+                  Text('Datos del transporte', style: tema.titleMedium),
+                  const SizedBox(height: Espacio.md),
+                  // Ya no se escriben: salen del viaje de la etapa y el servidor los toma de ahí.
+                  _DatosDelViaje(viajeId: widget.viajeId),
+                  const SizedBox(height: Espacio.md),
+                  _FilaUbicacion(gps: _gps, error: _errorGps, buscando: _buscandoGps, alReintentar: _buscarUbicacion, alAbrirAjustes: ref.read(servicioUbicacionProvider).abrirAjustes),
+                  const SizedBox(height: Espacio.lg),
+                  Text('Novedades', style: tema.titleMedium),
+                  Text('Toca el cuadrante donde está el daño. Si no hay novedades, puedes cerrar sin fotos.', style: tema.bodySmall),
+                  const SizedBox(height: Espacio.md),
+                  SelectorZonaDano(
+                    contexto: _contextoDibujo,
+                    danos: {for (final h in _hallazgos) ?h.clave: h.nivel},
+                    // Lo que el vehículo ya traía, rayado y con borde discontinuo. Al conductor no se le muestra:
+                    // la API le responde 403 a los previos y no es él quien decide si un daño ya venía de antes.
+                    anteriores: _esConductor ? const {} : {for (final p in _previos) ?p.clave},
+                    alRegistrar: _registrarDano,
+                    alAbrirDano: _abrirDano,
+                  ),
+                  if (_hallazgos.isNotEmpty) ...[
+                    const SizedBox(height: Espacio.md),
+                    for (var i = 0; i < _hallazgos.length; i++)
+                      FilaHallazgo(
+                        hallazgo: _hallazgos[i],
+                        clase: catalogos.etiqueta(Catalogo.clasesDano, _hallazgos[i].clase),
+                        tamano: catalogos.etiqueta(Catalogo.tamanosDano, _hallazgos[i].tamano),
+                        nivel: switch (_hallazgos[i].nivel) {
+                          final n? => catalogos.etiqueta(Catalogo.nivelesSeveridad, n),
+                          null => null,
+                        },
+                        alQuitar: () => _cambiar(() => _hallazgos.removeAt(i)),
+                      ),
+                  ],
+                  // Con qué venía el vehículo. Va debajo de lo que se está capturando: primero lo que se hace ahora,
+                  // después aquello contra lo que se compara. Al conductor no: la API le responde 403.
+                  if (!_esConductor) ...[
+                    const SizedBox(height: Espacio.lg),
+                    ListaHallazgosPrevios(
+                      previos: _previos,
+                      cargando: _cargandoPrevios,
+                      // Los enlaces de las fotos vencen; al vencer se vuelven a pedir, que es lo que trae unos nuevos.
+                      alVencerFoto: _cargarPrevios,
                     ),
-                ],
-                // Con qué venía el vehículo. Va debajo de lo que se está capturando: primero lo que se hace ahora,
-                // después aquello contra lo que se compara. Al conductor no: la API le responde 403.
-                if (!_esConductor) ...[
+                  ],
+                  if (ref.watch(entornoProvider).extrasHabilitados) ...[
+                    const SizedBox(height: Espacio.lg),
+                    SeccionExtras(
+                      catalogos: catalogos,
+                      extras: _extras,
+                      alAgregar: _guardandoFoto ? null : _agregarExtra,
+                      alTomarFoto: _guardandoFoto ? null : _tomarFotoExtra,
+                      alQuitar: (i) => _cambiar(() => _extras.removeAt(i)),
+                    ),
+                  ],
                   const SizedBox(height: Espacio.lg),
-                  ListaHallazgosPrevios(
-                    previos: _previos,
-                    cargando: _cargandoPrevios,
-                    // Los enlaces de las fotos vencen; al vencer se vuelven a pedir, que es lo que trae unos nuevos.
-                    alVencerFoto: _cargarPrevios,
-                  ),
-                ],
-                if (ref.watch(entornoProvider).extrasHabilitados) ...[
-                  const SizedBox(height: Espacio.lg),
-                  SeccionExtras(
-                    catalogos: catalogos,
-                    extras: _extras,
-                    alAgregar: _guardandoFoto ? null : _agregarExtra,
-                    alTomarFoto: _guardandoFoto ? null : _tomarFotoExtra,
-                    alQuitar: (i) => setState(() => _extras.removeAt(i)),
-                  ),
-                ],
-                const SizedBox(height: Espacio.lg),
-                if (_esAcomodacion)
-                  SeccionAcomodacion(
-                    viaje: _viaje,
-                    unidades: _unidades,
-                    posiciones: _posiciones,
-                    fotos: _fotos,
-                    fotosMinimas: _fotosAcomodacionMinimas,
-                    alElegir: (vin, posicion) => setState(() {
-                      if (posicion == null) {
-                        _posiciones.remove(vin);
-                      } else {
-                        _posiciones[vin] = posicion;
-                      }
-                    }),
-                    alTomarFoto: _guardandoFoto ? null : _tomarFotoAcomodacion,
-                    alReintentar: () => ref.invalidate(viajeDeEtapaProvider(widget.viajeId!)),
-                    precisionBaja: ref.watch(entornoProvider).precisionBajaMetros,
-                  )
-                else if (checklist.isEmpty)
-                  Text(
-                    'Esta etapa no pide fotos por vista; basta la ubicación del registro.',
-                    style: tema.bodySmall,
-                  )
-                else ...[
-                  Text('Fotos de la inspección', style: tema.titleMedium),
-                  Text(
-                    'Las obligatorias se piden siempre. Las adicionales, solo si hay faltante o daño, y con su nota.',
-                    style: tema.bodySmall,
-                  ),
-                  const SizedBox(height: Espacio.md),
-                  for (final vista in checklist) ...[
-                    FilaVista(
-                      vista: vista,
-                      foto: _fotos.ultimaDeLaVista(vista.id),
-                      alTomar: _guardandoFoto ? null : () => _tomarFoto(vista),
+                  if (_esAcomodacion)
+                    SeccionAcomodacion(
+                      viaje: _viaje,
+                      unidades: _unidades,
+                      posiciones: _posiciones,
+                      fotos: _fotos,
+                      fotosMinimas: _fotosAcomodacionMinimas,
+                      alElegir: (vin, posicion) => setState(() {
+                        if (posicion == null) {
+                          _posiciones.remove(vin);
+                        } else {
+                          _posiciones[vin] = posicion;
+                        }
+                      }),
+                      alTomarFoto: _guardandoFoto ? null : _tomarFotoAcomodacion,
+                      alReintentar: () => ref.invalidate(viajeDeEtapaProvider(widget.viajeId!)),
                       precisionBaja: ref.watch(entornoProvider).precisionBajaMetros,
+                    )
+                  else if (checklist.isEmpty)
+                    Text(
+                      'Esta etapa no pide fotos por vista; basta la ubicación del registro.',
+                      style: tema.bodySmall,
+                    )
+                  else ...[
+                    Text('Fotos de la inspección', style: tema.titleMedium),
+                    Text(
+                      'Las obligatorias se piden siempre. Las adicionales, solo si hay faltante o daño, y con su nota.',
+                      style: tema.bodySmall,
                     ),
-                    const SizedBox(height: Espacio.sm),
+                    const SizedBox(height: Espacio.md),
+                    for (final vista in checklist) ...[
+                      FilaVista(
+                        vista: vista,
+                        foto: _fotos.ultimaDeLaVista(vista.id),
+                        alTomar: _guardandoFoto ? null : () => _tomarFoto(vista),
+                        precisionBaja: ref.watch(entornoProvider).precisionBajaMetros,
+                      ),
+                      const SizedBox(height: Espacio.sm),
+                    ],
+                  ],
+                  const SizedBox(height: Espacio.lg),
+                  TextField(
+                    controller: _notas,
+                    maxLines: 4,
+                    maxLength: 1000,
+                    decoration: const InputDecoration(labelText: 'Notas adicionales (opcional)', hintText: 'Detalles del hallazgo u observaciones', alignLabelWithHint: true),
+                  ),
+                  const SizedBox(height: Espacio.md),
+                  FilledButton(
+                    onPressed: bloqueo == null && !_cerrando ? _cerrar : null,
+                    child: _cerrando ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)) : const Text('Cerrar informe'),
+                  ),
+                  if (bloqueo != null && !_cerrando) ...[
+                    Padding(padding: const EdgeInsets.only(top: Espacio.sm), child: Text(bloqueo.mensaje, textAlign: TextAlign.center, style: tema.bodySmall)),
+                    if (bloqueo is SinCatalogos)
+                      TextButton(
+                        // Mientras hay una descarga en curso el botón lo dice, para no pulsarlo a ciegas.
+                        onPressed: descargandoCatalogos
+                            ? null
+                            : () => ref.read(catalogosControllerProvider.notifier).reintentar(),
+                        child: Text(descargandoCatalogos ? 'Descargando…' : 'Reintentar descarga'),
+                      ),
                   ],
                 ],
-                const SizedBox(height: Espacio.lg),
-                TextField(
-                  controller: _notas,
-                  maxLines: 4,
-                  maxLength: 1000,
-                  decoration: const InputDecoration(labelText: 'Notas adicionales (opcional)', hintText: 'Detalles del hallazgo u observaciones', alignLabelWithHint: true),
-                ),
-                const SizedBox(height: Espacio.md),
-                FilledButton(
-                  onPressed: bloqueo == null && !_cerrando ? _cerrar : null,
-                  child: _cerrando ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white)) : const Text('Cerrar informe'),
-                ),
-                if (bloqueo != null && !_cerrando) ...[
-                  Padding(padding: const EdgeInsets.only(top: Espacio.sm), child: Text(bloqueo.mensaje, textAlign: TextAlign.center, style: tema.bodySmall)),
-                  if (bloqueo is SinCatalogos)
-                    TextButton(
-                      // Mientras hay una descarga en curso el botón lo dice, para no pulsarlo a ciegas.
-                      onPressed: descargandoCatalogos
-                          ? null
-                          : () => ref.read(catalogosControllerProvider.notifier).reintentar(),
-                      child: Text(descargandoCatalogos ? 'Descargando…' : 'Reintentar descarga'),
-                    ),
-                ],
-              ],
-            ),
-            if (_guardandoFoto)
-              Positioned.fill(
-                child: Container(
-                  color: Colors.white70,
-                  child: const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(), SizedBox(height: Espacio.sm), Text('Guardando foto…')])),
-                ),
               ),
-          ],
+              if (_guardandoFoto)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.white70,
+                    child: const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(), SizedBox(height: Espacio.sm), Text('Guardando foto…')])),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

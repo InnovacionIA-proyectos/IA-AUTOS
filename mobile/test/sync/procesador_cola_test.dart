@@ -461,6 +461,30 @@ void main() {
       expect(archivos.borrados, ['a.jpg', 'b.jpg']);
     });
 
+    // S8-HU-11.2 CA-5: la foto de un daño es del job igual que las del checklist; enviado o descartado, se borra.
+    test('enviado o descartado, también borra la foto de cada daño', () async {
+      const conFoto = HallazgoLocal(
+        cuadranteNumero: 26,
+        lado: 'derecho',
+        zona: 'Llanta trasera derecha',
+        clase: 'golpe',
+        tamano: '1_5cm',
+        nivel: 'v2',
+        foto: FotoLocal(ruta: 'h.jpg', selloFecha: '2026-01-02T10:03:00.000Z'),
+      );
+      archivos.existentes.add('h.jpg');
+      await cola.agregar(informe(fotos: [foto('a.jpg')], hallazgos: [conFoto]));
+
+      await procesador.procesar(usuarioPrueba);
+      expect(cola.jobs, isEmpty);
+      expect(archivos.borrados, ['a.jpg', 'h.jpg']);
+
+      archivos.borrados.clear();
+      await cola.agregar(informe(fallido: true, fotos: [foto('b.jpg')], hallazgos: [conFoto]));
+      await procesador.descartar('j1');
+      expect(archivos.borrados, ['b.jpg', 'h.jpg']);
+    });
+
     test('reintentar o descartar un id inexistente no hace nada', () async {
       await procesador.reintentar('nada', usuarioPrueba);
       await procesador.descartar('nada');
