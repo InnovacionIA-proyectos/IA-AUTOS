@@ -15,6 +15,11 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
 {
     private const int MAXIMO_BUSQUEDA = 8;
 
+    public async Task<IReadOnlyList<string>> MarcasAsync(Guid? clienteId, CancellationToken ct = default) =>
+        await contexto.Vehiculos.AsNoTracking()
+            .Where(v => (clienteId == null || v.ClienteId == clienteId) && v.Marca != string.Empty)
+            .Select(v => v.Marca).Distinct().OrderBy(m => m).ToListAsync(ct);
+
     public async Task<IReadOnlyList<VehiculoBusquedaDto>> BuscarAsync(string termino, Guid? soloDeUsuario, Guid? soloDeCliente, CancellationToken ct = default)
     {
         // Un vehiculo dado de baja ya no se ofrece al buscar (sigue en los listados, el inventario y los reportes).
@@ -74,7 +79,9 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
 
         if (f.Marca is not null)
         {
-            consulta = consulta.Where(v => v.Marca == f.Marca);
+            // La marca busca por contenido, sin distinguir mayusculas (el servicio ya recorto los espacios de los bordes).
+            var marca = f.Marca.ToLower();
+            consulta = consulta.Where(v => v.Marca.ToLower().Contains(marca));
         }
 
         if (f.ClienteId is { } clienteFiltro)

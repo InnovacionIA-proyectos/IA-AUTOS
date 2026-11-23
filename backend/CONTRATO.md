@@ -152,6 +152,22 @@ Los nombres `codigoMtrack`, `conductorId`, `usuarioId`, `viajeId` y `clienteId` 
 `desde` y `hasta` son fechas ISO con zona y acotan, según el listado, la fecha de la inspección (inspecciones), la creación del viaje (viajes), el evento de la orden (Sofasa) o el alta del vehículo (vehículos). `cliente_id` lo elige solo el `super_admin`: quien se limita a su cliente
 recibe siempre el suyo y un `cliente_id` distinto responde `403`. `origen_id` y `destino_id` son los del viaje.
 
+**Filtros de texto: exactos o parciales.** Cada filtro de texto dice cuál es, y el servidor lo normaliza (recorta los espacios de los bordes) para que no dependa de lo que mande cada pantalla. Un filtro vacío o solo con espacios **no filtra**, y cero coincidencias responde `200` con `0` elementos (nunca `400` ni `404`).
+
+| Filtro | Búsqueda |
+|---|---|
+| `marca` (vehículos, informes, exportación de informes y reportes del tablero), `trailer` (reportes del tablero) | **parcial**: por contenido, sin distinguir mayúsculas («rena», «RENA» y « rena » encuentran los mismos Renault) |
+| `estado` de `GET /api/sofasa/ordenes` (sobre el `status_code`) | **parcial**: «entreg» encuentra ENTREGADA y ENTREGA PARCIAL |
+| `ciudad` de Sofasa, `codigo_mtrack` | parcial (como antes) |
+| `vin` | un VIN de 17 caracteres, **exacto**; un chasis (de 6 a 20), por contenido (como antes) |
+| `operacion`, `momento`, `estado` de un informe, `proceso`, `nivel` y los de catálogo | **exacto** (un valor de la lista) |
+
+**Listas para los filtros.** Para que el portal ofrezca todos los valores de un filtro de texto:
+- `GET /api/vehiculos/marcas`: las **marcas distintas** de los vehículos del cliente de quien pregunta, por orden alfabético y sin repetir (una lista de textos). Un cliente sin vehículos recibe `[]`.
+- `GET /api/viajes/trailers`: los **trailers distintos** de los viajes del cliente, sin nulos ni vacíos y por orden alfabético.
+
+Las dos las leen `coordinador_calidad`, `admin` y `super_admin` (`403` al resto); `cliente_id` solo lo elige el `super_admin` (sin él ve las de todos); los demás reciben las de su cliente y `403` si piden otro; un `cliente_id` que no es un UUID responde `400`. No traen ningún dato personal. Los estados de Sofasa no tienen lista aparte: son el catálogo `estados-sofasa`. Los nombres de las dos rutas están **a confirmar por backend** con el portal.
+
 **VIN.** Un solo criterio para cargar y buscar un VIN: **17 caracteres alfanuméricos sin las letras `I`, `O` ni `Q`** (ISO 3779) **o un chasis de Sofasa de 6 a 20 caracteres alfanuméricos**; se normaliza a mayúscula y sin espacios en los bordes. Lo aplican la carga
 (`POST /api/vehiculos/cargar`, por fila: una fila inválida responde `400`), el filtro `vin` de los listados de arriba y de sus exportaciones, y el autocompletado `GET /api/vehiculos?vin=` cuando el texto tiene 17 caracteres alfanuméricos. Un VIN de 17 caracteres se busca exacto; un chasis
 (de 6 a 20), por contenido. Un valor que no cumple responde `400` con el motivo, por ejemplo: `VIN inválido: los de 17 caracteres son alfanuméricos y no llevan las letras I, O ni Q`. El autocompletado de Inventario sigue buscando por **fragmento** de VIN o de marca.
@@ -2322,7 +2338,7 @@ Los días son días de Colombia (UTC-5). Quien no es `super_admin` recibe solo l
 | `operacion` | `importacion`, `exportacion` o `nacional` |
 | `cliente_id` | solo el `super_admin` elige un cliente (o ninguno: ve todos); los demás reciben su cliente y `403` si piden otro |
 | `punto_id` | un punto de custodia: los viajes que **salen de él o llegan a él** |
-| `marca`, `trailer` | texto exacto |
+| `marca`, `trailer` | texto **parcial**: busca por contenido, sin distinguir mayúsculas y recortando los espacios de los bordes («tr-12» encuentra «TR-123» y no «TR-145») |
 | `proceso` | `cargue`, `transporte` o `descargue` (en tiempo de captura y en los hallazgos: averías y patrones) |
 | `nivel` | `v1_plus`, `v1`, `v2` o `v3` (en los hallazgos: averías y patrones) |
 

@@ -43,6 +43,8 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
         FiltrosInspecciones f, Guid? soloDeUsuario, Guid? soloDeCliente, PaginaSolicitada pagina, OrdenSolicitado? orden, CancellationToken ct = default)
     {
         var vinExacto = f.Vin?.Length == clsVin.LONGITUD_ISO;
+        // La marca busca por contenido, sin distinguir mayusculas.
+        var marca = f.Marca?.ToLower();
         var consulta = from i in contexto.Inspecciones.AsNoTracking()
                        join e in contexto.Etapas on i.EtapaId equals e.Id
                        join v in contexto.Vehiculos on e.VehiculoId equals v.Id
@@ -57,7 +59,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                        where (f.Vin == null || (vinExacto ? v.Vin == f.Vin : v.Vin.Contains(f.Vin)))
                           && (soloDeCliente == null || v.ClienteId == soloDeCliente)
                           && (f.Operacion == null || v.Operacion == f.Operacion)
-                          && (f.Marca == null || v.Marca == f.Marca)
+                          && (marca == null || v.Marca.ToLower().Contains(marca))
                           && (f.OrigenId == null || vj.OrigenId == f.OrigenId)
                           && (f.DestinoId == null || vj.DestinoId == f.DestinoId)
                           && (f.UsuarioId == null || i.UsuarioId == f.UsuarioId)

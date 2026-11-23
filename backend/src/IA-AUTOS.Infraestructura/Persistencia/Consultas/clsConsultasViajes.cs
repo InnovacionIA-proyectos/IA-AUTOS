@@ -90,6 +90,17 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
             || (!contexto.ViajeVehiculos.Any(vv => vv.ViajeId == v.Id)
                 && contexto.Usuarios.Any(u => u.Id == v.CreadoPor && u.ClienteId == clienteId));
 
+    public async Task<IReadOnlyList<string>> TrailersAsync(Guid? clienteId, CancellationToken ct = default)
+    {
+        var consulta = contexto.Viajes.AsNoTracking().Where(v => v.Trailer != null && v.Trailer != string.Empty);
+        if (clienteId is { } cliente)
+        {
+            consulta = consulta.Where(DeCliente(cliente));
+        }
+
+        return await consulta.Select(v => v.Trailer!).Distinct().OrderBy(t => t).ToListAsync(ct);
+    }
+
     public async Task<bool> ViajeEsDeClienteAsync(Guid viajeId, Guid clienteId, CancellationToken ct = default) =>
         await contexto.Viajes.AsNoTracking().Where(v => v.Id == viajeId).Where(DeCliente(clienteId)).AnyAsync(ct);
 

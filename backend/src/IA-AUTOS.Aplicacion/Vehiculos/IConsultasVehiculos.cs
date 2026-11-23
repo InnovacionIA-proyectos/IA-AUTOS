@@ -15,6 +15,9 @@ public static class clsTipoListado
 /// <summary>Consultas de solo lectura sobre vehiculos (listados del tablero, busqueda e inventario por VIN).</summary>
 public interface IConsultasVehiculos
 {
+    /// <summary>Las marcas distintas de los vehiculos del cliente (de todos si <paramref name="clienteId"/> es nulo), sin vacias y por orden alfabetico.</summary>
+    Task<IReadOnlyList<string>> MarcasAsync(Guid? clienteId, CancellationToken ct = default);
+
     /// <summary>
     /// Coincidencia por fragmento de VIN o marca; maximo 8 resultados. Con <paramref name="soloDeUsuario"/>, solo VIN de los viajes de ese usuario; con
     /// <paramref name="soloDeCliente"/>, solo los VIN de ese cliente.

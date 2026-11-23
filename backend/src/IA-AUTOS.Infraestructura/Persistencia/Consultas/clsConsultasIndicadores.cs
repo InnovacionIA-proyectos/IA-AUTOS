@@ -222,14 +222,17 @@ internal sealed class clsConsultasIndicadores(clsAppDbContext contexto) : IConsu
             consulta = consulta.Where(x => x.OrigenId == punto || x.DestinoId == punto);
         }
 
+        // La marca y el trailer buscan por contenido, sin distinguir mayusculas.
         if (f.Marca is { } marca)
         {
-            consulta = consulta.Where(x => x.Marca == marca);
+            var buscada = marca.ToLower();
+            consulta = consulta.Where(x => x.Marca.ToLower().Contains(buscada));
         }
 
         if (f.Trailer is { } trailer)
         {
-            consulta = consulta.Where(x => x.Trailer == trailer);
+            var buscado = trailer.ToLower();
+            consulta = consulta.Where(x => x.Trailer != null && x.Trailer.ToLower().Contains(buscado));
         }
 
         return consulta;
@@ -319,12 +322,14 @@ internal sealed class clsConsultasIndicadores(clsAppDbContext contexto) : IConsu
 
         if (filtros.Marca is { } marca)
         {
-            consulta = consulta.Where(x => x.Marca == marca);
+            var buscada = marca.ToLower();
+            consulta = consulta.Where(x => x.Marca.ToLower().Contains(buscada));
         }
 
         if (filtros.Trailer is { } trailer)
         {
-            consulta = consulta.Where(x => x.Trailer == trailer);
+            var buscado = trailer.ToLower();
+            consulta = consulta.Where(x => x.Trailer != null && x.Trailer.ToLower().Contains(buscado));
         }
 
         if (filtros.Proceso is { } proceso)

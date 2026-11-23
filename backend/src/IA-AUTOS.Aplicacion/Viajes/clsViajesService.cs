@@ -144,6 +144,22 @@ public sealed class clsViajesService(
         return new PaginaDto<ViajeResumenDto>(filas, total, pagina.Pagina, pagina.Tamano);
     }
 
+    /// <summary>
+    /// Los trailers distintos de los viajes del cliente, sin nulos ni vacios y por orden alfabetico: para que el portal ofrezca todos los valores del filtro de trailer. Mismas reglas de cliente que las marcas (quien se limita a su
+    /// cliente recibe los suyos y 403 si pide otro; el super administrador elige con <c>cliente_id</c>). No lleva ningun dato personal.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> TrailersAsync(string? clienteId, CancellationToken ct = default)
+    {
+        var errores = new Dictionary<string, string[]>();
+        var cliente = clsParseoFiltros.Uuid(clienteId, "cliente_id", errores);
+        if (errores.Count > 0)
+        {
+            throw clsErroresCampos.Varios(errores);
+        }
+
+        return await consultas.TrailersAsync(actual.ClienteDelFiltro(cliente), ct);
+    }
+
     /// <summary>Los viajes del usuario (como conductor o inspector). Sin estado: los programados y en curso.</summary>
     public async Task<IReadOnlyList<ViajeDto>> MiosAsync(string? estado, CancellationToken ct = default)
     {

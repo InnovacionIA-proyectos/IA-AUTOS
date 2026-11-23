@@ -6,6 +6,9 @@ namespace IAAutos.Aplicacion.Viajes;
 /// <summary>Consultas de solo lectura de viajes y de su visibilidad por usuario.</summary>
 public interface IConsultasViajes
 {
+    /// <summary>Los trailers distintos de los viajes del cliente (de todos si <paramref name="clienteId"/> es nulo), sin nulos ni vacios y por orden alfabetico.</summary>
+    Task<IReadOnlyList<string>> TrailersAsync(Guid? clienteId, CancellationToken ct = default);
+
     /// <summary>
     /// Una pagina del listado (sin <paramref name="orden"/>, los mas recientes primero) y el total que cumple los filtros. Con <paramref name="soloDeUsuario"/> solo los viajes en los que participa ese
     /// usuario. Con <paramref name="soloDeCliente"/> solo los viajes de ese cliente (con algun VIN suyo, o sin VIN y creados por alguien de su cliente), con los conteos y los clientes calculados solo sobre

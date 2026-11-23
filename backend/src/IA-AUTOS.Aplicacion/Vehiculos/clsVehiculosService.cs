@@ -178,6 +178,22 @@ public sealed class clsVehiculosService(
     }
 
     /// <summary>
+    /// Las marcas distintas de los vehiculos del cliente, por orden alfabetico y sin repetir: para que el portal ofrezca todos los valores del filtro de marca. Quien se limita a su cliente recibe las suyas (pedir otro
+    /// cliente responde 403); el super administrador elige el cliente con <c>cliente_id</c> (sin el, las de todos). Un cliente sin vehiculos recibe una lista vacia. No lleva ningun dato personal.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> MarcasAsync(string? clienteId, CancellationToken ct = default)
+    {
+        var errores = new Dictionary<string, string[]>();
+        var cliente = clsParseoFiltros.Uuid(clienteId, "cliente_id", errores);
+        if (errores.Count > 0)
+        {
+            throw clsErroresCampos.Varios(errores);
+        }
+
+        return await consultas.MarcasAsync(actual.ClienteDelFiltro(cliente), ct);
+    }
+
+    /// <summary>
     /// Una pagina de vehiculos: <c>{items, total, pagina, tamano}</c> (50 por defecto, maximo 200). Los filtros, la pagina y el orden se validan juntos y un error responde 400. Quien se limita a su cliente solo
     /// ve el suyo (pedir otro responde 403).
     /// </summary>

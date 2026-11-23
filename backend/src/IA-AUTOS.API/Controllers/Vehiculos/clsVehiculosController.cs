@@ -52,6 +52,15 @@ public sealed class clsVehiculosController(clsVehiculosService servicio, clsInve
     /// <c>cliente_id</c> (solo el super administrador elige otro), <c>estado_unidad</c>, <c>activo</c>, <c>desde</c> y <c>hasta</c> (alta del vehiculo); <c>pagina</c>, <c>tamano</c> (50, maximo 200) y <c>orden</c>
     /// (<c>campo:asc|desc</c>).
     /// </summary>
+    /// <summary>
+    /// Las marcas distintas de los vehiculos del cliente de quien pregunta, por orden alfabetico y sin repetir (una lista de textos): el portal las ofrece en el filtro de marca. <c>cliente_id</c> solo lo elige el super administrador
+    /// (los demas reciben el suyo y 403 si piden otro). Un cliente sin vehiculos recibe una lista vacia.
+    /// </summary>
+    [HttpGet("marcas")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<IReadOnlyList<string>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Marcas([FromQuery(Name = "cliente_id")] string? clienteId, CancellationToken ct) => Ok(await servicio.MarcasAsync(clienteId, ct));
+
     [HttpGet("listado")]
     [ProducesResponseType<PaginaDto<ListadoVehiculoDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Listar(

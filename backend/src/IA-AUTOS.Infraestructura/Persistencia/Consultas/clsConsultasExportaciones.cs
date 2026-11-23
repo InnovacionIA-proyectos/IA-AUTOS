@@ -174,6 +174,8 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
     public async Task<ResultadoExportacion<FilaExportInspeccion>> InspeccionesAsync(FiltrosInspecciones f, Guid? clienteId, int maximo, CancellationToken ct = default)
     {
         var vinExacto = f.Vin?.Length == clsVin.LONGITUD_ISO;
+        // La marca busca por contenido, sin distinguir mayusculas.
+        var marca = f.Marca?.ToLower();
         var consulta = from i in contexto.Inspecciones.AsNoTracking()
                        join e in contexto.Etapas on i.EtapaId equals e.Id
                        join v in contexto.Vehiculos on e.VehiculoId equals v.Id
@@ -201,7 +203,7 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                           && (f.Estado == null || i.Estado == f.Estado)
                           && (f.Proceso == null || ec.Codigo == f.Proceso)
                           && (f.Operacion == null || v.Operacion == f.Operacion)
-                          && (f.Marca == null || v.Marca == f.Marca)
+                          && (marca == null || v.Marca.ToLower().Contains(marca))
                           && (f.OrigenId == null || vj.OrigenId == f.OrigenId)
                           && (f.DestinoId == null || vj.DestinoId == f.DestinoId)
                           && (f.Desde == null || i.Fecha >= f.Desde)
