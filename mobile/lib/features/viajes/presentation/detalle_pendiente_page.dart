@@ -10,6 +10,7 @@ import '../../inspecciones/providers.dart';
 import '../domain/pendiente.dart';
 import '../domain/viaje.dart';
 import '../providers.dart';
+import 'tomados.dart';
 
 /// El camión que el inspector reclamó: dónde es, qué unidades trae y cómo soltarlo.
 ///
@@ -29,20 +30,7 @@ class _EstadoDetallePendiente extends ConsumerState<DetallePendientePage> {
   Pendiente get _pendiente => widget.pendiente;
 
   Future<void> _liberar() async {
-    final soltar = await showDialog<bool>(
-      context: context,
-      builder: (contexto) => AlertDialog(
-        title: const Text('Liberar el camión'),
-        content: const Text(
-          'Vuelve a quedar pendiente para los demás inspectores. Lo que ya capturaste se conserva a tu nombre.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(contexto).pop(false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.of(contexto).pop(true), child: const Text('Liberar')),
-        ],
-      ),
-    );
-    if (soltar != true || !mounted) return;
+    if (!await confirmarLiberar(context) || !mounted) return;
 
     setState(() => _liberando = true);
     final mensajes = ScaffoldMessenger.of(context);

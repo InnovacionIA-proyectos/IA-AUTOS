@@ -18,7 +18,7 @@ class ReclamosRepositorio {
     return [for (final p in elementosDe(r, ruta: '/api/viajes/pendientes')) Pendiente.fromJson(p as Map<String, dynamic>)];
   }
 
-  /// «Revisar este». El servidor responde 409 si ya lo tomó otro («Ya fue tomado por otro inspector») o si el
+  /// «Tomar». El servidor responde 409 si ya lo tomó otro («Ya fue tomado por otro inspector») o si el
   /// cargue no es de hoy; el error se propaga tal cual para mostrarlo.
   Future<void> reclamar(String viajeId, String proceso) async {
     await _api.post('/api/viajes/${Uri.encodeComponent(viajeId)}/reclamos', cuerpo: {'proceso': proceso});

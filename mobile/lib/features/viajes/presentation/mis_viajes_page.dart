@@ -11,12 +11,14 @@ import '../../inspecciones/providers.dart';
 import '../../sync/presentation/barra_sync.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../vehiculos/domain/etiquetas.dart';
+import '../domain/pendiente.dart';
 import '../domain/viaje.dart';
 import '../providers.dart';
 import 'acciones_conductor.dart';
 import 'entrega_punto_page.dart';
 import 'mis_viajes_controller.dart';
 import 'seccion_pendientes.dart';
+import 'tomados.dart';
 
 /// Entrada principal del trabajo de campo: los viajes donde la persona es conductor o inspector, con sus VIN.
 ///
@@ -159,6 +161,14 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
     final inspector = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol)) == 'inspector';
     if (inspector && estado.fase == FaseViajes.listo) {
       final tema = Theme.of(context).textTheme;
+      // Lo que tomó de «Por tomar» sale de esa lista y se trabaja aquí. Un cargue tomado ya llega como viaje suyo;
+      // una entrega todavía no (S8-HU-10.1), así que se pinta con lo que trae «Por tomar» para que no desaparezca.
+      final tomados = [
+        for (final p in ref.watch(pendientesProvider).value ?? const <Pendiente>[])
+          if (p.estado == EstadoPendiente.mio) p,
+      ];
+      final idsMios = {for (final v in estado.viajes) v.id};
+      final sueltos = [for (final p in tomados) if (!idsMios.contains(p.viajeId)) p];
       return RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(pendientesProvider);
@@ -171,10 +181,15 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
             const SizedBox(height: Espacio.lg),
             Text('Mis viajes', style: tema.titleMedium),
             const SizedBox(height: Espacio.sm),
-            if (estado.viajes.isEmpty)
-              Text('Cuando reclames un camión o se te asigne un viaje aparecerá aquí con sus unidades.', style: tema.bodySmall)
-            else
-              for (final viaje in estado.viajes) ...[_TarjetaViaje(viaje), const SizedBox(height: Espacio.sm)],
+            if (estado.viajes.isEmpty && sueltos.isEmpty)
+              Text('Cuando tomes un camión de «Por tomar» o se te asigne un viaje, aparecerá aquí con sus unidades.', style: tema.bodySmall)
+            else ...[
+              for (final viaje in estado.viajes) ...[
+                _TarjetaViaje(viaje, tomados: [for (final p in tomados) if (p.viajeId == viaje.id) p]),
+                const SizedBox(height: Espacio.sm),
+              ],
+              for (final pendiente in sueltos) ...[TarjetaTomada(pendiente: pendiente), const SizedBox(height: Espacio.sm)],
+            ],
           ],
         ),
       );
@@ -213,9 +228,12 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
 }
 
 class _TarjetaViaje extends ConsumerWidget {
-  const _TarjetaViaje(this.viaje);
+  const _TarjetaViaje(this.viaje, {this.tomados = const []});
 
   final Viaje viaje;
+
+  /// Lo que quien mira tomó de este viaje en «Por tomar»: dice si carga o recibe y desde aquí se libera.
+  final List<Pendiente> tomados;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -249,6 +267,10 @@ class _TarjetaViaje extends ConsumerWidget {
             ],
           ),
           if (ruta.isNotEmpty) Text(ruta, style: tema.bodySmall),
+          if (etiquetaDelPapel(tomados) case final papel?) ...[
+            const SizedBox(height: Espacio.xs),
+            Insignia(papel, tono: TonoInsignia.info),
+          ],
           const SizedBox(height: Espacio.sm),
           if (viaje.vehiculos.isEmpty)
             Text('Este viaje todavía no tiene unidades.', style: tema.bodySmall)
@@ -280,6 +302,10 @@ class _TarjetaViaje extends ConsumerWidget {
               ),
               child: const Text('Entrega por punto'),
             ),
+          ],
+          if (tomados.isNotEmpty) ...[
+            const SizedBox(height: Espacio.sm),
+            BotonesLiberar(tomados: tomados),
           ],
         ],
       ),

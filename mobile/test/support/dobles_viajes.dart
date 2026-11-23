@@ -109,6 +109,9 @@ class ReclamosRepositorioFalso implements ReclamosRepositorio {
   final List<(String, String)> reclamados = [];
   final List<(String, String)> liberados = [];
 
+  /// Lo que pasa en el servidor tras un reclamo que sale bien: tomar el cargue hace al inspector inspector del viaje.
+  void Function(String viajeId, String proceso)? alReclamar;
+
   @override
   Future<List<Pendiente>> pendientes() async {
     consultas++;
@@ -123,6 +126,7 @@ class ReclamosRepositorioFalso implements ReclamosRepositorio {
       if (despuesDeConsultar != null) pendientesActuales = despuesDeConsultar!;
       throw errorReclamar!;
     }
+    alReclamar?.call(viajeId, proceso);
     pendientesActuales = [
       for (final p in pendientesActuales)
         if (p.viajeId == viajeId && p.proceso == proceso)
