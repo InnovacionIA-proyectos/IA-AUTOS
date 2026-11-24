@@ -684,6 +684,30 @@ void main() {
       expect(find.widgetWithText(OutlinedButton, 'Agregar nota aclaratoria'), findsOneWidget);
     });
 
+    // S8-HU-01.3 CA-8: la firma por niñera cuelga de la acomodación, y desde ahí la llegada de esa etapa tampoco
+    // se corrige: la regla es por etapa, no por informe.
+    testWidgets('con la salida firmada, la llegada de la misma etapa tampoco se corrige', (tester) async {
+      final json = inventarioSalida(transferencia: firmaDeEntrega);
+      final etapa = (json['etapas'] as List<dynamic>).first as Map<String, dynamic>;
+      (etapa['inspecciones'] as List<dynamic>).add({
+        'id': 'i0',
+        'momento': 'llegada',
+        'momento_nombre': 'Inspección de llegada',
+        // La más reciente: es la que la ficha muestra como «Último informe».
+        'fecha': '2026-01-02T12:30:00Z',
+        'cerrada_at': '2026-01-02T12:40:00Z',
+        'estado': 'cerrada',
+        'usuario_id': 'u1',
+        'hallazgos': [],
+        'evidencias': [],
+        'transferencia': null,
+      });
+      await abrir(tester, inventario: json, viajes: enEstado('en_curso'));
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
+      expect(find.text('Esta etapa ya fue firmada: deja una nota aclaratoria'), findsOneWidget);
+    });
+
     testWidgets('tampoco la corrige el administrador con una firma de por medio', (tester) async {
       await abrir(
         tester,
@@ -1039,5 +1063,20 @@ void main() {
 
       expect(find.text('Es la firma de la inspección de salida.'), findsOneWidget);
     });
+  });
+
+  // S8-HU-01.3 CA-9: el cargue muestra el puesto que el servidor registró para el carro en la niñera.
+  testWidgets('el cargue dice el puesto del carro en la niñera', (tester) async {
+    final json = inventarioJson();
+    ((json['etapas'] as List<dynamic>).first as Map<String, dynamic>)['posicion'] = 4;
+    await abrir(tester, inventario: json);
+
+    expect(find.text('Posición en la niñera: 4'), findsOneWidget);
+  });
+
+  testWidgets('sin puesto registrado no se habla de puesto', (tester) async {
+    await abrir(tester);
+
+    expect(find.textContaining('Posición en la niñera'), findsNothing);
   });
 }

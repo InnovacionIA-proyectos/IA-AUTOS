@@ -334,6 +334,7 @@ class EtapaVista {
     this.conPersonalApoyo = false,
     this.traeMarcaApoyo = true,
     this.inspecciones = const [],
+    this.posicion,
   });
 
   factory EtapaVista.fromJson(Map<String, dynamic> json) => EtapaVista(
@@ -346,10 +347,23 @@ class EtapaVista {
         conPersonalApoyo: json['con_personal_apoyo'] as bool? ?? false,
         traeMarcaApoyo: json.containsKey('con_personal_apoyo'),
         inspecciones: [for (final i in (json['inspecciones'] as List<dynamic>? ?? [])) InspeccionVista.fromJson(i as Map<String, dynamic>)],
+        posicion: (json['posicion'] as num?)?.toInt(),
       );
 
   final String id;
   final int orden;
+
+  /// El puesto que tuvo el carro en la niñera en esta etapa (el cargue), tal como lo manda el servidor. Null si no
+  /// se registró: los viajes de antes y los carros que no salen.
+  final int? posicion;
+
+  /// Alguna transferencia de la etapa (de la llegada o de la salida, de cualquier versión) ya tiene una firma o un
+  /// cierre. Desde ahí nadie corrige ninguno de sus informes: el servidor responde 409 `INSPECCION_YA_FIRMADA`
+  /// aunque el informe que se corrige no tenga firma propia (S8-HU-01.3 CA-8).
+  bool get tieneFirma => inspecciones.any((i) {
+        final t = i.transferencia;
+        return t != null && (t.firmoEntrega || t.firmoRecibe || t.cerrada);
+      });
 
   /// Código de la etapa del catálogo `etapas` (cargue, transporte, descargue).
   final String proceso;

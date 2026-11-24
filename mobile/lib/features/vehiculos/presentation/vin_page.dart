@@ -849,11 +849,10 @@ class _UltimoInforme extends ConsumerWidget {
     final yaCorregida = etapa.fueCorregida(inspeccion);
     final suya = inspeccion.usuarioId != null && inspeccion.usuarioId == yo?.id;
     final esAdministrador = yo?.rol == 'admin' || yo?.rol == 'super_admin';
-    // Cuenta cualquier firma y cualquiera de las cuatro formas de cierre. Una transferencia ya creada pero sin
-    // ninguna firma no impide corregir.
-    final transferencia = inspeccion.transferencia;
-    final yaFirmada =
-        transferencia != null && (transferencia.firmoEntrega || transferencia.firmoRecibe || transferencia.cerrada);
+    // Cuenta cualquier firma y cualquiera de las cuatro formas de cierre, en cualquiera de los dos informes de la
+    // etapa (S8-HU-01.3 CA-8): con el cargue firmado por niñera, la firma cuelga de la acomodación y la llegada
+    // tampoco se corrige. Una transferencia ya creada pero sin ninguna firma no impide corregir.
+    final yaFirmada = etapa.tieneFirma;
     final puedeCorregir = (suya || esAdministrador) &&
         inspeccion.cerrada &&
         !yaCorregida &&
@@ -1000,11 +999,7 @@ class _UltimoInforme extends ConsumerWidget {
             const SizedBox(height: Espacio.sm),
             // El botón de la nota aclaratoria está justo encima y sus condiciones son las mismas: quien la hizo
             // o un administrador. Por eso se nombra sin repetirlo.
-            Text(
-              'Esta inspección ya fue firmada: ya no admite correcciones. Si hay algo que precisar, agrégalo como '
-              'nota aclaratoria.',
-              style: tema.bodySmall?.copyWith(color: Colores.advertencia),
-            ),
+            Text('Esta etapa ya fue firmada: deja una nota aclaratoria', style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
           ] else if (!ajeno && inspeccion.cerrada && viajeTerminado) ...[
             const SizedBox(height: Espacio.sm),
             Text('El viaje ya terminó: este informe no admite correcciones.', style: tema.bodySmall),
@@ -1084,6 +1079,9 @@ class _TarjetaEtapa extends StatelessWidget {
                     // El lugar lo resuelve la API («CEDI 1»); no todas las etapas tienen uno.
                     if (etapa.lugar case final lugar? when lugar.isNotEmpty)
                       Text(lugar, style: tema.bodySmall),
+                    // S8-HU-01.3 CA-9: el puesto que el servidor registró para este carro en la niñera.
+                    if (etapa.proceso == 'cargue' && etapa.posicion != null)
+                      Text('Posición en la niñera: ${etapa.posicion}', style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
                   ],
                 ),
               ),

@@ -54,6 +54,8 @@ void main() {
       // inspector, y el conductor solo por la excepción «No hay inspector». La app lo soporta con y sin la
       // marca, porque un celular puede quedar contra una API vieja.
       'id', 'orden', 'proceso', 'lugar', 'requiere_inspeccion', 'viaje_id', 'inspecciones',
+      // S8-HU-01.3 CA-9: el puesto del carro en la niñera, que el cargue cerrado muestra.
+      'posicion',
     ],
     'ViajeDto': [
       'id', 'codigo_mtrack', 'placa', 'estado', 'unidad', 'trailer', 'conductor_nombre', 'inspector_nombre',
