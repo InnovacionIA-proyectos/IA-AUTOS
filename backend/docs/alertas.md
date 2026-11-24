@@ -5,7 +5,7 @@ El sistema avisa de lo que requiere atencion sin que nadie tenga que revisar lis
 - **Alertas preventivas**: van al `coordinador_calidad` y a los `admin` **activos del cliente** de la unidad (nunca a otro cliente).
 - **Avisos operativos**: van a quien tiene la tarea pendiente (quien inicio la inspeccion o el firmante que falta) y no son alertas preventivas.
 
-Todas se guardan como notificaciones (ver [notificaciones.md](notificaciones.md)): una fila de **bandeja** y una de **push** por destinatario, **nunca por correo** (el unico correo es el reporte diario). Cada una lleva su
+Todas se guardan como notificaciones (ver [notificaciones.md](notificaciones.md)): una fila de **bandeja** por destinatario y, **solo si la urgencia es `alta`**, una de **push** (los avisos de urgencia `media` quedan solo en la bandeja y no dejan fila de push), **nunca por correo** (el unico correo es el reporte diario). Cada una lleva su
 **clave de dedupe**, asi que correr un proceso otra vez, o dos instancias a la vez, no repite nada. Si el push falla, la notificacion queda con su `ErrorEnvio`.
 
 | Tipo | Clase | Urgencia | Destinatarios | Cuando | Clave de dedupe |
@@ -18,7 +18,9 @@ Todas se guardan como notificaciones (ver [notificaciones.md](notificaciones.md)
 | `cambio_cargue_inspector` | operativo | media | coordinador de calidad y administradores del cliente | cuando el inspector asigna o cambia el muelle o cambia el tráiler (solo bandeja, sin push) | `cambio_cargue_inspector:{viaje}:{campo}:{instante}`: uno por cambio |
 | `cambio_destino_unidad` | operativo | media | conductor del viaje e inspectores del lugar nuevo | cuando se cambia el destino de una unidad | `cambio_destino_unidad:{viaje}:{vehiculo}:{instante}`: uno por cambio |
 | `firma_cargue_pendiente` | operativo | media | inspector del viaje (si falta quien entrega) o conductor (si falta quien recibe) | proceso **cada 10 minutos** | `firma_cargue_pendiente:{viaje}:{parte}`: una por viaje y parte |
-| `propuesta_ubicacion` | operativo | media | coordinador de calidad del cliente | proceso **cada hora** | `propuesta_ubicacion:{propuesta}`: una por propuesta |
+| `propuesta_ubicacion` | operativo | media | coordinador de calidad del cliente | proceso **cada hora** (con `propuesta_ubicacion_visitas` visitas distintas, 3 por defecto) | `propuesta_ubicacion:{propuesta}`: una por propuesta |
+| `ubicacion_fijada` | operativo | media | coordinadores de calidad y administradores del cliente de quien la fijó | cuando alguien fija la ubicación de un lugar «aquí» (`POST /api/lugares/{id}/ubicacion`; solo bandeja) | `ubicacion_fijada:{lugar}`: uno por lugar |
+| `fuera_de_rango` (entrega) | operativo | alta | coordinador de calidad del cliente | cuando el inspector toma una entrega (`POST /api/viajes/{id}/reclamos`) con su posición fuera del rango del lugar de la parada | `fuera_de_rango:reclamo:{reclamo}`: uno por reclamo |
 
 ## Parametros
 
@@ -62,7 +64,7 @@ No avisa de una inspeccion cerrada, ni de Transporte, ni de un usuario retirado.
 ## Camión reclamado sin actividad
 
 Cada 10 minutos, junto con los demás avisos operativos, se buscan los **reclamos activos** de viajes activos hechos hace más de `reclamo_sin_actividad_minutos` (30 por defecto, ajustable sin desplegar) sin ninguna **inspección del viaje iniciada o cerrada después del reclamo** (esa es la «actividad»).
-Se avisa a los `coordinador_calidad` activos del cliente del inspector con una notificación `reclamo_sin_actividad` (urgencia media, bandeja y push) que trae la placa, el viaje, el proceso y el nombre del inspector. Es **un aviso por reclamo** (la clave de dedupe lleva el id del reclamo).
+Se avisa a los `coordinador_calidad` activos del cliente del inspector con una notificación `reclamo_sin_actividad` (urgencia media, solo bandeja) que trae la placa, el viaje, el proceso y el nombre del inspector. Es **un aviso por reclamo** (la clave de dedupe lleva el id del reclamo).
 El reclamo **no se libera**: lo libera una persona (ver [viajes.md](viajes.md)). Necesita el script [`27-aviso-reclamo-sin-actividad.sql`](../database/cambios-esquema/27-aviso-reclamo-sin-actividad.sql) aplicado (el tipo de aviso nuevo en `tblNotificaciones`).
 
 ## Fuera del rango del lugar
@@ -72,7 +74,7 @@ No es un proceso periódico: se dispara con la **primera foto con ubicación** d
 ## Cargue sin reclamar
 
 Cada 10 minutos, junto con los demas avisos operativos, se buscan los viajes **programados** cuya hora programada paso hace mas de `cargue_sin_reclamar_minutos` (30 por defecto, ajustable sin desplegar) y dentro de las ultimas 24 horas, con unidades activas, **sin ningun reclamo activo del cargue** y **sin ninguna inspeccion iniciada**.
-Se avisa a los `coordinador_calidad` activos del cliente de las unidades con una notificacion `cargue_sin_reclamar` (urgencia media, bandeja y push) con el viaje, el lugar y la hora programada. Es **un aviso por viaje**: correr el proceso otra vez no lo repite.
+Se avisa a los `coordinador_calidad` activos del cliente de las unidades con una notificacion `cargue_sin_reclamar` (urgencia media, solo bandeja) con el viaje, el lugar y la hora programada. Es **un aviso por viaje**: correr el proceso otra vez no lo repite.
 Si el viaje se reclama o se inicia una inspeccion antes de que pase el tiempo, no se avisa. Necesita el script `32-ubicacion-con-rango-y-confirmacion-en-sitio.sql` (parametro y tipo de aviso).
 
 ## Propuesta de ubicacion del lugar (autocalibracion)

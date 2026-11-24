@@ -269,13 +269,14 @@ public sealed class clsAlertasPeriodicas(
     }
 
     /// <summary>
-    /// La autocalibracion de la ubicacion de los lugares: con las fotos selladas con ubicacion de al menos <see cref="IAAutos.Dominio.Catalogos.clsAutocalibracion.VISITAS_MINIMAS"/> visitas distintas a un lugar sin ubicacion confirmada
+    /// La autocalibracion de la ubicacion de los lugares: con las fotos selladas con ubicacion de al menos <c>propuesta_ubicacion_visitas</c> visitas distintas (3 por defecto, ajustable sin desplegar) a un lugar sin ubicacion confirmada
     /// propone el centro (mediana de las coordenadas) y el radio (segun su dispersion), crea la propuesta pendiente y avisa al coordinador de calidad. El lugar NO cambia mientras la propuesta siga pendiente. No
     /// repite una propuesta pendiente ni vuelve a proponer sin fotos nuevas despues de una decision. Devuelve cuantos avisos intento crear.
     /// </summary>
     public async Task<int> EjecutarAutocalibracionAsync(CancellationToken ct = default)
     {
         var valvula = await parametros.EnteroAsync(clsClavesParametros.VALVULA_PRECISION_M, VALVULA_PRECISION_POR_DEFECTO_M, ct);
+        var visitasMinimas = Math.Max(await parametros.EnteroAsync(clsClavesParametros.PROPUESTA_UBICACION_VISITAS, clsAutocalibracion.VISITAS_MINIMAS, ct), 1);
         var porLugar = (await consultas.FotosPorLugarAsync(valvula, LIMITE_FOTOS_AUTOCALIBRACION, ct)).GroupBy(f => f.LugarId).ToList();
         if (porLugar.Count == 0)
         {
@@ -286,7 +287,7 @@ public sealed class clsAlertasPeriodicas(
         var emitidas = 0;
         foreach (var fotos in porLugar)
         {
-            var calibracion = clsAutocalibracion.Proponer([.. fotos.Select(f => (f.Lat, f.Lng, f.ViajeId))]);
+            var calibracion = clsAutocalibracion.Proponer([.. fotos.Select(f => (f.Lat, f.Lng, f.ViajeId))], visitasMinimas);
             if (calibracion is null || (previas.TryGetValue(fotos.Key, out var previa) && (previa.EstaPendiente || calibracion.Fotos <= previa.Fotos)))
             {
                 continue;

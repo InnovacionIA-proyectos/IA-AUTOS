@@ -189,7 +189,7 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var esquemas = contrato["components"]!["schemas"]!.AsObject();
         var rutas = contrato["paths"]!.AsObject();
 
-        Assert.Equal(["proceso", "lugar_id"], esquemas["ReclamarViajeRequest"]!["properties"]!.AsObject().Select(p => p.Key).ToList());
+        Assert.Equal(["proceso", "lugar_id", "lat", "lng", "precision"], esquemas["ReclamarViajeRequest"]!["properties"]!.AsObject().Select(p => p.Key).ToList());
         // La entrega se libera por parada: lugar_id viaja en la consulta.
         Assert.Contains("lugar_id", rutas["/api/viajes/{id}/reclamos/{proceso}"]!["delete"]!["parameters"]!.ToJsonString());
         Assert.Contains("ReclamarViajeRequest", rutas["/api/viajes/{id}/reclamos"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());

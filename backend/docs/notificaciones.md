@@ -5,7 +5,7 @@ los endpoints que lo usan estan en [CONTRATO.md](../CONTRATO.md) («Conductor en
 
 ## Notificaciones
 
-`tblNotificaciones` guarda **una fila por destinatario y por canal**: una misma alerta para un coordinador son dos filas, una en la bandeja del portal y otra por push.
+`tblNotificaciones` guarda **una fila por destinatario y por canal**: una misma alerta **urgente** (`alta`) para un coordinador son dos filas, una en la bandeja del portal y otra por push; una de urgencia `media` es **solo la fila de la bandeja** (no deja fila de push).
 
 | Columna | Contenido |
 |---|---|
@@ -49,7 +49,7 @@ Que haya foto, que el tamano sea un codigo activo y que existan el GPS y la fech
 
 Las alertas preventivas y los avisos operativos que crean los procesos periodicos estan en [alertas.md](alertas.md).
 
-`clsEmisorNotificaciones` crea las notificaciones de una alerta: una fila de **bandeja** y una de **push** por destinatario. El push va por Firebase Cloud Messaging a cada dispositivo activo del destinatario (`IEnviadorPush`, implementado por `clsEnviadorFcm`):
+`clsEmisorNotificaciones` crea las notificaciones de una alerta: una fila de **bandeja** por destinatario y, solo si la urgencia es `alta`, una de **push**. El push va por Firebase Cloud Messaging a cada dispositivo activo del destinatario (`IEnviadorPush`, implementado por `clsEnviadorFcm`):
 
 - El envio nunca rompe la peticion que lo origino. Como `EnviadaAt` y `ErrorEnvio` solo se fijan al crear la fila, el push se intenta **antes** de guardarla: si llego a algun dispositivo queda `EnviadaAt`; si no, queda `ErrorEnvio`
   (FCM respondio con error, FCM no esta configurado o el usuario no tiene dispositivos activos). Un token que FCM ya no reconoce (`UNREGISTERED`) deja el dispositivo inactivo.

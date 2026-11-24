@@ -1,7 +1,9 @@
 using IAAutos.Aplicacion.Comun;
+using IAAutos.Aplicacion.Inspecciones;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Comun;
+using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Viajes;
 
@@ -24,7 +26,8 @@ public sealed class clsReclamosService(
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
-    IReloj reloj)
+    IReloj reloj,
+    clsConfirmacionEnSitioService confirmacionEnSitio)
 {
     private static readonly TimeSpan COLOMBIA = TimeSpan.FromHours(-5);
 
@@ -48,7 +51,8 @@ public sealed class clsReclamosService(
     /// <summary>
     /// Reclama un cargue pendiente de hoy en un punto del inspector o la entrega de UNA PARADA (<c>lugar_id</c>, obligatorio: 400 sin el) de un viaje que llega a un punto suyo. Reclamar de nuevo lo que ya es suyo no cambia nada.
     /// Devuelve el reclamo y si se creo ahora. 403 si el viaje o la parada no es de ninguno de sus puntos; 404 si la parada no tiene carros activos por entregar de ese viaje; 409 si el viaje no esta activo, el cargue no es de hoy o
-    /// ya lo tomo otro inspector (en la entrega, con el motivo <c>entrega_tomada</c>).
+    /// ya lo tomo otro inspector (en la entrega, con el motivo <c>entrega_tomada</c>). Con la posicion del inspector (<c>lat</c>, <c>lng</c>, <c>precision</c>) la entrega se compara con el lugar de la parada con la regla de
+    /// las fotos: fuera de rango avisa al coordinador (urgencia alta) pero el reclamo queda creado en todos los casos; el resultado queda en la auditoria. 400 con una posicion invalida.
     /// </summary>
     public async Task<(ReclamoDto Reclamo, bool Creado)> ReclamarAsync(Guid viajeId, ReclamarViajeRequest solicitud, CancellationToken ct = default)
     {
@@ -58,6 +62,7 @@ public sealed class clsReclamosService(
             throw clsErroresCampos.De("proceso", $"Proceso inválido. Permitidos: {string.Join(", ", clsProcesoReclamo.VALORES.Order())}");
         }
 
+        ValidarPosicion(solicitud);
         var viaje = await ObtenerViajeAsync(viajeId, ct);
         viaje.AsegurarActivo();
         var inspectorId = actual.IdObligatorio();
@@ -106,13 +111,31 @@ public sealed class clsReclamosService(
         var reclamo = clsReclamo.Crear(viajeId, inspectorId, proceso, ahora, lugarEntrega);
         reclamos.Agregar(reclamo);
         var antesViaje = viaje.InspectorId;
+
+        // La posicion del inspector solo cuenta en la entrega (el cargue no cambia) y nunca bloquea: solo se compara con el lugar de la parada.
+        EvaluacionDeEntrega? evaluacion = null;
+        if (proceso == clsProcesoReclamo.ENTREGA && lugarEntrega is { } paradaTomada && solicitud.Lat is { } lat && solicitud.Lng is { } lng)
+        {
+            evaluacion = await confirmacionEnSitio.EvaluarEntregaAsync(paradaTomada, lat, lng, solicitud.Precision, ct);
+        }
+
         if (proceso == clsProcesoReclamo.CARGUE)
         {
             viaje.AsignarInspector(inspectorId, ahora);
         }
 
         await auditor.RegistrarDeViajeAsync(
-            "viaje.reclamar", "reclamos", reclamo.Id, viaje.Id, new DetalleAuditoria(new { inspector_id = antesViaje }, new { reclamo_id = reclamo.Id, proceso, lugar_id = lugarEntrega, inspector_id = inspectorId }), ct: ct);
+            "viaje.reclamar", "reclamos", reclamo.Id, viaje.Id, new DetalleAuditoria(
+                new { inspector_id = antesViaje },
+                new
+                {
+                    reclamo_id = reclamo.Id,
+                    proceso,
+                    lugar_id = lugarEntrega,
+                    inspector_id = inspectorId,
+                    confirmacion_sitio = evaluacion is null ? null : new { resultado = evaluacion.Resultado, distancia_m = evaluacion.DistanciaM, radio_m = evaluacion.RadioM, precision_m = evaluacion.PrecisionM },
+                }),
+            ct: ct);
 
         // Dos reclamos simultaneos: el indice unico de reclamos activos deja pasar uno y el otro se traduce a 409 al guardar.
         try
@@ -124,7 +147,42 @@ public sealed class clsReclamosService(
             throw new clsConflictoException("Ya fue tomado por otro inspector", clsMotivosRechazo.ENTREGA_TOMADA);
         }
 
+        if (evaluacion is { Resultado: clsResultadoConfirmacionSitio.FUERA_DE_RANGO } && lugarEntrega is { } paradaFuera)
+        {
+            await confirmacionEnSitio.AvisarEntregaFueraDeRangoAsync(reclamo.Id, viaje, paradaFuera, inspectorId, evaluacion, ct);
+        }
+
         return (await ADtoAsync(reclamo, ct), true);
+    }
+
+    /// <summary>La posicion del inspector es opcional, pero va completa: la latitud y la longitud juntas, dentro de su rango, y una precision en metros no negativa. 400 en el campo que no cumple.</summary>
+    private static void ValidarPosicion(ReclamarViajeRequest solicitud)
+    {
+        var errores = new Dictionary<string, string[]>();
+        if ((solicitud.Lat is null) != (solicitud.Lng is null))
+        {
+            errores[solicitud.Lat is null ? "lat" : "lng"] = ["La latitud y la longitud van juntas: envíe las dos o ninguna"];
+        }
+
+        if (solicitud.Lat is { } lat && (!double.IsFinite(lat) || lat is < -90 or > 90))
+        {
+            errores["lat"] = ["La latitud debe estar entre -90 y 90"];
+        }
+
+        if (solicitud.Lng is { } lng && (!double.IsFinite(lng) || lng is < -180 or > 180))
+        {
+            errores["lng"] = ["La longitud debe estar entre -180 y 180"];
+        }
+
+        if (solicitud.Precision is { } precision && (!double.IsFinite(precision) || precision < 0))
+        {
+            errores["precision"] = ["La precisión debe ser un número en metros mayor o igual a 0"];
+        }
+
+        if (errores.Count > 0)
+        {
+            throw clsErroresCampos.Varios(errores);
+        }
     }
 
     /// <summary>

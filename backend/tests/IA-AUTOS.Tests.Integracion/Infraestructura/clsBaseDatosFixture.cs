@@ -146,7 +146,9 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             UPDATE dbo.tblParametros SET Valor = CASE Clave
                 WHEN 'objetivo_diario_novedad' THEN N'1.2' WHEN 'reporte_diario_hora' THEN N'06:00' WHEN 'horario_operacion_inicio' THEN N'08:00' WHEN 'horario_operacion_fin' THEN N'21:00'
                 WHEN 'gps_precision_minima_m' THEN N'30' WHEN 'url_firmada_minutos' THEN N'15' WHEN 'niveles_criticos' THEN N'v1_plus,v1' WHEN 'umbral_patron_cantidad' THEN N'10'
-                WHEN 'umbral_patron_ventana_dias' THEN N'30' WHEN 'captura_incompleta_minutos' THEN N'30' WHEN 'transferencia_pendiente_minutos' THEN N'240' WHEN 'reclamo_sin_actividad_minutos' THEN N'30' WHEN 'acomodacion_fotos_minimas' THEN N'1' WHEN 'radio_lugar_cargue_m' THEN N'1000' WHEN 'radio_destino_m' THEN N'500' WHEN 'valvula_precision_m' THEN N'500' WHEN 'cargue_sin_reclamar_minutos' THEN N'30' ELSE NULL END,
+                WHEN 'umbral_patron_ventana_dias' THEN N'30' WHEN 'captura_incompleta_minutos' THEN N'30' WHEN 'transferencia_pendiente_minutos' THEN N'240' WHEN 'reclamo_sin_actividad_minutos' THEN N'30' WHEN 'acomodacion_fotos_minimas' THEN N'1' WHEN 'radio_lugar_cargue_m' THEN N'1000' WHEN 'radio_destino_m' THEN N'500' WHEN 'valvula_precision_m' THEN N'500' WHEN 'cargue_sin_reclamar_minutos' THEN N'30'
+                WHEN 'permiso_sin_inspector_minutos' THEN N'10' WHEN 'espera_inspector_aviso_minutos' THEN N'15' WHEN 'espera_inspector_plan_b_minutos' THEN N'30' WHEN 'viaje_sin_movimiento_horas' THEN N'24'
+                WHEN 'firma_cargue_pendiente_minutos' THEN N'30' WHEN 'propuesta_ubicacion_visitas' THEN N'3' ELSE NULL END,
                 ActualizadoPor = NULL;
             DELETE FROM dbo.tblPanelesDano WHERE Codigo NOT IN ('superior', 'perfil_posterior_izquierdo', 'perfil_posterior_derecho', 'costado_izquierdo', 'costado_derecho');
             UPDATE dbo.tblPanelesDano SET Activo = 1, ImagenPath = NULL;

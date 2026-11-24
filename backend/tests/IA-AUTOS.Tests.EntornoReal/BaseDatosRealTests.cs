@@ -1054,6 +1054,21 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Los_parametros_de_tiempos_y_avisos_el_plazo_del_permiso_y_la_precision_del_lugar_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/48-parametros-de-avisos-y-tiempos.sql.
+        await using var conexion = await AbrirAsync();
+
+        var parametros = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Tipo = N'numero' AND Clave IN (N'permiso_sin_inspector_minutos', N'espera_inspector_aviso_minutos', N'espera_inspector_plan_b_minutos', N'viaje_sin_movimiento_horas', N'firma_cargue_pendiente_minutos', N'propuesta_ubicacion_visitas')");
+        var plazo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblPermisosSinInspector') AND name = N'VenceAt' AND is_nullable = 0");
+        var reloj = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblPermisosSinInspector_Reloj' AND parent_object_id = OBJECT_ID(N'tblPermisosSinInspector') AND definition LIKE N'%VenceAt%'");
+        var precision = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblLugares') AND name = N'PrecisionM'");
+        var aviso = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%ubicacion_fijada%'");
+
+        Assert.True(parametros == 6 && plazo == 1 && reloj == 1 && precision == 1 && aviso == 1, "Faltan los parametros de tiempos y avisos, el plazo del permiso o la precision del lugar. Ejecute database/cambios-esquema/48-parametros-de-avisos-y-tiempos.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

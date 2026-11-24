@@ -15,6 +15,9 @@ namespace IAAutos.Aplicacion.Inspecciones;
 /// <summary>Lo que lleva el aviso cuando la primera foto de una inspeccion quedo «fuera del rango».</summary>
 public sealed record AvisoFueraDeRango(Guid InspeccionId, Guid ViajeId, Guid VehiculoId, string Proceso, string? Lugar, double DistanciaM, double RadioM, double? PrecisionM);
 
+/// <summary>Lo que se decidio de la posicion de quien toma una entrega: el resultado, la distancia al lugar de la parada (nula si no se pudo calcular), el radio con que se comparo y la precision que reporto el dispositivo.</summary>
+public sealed record EvaluacionDeEntrega(string Resultado, double? DistanciaM, double RadioM, double? PrecisionM, string? Lugar);
+
 /// <summary>
 /// Confirma «en sitio» la evidencia sellada de una inspeccion de Cargue o Descargue: con la primera foto con ubicacion calcula la distancia al lugar de la etapa (el lugar de cargue del viaje o el destino de
 /// la unidad) y aplica <see cref="clsConfirmacionSitio"/>. El resultado se guarda en la inspeccion (mientras esta en borrador) y, solo si queda «fuera del rango», se avisa una vez al coordinador de calidad del
@@ -137,6 +140,96 @@ public sealed class clsConfirmacionEnSitioService(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             registro.LogError(ex, "No se pudo avisar que la inspección {Inspeccion} quedó fuera del rango", aviso.InspeccionId);
+        }
+    }
+
+    /// <summary>
+    /// Compara la posicion de quien toma la entrega de una parada con el lugar de esa parada, con la misma regla de las fotos (<see cref="clsConfirmacionSitio.Evaluar"/>): el radio es el del lugar o el parametro
+    /// <c>radio_destino_m</c> y la valvula es <c>valvula_precision_m</c>. Sin ubicacion confirmada del lugar, sin posicion util o con una precision que llega a la valvula el resultado es «sin confirmacion posible». Nunca
+    /// lanza ni bloquea: si el calculo falla devuelve nulo y el reclamo sigue.
+    /// </summary>
+    public async Task<EvaluacionDeEntrega?> EvaluarEntregaAsync(Guid lugarId, double lat, double lng, double? precisionM, CancellationToken ct = default)
+    {
+        try
+        {
+            var lugar = (await catalogos.ValoresAsync(clsNombresCatalogo.LUGARES, ct)).FirstOrDefault(l => l.Id == lugarId);
+            var radio = Numero(lugar, "radio_metros") ?? await parametros.EnteroAsync(clsClavesParametros.RADIO_DESTINO_M, RADIO_DESTINO_POR_DEFECTO_M, ct);
+            var valvula = await parametros.EnteroAsync(clsClavesParametros.VALVULA_PRECISION_M, VALVULA_POR_DEFECTO_M, ct);
+            var evaluacion = clsConfirmacionSitio.Evaluar(
+                lat, lng, precisionM, Numero(lugar, "latitud"), Numero(lugar, "longitud"),
+                lugar is not null && lugar.TryGetValue("estado_ubicacion", out var estado) && estado as string == clsEstadoUbicacion.CONFIRMADA, radio, valvula);
+            var nombre = lugar is not null && lugar.TryGetValue("nombre", out var valorNombre) ? valorNombre as string : null;
+            return new EvaluacionDeEntrega(evaluacion.Resultado, evaluacion.DistanciaM, radio, precisionM, nombre);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            registro.LogWarning(ex, "No se pudo calcular la distancia de la entrega a la parada {Lugar}", lugarId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Avisa al coordinador de calidad del cliente del viaje, por bandeja y push (urgencia alta), que la entrega de una parada se tomo fuera del rango del lugar: con el viaje, quien la tomo, la distancia y el rango. Una sola
+    /// vez por reclamo (la clave de dedupe es el reclamo). Quien llama ya guardo el reclamo: si el aviso falla, no lo deshace.
+    /// </summary>
+    public async Task AvisarEntregaFueraDeRangoAsync(Guid reclamoId, clsViaje viaje, Guid lugarId, Guid inspectorId, EvaluacionDeEntrega evaluacion, CancellationToken ct = default)
+    {
+        try
+        {
+            Guid? clienteId = null;
+            foreach (var enlace in await viajes.ObtenerVehiculosAsync(viaje.Id, ct))
+            {
+                if (await vehiculos.ObtenerPorIdAsync(enlace.VehiculoId, ct) is { } vehiculo)
+                {
+                    clienteId = vehiculo.ClienteId;
+                    break;
+                }
+            }
+
+            if (clienteId is not { } cliente || evaluacion.DistanciaM is not { } distancia)
+            {
+                return;
+            }
+
+            var destinatarios = (await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD], cliente, ct)).Select(u => u.Id).ToList();
+            if (destinatarios.Count == 0)
+            {
+                return;
+            }
+
+            var lugar = evaluacion.Lugar ?? "el lugar";
+            var quien = (await usuarios.NombresAsync([inspectorId], ct)).GetValueOrDefault(inspectorId);
+            var codigo = viaje.CodigoMtrack ?? "sin código";
+            var precision = evaluacion.PrecisionM is { } p ? $", precisión {p:0.#} m" : string.Empty;
+            await emisor.EmitirAsync(
+                new clsAlerta(
+                    clsTipoNotificacion.FUERA_DE_RANGO,
+                    clsUrgenciaNotificacion.ALTA,
+                    destinatarios,
+                    cliente,
+                    viaje.Id,
+                    null,
+                    null,
+                    null,
+                    $"Fuera del rango: {lugar}",
+                    $"{quien ?? "Un inspector"} tomó la entrega del viaje {codigo} a {distancia:0} m de {lugar} (rango {evaluacion.RadioM:0} m{precision}). La entrega quedó tomada sin bloqueo.",
+                    $"{clsTipoNotificacion.FUERA_DE_RANGO}:reclamo:{reclamoId}",
+                    new Dictionary<string, object?>
+                    {
+                        ["hecho"] = "reclamo_entrega",
+                        ["viaje_id"] = viaje.Id,
+                        ["lugar_id"] = lugarId,
+                        ["lugar"] = lugar,
+                        ["usuario_nombre"] = quien,
+                        ["distancia_m"] = distancia,
+                        ["radio_m"] = evaluacion.RadioM,
+                        ["precision_m"] = evaluacion.PrecisionM,
+                    }),
+                ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            registro.LogError(ex, "No se pudo avisar que la entrega del reclamo {Reclamo} se tomo fuera del rango", reclamoId);
         }
     }
 

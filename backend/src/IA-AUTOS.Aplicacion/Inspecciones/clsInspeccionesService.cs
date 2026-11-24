@@ -84,7 +84,7 @@ public sealed class clsInspeccionesService(
     IConsultasInspecciones consultas,
     IConsultasNovedadesProceso consultasNovedades,
     INovedadProcesoRepository novedades,
-    IPermisoSinInspectorRepository permisos,
+    clsPermisosSinInspectorService permisos,
     IReclamoRepository reclamos,
     ITransferenciaCustodiaRepository transferencias,
     clsEmisorNotificaciones emisor,
@@ -142,15 +142,17 @@ public sealed class clsInspeccionesService(
         var porExcepcion = actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && await EsCargueAsync(etapa, ct);
         var motivo = await ResolverMotivoAsync(solicitud, porExcepcion, ct);
 
-        // Donde el punto de cargue TIENE inspectores la excepcion se pide y la concede un coordinador (o el reloj a los 10 minutos); donde no los hay se activa en el momento, como siempre.
+        // Donde el punto de cargue TIENE inspectores la excepcion se pide y la concede un coordinador (o el reloj al cumplirse el plazo de la solicitud); donde no los hay se activa en el momento, como siempre. Una solicitud
+        // pendiente con el plazo ya cumplido se concede por tiempo en esta misma peticion: no se responde «espere» despues del plazo.
         clsPermisoSinInspector? permiso = null;
         if (porExcepcion && viaje.LugarCargueId is { } lugarDeCargue && await reclamos.LugarTieneInspectoresAsync(lugarDeCargue, ct))
         {
-            permiso = await permisos.ObtenerDeViajeAsync(viaje.Id, ct);
+            permiso = await permisos.ConcederSiVencidoAsync(viaje.Id, ct);
             if (permiso is not { EstaConcedido: true })
             {
+                var espera = permiso?.EsperaMinutos ?? await permisos.EsperaVigenteAsync(ct);
                 throw new clsProhibidoException(
-                    $"El punto de cargue tiene inspectores: pida el permiso de la excepción «No hay inspector» y espere a que lo conceda el coordinador (o a que pasen {clsPermisoSinInspector.MINUTOS_DE_ESPERA} minutos sin respuesta)");
+                    $"El punto de cargue tiene inspectores: pida el permiso de la excepción «No hay inspector» y espere a que lo conceda el coordinador (o a que pasen {espera} minutos sin respuesta)");
             }
         }
 

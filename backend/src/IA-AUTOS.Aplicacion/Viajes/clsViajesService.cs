@@ -31,7 +31,7 @@ public sealed class clsViajesService(
     clsAccesoViajes acceso,
     IReclamoRepository reclamos,
     clsEmisorNotificaciones emisor,
-    IPermisoSinInspectorRepository permisos,
+    clsPermisosSinInspectorService permisos,
     IInspeccionRepository inspecciones,
     ITransferenciaCustodiaRepository transferencias,
     INovedadProcesoRepository novedadesProceso,
@@ -406,9 +406,10 @@ public sealed class clsViajesService(
             throw new clsProhibidoException("El viaje no está asignado a su usuario", clsMotivosRechazo.VIAJE_NO_ASIGNADO);
         }
 
-        // El conductor solo acomoda las unidades cuando hace el cargue sin inspector: con el permiso concedido (donde el punto tiene inspectores) o con la excepcion ya activa (donde no los tiene).
+        // El conductor solo acomoda las unidades cuando hace el cargue sin inspector: con el permiso concedido (donde el punto tiene inspectores; uno pendiente con el plazo ya cumplido se concede por tiempo en esta misma
+        // peticion) o con la excepcion ya activa (donde no los tiene).
         if (actual.Rol == clsRol.CONDUCTOR
-            && !(await permisos.ObtenerDeViajeAsync(id, ct) is { EstaConcedido: true } || await novedadesProceso.ExisteCargueSinInspectorAsync(id, ct)))
+            && !(await permisos.ConcederSiVencidoAsync(id, ct) is { EstaConcedido: true } || await novedadesProceso.ExisteCargueSinInspectorAsync(id, ct)))
         {
             throw new clsProhibidoException("El conductor solo registra la posición de las unidades cuando hace el cargue sin inspector, con el permiso concedido", clsMotivosRechazo.CONDUCTOR_SIN_PERMISO_DE_EXCEPCION);
         }

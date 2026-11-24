@@ -217,7 +217,8 @@ public sealed class UbicacionDeLugaresApiTests(clsBaseDatosFixture bd) : clsPrue
         Assert.Equal(1, avisos);
         Assert.Equal(1, await PropuestasAsync(lugar, "pendiente"));
         Assert.Equal(1, await AvisosAsync(diana.UsuarioId));
-        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'propuesta_ubicacion' AND Canal = 'push' AND UsuarioId = @u", ("@u", diana.UsuarioId)));
+        // Es un aviso de urgencia media: queda en la bandeja y no sale al celular.
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'propuesta_ubicacion' AND Canal = 'push' AND UsuarioId = @u", ("@u", diana.UsuarioId)));
         Assert.Equal(("sin_ubicacion", null, null), await EstadoDelLugarAsync(lugar));
 
         var propuesta = (await JsonAsync(await Como(diana).GetAsync("/api/lugares/propuestas?estado=pendiente"))).EnumerateArray().Single();
@@ -391,7 +392,7 @@ public sealed class UbicacionDeLugaresApiTests(clsBaseDatosFixture bd) : clsPrue
         Assert.Equal(1, await AvisosCargueAsync());
         Assert.Equal(1, await AvisosCargueAsync(tarde));
         Assert.Equal(diana.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT UsuarioId FROM dbo.tblNotificaciones WHERE Tipo = 'cargue_sin_reclamar' AND Canal = 'bandeja'"))!);
-        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'cargue_sin_reclamar' AND Canal = 'push'"));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'cargue_sin_reclamar' AND Canal = 'push'"));
     }
 
     [Fact]
@@ -429,5 +430,107 @@ public sealed class UbicacionDeLugaresApiTests(clsBaseDatosFixture bd) : clsPrue
         }
 
         Assert.Equal(1, await ConProcesosAsync(p => p.EjecutarCarguesSinReclamarAsync()));
+    }
+
+    // ------------------------------------------------------------------------------------------------ la precision y el aviso al fijar
+
+    private Task<int> AvisosFijadaAsync(Guid usuario, string canal = "bandeja") =>
+        Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'ubicacion_fijada' AND Urgencia = 'media' AND Canal = @c AND UsuarioId = @u", ("@c", canal), ("@u", usuario));
+
+    [Fact]
+    public async Task Fijar_aqui_guarda_la_precision_en_el_lugar_y_avisa_a_los_coordinadores_y_administradores_solo_por_bandeja()
+    {
+        var lugar = await LugarAsync("Patio de Prueba");
+        var inspector = await SesionAsync("marcos@ejemplo.com", clsRol.INSPECTOR);
+        var diana = await SesionAsync("diana@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
+        var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
+        var conductor = await SesionAsync("luis@ejemplo.com", clsRol.CONDUCTOR);
+
+        var r = await Como(inspector).PostAsync($"/api/lugares/{lugar}/ubicacion", Cuerpo(new { lat = LAT, lng = LNG, precision = 12 }));
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        // La precision queda guardada en el lugar, sale en el catalogo y en la respuesta.
+        Assert.Equal(12, (await JsonAsync(r)).GetProperty("precision_m").GetDouble());
+        Assert.Equal(12.0, (double)(await Sembrador.EscalarAsync("SELECT PrecisionM FROM dbo.tblLugares WHERE Id = @l", ("@l", lugar)))!);
+        var delCatalogo = await LugarDelCatalogoAsync(diana, lugar);
+        Assert.Equal(12, delCatalogo.GetProperty("precision_m").GetDouble());
+        Assert.Equal("pendiente_confirmar", delCatalogo.GetProperty("estado_ubicacion").GetString());
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'lugar.fijar_ubicacion' AND Detalle LIKE N'%precision_m%'"));
+        // El aviso (urgencia media, solo bandeja) le llega a la coordinadora y al administrador, no a quien fijo ni al conductor; no deja fila de push.
+        Assert.Equal(1, await AvisosFijadaAsync(diana.UsuarioId));
+        Assert.Equal(1, await AvisosFijadaAsync(admin.UsuarioId));
+        Assert.Equal(0, await AvisosFijadaAsync(inspector.UsuarioId));
+        Assert.Equal(0, await AvisosFijadaAsync(conductor.UsuarioId));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'ubicacion_fijada' AND Canal = 'push'"));
+        var titulo = (string)(await Sembrador.EscalarAsync("SELECT Titulo FROM dbo.tblNotificaciones WHERE Tipo = 'ubicacion_fijada' AND Canal = 'bandeja' AND UsuarioId = @u", ("@u", diana.UsuarioId)))!;
+        var mensaje = (string)(await Sembrador.EscalarAsync("SELECT Mensaje FROM dbo.tblNotificaciones WHERE Tipo = 'ubicacion_fijada' AND Canal = 'bandeja' AND UsuarioId = @u", ("@u", diana.UsuarioId)))!;
+        var datos = System.Text.Json.JsonDocument.Parse((string)(await Sembrador.EscalarAsync("SELECT Datos FROM dbo.tblNotificaciones WHERE Tipo = 'ubicacion_fijada' AND Canal = 'bandeja' AND UsuarioId = @u", ("@u", diana.UsuarioId)))!).RootElement;
+        Assert.Equal("Ubicación fijada: Patio de Prueba", titulo);
+        Assert.Contains("Nombre marcos@ejemplo.com", mensaje);
+        Assert.Contains("precisión 12 m", mensaje);
+        Assert.Equal(lugar, datos.GetProperty("lugar_id").GetGuid());
+        Assert.Equal("Patio de Prueba", datos.GetProperty("lugar").GetString());
+        Assert.Equal("Nombre marcos@ejemplo.com", datos.GetProperty("usuario_nombre").GetString());
+        Assert.Equal(12, datos.GetProperty("precision_m").GetDouble());
+        Assert.NotEqual(JsonValueKind.Null, datos.GetProperty("fijada_at").ValueKind);
+        // La segunda fijacion sigue siendo 409 y no avisa otra vez.
+        Assert.Equal(HttpStatusCode.Conflict, (await Como(inspector).PostAsync($"/api/lugares/{lugar}/ubicacion", Cuerpo(new { lat = 7.0, lng = -75.0, precision = 5 }))).StatusCode);
+        Assert.Equal(1, await AvisosFijadaAsync(diana.UsuarioId));
+        Assert.Equal(12.0, (double)(await Sembrador.EscalarAsync("SELECT PrecisionM FROM dbo.tblLugares WHERE Id = @l", ("@l", lugar)))!);
+    }
+
+    [Fact]
+    public async Task Los_lugares_con_ubicacion_cargada_a_mano_o_fijada_antes_no_traen_precision_y_la_propuesta_lista_la_del_lugar()
+    {
+        var manual = await LugarAsync("CEDI Envigado");
+        var fijado = await LugarAsync("Patio Bello", "pendiente_confirmar", LAT, LNG);
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblLugares SET PrecisionM = 12.5 WHERE Id = @l", ("@l", fijado));
+        var inspector = await SesionAsync("marcos@ejemplo.com", clsRol.INSPECTOR);
+        var diana = await SesionAsync("diana@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
+
+        Assert.Equal(HttpStatusCode.OK, (await Como(diana).PatchAsync($"/api/catalogos/lugares/{manual}", Cuerpo(new { latitud = LAT, longitud = LNG, radio_metros = 800 }))).StatusCode);
+        Assert.Equal(JsonValueKind.Null, (await LugarDelCatalogoAsync(diana, manual)).GetProperty("precision_m").ValueKind);
+        Assert.Equal(12.5, (await LugarDelCatalogoAsync(diana, fijado)).GetProperty("precision_m").GetDouble());
+
+        // Confirmar la ubicacion pendiente con otras coordenadas borra la precision del GPS anterior; con las mismas la conserva.
+        Assert.Equal(HttpStatusCode.OK, (await Como(diana).PatchAsync($"/api/catalogos/lugares/{fijado}", Cuerpo(new { radio_metros = 300 }))).StatusCode);
+        Assert.Equal(12.5, (await LugarDelCatalogoAsync(diana, fijado)).GetProperty("precision_m").GetDouble());
+        Assert.Equal(HttpStatusCode.OK, (await Como(diana).PatchAsync($"/api/catalogos/lugares/{fijado}", Cuerpo(new { latitud = LAT + 0.01, longitud = LNG }))).StatusCode);
+        Assert.Equal(JsonValueKind.Null, (await LugarDelCatalogoAsync(diana, fijado)).GetProperty("precision_m").ValueKind);
+
+        // La propuesta de la autocalibracion trae la precision con que se fijo la ubicacion actual del lugar (nula si no se guardo).
+        var pendiente = await LugarAsync("Patio Itagui", "pendiente_confirmar", LAT, LNG);
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblLugares SET PrecisionM = 8 WHERE Id = @l", ("@l", pendiente));
+        foreach (var metros in new double[] { 0, 30, 60 })
+        {
+            await VisitaAsync(inspector, pendiente, metros);
+        }
+
+        await ConProcesosAsync(p => p.EjecutarAutocalibracionAsync());
+        var propuesta = (await JsonAsync(await Como(diana).GetAsync("/api/lugares/propuestas?estado=pendiente"))).EnumerateArray().Single();
+        Assert.Equal("Patio Itagui", propuesta.GetProperty("lugar").GetString());
+        Assert.Equal(8, propuesta.GetProperty("precision_m").GetDouble());
+    }
+
+    [Fact]
+    public async Task Las_visitas_que_hacen_falta_para_proponer_se_ajustan_por_parametro_sin_desplegar()
+    {
+        var conDos = await LugarAsync("CEDI Envigado");
+        var conUna = await LugarAsync("Patio Bello");
+        var inspector = await SesionAsync("marcos@ejemplo.com", clsRol.INSPECTOR);
+        var diana = await SesionAsync("diana@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
+        await VisitaAsync(inspector, conDos, 0);
+        await VisitaAsync(inspector, conDos, 40);
+        await VisitaAsync(inspector, conUna, 0);
+
+        // Con el valor inicial (3) dos visitas no alcanzan.
+        Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarAutocalibracionAsync()));
+        Assert.Equal(0, await PropuestasAsync(conDos));
+
+        // Con el parametro en 2, el lugar con dos visitas distintas recibe propuesta y el de una no.
+        Assert.Equal(HttpStatusCode.OK, (await Como(diana).PatchAsync("/api/parametros/propuesta_ubicacion_visitas", Cuerpo(new { valor = 2 }))).StatusCode);
+        Assert.Equal(1, await ConProcesosAsync(p => p.EjecutarAutocalibracionAsync()));
+        Assert.Equal(1, await PropuestasAsync(conDos));
+        Assert.Equal(0, await PropuestasAsync(conUna));
     }
 }

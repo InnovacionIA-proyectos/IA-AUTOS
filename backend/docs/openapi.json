@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.22.0"
+    "version": "3.23.0"
   },
   "paths": {
     "/api/viajes": {
@@ -13314,6 +13314,111 @@
         ]
       }
     },
+    "/api/parametros/app": {
+      "get": {
+        "tags": [
+          "Parametros"
+        ],
+        "operationId": "Parametros_DeLaApp",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParametrosDeLaAppDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParametrosDeLaAppDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ParametrosDeLaAppDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
     "/api/parametros": {
       "get": {
         "tags": [
@@ -22357,7 +22462,8 @@
                         "decidida_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "decidida_at": "2026-10-22T14:30:00.000Z",
                         "created_at": "2026-10-22T14:30:00.000Z",
-                        "decidida_por_nombre": "texto"
+                        "decidida_por_nombre": "texto",
+                        "precision_m": 1.5
                       }
                     ]
                   ],
@@ -22384,7 +22490,8 @@
                         "decidida_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "decidida_at": "2026-10-22T14:30:00.000Z",
                         "created_at": "2026-10-22T14:30:00.000Z",
-                        "decidida_por_nombre": "texto"
+                        "decidida_por_nombre": "texto",
+                        "precision_m": 1.5
                       }
                     ]
                   ],
@@ -22411,7 +22518,8 @@
                         "decidida_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "decidida_at": "2026-10-22T14:30:00.000Z",
                         "created_at": "2026-10-22T14:30:00.000Z",
-                        "decidida_por_nombre": "texto"
+                        "decidida_por_nombre": "texto",
+                        "precision_m": 1.5
                       }
                     ]
                   ],
@@ -34732,6 +34840,29 @@
           }
         }
       },
+      "ParametrosDeLaAppDto": {
+        "examples": [
+          {
+            "acomodacion_fotos_minimas": 1,
+            "gps_precision_minima_m": 1
+          }
+        ],
+        "required": [
+          "acomodacion_fotos_minimas",
+          "gps_precision_minima_m"
+        ],
+        "type": "object",
+        "properties": {
+          "acomodacion_fotos_minimas": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "gps_precision_minima_m": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "PatronClaseDto": {
         "examples": [
           {
@@ -35463,7 +35594,8 @@
             "decidida_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "decidida_at": "2026-10-22T14:30:00.000Z",
             "created_at": "2026-10-22T14:30:00.000Z",
-            "decidida_por_nombre": "texto"
+            "decidida_por_nombre": "texto",
+            "precision_m": 1.5
           }
         ],
         "required": [
@@ -35534,6 +35666,13 @@
               "null",
               "string"
             ]
+          },
+          "precision_m": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
           }
         }
       },
@@ -35766,7 +35905,10 @@
         "examples": [
           {
             "proceso": "cargue",
-            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "precision": 1.5
           }
         ],
         "required": [
@@ -35786,6 +35928,27 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "precision": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
           }
         }
       },

@@ -176,6 +176,24 @@ public static class clsClavesParametros
     /// <summary>Minutos desde la hora programada de un cargue sin reclamo antes de avisar al coordinador.</summary>
     public const string CARGUE_SIN_RECLAMAR_MINUTOS = "cargue_sin_reclamar_minutos";
     public const string ACOMODACION_FOTOS_MINIMAS = "acomodacion_fotos_minimas";
+
+    /// <summary>Precision del GPS, en metros, a partir de la cual el dispositivo avisa de precision baja (la app la lee de la ruta de parametros de la aplicacion).</summary>
+    public const string GPS_PRECISION_MINIMA_M = "gps_precision_minima_m";
+
+    /// <summary>Minutos que espera el permiso de la excepcion «No hay inspector» del cargue, sin respuesta, antes de que el sistema lo conceda por tiempo.</summary>
+    public const string PERMISO_SIN_INSPECTOR_MINUTOS = "permiso_sin_inspector_minutos";
+
+    /// <summary>Minutos desde que el conductor activa la excepcion «No hay inspector» en un destino, sin que nadie tome la entrega, antes de avisar al coordinador.</summary>
+    public const string ESPERA_INSPECTOR_AVISO_MINUTOS = "espera_inspector_aviso_minutos";
+
+    /// <summary>Minutos adicionales, despues de la espera del aviso, para habilitar la entrega sin inspector del punto (el plan B del destino).</summary>
+    public const string ESPERA_INSPECTOR_PLAN_B_MINUTOS = "espera_inspector_plan_b_minutos";
+
+    /// <summary>Horas que un viaje en curso puede seguir sin movimiento antes de avisar al coordinador.</summary>
+    public const string VIAJE_SIN_MOVIMIENTO_HORAS = "viaje_sin_movimiento_horas";
+
+    /// <summary>Visitas distintas con fotos selladas a un lugar sin ubicacion confirmada que hacen falta para proponer su ubicacion.</summary>
+    public const string PROPUESTA_UBICACION_VISITAS = "propuesta_ubicacion_visitas";
     public const string REPORTE_DIARIO_DESTINATARIOS = "reporte_diario_destinatarios";
     public const string REPORTE_DIARIO_HORA = "reporte_diario_hora";
     public const string RETENCION_DIAS = "retencion_dias";
