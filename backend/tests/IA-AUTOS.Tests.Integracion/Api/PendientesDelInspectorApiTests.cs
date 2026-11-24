@@ -84,8 +84,8 @@ public sealed class PendientesDelInspectorApiTests(clsBaseDatosFixture bd) : cls
         return id;
     }
 
-    private Task<HttpResponseMessage> ReclamarAsync(Sesion quien, Guid viaje, string proceso = "cargue") =>
-        Como(quien).PostAsync($"/api/viajes/{viaje}/reclamos", Cuerpo(new { proceso }));
+    private Task<HttpResponseMessage> ReclamarAsync(Sesion quien, Guid viaje, string proceso = "cargue", Guid? lugar = null) =>
+        Como(quien).PostAsync($"/api/viajes/{viaje}/reclamos", Cuerpo(lugar is null ? new { proceso } : new { proceso, lugar_id = lugar }));
 
     private async Task<List<JsonElement>> PendientesAsync(Sesion quien)
     {
@@ -165,7 +165,7 @@ public sealed class PendientesDelInspectorApiTests(clsBaseDatosFixture bd) : cls
         Assert.Equal("CEDI Envigado", entrega.GetProperty("lugar").GetString());
         Assert.Equal("disponible", entrega.GetProperty("estado").GetString());
         Assert.Equal(1, entrega.GetProperty("unidades").GetInt32());
-        Assert.Equal(HttpStatusCode.Created, (await ReclamarAsync(e.Andres, viaje, "entrega")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await ReclamarAsync(e.Andres, viaje, "entrega", e.Envigado)).StatusCode);
         Assert.Equal("en_revision", (await PendientesAsync(e.Esleider)).Single(p => p.GetProperty("proceso").GetString() == "entrega").GetProperty("estado").GetString());
 
         // Un inspector sin puntos recibe la lista vacia; el conductor, el coordinador y los demas roles no la usan (403).

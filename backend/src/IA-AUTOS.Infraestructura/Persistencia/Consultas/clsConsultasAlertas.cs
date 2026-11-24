@@ -120,11 +120,13 @@ internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultas
         await (from r in contexto.Reclamos.AsNoTracking()
                join vj in contexto.Viajes.AsNoTracking() on r.ViajeId equals vj.Id
                join u in contexto.Usuarios.AsNoTracking() on r.InspectorId equals u.Id
+               join l in contexto.Lugares.AsNoTracking() on r.LugarId equals l.Id into paradas
+               from parada in paradas.DefaultIfEmpty()
                where r.LiberadoAt == null && r.ReclamadoAt < reclamadosAntesDe
                   && (vj.Estado == clsEstadoViaje.PROGRAMADO || vj.Estado == clsEstadoViaje.EN_CURSO)
                   && !contexto.Inspecciones.Any(i => i.ViajeId == r.ViajeId && (i.IniciadaAt > r.ReclamadoAt || i.CerradaAt > r.ReclamadoAt))
                orderby r.ReclamadoAt
-               select new clsReclamoSinActividad(r.Id, vj.Id, vj.CodigoMtrack, vj.Placa, r.Proceso, r.InspectorId, u.Nombre, u.ClienteId, r.ReclamadoAt)).Take(limite).ToListAsync(ct);
+               select new clsReclamoSinActividad(r.Id, vj.Id, vj.CodigoMtrack, vj.Placa, r.Proceso, r.InspectorId, u.Nombre, u.ClienteId, r.ReclamadoAt, parada != null ? parada.Nombre : null)).Take(limite).ToListAsync(ct);
 
     public async Task<IReadOnlyList<clsConteoPatron>> ConteoPorZonaAsync(DateTimeOffset desde, CancellationToken ct = default)
     {

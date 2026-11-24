@@ -86,6 +86,7 @@ public sealed class clsInspeccionesService(
     INovedadProcesoRepository novedades,
     IPermisoSinInspectorRepository permisos,
     IReclamoRepository reclamos,
+    ITransferenciaCustodiaRepository transferencias,
     clsEmisorNotificaciones emisor,
     IDescriptorHallazgos descriptorHallazgos,
     clsAccesoViajes acceso,
@@ -128,6 +129,14 @@ public sealed class clsInspeccionesService(
         // Una unidad que no sale (o que se bajo) del viaje no se revisa.
         await guardaDeUnidad.AsegurarActivaAsync(etapa.ViajeId, etapa.VehiculoId, ct);
 
+        // La revision de llegada del Descargue de un carro solo se crea despues de que el conductor marco «Llegue» (su llegada de Transporte confirmada), sea quien sea quien la hace. Si el carro se rechazo en su destino y
+        // ya recibio otro, la revision nueva es otro ciclo de la misma etapa y la del rechazo se conserva como evidencia.
+        var ciclo = 1;
+        if (solicitud.Momento == clsMomento.LLEGADA && await CodigoDeEtapaAsync(etapa, ct) == clsCodigosEtapa.DESCARGUE)
+        {
+            ciclo = await CicloDeLaLlegadaDelDescargueAsync(etapa, viaje, ct);
+        }
+
         // La salida de un Cargue la hace siempre el inspector: el conductor solo firma el recibo. Si no hay inspector, el conductor del viaje la hace activando en el momento la excepcion
         // «No hay inspector» (con su motivo); sin motivo es 403 y en cualquier otro caso el motivo no se admite (400).
         var porExcepcion = actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && await EsCargueAsync(etapa, ct);
@@ -164,7 +173,8 @@ public sealed class clsInspeccionesService(
             solicitud.Notas,
             reloj.Ahora,
             motivo?.Codigo,
-            motivo is null ? null : clsValidador.Opcional(solicitud.MotivoSinInspectorTexto));
+            motivo is null ? null : clsValidador.Opcional(solicitud.MotivoSinInspectorTexto),
+            ciclo);
         viaje.RegistrarActividad(reloj.Ahora);
         inspecciones.Agregar(inspeccion);
         await auditor.RegistrarDeViajeAsync(
@@ -755,6 +765,35 @@ public sealed class clsInspeccionesService(
     }
 
     /// <summary>True si la etapa es el Cargue (la etapa del catalogo con ese codigo).</summary>
+    private async Task<string?> CodigoDeEtapaAsync(clsEtapa etapa, CancellationToken ct) =>
+        (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
+
+    /// <summary>
+    /// El ciclo de la revision de llegada del Descargue que se va a crear. 409 <c>sin_llegue</c> si la llegada de Transporte del carro no esta confirmada. Es el ciclo siguiente solo cuando la ultima revision termino en un rechazo
+    /// y despues se le cambio el destino al carro; en cualquier otro caso es el de la ultima revision (y una segunda original del mismo ciclo la rechaza la base).
+    /// </summary>
+    private async Task<int> CicloDeLaLlegadaDelDescargueAsync(clsEtapa descargue, clsViaje viaje, CancellationToken ct)
+    {
+        var codigosPorEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).ToDictionary(v => v.Id, v => v.Codigo);
+        var transporte = (await viajes.ObtenerEtapasAsync(viaje.Id, descargue.VehiculoId, ct)).FirstOrDefault(e => codigosPorEtapa.TryGetValue(e.EtapaCatalogoId, out var codigo) && codigo == clsCodigosEtapa.TRANSPORTE);
+        var llego = transporte is not null && await inspecciones.ObtenerUltimaDeEtapaAsync(transporte.Id, clsMomento.LLEGADA, ct) is { EstaCerrada: true };
+        if (!llego)
+        {
+            var vin = (await vehiculos.ObtenerPorIdAsync(descargue.VehiculoId, ct))?.Vin ?? string.Empty;
+            throw new clsConflictoException($"El conductor aún no marca «Llegué» para el VIN {vin}", clsMotivosRechazo.SIN_LLEGUE);
+        }
+
+        var ultima = await inspecciones.ObtenerUltimaDeEtapaAsync(descargue.Id, clsMomento.LLEGADA, ct);
+        if (ultima is null)
+        {
+            return 1;
+        }
+
+        var transferencia = await transferencias.ObtenerPorInspeccionAsync(ultima.Id, ct);
+        var enlace = await viajes.ObtenerVehiculoAsync(viaje.Id, descargue.VehiculoId, ct);
+        return transferencia is { EstaRechazada: true, FirmadaAt: { } rechazadoAt } && enlace?.LugarDestinoCambiadoAt is { } cambiadoAt && cambiadoAt > rechazadoAt ? ultima.Ciclo + 1 : ultima.Ciclo;
+    }
+
     private async Task<bool> EsCargueAsync(clsEtapa etapa, CancellationToken ct) =>
         (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo == clsCodigosEtapa.CARGUE;
 

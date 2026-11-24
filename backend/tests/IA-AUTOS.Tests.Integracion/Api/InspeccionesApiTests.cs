@@ -255,6 +255,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task El_bloqueo_por_etapa_previa_solo_aplica_a_la_salida_no_a_la_llegada()
     {
         var (sesion, etapas) = await EscenarioAsync();
+        // La revision de llegada del descargue exige el «Llegue» del conductor: la llegada de Transporte ya confirmada.
+        await LlegadaCerradaAsync(etapas[1], sesion.UsuarioId);
 
         var llegada = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "llegada", fecha = FECHA });
 
@@ -1204,8 +1206,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var conGps = await CrearInspeccionAsync(sesion, etapas[1], "llegada");
 
         var rechazada = await CerrarAsync(sesion, sinGps);
-        var salida = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "llegada", fecha = FECHA, lat = 4.6, lng = -74.1 });
         var cerrada = await CerrarAsync(sesion, conGps);
+        var salida = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "llegada", fecha = FECHA, lat = 4.6, lng = -74.1 });
 
         Assert.Equal(HttpStatusCode.BadRequest, rechazada.StatusCode);
         Assert.Contains("ubicación", (await ClonarAsync(rechazada)).GetProperty("details")[0].GetString());

@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.20.0"
+    "version": "3.21.0"
   },
   "paths": {
     "/api/viajes": {
@@ -2564,7 +2564,9 @@
                         "activo": true,
                         "liberado_at": "2026-10-22T14:30:00.000Z",
                         "liberado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                        "liberado_por_nombre": "texto"
+                        "liberado_por_nombre": "texto",
+                        "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "lugar": "texto"
                       }
                     ]
                   ],
@@ -2588,7 +2590,9 @@
                         "activo": true,
                         "liberado_at": "2026-10-22T14:30:00.000Z",
                         "liberado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                        "liberado_por_nombre": "texto"
+                        "liberado_por_nombre": "texto",
+                        "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "lugar": "texto"
                       }
                     ]
                   ],
@@ -2612,7 +2616,9 @@
                         "activo": true,
                         "liberado_at": "2026-10-22T14:30:00.000Z",
                         "liberado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-                        "liberado_por_nombre": "texto"
+                        "liberado_por_nombre": "texto",
+                        "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "lugar": "texto"
                       }
                     ]
                   ],
@@ -2774,6 +2780,14 @@
             "required": true,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "lugar_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -26650,12 +26664,32 @@
         "examples": [
           {
             "firma": "texto",
-            "motivo": "Mensaje de ejemplo"
+            "motivo_codigo": "texto",
+            "motivo_texto": "texto",
+            "fotos": [
+              {
+                "vin": "9FBHSR4E8PM000001",
+                "storage_path": "ejemplo.jpg",
+                "sello_fecha": "2026-10-22T14:30:00.000Z",
+                "sello_lat": 1.5,
+                "sello_lng": 1.5,
+                "precision": 1.5,
+                "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "nota": "Mensaje de ejemplo",
+                "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            ],
+            "testigo_nombre": "texto",
+            "testigo_cedula": "texto",
+            "fecha_momento": "2026-10-22T14:30:00.000Z",
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "precision_m": 1.5
           }
         ],
         "required": [
           "firma",
-          "motivo"
+          "motivo_codigo"
         ],
         "type": "object",
         "properties": {
@@ -26665,11 +26699,145 @@
               "string"
             ]
           },
-          "motivo": {
+          "motivo_codigo": {
             "type": [
               "null",
               "string"
             ]
+          },
+          "motivo_texto": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fotos": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "examples": [
+                {
+                  "vin": "9FBHSR4E8PM000001",
+                  "storage_path": "ejemplo.jpg",
+                  "sello_fecha": "2026-10-22T14:30:00.000Z",
+                  "sello_lat": 1.5,
+                  "sello_lng": 1.5,
+                  "precision": 1.5,
+                  "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "nota": "Mensaje de ejemplo",
+                  "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                }
+              ],
+              "required": [
+                "vin",
+                "storage_path",
+                "sello_fecha",
+                "sello_lat",
+                "sello_lng",
+                "precision",
+                "dispositivo_id",
+                "nota",
+                "hash_sha256"
+              ],
+              "type": "object",
+              "properties": {
+                "vin": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "storage_path": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "sello_fecha": {
+                  "format": "date-time"
+                },
+                "sello_lat": {
+                  "type": [
+                    "null",
+                    "number"
+                  ],
+                  "format": "double"
+                },
+                "sello_lng": {
+                  "type": [
+                    "null",
+                    "number"
+                  ],
+                  "format": "double"
+                },
+                "precision": {
+                  "type": [
+                    "null",
+                    "number"
+                  ],
+                  "format": "double"
+                },
+                "dispositivo_id": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "nota": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "hash_sha256": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
+          },
+          "testigo_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "testigo_cedula": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fecha_momento": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "precision_m": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
           }
         }
       },
@@ -27942,10 +28110,40 @@
                 "no_firma_parte": "texto",
                 "motivo_cierre": "texto",
                 "recibe_externo_nombre": "texto",
-                "recibe_externo_cedula": "texto"
+                "recibe_externo_cedula": "texto",
+                "motivo_codigo": "texto",
+                "reservas": "texto",
+                "fotos_de_cierre": 1,
+                "testigo_nombre": "texto",
+                "entrega_momento": {
+                  "momento": "2026-10-22T14:30:00.000Z",
+                  "lat": 4.6097,
+                  "lng": -74.0817,
+                  "precision_m": 1.5,
+                  "sin_ubicacion": true
+                },
+                "recibe_momento": {
+                  "momento": "2026-10-22T14:30:00.000Z",
+                  "lat": 4.6097,
+                  "lng": -74.0817,
+                  "precision_m": 1.5,
+                  "sin_ubicacion": true
+                },
+                "danos_nuevos": 1,
+                "rechazo": {
+                  "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "evidencia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "marcado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "marcado_por_nombre": "texto",
+                  "motivo": "Mensaje de ejemplo"
+                }
               }
             ],
-            "lugar_tiene_inspector": true
+            "lugar_tiene_inspector": true,
+            "estado_parada": "texto",
+            "receptor": "texto",
+            "receptor_nombre": "texto",
+            "conductor_llego": true
           }
         ],
         "required": [
@@ -28001,6 +28199,24 @@
           "lugar_tiene_inspector": {
             "type": "boolean",
             "default": false
+          },
+          "estado_parada": {
+            "type": "string",
+            "default": "pendiente"
+          },
+          "receptor": {
+            "type": "string",
+            "default": "sin_receptor"
+          },
+          "receptor_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "conductor_llego": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -28021,7 +28237,11 @@
                 "unidades_pendientes": 1,
                 "entregada": true,
                 "unidades": [],
-                "lugar_tiene_inspector": true
+                "lugar_tiene_inspector": true,
+                "estado_parada": "texto",
+                "receptor": "texto",
+                "receptor_nombre": "texto",
+                "conductor_llego": true
               }
             ]
           }
@@ -28066,7 +28286,33 @@
             "no_firma_parte": "texto",
             "motivo_cierre": "texto",
             "recibe_externo_nombre": "texto",
-            "recibe_externo_cedula": "texto"
+            "recibe_externo_cedula": "texto",
+            "motivo_codigo": "texto",
+            "reservas": "texto",
+            "fotos_de_cierre": 1,
+            "testigo_nombre": "texto",
+            "entrega_momento": {
+              "momento": "2026-10-22T14:30:00.000Z",
+              "lat": 4.6097,
+              "lng": -74.0817,
+              "precision_m": 1.5,
+              "sin_ubicacion": true
+            },
+            "recibe_momento": {
+              "momento": "2026-10-22T14:30:00.000Z",
+              "lat": 4.6097,
+              "lng": -74.0817,
+              "precision_m": 1.5,
+              "sin_ubicacion": true
+            },
+            "danos_nuevos": 1,
+            "rechazo": {
+              "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "evidencia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "marcado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "marcado_por_nombre": "texto",
+              "motivo": "Mensaje de ejemplo"
+            }
           }
         ],
         "required": [
@@ -28132,6 +28378,64 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "motivo_codigo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reservas": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fotos_de_cierre": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          },
+          "testigo_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "entrega_momento": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MomentoDeFirmaDto"
+              }
+            ]
+          },
+          "recibe_momento": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MomentoDeFirmaDto"
+              }
+            ]
+          },
+          "danos_nuevos": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          },
+          "rechazo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RechazoDeEntregaDto"
+              }
             ]
           }
         }
@@ -28862,17 +29166,29 @@
         "examples": [
           {
             "firma": "texto",
-            "entrega_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "recibe_usuario_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "recibe_nombre": "texto",
             "recibe_cedula": "texto",
-            "firma_recibe": "texto"
+            "firma_recibe": "texto",
+            "reservas": [
+              {
+                "vin": "9FBHSR4E8PM000001",
+                "observaciones": "texto"
+              }
+            ],
+            "rechazos": [
+              {
+                "vin": "9FBHSR4E8PM000001",
+                "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              }
+            ],
+            "fecha_momento": "2026-10-22T14:30:00.000Z",
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "precision_m": 1.5
           }
         ],
         "required": [
-          "firma",
-          "entrega_usuario_id",
-          "recibe_usuario_id"
+          "firma"
         ],
         "type": "object",
         "properties": {
@@ -28881,20 +29197,6 @@
               "null",
               "string"
             ]
-          },
-          "entrega_usuario_id": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
-          },
-          "recibe_usuario_id": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "uuid"
           },
           "recibe_nombre": {
             "type": [
@@ -28913,6 +29215,100 @@
               "null",
               "string"
             ]
+          },
+          "reservas": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "examples": [
+                {
+                  "vin": "9FBHSR4E8PM000001",
+                  "observaciones": "texto"
+                }
+              ],
+              "required": [
+                "vin",
+                "observaciones"
+              ],
+              "type": "object",
+              "properties": {
+                "vin": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "observaciones": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                }
+              }
+            }
+          },
+          "rechazos": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "examples": [
+                {
+                  "vin": "9FBHSR4E8PM000001",
+                  "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                }
+              ],
+              "required": [
+                "vin",
+                "hallazgo_id"
+              ],
+              "type": "object",
+              "properties": {
+                "vin": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "hallazgo_id": {
+                  "type": [
+                    "null",
+                    "string"
+                  ],
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "fecha_momento": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "precision_m": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
           }
         }
       },
@@ -32990,6 +33386,54 @@
           }
         }
       },
+      "MomentoDeFirmaDto": {
+        "examples": [
+          {
+            "momento": "2026-10-22T14:30:00.000Z",
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "precision_m": 1.5,
+            "sin_ubicacion": true
+          }
+        ],
+        "required": [
+          "momento",
+          "lat",
+          "lng",
+          "precision_m",
+          "sin_ubicacion"
+        ],
+        "type": "object",
+        "properties": {
+          "momento": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "precision_m": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "sin_ubicacion": {
+            "type": "boolean"
+          }
+        }
+      },
       "MotivoSinInspectorDto": {
         "examples": [
           {
@@ -35146,6 +35590,51 @@
           }
         }
       },
+      "RechazoDeEntregaDto": {
+        "examples": [
+          {
+            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "evidencia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "marcado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "marcado_por_nombre": "texto",
+            "motivo": "Mensaje de ejemplo"
+          }
+        ],
+        "required": [
+          "hallazgo_id",
+          "evidencia_id",
+          "marcado_por",
+          "marcado_por_nombre",
+          "motivo"
+        ],
+        "type": "object",
+        "properties": {
+          "hallazgo_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "evidencia_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "marcado_por": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "marcado_por_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo": {
+            "type": "string"
+          }
+        }
+      },
       "RecibirConReservasRequest": {
         "examples": [
           {
@@ -35213,7 +35702,8 @@
       "ReclamarViajeRequest": {
         "examples": [
           {
-            "proceso": "cargue"
+            "proceso": "cargue",
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -35226,6 +35716,13 @@
               "null",
               "string"
             ]
+          },
+          "lugar_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -35241,7 +35738,9 @@
             "activo": true,
             "liberado_at": "2026-10-22T14:30:00.000Z",
             "liberado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            "liberado_por_nombre": "texto"
+            "liberado_por_nombre": "texto",
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar": "texto"
           }
         ],
         "required": [
@@ -35296,6 +35795,19 @@
             "format": "uuid"
           },
           "liberado_por_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lugar_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "lugar": {
             "type": [
               "null",
               "string"

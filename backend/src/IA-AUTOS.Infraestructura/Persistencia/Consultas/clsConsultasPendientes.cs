@@ -1,4 +1,5 @@
 using IAAutos.Aplicacion.Viajes.DTOViajes;
+using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
 using Microsoft.EntityFrameworkCore;
@@ -28,17 +29,8 @@ internal sealed class clsConsultasPendientes(clsAppDbContext contexto) : IConsul
             return [];
         }
 
-        // Las unidades que ya tienen cerrada la transferencia de su Descargue no estan pendientes de entrega.
-        var etapasDescargue = await (from e in contexto.Etapas.AsNoTracking()
-                                     join c in contexto.EtapasCatalogo.AsNoTracking() on e.EtapaCatalogoId equals c.Id
-                                     where c.Codigo == clsCodigosEtapa.DESCARGUE && viajeIds.Contains(e.ViajeId)
-                                     select new { e.Id, e.ViajeId, e.VehiculoId }).ToListAsync(ct);
-        var etapaIds = etapasDescargue.Select(e => e.Id).ToList();
-        var cerradas = (await (from t in contexto.Transferencias.AsNoTracking()
-                               join i in contexto.Inspecciones.AsNoTracking() on t.InspeccionId equals i.Id
-                               where t.TipoCierre != null && etapaIds.Contains(i.EtapaId)
-                               select i.EtapaId).ToListAsync(ct)).ToHashSet();
-        var entregadas = etapasDescargue.Where(e => cerradas.Contains(e.Id)).Select(e => (e.ViajeId, e.VehiculoId)).ToHashSet();
+        // Las unidades que ya tienen cerrada la transferencia de su Descargue (entregadas o rechazadas en esa parada) no estan pendientes de entrega.
+        var entregadas = await ResueltasAsync(viajeIds, ct);
 
         var activos = (await contexto.ViajeVehiculos.AsNoTracking()
             .Where(vv => viajeIds.Contains(vv.ViajeId) && vv.EstadoUnidad == clsEstadoUnidad.ACTIVA)
@@ -47,11 +39,11 @@ internal sealed class clsConsultasPendientes(clsAppDbContext contexto) : IConsul
         var reclamosActivos = await (from r in contexto.Reclamos.AsNoTracking()
                                      join u in contexto.Usuarios.AsNoTracking() on r.InspectorId equals u.Id
                                      where r.LiberadoAt == null && viajeIds.Contains(r.ViajeId)
-                                     select new { r.ViajeId, r.Proceso, r.InspectorId, u.Nombre, r.ReclamadoAt }).ToListAsync(ct);
+                                     select new { r.ViajeId, r.Proceso, r.LugarId, r.InspectorId, u.Nombre, r.ReclamadoAt }).ToListAsync(ct);
 
         PendienteDto Armar(Guid viajeId, string? codigo, string? placa, string proceso, Guid lugarId, string lugar, DateTimeOffset? fecha, int unidades)
         {
-            var reclamo = reclamosActivos.FirstOrDefault(r => r.ViajeId == viajeId && r.Proceso == proceso);
+            var reclamo = reclamosActivos.FirstOrDefault(r => r.ViajeId == viajeId && r.Proceso == proceso && (proceso == clsProcesoReclamo.CARGUE || r.LugarId == lugarId));
             var estado = reclamo is null ? clsEstadoPendiente.DISPONIBLE : reclamo.InspectorId == usuarioId ? clsEstadoPendiente.MIO : clsEstadoPendiente.EN_REVISION;
             return new PendienteDto(viajeId, codigo, placa, proceso, lugarId, lugar, fecha, estado, reclamo?.InspectorId, reclamo?.Nombre, reclamo?.ReclamadoAt, unidades);
         }
@@ -66,5 +58,33 @@ internal sealed class clsConsultasPendientes(clsAppDbContext contexto) : IConsul
             .ThenBy(p => p.FechaProgramada)
             .ThenBy(p => p.Placa, StringComparer.Ordinal)
             .ToList();
+    }
+
+    public async Task<int> UnidadesPorEntregarAsync(Guid viajeId, Guid lugarId, CancellationToken ct = default)
+    {
+        var activas = await contexto.ViajeVehiculos.AsNoTracking()
+            .Where(vv => vv.ViajeId == viajeId && vv.LugarDestinoId == lugarId && vv.EstadoUnidad == clsEstadoUnidad.ACTIVA)
+            .Select(vv => vv.VehiculoId).ToListAsync(ct);
+        var resueltas = await ResueltasAsync([viajeId], ct);
+        return activas.Count(v => !resueltas.Contains((viajeId, v)));
+    }
+
+    /// <summary>
+    /// Las unidades cuya transferencia de la ULTIMA revision del Descargue ya tiene cierre y no se esta esperando de nuevo: las entregadas y las rechazadas en su parada. Un carro rechazado al que despues se le cambio el
+    /// destino (y que aun no tiene su revision nueva) vuelve a faltar.
+    /// </summary>
+    private async Task<HashSet<(Guid ViajeId, Guid VehiculoId)>> ResueltasAsync(IReadOnlyCollection<Guid> viajeIds, CancellationToken ct)
+    {
+        var filas = await (from e in contexto.Etapas.AsNoTracking()
+                           join c in contexto.EtapasCatalogo.AsNoTracking() on e.EtapaCatalogoId equals c.Id
+                           join i in contexto.Inspecciones.AsNoTracking() on e.Id equals i.EtapaId
+                           join t in contexto.Transferencias.AsNoTracking() on i.Id equals t.InspeccionId
+                           join vv in contexto.ViajeVehiculos.AsNoTracking() on new { e.ViajeId, e.VehiculoId } equals new { vv.ViajeId, vv.VehiculoId }
+                           where c.Codigo == clsCodigosEtapa.DESCARGUE && viajeIds.Contains(e.ViajeId) && t.TipoCierre != null
+                              && !contexto.Inspecciones.Any(j => j.EtapaId == i.EtapaId && j.Momento == i.Momento && j.Ciclo > i.Ciclo)
+                           select new { e.ViajeId, e.VehiculoId, t.TipoCierre, t.FirmadaAt, vv.LugarDestinoCambiadoAt }).ToListAsync(ct);
+        return filas
+            .Where(f => f.TipoCierre != clsTipoCierre.RECHAZADO || f.LugarDestinoCambiadoAt is null || f.FirmadaAt is null || f.LugarDestinoCambiadoAt <= f.FirmadaAt)
+            .Select(f => (f.ViajeId, f.VehiculoId)).ToHashSet();
     }
 }

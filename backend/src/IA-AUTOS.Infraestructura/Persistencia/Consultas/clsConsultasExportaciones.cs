@@ -169,6 +169,18 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
         public string? RecibeIp { get; init; }
 
         public int Extras { get; init; }
+
+        public DateTimeOffset? EntregaMomento { get; init; }
+
+        public double? EntregaLat { get; init; }
+
+        public double? EntregaLng { get; init; }
+
+        public DateTimeOffset? RecibeMomento { get; init; }
+
+        public double? RecibeLat { get; init; }
+
+        public double? RecibeLng { get; init; }
     }
 
     public async Task<ResultadoExportacion<FilaExportInspeccion>> InspeccionesAsync(FiltrosInspecciones f, Guid? clienteId, int maximo, CancellationToken ct = default)
@@ -241,11 +253,21 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                            RecibeFecha = tr.FirmaRecibeAt,
                            RecibeIp = tr.FirmaRecibeIp,
                            Extras = contexto.InspeccionExtras.Count(x => x.InspeccionId == i.Id),
+                           EntregaMomento = tr.FirmaEntregaMomentoAt,
+                           EntregaLat = tr.FirmaEntregaLat,
+                           EntregaLng = tr.FirmaEntregaLng,
+                           RecibeMomento = tr.FirmaRecibeMomentoAt,
+                           RecibeLat = tr.FirmaRecibeLat,
+                           RecibeLng = tr.FirmaRecibeLng,
                        };
 
+        // La ubicacion del momento en que se firmo: las coordenadas o «sin ubicacion» si la firma no trajo GPS (vacia si la firma no guardo su momento).
+        static string? Ubicacion(DateTimeOffset? momento, double? lat, double? lng) =>
+            momento is null ? null : lat is { } la && lng is { } lo ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{la:0.#####}, {lo:0.#####}") : "sin ubicación";
         var filas = (await consulta.Take(maximo + 1).ToListAsync(ct)).Select(x => new FilaExportInspeccion(
             Contexto(x.Contexto), x.Inspeccion.Momento, x.Inspeccion.Version, x.Inspeccion.Estado, x.Inspeccion.IniciadaAt, x.Inspeccion.CerradaAt, x.Inspector,
-            x.TipoCierre, x.EntregaNombre, x.EntregaFecha, x.EntregaIp, x.RecibeNombre, x.RecibeFecha, x.RecibeIp, x.Extras)).ToList();
+            x.TipoCierre, x.EntregaNombre, x.EntregaFecha, x.EntregaIp, x.RecibeNombre, x.RecibeFecha, x.RecibeIp, x.Extras,
+            x.EntregaMomento, Ubicacion(x.EntregaMomento, x.EntregaLat, x.EntregaLng), x.RecibeMomento, Ubicacion(x.RecibeMomento, x.RecibeLat, x.RecibeLng))).ToList();
         return Limitar(filas, maximo);
     }
 

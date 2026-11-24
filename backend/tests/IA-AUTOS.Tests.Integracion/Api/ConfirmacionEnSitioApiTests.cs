@@ -131,6 +131,7 @@ public sealed class ConfirmacionEnSitioApiTests(clsBaseDatosFixture bd) : clsPru
     public async Task La_duda_del_GPS_juega_a_favor_en_el_limite_exacto_y_un_metro_mas_queda_fuera_del_rango()
     {
         var e = await EscenarioAsync();
+        await Sembrador.InformeAsync(e.Etapas[1], e.Inspector.UsuarioId, cerrada: true, momento: "llegada");
         var justa = await InspeccionAsync(e.Inspector, e.Etapas[0]);
         var pasada = await InspeccionAsync(e.Inspector, e.Etapas[2]);
 
@@ -250,6 +251,8 @@ public sealed class ConfirmacionEnSitioApiTests(clsBaseDatosFixture bd) : clsPru
     {
         var e = await EscenarioAsync(radioDelLugar: null);
         var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
+        // La llegada de Transporte ya confirmada (el «Llegue» del conductor) es la que se evalua mas abajo: el transporte no se confirma en sitio.
+        var otra = await Sembrador.InformeAsync(e.Etapas[1], e.Inspector.UsuarioId, cerrada: true, momento: "llegada");
         var cargue = await InspeccionAsync(e.Inspector, e.Etapas[0]);
         var descargue = await InspeccionAsync(e.Inspector, e.Etapas[2]);
 
@@ -261,7 +264,6 @@ public sealed class ConfirmacionEnSitioApiTests(clsBaseDatosFixture bd) : clsPru
 
         // Cambiado el parametro del cargue, la siguiente evaluacion lo usa sin reiniciar nada.
         Assert.Equal(HttpStatusCode.OK, (await Como(admin).PatchAsync("/api/parametros/radio_lugar_cargue_m", Cuerpo(new { valor = "300" }))).StatusCode);
-        var otra = await InspeccionAsync(e.Inspector, e.Etapas[1], "llegada");
         var cargue2 = await InspeccionAsync(e.Inspector, e.Etapas[0], "salida");
         await FotoAsync(e.Inspector, cargue2, 400, 20);
         Assert.Equal("fuera_de_rango", (await ConfirmacionAsync(e.Diana, cargue2))!.Value.GetProperty("resultado").GetString());

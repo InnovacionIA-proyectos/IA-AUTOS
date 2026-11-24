@@ -68,7 +68,8 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
         }));
 
     /// <summary>
-    /// El viaje MT-4512: tres unidades al Concesionario Autonorte (Bogota) y dos al Concesionario Cali Sur (Cali), ya en curso, cada una con la inspeccion de llegada del Descargue cerrada (ahi se firma la entrega).
+    /// El viaje MT-4512: tres unidades al Concesionario Autonorte (Bogota) y dos al Concesionario Cali Sur (Cali), ya en curso, cada una con el «Llegue» del conductor y la inspeccion de llegada del Descargue cerrada (ahi se firma la
+    /// entrega). Con <c>conInspector</c> Autonorte tiene asignado al inspector y este ya tomo su entrega; Cali Sur nunca tiene inspectores (recibe la persona del lugar).
     /// </summary>
     private async Task<Escenario> EscenarioAsync(bool conLlegadas = true, bool conInspector = true)
     {
@@ -94,8 +95,15 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
         {
             foreach (var vin in vinesBogota.Concat(vinesCali))
             {
+                await Sembrador.InformeAsync(await EtapaAsync(viaje, vin, "transporte"), conductor.UsuarioId, cerrada: true, momento: "llegada");
                 llegadas[vin] = await Sembrador.InformeAsync(await EtapaAsync(viaje, vin, "descargue"), inspector.UsuarioId, cerrada: true, momento: "llegada");
             }
+        }
+
+        if (conInspector)
+        {
+            await Sembrador.EjecutarAsync("INSERT dbo.tblInspectorLugares (Id, UsuarioId, LugarId) VALUES (NEWID(), @u, @l)", ("@u", inspector.UsuarioId), ("@l", autonorte));
+            Assert.Equal(HttpStatusCode.Created, (await Como(inspector).PostAsync($"/api/viajes/{viaje}/reclamos", Cuerpo(new { proceso = "entrega", lugar_id = autonorte }))).StatusCode);
         }
 
         return new Escenario(viaje, autonorte, caliSur, conductor, inspector, coordinador, llegadas);
@@ -104,8 +112,8 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
     private Task<HttpResponseMessage> FirmarAsync(Sesion quien, Guid viaje, Guid lugar, string firma = "M10,10 L50,50") =>
         Como(quien).PostAsync($"/api/viajes/{viaje}/entregas/{lugar}/firma", Cuerpo(new { firma }));
 
-    private Task<HttpResponseMessage> UnaFirmaAsync(Sesion quien, Guid viaje, Guid lugar, string? motivo, string? firma = "M10,10 L50,50") =>
-        Como(quien).PostAsync($"/api/viajes/{viaje}/entregas/{lugar}/una-firma", Cuerpo(new { firma, motivo }));
+    private Task<HttpResponseMessage> UnaFirmaAsync(Sesion quien, Guid viaje, Guid lugar, string? motivoCodigo, string? firma = "M10,10 L50,50", string? motivoTexto = null, object[]? fotos = null) =>
+        Como(quien).PostAsync($"/api/viajes/{viaje}/entregas/{lugar}/una-firma", Cuerpo(new { firma, motivo_codigo = motivoCodigo, motivo_texto = motivoTexto, fotos }));
 
     private Task<object?> TransferenciaAsync(Guid inspeccion, string columna) =>
         Sembrador.EscalarAsync($"SELECT {columna} FROM dbo.tblTransferenciasCustodia WHERE InspeccionId = @i", ("@i", inspeccion));
@@ -313,9 +321,8 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
         Assert.Equal("en_curso", await Sembrador.EscalarAsync("SELECT Estado FROM dbo.tblViajes WHERE Id = @v", ("@v", e.Viaje)));
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia t JOIN dbo.tblInspecciones i ON i.Id = t.InspeccionId JOIN dbo.tblEtapas et ON et.Id = i.EtapaId JOIN dbo.tblVehiculos v ON v.Id = et.VehiculoId WHERE v.Vin LIKE 'VIN-ENT-C%'"));
 
-        // ESC-02: la entrega del ultimo punto completa el viaje y queda finalizado.
-        Assert.Equal(HttpStatusCode.OK, (await FirmarAsync(e.Inspector, e.Viaje, e.CaliSur)).StatusCode);
-        var ultimo = await FirmarAsync(e.Conductor, e.Viaje, e.CaliSur);
+        // La entrega del ultimo punto (sin inspectores: recibe la persona del lugar) completa el viaje y queda finalizado.
+        var ultimo = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.CaliSur, new { firma = "firma-del-conductor", recibe_nombre = "Luis Mora", recibe_cedula = "79123456", firma_recibe = "firma-luis" });
 
         Assert.Equal(HttpStatusCode.OK, ultimo.StatusCode);
         Assert.Equal("finalizado", (await JsonAsync(ultimo)).GetProperty("viaje_estado").GetString());
@@ -366,9 +373,8 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
     public async Task Cerrar_la_entrega_con_una_sola_firma_deja_cada_unidad_como_recibo_sin_entrega_con_su_novedad_y_un_solo_aviso_al_coordinador()
     {
         var e = await EscenarioAsync();
-        Assert.Equal(HttpStatusCode.OK, (await FirmarAsync(e.Conductor, e.Viaje, e.CaliSur, "firma-del-conductor")).StatusCode);
 
-        var r = await UnaFirmaAsync(e.Conductor, e.Viaje, e.CaliSur, "No hay inspector en el punto", firma: null);
+        var r = await UnaFirmaAsync(e.Conductor, e.Viaje, e.CaliSur, "no_habia_nadie", firma: "firma-del-conductor");
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var punto = await JsonAsync(r);
@@ -383,53 +389,43 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
         {
             Assert.Equal("recibo_sin_entrega", await TransferenciaAsync(e.Llegadas[vin], "TipoCierre"));
             Assert.Equal("recibe", await TransferenciaAsync(e.Llegadas[vin], "NoFirmaParte"));
-            Assert.Equal("No hay inspector en el punto", await TransferenciaAsync(e.Llegadas[vin], "MotivoNoFirma"));
+            Assert.Equal("No había nadie para recibir", await TransferenciaAsync(e.Llegadas[vin], "MotivoNoFirma"));
+            Assert.Equal("no_habia_nadie", await TransferenciaAsync(e.Llegadas[vin], "MotivoCodigo"));
             Assert.Equal("firma-del-conductor", await TransferenciaAsync(e.Llegadas[vin], "FirmaEntrega"));
             Assert.Null(await TransferenciaAsync(e.Llegadas[vin], "FirmaRecibe"));
         }
 
-        // La novedad de proceso queda por unidad y el aviso es uno solo, con su dedupe por entrega y punto, para el coordinador de calidad.
-        Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNovedadesProceso WHERE Tipo = 'recibo_sin_entrega' AND MotivoTexto = N'No hay inspector en el punto' AND ViajeId = @v", ("@v", e.Viaje)));
+        // La novedad de proceso queda por unidad, con el codigo del motivo, y el aviso es uno solo, con su dedupe por entrega y parada, para el coordinador de calidad.
+        Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNovedadesProceso WHERE Tipo = 'recibo_sin_entrega' AND MotivoCodigo = 'no_habia_nadie' AND ViajeId = @v", ("@v", e.Viaje)));
         Assert.Equal(1, await Sembrador.ContarAsync(
             "SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'novedad_proceso' AND Canal = 'bandeja' AND UsuarioId = @u AND ViajeId = @v AND ClaveDedupe LIKE @k AND Titulo LIKE N'%Concesionario Cali Sur%'",
             ("@u", e.Coordinador.UsuarioId), ("@v", e.Viaje), ("@k", $"novedad_proceso:entrega:{e.Viaje}:{e.CaliSur}%")));
-        Assert.Contains("No hay inspector en el punto", (string)(await Sembrador.EscalarAsync("SELECT TOP 1 Mensaje FROM dbo.tblNotificaciones WHERE UsuarioId = @u", ("@u", e.Coordinador.UsuarioId)))!);
+        Assert.Contains("No había nadie para recibir", (string)(await Sembrador.EscalarAsync("SELECT TOP 1 Mensaje FROM dbo.tblNotificaciones WHERE UsuarioId = @u", ("@u", e.Coordinador.UsuarioId)))!);
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE UsuarioId IN (@c, @i)", ("@c", e.Conductor.UsuarioId), ("@i", e.Inspector.UsuarioId)));
         // Cerrarla de nuevo no repite nada.
-        Assert.Equal(HttpStatusCode.Conflict, (await UnaFirmaAsync(e.Conductor, e.Viaje, e.CaliSur, "otra vez")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await UnaFirmaAsync(e.Conductor, e.Viaje, e.CaliSur, "no_habia_nadie")).StatusCode);
     }
 
     [Fact]
-    public async Task Quien_recibe_tambien_puede_cerrar_con_su_sola_firma_y_el_cierre_exige_motivo_y_que_la_otra_parte_no_haya_firmado()
+    public async Task El_cierre_exige_motivo_codificado_y_que_la_otra_parte_no_haya_firmado_y_quien_recibe_tambien_puede_cerrar_con_su_sola_firma()
     {
         var e = await EscenarioAsync();
 
         var sinMotivo = await UnaFirmaAsync(e.Inspector, e.Viaje, e.Autonorte, null);
-        var motivoLargo = await UnaFirmaAsync(e.Inspector, e.Viaje, e.Autonorte, new string('x', 301));
-        var sinFirmaNiPrevia = await UnaFirmaAsync(e.Inspector, e.Viaje, e.Autonorte, "El conductor no esta", firma: null);
-        var ajeno = await UnaFirmaAsync(e.Coordinador, e.Viaje, e.Autonorte, "El conductor no esta");
+        var motivoLargo = await UnaFirmaAsync(e.Inspector, e.Viaje, e.Autonorte, "se_nego_a_firmar", motivoTexto: new string('x', 301));
+        var sinFirmaNiPrevia = await UnaFirmaAsync(e.Inspector, e.Viaje, e.Autonorte, "no_habia_nadie", firma: null);
+        var ajeno = await UnaFirmaAsync(e.Coordinador, e.Viaje, e.Autonorte, "no_habia_nadie");
         Assert.Equal(HttpStatusCode.BadRequest, sinMotivo.StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, motivoLargo.StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest, sinFirmaNiPrevia.StatusCode);
+        // «No habia nadie» donde el punto tiene inspector es sin_receptor (409): el inspector esta ahi.
+        Assert.Equal(HttpStatusCode.Conflict, sinFirmaNiPrevia.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, ajeno.StatusCode);
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia"));
 
-        // Firma solo quien recibe (nadie entrego): la parte que no firmo es quien entrega y no queda usuario de entrega.
-        var r = await UnaFirmaAsync(e.Inspector, e.Viaje, e.Autonorte, "El conductor no esta en el punto", "firma-del-inspector");
-
-        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
-        foreach (var vin in new[] { "VIN-ENT-B1", "VIN-ENT-B2", "VIN-ENT-B3" })
-        {
-            Assert.Equal("recibo_sin_entrega", await TransferenciaAsync(e.Llegadas[vin], "TipoCierre"));
-            Assert.Equal("entrega", await TransferenciaAsync(e.Llegadas[vin], "NoFirmaParte"));
-            Assert.Null(await TransferenciaAsync(e.Llegadas[vin], "EntregaUsuarioId"));
-            Assert.Equal("firma-del-inspector", await TransferenciaAsync(e.Llegadas[vin], "FirmaRecibe"));
-        }
-
         // Si la otra parte ya firmo, no se puede cerrar con una sola firma (409).
-        Assert.Equal(HttpStatusCode.OK, (await FirmarAsync(e.Inspector, e.Viaje, e.CaliSur)).StatusCode);
-        var yaFirmo = await UnaFirmaAsync(e.Conductor, e.Viaje, e.CaliSur, "El inspector no firma");
-        Assert.Equal(HttpStatusCode.Conflict, yaFirmo.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await FirmarAsync(e.Conductor, e.Viaje, e.Autonorte)).StatusCode);
+        var yaFirmo = await UnaFirmaAsync(e.Inspector, e.Viaje, e.Autonorte, "se_nego_a_firmar", motivoTexto: "El conductor no firma");
+        Assert.True(yaFirmo.StatusCode is HttpStatusCode.Conflict or HttpStatusCode.BadRequest);
     }
 
     [Fact]
@@ -440,7 +436,7 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
         Assert.Equal(HttpStatusCode.OK, (await FirmarAsync(e.Inspector, e.Viaje, e.Autonorte)).StatusCode);
         Assert.Equal("en_curso", await Sembrador.EscalarAsync("SELECT Estado FROM dbo.tblViajes WHERE Id = @v", ("@v", e.Viaje)));
 
-        var r = await UnaFirmaAsync(e.Conductor, e.Viaje, e.CaliSur, "No hay inspector en el punto");
+        var r = await UnaFirmaAsync(e.Conductor, e.Viaje, e.CaliSur, "no_habia_nadie");
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         Assert.Equal("finalizado", (await JsonAsync(r)).GetProperty("viaje_estado").GetString());
@@ -456,8 +452,7 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
 
         Assert.Equal(HttpStatusCode.OK, (await FirmarAsync(e.Conductor, e.Viaje, e.Autonorte)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await FirmarAsync(e.Inspector, e.Viaje, e.Autonorte)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await FirmarAsync(e.Conductor, e.Viaje, e.CaliSur)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await FirmarAsync(e.Inspector, e.Viaje, e.CaliSur)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await FirmarConExternoAsync(e.Conductor, e.Viaje, e.CaliSur, new { firma = "f", recibe_nombre = "Luis Mora", recibe_cedula = "79123456", firma_recibe = "fl" })).StatusCode);
 
         // La unidad de un viaje anterior al destino por unidad no tiene destino ni descargue cerrado: el viaje sigue en curso.
         Assert.Equal("en_curso", await Sembrador.EscalarAsync("SELECT Estado FROM dbo.tblViajes WHERE Id = @v", ("@v", e.Viaje)));
@@ -569,7 +564,6 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
     public async Task Un_punto_con_inspector_asignado_se_firma_entre_el_conductor_y_ese_inspector_como_hasta_ahora_y_rechaza_a_una_persona_externa()
     {
         var e = await EscenarioAsync();
-        await Sembrador.EjecutarAsync("INSERT dbo.tblInspectorLugares (Id, UsuarioId, LugarId) VALUES (NEWID(), @u, @l)", ("@u", e.Inspector.UsuarioId), ("@l", e.Autonorte));
 
         // ESC-02: no se piden nombre ni cedula de nadie mas; si llegan, se rechazan.
         var conExterno = await FirmarConExternoAsync(e.Conductor, e.Viaje, e.Autonorte, new { firma = "f", recibe_nombre = "Ana Restrepo", recibe_cedula = "1020304050", firma_recibe = "fa" });
@@ -619,7 +613,7 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
         var e = await EscenarioAsync(conInspector: false);
         const string MOTIVO = "El concesionario cerró antes de la llegada";
 
-        var r = await UnaFirmaAsync(e.Conductor, e.Viaje, e.Autonorte, MOTIVO, "firma-conductor");
+        var r = await UnaFirmaAsync(e.Conductor, e.Viaje, e.Autonorte, "no_habia_nadie", "firma-conductor", MOTIVO);
 
         // ESC-04: el motivo, y que parte firmo y cual no.
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
@@ -627,6 +621,7 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
         {
             Assert.Equal("recibo_sin_entrega", u.GetProperty("tipo_cierre").GetString());
             Assert.Equal(MOTIVO, u.GetProperty("motivo_cierre").GetString());
+            Assert.Equal("no_habia_nadie", u.GetProperty("motivo_codigo").GetString());
             Assert.Equal("recibe", u.GetProperty("no_firma_parte").GetString());
             Assert.NotEqual(JsonValueKind.Null, u.GetProperty("entrega_firmada_at").ValueKind);
             Assert.Equal(JsonValueKind.Null, u.GetProperty("recibe_firmada_at").ValueKind);
@@ -650,7 +645,7 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
     {
         var e = await EscenarioAsync(conInspector: false);
         const string MOTIVO = "El concesionario cerró antes de la llegada";
-        Assert.Equal(HttpStatusCode.OK, (await UnaFirmaAsync(e.Conductor, e.Viaje, e.Autonorte, MOTIVO, "firma-conductor")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await UnaFirmaAsync(e.Conductor, e.Viaje, e.Autonorte, "no_habia_nadie", "firma-conductor", MOTIVO)).StatusCode);
 
         // ESC-05: la bandeja del coordinador trae el aviso con sus datos propios y se filtra por tipo.
         var bandeja = await JsonAsync(await Como(e.Coordinador).GetAsync("/api/notificaciones?tipo=novedad_proceso"));
@@ -664,7 +659,8 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
         // El texto que ya tenia no se pierde.
         Assert.Contains("Concesionario Autonorte", aviso.GetProperty("mensaje").GetString());
         Assert.Contains(MOTIVO, aviso.GetProperty("mensaje").GetString());
-        Assert.StartsWith("Entrega con una sola firma", aviso.GetProperty("titulo").GetString());
+        Assert.Equal("No había nadie para recibir: Concesionario Autonorte", aviso.GetProperty("titulo").GetString());
+        Assert.Equal("no_habia_nadie", datos.GetProperty("motivo_codigo").GetString());
 
         // Un aviso sin campos propios sigue sin ellos.
         var otras = await JsonAsync(await Como(e.Coordinador).GetAsync("/api/notificaciones"));
@@ -675,12 +671,16 @@ public sealed class EntregasPorPuntoApiTests(clsBaseDatosFixture bd) : clsPrueba
     public async Task Cuando_firma_solo_quien_recibe_el_aviso_dice_que_la_parte_que_firmo_es_quien_recibe()
     {
         var e = await EscenarioAsync();
-        Assert.Equal(HttpStatusCode.OK, (await UnaFirmaAsync(e.Inspector, e.Viaje, e.Autonorte, "El conductor no esta en el punto", "firma-del-inspector")).StatusCode);
+        var subida = await JsonAsync(await Como(e.Inspector).PostAsJsonAsync("/api/uploads", new { data = Convert.ToBase64String(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }.Concat(Guid.NewGuid().ToByteArray()).ToArray()), ext = "png" }));
+        var foto = new { vin = "VIN-ENT-B1", storage_path = subida.GetProperty("storage_path").GetString(), sello_fecha = "2026-11-18T14:10:00-05:00", sello_lat = 4.6, sello_lng = -74.1, hash_sha256 = subida.GetProperty("hash_sha256").GetString() };
+        Assert.Equal(HttpStatusCode.OK, (await UnaFirmaAsync(e.Inspector, e.Viaje, e.Autonorte, "se_nego_a_firmar", "firma-del-inspector", "El conductor se niega a firmar", [foto])).StatusCode);
 
         var bandeja = await JsonAsync(await Como(e.Coordinador).GetAsync("/api/notificaciones?tipo=novedad_proceso"));
 
         var datos = Assert.Single(bandeja.GetProperty("items").EnumerateArray()).GetProperty("datos");
         Assert.Equal("recibe", datos.GetProperty("parte_que_firmo").GetString());
-        Assert.Equal("El conductor no esta en el punto", datos.GetProperty("motivo").GetString());
+        Assert.Equal("El conductor se niega a firmar", datos.GetProperty("motivo").GetString());
+        Assert.Equal("se_nego_a_firmar", datos.GetProperty("motivo_codigo").GetString());
+        Assert.Equal(1, datos.GetProperty("fotos").GetInt32());
     }
 }

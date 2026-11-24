@@ -1,25 +1,26 @@
 using System.Text.RegularExpressions;
 using IAAutos.Aplicacion.Archivos;
+using IAAutos.Dominio.Custodia;
 
 namespace IAAutos.Aplicacion.Inspecciones;
 
 /// <summary>Arma la firma de un PDF a partir de lo guardado en la transferencia: el nombre de un archivo subido (se incrusta como imagen) o un trazo SVG (se dibuja).</summary>
 internal static partial class clsArmadorFirmas
 {
-    public static async Task<FirmaConstancia> ArmarAsync(IAlmacenArchivos almacen, string persona, string? firma, DateTimeOffset? fecha, string? ip, CancellationToken ct)
+    public static async Task<FirmaConstancia> ArmarAsync(IAlmacenArchivos almacen, string persona, string? firma, DateTimeOffset? fecha, string? ip, CancellationToken ct, MomentoDeFirma? momento = null)
     {
         if (string.IsNullOrEmpty(firma))
         {
-            return new FirmaConstancia(persona, fecha, ip, null, null);
+            return new FirmaConstancia(persona, fecha, ip, null, null, momento);
         }
 
         if (ArchivoSubido().IsMatch(firma))
         {
             var imagen = await almacen.LeerAsync(firma, ct);
-            return new FirmaConstancia(persona, fecha, ip, imagen is null ? firma : null, imagen);
+            return new FirmaConstancia(persona, fecha, ip, imagen is null ? firma : null, imagen, momento);
         }
 
-        return new FirmaConstancia(persona, fecha, ip, firma, null);
+        return new FirmaConstancia(persona, fecha, ip, firma, null, momento);
     }
 
     [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.(jpg|jpeg|png)$", RegexOptions.IgnoreCase)]

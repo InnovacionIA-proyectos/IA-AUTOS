@@ -37,7 +37,7 @@ public sealed record clsTransferenciaPendiente(
 
 /// <summary>Un camion reclamado (reclamo activo) por un inspector que aun no inicio ni cerro ninguna inspeccion del viaje despues de reclamarlo.</summary>
 public sealed record clsReclamoSinActividad(
-    Guid ReclamoId, Guid ViajeId, string? CodigoMtrack, string? Placa, string Proceso, Guid InspectorId, string? InspectorNombre, Guid? ClienteId, DateTimeOffset ReclamadoAt);
+    Guid ReclamoId, Guid ViajeId, string? CodigoMtrack, string? Placa, string Proceso, Guid InspectorId, string? InspectorNombre, Guid? ClienteId, DateTimeOffset ReclamadoAt, string? Parada = null);
 
 /// <summary>Una foto sellada con ubicacion de una visita a un lugar sin ubicacion confirmada: de que lugar, de que viaje (la visita), de que cliente y sus coordenadas.</summary>
 public sealed record clsFotoDeLugar(Guid LugarId, string LugarNombre, Guid ViajeId, Guid ClienteId, double Lat, double Lng);
@@ -369,7 +369,7 @@ public sealed class clsAlertasPeriodicas(
                     null,
                     null,
                     $"Camión reclamado sin actividad: {reclamo.Placa ?? reclamo.CodigoMtrack ?? "sin placa"}",
-                    $"{reclamo.InspectorNombre ?? "Un inspector"} reclamó {camion}{viaje} ({reclamo.Proceso}) hace más de {minutos} minutos y no ha iniciado ninguna inspección. El reclamo sigue vigente.",
+                    $"{reclamo.InspectorNombre ?? "Un inspector"} reclamó {camion}{viaje} ({reclamo.Proceso}{(reclamo.Parada is { } parada ? $" en {parada}" : string.Empty)}) hace más de {minutos} minutos y no ha iniciado ninguna inspección. El reclamo sigue vigente.",
                     $"{clsTipoNotificacion.RECLAMO_SIN_ACTIVIDAD}:{reclamo.ReclamoId}"),
                 ct);
             emitidas += destinatarios.Count;

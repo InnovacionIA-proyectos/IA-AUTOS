@@ -105,16 +105,17 @@ public sealed class clsViajesController(
     public async Task<IActionResult> ObtenerEntrega(Guid id, Guid lugar, CancellationToken ct) => Ok(await entregas.ObtenerPuntoAsync(id, lugar, ct));
 
     /// <summary>
-    /// Firma la entrega del punto: la firma del usuario autenticado (quien entrega o quien recibe) se guarda en la transferencia de cada unidad pendiente del punto, con la misma firma, fecha e IP. Quien entrega es por
-    /// defecto el conductor del viaje y quien recibe su inspector (se pueden indicar otros usuarios del viaje). 403 si no es el conductor ni el inspector del viaje; 409 si no hay unidades pendientes o alguna aun no tiene
-    /// la inspeccion de llegada del Descargue.
+    /// Firma la entrega de la parada: la firma del usuario autenticado (quien entrega o quien recibe) se guarda en la transferencia de cada unidad pendiente de la parada, con la misma firma, fecha e IP y la hora y el GPS del
+    /// momento. Entrega el conductor del viaje y recibe el inspector que tomo la entrega de ESA parada o, donde el punto no tiene inspectores, la persona del lugar. <c>rechazos</c> (VIN y dano de su revision de llegada) deja
+    /// carros sin entregar y <c>reservas</c> son las observaciones de quien recibe por carro. 403 si no es el conductor ni el inspector de la parada; 409 <c>sin_receptor</c>, <c>conductor_sin_llegada</c>, <c>llegada_abierta</c> o
+    /// <c>sin_novedad_para_rechazar</c> segun el caso, o si no hay unidades pendientes.
     /// </summary>
     [HttpPost("{id:guid}/entregas/{lugar:guid}/firma")]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR)]
     [ProducesResponseType<EntregaPuntoDto>(StatusCodes.Status200OK)]
     [CuerpoSolicitud(typeof(FirmarEntregaRequest))]
     public async Task<IActionResult> FirmarEntrega(Guid id, Guid lugar, CancellationToken ct) =>
-        Ok(await entregas.FirmarAsync(id, lugar, await LeerCuerpoAsync<FirmarEntregaRequest>(ct), Cliente(), ct));
+        Ok(await entregas.FirmarAsync(id, lugar, await LeerCuerpoAsync<FirmarEntregaRequest>(ct, "motivo_parcial", "entrega_usuario_id", "recibe_usuario_id"), Cliente(), ct));
 
     /// <summary>
     /// Firma el cargue de toda la niñera: una sola firma de cada parte (el inspector del viaje entrega, el conductor del viaje recibe) para todos los carros activos, con el trazo, la hora y el GPS del momento y, solo quien recibe,
@@ -154,19 +155,21 @@ public sealed class clsViajesController(
         Ok(await cargueNinera.RegistrarNoFirmaAsync(id, await LeerCuerpoAsync<NoFirmaDelCargueRequest>(ct), Cliente(), ct));
 
     /// <summary>
-    /// Cierra la entrega del punto con una sola firma y su <c>motivo</c> (obligatorio, hasta 300 caracteres): cada unidad pendiente queda como «recibo_sin_entrega» con la parte que no firmo, deja su novedad de proceso y
-    /// los coordinadores de calidad reciben un aviso por entrega y punto. La <c>firma</c> solo hace falta si quien cierra aun no habia firmado. 403 si no es el conductor ni el inspector del viaje; 409 si la otra parte ya firmo.
+    /// Cierra la entrega de la parada con una sola firma y su <c>motivo_codigo</c> (<c>se_nego_a_firmar</c>, <c>no_habia_nadie</c> o <c>sin_inspector_del_punto</c>), con su evidencia (<c>fotos</c>, testigo opcional, hora y GPS): cada
+    /// unidad pendiente queda como «recibo_sin_entrega» con la parte que no firmo, deja su novedad de proceso y los coordinadores de calidad reciben un aviso por entrega y parada. La <c>firma</c> solo hace falta si quien cierra aun no
+    /// habia firmado. 403 si no es el conductor ni el inspector de la parada; 409 si la otra parte ya firmo o si el punto tiene inspectores y nadie tomo la entrega (<c>sin_receptor</c>).
     /// </summary>
     [HttpPost("{id:guid}/entregas/{lugar:guid}/una-firma")]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR)]
     [ProducesResponseType<EntregaPuntoDto>(StatusCodes.Status200OK)]
     [CuerpoSolicitud(typeof(CerrarEntregaUnaFirmaRequest))]
     public async Task<IActionResult> CerrarEntregaConUnaFirma(Guid id, Guid lugar, CancellationToken ct) =>
-        Ok(await entregas.CerrarConUnaFirmaAsync(id, lugar, await LeerCuerpoAsync<CerrarEntregaUnaFirmaRequest>(ct), Cliente(), ct));
+        Ok(await entregas.CerrarConUnaFirmaAsync(id, lugar, await LeerCuerpoAsync<CerrarEntregaUnaFirmaRequest>(ct, "rechazos"), Cliente(), ct));
 
     /// <summary>
-    /// El inspector reclama la revision del viaje («revisar este»): <c>proceso</c> <c>cargue</c> (un cargue programado para hoy en uno de sus puntos; queda como inspector del viaje) o <c>entrega</c> (un viaje que llega
-    /// a uno de sus puntos). <c>201</c> con el reclamo; <c>200</c> si ya era suyo. 403 si el viaje no es de ninguno de sus puntos; 409 «Ya fue tomado por otro inspector» si otro lo reclamo antes (si dos lo hacen a la vez, gana uno).
+    /// El inspector reclama la revision del viaje («revisar este»): <c>proceso</c> <c>cargue</c> (un cargue programado para hoy en uno de sus puntos; queda como inspector del viaje) o <c>entrega</c> (UNA parada de un viaje que llega
+    /// a uno de sus puntos: <c>lugar_id</c> es obligatorio, 400 sin el). <c>201</c> con el reclamo; <c>200</c> si ya era suyo. 403 si el viaje o la parada no es de ninguno de sus puntos; 404 si la parada no tiene carros por entregar;
+    /// 409 «Ya fue tomado por otro inspector» (en la entrega con el motivo <c>entrega_tomada</c>) si otro lo reclamo antes (si dos lo hacen a la vez, gana uno).
     /// </summary>
     [HttpPost("{id:guid}/reclamos")]
     [RolesPermitidos(clsRol.INSPECTOR)]
@@ -179,13 +182,13 @@ public sealed class clsViajesController(
     }
 
     /// <summary>
-    /// Libera el reclamo activo del proceso (<c>cargue</c> o <c>entrega</c>): lo libera el inspector que lo reclamo, el coordinador de calidad o un administrador (403 cualquier otro). El viaje queda sin inspector y lo
-    /// capturado conserva su autor; queda registrado quien libero. 404 si no hay un reclamo activo. Ningun proceso libera reclamos por tiempo.
+    /// Libera el reclamo activo del proceso (<c>cargue</c> o <c>entrega</c>; la entrega se libera por parada con <c>?lugar_id=</c>, 400 sin el): lo libera el inspector que lo reclamo, el coordinador de calidad o un administrador
+    /// (403 cualquier otro). El viaje queda sin inspector y lo capturado conserva su autor; queda registrado quien libero. 404 si no hay un reclamo activo. Ningun proceso libera reclamos por tiempo.
     /// </summary>
     [HttpDelete("{id:guid}/reclamos/{proceso}")]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
     [ProducesResponseType<ReclamoDto>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> LiberarReclamo(Guid id, string proceso, CancellationToken ct) => Ok(await reclamos.LiberarAsync(id, proceso, ct));
+    public async Task<IActionResult> LiberarReclamo(Guid id, string proceso, [FromQuery(Name = "lugar_id")] Guid? lugarId, CancellationToken ct) => Ok(await reclamos.LiberarAsync(id, proceso, lugarId, ct));
 
     /// <summary>Los reclamos del viaje (activos y liberados), del mas reciente al mas antiguo, con quien reclamo y quien libero.</summary>
     [HttpGet("{id:guid}/reclamos")]

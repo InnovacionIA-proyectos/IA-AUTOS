@@ -1197,7 +1197,9 @@ INSERT @casosRec (Prueba, Sentencia, Esperado) VALUES
  (N'FK reclamo: viaje inexistente', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), NEWID(), ''' + @u1Rec + N''', ''cargue'')', 547),
  (N'Reclamo: el cargue se reclama', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u1Rec + N''', ''cargue'')', 0),
  (N'UNIQUE filtrado reclamo: no hay dos reclamos activos del mismo viaje y proceso', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''cargue'')', 2601),
- (N'Reclamo: la entrega del mismo viaje se reclama aparte', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''entrega'')', 0),
+ (N'Reclamo: la entrega activa sin parada se rechaza', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''entrega'')', 547),
+ (N'Reclamo: la entrega del mismo viaje se reclama aparte, con su parada', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso, LugarId) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''entrega'', ''' + CONVERT(nvarchar(36), @lugarRec) + N''')', 0),
+ (N'UNIQUE filtrado reclamo: no hay dos reclamos activos de la misma parada', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso, LugarId) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u1Rec + N''', ''entrega'', ''' + CONVERT(nvarchar(36), @lugarRec) + N''')', 2601),
  (N'Reclamo: liberar guarda quien y cuando', N'UPDATE dbo.tblReclamos SET LiberadoAt = SYSDATETIMEOFFSET(), LiberadoPor = ''' + @u2Rec + N''' WHERE ViajeId = ''' + @vjRec + N''' AND Proceso = ''cargue'' AND LiberadoAt IS NULL', 0),
  (N'Reclamo: liberado el reclamo, el cargue se puede reclamar de nuevo', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''cargue'')', 0),
  (N'Trigger: un reclamo es historial y no se borra', N'DELETE FROM dbo.tblReclamos WHERE ViajeId = ''' + @vjRec + N'''', 51003);
@@ -1473,6 +1475,23 @@ INSERT #r SELECT N'Mapeo de carga: la tabla existe y es unica por cliente y form
           AND EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblMapeosCargaViajes_Cliente_Huella' AND parent_object_id = OBJECT_ID(N'dbo.tblMapeosCargaViajes')) THEN 1 ELSE 0 END, NULL;
 INSERT #r SELECT N'Mapeo de carga: columnas y campos solo admiten JSON',
     CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblMapeosCargaViajes_Json' AND parent_object_id = OBJECT_ID(N'dbo.tblMapeosCargaViajes')) THEN 1 ELSE 0 END, NULL;
+
+-- 7f) La entrega por parada, el rechazo por novedad y los motivos del cierre con una sola firma
+INSERT #r SELECT N'Entrega por parada: el reclamo lleva su parada y el indice unico es por viaje, proceso y parada',
+    CASE WHEN COL_LENGTH(N'dbo.tblReclamos', N'LugarId') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblReclamos_Lugar')
+          AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblReclamos_Parada' AND parent_object_id = OBJECT_ID(N'dbo.tblReclamos'))
+          AND EXISTS (SELECT 1 FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id WHERE i.name = N'UX_tblReclamos_Activo' AND i.object_id = OBJECT_ID(N'dbo.tblReclamos') AND COL_NAME(ic.object_id, ic.column_id) = N'LugarId') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Rechazo por novedad: una etapa admite otra revision original por ciclo y el cierre admite rechazado',
+    CASE WHEN COL_LENGTH(N'dbo.tblInspecciones', N'Ciclo') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id WHERE i.name = N'UX_tblInspecciones_Etapa_Momento_Original' AND i.object_id = OBJECT_ID(N'dbo.tblInspecciones') AND COL_NAME(ic.object_id, ic.column_id) = N'Ciclo')
+          AND (SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblTransferencias_TipoCierre', N'CK_tblTransferencias_Cierre') AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND definition LIKE N'%rechazado%') = 2 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Cierre con una sola firma: el motivo codificado, el testigo sin usuario y el rechazo existen',
+    CASE WHEN (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND name IN (N'MotivoCodigo', N'TestigoNombre', N'TestigoCedula', N'RechazoHallazgoId', N'RechazoMarcadoPor')) = 5
+          AND (SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblTransferencias_MotivoCodigo', N'CK_tblTransferencias_TestigoExterno', N'CK_tblTransferencias_Rechazo') AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia')) = 3
+          AND (SELECT COUNT(*) FROM dbo.tblMotivosSinInspector WHERE Codigo IN (N'se_nego_a_firmar', N'no_habia_nadie', N'sin_inspector_del_punto') AND Activo = 0) = 3 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Rechazo por novedad: la notificacion admite el tipo carro_rechazado_en_destino',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%carro_rechazado_en_destino%') THEN 1 ELSE 0 END, NULL;
 
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;

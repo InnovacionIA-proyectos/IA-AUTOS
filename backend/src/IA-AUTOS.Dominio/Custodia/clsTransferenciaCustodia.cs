@@ -18,14 +18,39 @@ public static class clsTipoCierre
     /// <summary>Nadie de Botero Soto firma la entrega (el conductor hizo la salida del cargue): solo firma quien recibe.</summary>
     public const string RECIBO_SIN_ENTREGA = "recibo_sin_entrega";
 
-    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { FIRMADA, CON_RESERVAS, NO_FIRMA, RECIBO_SIN_ENTREGA };
+    /// <summary>El carro no se entrego en su parada: se rechazo por una novedad de su revision de llegada y las dos partes firmaron la constancia del rechazo, unida al dano que lo motivo. El carro no cuenta como entregado.</summary>
+    public const string RECHAZADO = "rechazado";
+
+    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { FIRMADA, CON_RESERVAS, NO_FIRMA, RECIBO_SIN_ENTREGA, RECHAZADO };
+}
+
+/// <summary>Los motivos codificados con los que se cierra una entrega con una sola firma.</summary>
+public static class clsMotivoUnaFirma
+{
+    public const string SE_NEGO_A_FIRMAR = "se_nego_a_firmar";
+    public const string NO_HABIA_NADIE = "no_habia_nadie";
+    public const string SIN_INSPECTOR_DEL_PUNTO = "sin_inspector_del_punto";
+
+    /// <summary>El motivo de las entregas cerradas con una sola firma antes de que el motivo fuera codificado.</summary>
+    public const string OTRO = "otro";
+
+    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { SE_NEGO_A_FIRMAR, NO_HABIA_NADIE, SIN_INSPECTOR_DEL_PUNTO };
+
+    /// <summary>El texto del motivo para el titulo del aviso y para el cierre cuando no se escribio uno.</summary>
+    public static string Etiqueta(string codigo) => codigo switch
+    {
+        SE_NEGO_A_FIRMAR => "Quien recibe se negó a firmar",
+        NO_HABIA_NADIE => "No había nadie para recibir",
+        SIN_INSPECTOR_DEL_PUNTO => "El punto tiene inspector y no llegó",
+        _ => "Otro motivo",
+    };
 }
 
 /// <summary>
 /// La hora y el lugar del momento en que una parte firmo (no cuando la firma llego al servidor): una firma hecha sin senal se envia despues y conserva el momento y el GPS del patio.
-/// <c>PrecisionM</c> es la precision del GPS en metros, si se conoce.
+/// <c>PrecisionM</c> es la precision del GPS en metros, si se conoce. Una firma sin senal ni GPS conserva la hora y queda «sin ubicacion» (<c>Lat</c> y <c>Lng</c> nulos).
 /// </summary>
-public sealed record MomentoDeFirma(DateTimeOffset Momento, double Lat, double Lng, double? PrecisionM);
+public sealed record MomentoDeFirma(DateTimeOffset Momento, double? Lat, double? Lng, double? PrecisionM);
 
 /// <summary>Las dos partes de una transferencia.</summary>
 public static class clsParteFirmante
@@ -127,6 +152,22 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
     /// <summary>La foto de la constancia (una evidencia marcada como constancia).</summary>
     public Guid? EvidenciaConstanciaId { get; private set; }
 
+    /// <summary>El motivo codificado del cierre con una sola firma (<see cref="clsMotivoUnaFirma"/>); nulo en los demas cierres y en los de una sola firma anteriores a que se codificara.</summary>
+    public string? MotivoCodigo { get; private set; }
+
+    /// <summary>El testigo sin usuario (por ejemplo el vigilante) de un cierre con una sola firma: su nombre, siempre con <see cref="TestigoCedula"/>. Su cedula es un dato personal y no viaja en los avisos.</summary>
+    public string? TestigoNombre { get; private set; }
+
+    public string? TestigoCedula { get; private set; }
+
+    /// <summary>El dano de la revision de llegada del carro que motivo su rechazo (<see cref="clsTipoCierre.RECHAZADO"/>).</summary>
+    public Guid? RechazoHallazgoId { get; private set; }
+
+    /// <summary>Quien marco el rechazo: el inspector que tomo la entrega de la parada o, donde no hay inspectores, el conductor.</summary>
+    public Guid? RechazoMarcadoPor { get; private set; }
+
+    public bool EstaRechazada => TipoCierre == clsTipoCierre.RECHAZADO;
+
     public bool EstaCompleta => !string.IsNullOrEmpty(FirmaEntrega) && !string.IsNullOrEmpty(FirmaRecibe);
 
     /// <summary>True si ya tiene tipo de cierre: no admite mas cambios.</summary>
@@ -207,9 +248,10 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
 
     /// <summary>
     /// La persona externa que recibe firma su parte con su propio trazo (la firma la envia quien entrega, que esta con ella): con la firma de quien entrega ya puesta, la transferencia se cierra como «firmada». 409 si la
-    /// transferencia no es de una persona externa. Una transferencia ya cerrada solo acepta repetir exactamente la misma firma (reintento idempotente).
+    /// transferencia no es de una persona externa. Una transferencia ya cerrada solo acepta repetir exactamente la misma firma (reintento idempotente). Las <paramref name="reservas"/> que quien entrega deja en nombre de quien
+    /// recibe (de 1 a <see cref="RESERVAS_MAX"/> caracteres) no se borran al firmar y el carro cierra «con reservas».
     /// </summary>
-    public void FirmarComoExterno(string? firma, string? ip, DateTimeOffset ahora)
+    public void FirmarComoExterno(string? firma, string? ip, DateTimeOffset ahora, MomentoDeFirma? momento = null, string? reservas = null)
     {
         if (!RecibeEsExterno)
         {
@@ -217,9 +259,10 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
         }
 
         var limpia = string.IsNullOrEmpty(firma) ? throw clsErroresCampos.De("firma_recibe", "La firma de quien recibe es obligatoria") : firma;
+        var texto = reservas is null ? null : LimpiarReservas(reservas);
         if (EstaCerrada)
         {
-            if (TipoCierre != clsTipoCierre.FIRMADA || limpia != FirmaRecibe)
+            if (!(TipoCierre is clsTipoCierre.FIRMADA or clsTipoCierre.CON_RESERVAS or clsTipoCierre.RECHAZADO) || limpia != FirmaRecibe)
             {
                 throw ConflictoPorCierre();
             }
@@ -227,8 +270,12 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
             return;
         }
 
-        PonerFirma(clsParteFirmante.RECIBE, limpia, ip, ahora);
-        ReservasTexto = null;
+        PonerFirma(clsParteFirmante.RECIBE, limpia, ip, ahora, momento);
+        if (texto is not null)
+        {
+            ReservasTexto = texto;
+        }
+
         CerrarSiEstanAmbas(ahora);
         Tocar(ahora);
     }
@@ -301,7 +348,8 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
     /// entrega no firmo (<c>NoFirmaParte = entrega</c>: sin usuario, firma, fecha ni IP de entrega); si firma quien entrega, quien recibe no firmo (<c>NoFirmaParte = recibe</c>). 409 si la otra parte ya firmo o si la
     /// transferencia ya esta cerrada. Si el usuario ya habia firmado su parte, la firma no hace falta; si no, es obligatoria.
     /// </summary>
-    public void CerrarConUnaFirma(Guid usuarioId, string? firma, string? motivo, string? ip, DateTimeOffset ahora)
+    public void CerrarConUnaFirma(
+        Guid usuarioId, string? firma, string? motivo, string? ip, DateTimeOffset ahora, MomentoDeFirma? momento = null, string? motivoCodigo = null, string? testigoNombre = null, string? testigoCedula = null)
     {
         if (EstaCerrada)
         {
@@ -324,7 +372,7 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
 
             if (!string.IsNullOrEmpty(firma) || string.IsNullOrEmpty(FirmaEntrega))
             {
-                PonerFirma(clsParteFirmante.ENTREGA, FirmaValida(firma), ip, ahora);
+                PonerFirma(clsParteFirmante.ENTREGA, FirmaValida(firma), ip, ahora, momento);
             }
 
             NoFirmaParte = clsParteFirmante.RECIBE;
@@ -338,7 +386,7 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
 
             if (!string.IsNullOrEmpty(firma) || string.IsNullOrEmpty(FirmaRecibe))
             {
-                PonerFirma(clsParteFirmante.RECIBE, FirmaValida(firma), ip, ahora);
+                PonerFirma(clsParteFirmante.RECIBE, FirmaValida(firma), ip, ahora, momento);
             }
 
             ReservasTexto = null;
@@ -347,6 +395,9 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
         }
 
         MotivoNoFirma = texto;
+        MotivoCodigo = clsValidador.Opcional(motivoCodigo);
+        TestigoNombre = clsValidador.Opcional(testigoNombre);
+        TestigoCedula = clsValidador.Opcional(testigoCedula);
         TipoCierre = clsTipoCierre.RECIBO_SIN_ENTREGA;
         Tocar(ahora);
     }
@@ -534,7 +585,14 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
     /// su firma se retira y se le pide otra vez. Sin reservas cierra «firmada». Reenviar exactamente la misma firma (misma parte, mismo momento, mismas reservas) no cambia nada, aunque ya este cerrada; una firma distinta sobre
     /// una transferencia cerrada es 409.
     /// </summary>
-    public void FirmarPorNinera(Guid usuarioId, string? firma, string? reservas, MomentoDeFirma momento, string? ip, DateTimeOffset ahora)
+    public void FirmarPorNinera(Guid usuarioId, string? firma, string? reservas, MomentoDeFirma momento, string? ip, DateTimeOffset ahora) =>
+        FirmarConMomento(usuarioId, firma, reservas, momento, ip, ahora, porNinera: true);
+
+    /// <summary>
+    /// La firma de la propia parte con la hora y el GPS del momento (que pueden faltar: la firma queda «sin ubicacion») y, solo quien recibe, sus <paramref name="reservas"/>: la misma regla de la firma por ninera, pero
+    /// para la entrega de una parada. Con <paramref name="rechazoHallazgoId"/> el carro se rechaza por ese dano: las dos partes firman la constancia y cierra como <see cref="clsTipoCierre.RECHAZADO"/>.
+    /// </summary>
+    public void FirmarConMomento(Guid usuarioId, string? firma, string? reservas, MomentoDeFirma? momento, string? ip, DateTimeOffset ahora, bool porNinera, Guid? rechazoHallazgoId = null)
     {
         var parte = ParteObligatoria(usuarioId, "firmar el cargue");
         var limpia = FirmaValida(firma);
@@ -555,7 +613,7 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
 
         var firmaPrevia = parte == clsParteFirmante.ENTREGA ? FirmaEntrega : FirmaRecibe;
         var momentoPrevio = parte == clsParteFirmante.ENTREGA ? FirmaEntregaMomentoAt : FirmaRecibeMomentoAt;
-        if (firmaPrevia == limpia && momentoPrevio == momento.Momento && (parte == clsParteFirmante.ENTREGA || ReservasTexto == texto))
+        if (firmaPrevia == limpia && momentoPrevio == momento?.Momento && (parte == clsParteFirmante.ENTREGA || ReservasTexto == texto))
         {
             return;
         }
@@ -577,7 +635,7 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
             throw ConflictoPorCierre();
         }
 
-        FirmaPorNinera = true;
+        FirmaPorNinera = porNinera;
         if (parte == clsParteFirmante.RECIBE)
         {
             var cambiaronLasReservas = texto is not null && texto != ReservasTexto;
@@ -589,6 +647,12 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
         }
 
         PonerFirma(parte, limpia, ip, ahora, momento);
+        if (rechazoHallazgoId is { } hallazgo)
+        {
+            RechazoHallazgoId = hallazgo;
+            RechazoMarcadoPor = usuarioId;
+        }
+
         CerrarSiEstanAmbas(ahora);
         Tocar(ahora);
     }
@@ -601,7 +665,17 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
         }
 
         FirmadaAt = ahora;
-        TipoCierre = ReservasTexto is null ? clsTipoCierre.FIRMADA : clsTipoCierre.CON_RESERVAS;
+        TipoCierre = RechazoHallazgoId is not null ? clsTipoCierre.RECHAZADO : ReservasTexto is null ? clsTipoCierre.FIRMADA : clsTipoCierre.CON_RESERVAS;
+        if (EstaRechazada)
+        {
+            ReservasTexto = null;
+        }
+    }
+
+    private static string LimpiarReservas(string reservas)
+    {
+        var texto = clsValidador.Opcional(reservas) ?? throw clsErroresCampos.De("reservas", "Escriba las observaciones: no se puede recibir con reservas sin ellas");
+        return texto.Length > RESERVAS_MAX ? throw clsErroresCampos.De("reservas", $"Las observaciones admiten máximo {RESERVAS_MAX} caracteres") : texto;
     }
 
     private string ParteObligatoria(Guid usuarioId, string accion) =>
@@ -615,6 +689,7 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
         clsTipoCierre.FIRMADA => new("La transferencia ya está firmada por ambas partes y es inmutable"),
         clsTipoCierre.CON_RESERVAS => new("La transferencia ya está cerrada con reservas y es inmutable"),
         clsTipoCierre.RECIBO_SIN_ENTREGA => new("La transferencia ya está cerrada como recibo sin entrega y es inmutable"),
+        clsTipoCierre.RECHAZADO => new("La transferencia ya está cerrada como carro rechazado y es inmutable"),
         _ => new("La transferencia ya tiene constancia de no firma y es inmutable"),
     };
 }

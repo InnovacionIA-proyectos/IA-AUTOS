@@ -9,6 +9,7 @@ using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Notificaciones;
 using IAAutos.Dominio.Comun;
+using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
@@ -31,6 +32,8 @@ public sealed class clsViajesService(
     IReclamoRepository reclamos,
     clsEmisorNotificaciones emisor,
     IPermisoSinInspectorRepository permisos,
+    IInspeccionRepository inspecciones,
+    ITransferenciaCustodiaRepository transferencias,
     INovedadProcesoRepository novedadesProceso,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
@@ -300,7 +303,7 @@ public sealed class clsViajesService(
 
     /// <summary>
     /// Cambia el lugar de destino de UNA unidad de un viaje activo: solo se mueve su etapa de Descargue (las demas unidades no se tocan). 409 si la unidad no sale del viaje o si su Descargue ya tiene un
-    /// informe cerrado.
+    /// informe cerrado, salvo que el carro se haya rechazado en su parada: ese conserva su revision de llegada como evidencia del rechazo, queda pendiente en el destino nuevo y se revisa de nuevo ahi.
     /// </summary>
     public async Task<ViajeDto> CambiarDestinoDeUnidadAsync(Guid id, string vin, CambiarDestinoUnidadRequest solicitud, CancellationToken ct = default)
     {
@@ -315,7 +318,7 @@ public sealed class clsViajesService(
 
         var codigosPorEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).ToDictionary(v => v.Id, v => v.Codigo);
         var descargue = (await viajes.ObtenerEtapasAsync(id, vehiculo.Id, ct)).FirstOrDefault(e => codigosPorEtapa.TryGetValue(e.EtapaCatalogoId, out var codigo) && codigo == clsCodigosEtapa.DESCARGUE);
-        if (descargue is not null && (await viajes.EtapasConInformeCerradoAsync(id, ct)).Contains(descargue.Id))
+        if (descargue is not null && (await viajes.EtapasConInformeCerradoAsync(id, ct)).Contains(descargue.Id) && !await EstaRechazadaEnSuParadaAsync(enlace, descargue, ct))
         {
             throw new clsConflictoException("El descargue de la unidad ya tiene un informe cerrado: su destino no se cambia", clsMotivosRechazo.DESCARGUE_CON_INFORME_CERRADO);
         }
@@ -333,6 +336,17 @@ public sealed class clsViajesService(
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         await AvisarCambioDeDestinoAsync(viaje, vehiculo, antes, enlace.LugarDestinoId, ct);
         return await ObtenerDtoAsync(id, ct);
+    }
+
+    /// <summary>
+    /// El carro se rechazo en su parada por una novedad de su revision de llegada y todavia no se le cambio el destino: su revision cerrada es la evidencia del rechazo y el carro puede recibir otro destino. En cualquier otro
+    /// caso un descargue con informe cerrado no cambia de destino.
+    /// </summary>
+    private async Task<bool> EstaRechazadaEnSuParadaAsync(clsViajeVehiculo enlace, clsEtapa descargue, CancellationToken ct)
+    {
+        var llegada = await inspecciones.ObtenerUltimaDeEtapaAsync(descargue.Id, clsMomento.LLEGADA, ct);
+        var transferencia = llegada is null ? null : await transferencias.ObtenerPorInspeccionAsync(llegada.Id, ct);
+        return transferencia is { EstaRechazada: true, FirmadaAt: { } rechazadoAt } && !(enlace.LugarDestinoCambiadoAt is { } cambiadoAt && cambiadoAt > rechazadoAt);
     }
 
     /// <summary>

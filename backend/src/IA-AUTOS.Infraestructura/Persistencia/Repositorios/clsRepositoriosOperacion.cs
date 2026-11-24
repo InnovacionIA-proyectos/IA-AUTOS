@@ -203,7 +203,7 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
          select t.Id).AnyAsync(ct);
 
     public Task<clsInspeccion?> ObtenerUltimaDeEtapaAsync(Guid etapaId, string momento, CancellationToken ct = default) =>
-        contexto.Inspecciones.Where(i => i.EtapaId == etapaId && i.Momento == momento).OrderByDescending(i => i.Version).FirstOrDefaultAsync(ct);
+        contexto.Inspecciones.Where(i => i.EtapaId == etapaId && i.Momento == momento).OrderByDescending(i => i.Ciclo).ThenByDescending(i => i.Version).FirstOrDefaultAsync(ct);
 
     public Task<int> ContarNovedadesAsync(Guid inspeccionId, CancellationToken ct = default) =>
         contexto.Hallazgos.CountAsync(h => h.InspeccionId == inspeccionId && h.TipoNovedad != null, ct);
@@ -265,6 +265,26 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
 
     public async Task<IReadOnlySet<Guid>> HallazgosConFotoAsync(IReadOnlyCollection<Guid> hallazgoIds, CancellationToken ct = default) =>
         await clsFotosDeHallazgos.ConFotoAsync(contexto, hallazgoIds, ct);
+
+    public async Task<IReadOnlyDictionary<Guid, int>> ContarFotosDeConstanciaAsync(IReadOnlyCollection<Guid> inspeccionIds, CancellationToken ct = default)
+    {
+        var ids = inspeccionIds.Distinct().ToList();
+        return ids.Count == 0
+            ? new Dictionary<Guid, int>()
+            : await contexto.Evidencias.AsNoTracking().Where(e => e.EsConstancia && ids.Contains(e.InspeccionId)).GroupBy(e => e.InspeccionId).Select(g => new { g.Key, Total = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Total, ct);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, Guid>> PrimeraFotoDeHallazgosAsync(IReadOnlyCollection<Guid> hallazgoIds, CancellationToken ct = default)
+    {
+        var ids = hallazgoIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, Guid>();
+        }
+
+        var fotos = await contexto.Evidencias.AsNoTracking().Where(e => e.HallazgoId != null && ids.Contains(e.HallazgoId.Value)).OrderBy(e => e.CreatedAt).Select(e => new { Hallazgo = e.HallazgoId!.Value, e.Id }).ToListAsync(ct);
+        return fotos.GroupBy(f => f.Hallazgo).ToDictionary(g => g.Key, g => g.First().Id);
+    }
 
     public void Agregar(clsInspeccion inspeccion) => contexto.Inspecciones.Add(inspeccion);
 

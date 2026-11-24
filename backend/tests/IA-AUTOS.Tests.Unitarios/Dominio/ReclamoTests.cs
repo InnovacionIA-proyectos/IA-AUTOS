@@ -15,7 +15,7 @@ public class ReclamoTests
         var viaje = Guid.NewGuid();
         var inspector = Guid.NewGuid();
 
-        var reclamo = clsReclamo.Crear(viaje, inspector, proceso, AHORA);
+        var reclamo = clsReclamo.Crear(viaje, inspector, proceso, AHORA, proceso == clsProcesoReclamo.ENTREGA ? Guid.NewGuid() : null);
 
         Assert.NotEqual(Guid.Empty, reclamo.Id);
         Assert.Equal(viaje, reclamo.ViajeId);
@@ -34,6 +34,19 @@ public class ReclamoTests
     public void Un_proceso_que_no_es_cargue_ni_entrega_se_rechaza(string proceso)
     {
         Assert.Throws<clsValidacionException>(() => clsReclamo.Crear(Guid.NewGuid(), Guid.NewGuid(), proceso, AHORA));
+    }
+
+    [Fact]
+    public void La_entrega_se_reclama_por_parada_y_el_cargue_no_lleva_parada()
+    {
+        var parada = Guid.NewGuid();
+
+        var entrega = clsReclamo.Crear(Guid.NewGuid(), Guid.NewGuid(), clsProcesoReclamo.ENTREGA, AHORA, parada);
+        var cargue = clsReclamo.Crear(Guid.NewGuid(), Guid.NewGuid(), clsProcesoReclamo.CARGUE, AHORA, parada);
+
+        Assert.Equal(parada, entrega.LugarId);
+        Assert.Null(cargue.LugarId);
+        Assert.Throws<clsValidacionException>(() => clsReclamo.Crear(Guid.NewGuid(), Guid.NewGuid(), clsProcesoReclamo.ENTREGA, AHORA));
     }
 
     [Fact]
