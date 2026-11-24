@@ -43,7 +43,9 @@ class _EstadoCambiosDelCargue extends ConsumerState<CambiosDelCargue> {
       mensajes.showSnackBar(SnackBar(content: Text(hecho)));
     } catch (e) {
       // El 409 `cargue_firmado` trae su propio mensaje: es lo único que explica por qué ya no se puede.
-      mensajes.showSnackBar(SnackBar(content: Text(mensajeDeError(e, 'No se pudo guardar el cambio. Revisa la señal.'))));
+      mensajes.showSnackBar(SnackBar(
+        content: Text(e is ErrorApi ? e.mensajeDetallado : 'No se pudo guardar el cambio. Revisa la señal.'),
+      ));
       if (e is ErrorApi && e.status == 409) contenedor.invalidate(viajeDeEtapaProvider(_viaje.id));
     } finally {
       if (mounted) setState(() => _enviando = false);

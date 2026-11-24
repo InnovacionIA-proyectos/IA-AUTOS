@@ -137,6 +137,8 @@ class TransferenciaVista {
     this.entregaFirmoEn,
     this.recibeFirmoEn,
     this.tipoCierre,
+    this.reservasTexto,
+    this.firmaPorNinera = false,
   });
 
   factory TransferenciaVista.fromJson(Map<String, dynamic> json) => TransferenciaVista(
@@ -148,7 +150,15 @@ class TransferenciaVista {
         entregaFirmoEn: switch (json['entrega_firmada_at']) { final String f => DateTime.tryParse(f), _ => null },
         recibeFirmoEn: switch (json['recibe_firmada_at']) { final String f => DateTime.tryParse(f), _ => null },
         tipoCierre: json['tipo_cierre'] as String?,
+        reservasTexto: json['reservas_texto'] as String?,
+        firmaPorNinera: json['firma_por_ninera'] as bool? ?? false,
       );
+
+  /// Lo que quien recibe dejó dicho al recibir con reservas. Null si recibió sin reservas o aún no recibe.
+  final String? reservasTexto;
+
+  /// Se firmó por niñera (S8-HU-01.3): una firma de cada parte para todos los carros del cargue.
+  final bool firmaPorNinera;
 
   final String entregaId;
   final String recibeId;
@@ -646,8 +656,13 @@ AccionEtapa accionDeEtapa(EtapaVista etapa, Inventario inventario) {
   // La primera cerrada **que siga valiendo**. El servidor las entrega de la más antigua a la más reciente, así
   // que tras una corrección la primera es la que quedó atrás: firmar sobre ella sería firmar un informe que ya
   // no describe el carro.
-  final referencia =
-      inspecciones.where((i) => i.cerrada && !etapa.fueCorregida(i)).firstOrNull ?? inspecciones.firstOrNull;
+  //
+  // Si alguna de las vigentes ya tiene la transferencia, es esa: la firma por niñera cuelga de la salida del cargue
+  // (la acomodación) y no de la llegada, que es la primera. Sin esto la ficha nunca veía el cargue firmado.
+  final vigentes = [...inspecciones.where((i) => i.cerrada && !etapa.fueCorregida(i))];
+  final referencia = vigentes.where((i) => i.transferencia != null).firstOrNull ??
+      vigentes.firstOrNull ??
+      inspecciones.firstOrNull;
   if (etapa.requiereInspeccion) {
     if (referencia == null) return const SinInforme();
     return FirmarTransferencia(

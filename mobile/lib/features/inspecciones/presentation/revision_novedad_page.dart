@@ -174,10 +174,12 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
 
     // Tras un rechazo, salir le avisa a quien abrió la pantalla que recargue: un 409 suele ser que otro ya lo
     // calificó, y la lista tiene que dejar de ofrecerlo.
+    // Mientras se envía no se sale: si el servidor la acepta después, la lista de abajo ya no se enteraría y
+    // seguiría ofreciendo un daño calificado.
     return PopScope<bool>(
-      canPop: _rechazada == null,
+      canPop: _rechazada == null && !_enviando,
       onPopInvokedWithResult: (salio, _) {
-        if (!salio) Navigator.of(context).pop(true);
+        if (!salio && !_enviando) Navigator.of(context).pop(true);
       },
       child: Scaffold(
         appBar: AppBar(title: const Text('Revisar la novedad')),

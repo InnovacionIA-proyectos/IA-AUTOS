@@ -33,12 +33,16 @@ Future<void> anunciarDesenlace(BuildContext context, WidgetRef ref, String jobId
           'Quedó en cola: todavía no se envió',
           'No se pudo enviar$motivo. Se reintenta solo ${enPalabras(desenlace.espera!)}.',
         ),
+      FaseEnvio.rechazado when desenlace.retirado => (
+          textos.noRegistrado,
+          'Se retiró$motivo. Ya no se puede enviar: quítalo desde Inspecciones › Cola.',
+        ),
       FaseEnvio.rechazado => (
           textos.noRegistrado,
           'El servidor lo rechazó$motivo. Puedes reintentarlo aquí o desde Inspecciones › Cola.',
         ),
     };
-    final rechazado = desenlace.fase == FaseEnvio.rechazado;
+    final rechazado = desenlace.fase == FaseEnvio.rechazado && !desenlace.retirado;
     final reintentar = await showDialog<bool>(
       context: context,
       builder: (contexto) => AlertDialog(

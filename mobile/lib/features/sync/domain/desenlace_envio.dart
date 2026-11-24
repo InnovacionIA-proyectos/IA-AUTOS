@@ -29,7 +29,10 @@ enum FaseEnvio {
 
 /// El desenlace de [jobId] con el motivo y, si se va a reintentar solo, cuánto falta.
 class DesenlaceEnvio {
-  const DesenlaceEnvio(this.fase, {this.motivo, this.espera});
+  const DesenlaceEnvio(this.fase, {this.motivo, this.espera, this.retirado = false});
+
+  /// Rechazado porque el carro ya no sale o se bajó del viaje: reintentar daría lo mismo, solo queda quitarlo.
+  final bool retirado;
 
   final FaseEnvio fase;
 
@@ -51,7 +54,7 @@ class DesenlaceEnvio {
 DesenlaceEnvio desenlaceDe(Iterable<Job> cola, String jobId, {MotivoPausa? pausa}) {
   final job = cola.where((j) => j.id == jobId).firstOrNull;
   if (job == null) return const DesenlaceEnvio(FaseEnvio.registrado);
-  if (job.fallido) return DesenlaceEnvio(FaseEnvio.rechazado, motivo: job.error);
+  if (job.fallido) return DesenlaceEnvio(FaseEnvio.rechazado, motivo: job.error, retirado: job.retirado);
   if (job.error == null) {
     // El servidor caído sí se reintenta solo, y el tiempo se puede prometer: la cola ya lo tiene programado.
     return pausa == MotivoPausa.apiCaida

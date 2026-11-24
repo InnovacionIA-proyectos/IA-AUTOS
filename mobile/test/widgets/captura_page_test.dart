@@ -423,6 +423,18 @@ void main() {
       }
     });
 
+    // ESC-03: donde el lugar no tiene muelles, el muelle no se muestra como faltante.
+    testWidgets('en un cargue donde el lugar no tiene muelles no se dice «Sin asignar»', (tester) async {
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1', vines: [vinA], inspectorId: 'u1', lugarCargueId: 'sin-muelles'),
+        muelles: muelles,
+      );
+
+      expect(find.text('Muelle'), findsNothing);
+      expect(find.text('Sin asignar'), findsNothing);
+    });
+
     testWidgets('fuera del cargue no se habla de muelle si el viaje no tiene', (tester) async {
       await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1', inspectorId: 'u1'), procesoCodigo: 'descargue');
 

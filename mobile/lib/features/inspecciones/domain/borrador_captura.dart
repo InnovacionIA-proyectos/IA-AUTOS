@@ -15,6 +15,7 @@ class BorradorCaptura {
     this.notas = '',
     this.archivos = const {},
     this.posiciones = const {},
+    this.posicionesBase = const {},
   });
 
   factory BorradorCaptura.fromJson(Map<String, dynamic> json) => BorradorCaptura(
@@ -26,7 +27,11 @@ class BorradorCaptura {
         notas: json['notas'] as String? ?? '',
         archivos: {for (final a in json['archivos'] as List<dynamic>? ?? const []) a as String},
         posiciones: {
-          for (final e in (json['posiciones'] as Map<String, dynamic>? ?? const {}).entries) e.key: (e.value as num).toInt(),
+          for (final e in (json['posiciones'] as Map<String, dynamic>? ?? const {}).entries) e.key: (e.value as num?)?.toInt(),
+        },
+        posicionesBase: {
+          for (final e in (json['posiciones_base'] as Map<String, dynamic>? ?? const {}).entries)
+            e.key: (e.value as num?)?.toInt(),
         },
       );
 
@@ -40,8 +45,13 @@ class BorradorCaptura {
   /// lo que se borra al empezar de nuevo, para que no queden fotos sin dueño en el teléfono (CA-5).
   final Set<String> archivos;
 
-  /// Los puestos que se eligieron en la acomodación y el servidor todavía no tiene (S8-HU-01.3 CA-4): VIN → puesto.
-  final Map<String, int> posiciones;
+  /// Los cambios de puesto de la acomodación que el servidor todavía no tiene (S8-HU-01.3 CA-4): VIN → puesto,
+  /// o null cuando se liberó un puesto que el servidor sí tenía.
+  final Map<String, int?> posiciones;
+
+  /// El puesto que el servidor tenía de cada uno de esos VIN cuando se guardó. Si al volver ya es otro (se acomodó
+  /// desde otro carro, o se cerró la acomodación), ese cambio guardado quedó viejo y no se aplica.
+  final Map<String, int?> posicionesBase;
 
   /// Lo que se cuenta como fotos al ofrecer continuar: las del checklist y la acomodación, y las de los extras.
   int get cuantasFotos => fotos.length + extras.fold(0, (n, e) => n + e.fotos.length);
@@ -58,6 +68,7 @@ class BorradorCaptura {
         'notas': notas,
         'archivos': archivos.toList(),
         'posiciones': posiciones,
+        'posiciones_base': posicionesBase,
       };
 }
 

@@ -117,14 +117,16 @@ class _Unidades extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
-    if (viaje.vehiculos.isEmpty) return Tarjeta(child: Text('Este viaje todavía no tiene unidades.', style: tema.bodySmall));
+    // Un carro bajado ya no es parte del viaje (S8-HU-02.2 CA-6), aunque el detalle del viaje lo siga listando.
+    final unidades = [...viaje.vehiculos.where((v) => !v.bajado)];
+    if (unidades.isEmpty) return Tarjeta(child: Text('Este viaje todavía no tiene unidades.', style: tema.bodySmall));
     // Sin los informes todavía (o sin señal) no se inventa un estado: la insignia simplemente no sale, en vez de
     // decir «sin informe» de una unidad que puede estar cerrada.
     final informes = ref.watch(informesDelViajeProvider((viajeId: viaje.id, proceso: proceso))).value;
     return Tarjeta(
       child: Column(
         children: [
-          for (final unidad in viaje.vehiculos)
+          for (final unidad in unidades)
             InkWell(
               onTap: () => context.push(
                 '/inspecciones/vin/${Uri.encodeComponent(unidad.vin)}?viajeId=${Uri.encodeQueryComponent(viaje.id)}',

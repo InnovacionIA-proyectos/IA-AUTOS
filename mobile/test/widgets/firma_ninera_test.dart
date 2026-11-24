@@ -9,6 +9,10 @@ import 'package:traza_autos/features/custodia/presentation/firma_ninera_page.dar
 import 'package:traza_autos/features/custodia/presentation/lienzo_firma.dart';
 import 'package:traza_autos/features/custodia/providers.dart';
 import 'package:traza_autos/features/inspecciones/domain/inspeccion_resumen.dart';
+import 'package:traza_autos/features/sync/domain/job.dart';
+import 'package:traza_autos/features/vehiculos/data/vehiculos_repositorio.dart';
+import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
+import 'package:traza_autos/features/vehiculos/providers.dart';
 import 'package:traza_autos/features/viajes/domain/viaje.dart';
 import 'package:traza_autos/features/viajes/providers.dart';
 
@@ -46,16 +50,75 @@ List<InspeccionResumen> _cargueCompleto({bool sinSalidaDeB = false}) => [
             InspeccionResumen(id: '$vin-$momento', vin: vin, momento: momento, momentoNombre: momento, fecha: '', estado: 'cerrada'),
     ];
 
+/// La transferencia del cargue de cada carro, colgada de su salida, como la deja la firma por niñera.
+class _Inventarios implements VehiculosRepositorio {
+  _Inventarios(this.transferencias);
+
+  /// VIN → transferencia de su salida del cargue (null: nadie ha firmado).
+  final Map<String, Map<String, dynamic>?> transferencias;
+
+  @override
+  Future<List<VehiculoBusqueda>> buscar(String termino) async => const [];
+
+  @override
+  Future<Inventario> inventario(String vin) async => Inventario.fromJson({
+        'id': vin,
+        'vin': vin,
+        'marca': 'Renault',
+        'operacion': 'nacional',
+        'etapas': [
+          {
+            'id': 'e-$vin',
+            'orden': 1,
+            'proceso': 'cargue',
+            'requiere_inspeccion': true,
+            'viaje_id': 'v1',
+            'inspecciones': [
+              for (final (momento, hora) in [('llegada', '10'), ('salida', '11')])
+                {
+                  'id': '$vin-$momento',
+                  'momento': momento,
+                  'momento_nombre': momento,
+                  'fecha': '2026-11-23T$hora:00:00Z',
+                  'cerrada_at': '2026-11-23T$hora:30:00Z',
+                  'estado': 'cerrada',
+                  'hallazgos': [],
+                  'evidencias': [],
+                  'transferencia': momento == 'salida' ? transferencias[vin] : null,
+                },
+            ],
+          },
+        ],
+      });
+}
+
+Map<String, dynamic> _transferencia({bool entrega = false, bool recibe = false, String? reservas, String? cierre}) => {
+      'entrega_usuario_id': ana.id,
+      'recibe_usuario_id': luis.id,
+      'entrega_firmada_at': entrega ? '2026-11-23T12:00:00Z' : null,
+      'recibe_firmada_at': recibe ? '2026-11-23T12:05:00Z' : null,
+      'tipo_cierre': cierre,
+      'reservas_texto': reservas,
+      'firma_por_ninera': true,
+    };
+
 Future<void> avanzar(WidgetTester tester) async {
   for (var i = 0; i < 12; i++) {
     await tester.pump(const Duration(milliseconds: 50));
   }
 }
 
-Future<Arnes> abrir(WidgetTester tester, {Sesion sesion = _ana, Viaje? viaje, List<InspeccionResumen>? informes}) async {
+Future<Arnes> abrir(
+  WidgetTester tester, {
+  Sesion sesion = _ana,
+  Viaje? viaje,
+  List<InspeccionResumen>? informes,
+  Map<String, Map<String, dynamic>?> transferencias = const {},
+  Arnes? arnes,
+}) async {
   await tester.binding.setSurfaceSize(const Size(600, 2200));
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  final arnes = Arnes(sesion: sesion);
+  arnes ??= Arnes(sesion: sesion);
   arnes.inspecciones.delViajeResultado = informes ?? _cargueCompleto();
   await tester.pumpWidget(
     ProviderScope(
@@ -64,6 +127,7 @@ Future<Arnes> abrir(WidgetTester tester, {Sesion sesion = _ana, Viaje? viaje, Li
         ...arnes.overrides,
         viajesRepositorioProvider.overrideWithValue(ViajesRepositorioFalso()..viajeDeEtapa = viaje ?? _viaje()),
         usuariosRepositorioProvider.overrideWithValue(UsuariosRepositorioFalso()),
+        vehiculosRepositorioProvider.overrideWithValue(_Inventarios(transferencias)),
       ],
       child: MaterialApp(
         theme: crearTema(),
@@ -196,5 +260,76 @@ void main() {
 
     expect(find.text('Falta la foto.'), findsOneWidget);
     expect(boton(tester, 'Registrar constancia de la niñera').onPressed, isNull);
+  });
+
+  // Revisión: la pantalla sabe lo que ya se firmó y no deja firmar otra vez encima.
+  group('lo que ya se firmó', () {
+    testWidgets('quien ya firmó lo ve, con lo que falta, y no firma otra vez', (tester) async {
+      await abrir(
+        tester,
+        sesion: _luis,
+        transferencias: {
+          'VINA0000000000001': _transferencia(recibe: true, reservas: 'Rayón en la puerta'),
+          'VINB0000000000002': _transferencia(recibe: true),
+        },
+      );
+
+      expect(find.text('Ya firmaste el recibo de la niñera.'), findsOneWidget);
+      expect(find.text('Falta la entrega del inspector.'), findsOneWidget);
+      expect(find.text('Con reservas VINA0000000000001: Rayón en la puerta'), findsOneWidget);
+      expect(find.byType(LienzoFirma), findsNothing);
+    });
+
+    testWidgets('con su firma todavía en la cola, no se firma de nuevo', (tester) async {
+      final arnes = Arnes(sesion: _ana);
+      await arnes.cola.agregar(FirmaNineraJob(
+        id: 'pendiente',
+        etiqueta: 'Entrega de la niñera MTK-1',
+        creadoEn: 0,
+        usuarioId: ana.id,
+        viajeId: 'v1',
+        parte: ParteTransferencia.entrega,
+        firma: 'M0 0',
+        fechaMomento: '2026-11-23T10:00:00-05:00',
+        lat: 6.2,
+        lng: -75.5,
+      ));
+      arnes.red.estable = false;
+      await abrir(tester, arnes: arnes);
+
+      expect(find.text('Tu firma ya está guardada en este teléfono y se enviará cuando haya señal.'), findsOneWidget);
+      expect(find.byType(LienzoFirma), findsNothing);
+    });
+
+    // CA-13: el inspector ve las reservas del conductor antes de firmar.
+    testWidgets('el inspector ve las reservas que dejó el conductor antes de firmar', (tester) async {
+      await abrir(
+        tester,
+        transferencias: {
+          'VINA0000000000001': _transferencia(recibe: true, reservas: 'Rayón en la puerta'),
+          'VINB0000000000002': _transferencia(recibe: true),
+        },
+      );
+
+      expect(find.text('Con reservas: Rayón en la puerta'), findsOneWidget);
+      expect(find.byType(LienzoFirma), findsOneWidget);
+    });
+
+    // SUP-004: reservas nuevas retiran la firma del inspector en esos carros.
+    testWidgets('si se le retiró la firma en algunos carros, se le pide firmar otra vez', (tester) async {
+      await abrir(
+        tester,
+        transferencias: {
+          'VINA0000000000001': _transferencia(recibe: true, reservas: 'Rayón nuevo'),
+          'VINB0000000000002': _transferencia(entrega: true, recibe: true, cierre: 'firmada'),
+        },
+      );
+
+      expect(
+        find.text('El conductor dejó reservas nuevas y tu firma se retiró en esos carros: firma otra vez la entrega.'),
+        findsOneWidget,
+      );
+      expect(find.byType(LienzoFirma), findsOneWidget);
+    });
   });
 }

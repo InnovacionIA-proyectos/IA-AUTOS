@@ -34,6 +34,7 @@ import '../domain/foto_local.dart';
 import '../domain/hallazgo_local.dart';
 import '../domain/hallazgo_previo.dart';
 import '../domain/reglas_informe.dart';
+import '../data/cierre_de_captura.dart';
 import '../providers.dart';
 import 'aviso_preexistente.dart';
 import 'camara_page.dart';
@@ -120,6 +121,9 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   List<ViajeVehiculo>? _unidades;
   final _posiciones = <String, int>{};
   var _posicionesPrevias = const <String, int>{};
+
+  /// Los cambios de puesto de un borrador que se continuó antes de que llegara el viaje: se aplican al llegar.
+  ({Map<String, int?> cambios, Map<String, int?> base})? _puestosPorAplicar;
   bool _guardandoFoto = false;
   bool _cerrando = false;
 
@@ -130,6 +134,12 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 
   /// Se toma al abrir: al salir de la pantalla todavía hay que guardar, y para entonces `ref` ya no sirve.
   late final AlmacenBorradores _almacen;
+
+  /// Se toman al abrir: al cerrar se usan después de varios `await`, cuando la pantalla puede ya no estar y `ref`
+  /// ya no se puede leer. Sin esto, salir en ese instante dejaba el informe sin encolar y sin aviso.
+  late final CierreDeCaptura _cierre;
+  late final SyncController _sync;
+  late final ColaRepositorio _cola;
   late final ArchivosLocales _archivosDelTelefono;
 
   /// Null sin sesión: sin saber de quién es, no se guarda ni se ofrece nada.
@@ -155,6 +165,9 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   void initState() {
     super.initState();
     _almacen = ref.read(almacenBorradoresProvider);
+    _cierre = ref.read(cierreDeCapturaProvider);
+    _sync = ref.read(syncControllerProvider.notifier);
+    _cola = ref.read(colaRepositorioProvider);
     _archivosDelTelefono = ref.read(archivosLocalesProvider);
     if (ref.read(authControllerProvider).sesion?.usuario.id case final usuarioId?) {
       _clave = claveBorrador(
@@ -166,6 +179,13 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       );
     }
     _leerBorrador();
+    // En el cargue se piden los catálogos otra vez (con su ETag, así que casi siempre no baja nada): un muelle
+    // que el negocio acaba de crear tiene que poder elegirse, y sin él el cierre se rechaza (S8-HU-03.2 ESC-08).
+    if (widget.proceso == 'cargue') {
+      Future.microtask(() {
+        if (mounted) ref.read(catalogosControllerProvider.notifier).cargar();
+      });
+    }
     _notas.addListener(_alEscribirNotas);
     _buscarUbicacion();
     _escucharElGps();
@@ -212,8 +232,14 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       _hallazgos.addAll(guardado.hallazgos);
       _extras.addAll(guardado.extras);
       _archivos.addAll(guardado.archivos);
-      // Los puestos elegidos antes de salir van encima de los que ya tiene el servidor (CA-4).
-      _posiciones.addAll(guardado.posiciones);
+      // Los puestos elegidos antes de salir van encima de los que ya tiene el servidor (CA-4). Si el viaje todavía
+      // no llega, se aplican cuando llegue.
+      final puestos = (cambios: guardado.posiciones, base: guardado.posicionesBase);
+      if (_unidades == null) {
+        _puestosPorAplicar = puestos;
+      } else {
+        _aplicarPuestos(puestos);
+      }
       _ofrecido = null;
     });
     // Escribirlas dispara el guardado de las notas, que vuelve a escribir lo mismo.
@@ -258,11 +284,9 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         extras: [..._extras],
         notas: _notas.text,
         archivos: {..._archivos},
-        // Solo lo que se eligió aquí: lo que el servidor ya tiene vuelve con el viaje.
-        posiciones: {
-          for (final e in _posiciones.entries)
-            if (_posicionesPrevias[e.key] != e.value) e.key: e.value,
-        },
+        // Solo lo que cambió aquí, también lo liberado (null): lo que el servidor ya tiene vuelve con el viaje.
+        posiciones: _cambiosDePuesto,
+        posicionesBase: {for (final vin in _cambiosDePuesto.keys) vin: _posicionesPrevias[vin]},
       );
 
   /// Cambia lo capturado y lo guarda en el teléfono.
@@ -297,20 +321,27 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   /// Encola el informe y suelta su borrador en un solo paso. Desde ahí lo de esta pantalla es del job: los archivos
   /// que usa los borra la cola cuando el servidor los recibe, y los que no usa (la foto de un daño o de un extra
   /// que se quitó) se borran aquí. Si no se pudo encolar, el borrador sigue guardado como estaba.
-  Future<void> _encolarYSoltar(Job job) async {
+  Future<void> _encolarYSoltar(InformeJob job) async {
     // Desde aquí ninguna escritura del borrador corre: la que estaba en camino se espera, y las siguientes ven
     // `_encolado` y no hacen nada.
     _encolado = true;
     _notasPorGuardar?.cancel();
     await _escritura;
     try {
-      await ref.read(cierreDeCapturaProvider).encolar(job, claveBorrador: _clave);
+      await _cierre.encolar(job, claveBorrador: _clave);
     } catch (_) {
       _encolado = false;
       _guardarBorrador();
       rethrow;
     }
-    await _borrarArchivos(_archivos.difference(_rutasDe(_loCapturado)));
+    // Las rutas del job que se encoló, no las de la pantalla: mientras se guardaba, la pantalla seguía respondiendo
+    // y quitar un daño en ese instante borraba una foto que el job sí lleva.
+    await _borrarArchivos(_archivos.difference({
+      for (final f in job.fotos) f.ruta,
+      for (final h in job.hallazgos) ?h.foto?.ruta,
+      for (final e in job.extras)
+        for (final f in e.fotos) f.ruta,
+    }));
   }
 
   Future<void> _borrarArchivos(Iterable<String> rutas) async {
@@ -345,13 +376,34 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       _viaje = viaje;
       _unidades = viaje.vehiculos;
       _posicionesPrevias = posicionesDelViaje(viaje);
-      // Lo que ya se eligió aquí (un borrador que se continuó antes de que llegara el viaje) va encima.
-      final elegidas = {..._posiciones};
-      _posiciones
-        ..clear()
-        ..addAll(_posicionesPrevias)
-        ..addAll(elegidas);
+      _posiciones.addAll(_posicionesPrevias);
+      if (_puestosPorAplicar case final puestos?) {
+        _aplicarPuestos(puestos);
+        _puestosPorAplicar = null;
+      }
     });
+  }
+
+  /// Lo que cambió en los puestos frente a lo que tiene el servidor: VIN → puesto nuevo, o null si se liberó.
+  Map<String, int?> get _cambiosDePuesto => {
+        for (final vin in {..._posicionesPrevias.keys, ..._posiciones.keys})
+          if (_posiciones[vin] != _posicionesPrevias[vin]) vin: _posiciones[vin],
+      };
+
+  /// Aplica los puestos de un borrador. Uno cuyo puesto en el servidor ya no es el que había al guardarlo quedó
+  /// viejo (se acomodó o se cerró desde otro carro) y no se aplica: mandarlo haría fallar el informe.
+  void _aplicarPuestos(({Map<String, int?> cambios, Map<String, int?> base}) puestos) {
+    for (final e in puestos.cambios.entries) {
+      if (_posicionesPrevias[e.key] != puestos.base[e.key]) continue;
+      final puesto = e.value;
+      if (puesto == null) {
+        _posiciones.remove(e.key);
+      } else {
+        // Nadie más en ese puesto: el que lo tenía en el servidor se movió o se liberó en el mismo borrador.
+        _posiciones.removeWhere((vin, p) => p == puesto && vin != e.key && !puestos.cambios.containsKey(vin));
+        _posiciones[e.key] = puesto;
+      }
+    }
   }
 
   /// Vuelve a buscar sola en cuanto el GPS se enciende.
@@ -724,12 +776,12 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         corrigeInspeccionId: widget.corrigeInspeccionId,
       );
       await _encolarYSoltar(job);
-      final sync = ref.read(syncControllerProvider.notifier);
+      final sync = _sync;
       await sync.refrescar();
       await sync.sincronizar();
       // Se mira ESTE job y no el contador de pendientes de la cola, que excluye los fallidos: con eso, un
       // informe que el servidor acababa de rechazar se anunciaba como «enviado y cerrado».
-      final enCola = (await ref.read(colaRepositorioProvider).listar()).where((j) => j.id == job.id).firstOrNull;
+      final enCola = (await _cola.listar()).where((j) => j.id == job.id).firstOrNull;
       if (!mounted) return;
       // El color dice el desenlace de un vistazo, que es como se lee algo en el patio: verde si quedó hecho,
       // ámbar si falta que salga, rojo si lo rechazaron.
@@ -743,6 +795,13 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                 : 'Quedó cerrado en el servidor.',
             Icons.check_circle,
             Colores.exito,
+          ),
+        // El carro ya no sale o se bajó: no hay nada que reintentar.
+        final j when j.retirado => (
+            'Se retiró $que',
+            '${j.error ?? 'El carro ya no está en el viaje'}. Ya no se puede enviar: quítalo desde Inspecciones › Cola.',
+            Icons.info_outline,
+            Colores.advertencia,
           ),
         // No se arregla reintentando: quien está en el patio tiene que saberlo ahora, no descubrirlo después.
         final j when j.fallido => (
@@ -1019,7 +1078,9 @@ class _DatosDelViaje extends ConsumerWidget {
                       for (final (etiqueta, valor) in [
                         ('Placa', viaje.placa),
                         ('Tráiler', viaje.trailer ?? '—'),
-                        if (esCargue || viaje.muelle != null) ('Muelle', viaje.muelle ?? 'Sin asignar'),
+                        if (viaje.muelle != null ||
+                            (esCargue && muellesDelLugar(ref.watch(catalogosProvider), viaje.lugarCargueId).isNotEmpty))
+                          ('Muelle', viaje.muelle ?? 'Sin asignar'),
                         ('Unidad', viaje.unidad ?? '—'),
                         ('Conductor', viaje.conductorNombre ?? '—'),
                       ])

@@ -166,8 +166,20 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
       final tema = Theme.of(context).textTheme;
       // Lo que tomó de «Por tomar» sale de esa lista y se trabaja aquí. Un cargue tomado ya llega como viaje suyo;
       // una entrega todavía no (S8-HU-10.1), así que se pinta con lo que trae «Por tomar» para que no desaparezca.
+      // Con señal salen de «Por tomar» y se guardan; sin ella, de lo último guardado (CA-6 de S8-HU-10.2).
+      final consultados = ref.watch(pendientesProvider);
+      final usuarioId = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.id));
+      ref.listen(pendientesProvider, (_, siguiente) {
+        if (siguiente case AsyncData(:final value) when usuarioId != null) {
+          guardarTomados(ref.read(almacenTomadosProvider), usuarioId, value).ignore();
+          ref.invalidate(tomadosGuardadosProvider);
+        }
+      });
+      final base = consultados.hasError || !consultados.hasValue
+          ? ref.watch(tomadosGuardadosProvider).value ?? const <Pendiente>[]
+          : consultados.value!;
       final tomados = [
-        for (final p in ref.watch(pendientesProvider).value ?? const <Pendiente>[])
+        for (final p in base)
           if (p.estado == EstadoPendiente.mio) p,
       ];
       final idsMios = {for (final v in estado.viajes) v.id};

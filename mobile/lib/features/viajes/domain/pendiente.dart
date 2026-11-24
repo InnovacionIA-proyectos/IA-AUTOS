@@ -41,6 +41,22 @@ class Pendiente {
   final String? reclamadoPorNombre;
 
   bool get esEntrega => proceso == procesoEntrega;
+
+  Map<String, dynamic> toJson() => {
+        'viaje_id': viajeId,
+        'proceso': proceso,
+        'lugar': lugar,
+        'estado': switch (estado) {
+          EstadoPendiente.disponible => 'disponible',
+          EstadoPendiente.enRevision => 'en_revision',
+          EstadoPendiente.mio => 'mio',
+        },
+        'unidades': unidades,
+        'codigo_mtrack': codigoMtrack,
+        'placa': placa,
+        'fecha_programada': fechaProgramada?.toUtc().toIso8601String(),
+        'reclamado_por_nombre': reclamadoPorNombre,
+      };
 }
 
 const procesoCargue = 'cargue';

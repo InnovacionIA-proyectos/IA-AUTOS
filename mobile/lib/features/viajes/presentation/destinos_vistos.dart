@@ -54,7 +54,9 @@ class DestinosVistos extends AsyncNotifier<Map<String, String>> {
     final cambio = unidad.destinoCambiadoAt;
     final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
     if (cambio == null || usuarioId == null) return;
-    final vistos = {...?state.value, _llave(viajeId, unidad.vin): _sello(cambio)};
+    // Sobre lo ya leído: si se toca un carro antes de que cargue, partir de un estado vacío borraría lo visto.
+    final anteriores = await future;
+    final vistos = {...anteriores, _llave(viajeId, unidad.vin): _sello(cambio)};
     state = AsyncData(vistos);
     await ref.read(almacenDestinosVistosProvider).escribir(clave(usuarioId), jsonEncode(vistos));
   }

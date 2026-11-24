@@ -112,6 +112,33 @@ void main() {
     });
   });
 
+  // Revisión: el servidor exige cerrada la última versión; una corrección en borrador no cuenta como cerrada.
+  test('una llegada cerrada con su corrección en borrador no está cerrada', () {
+    final informes = [
+      for (final vin in ['VINA', 'VINB']) ...[_informe(vin, 'llegada'), _informe(vin, 'salida')],
+      InspeccionResumen(id: 'VINB-llegada-v2', vin: 'VINB', momento: 'llegada', momentoNombre: 'llegada', fecha: '', estado: 'borrador', version: 2),
+    ];
+
+    expect(faltanteDelCargue(_viaje(), informes), 'Falta la llegada del cargue del VIN VINB');
+  });
+
+  test('una versión vieja en borrador ya corregida y cerrada no bloquea', () {
+    final informes = [
+      for (final vin in ['VINA', 'VINB']) ...[_informe(vin, 'llegada'), _informe(vin, 'salida')],
+      InspeccionResumen(id: 'v0', vin: 'VINA', momento: 'salida', momentoNombre: 'salida', fecha: '', estado: 'borrador', version: 0),
+    ];
+
+    expect(faltanteDelCargue(_viaje(), informes), isNull);
+  });
+
+  test('la hora lleva el desfase de la zona, también negativo', () {
+    final momento = DateTime.utc(2026, 11, 18, 19, 9);
+
+    expect(isoConZona(momento, desfase: const Duration(hours: -5)), '2026-11-18T14:09:00-05:00');
+    expect(isoConZona(momento, desfase: const Duration(hours: 5, minutes: 30)), '2026-11-19T00:39:00+05:30');
+    expect(isoConZona(momento, desfase: Duration.zero), '2026-11-18T19:09:00+00:00');
+  });
+
   // ESC-05: la hora es la del patio, con su zona.
   test('la hora del momento va con su zona', () {
     final texto = isoConZona(DateTime(2026, 11, 18, 14, 9, 5));

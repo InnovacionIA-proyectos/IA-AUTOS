@@ -1034,14 +1034,18 @@ class ReservaCarro {
 /// La hora del momento con su zona, como la pide el contrato: «2026-11-18T14:09:00-05:00».
 ///
 /// La firma hecha sin señal se envía después, y lo que vale es cuándo se hizo en el patio, no cuándo llegó.
-String isoConZona(DateTime momento) {
-  final local = momento.toLocal();
+///
+/// [desfase] es el del teléfono; se pasa a mano solo para probar zonas distintas de la de quien corre las pruebas.
+String isoConZona(DateTime momento, {Duration? desfase}) {
+  final zona = desfase ?? momento.toLocal().timeZoneOffset;
+  final local = desfase == null ? momento.toLocal() : momento.toUtc().add(desfase);
   String dos(int n) => n.abs().toString().padLeft(2, '0');
-  final desfase = local.timeZoneOffset;
-  final signo = desfase.isNegative ? '-' : '+';
+  final desfaseFinal = zona;
+  final signo = desfaseFinal.isNegative ? '-' : '+';
+  final minutos = desfaseFinal.inMinutes.abs();
   return '${local.year.toString().padLeft(4, '0')}-${dos(local.month)}-${dos(local.day)}'
       'T${dos(local.hour)}:${dos(local.minute)}:${dos(local.second)}'
-      '$signo${dos(desfase.inHours)}:${dos(desfase.inMinutes % 60)}';
+      '$signo${dos(minutos ~/ 60)}:${dos(minutos % 60)}';
 }
 
 /// La firma del cargue de toda la niñera (S8-HU-01.3 CA-5): una por parte para todos los carros activos del viaje,

@@ -13,11 +13,28 @@ import '../../sync/domain/job.dart';
 import '../../sync/presentation/anuncio_desenlace.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
+import '../../vehiculos/domain/inventario.dart';
+import '../../vehiculos/providers.dart';
 import '../../viajes/domain/viaje.dart';
 import '../../viajes/providers.dart';
 import '../domain/firma_ninera.dart';
 import 'lienzo_firma.dart';
 import 'no_firma_ninera_page.dart';
+
+/// El inventario de un carro: de él sale la transferencia del cargue, con quién firmó y sus reservas.
+final _inventarioDelCarroProvider = FutureProvider.autoDispose.family<Inventario, String>(
+  (ref, vin) => ref.watch(vehiculosRepositorioProvider).inventario(vin),
+);
+
+/// Si esta persona ya dejó su firma de la niñera en la cola y todavía no salió: firmar otra vez mandaría otra con
+/// otra hora y otro GPS, y la segunda pisaría a la primera.
+final _firmaEnColaProvider =
+    FutureProvider.autoDispose.family<bool, ({String viajeId, String parte, String usuarioId})>((ref, clave) async {
+  final jobs = await ref.watch(colaRepositorioProvider).listar();
+  return jobs.any(
+    (j) => j is FirmaNineraJob && j.viajeId == clave.viajeId && j.parte == clave.parte && j.esDe(clave.usuarioId) && !j.fallido,
+  );
+});
 
 /// La firma del cargue de toda la niñera (S8-HU-01.3): una sola vez por parte para todos los carros activos. El
 /// inspector del viaje firma la entrega y el conductor el recibo, cada uno desde su sesión.
@@ -96,8 +113,9 @@ class _EstadoFirmaNinera extends ConsumerState<FirmaNineraPage> {
         detalleRegistrado: 'Quedó para ${carros == 1 ? 'el carro' : 'los $carros carros'} de la niñera.',
         noRegistrado: 'No se pudo registrar la firma',
       ));
+      if (!mounted) return;
       ref.invalidate(viajeDeEtapaProvider(viaje.id));
-      if (mounted) Navigator.of(context).pop();
+      Navigator.of(context).pop();
     } catch (e) {
       mensajes.showSnackBar(SnackBar(content: Text(mensajeDeError(e, 'No se pudo guardar la firma. Inténtalo de nuevo.'))));
     } finally {
@@ -138,6 +156,25 @@ class _EstadoFirmaNinera extends ConsumerState<FirmaNineraPage> {
     // Sin señal no se puede comprobar qué falta: se deja firmar y el servidor lo comprueba al recibirla (CA-7).
     final faltante = informes.whenOrNull(data: (lista) => faltanteDelCargue(viaje, lista));
     final recibe = parte == ParteTransferencia.recibe;
+    // Lo que ya está firmado en cada carro. Mientras no se sepa (sin señal) no se afirma nada: el servidor ignora
+    // la misma firma reenviada.
+    final inventarios = {for (final c in carros) c.vin: ref.watch(_inventarioDelCarroProvider(c.vin))};
+    final transferencias = {
+      for (final e in inventarios.entries) e.key: e.value.whenOrNull(data: (inv) => transferenciaDelCargue(inv, viaje.id)),
+    };
+    final seSabe = inventarios.values.every((v) => v.hasValue);
+    final enCola = parte == null || yo == null
+        ? false
+        : ref.watch(_firmaEnColaProvider((viajeId: viaje.id, parte: parte, usuarioId: yo))).value ?? false;
+    final firmados = [for (final c in carros) if (yaFirmo(transferencias[c.vin], parte ?? '')) c.vin];
+    final yaFirmeTodo = seSabe && carros.isNotEmpty && firmados.length == carros.length;
+    // SUP-004: si quien recibe dejó reservas nuevas, el servidor retira la firma de quien entrega en esos carros.
+    final hayQueVolverAFirmar = !recibe && seSabe && firmados.isNotEmpty && firmados.length < carros.length;
+    final reservasDelConductor = {
+      for (final c in carros)
+        if (transferencias[c.vin]?.reservasTexto case final r? when r.trim().isNotEmpty) c.vin: r,
+    };
+    final otraParte = recibe ? 'la entrega del inspector' : 'el recibo del conductor';
 
     return ListView(
       padding: const EdgeInsets.all(Espacio.lg),
@@ -172,7 +209,37 @@ class _EstadoFirmaNinera extends ConsumerState<FirmaNineraPage> {
               style: tema.bodySmall,
             ),
           )
+        else if (enCola)
+          Tarjeta(
+            child: Text(
+              'Tu firma ya está guardada en este teléfono y se enviará cuando haya señal.',
+              style: tema.titleSmall?.copyWith(color: Colores.advertencia),
+            ),
+          )
+        else if (yaFirmeTodo)
+          Tarjeta(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  recibe ? 'Ya firmaste el recibo de la niñera.' : 'Ya firmaste la entrega de la niñera.',
+                  style: tema.titleSmall?.copyWith(color: Colores.exito),
+                ),
+                Text('Falta $otraParte.', style: tema.bodySmall),
+                for (final e in reservasDelConductor.entries)
+                  Text('Con reservas ${e.key}: ${e.value}', style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
+              ],
+            ),
+          )
         else ...[
+          if (hayQueVolverAFirmar)
+            Padding(
+              padding: const EdgeInsets.only(bottom: Espacio.sm),
+              child: Text(
+                'El conductor dejó reservas nuevas y tu firma se retiró en esos carros: firma otra vez la entrega.',
+                style: tema.bodyMedium?.copyWith(color: Colores.advertencia),
+              ),
+            ),
           Text('Carros', style: tema.titleMedium),
           if (recibe)
             Text(
@@ -183,7 +250,8 @@ class _EstadoFirmaNinera extends ConsumerState<FirmaNineraPage> {
           for (final carro in carros) ...[
             _FilaCarro(
               carro: carro,
-              reserva: _reservas[carro.vin],
+              // El inspector ve las reservas que dejó el conductor antes de firmar (CA-13).
+              reserva: recibe ? _reservas[carro.vin] : reservasDelConductor[carro.vin],
               alReservar: recibe ? () => _reservar(carro.vin) : null,
             ),
             const SizedBox(height: Espacio.xs),

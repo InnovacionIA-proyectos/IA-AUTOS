@@ -25,6 +25,7 @@ import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
 import 'package:traza_autos/features/sync/domain/puertos.dart';
 import 'package:traza_autos/features/sync/providers.dart';
 import 'package:traza_autos/features/viajes/presentation/destinos_vistos.dart';
+import 'package:traza_autos/features/viajes/presentation/tomados.dart';
 
 import 'dobles_dibujo.dart';
 import 'dobles_sync.dart';
@@ -279,8 +280,12 @@ class Arnes {
   /// Lo que el conductor ya vio de cada cambio de destino (S8-HU-03.2 CA-5), en memoria.
   final destinosVistos = DestinosVistosEnMemoria();
 
+  /// Lo último que el inspector tenía tomado, guardado en el teléfono, en memoria.
+  final tomadosGuardados = TomadosEnMemoria();
+
   List<Override> get overrides => [
         almacenDestinosVistosProvider.overrideWithValue(destinosVistos),
+        almacenTomadosProvider.overrideWithValue(tomadosGuardados),
         entornoProvider.overrideWithValue(entorno),
         almacenSesionProvider.overrideWithValue(almacen),
         authRepositorioProvider.overrideWithValue(auth),
@@ -392,6 +397,16 @@ class CierreEnMemoria implements CierreDeCaptura {
 }
 
 class DestinosVistosEnMemoria implements AlmacenDestinosVistos {
+  final Map<String, String> guardados = {};
+
+  @override
+  Future<String?> leer(String clave) async => guardados[clave];
+
+  @override
+  Future<void> escribir(String clave, String valor) async => guardados[clave] = valor;
+}
+
+class TomadosEnMemoria implements AlmacenTomados {
   final Map<String, String> guardados = {};
 
   @override

@@ -495,6 +495,19 @@ void main() {
       expect(find.text('Este carro no sale: Faltan documentos'), findsOneWidget);
     });
 
+    // Revisión: corregir es revisar otra vez, y un carro que no sale no se revisa (409 `unidad_no_sale`).
+    testWidgets('la ficha de un carro que no sale no ofrece «Corregir»', (tester) async {
+      await abrir(tester, inventario: inventarioSalida(momento: 'llegada'), viajes: delInspector('u1', noSale: true));
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
+    });
+
+    testWidgets('el mismo informe de un carro activo sí se corrige', (tester) async {
+      await abrir(tester, inventario: inventarioSalida(momento: 'llegada'), viajes: delInspector('u1'));
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsOneWidget);
+    });
+
     testWidgets('con el cargue ya cerrado no se ofrece «Vuelve a salir»', (tester) async {
       await abrir(tester, viajes: delInspector('u1', noSale: true, cargueCerrado: true));
 
@@ -1106,6 +1119,39 @@ void main() {
 
       expect(find.widgetWithText(FilledButton, 'Ir a la firma de la niñera'), findsOneWidget);
       expect(find.widgetWithText(FilledButton, 'Revisar y firmar'), findsNothing);
+    });
+
+    // Revisión: la firma por niñera cuelga de la salida, no de la llegada; la ficha tiene que verla cerrada.
+    testWidgets('con la niñera firmada, la ficha dice cómo se cerró y con qué reservas', (tester) async {
+      final json = inventarioJson();
+      final etapa = (json['etapas'] as List<dynamic>).first as Map<String, dynamic>;
+      final salida = (etapa['inspecciones'] as List<dynamic>).first as Map<String, dynamic>;
+      salida['transferencia'] = {
+        'entrega_usuario_id': 'u1',
+        'recibe_usuario_id': 'conductor-1',
+        'entrega_firmada_at': '2026-01-02T12:00:00Z',
+        'recibe_firmada_at': '2026-01-02T12:05:00Z',
+        'tipo_cierre': 'con_reservas',
+        'reservas_texto': 'Rayón en la puerta izquierda',
+        'firma_por_ninera': true,
+      };
+      // La llegada es la primera: antes la ficha buscaba la firma ahí y nunca la encontraba.
+      (etapa['inspecciones'] as List<dynamic>).insert(0, {
+        'id': 'i0',
+        'momento': 'llegada',
+        'momento_nombre': 'Inspección de llegada',
+        'fecha': '2026-01-02T09:00:00Z',
+        'cerrada_at': '2026-01-02T09:30:00Z',
+        'estado': 'cerrada',
+        'usuario_id': 'u1',
+        'hallazgos': [],
+        'evidencias': [],
+        'transferencia': null,
+      });
+      await abrir(tester, inventario: json, viajes: delViaje());
+
+      expect(find.widgetWithText(FilledButton, 'Ir a la firma de la niñera'), findsNothing);
+      expect(find.text('Reservas: Rayón en la puerta izquierda'), findsOneWidget);
     });
 
     testWidgets('a quien no la firma, ni carro por carro ni por niñera: dice quién la firma', (tester) async {

@@ -27,6 +27,7 @@ Future<ReclamosRepositorioFalso> abrir(
   Sesion? sesion = sesionPrueba,
   List<String> vinesDeMisViajes = const [],
   ViajesRepositorioFalso? viajes,
+  Arnes? arnes,
 }) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -36,7 +37,7 @@ Future<ReclamosRepositorioFalso> abrir(
     ProviderScope(
       retry: (_, _) => null,
       overrides: [
-        ...Arnes(sesion: sesion).overrides,
+        ...(arnes ?? Arnes(sesion: sesion)).overrides,
         viajesRepositorioProvider.overrideWithValue(repositorio),
         reclamosRepositorioProvider.overrideWithValue(reclamos),
       ],
@@ -340,6 +341,23 @@ void main() {
 
     expect(find.byType(DetallePendientePage), findsOneWidget);
     expect(find.text('No hay un reclamo activo'), findsOneWidget);
+  });
+
+  // Revisión (CA-6 de S8-HU-10.2): sin señal, lo tomado sigue en «Mis viajes» con lo último guardado.
+  testWidgets('lo tomado se guarda en el teléfono y sin señal sigue en «Mis viajes»', (tester) async {
+    final conSenal = Arnes();
+    await abrir(
+      tester,
+      ReclamosRepositorioFalso()..pendientesActuales = [pendienteDe('v9', placa: 'ENT009', proceso: 'entrega', estado: EstadoPendiente.mio)],
+      arnes: conSenal,
+    );
+    expect(conSenal.tomadosGuardados.guardados['tomados.u1'], contains('v9'));
+
+    final sinSenal = Arnes()..tomadosGuardados.guardados.addAll(conSenal.tomadosGuardados.guardados);
+    await abrir(tester, ReclamosRepositorioFalso()..errorPendientes = Exception('sin red'), arnes: sinSenal);
+
+    expect(find.text('Tú recibes'), findsOneWidget);
+    expect(find.text('MTK-v9'), findsOneWidget);
   });
 
   testWidgets('quien no es inspector no ve «Por tomar» ni lo consulta', (tester) async {

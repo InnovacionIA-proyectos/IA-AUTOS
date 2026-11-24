@@ -1,5 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/db/cache_lecturas.dart';
+import '../../auth/presentation/auth_controller.dart';
 
 import '../../../core/errores/error_api.dart';
 import '../../../core/tema/tema.dart';
@@ -11,6 +16,49 @@ import 'mis_viajes_controller.dart';
 
 /// Lo que el inspector tomó de «Por tomar» y ahora le toca inspeccionar: cómo se nombra, qué papel tiene en el viaje
 /// y cómo se libera.
+
+/// Dónde se guarda en el teléfono lo último que el inspector tomó: «Por tomar» solo se consulta con señal, y sin
+/// esto una entrega tomada desaparecía de «Mis viajes» al abrir la app sin señal. Las pruebas lo reemplazan.
+abstract interface class AlmacenTomados {
+  Future<String?> leer(String clave);
+  Future<void> escribir(String clave, String valor);
+}
+
+class _TomadosEnCache implements AlmacenTomados {
+  const _TomadosEnCache(this._cache);
+
+  final CacheLecturasRepo _cache;
+
+  @override
+  Future<String?> leer(String clave) => _cache.leer(clave);
+
+  @override
+  Future<void> escribir(String clave, String valor) => _cache.escribir(clave, valor);
+}
+
+final almacenTomadosProvider = Provider<AlmacenTomados>((ref) => _TomadosEnCache(ref.watch(cacheViajesProvider)));
+
+/// Lo tomado, por persona: en un equipo compartido nadie ve lo de otro.
+String claveTomados(String usuarioId) => 'tomados.$usuarioId';
+
+/// Lo último que se supo que esta persona tenía tomado. Vacío si nunca se guardó o la copia está dañada.
+final tomadosGuardadosProvider = FutureProvider.autoDispose<List<Pendiente>>((ref) async {
+  final usuarioId = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.id));
+  if (usuarioId == null) return const [];
+  final crudo = await ref.watch(almacenTomadosProvider).leer(claveTomados(usuarioId));
+  if (crudo == null) return const [];
+  try {
+    return [for (final p in jsonDecode(crudo) as List<dynamic>) Pendiente.fromJson(p as Map<String, dynamic>)];
+  } catch (_) {
+    return const [];
+  }
+});
+
+/// Guarda lo que esta persona tiene tomado según la última consulta de «Por tomar».
+Future<void> guardarTomados(AlmacenTomados almacen, String usuarioId, List<Pendiente> pendientes) => almacen.escribir(
+      claveTomados(usuarioId),
+      jsonEncode([for (final p in pendientes) if (p.estado == EstadoPendiente.mio) p.toJson()]),
+    );
 
 /// La placa del camión, o su código si no trae placa.
 String nombreDelCamion(Pendiente pendiente) => pendiente.placa ?? pendiente.codigoMtrack ?? 'El camión';
@@ -58,6 +106,7 @@ Future<bool> confirmarLiberar(BuildContext context) async =>
     true;
 
 /// Libera lo tomado desde «Mis viajes»: confirma, va a la API y refresca las dos listas. El camión vuelve a «Por tomar».
+/// Devuelve cuando terminó, para que el botón no se pueda tocar otra vez mientras tanto.
 Future<void> liberarTomado(BuildContext context, Pendiente pendiente) async {
   if (!await confirmarLiberar(context) || !context.mounted) return;
   final mensajes = ScaffoldMessenger.of(context);
@@ -75,19 +124,37 @@ Future<void> liberarTomado(BuildContext context, Pendiente pendiente) async {
 }
 
 /// Los botones «Liberar» de lo tomado en un viaje: uno por proceso, y si son dos dicen cuál es cuál.
-class BotonesLiberar extends StatelessWidget {
+class BotonesLiberar extends StatefulWidget {
   const BotonesLiberar({super.key, required this.tomados});
 
   final List<Pendiente> tomados;
 
   @override
+  State<BotonesLiberar> createState() => _EstadoBotonesLiberar();
+}
+
+class _EstadoBotonesLiberar extends State<BotonesLiberar> {
+  /// Mientras se libera, no se libera otra vez: el segundo toque recibía un 404 y mostraba un error falso.
+  bool _liberando = false;
+
+  Future<void> _liberar(Pendiente tomado) async {
+    setState(() => _liberando = true);
+    try {
+      await liberarTomado(context, tomado);
+    } finally {
+      if (mounted) setState(() => _liberando = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final tomados = widget.tomados;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final tomado in tomados)
           OutlinedButton(
-            onPressed: () => liberarTomado(context, tomado),
+            onPressed: _liberando ? null : () => _liberar(tomado),
             child: Text(
               tomados.length == 1 ? 'Liberar' : (tomado.esEntrega ? 'Liberar la entrega' : 'Liberar el cargue'),
             ),

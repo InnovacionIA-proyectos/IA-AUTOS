@@ -169,16 +169,15 @@ void main() {
       expect(await procesador.contarFallidos(usuarioPrueba), 0);
     });
 
-    // S8-HU-02.2 CA-6: al conductor el servidor le responde 404 cuando el carro ya no está en su viaje.
-    test('si el carro se bajó del viaje, se retira con «El carro ya no está en el viaje»', () async {
-      gateway.errores['crearNovedad'] = [conCodigo(404, 'NOT_FOUND', 'El VIN no está en el viaje')];
+    // Un 404 no es un carro bajado (al conductor el servidor le responde 409 UNIDAD_NO_SALE también en ese caso):
+    // no se retira como si lo fuera.
+    test('un 404 no se toma como carro retirado', () async {
+      gateway.errores['crearNovedad'] = [conCodigo(404, 'NOT_FOUND', 'El viaje no existe')];
       await cola.agregar(novedad());
 
-      final r = await procesador.procesar(usuarioPrueba);
+      await procesador.procesar(usuarioPrueba);
 
-      expect(r.fallidos, 0);
-      expect(cola.jobs.single.retirado, isTrue);
-      expect(cola.jobs.single.error, 'El carro ya no está en el viaje');
+      expect(cola.jobs.single.retirado, isFalse);
     });
   });
 

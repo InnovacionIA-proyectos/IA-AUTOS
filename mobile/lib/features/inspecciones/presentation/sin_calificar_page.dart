@@ -73,10 +73,8 @@ class SinCalificarPage extends ConsumerWidget {
                     ? Padding(
                         padding: const EdgeInsets.only(bottom: Espacio.sm),
                         child: Text(
-                          novedades.length == 1
-                              ? 'Falta calificar 1 daño. Lo registró el conductor: le falta la zona, la clase y el nivel.'
-                              : 'Faltan calificar ${novedades.length} daños. Los registró el conductor: les falta la '
-                                  'zona, la clase y el nivel.',
+                          // S8-HU-08.2 CA-2: solo cuántos faltan.
+                          novedades.length == 1 ? 'Falta calificar 1 daño' : 'Faltan calificar ${novedades.length} daños',
                           style: tema.bodySmall,
                         ),
                       )

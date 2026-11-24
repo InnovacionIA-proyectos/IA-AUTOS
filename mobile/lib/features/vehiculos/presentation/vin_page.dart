@@ -560,14 +560,17 @@ class _EstadoNoSale extends ConsumerState<_NoSale> {
 
   /// Manda el cambio y refresca lo que cambió para todos: el viaje, Mis viajes y la ficha.
   Future<void> _enviar(String viajeId, Future<Viaje> Function() cambio, String hecho) async {
-    // El aviso se toma antes de los `await`: después de ellos el widget puede ya no estar en pantalla.
+    // El aviso y el contenedor se toman antes de los `await`: después de ellos el widget puede ya no estar en
+    // pantalla, y `ref` ya no se puede usar.
     final avisos = ScaffoldMessenger.of(context);
+    final contenedor = ProviderScope.containerOf(context, listen: false);
+    final vin = widget.inventario.vin;
     setState(() => _enviando = true);
     try {
       await cambio();
-      await ref.read(misViajesControllerProvider.notifier).cargar();
-      ref.invalidate(viajeDeEtapaProvider(viajeId));
-      ref.invalidate(inventarioProvider(widget.inventario.vin));
+      await contenedor.read(misViajesControllerProvider.notifier).cargar();
+      contenedor.invalidate(viajeDeEtapaProvider(viajeId));
+      contenedor.invalidate(inventarioProvider(vin));
       avisos.showSnackBar(SnackBar(content: Text(hecho)));
     } on ErrorApi catch (e) {
       // Un 403 o un 409 no se arreglan reintentando (el daño no es V1+, el cargue ya se cerró, la niñera está
@@ -866,11 +869,19 @@ class _UltimoInforme extends ConsumerWidget {
     // etapa (S8-HU-01.3 CA-8): con el cargue firmado por niñera, la firma cuelga de la acomodación y la llegada
     // tampoco se corrige. Una transferencia ya creada pero sin ninguna firma no impide corregir.
     final yaFirmada = etapa.tieneFirma;
+    // S8-HU-02.2 CA-4: un carro que no sale o se bajó no se revisa en ninguna etapa, y corregir es revisar otra vez
+    // (el servidor responde 409 `unidad_no_sale`).
+    final unidad = switch (etapa.viajeId) {
+      final viajeId? => ref.watch(viajeDeEtapaProvider(viajeId)).value?.vehiculos.where((v) => v.vin == vin).firstOrNull,
+      null => null,
+    };
+    final noSale = unidad != null && !unidad.sale;
     final puedeCorregir = (suya || esAdministrador) &&
         inspeccion.cerrada &&
         !yaCorregida &&
         !yaFirmada &&
-        !viajeTerminado;
+        !viajeTerminado &&
+        !noSale;
 
     return Tarjeta(
       child: Column(
@@ -1159,6 +1170,11 @@ class _TarjetaEtapa extends StatelessWidget {
                   if (cual != null) ...[
                     const SizedBox(height: Espacio.xs),
                     Text('Es la firma de la ${cual.toLowerCase()}.', style: tema.bodySmall),
+                  ],
+                  // S8-HU-01.3 CA-13: el cargue cerrado dice en ese carro con qué reservas se recibió.
+                  if (t.reservasTexto case final reservas? when reservas.trim().isNotEmpty) ...[
+                    const SizedBox(height: Espacio.xs),
+                    Text('Reservas: $reservas', style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
                   ],
                 ],
               ),

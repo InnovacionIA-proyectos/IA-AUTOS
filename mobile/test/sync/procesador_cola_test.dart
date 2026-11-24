@@ -357,6 +357,20 @@ void main() {
       });
     }
 
+    // Revisión: el cierre ya no toma el 409 de un carro que salió del viaje como «ya estaba cerrada».
+    test('un 409 de carro bajado al cerrar se retira, no se da por enviado', () async {
+      await cola.agregar(informe(id: 'a'));
+      gateway.errores['cerrarInspeccion'] = [
+        const ErrorApi(message: 'La unidad se bajó de este viaje', code: 'CONFLICT', status: 409, details: {'motivo': 'unidad_bajada'}),
+      ];
+
+      final r = await procesador.procesar(usuarioPrueba);
+
+      expect(r.enviados, 0);
+      expect(cola.jobs.single.retirado, isTrue);
+      expect(cola.jobs.single.error, 'El carro ya no está en el viaje');
+    });
+
     test('otro 409 sigue siendo un error', () async {
       await cola.agregar(informe(id: 'a'));
       gateway.errores['crearInspeccion'] = [

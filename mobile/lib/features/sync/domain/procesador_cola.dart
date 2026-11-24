@@ -14,8 +14,8 @@ const mensajeCarroBajado = 'El carro ya no está en el viaje';
 /// Por qué el servidor ya no admite este envío del carro, o null si el rechazo es otro (S8-HU-02.2 CA-4 y CA-6).
 ///
 /// Llega de tres maneras: las inspecciones y las firmas responden 409 con `details.motivo` `unidad_no_sale` o
-/// `unidad_bajada`; la novedad y el «Llegué» del conductor, 409 con el código `UNIDAD_NO_SALE`, y 404 cuando el
-/// carro ya no está en el viaje.
+/// `unidad_bajada`; la novedad y el «Llegué» del conductor, 409 con el código `UNIDAD_NO_SALE` (también cuando el
+/// carro se bajó: el servidor responde lo mismo).
 String? motivoDeRetiro(ErrorApi e, Job job) {
   final motivo = switch (e.details) { final Map m => m['motivo'], _ => null };
   if (e.status == 409 && (motivo == 'unidad_no_sale' || e.code == codigoUnidadNoSale)) return e.message;
@@ -23,7 +23,6 @@ String? motivoDeRetiro(ErrorApi e, Job job) {
   // S8-HU-01.3 CA-11: en el cargue ya no se firma carro por carro; un envío viejo se retira con lo que dice el
   // servidor («firma desde la pantalla de la niñera»), no queda «con error».
   if (e.status == 409 && motivo == 'firma_por_ninera') return e.message;
-  if (e.status == 404 && (job is NovedadJob || job is LlegadaJob)) return mensajeCarroBajado;
   return null;
 }
 
@@ -368,7 +367,8 @@ class ProcesadorCola {
       try {
         await gateway.cerrarInspeccion(inspeccionId);
       } on ErrorApi catch (e) {
-        if (e.status != 409) rethrow;
+        // El 409 de un carro que ya no sale o se bajó no es «ya cerrada»: se retira con su explicación.
+        if (e.status != 409 || motivoDeRetiro(e, job) != null) rethrow;
       }
       job = job.conProgreso(cerrada: true);
       await cola.guardar(job);
@@ -378,8 +378,6 @@ class ProcesadorCola {
     await _borrarFotos(job);
   }
 
-  /// La constancia va en dos pasos, como un hallazgo: primero el archivo, y el progreso se guarda, de modo
-  /// que un corte entre la subida y el registro no vuelve a subir la foto.
   /// Como la constancia por carro: la foto se sube primero y queda anotada, así un reintento no la sube dos veces.
   Future<void> _ejecutarNoFirmaNinera(NoFirmaNineraJob job) async {
     var actual = job;
@@ -406,6 +404,8 @@ class ProcesadorCola {
     }
   }
 
+  /// La constancia va en dos pasos, como un hallazgo: primero el archivo, y el progreso se guarda, de modo
+  /// que un corte entre la subida y el registro no vuelve a subir la foto.
   Future<void> _ejecutarNoFirma(NoFirmaJob job) async {
     var actual = job;
     if (actual.foto.storagePath == null) {
