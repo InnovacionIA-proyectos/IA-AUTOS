@@ -286,7 +286,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     {
         var coordinador = await CoordinadorAsync();
         await LugaresDeLaCargaAsync(coordinador);
-        var vines = Enumerable.Range(1, 9).Select(i => $"VIN-S-{i:00}").ToList();
+        var vines = Enumerable.Range(1, 7).Select(i => $"VIN-S-{i:00}").ToList();
         foreach (var vin in vines.Append("VIN-S-10").Append("VIN-S-11"))
         {
             await Sembrador.VehiculoAsync(vin);
@@ -301,7 +301,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
 
         var vista = await LeerJsonAsync(await Cliente(coordinador.Token).PostAsync("/api/viajes/cargar/previsualizar", Cuerpo(new { filas })));
 
-        Assert.Equal(11, vista.GetProperty("validas").GetInt32());
+        Assert.Equal(9, vista.GetProperty("validas").GetInt32());
         Assert.Equal(3, vista.GetProperty("viajes").GetInt32());
         var porFila = vista.GetProperty("filas").EnumerateArray().ToDictionary(f => f.GetProperty("fila").GetInt32());
         Assert.Equal("AUTO-WXY123-202511190600", porFila[2].GetProperty("codigo_mtrack").GetString());
@@ -315,7 +315,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
 
         Assert.Equal(HttpStatusCode.Created, confirmada.StatusCode);
         Assert.Equal(3, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes"));
-        Assert.Equal(9, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajeVehiculos vv JOIN dbo.tblViajes v ON v.Id = vv.ViajeId WHERE v.CodigoMtrack = 'AUTO-WXY123-202511190600'"));
+        Assert.Equal(7, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajeVehiculos vv JOIN dbo.tblViajes v ON v.Id = vv.ViajeId WHERE v.CodigoMtrack = 'AUTO-WXY123-202511190600'"));
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes v JOIN dbo.tblTiposUnidadTransportadora t ON t.Id = v.TipoUnidadId WHERE v.CodigoMtrack = 'AUTO-WXY123-202511190600' AND t.Codigo = 'ninera'"));
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes v JOIN dbo.tblTiposUnidadTransportadora t ON t.Id = v.TipoUnidadId WHERE v.CodigoMtrack = 'MTK-CON-CODIGO' AND t.Codigo = 'nodriza'"));
 
@@ -390,7 +390,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var viaje = await LeerJsonAsync(r);
         Assert.Equal(
             ["id", "codigo_mtrack", "tipo_unidad_id", "unidad", "placa", "trailer", "conductor_id", "conductor_nombre", "inspector_id", "inspector_nombre",
-             "origen_id", "origen", "destino_id", "destino", "estado", "vehiculos", "clientes", "created_at", "updated_at", "novedades_proceso", "fecha_programada", "lugar_cargue_id", "lugar_cargue", "capacidad", "disposicion", "fotos_acomodacion", "lugar_cargue_tiene_inspector", "cargue_firmado_por_ninera_at", "cargue_no_firmado_at", "cargue_no_firma_parte"],
+             "origen_id", "origen", "destino_id", "destino", "estado", "vehiculos", "clientes", "created_at", "updated_at", "novedades_proceso", "fecha_programada", "lugar_cargue_id", "lugar_cargue", "capacidad", "disposicion", "fotos_acomodacion", "lugar_cargue_tiene_inspector", "cargue_firmado_por_ninera_at", "cargue_no_firmado_at", "cargue_no_firma_parte", "muelle_id", "muelle", "eliminable"],
             viaje.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("MTK-ALTA", viaje.GetProperty("codigo_mtrack").GetString());
         Assert.Equal("Niñera", viaje.GetProperty("unidad").GetString());
@@ -608,7 +608,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(JsonValueKind.Null, antesUnidad.GetProperty("no_sale").ValueKind);
         var unidad = despues.GetProperty("vehiculos")[0];
         Assert.Equal(
-            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale", "estado_transporte", "novedades", "lugar_destino_id", "lugar_destino", "posicion", "bajado"],
+            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale", "estado_transporte", "novedades", "lugar_destino_id", "lugar_destino", "posicion", "bajado", "lugar_destino_cambiado_at"],
             unidad.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("no_sale", unidad.GetProperty("estado_unidad").GetString());
         var noSale = unidad.GetProperty("no_sale");

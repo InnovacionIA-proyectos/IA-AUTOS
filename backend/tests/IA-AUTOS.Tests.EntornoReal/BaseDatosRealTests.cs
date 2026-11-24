@@ -996,6 +996,20 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Los_muelles_el_destino_cambiado_y_los_avisos_del_patio_existen()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/44-muelles-destino-cambiado-y-avisos-del-patio.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'tblMuelles')");
+        var muelleDelViaje = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajes') AND name = N'MuelleId'");
+        var destinoCambiado = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajeVehiculos') AND name = N'LugarDestinoCambiadoAt'");
+        var avisos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%cambio_cargue_inspector%' AND definition LIKE N'%cambio_destino_unidad%'");
+
+        Assert.True(tabla == 1 && muelleDelViaje == 1 && destinoCambiado == 1 && avisos == 1, "Faltan los muelles y los avisos del patio. Ejecute database/cambios-esquema/44-muelles-destino-cambiado-y-avisos-del-patio.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

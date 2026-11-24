@@ -3,9 +3,11 @@ using FluentValidation;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones;
+using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Notificaciones;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
@@ -26,6 +28,8 @@ public sealed class clsViajesService(
     ILugarRepository lugares,
     clsEnsamblajeViajes ensamblaje,
     clsAccesoViajes acceso,
+    IReclamoRepository reclamos,
+    clsEmisorNotificaciones emisor,
     IPermisoSinInspectorRepository permisos,
     INovedadProcesoRepository novedadesProceso,
     IUnidadDeTrabajo unidadDeTrabajo,
@@ -311,7 +315,51 @@ public sealed class clsViajesService(
             "viaje.cambiar_destino_unidad", "viajes", viaje.Id, viaje.Id,
             new DetalleAuditoria(new { vin = vehiculo.Vin, lugar_destino_id = antes }, new { vin = vehiculo.Vin, lugar_destino_id = enlace.LugarDestinoId }), vehiculo.ClienteId, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        await AvisarCambioDeDestinoAsync(viaje, vehiculo, antes, enlace.LugarDestinoId, ct);
         return await ObtenerDtoAsync(id, ct);
+    }
+
+    /// <summary>
+    /// Avisa del cambio de destino de una unidad al conductor del viaje y a los inspectores asignados al lugar nuevo: «Cambio el destino del VIN …: ahora va a …» (urgencia media). Nunca lanza: el cambio ya quedo guardado.
+    /// </summary>
+    private async Task AvisarCambioDeDestinoAsync(clsViaje viaje, clsVehiculo vehiculo, Guid? lugarAnterior, Guid? lugarNuevo, CancellationToken ct)
+    {
+        if (lugarNuevo is not { } nuevo)
+        {
+            return;
+        }
+
+        try
+        {
+            var nombreNuevo = (await lugares.ObtenerAsync(nuevo, ct))?.Nombre ?? "el lugar nuevo";
+            var nombreAnterior = lugarAnterior is { } anterior ? (await lugares.ObtenerAsync(anterior, ct))?.Nombre : null;
+            var destinatarios = new List<Guid>();
+            if (viaje.ConductorId is { } conductor)
+            {
+                destinatarios.Add(conductor);
+            }
+
+            destinatarios.AddRange((await reclamos.InspectoresDelLugarAsync(nuevo, ct)).Where(i => !destinatarios.Contains(i)));
+            await emisor.EmitirAsync(
+                new clsAlerta(
+                    clsTipoNotificacion.CAMBIO_DESTINO_UNIDAD,
+                    clsUrgenciaNotificacion.MEDIA,
+                    destinatarios,
+                    vehiculo.ClienteId,
+                    viaje.Id,
+                    vehiculo.Id,
+                    null,
+                    null,
+                    "Cambió el destino de un carro",
+                    $"Cambió el destino del VIN {vehiculo.Vin}: ahora va a {nombreNuevo}",
+                    $"{clsTipoNotificacion.CAMBIO_DESTINO_UNIDAD}:{viaje.Id}:{vehiculo.Id}:{reloj.Ahora.UtcTicks}",
+                    new Dictionary<string, object?> { ["viaje_id"] = viaje.Id, ["vin"] = vehiculo.Vin, ["lugar_anterior"] = nombreAnterior, ["lugar_nuevo"] = nombreNuevo }),
+                ct);
+        }
+        catch (Exception)
+        {
+            // El aviso es un efecto aparte: el cambio de destino ya quedo guardado y no se deshace.
+        }
     }
 
     /// <summary>

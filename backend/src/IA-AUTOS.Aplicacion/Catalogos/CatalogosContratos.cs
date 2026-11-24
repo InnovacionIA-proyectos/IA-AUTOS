@@ -21,6 +21,7 @@ public static class clsNombresCatalogo
     public const string ESTADOS_SOFASA = "estados-sofasa";
     public const string MOTIVOS_SIN_INSPECTOR = "motivos-sin-inspector";
     public const string MOTIVOS_NO_SALE = "motivos-no-sale";
+    public const string MUELLES = "muelles";
     public const string TIPOS_EXTRA = "tipos-extra";
     public const string LUGARES = "lugares";
 }

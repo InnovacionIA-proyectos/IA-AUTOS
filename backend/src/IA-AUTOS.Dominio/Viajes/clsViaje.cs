@@ -53,6 +53,41 @@ public sealed partial class clsViaje : clsEntidadBase
 
     public string? Trailer { get; private set; }
 
+    /// <summary>El muelle del viaje: uno de los muelles de su lugar de cargue; nulo mientras nadie lo asigna.</summary>
+    public Guid? MuelleId { get; private set; }
+
+    /// <summary>
+    /// Lo que el inspector (o el coordinador) cambia durante el cargue: el muelle y el trailer. Cada uno se cambia solo si se indica; el trailer vacio lo borra y uno distinto del actual se valida como al editar el viaje.
+    /// Devuelve que cambio realmente (con su valor anterior) para avisar solo de lo que cambio.
+    /// </summary>
+    public IReadOnlyList<(string Campo, string? Antes)> CambiarCargue(bool cambiaMuelle, Guid? muelleId, bool cambiaTrailer, string? trailer, DateTimeOffset ahora)
+    {
+        AsegurarActivo();
+        var cambios = new List<(string, string?)>();
+        if (cambiaMuelle && muelleId != MuelleId)
+        {
+            cambios.Add(("muelle", MuelleId?.ToString()));
+            MuelleId = muelleId;
+        }
+
+        if (cambiaTrailer)
+        {
+            var nuevo = TrailerValido(trailer);
+            if (!string.Equals(nuevo, Trailer, StringComparison.Ordinal))
+            {
+                cambios.Add(("trailer", Trailer));
+                Trailer = nuevo;
+            }
+        }
+
+        if (cambios.Count > 0)
+        {
+            RegistrarActividad(ahora);
+        }
+
+        return cambios;
+    }
+
     public Guid? ConductorId { get; private set; }
 
     public Guid? InspectorId { get; private set; }
@@ -378,6 +413,9 @@ public sealed class clsViajeVehiculo : clsEntidadBase
     /// <summary>El lugar real de destino de ESTA unidad (cada VIN del viaje puede ir a uno distinto). Nulo en lo anterior.</summary>
     public Guid? LugarDestinoId { get; private set; }
 
+    /// <summary>Cuando se cambio por ultima vez el destino de esta unidad; nulo si nunca se cambio.</summary>
+    public DateTimeOffset? LugarDestinoCambiadoAt { get; private set; }
+
     /// <summary>
     /// La posicion de la unidad en la ninera (1 a 7, unica dentro del viaje; nula mientras no se registra). La registra la segunda inspeccion del cargue y se libera al marcar la unidad «no sale».
     /// </summary>
@@ -506,6 +544,7 @@ public sealed class clsViajeVehiculo : clsEntidadBase
         }
 
         LugarDestinoId = lugarDestinoId;
+        LugarDestinoCambiadoAt = ahora;
         Tocar(ahora);
     }
 

@@ -15,6 +15,8 @@ Todas se guardan como notificaciones (ver [notificaciones.md](notificaciones.md)
 | `captura_incompleta` | operativo | media | quien inicio la inspeccion | proceso **cada 10 minutos** | `captura_incompleta:{inspeccion}`: una por inspeccion |
 | `transferencia_pendiente` | operativo | media | el firmante que falta | proceso **cada 10 minutos** | `transferencia_pendiente:{inspeccion}`: una por inspeccion y destinatario |
 | `cargue_sin_reclamar` | operativo | media | coordinador de calidad del cliente | proceso **cada 10 minutos** | `cargue_sin_reclamar:{viaje}`: una por viaje |
+| `cambio_cargue_inspector` | operativo | media | coordinador de calidad y administradores del cliente | cuando el inspector asigna o cambia el muelle o cambia el tráiler (solo bandeja, sin push) | `cambio_cargue_inspector:{viaje}:{campo}:{instante}`: uno por cambio |
+| `cambio_destino_unidad` | operativo | media | conductor del viaje e inspectores del lugar nuevo | cuando se cambia el destino de una unidad | `cambio_destino_unidad:{viaje}:{vehiculo}:{instante}`: uno por cambio |
 | `firma_cargue_pendiente` | operativo | media | inspector del viaje (si falta quien entrega) o conductor (si falta quien recibe) | proceso **cada 10 minutos** | `firma_cargue_pendiente:{viaje}:{parte}`: una por viaje y parte |
 | `propuesta_ubicacion` | operativo | media | coordinador de calidad del cliente | proceso **cada hora** | `propuesta_ubicacion:{propuesta}`: una por propuesta |
 

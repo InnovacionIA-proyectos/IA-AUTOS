@@ -2445,5 +2445,45 @@ BEGIN
 END
 GO
 
+/* -----------------------------------------------------------------------------
+   Muelles, destino cambiado y avisos del patio. tblMuelles: el catalogo de muelles de cada lugar (Codigo unico dentro del lugar); no se siembra ninguno. tblViajes.MuelleId: el muelle del viaje (nulo mientras nadie
+   lo asigna). tblViajeVehiculos.LugarDestinoCambiadoAt: cuando se cambio por ultima vez el destino de la unidad. Los tipos de aviso cambio_cargue_inspector (el inspector cambia el muelle o el trailer) y
+   cambio_destino_unidad (se cambia el destino de una unidad).
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblMuelles', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblMuelles
+    (
+        Id        uniqueidentifier  NOT NULL CONSTRAINT PK_tblMuelles PRIMARY KEY,
+        LugarId   uniqueidentifier  NOT NULL,
+        Codigo    varchar(30)       NOT NULL,
+        Nombre    nvarchar(100)     NOT NULL,
+        Orden     int               NOT NULL CONSTRAINT DF_tblMuelles_Orden DEFAULT (0),
+        Activo    bit               NOT NULL CONSTRAINT DF_tblMuelles_Activo DEFAULT (1),
+        CreatedAt datetimeoffset(3) NOT NULL CONSTRAINT DF_tblMuelles_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt datetimeoffset(3) NOT NULL CONSTRAINT DF_tblMuelles_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblMuelles_Lugar FOREIGN KEY (LugarId) REFERENCES dbo.tblLugares (Id),
+        CONSTRAINT UQ_tblMuelles_Lugar_Codigo UNIQUE (LugarId, Codigo),
+        CONSTRAINT CK_tblMuelles_Nombre CHECK (LEN(LTRIM(RTRIM(Nombre))) > 0)
+    );
+END
+GO
+IF COL_LENGTH(N'dbo.tblViajes', N'MuelleId') IS NULL
+    ALTER TABLE dbo.tblViajes ADD MuelleId uniqueidentifier NULL;
+GO
+IF COL_LENGTH(N'dbo.tblViajes', N'MuelleId') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajes_Muelle' AND parent_object_id = OBJECT_ID(N'dbo.tblViajes'))
+    EXEC (N'ALTER TABLE dbo.tblViajes ADD CONSTRAINT FK_tblViajes_Muelle FOREIGN KEY (MuelleId) REFERENCES dbo.tblMuelles (Id)');
+GO
+IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'LugarDestinoCambiadoAt') IS NULL
+    ALTER TABLE dbo.tblViajeVehiculos ADD LugarDestinoCambiadoAt datetimeoffset(3) NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%cambio_destino_unidad%')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones'))
+        ALTER TABLE dbo.tblNotificaciones DROP CONSTRAINT CK_tblNotificaciones_Tipo;
+    ALTER TABLE dbo.tblNotificaciones ADD CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario', 'novedad_proceso', 'reclamo_sin_actividad', 'fuera_de_rango', 'cargue_sin_reclamar', 'propuesta_ubicacion', 'permiso_sin_inspector', 'firma_cargue_pendiente', 'cambio_cargue_inspector', 'cambio_destino_unidad'));
+END
+GO
+
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';
 GO
