@@ -196,6 +196,15 @@ public sealed class clsViajesController(
     [ProducesResponseType<IReadOnlyList<FirmanteDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Firmantes(Guid id, CancellationToken ct) => Ok(await transferencias.FirmantesDelViajeAsync(id, ct));
 
+    /// <summary>
+    /// Los trailers distintos de los viajes del cliente de quien pregunta, sin nulos ni vacios y por orden alfabetico (una lista de textos): el portal los ofrece en el filtro de trailer. <c>cliente_id</c> solo lo elige el
+    /// super administrador (los demas reciben el suyo y 403 si piden otro).
+    /// </summary>
+    [HttpGet("trailers")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<IReadOnlyList<string>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Trailers([FromQuery(Name = "cliente_id")] string? clienteId, CancellationToken ct) => Ok(await servicio.TrailersAsync(clienteId, ct));
+
     [HttpGet("{id:guid}")]
     [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Obtener(Guid id, CancellationToken ct) => Ok(await servicio.ObtenerAsync(id, ct));
