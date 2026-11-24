@@ -6,6 +6,23 @@ import 'puertos.dart';
 /// Códigos con que el servidor explica un 409 del conductor en ruta.
 const codigoEtapaPreviaSinCierre = 'ETAPA_PREVIA_SIN_CIERRE';
 const codigoLlegadaYaCerrada = 'LLEGADA_YA_CERRADA';
+const codigoUnidadNoSale = 'UNIDAD_NO_SALE';
+
+/// Lo que dice un envío retirado de un carro que se bajó del viaje. El de un carro que no sale es el del servidor.
+const mensajeCarroBajado = 'El carro ya no está en el viaje';
+
+/// Por qué el servidor ya no admite este envío del carro, o null si el rechazo es otro (S8-HU-02.2 CA-4 y CA-6).
+///
+/// Llega de tres maneras: las inspecciones y las firmas responden 409 con `details.motivo` `unidad_no_sale` o
+/// `unidad_bajada`; la novedad y el «Llegué» del conductor, 409 con el código `UNIDAD_NO_SALE`, y 404 cuando el
+/// carro ya no está en el viaje.
+String? motivoDeRetiro(ErrorApi e, Job job) {
+  final motivo = switch (e.details) { final Map m => m['motivo'], _ => null };
+  if (e.status == 409 && (motivo == 'unidad_no_sale' || e.code == codigoUnidadNoSale)) return e.message;
+  if (e.status == 409 && motivo == 'unidad_bajada') return mensajeCarroBajado;
+  if (e.status == 404 && (job is NovedadJob || job is LlegadaJob)) return mensajeCarroBajado;
+  return null;
+}
 
 enum _Desenlace { hecho, espera }
 
@@ -75,7 +92,8 @@ class ProcesadorCola {
   /// Cantidad de jobs que aún se reintentarán solos.
   Future<int> contarPendientes(String usuarioId) async => (await visibles(usuarioId)).where((j) => !j.fallido).length;
 
-  Future<int> contarFallidos(String usuarioId) async => (await visibles(usuarioId)).where((j) => j.fallido).length;
+  Future<int> contarFallidos(String usuarioId) async =>
+      (await visibles(usuarioId)).where((j) => j.fallido && !j.retirado).length;
 
   /// Adopta los jobs sin dueño para [usuarioId]. Se llama al arrancar con una sesión guardada: esa es, casi con
   /// certeza, quien los encoló, porque es la última que se usó antes de actualizar la app. Devuelve cuántos.
@@ -92,7 +110,7 @@ class ProcesadorCola {
     return ResultadoSync(
       enviados: enviados,
       pendientes: jobs.where((j) => !j.fallido).length,
-      fallidos: jobs.where((j) => j.fallido).length,
+      fallidos: jobs.where((j) => j.fallido && !j.retirado).length,
       pausa: pausa,
     );
   }
@@ -145,6 +163,11 @@ class ProcesadorCola {
         } catch (e) {
           final actual = (await cola.listar()).where((j) => j.id == job.id).firstOrNull;
           if (actual == null) continue;
+          final retiro = e is ErrorApi ? motivoDeRetiro(e, actual) : null;
+          if (retiro != null) {
+            await cola.guardar(actual.conIntento(intentos: actual.intentos + 1, error: retiro, codigo: codigoRetirado, fallido: true));
+            continue;
+          }
           final transitorio = e is! ErrorApi || e.esTransitorio;
           // El PIN temporal no es un fallo del envío: la cola queda en pausa hasta que la persona lo cambie, así
           // que no gasta uno de los ocho intentos. Cualquier otro error sí cuenta.

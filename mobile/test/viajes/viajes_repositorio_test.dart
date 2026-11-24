@@ -106,7 +106,9 @@ void main() {
           'modelo': 'Kwid',
           'estado_unidad': 'no_sale',
           'no_sale': {
-            'motivo': 'Golpe profundo en el capó',
+            'motivo_codigo': 'dano_v1_plus',
+            'motivo': 'Daño V1+',
+            'motivo_texto': 'Golpe profundo en el capó',
             'hallazgo_id': 'h1',
             'marcado_por_nombre': 'Ana Pérez',
             'fecha': '2026-10-28T15:00:00Z',
@@ -119,7 +121,7 @@ void main() {
       final viaje = await repositorio(adaptador).marcarNoSale(
         'v1',
         'VIN00000000000001',
-        motivo: 'Golpe profundo en el capó',
+        motivoCodigo: 'dano_v1_plus',
         hallazgoId: 'h1',
         vinReemplazo: 'VIN00000000000002',
       );
@@ -128,23 +130,34 @@ void main() {
       expect(peticion.uri.path, '/api/viajes/v1/vehiculos/VIN00000000000001/no-sale');
       expect(peticion.method, 'POST');
       final cuerpo = peticion.data as Map<String, dynamic>;
-      expect((cuerpo['motivo'], cuerpo['hallazgo_id'], cuerpo['vin_reemplazo']),
-          ('Golpe profundo en el capó', 'h1', 'VIN00000000000002'));
+      expect(cuerpo, {'motivo_codigo': 'dano_v1_plus', 'hallazgo_id': 'h1', 'vin_reemplazo': 'VIN00000000000002'},
+          reason: 'sin texto: el motivo no lo pide');
 
       final unidad = viaje.vehiculos.single;
       expect(unidad.sale, isFalse);
-      expect(unidad.noSale!.motivo, 'Golpe profundo en el capó');
+      expect(unidad.noSale!.motivoCodigo, 'dano_v1_plus');
+      expect(unidad.noSale!.etiqueta, 'Daño V1+');
+      expect(unidad.noSale!.motivoTexto, 'Golpe profundo en el capó');
       expect(unidad.noSale!.vinReemplazo, 'VIN00000000000002');
     });
 
-    test('sin reemplazo la clave viaja igual, en nulo: el servidor la exige presente', () async {
+    test('con «otro» va el texto y sin daño; el reemplazo viaja igual, en nulo', () async {
       final adaptador = AdaptadorFalso((_) => json(200, viajeJson('v1')));
 
-      await repositorio(adaptador).marcarNoSale('v1', 'VIN00000000000001', motivo: 'Rechazado', hallazgoId: 'h1');
+      await repositorio(adaptador).marcarNoSale('v1', 'VIN00000000000001', motivoCodigo: 'otro', motivoTexto: 'Lo pidió el cliente');
 
       final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
-      expect(cuerpo.containsKey('vin_reemplazo'), isTrue);
-      expect(cuerpo['vin_reemplazo'], isNull);
+      expect(cuerpo, {'motivo_codigo': 'otro', 'motivo_texto': 'Lo pidió el cliente', 'vin_reemplazo': null});
+    });
+
+    test('«Vuelve a salir» va a su ruta, sin cuerpo', () async {
+      final adaptador = AdaptadorFalso((_) => json(200, viajeJson('v1')));
+
+      await repositorio(adaptador).vuelveASalir('v1', 'VIN00000000000001');
+
+      final peticion = adaptador.peticiones.single;
+      expect(peticion.method, 'POST');
+      expect(peticion.uri.path, '/api/viajes/v1/vehiculos/VIN00000000000001/vuelve-a-salir');
     });
   });
 

@@ -28,6 +28,9 @@ Viaje viaje(
   bool cargueCerrado = false,
   Map<String, String> destinos = const {},
   Map<String, DateTime> destinosCambiados = const {},
+  /// El `estado_unidad` de cada VIN que no esté activo (`no_sale`, `bajado`), y el «no sale» de cada uno.
+  Map<String, String> estados = const {},
+  Map<String, NoSale> noSales = const {},
 }) =>
     Viaje(
       id: id,
@@ -50,6 +53,8 @@ Viaje viaje(
             marca: 'Renault',
             modelo: 'Kwid',
             posicion: posiciones[v],
+            estadoUnidad: estados[v] ?? estadoUnidadActiva,
+            noSale: noSales[v],
             lugarDestino: destinos[v],
             destinoCambiadoAt: destinosCambiados[v],
           ),
@@ -119,19 +124,35 @@ class ViajesRepositorioFalso implements ViajesRepositorio {
   Future<Viaje> marcarNoSale(
     String viajeId,
     String vin, {
-    required String motivo,
-    required String hallazgoId,
+    required String motivoCodigo,
+    String? motivoTexto,
+    String? hallazgoId,
     String? vinReemplazo,
   }) async {
     noSalesMarcados.add({
       'viaje_id': viajeId,
       'vin': vin,
-      'motivo': motivo,
+      'motivo_codigo': motivoCodigo,
+      'motivo_texto': motivoTexto,
       'hallazgo_id': hallazgoId,
       'vin_reemplazo': vinReemplazo,
     });
     if (errorNoSale != null) throw errorNoSale!;
+    if (viajeTrasNoSale != null) viajeDeEtapa = viajeTrasNoSale;
     return viajeTrasNoSale ?? viajeDeEtapa!;
+  }
+
+  /// Lo que responde «vuelve a salir»: el viaje con el carro activo otra vez, o el 409 del servidor.
+  Viaje? viajeTrasVolver;
+  Object? errorVolver;
+  final List<(String, String)> vueltasASalir = [];
+
+  @override
+  Future<Viaje> vuelveASalir(String viajeId, String vin) async {
+    vueltasASalir.add((viajeId, vin));
+    if (errorVolver != null) throw errorVolver!;
+    if (viajeTrasVolver != null) viajeDeEtapa = viajeTrasVolver;
+    return viajeTrasVolver ?? viajeDeEtapa!;
   }
 }
 

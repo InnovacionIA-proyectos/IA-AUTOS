@@ -6,6 +6,9 @@ const codigoCambioPinRequerido = 'PIN_CHANGE_REQUIRED';
 /// informe que empezó otra persona (solo su autor o un administrador lo continúan).
 const codigoProhibido = 'FORBIDDEN';
 
+/// Código local (no del servidor) de un envío retirado porque su carro ya no sale o se bajó del viaje.
+const codigoRetirado = 'RETIRADO';
+
 /// Error devuelto por la API (cuerpo uniforme `{error, code, message, timestamp, details}`) o de red.
 ///
 /// `status == 0` significa que la petición no llegó al servidor (sin red, tiempo agotado, DNS...).

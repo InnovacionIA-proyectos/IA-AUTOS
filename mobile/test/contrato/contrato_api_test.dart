@@ -83,7 +83,8 @@ void main() {
       // A dónde va cada carro y cuándo cambió por última vez, para resaltarlo al conductor.
       'lugar_destino', 'lugar_destino_cambiado_at',
     ],
-    'NoSaleDto': ['motivo', 'hallazgo_id', 'marcado_por_nombre', 'fecha', 'vin_reemplazo'],
+    // S8-HU-02.2: el motivo es de catálogo; `motivo` es su etiqueta para quien pregunta.
+    'NoSaleDto': ['motivo_codigo', 'motivo', 'motivo_texto', 'hallazgo_id', 'marcado_por_nombre', 'fecha', 'vin_reemplazo'],
     // `usuario_id` distingue el informe propio del ajeno: es lo que decide si al conductor se le muestra el
     // detalle de lo que marcó el inspector.
     'InventarioInspeccionDto': [
@@ -226,7 +227,7 @@ void main() {
       'es_preexistente', 'hallazgo_origen_id',
     ],
     // La unidad que no sale del viaje: su motivo, el hallazgo V1+ que lo causa y el VIN que la reemplaza.
-    'MarcarNoSaleRequest': ['motivo', 'hallazgo_id', 'vin_reemplazo'],
+    'MarcarNoSaleRequest': ['motivo_codigo', 'motivo_texto', 'hallazgo_id', 'vin_reemplazo'],
     // Aclarar un registro que ya no se puede cambiar: solo el texto.
     'AgregarNotaRequest': ['texto'],
     // Quien recibe firma dejando sus observaciones: cierra la transferencia como `con_reservas`.
@@ -305,6 +306,7 @@ void main() {
       ('post', '/api/hallazgos/{}/revision'),
       // La unidad que no sale del viaje.
       ('post', '/api/viajes/{}/vehiculos/{}/no-sale'),
+      ('post', '/api/viajes/{}/vehiculos/{}/vuelve-a-salir'),
       // El muelle y el tráiler que el inspector cambia durante el cargue.
       ('patch', '/api/viajes/{}/cargue'),
       // El permiso de la excepción «No hay inspector» donde el punto de cargue sí tiene inspectores. Conceder no

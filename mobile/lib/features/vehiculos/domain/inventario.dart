@@ -532,6 +532,10 @@ bool conductorUsaExcepcion(EtapaVista etapa, {required String rol, required Stri
 /// Lo que se dice en una etapa de un viaje que ya cerró. Se puede mirar lo que quedó, no agregar nada.
 const mensajeViajeTerminado = 'Este viaje ya terminó: solo se puede consultar.';
 
+/// Lo que dice cada etapa de un carro que no sale (S8-HU-02.2 CA-4): se ve lo registrado, pero no se captura ni
+/// se firma.
+const mensajeNoSale = 'Este carro no sale del viaje: no se revisa ni se firma';
+
 /// Los dos momentos de una etapa que exige inspección, en orden. Una etapa que no la exige no tiene ninguno:
 /// ahí solo se firma.
 List<MomentoEtapa> momentosDeEtapa(EtapaVista etapa, Inventario inventario) {

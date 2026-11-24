@@ -33,6 +33,10 @@ abstract final class Catalogo {
   /// Por qué no hay inspector en un cargue: `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto).
   static const motivosSinInspector = 'motivos-sin-inspector';
 
+  /// Por qué un carro no sale del viaje. Cada motivo dice si exige un daño (`exige_hallazgo`), un texto
+  /// (`exige_texto`) o solo aplica donde se carga sin inspector (`solo_sin_inspector`).
+  static const motivosNoSale = 'motivos-no-sale';
+
   /// Los muelles de cada lugar (`lugar_id`). Los carga el negocio: un lugar sin muelles no los exige.
   static const muelles = 'muelles';
 }

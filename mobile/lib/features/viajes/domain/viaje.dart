@@ -204,6 +204,9 @@ class ViajeVehiculo {
 
   bool get sale => estadoUnidad == estadoUnidadActiva;
 
+  /// Se bajó del viaje (un cambio de pedido): ya no es parte de él y no se muestra en ningún lado del viaje.
+  bool get bajado => estadoUnidad == estadoUnidadBajado;
+
   Map<String, dynamic> toJson() => {
         'vin': vin,
         'marca': marca,
@@ -238,19 +241,40 @@ abstract final class EstadoTransporte {
 /// Valor de `estado_unidad` de una unidad que sigue en el viaje.
 const estadoUnidadActiva = 'activa';
 
+/// Valor de `estado_unidad` de una unidad que se bajó del viaje.
+const estadoUnidadBajado = 'bajado';
+
 /// Por qué una unidad dejó de salir en el viaje.
 class NoSale {
-  const NoSale({required this.motivo, this.hallazgoId, this.marcadoPorNombre, this.fecha, this.vinReemplazo});
+  const NoSale({
+    required this.motivo,
+    this.motivoCodigo,
+    this.motivoTexto,
+    this.hallazgoId,
+    this.marcadoPorNombre,
+    this.fecha,
+    this.vinReemplazo,
+  });
 
   factory NoSale.fromJson(Map<String, dynamic> json) => NoSale(
         motivo: json['motivo'] as String? ?? '',
+        motivoCodigo: json['motivo_codigo'] as String?,
+        motivoTexto: json['motivo_texto'] as String?,
         hallazgoId: json['hallazgo_id'] as String?,
         marcadoPorNombre: json['marcado_por_nombre'] as String?,
         fecha: switch (json['fecha']) { final String f => DateTime.tryParse(f), _ => null },
         vinReemplazo: json['vin_reemplazo'] as String?,
       );
 
+  /// La etiqueta del motivo, tal como la manda el servidor para quien pregunta: al conductor «Daño que impide
+  /// viajar» en vez de «Daño V1+». Por eso se muestra esta y no la del catálogo.
   final String motivo;
+
+  /// El código de `motivos-no-sale`. Null en lo que se guardó antes del catálogo.
+  final String? motivoCodigo;
+
+  /// El texto que se escribió: obligatorio con «otro», opcional en los demás.
+  final String? motivoTexto;
   final String? hallazgoId;
   final String? marcadoPorNombre;
   final DateTime? fecha;
@@ -258,8 +282,19 @@ class NoSale {
   /// El VIN que entró al viaje en su lugar, si ya lo había cuando se marcó.
   final String? vinReemplazo;
 
+  /// Lo que se le dice a quien mira: con «otro», lo que se escribió; en los demás, la etiqueta del motivo. Un código
+  /// que la app no conoce se muestra igual, con la etiqueta del servidor (CA-7).
+  String get etiqueta {
+    final texto = motivoTexto?.trim() ?? '';
+    if (motivoCodigo == 'otro' && texto.isNotEmpty) return texto;
+    if (motivo.isNotEmpty) return motivo;
+    return texto.isNotEmpty ? texto : 'Sin motivo';
+  }
+
   Map<String, dynamic> toJson() => {
         'motivo': motivo,
+        'motivo_codigo': motivoCodigo,
+        'motivo_texto': motivoTexto,
         'hallazgo_id': hallazgoId,
         'marcado_por_nombre': marcadoPorNombre,
         'fecha': fecha?.toIso8601String(),

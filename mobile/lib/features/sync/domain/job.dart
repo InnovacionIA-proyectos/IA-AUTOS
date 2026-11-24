@@ -36,6 +36,11 @@ sealed class Job {
   /// que su dueño, y por eso esta sesión no puede ni reintentarlo ni descartarlo.
   bool get esProhibido => fallido && codigoError == codigoProhibido;
 
+  /// El servidor ya no lo admite porque el carro dejó de ser parte del trabajo: no sale o se bajó del viaje
+  /// (S8-HU-02.2 CA-4 y CA-6). No es un error de nadie ni se arregla reintentando: queda a la vista con su
+  /// explicación hasta que alguien lo quite, y no cuenta como «con error».
+  bool get retirado => fallido && codigoError == codigoRetirado;
+
   /// Quién lo encoló. La cola sobrevive al cierre de sesión y el servidor atribuye el informe al dueño del token,
   /// así que sin esto, en un equipo compartido, lo de una persona salía a nombre de la siguiente.
   ///

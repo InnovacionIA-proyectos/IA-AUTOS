@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/auth/presentation/auth_controller.dart';
+import 'package:traza_autos/features/viajes/domain/viaje.dart';
 import 'package:traza_autos/features/viajes/presentation/destinos_vistos.dart';
 import 'package:traza_autos/features/viajes/presentation/mis_viajes_page.dart';
 import 'package:traza_autos/features/viajes/providers.dart';
@@ -118,5 +119,48 @@ void main() {
 
     expect(find.text('Va a Patio Guayabal'), findsOneWidget);
     expect(find.text('Destino nuevo'), findsNothing);
+  });
+
+  // S8-HU-02.2 CA-3 y CA-6: el conductor ve por qué no sale cada carro, y un carro bajado ya no está en el viaje.
+  group('el carro que no sale o se bajó', () {
+    ViajesRepositorioFalso conCarros() => ViajesRepositorioFalso()
+      ..remotos = [
+        viaje(
+          'v1',
+          vines: [_vin, 'VINBBBBBBBBBBBBB2', 'VINCCCCCCCCCCCCC3'],
+          estados: {'VINBBBBBBBBBBBBB2': 'no_sale', 'VINCCCCCCCCCCCCC3': 'bajado'},
+          noSales: {
+            'VINBBBBBBBBBBBBB2': const NoSale(
+              motivo: 'Faltan documentos',
+              motivoCodigo: 'faltan_documentos',
+              vinReemplazo: 'VINDDDDDDDDDDDDD4',
+            ),
+          },
+        ),
+      ];
+
+    testWidgets('el conductor ve el motivo con su etiqueta y quién lo reemplaza', (tester) async {
+      await abrir(tester, conCarros());
+
+      expect(find.text('Este carro no sale: Faltan documentos · la reemplaza VINDDDDDDDDDDDDD4'), findsOneWidget);
+    });
+
+    testWidgets('un carro bajado no aparece en el viaje', (tester) async {
+      await abrir(tester, conCarros());
+
+      expect(find.text(_vin), findsOneWidget);
+      expect(find.text('VINBBBBBBBBBBBBB2'), findsOneWidget, reason: 'el que no sale sigue en la lista');
+      expect(find.text('VINCCCCCCCCCCCCC3'), findsNothing);
+    });
+
+    testWidgets('tampoco desde la copia guardada sin señal', (tester) async {
+      final viajes = conCarros();
+      viajes.guardados = viajes.remotos;
+      viajes.error = Exception('sin red');
+      await abrir(tester, viajes);
+
+      expect(find.text(_vin), findsOneWidget);
+      expect(find.text('VINCCCCCCCCCCCCC3'), findsNothing);
+    });
   });
 }

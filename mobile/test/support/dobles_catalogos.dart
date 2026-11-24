@@ -13,6 +13,8 @@ Catalogos catalogosCon(
   List<Map<String, dynamic>> motivos = const [],
   /// Los muelles, cada uno con su `lugar_id`. Vacío = ningún lugar tiene muelles.
   List<Map<String, dynamic>> muelles = const [],
+  /// Los motivos de «no sale». Vacío = no se descargaron.
+  List<Map<String, dynamic>> motivosNoSale = const [],
 }) =>
     Catalogos.desdeRespuesta(
       {
@@ -33,6 +35,7 @@ Catalogos catalogosCon(
           Catalogo.etapas: etapas,
           Catalogo.motivosSinInspector: motivos,
           Catalogo.muelles: muelles,
+          Catalogo.motivosNoSale: motivosNoSale,
         },
       },
       usuarioId: usuarioId,
@@ -73,3 +76,10 @@ class CatalogosRepositorioFalso implements CatalogosRepositorio {
     return remoto!;
   }
 }
+
+/// Algunos motivos de «no sale» como los sirve la API, con sus tres marcas.
+const motivosDePruebaNoSale = [
+  {'id': 'n1', 'codigo': 'dano_v1_plus', 'nombre': 'Daño V1+', 'orden': 1, 'activo': true, 'exige_hallazgo': true, 'exige_texto': false, 'solo_sin_inspector': false},
+  {'id': 'n4', 'codigo': 'faltan_documentos', 'nombre': 'Faltan documentos', 'orden': 4, 'activo': true, 'exige_hallazgo': false, 'exige_texto': false, 'solo_sin_inspector': false},
+  {'id': 'n6', 'codigo': 'otro', 'nombre': 'Otro', 'orden': 6, 'activo': true, 'exige_hallazgo': false, 'exige_texto': true, 'solo_sin_inspector': false},
+];

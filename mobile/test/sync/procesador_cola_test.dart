@@ -333,6 +333,43 @@ void main() {
     });
   });
 
+  // S8-HU-02.2 CA-4 y CA-6: el informe de un carro que dejó de salir o se bajó no queda «con error»: se retira con
+  // la explicación y los demás envíos siguen.
+  group('el envío de un carro que ya no sale o se bajó', () {
+    for (final (motivo, mensaje, esperado) in [
+      ('unidad_no_sale', 'La unidad no sale de este viaje', 'La unidad no sale de este viaje'),
+      ('unidad_bajada', 'La unidad se bajó de este viaje', 'El carro ya no está en el viaje'),
+    ]) {
+      test('$motivo: se retira con «$esperado» y la cola sigue con lo demás', () async {
+        await cola.agregar(informe(id: 'a'));
+        await cola.agregar(informe(id: 'b'));
+        gateway.errores['crearInspeccion'] = [
+          ErrorApi(message: mensaje, code: 'CONFLICT', status: 409, details: {'motivo': motivo}),
+        ];
+
+        final r = await procesador.procesar(usuarioPrueba);
+
+        final retirado = cola.jobs.single;
+        expect(retirado.id, 'a');
+        expect(retirado.retirado, isTrue);
+        expect(retirado.error, esperado);
+        expect((r.enviados, r.fallidos), (1, 0), reason: 'el otro salió y el retirado no cuenta como error');
+      });
+    }
+
+    test('otro 409 sigue siendo un error', () async {
+      await cola.agregar(informe(id: 'a'));
+      gateway.errores['crearInspeccion'] = [
+        const ErrorApi(message: 'Otra cosa', code: 'CONFLICT', status: 409, details: {'motivo': 'cargue_firmado'}),
+      ];
+
+      final r = await procesador.procesar(usuarioPrueba);
+
+      expect(cola.jobs.single.retirado, isFalse);
+      expect(r.fallidos, 1);
+    });
+  });
+
   group('clasificación de errores', () {
     for (final status in [0, 401, 408, 429, 500, 502, 503]) {
       test('$status es transitorio: el job se conserva con un intento más y la pasada se detiene', () async {

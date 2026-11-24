@@ -273,10 +273,12 @@ class _TarjetaViaje extends ConsumerWidget {
             Insignia(papel, tono: TonoInsignia.info),
           ],
           const SizedBox(height: Espacio.sm),
-          if (viaje.vehiculos.isEmpty)
+          // Un carro bajado ya no es parte del viaje (S8-HU-02.2 CA-6): no se muestra, tampoco en la copia guardada.
+          if (viaje.vehiculos.every((v) => v.bajado))
             Text('Este viaje todavía no tiene unidades.', style: tema.bodySmall)
           else
-            for (final vehiculo in viaje.vehiculos) _FilaVehiculo(vehiculo, viaje: viaje),
+            for (final vehiculo in viaje.vehiculos)
+              if (!vehiculo.bajado) _FilaVehiculo(vehiculo, viaje: viaje),
           // Los daños que el conductor registró y nadie ha calificado. Solo al inspector del viaje: es el único
           // que puede ponerles clase y nivel —a otro, el listado le responde 200 con la lista vacía y la
           // revisión le responde 403—. Con cero también se ofrece (S8-HU-08.2 CA-3): «Sin calificar (0)» dice
@@ -387,10 +389,14 @@ class _FilaVehiculo extends ConsumerWidget {
                       // sobre ella y no cuenta para que el viaje esté completo.
                       if (!vehiculo.sale)
                         Text(
-                          switch (vehiculo.noSale?.vinReemplazo) {
-                            final reemplazo? when reemplazo.isNotEmpty => 'No sale · la reemplaza $reemplazo',
-                            _ => 'No sale',
-                          },
+                          [
+                            switch (vehiculo.noSale) {
+                              final no? => 'Este carro no sale: ${no.etiqueta}',
+                              null => 'Este carro no sale',
+                            },
+                            if (vehiculo.noSale?.vinReemplazo case final reemplazo? when reemplazo.isNotEmpty)
+                              'la reemplaza $reemplazo',
+                          ].join(' · '),
                           style: tema.bodySmall?.copyWith(color: Colores.peligro),
                         ),
                     ],

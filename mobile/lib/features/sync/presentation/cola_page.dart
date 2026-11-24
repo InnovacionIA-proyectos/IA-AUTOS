@@ -107,6 +107,9 @@ class _FilaJob extends StatelessWidget {
               Expanded(child: Text(job.etiqueta, style: tema.titleMedium?.copyWith(fontSize: 15))),
               if (ajeno || job.esProhibido)
                 const Insignia('De otro usuario', tono: TonoInsignia.neutro)
+              else if (job.retirado)
+                // No falló nada: el carro ya no sale o se bajó del viaje, y el servidor ya no lo admite.
+                const Insignia('Retirado', tono: TonoInsignia.neutro)
               else if (job.codigoError == 'VALIDATION_ERROR')
                 // No es un fallo de envío: al informe le falta algo, y el detalle de abajo dice qué.
                 const Insignia('Captura incompleta', tono: TonoInsignia.advertencia)
@@ -118,7 +121,11 @@ class _FilaJob extends StatelessWidget {
           ),
           Text(formatearFecha(creado), style: tema.bodySmall),
           if (job.intentos > 0) Text('Intentos: ${job.intentos}', style: tema.bodySmall),
-          if (job.error != null) Padding(padding: const EdgeInsets.only(top: Espacio.xs), child: Text(job.error!, style: tema.bodySmall?.copyWith(color: Colores.peligro))),
+          if (job.error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: Espacio.xs),
+              child: Text(job.error!, style: tema.bodySmall?.copyWith(color: job.retirado ? null : Colores.peligro)),
+            ),
           // Lo intentó y falló por algo pasajero: decir cuándo vuelve a intentarlo evita el «no está haciendo
           // nada» de quien mira una cola que, por dentro, sí espera.
           if (!job.fallido && !ajeno && job.error != null)
@@ -138,7 +145,11 @@ class _FilaJob extends StatelessWidget {
                 style: tema.bodySmall,
               ),
             ),
-          if (job.fallido && !ajeno && !job.esProhibido) ...[
+          if (job.retirado && !ajeno) ...[
+            const SizedBox(height: Espacio.md),
+            // Reintentar daría el mismo rechazo: lo único que queda es quitarlo.
+            OutlinedButton(onPressed: onDescartar, child: const Text('Quitar')),
+          ] else if (job.fallido && !ajeno && !job.esProhibido) ...[
             const SizedBox(height: Espacio.md),
             Row(
               children: [

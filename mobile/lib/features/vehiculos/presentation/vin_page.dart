@@ -35,6 +35,7 @@ import '../../viajes/domain/permiso_sin_inspector.dart';
 import '../../viajes/presentation/mis_viajes_controller.dart';
 import '../../viajes/presentation/permiso_sin_inspector_page.dart';
 import '../../sync/presentation/sync_controller.dart';
+import '../../viajes/domain/viaje.dart';
 import '../../viajes/providers.dart';
 import '../domain/etiquetas.dart';
 import '../domain/consulta.dart';
@@ -297,6 +298,8 @@ class _Detalle extends ConsumerWidget {
     final viajeId = inventario.etapas.map((e) => e.viajeId).nonNulls.firstOrNull;
     final viaje = viajeId == null ? null : ref.watch(viajeDeEtapaProvider(viajeId)).value;
     final viajeTerminado = viaje != null && !viaje.admiteTrabajo;
+    final unidadDelViaje = viaje?.vehiculos.where((v) => v.vin == inventario.vin).firstOrNull;
+    final unidadFuera = unidadDelViaje != null && !unidadDelViaje.sale;
     // Donde el punto de cargue tiene inspectores, la excepción se pide y se espera. Solo entonces se consulta:
     // en los demás viajes ese permiso no existe y preguntarlo sería un 404 por cada ficha que se abre.
     final cargueConInspector = viaje?.cargueTieneInspector ?? false;
@@ -368,6 +371,9 @@ class _Detalle extends ConsumerWidget {
               viajeTerminado: viajeTerminado,
               motivoSoloLectura: switch (etapa) {
                 _ when viajeTerminado => mensajeViajeTerminado,
+                // S8-HU-02.2 CA-4: un carro que no sale no se revisa ni se firma en ninguna etapa; el servidor
+                // responde 409 `unidad_no_sale`.
+                _ when unidadFuera => mensajeNoSale,
                 _ when !puedeTrabajar => mensajeSoloConsulta,
                 _ => null,
               },
@@ -519,10 +525,11 @@ class _NovedadesPorRevisar extends ConsumerWidget {
   }
 }
 
-/// Marcar que la unidad no sale del viaje, o decir que ya no sale.
+/// Marcar que la unidad no sale del viaje, decir por qué no sale, o devolverla con «Vuelve a salir».
 ///
-/// Solo se le ofrece al inspector de ese viaje y solo cuando hay un hallazgo V1+ en una inspección cerrada del
-/// viaje: son las mismas condiciones que el servidor exige, y sin ellas responde 403 o 409.
+/// Marcar y devolver solo se le ofrecen al inspector de ese viaje (S8-HU-02.2 CA-2 y CA-5): son las condiciones
+/// que el servidor exige, y sin ellas responde 403 o 409. El motivo lo ven todos, el conductor con la etiqueta que
+/// el servidor le manda a él (CA-3).
 class _NoSale extends ConsumerStatefulWidget {
   const _NoSale({required this.inventario});
 
@@ -538,33 +545,70 @@ class _EstadoNoSale extends ConsumerState<_NoSale> {
   /// El viaje al que pertenece esta unidad hoy. Las etapas de un VIN cuelgan todas del mismo.
   String? get _viajeId => widget.inventario.etapas.map((e) => e.viajeId).nonNulls.firstOrNull;
 
-  Future<void> _marcar(String viajeId, List<HallazgoVista> impiden) async {
-    final datos = await pedirNoSale(context, hallazgos: impiden, catalogos: ref.read(catalogosProvider));
-    if (datos == null || !mounted) return;
-
+  /// Manda el cambio y refresca lo que cambió para todos: el viaje, Mis viajes y la ficha.
+  Future<void> _enviar(String viajeId, Future<Viaje> Function() cambio, String hecho) async {
     // El aviso se toma antes de los `await`: después de ellos el widget puede ya no estar en pantalla.
     final avisos = ScaffoldMessenger.of(context);
     setState(() => _enviando = true);
     try {
-      await ref.read(viajesRepositorioProvider).marcarNoSale(
-            viajeId,
-            widget.inventario.vin,
-            motivo: datos.motivo,
-            hallazgoId: datos.hallazgoId,
-            vinReemplazo: datos.vinReemplazo,
-          );
-      // El viaje cambió para todos: la unidad deja de contar y el reemplazo entra con sus etapas.
+      await cambio();
       await ref.read(misViajesControllerProvider.notifier).cargar();
       ref.invalidate(viajeDeEtapaProvider(viajeId));
       ref.invalidate(inventarioProvider(widget.inventario.vin));
-      avisos.showSnackBar(const SnackBar(content: Text('La unidad quedó marcada como que no sale.')));
+      avisos.showSnackBar(SnackBar(content: Text(hecho)));
     } on ErrorApi catch (e) {
-      // Un 409 no se arregla reintentando (el hallazgo no es V1+, su inspección no está cerrada, ya no salía):
-      // se muestra tal cual lo explica el servidor.
+      // Un 403 o un 409 no se arreglan reintentando (el daño no es V1+, el cargue ya se cerró, la niñera está
+      // llena): se muestra tal cual lo explica el servidor.
       avisos.showSnackBar(SnackBar(content: Text(e.mensajeDetallado)));
     } finally {
       if (mounted) setState(() => _enviando = false);
     }
+  }
+
+  Future<void> _marcar(String viajeId) async {
+    final datos = await pedirNoSale(
+      context,
+      catalogos: ref.read(catalogosProvider),
+      hallazgosV1Plus: hallazgosQueImpidenSalir(widget.inventario, viajeId: viajeId),
+      danosDelConductor: danosDelConductorSinCalificar(widget.inventario, viajeId: viajeId),
+      // El dato del lugar llega con S8-HU-07; mientras tanto ningún lugar admite el cargue sin inspector.
+      admiteSinInspector: false,
+    );
+    if (datos == null || !mounted) return;
+    await _enviar(
+      viajeId,
+      () => ref.read(viajesRepositorioProvider).marcarNoSale(
+            viajeId,
+            widget.inventario.vin,
+            motivoCodigo: datos.motivoCodigo,
+            motivoTexto: datos.motivoTexto,
+            hallazgoId: datos.hallazgoId,
+            vinReemplazo: datos.vinReemplazo,
+          ),
+      'La unidad quedó marcada como que no sale.',
+    );
+  }
+
+  Future<void> _vuelveASalir(String viajeId) async {
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (contexto) => AlertDialog(
+        title: const Text('El carro vuelve a salir'),
+        content: const Text(
+          'Vuelve a la niñera sin puesto: hay que acomodarlo otra vez. Se puede revisar y firmar como los demás.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(contexto).pop(false), child: const Text('Cancelar')),
+          TextButton(onPressed: () => Navigator.of(contexto).pop(true), child: const Text('Vuelve a salir')),
+        ],
+      ),
+    );
+    if (confirmado != true || !mounted) return;
+    await _enviar(
+      viajeId,
+      () => ref.read(viajesRepositorioProvider).vuelveASalir(viajeId, widget.inventario.vin),
+      'El carro vuelve a salir: acomódalo en la niñera.',
+    );
   }
 
   @override
@@ -576,16 +620,35 @@ class _EstadoNoSale extends ConsumerState<_NoSale> {
     final viaje = ref.watch(viajeDeEtapaProvider(viajeId)).value;
     if (viaje == null) return const SizedBox.shrink();
 
+    final sesion = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario));
+    final esInspectorDelViaje = viaje.inspectorId != null && viaje.inspectorId == sesion?.id;
     final unidad = viaje.vehiculos.where((v) => v.vin == widget.inventario.vin).firstOrNull;
+    if (unidad != null && unidad.bajado) {
+      return Tarjeta(
+        child: Text('Este carro ya no está en el viaje.', style: tema.titleSmall?.copyWith(color: Colores.peligro)),
+      );
+    }
     if (unidad != null && !unidad.sale) {
+      final vuelve = viaje.admiteTrabajo &&
+          puedeVolverASalir(rol: sesion?.rol, esInspectorDelViaje: esInspectorDelViaje, cargueCerrado: viaje.cargueCerrado);
       return Tarjeta(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Esta unidad no sale', style: tema.titleSmall?.copyWith(color: Colores.peligro)),
-            if (unidad.noSale case final no?) ...[
-              Text(no.motivo, style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
-              if (no.vinReemplazo case final reemplazo?) Text('La reemplaza $reemplazo', style: tema.bodySmall),
+            Text(
+              switch (unidad.noSale) {
+                final no? => 'Este carro no sale: ${no.etiqueta}',
+                null => 'Este carro no sale',
+              },
+              style: tema.titleSmall?.copyWith(color: Colores.peligro),
+            ),
+            if (unidad.noSale?.vinReemplazo case final reemplazo?) Text('La reemplaza $reemplazo', style: tema.bodySmall),
+            if (vuelve) ...[
+              const SizedBox(height: Espacio.sm),
+              OutlinedButton(
+                onPressed: _enviando ? null : () => _vuelveASalir(viajeId),
+                child: Text(_enviando ? 'Enviando...' : 'Vuelve a salir'),
+              ),
             ],
           ],
         ),
@@ -594,18 +657,10 @@ class _EstadoNoSale extends ConsumerState<_NoSale> {
 
     // En un viaje que ya cerró tampoco se marca: el servidor responde 409.
     if (!viaje.admiteTrabajo) return const SizedBox.shrink();
-
-    final impiden = hallazgosQueImpidenSalir(widget.inventario, viajeId: viajeId);
-    final puede = puedeMarcarNoSale(
-      rol: ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol)),
-      esInspectorDelViaje: viaje.inspectorId != null &&
-          viaje.inspectorId == ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.id)),
-      hayHallazgoV1Plus: impiden.isNotEmpty,
-    );
-    if (!puede) return const SizedBox.shrink();
+    if (!puedeMarcarNoSale(rol: sesion?.rol, esInspectorDelViaje: esInspectorDelViaje)) return const SizedBox.shrink();
 
     return OutlinedButton(
-      onPressed: _enviando ? null : () => _marcar(viajeId, impiden),
+      onPressed: _enviando ? null : () => _marcar(viajeId),
       child: Text(
         _enviando ? 'Marcando...' : 'La unidad no sale',
         style: const TextStyle(color: Colores.peligro),

@@ -198,6 +198,7 @@ Future<void> abrir(
   Sesion? sesion,
   ViajesRepositorioFalso? viajes,
   List<NovedadPendiente> novedades = const [],
+  List<Map<String, dynamic>> motivosNoSale = const [],
   Object? error,
 }) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
@@ -207,7 +208,9 @@ Future<void> abrir(
       retry: (_, _) => null,
       overrides: [
         ...(Arnes(sesion: sesion ?? sesionPrueba)..novedades.lista = novedades).overrides,
-        catalogosRepositorioProvider.overrideWithValue(CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe')),
+        catalogosRepositorioProvider.overrideWithValue(
+          CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe', motivosNoSale: motivosNoSale),
+        ),
         vehiculosRepositorioProvider
             .overrideWithValue(VehiculosRepositorioFalso(inventario ?? inventarioJson(), error: error)),
         viajesRepositorioProvider.overrideWithValue(viajes ?? ViajesRepositorioFalso()),
@@ -330,21 +333,31 @@ void main() {
       return json;
     }
 
-    ViajesRepositorioFalso delInspector(String inspectorId, {bool noSale = false}) => ViajesRepositorioFalso()
-      ..viajeDeEtapa = Viaje(
-        id: 'viaje-1',
-        codigoMtrack: 'MTK-1',
-        placa: 'ABC123',
-        estado: 'en_curso',
-        inspectorId: inspectorId,
-        vehiculos: [
-          ViajeVehiculo(
-            vin: 'VIN00000000000001',
+    const faltanDocumentos = NoSale(
+      motivo: 'Faltan documentos',
+      motivoCodigo: 'faltan_documentos',
+      vinReemplazo: 'VIN00000000000002',
+    );
+
+    Viaje viajeCon({required String inspectorId, String estadoUnidad = estadoUnidadActiva, NoSale? noSale, bool cargueCerrado = false}) =>
+        Viaje(
+          id: 'viaje-1',
+          codigoMtrack: 'MTK-1',
+          placa: 'ABC123',
+          estado: 'en_curso',
+          inspectorId: inspectorId,
+          cargueCerrado: cargueCerrado,
+          vehiculos: [ViajeVehiculo(vin: 'VIN00000000000001', estadoUnidad: estadoUnidad, noSale: noSale)],
+        );
+
+    ViajesRepositorioFalso delInspector(String inspectorId, {bool noSale = false, bool cargueCerrado = false}) =>
+        ViajesRepositorioFalso()
+          ..viajeDeEtapa = viajeCon(
+            inspectorId: inspectorId,
             estadoUnidad: noSale ? 'no_sale' : estadoUnidadActiva,
-            noSale: noSale ? const NoSale(motivo: 'Golpe profundo en el capó', vinReemplazo: 'VIN00000000000002') : null,
-          ),
-        ],
-      );
+            noSale: noSale ? faltanDocumentos : null,
+            cargueCerrado: cargueCerrado,
+          );
 
     testWidgets('se le ofrece al inspector del viaje con un V1+ cerrado', (tester) async {
       await abrir(tester, inventario: conV1Plus(), viajes: delInspector('u1'));
@@ -364,19 +377,128 @@ void main() {
       expect(find.text('La unidad no sale'), findsNothing);
     });
 
-    testWidgets('sin un V1+ no hay nada que marcar', (tester) async {
+    // S8-HU-02.2 CA-2: ya no hace falta un V1+: los demás motivos no piden ningún daño.
+    testWidgets('sin un V1+ también se ofrece, con cualquier motivo', (tester) async {
       await abrir(tester, viajes: delInspector('u1'));
 
-      expect(find.text('La unidad no sale'), findsNothing);
+      expect(find.text('La unidad no sale'), findsOneWidget);
+    });
+
+    testWidgets('marcar manda el motivo del catálogo y la ficha dice por qué no sale', (tester) async {
+      final viajes = delInspector('u1')
+        ..viajeTrasNoSale = viajeCon(inspectorId: 'u1', estadoUnidad: 'no_sale', noSale: faltanDocumentos);
+      await abrir(tester, viajes: viajes, motivosNoSale: motivosDePruebaNoSale);
+
+      await tester.tap(find.text('La unidad no sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Faltan documentos'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Marcar que no sale'));
+      await tester.pumpAndSettle();
+
+      expect(viajes.noSalesMarcados.single['motivo_codigo'], 'faltan_documentos');
+      expect(viajes.noSalesMarcados.single['hallazgo_id'], isNull);
+      expect(find.text('Este carro no sale: Faltan documentos'), findsOneWidget);
+    });
+
+    testWidgets('un 403 del servidor se muestra con su mensaje', (tester) async {
+      final viajes = delInspector('u1')..errorNoSale = errorApi(403, 'No eres el inspector de este viaje');
+      await abrir(tester, viajes: viajes, motivosNoSale: motivosDePruebaNoSale);
+
+      await tester.tap(find.text('La unidad no sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Faltan documentos'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Marcar que no sale'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No eres el inspector de este viaje'), findsOneWidget);
     });
 
     testWidgets('una unidad ya marcada dice por qué, en vez del botón', (tester) async {
       await abrir(tester, inventario: conV1Plus(), viajes: delInspector('u1', noSale: true));
 
       expect(find.text('La unidad no sale'), findsNothing);
-      expect(find.text('Esta unidad no sale'), findsOneWidget);
-      expect(find.text('Golpe profundo en el capó'), findsOneWidget);
+      expect(find.text('Este carro no sale: Faltan documentos'), findsOneWidget);
       expect(find.text('La reemplaza VIN00000000000002'), findsOneWidget);
+    });
+
+    // CA-3: el conductor ve la etiqueta que el servidor le manda a él, nunca el nivel.
+    testWidgets('el conductor ve el motivo con la etiqueta que le manda el servidor', (tester) async {
+      await abrir(
+        tester,
+        sesion: conductor,
+        viajes: ViajesRepositorioFalso()
+          ..viajeDeEtapa = viajeCon(
+            inspectorId: 'u1',
+            estadoUnidad: 'no_sale',
+            noSale: const NoSale(motivo: 'Daño que impide viajar', motivoCodigo: 'dano_v1_plus'),
+          ),
+      );
+
+      expect(find.text('Este carro no sale: Daño que impide viajar'), findsOneWidget);
+      expect(find.textContaining('V1+'), findsNothing);
+      expect(find.text('Vuelve a salir'), findsNothing);
+    });
+
+    // CA-7: un motivo que la app no conoce se muestra con la etiqueta del servidor.
+    testWidgets('un motivo desconocido se muestra con lo que dice el servidor', (tester) async {
+      await abrir(
+        tester,
+        viajes: ViajesRepositorioFalso()
+          ..viajeDeEtapa = viajeCon(
+            inspectorId: 'u1',
+            estadoUnidad: 'no_sale',
+            noSale: const NoSale(motivo: 'Lluvia en el patio', motivoCodigo: 'motivo_que_vendra'),
+          ),
+      );
+
+      expect(find.text('Este carro no sale: Lluvia en el patio'), findsOneWidget);
+    });
+
+    // CA-4: ni «Capturar» ni «Firmar transferencia» en ninguna etapa.
+    testWidgets('la ficha de un carro que no sale no ofrece capturar ni firmar', (tester) async {
+      await abrir(tester, viajes: delInspector('u1', noSale: true));
+
+      expect(find.text('Este carro no sale del viaje: no se revisa ni se firma'), findsWidgets);
+      expect(find.widgetWithText(BotonEnFila, 'Capturar'), findsNothing);
+      expect(find.textContaining('Firmar'), findsNothing);
+    });
+
+    // CA-5: «Vuelve a salir», con confirmación.
+    testWidgets('el inspector del viaje lo devuelve con «Vuelve a salir»', (tester) async {
+      final viajes = delInspector('u1', noSale: true)..viajeTrasVolver = viajeCon(inspectorId: 'u1');
+      await abrir(tester, viajes: viajes);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Vuelve a salir'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Vuelve a salir'));
+      await tester.pumpAndSettle();
+
+      expect(viajes.vueltasASalir, [('viaje-1', 'VIN00000000000001')]);
+      expect(find.text('El carro vuelve a salir: acomódalo en la niñera.'), findsOneWidget);
+      expect(find.textContaining('Este carro no sale'), findsNothing);
+      expect(find.text('La unidad no sale'), findsOneWidget, reason: 'vuelve a tener sus acciones');
+    });
+
+    testWidgets('si el servidor no lo deja volver, se muestra su mensaje', (tester) async {
+      final viajes = delInspector('u1', noSale: true)
+        ..errorVolver = errorApi(409, 'La niñera tiene 7 puestos y ya hay 7 unidades');
+      await abrir(tester, viajes: viajes);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Vuelve a salir'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Vuelve a salir'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('La niñera tiene 7 puestos y ya hay 7 unidades'), findsOneWidget);
+      expect(find.text('Este carro no sale: Faltan documentos'), findsOneWidget);
+    });
+
+    testWidgets('con el cargue ya cerrado no se ofrece «Vuelve a salir»', (tester) async {
+      await abrir(tester, viajes: delInspector('u1', noSale: true, cargueCerrado: true));
+
+      expect(find.text('Vuelve a salir'), findsNothing);
     });
   });
 

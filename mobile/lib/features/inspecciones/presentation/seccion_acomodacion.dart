@@ -70,7 +70,8 @@ class SeccionAcomodacion extends StatelessWidget {
             ),
           )
         else
-          for (final unidad in lista) ...[
+          // Un carro bajado ya no va en la niñera (S8-HU-02.2 CA-6).
+          for (final unidad in lista.where((u) => !u.bajado)) ...[
             _FilaUnidad(
               unidad: unidad,
               posiciones: posiciones,

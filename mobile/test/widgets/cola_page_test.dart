@@ -44,6 +44,22 @@ void main() {
     expect(descartar, findsOneWidget);
   });
 
+  // S8-HU-02.2 CA-4 y CA-6: retirado no es «con error»; reintentar daría lo mismo, así que solo se quita.
+  testWidgets('uno retirado dice por qué y solo se puede quitar', (tester) async {
+    final arnes = Arnes();
+    await arnes.cola.agregar(
+      informe(id: 'j').conIntento(intentos: 1, error: 'El carro ya no está en el viaje', codigo: codigoRetirado, fallido: true),
+    );
+
+    await abrir(tester, arnes);
+
+    expect(find.text('Retirado'), findsOneWidget);
+    expect(find.text('Con error'), findsNothing);
+    expect(find.text('El carro ya no está en el viaje'), findsOneWidget);
+    expect(reintentar, findsNothing);
+    expect(find.widgetWithText(OutlinedButton, 'Quitar'), findsOneWidget);
+  });
+
   testWidgets('uno de otra persona se ve, pero no se puede tocar', (tester) async {
     final arnes = Arnes();
     await arnes.cola.agregar(informe(id: 'j', usuarioId: 'otra-persona', fallido: true));

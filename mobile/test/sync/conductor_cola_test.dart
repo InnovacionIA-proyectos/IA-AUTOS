@@ -156,14 +156,29 @@ void main() {
       expect(gateway.novedadesEnviadas, hasLength(2));
     });
 
-    test('si la unidad no sale, queda fallida con el motivo del servidor', () async {
+    // S8-HU-02.2 CA-4: no es un error de nadie, el carro ya no sale. Se retira con el motivo del servidor.
+    test('si la unidad no sale, se retira con el motivo del servidor y no cuenta como error', () async {
       gateway.errores['crearNovedad'] = [conCodigo(409, 'UNIDAD_NO_SALE', 'La unidad no sale del viaje')];
       await cola.agregar(novedad());
 
       final r = await procesador.procesar(usuarioPrueba);
 
-      expect(r.fallidos, 1);
-      expect(cola.jobs.single.error, contains('no sale'));
+      expect(r.fallidos, 0);
+      expect(cola.jobs.single.retirado, isTrue);
+      expect(cola.jobs.single.error, 'La unidad no sale del viaje');
+      expect(await procesador.contarFallidos(usuarioPrueba), 0);
+    });
+
+    // S8-HU-02.2 CA-6: al conductor el servidor le responde 404 cuando el carro ya no está en su viaje.
+    test('si el carro se bajó del viaje, se retira con «El carro ya no está en el viaje»', () async {
+      gateway.errores['crearNovedad'] = [conCodigo(404, 'NOT_FOUND', 'El VIN no está en el viaje')];
+      await cola.agregar(novedad());
+
+      final r = await procesador.procesar(usuarioPrueba);
+
+      expect(r.fallidos, 0);
+      expect(cola.jobs.single.retirado, isTrue);
+      expect(cola.jobs.single.error, 'El carro ya no está en el viaje');
     });
   });
 
@@ -187,14 +202,15 @@ void main() {
       expect(cola.jobs, isEmpty);
     });
 
-    test('un 409 UNIDAD_NO_SALE la deja fallida con su mensaje', () async {
+    test('un 409 UNIDAD_NO_SALE la retira con su mensaje, sin dejarla «con error»', () async {
       gateway.errores['confirmarLlegada'] = [conCodigo(409, 'UNIDAD_NO_SALE', 'La unidad no sale del viaje')];
       await cola.agregar(llegada());
 
       final r = await procesador.procesar(usuarioPrueba);
 
-      expect(r.fallidos, 1);
-      expect(cola.jobs.single.error, contains('no sale'));
+      expect(r.fallidos, 0);
+      expect(cola.jobs.single.retirado, isTrue);
+      expect(cola.jobs.single.error, 'La unidad no sale del viaje');
     });
 
     test('con el cargue sin cerrar espera, igual que la novedad', () async {

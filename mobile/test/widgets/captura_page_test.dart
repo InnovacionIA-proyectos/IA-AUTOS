@@ -287,6 +287,21 @@ void main() {
       expect(find.text('Sin posición todavía'), findsNothing);
     });
 
+    // S8-HU-02.2 CA-6: un carro bajado ya no va en la niñera ni pide puesto.
+    testWidgets('un carro bajado no aparece en la niñera ni pide puesto', (tester) async {
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()
+          ..viajeDeEtapa = viaje('v1', vines: [vinA, vinB], posiciones: {vinA: 1}, estados: {vinB: 'bajado'}),
+        vistas: vistasDePrueba,
+        momento: Momento.salida,
+      );
+
+      expect(find.text(vinA), findsOneWidget);
+      expect(find.text(vinB), findsNothing);
+      expect(find.textContaining('Falta la posición'), findsNothing);
+    });
+
     testWidgets('sin poder traer el viaje lo dice y no deja cerrar', (tester) async {
       await abrir(
         tester,
