@@ -142,9 +142,11 @@ public sealed class clsCargueNineraService(
         AsegurarCargueCompleto(carros);
         var porFirmar = carros.Where(c => !c.CerradaAntes).ToList();
         var motivo = clsValidador.Opcional(solicitud.Motivo);
-        if (porFirmar.Count > 0 && porFirmar.All(c => c.Transferencia is { TipoCierre: clsTipoCierre.NO_FIRMA, FirmaPorNinera: true } t && t.NoFirmaParte == solicitud.Parte && t.MotivoNoFirma == motivo))
+        if (porFirmar.Count == 0 || porFirmar.All(c => c.Transferencia is { TipoCierre: clsTipoCierre.NO_FIRMA, FirmaPorNinera: true } t && t.NoFirmaParte == solicitud.Parte && t.MotivoNoFirma == motivo))
         {
-            return Armar(viaje, quienRegistra, carros);   // la misma constancia otra vez: no crea otra
+            // Sin nada pendiente de firmar (todos los carros ya se cerraron antes, carro por carro) o es la misma
+            // constancia otra vez: no hay nada que crear.
+            return Armar(viaje, quienRegistra, carros);
         }
 
         var testigoId = solicitud.TestigoUsuarioId!.Value;

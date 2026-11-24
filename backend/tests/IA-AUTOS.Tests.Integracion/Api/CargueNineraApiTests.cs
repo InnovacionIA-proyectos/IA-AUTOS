@@ -333,6 +333,24 @@ public sealed partial class CargueNineraApiTests(clsBaseDatosFixture bd) : clsPr
         Assert.Equal("cargue_incompleto", (await JsonAsync(sinCargue)).GetProperty("details").GetProperty("motivo").GetString());
     }
 
+    // Si los dos carros ya se cerraron carro por carro antes del cambio, no queda nada pendiente de firmar: la
+    // constancia de la niñera no tiene sobre qué carro colgarse y no debe reventar (hallazgo de QA en #448).
+    [Fact]
+    public async Task Si_todos_los_carros_ya_se_cerraron_antes_la_constancia_no_crea_nada_y_no_revienta()
+    {
+        var e = await EscenarioAsync();
+        await Sembrador.TransferenciaAsync(e.Llegadas[0], e.Inspector.UsuarioId, e.Conductor.UsuarioId, "firmada");
+        await Sembrador.TransferenciaAsync(e.Llegadas[1], e.Inspector.UsuarioId, e.Conductor.UsuarioId, "firmada");
+        var testigo = await SesionAsync("testigo@ejemplo.com", clsRol.INSPECTOR);
+
+        var r = await NoFirmaAsync(e.Inspector, e.Viaje, "recibe", testigo.UsuarioId);
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblEvidencias WHERE EsConstancia = 1"));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblTransferenciasCustodia WHERE FirmaPorNinera = 1"));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'novedad_proceso'"));
+    }
+
     private async Task<Escenario> EscenarioIncompletoAsync()
     {
         var inspector = await SesionAsync("inspector2@ejemplo.com", clsRol.INSPECTOR);
