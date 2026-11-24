@@ -11,6 +11,8 @@ Catalogos catalogosCon(
   List<Map<String, dynamic>> etapas = const [],
   /// Los motivos de «No hay inspector». Vacío = no se descargaron.
   List<Map<String, dynamic>> motivos = const [],
+  /// Los muelles, cada uno con su `lugar_id`. Vacío = ningún lugar tiene muelles.
+  List<Map<String, dynamic>> muelles = const [],
 }) =>
     Catalogos.desdeRespuesta(
       {
@@ -30,6 +32,7 @@ Catalogos catalogosCon(
           Catalogo.vistasFoto: vistas,
           Catalogo.etapas: etapas,
           Catalogo.motivosSinInspector: motivos,
+          Catalogo.muelles: muelles,
         },
       },
       usuarioId: usuarioId,

@@ -63,6 +63,8 @@ void main() {
       // Si el punto de cargue tiene inspectores: con eso el botón de la salida pide permiso en vez de activar
       // la excepción, que allí el servidor rechaza.
       'lugar_cargue_tiene_inspector',
+      // S8-HU-03.2: el muelle, el lugar de donde salen los muelles y si la entrega del cargue ya se cerró.
+      'lugar_cargue_id', 'muelle_id', 'muelle', 'cargue_firmado_por_ninera_at', 'cargue_no_firmado_at',
     ],
     // Quién recibe en un punto lo decide el servidor por punto, no por viaje.
     'EntregaPuntoDto': ['viaje_id', 'lugar_id', 'lugar', 'unidades', 'unidades_pendientes', 'entregada', 'lugar_tiene_inspector'],
@@ -78,6 +80,8 @@ void main() {
     // `estado_transporte` y `novedades` son lo que el conductor ve de cada unidad en su viaje.
     'ViajeVehiculoDto': [
       'vin', 'marca', 'modelo', 'color', 'operacion', 'estado_unidad', 'no_sale', 'estado_transporte', 'novedades',
+      // A dónde va cada carro y cuándo cambió por última vez, para resaltarlo al conductor.
+      'lugar_destino', 'lugar_destino_cambiado_at',
     ],
     'NoSaleDto': ['motivo', 'hallazgo_id', 'marcado_por_nombre', 'fecha', 'vin_reemplazo'],
     // `usuario_id` distingue el informe propio del ajeno: es lo que decide si al conductor se le muestra el
@@ -194,6 +198,8 @@ void main() {
     'LoginRequest': ['email', 'password'],
     'LoginConductorRequest': ['cedula', 'pin'],
     'CambiarPinRequest': ['pin_actual', 'pin_nuevo'],
+    // S8-HU-03.2: lo que el inspector cambia del viaje durante el cargue.
+    'CambiarCargueDelViajeRequest': ['muelle_id', 'trailer'],
     'CrearInspeccionRequest': ['etapa_id', 'momento', 'fecha', 'lat', 'lng', 'notas'],
     // Las diez claves van siempre, aunque algunas puedan ir nulas: la API las exige presentes.
     'CrearEvidenciaRequest': [
@@ -299,6 +305,8 @@ void main() {
       ('post', '/api/hallazgos/{}/revision'),
       // La unidad que no sale del viaje.
       ('post', '/api/viajes/{}/vehiculos/{}/no-sale'),
+      // El muelle y el tráiler que el inspector cambia durante el cargue.
+      ('patch', '/api/viajes/{}/cargue'),
       // El permiso de la excepción «No hay inspector» donde el punto de cargue sí tiene inspectores. Conceder no
       // está: eso se hace desde el portal, y la app solo pide y espera.
       ('post', '/api/viajes/{}/permiso-sin-inspector'),

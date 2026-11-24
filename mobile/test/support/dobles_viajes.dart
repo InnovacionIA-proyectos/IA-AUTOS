@@ -21,6 +21,13 @@ Viaje viaje(
   String estado = 'en_curso',
   Map<String, int> posiciones = const {},
   bool cargueTieneInspector = false,
+  String? inspectorId,
+  String? lugarCargueId,
+  String? muelleId,
+  String? muelle,
+  bool cargueCerrado = false,
+  Map<String, String> destinos = const {},
+  Map<String, DateTime> destinosCambiados = const {},
 }) =>
     Viaje(
       id: id,
@@ -31,7 +38,22 @@ Viaje viaje(
       trailer: trailer,
       conductorNombre: conductor,
       cargueTieneInspector: cargueTieneInspector,
-      vehiculos: [for (final v in vines) ViajeVehiculo(vin: v, marca: 'Renault', modelo: 'Kwid', posicion: posiciones[v])],
+      inspectorId: inspectorId,
+      lugarCargueId: lugarCargueId,
+      muelleId: muelleId,
+      muelle: muelle,
+      cargueCerrado: cargueCerrado,
+      vehiculos: [
+        for (final v in vines)
+          ViajeVehiculo(
+            vin: v,
+            marca: 'Renault',
+            modelo: 'Kwid',
+            posicion: posiciones[v],
+            lugarDestino: destinos[v],
+            destinoCambiadoAt: destinosCambiados[v],
+          ),
+      ],
     );
 
 class ViajesRepositorioFalso implements ViajesRepositorio {
@@ -60,6 +82,24 @@ class ViajesRepositorioFalso implements ViajesRepositorio {
     if (error != null) throw error!;
     guardados = remotos;
     return remotos;
+  }
+
+  /// Lo que responde «cambiar el cargue» (el viaje ya cambiado) o el error que el servidor devolvería, y con qué
+  /// se la llamó.
+  Viaje? viajeTrasCambiarCargue;
+  Object? errorCambiarCargue;
+  final List<Map<String, Object?>> carguesCambiados = [];
+
+  @override
+  Future<Viaje> cambiarCargue(String viajeId, {String? muelleId, bool quitarMuelle = false, String? trailer}) async {
+    carguesCambiados.add({
+      'viaje_id': viajeId,
+      if (muelleId != null || quitarMuelle) 'muelle_id': muelleId,
+      'trailer': ?trailer,
+    });
+    if (errorCambiarCargue != null) throw errorCambiarCargue!;
+    if (viajeTrasCambiarCargue != null) viajeDeEtapa = viajeTrasCambiarCargue;
+    return viajeTrasCambiarCargue ?? viajeDeEtapa!;
   }
 
   /// Los viajes ya terminados: vacíos salvo que la prueba los ponga.

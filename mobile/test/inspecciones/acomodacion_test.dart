@@ -209,6 +209,45 @@ void main() {
     });
   });
 
+  // S8-HU-03.2 CA-3: donde el lugar tiene muelles, el viaje necesita el suyo, con las palabras del servidor.
+  group('el muelle del viaje', () {
+    BloqueoCierre? conMuelle({required bool exige, String? muelleId}) => bloqueoDeCierre(
+          hayUbicacion: true,
+          fotos: [_foto()],
+          hallazgos: const [],
+          acomodacion: Acomodacion(
+            unidades: [_a],
+            posiciones: {_a.vin: 1},
+            fotosMinimas: 1,
+            exigeMuelle: exige,
+            muelleId: muelleId,
+          ),
+        );
+
+    test('falta el muelle donde hay muelles', () {
+      final bloqueo = conMuelle(exige: true);
+
+      expect(bloqueo, isA<FaltaMuelle>());
+      expect(bloqueo!.mensaje, 'Falta el muelle del viaje');
+    });
+
+    test('con el muelle asignado, o donde no hay muelles, no bloquea', () {
+      expect(conMuelle(exige: true, muelleId: 'm1'), isNull);
+      expect(conMuelle(exige: false), isNull);
+    });
+
+    test('el puesto que falta se dice antes que el muelle', () {
+      final bloqueo = bloqueoDeCierre(
+        hayUbicacion: true,
+        fotos: [_foto()],
+        hallazgos: const [],
+        acomodacion: Acomodacion(unidades: [_a], posiciones: const {}, fotosMinimas: 1, exigeMuelle: true),
+      );
+
+      expect(bloqueo, isA<FaltaPosicion>());
+    });
+  });
+
   /// La copia local tiene que conservar la niñera: sin señal, una de nueve se dibujaba de siete.
   group('el viaje guardado', () {
     test('conserva capacidad, disposición y cuántas fotos de acomodación tiene', () {

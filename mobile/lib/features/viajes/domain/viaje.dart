@@ -22,6 +22,10 @@ class Viaje {
     this.disposicion = const [],
     this.fotosAcomodacion = 0,
     this.cargueTieneInspector = false,
+    this.lugarCargueId,
+    this.muelleId,
+    this.muelle,
+    this.cargueCerrado = false,
   });
 
   factory Viaje.fromJson(Map<String, dynamic> json) => Viaje(
@@ -47,6 +51,13 @@ class Viaje {
         ],
         fotosAcomodacion: (json['fotos_acomodacion'] as List<dynamic>?)?.length ?? 0,
         cargueTieneInspector: json['lugar_cargue_tiene_inspector'] as bool? ?? false,
+        lugarCargueId: json['lugar_cargue_id'] as String?,
+        muelleId: json['muelle_id'] as String?,
+        muelle: json['muelle'] as String?,
+        // La copia guardada lo trae ya resuelto; del servidor sale de las dos maneras de cerrar el cargue de la
+        // niñera: con su firma o con la constancia de no firma.
+        cargueCerrado: json['cargue_cerrado'] as bool? ??
+            (json['cargue_firmado_por_ninera_at'] != null || json['cargue_no_firmado_at'] != null),
       );
 
   final String id;
@@ -85,6 +96,17 @@ class Viaje {
   /// se activa en el momento (S7-HU-22.1). Falso también cuando el viaje no tiene lugar de cargue.
   final bool cargueTieneInspector;
 
+  /// El lugar real del cargue. De él salen los muelles que se ofrecen.
+  final String? lugarCargueId;
+
+  /// El muelle donde se carga, y su nombre. Null mientras nadie lo asigna, y en los viajes de antes.
+  final String? muelleId;
+  final String? muelle;
+
+  /// La entrega del cargue de la niñera ya se cerró (firmada o con constancia): desde ahí el inspector ya no
+  /// cambia el muelle ni el tráiler.
+  final bool cargueCerrado;
+
   /// Si todavía se puede trabajar en él. Un viaje terminado o cancelado conserva sus etapas y sus informes, pero
   /// el servidor no admite inspecciones nuevas: ofrecerlas sería mandar a alguien a capturar siete fotos para
   /// que el envío muera con un 409.
@@ -109,6 +131,11 @@ class Viaje {
         // Sin él, sin señal el botón del cargue volvía a ofrecer la activación directa en un punto que sí tiene
         // inspectores, y el envío moría con un 403.
         'lugar_cargue_tiene_inspector': cargueTieneInspector,
+        // El muelle también sin señal: se ve en el viaje y decide el bloqueo del cierre de la acomodación.
+        'lugar_cargue_id': lugarCargueId,
+        'muelle_id': muelleId,
+        'muelle': muelle,
+        'cargue_cerrado': cargueCerrado,
         'disposicion': {'puestos': [for (final p in disposicion) p.toJson()]},
         'fotos_acomodacion': [for (var i = 0; i < fotosAcomodacion; i++) const <String, dynamic>{}],
       };
@@ -127,6 +154,8 @@ class ViajeVehiculo {
     this.posicion,
     this.estadoTransporte = EstadoTransporte.sinRegistro,
     this.novedades = 0,
+    this.lugarDestino,
+    this.destinoCambiadoAt,
   });
 
   factory ViajeVehiculo.fromJson(Map<String, dynamic> json) => ViajeVehiculo(
@@ -139,6 +168,8 @@ class ViajeVehiculo {
         posicion: json['posicion'] as int?,
         estadoTransporte: json['estado_transporte'] as String? ?? EstadoTransporte.sinRegistro,
         novedades: json['novedades'] as int? ?? 0,
+        lugarDestino: json['lugar_destino'] as String?,
+        destinoCambiadoAt: switch (json['lugar_destino_cambiado_at']) { final String f => DateTime.tryParse(f), _ => null },
         noSale: switch (json['no_sale']) {
           final Map<String, dynamic> m => NoSale.fromJson(m),
           _ => null,
@@ -165,6 +196,12 @@ class ViajeVehiculo {
   final String estadoTransporte;
   final int novedades;
 
+  /// A dónde va este carro, ya resuelto por la API.
+  final String? lugarDestino;
+
+  /// Cuándo se le cambió el destino por última vez; null si nunca.
+  final DateTime? destinoCambiadoAt;
+
   bool get sale => estadoUnidad == estadoUnidadActiva;
 
   Map<String, dynamic> toJson() => {
@@ -178,6 +215,8 @@ class ViajeVehiculo {
         'posicion': posicion,
         'estado_transporte': estadoTransporte,
         'novedades': novedades,
+        'lugar_destino': lugarDestino,
+        'lugar_destino_cambiado_at': destinoCambiadoAt?.toUtc().toIso8601String(),
       };
 }
 

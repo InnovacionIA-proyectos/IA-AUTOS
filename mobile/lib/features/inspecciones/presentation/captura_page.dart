@@ -23,6 +23,8 @@ import '../../dibujo_dano/presentation/dibujo_dano_controller.dart';
 import '../../dibujo_dano/presentation/selector_zona_dano.dart';
 import '../../vehiculos/domain/etiquetas.dart';
 import '../../viajes/domain/viaje.dart';
+import '../../viajes/domain/muelles.dart';
+import '../../viajes/presentation/cambios_del_cargue.dart';
 import '../../viajes/providers.dart';
 import '../domain/acomodacion.dart';
 import '../domain/borrador_captura.dart';
@@ -323,7 +325,13 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   Viaje? _viaje;
 
   void _alLlegarElViaje(Viaje? viaje) {
-    if (viaje == null || _unidades != null) return;
+    if (viaje == null) return;
+    // Cada vez que llega se toma el viaje nuevo: el muelle se asigna mientras se acomoda y decide el cierre. Las
+    // unidades y los puestos, solo la primera: lo que ya se eligió aquí no se pisa.
+    if (_unidades != null) {
+      setState(() => _viaje = viaje);
+      return;
+    }
     setState(() {
       // El viaje entero, no solo sus unidades: de él salen los puestos que se dibujan, cuántos hay y cuántas
       // fotos de la acomodación ya tiene.
@@ -659,7 +667,13 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         checklist: _checklist,
         catalogosListos: _catalogosListos,
         acomodacion: _esAcomodacion
-            ? Acomodacion(unidades: _unidades, posiciones: _posiciones, fotosMinimas: _fotosAcomodacionMinimas)
+            ? Acomodacion(
+                unidades: _unidades,
+                posiciones: _posiciones,
+                fotosMinimas: _fotosAcomodacionMinimas,
+                exigeMuelle: muellesDelLugar(ref.read(catalogosProvider), _viaje?.lugarCargueId).isNotEmpty,
+                muelleId: _viaje?.muelleId,
+              )
             : null,
       );
 
@@ -827,7 +841,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                   Text('Datos del transporte', style: tema.titleMedium),
                   const SizedBox(height: Espacio.md),
                   // Ya no se escriben: salen del viaje de la etapa y el servidor los toma de ahí.
-                  _DatosDelViaje(viajeId: widget.viajeId),
+                  _DatosDelViaje(viajeId: widget.viajeId, esCargue: widget.proceso == 'cargue'),
                   const SizedBox(height: Espacio.md),
                   _FilaUbicacion(gps: _gps, error: _errorGps, buscando: _buscandoGps, alReintentar: _buscarUbicacion, alAbrirAjustes: ref.read(servicioUbicacionProvider).abrirAjustes),
                   const SizedBox(height: Espacio.lg),
@@ -964,9 +978,12 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
 /// Antes se escribían a mano en cada informe. Ahora salen del viaje —el servidor los toma de ahí y ya no los
 /// acepta en el cuerpo—, así que aquí solo se muestran para que quien captura confirme que es el viaje correcto.
 class _DatosDelViaje extends ConsumerWidget {
-  const _DatosDelViaje({required this.viajeId});
+  const _DatosDelViaje({required this.viajeId, required this.esCargue});
 
   final String? viajeId;
+
+  /// En el cargue se muestra el muelle y, al inspector del viaje, se le deja cambiarlo junto con el tráiler.
+  final bool esCargue;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -988,6 +1005,7 @@ class _DatosDelViaje extends ConsumerWidget {
                       for (final (etiqueta, valor) in [
                         ('Placa', viaje.placa),
                         ('Tráiler', viaje.trailer ?? '—'),
+                        if (esCargue || viaje.muelle != null) ('Muelle', viaje.muelle ?? 'Sin asignar'),
                         ('Unidad', viaje.unidad ?? '—'),
                         ('Conductor', viaje.conductorNombre ?? '—'),
                       ])
@@ -1007,6 +1025,7 @@ class _DatosDelViaje extends ConsumerWidget {
                             ],
                           ),
                         ),
+                      if (esCargue) CambiosDelCargue(viaje: viaje),
                     ],
                   ),
                 ),

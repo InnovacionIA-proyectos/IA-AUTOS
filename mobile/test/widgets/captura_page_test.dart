@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/core/ui/widgets.dart';
+import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
 import 'package:traza_autos/features/inspecciones/presentation/captura_page.dart';
 import 'package:traza_autos/features/inspecciones/presentation/filas_captura.dart';
@@ -29,6 +30,7 @@ Future<Arnes> abrir(
   String proceso = 'Cargue',
   String procesoCodigo = 'cargue',
   String momento = Momento.llegada,
+  List<Map<String, dynamic>> muelles = const [],
 }) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -43,8 +45,8 @@ Future<Arnes> abrir(
         // el celular tras el primer ingreso. Sin ellos el cierre se bloquea y no se llega al desenlace.
         catalogosRepositorioProvider.overrideWithValue(
           CatalogosRepositorioFalso()
-            ..guardado = catalogosCon('Golpe', vistas: vistas)
-            ..remoto = catalogosCon('Golpe', vistas: vistas),
+            ..guardado = catalogosCon('Golpe', vistas: vistas, muelles: muelles)
+            ..remoto = catalogosCon('Golpe', vistas: vistas, muelles: muelles),
         ),
       ],
       child: MaterialApp(
@@ -306,5 +308,125 @@ void main() {
 
     final placa = tester.widget<Text>(find.text('XKL482'));
     expect(placa.style?.fontFamily, 'monospace');
+  });
+
+  // S8-HU-03.2: el muelle y el tráiler en el cargue, y el cierre que exige el muelle donde hay muelles.
+  group('el muelle y el tráiler del cargue', () {
+    const vinA = 'VINA0000000000001';
+    const muelles = [
+      {'id': 'm1', 'codigo': 'm1', 'nombre': 'Muelle 1', 'orden': 1, 'activo': true, 'lugar_id': 'cedi'},
+      {'id': 'm3', 'codigo': 'm3', 'nombre': 'Muelle 3', 'orden': 3, 'activo': true, 'lugar_id': 'cedi'},
+      {'id': 'mx', 'codigo': 'm1', 'nombre': 'Muelle de otro lugar', 'orden': 1, 'activo': true, 'lugar_id': 'otro'},
+    ];
+    const luis = Sesion(token: 'jwt', usuario: Usuario(id: 'luis', nombre: 'Luis Gómez', email: '', rol: 'conductor'));
+
+    Future<void> avanzar(WidgetTester tester) async {
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
+
+    testWidgets('el inspector del viaje ve el muelle y elige uno de los muelles de su lugar', (tester) async {
+      final viajes = ViajesRepositorioFalso()
+        ..viajeDeEtapa = viaje('v1', vines: [vinA], inspectorId: 'u1', lugarCargueId: 'cedi')
+        ..viajeTrasCambiarCargue =
+            viaje('v1', vines: [vinA], inspectorId: 'u1', lugarCargueId: 'cedi', muelleId: 'm3', muelle: 'Muelle 3');
+      await abrir(tester, viajes, muelles: muelles);
+
+      expect(find.text('Sin asignar'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Elegir muelle'));
+      await avanzar(tester);
+      expect(find.text('Muelle 1'), findsOneWidget);
+      expect(find.text('Muelle de otro lugar'), findsNothing, reason: 'solo los del lugar de cargue');
+
+      await tester.tap(find.text('Muelle 3'));
+      await avanzar(tester);
+
+      expect(viajes.carguesCambiados, [
+        {'viaje_id': 'v1', 'muelle_id': 'm3'},
+      ]);
+      expect(find.text('Muelle 3 asignado al viaje'), findsOneWidget);
+      expect(find.text('Muelle 3'), findsOneWidget, reason: 'la pantalla muestra el viaje ya cambiado');
+      expect(find.widgetWithText(FilledButton, 'Cambiar muelle'), findsOneWidget);
+    });
+
+    testWidgets('en un lugar sin muelles no hay selector, pero el tráiler sí se cambia', (tester) async {
+      final viajes = ViajesRepositorioFalso()
+        ..viajeDeEtapa = viaje('v1', vines: [vinA], trailer: 'TRX-101', inspectorId: 'u1', lugarCargueId: 'sin-muelles');
+      await abrir(tester, viajes, muelles: muelles);
+
+      expect(find.widgetWithText(FilledButton, 'Elegir muelle'), findsNothing);
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Cambiar tráiler'));
+      await avanzar(tester);
+      await tester.enterText(find.byType(TextField).last, 'TRX-202');
+      await tester.tap(find.widgetWithText(TextButton, 'Guardar'));
+      await avanzar(tester);
+
+      expect(viajes.carguesCambiados, [
+        {'viaje_id': 'v1', 'trailer': 'TRX-202'},
+      ]);
+      expect(find.text('Tráiler cambiado a TRX-202'), findsOneWidget);
+    });
+
+    testWidgets('con el cargue ya cerrado el servidor lo rechaza y se muestra su mensaje', (tester) async {
+      final viajes = ViajesRepositorioFalso()
+        ..viajeDeEtapa = viaje('v1', vines: [vinA], inspectorId: 'u1', lugarCargueId: 'cedi')
+        ..errorCambiarCargue = errorApi(409, 'El tráiler y el muelle solo los cambia el inspector durante el cargue');
+      await abrir(tester, viajes, muelles: muelles);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Elegir muelle'));
+      await avanzar(tester);
+      await tester.tap(find.text('Muelle 1'));
+      await avanzar(tester);
+
+      expect(find.text('El tráiler y el muelle solo los cambia el inspector durante el cargue'), findsOneWidget);
+    });
+
+    testWidgets('el conductor, otro inspector y el inspector con el cargue cerrado no ven los controles', (tester) async {
+      for (final (arnes, delViaje) in [
+        (Arnes(sesion: luis), viaje('v1', vines: [vinA], inspectorId: 'u1', lugarCargueId: 'cedi')),
+        (Arnes(), viaje('v1', vines: [vinA], inspectorId: 'otro', lugarCargueId: 'cedi')),
+        (Arnes(), viaje('v1', vines: [vinA], inspectorId: 'u1', lugarCargueId: 'cedi', cargueCerrado: true)),
+      ]) {
+        await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = delViaje, arnes: arnes, muelles: muelles);
+
+        expect(find.text('Muelle'), findsOneWidget, reason: 'el muelle se ve igual');
+        expect(find.widgetWithText(OutlinedButton, 'Cambiar tráiler'), findsNothing);
+        expect(find.widgetWithText(FilledButton, 'Elegir muelle'), findsNothing);
+      }
+    });
+
+    testWidgets('fuera del cargue no se habla de muelle si el viaje no tiene', (tester) async {
+      await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1', inspectorId: 'u1'), procesoCodigo: 'descargue');
+
+      expect(find.text('Muelle'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Cambiar tráiler'), findsNothing);
+    });
+
+    testWidgets('donde hay muelles, la acomodación no cierra sin el muelle del viaje', (tester) async {
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()
+          ..viajeDeEtapa = viaje('v1', vines: [vinA], posiciones: {vinA: 1}, inspectorId: 'u1', lugarCargueId: 'cedi'),
+        momento: Momento.salida,
+        muelles: muelles,
+      );
+
+      expect(find.text('Falta el muelle del viaje'), findsOneWidget);
+      final boton = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Cerrar informe'));
+      expect(boton.onPressed, isNull);
+    });
+
+    testWidgets('con el muelle asignado, o en un lugar sin muelles, el muelle no bloquea', (tester) async {
+      for (final delViaje in [
+        viaje('v1', vines: [vinA], posiciones: {vinA: 1}, lugarCargueId: 'cedi', muelleId: 'm1', muelle: 'Muelle 1'),
+        viaje('v1', vines: [vinA], posiciones: {vinA: 1}, lugarCargueId: 'sin-muelles'),
+      ]) {
+        await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = delViaje, momento: Momento.salida, muelles: muelles);
+
+        expect(find.text('Falta el muelle del viaje'), findsNothing);
+        expect(find.textContaining('Faltan fotos de la acomodación'), findsOneWidget, reason: 'sigue con lo siguiente');
+      }
+    });
   });
 }

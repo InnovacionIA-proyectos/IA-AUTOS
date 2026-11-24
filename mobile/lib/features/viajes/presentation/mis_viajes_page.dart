@@ -15,6 +15,7 @@ import '../domain/pendiente.dart';
 import '../domain/viaje.dart';
 import '../providers.dart';
 import 'acciones_conductor.dart';
+import 'destinos_vistos.dart';
 import 'entrega_punto_page.dart';
 import 'mis_viajes_controller.dart';
 import 'seccion_pendientes.dart';
@@ -261,7 +262,7 @@ class _TarjetaViaje extends ConsumerWidget {
             children: [
               TextoMono(viaje.placa, estilo: tema.bodySmall),
               Text(
-                [viaje.unidad, viaje.trailer].whereType<String>().where((v) => v.isNotEmpty).map((v) => ' · $v').join(),
+                [viaje.unidad, viaje.trailer, viaje.muelle].whereType<String>().where((v) => v.isNotEmpty).map((v) => ' · $v').join(),
                 style: tema.bodySmall,
               ),
             ],
@@ -341,14 +342,20 @@ class _FilaVehiculo extends ConsumerWidget {
     // viaje programado también: la primera novedad es la que lo pone en curso.
     final rol = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol));
     final conAcciones = rol == 'conductor' && viaje.admiteTrabajo && vehiculo.sale;
+    // S8-HU-03.2 CA-5: al conductor se le resalta el destino que cambió desde la última vez que abrió el carro.
+    final esConductor = rol == 'conductor';
+    final nuevo = esConductor && destinoNuevo(ref.watch(destinosVistosProvider).value, viaje.id, vehiculo);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         InkWell(
-          onTap: () => context.push(
-            '/inspecciones/vin/${Uri.encodeComponent(vehiculo.vin)}?viajeId=${Uri.encodeQueryComponent(viaje.id)}',
-          ),
+          onTap: () {
+            if (esConductor) ref.read(destinosVistosProvider.notifier).marcarVisto(viaje.id, vehiculo);
+            context.push(
+              '/inspecciones/vin/${Uri.encodeComponent(vehiculo.vin)}?viajeId=${Uri.encodeQueryComponent(viaje.id)}',
+            );
+          },
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: Espacio.sm),
             child: Row(
@@ -359,6 +366,23 @@ class _FilaVehiculo extends ConsumerWidget {
                     children: [
                       TextoMono(vehiculo.vin),
                       if (descripcion.isNotEmpty) Text(descripcion, style: tema.bodySmall),
+                      if (vehiculo.lugarDestino case final destino? when destino.isNotEmpty)
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'Va a $destino',
+                                style: nuevo
+                                    ? tema.bodySmall?.copyWith(color: Colores.advertencia, fontWeight: FontWeight.w600)
+                                    : tema.bodySmall,
+                              ),
+                            ),
+                            if (nuevo) ...[
+                              const SizedBox(width: Espacio.xs),
+                              const Insignia('Destino nuevo', tono: TonoInsignia.advertencia),
+                            ],
+                          ],
+                        ),
                       // La unidad sigue en la lista: conserva sus etapas y sus informes, pero ya no se captura
                       // sobre ella y no cuenta para que el viaje esté completo.
                       if (!vehiculo.sale)

@@ -24,6 +24,7 @@ import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
 import 'package:traza_autos/features/sync/domain/puertos.dart';
 import 'package:traza_autos/features/sync/providers.dart';
+import 'package:traza_autos/features/viajes/presentation/destinos_vistos.dart';
 
 import 'dobles_dibujo.dart';
 import 'dobles_sync.dart';
@@ -275,7 +276,11 @@ class Arnes {
 
   late final ProcesadorCola procesador = ProcesadorCola(cola: cola, gateway: gateway, red: red, archivos: archivos);
 
+  /// Lo que el conductor ya vio de cada cambio de destino (S8-HU-03.2 CA-5), en memoria.
+  final destinosVistos = DestinosVistosEnMemoria();
+
   List<Override> get overrides => [
+        almacenDestinosVistosProvider.overrideWithValue(destinosVistos),
         entornoProvider.overrideWithValue(entorno),
         almacenSesionProvider.overrideWithValue(almacen),
         authRepositorioProvider.overrideWithValue(auth),
@@ -384,4 +389,14 @@ class CierreEnMemoria implements CierreDeCaptura {
     await cola.agregar(job);
     if (claveBorrador != null) await borradores.borrar(claveBorrador);
   }
+}
+
+class DestinosVistosEnMemoria implements AlmacenDestinosVistos {
+  final Map<String, String> guardados = {};
+
+  @override
+  Future<String?> leer(String clave) async => guardados[clave];
+
+  @override
+  Future<void> escribir(String clave, String valor) async => guardados[clave] = valor;
 }

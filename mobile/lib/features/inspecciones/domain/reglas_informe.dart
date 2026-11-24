@@ -107,6 +107,14 @@ class FaltaPosicion extends BloqueoCierre {
   String get mensaje => 'Falta la posición de la unidad $vin';
 }
 
+/// El lugar de cargue tiene muelles y el viaje todavía no tiene el suyo. Mismas palabras que el servidor al cerrar.
+class FaltaMuelle extends BloqueoCierre {
+  const FaltaMuelle();
+
+  @override
+  String get mensaje => 'Falta el muelle del viaje';
+}
+
 class FaltanFotosDeAcomodacion extends BloqueoCierre {
   const FaltanFotosDeAcomodacion({required this.minimas, required this.hay});
 
@@ -140,6 +148,7 @@ BloqueoCierre? bloqueoDeCierre({
     if (acomodacion.unidades == null) return const SinUnidadesDelViaje();
     final sin = vinesSinPosicion(acomodacion.unidades!, acomodacion.posiciones);
     if (sin.isNotEmpty) return FaltaPosicion(sin.first);
+    if (acomodacion.exigeMuelle && acomodacion.muelleId == null) return const FaltaMuelle();
     // Solo las de ESTE informe. El viaje ya tenga o no fotos de la acomodación, el servidor las cuenta por
     // inspección (`ContarFotosLibresAsync(inspeccion.Id)`), así que contarlas por viaje dejaría cerrar aquí lo
     // que allá vuelve con un 400 y deja el informe a medias. Que la niñera se fotografíe una sola vez por viaje
@@ -167,11 +176,23 @@ BloqueoCierre? bloqueoDeCierre({
 /// Lo que la segunda inspección del cargue exige además de la ubicación: cada unidad con su lugar y las fotos de la
 /// acomodación. [unidades] es null mientras no se conozca el viaje.
 class Acomodacion {
-  const Acomodacion({required this.unidades, required this.posiciones, required this.fotosMinimas});
+  const Acomodacion({
+    required this.unidades,
+    required this.posiciones,
+    required this.fotosMinimas,
+    this.exigeMuelle = false,
+    this.muelleId,
+  });
 
   final List<ViajeVehiculo>? unidades;
   final Map<String, int> posiciones;
   final int fotosMinimas;
+
+  /// El lugar de cargue tiene al menos un muelle activo: entonces el viaje necesita el suyo para cerrar.
+  final bool exigeMuelle;
+
+  /// El muelle que tiene el viaje ahora.
+  final String? muelleId;
 }
 
 /// Fotos cuyo sello tiene poca precisión. No bloquean: se avisa.

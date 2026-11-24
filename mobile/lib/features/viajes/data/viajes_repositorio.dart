@@ -54,6 +54,22 @@ class ViajesRepositorio {
     return Viaje.fromJson(r as Map<String, dynamic>);
   }
 
+  /// Cambia el muelle o el tráiler del viaje durante el cargue y devuelve el viaje ya actualizado.
+  ///
+  /// Va directo a la API, como «no sale»: el servidor responde 409 `cargue_firmado` cuando la entrega del cargue ya
+  /// se cerró, y quien lo cambia tiene que enterarse ahí mismo. Solo viaja lo que cambia: [quitarMuelle] manda el
+  /// muelle en null, que es como el contrato lo quita.
+  Future<Viaje> cambiarCargue(String viajeId, {String? muelleId, bool quitarMuelle = false, String? trailer}) async {
+    final r = await _api.patch(
+      '/api/viajes/${Uri.encodeComponent(viajeId)}/cargue',
+      cuerpo: {
+        if (muelleId != null || quitarMuelle) 'muelle_id': muelleId,
+        'trailer': ?trailer,
+      },
+    );
+    return Viaje.fromJson(r as Map<String, dynamic>);
+  }
+
   /// Mis viajes ya terminados.
   ///
   /// No se guardan en la copia local: solo se miran con señal. Mezclarlos con los activos dejaría a quien está

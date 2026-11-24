@@ -20,4 +20,59 @@ void main() {
     expect(con('').admiteTrabajo, isFalse);
     expect(con('otro_estado_nuevo').admiteTrabajo, isFalse);
   });
+
+  // S8-HU-03.2 CA-4 y CA-5: el muelle, el lugar de cargue y el destino de cada carro, también sin señal.
+  group('el muelle y el destino', () {
+    final delServidor = {
+      'id': 'v1',
+      'codigo_mtrack': 'MTK-1',
+      'placa': 'ABC123',
+      'estado': 'en_curso',
+      'lugar_cargue_id': 'cedi',
+      'muelle_id': 'm3',
+      'muelle': 'Muelle 3',
+      'cargue_firmado_por_ninera_at': null,
+      'cargue_no_firmado_at': null,
+      'vehiculos': [
+        {'vin': 'VIN1', 'lugar_destino': 'Patio Guayabal', 'lugar_destino_cambiado_at': '2026-11-24T15:00:00Z'},
+      ],
+    };
+
+    test('se leen del servidor', () {
+      final viaje = Viaje.fromJson(delServidor);
+
+      expect(viaje.lugarCargueId, 'cedi');
+      expect(viaje.muelleId, 'm3');
+      expect(viaje.muelle, 'Muelle 3');
+      expect(viaje.cargueCerrado, isFalse);
+      expect(viaje.vehiculos.single.lugarDestino, 'Patio Guayabal');
+      expect(viaje.vehiculos.single.destinoCambiadoAt, DateTime.utc(2026, 11, 24, 15));
+    });
+
+    test('el cargue queda cerrado con la firma de la niñera o con la constancia', () {
+      for (final campo in ['cargue_firmado_por_ninera_at', 'cargue_no_firmado_at']) {
+        expect(Viaje.fromJson({...delServidor, campo: '2026-11-24T16:00:00Z'}).cargueCerrado, isTrue, reason: campo);
+      }
+    });
+
+    test('la copia guardada los conserva', () {
+      final cerrado = Viaje.fromJson({...delServidor, 'cargue_no_firmado_at': '2026-11-24T16:00:00Z'});
+      final copia = Viaje.fromJson(cerrado.toJson());
+
+      expect(copia.lugarCargueId, 'cedi');
+      expect(copia.muelleId, 'm3');
+      expect(copia.muelle, 'Muelle 3');
+      expect(copia.cargueCerrado, isTrue);
+      expect(copia.vehiculos.single.lugarDestino, 'Patio Guayabal');
+      expect(copia.vehiculos.single.destinoCambiadoAt, DateTime.utc(2026, 11, 24, 15));
+    });
+
+    test('un viaje de antes se lee sin muelle ni destino', () {
+      final viaje = Viaje.fromJson({'id': 'v1', 'vehiculos': [{'vin': 'VIN1'}]});
+
+      expect(viaje.muelle, isNull);
+      expect(viaje.cargueCerrado, isFalse);
+      expect(viaje.vehiculos.single.destinoCambiadoAt, isNull);
+    });
+  });
 }

@@ -218,6 +218,23 @@ void main() {
       expect(find.text('Viaje MTK-1'), findsOneWidget);
     });
 
+    // S8-HU-03.2 CA-6: el aviso del destino nuevo lleva a ese carro del viaje; un tipo que la app no conoce se pinta
+    // igual con su título y su mensaje.
+    testWidgets('el aviso de destino cambiado lleva al carro, y un tipo desconocido se pinta igual', (tester) async {
+      final repo = AvisosRepositorioFalso()
+        ..pagina0 = paginaCon([
+          avisoJson('a1', tipo: 'cambio_destino_unidad', titulo: 'Cambió el destino de un carro', urgencia: 'media'),
+          avisoJson('a2', tipo: 'algo_que_vendra', titulo: 'Un aviso nuevo', vin: null),
+        ], noLeidos: 2);
+      await abrir(tester, repo);
+
+      expect(find.text('Un aviso nuevo'), findsOneWidget);
+      await tester.tap(find.text('Cambió el destino de un carro'));
+      await avanzar(tester);
+
+      expect(find.widgetWithText(OutlinedButton, 'Ver la unidad'), findsOneWidget);
+    });
+
     testWidgets('uno que ya estaba leído no se vuelve a marcar', (tester) async {
       final repo = AvisosRepositorioFalso()..pagina0 = paginaCon([avisoJson('a1', leida: '2026-10-21T14:00:00Z')]);
       await abrir(tester, repo);

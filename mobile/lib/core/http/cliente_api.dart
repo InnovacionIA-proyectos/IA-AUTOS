@@ -63,6 +63,9 @@ class ClienteApi {
   Future<dynamic> post(String ruta, {Object? cuerpo, Map<String, String>? encabezados}) async =>
       (await enviar('POST', ruta, cuerpo: cuerpo, encabezados: encabezados)).datos;
 
+  Future<dynamic> patch(String ruta, {Object? cuerpo, Map<String, String>? encabezados}) async =>
+      (await enviar('PATCH', ruta, cuerpo: cuerpo, encabezados: encabezados)).datos;
+
   /// Sube un archivo como `multipart/form-data`.
   ///
   /// Multipart y no base64: base64 infla el cuerpo un tercio y obliga a tener la foto entera en memoria dos
