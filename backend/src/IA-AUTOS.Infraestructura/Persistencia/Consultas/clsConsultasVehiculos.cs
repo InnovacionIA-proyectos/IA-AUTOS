@@ -145,19 +145,22 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                                        join i in contexto.Inspecciones on e.Id equals i.EtapaId
                                        where ids.Contains(e.VehiculoId) && i.Estado == clsEstadoInspeccion.CERRADA
                                        select new { e.VehiculoId, EtapaId = e.Id }).Distinct().ToListAsync(ct);
+        // Solo la version vigente de cada informe: una version que una correccion cerrada ya reemplazo no cuenta. Con nivel son novedades; sin nivel, «sin calificar», aparte.
         var novedades = await (from e in contexto.Etapas
                                join i in contexto.Inspecciones on e.Id equals i.EtapaId
                                join h in contexto.Hallazgos on i.Id equals h.InspeccionId
                                where ids.Contains(e.VehiculoId)
+                                  && !contexto.Inspecciones.Any(c => c.CorrigeInspeccionId == i.Id && c.Estado == clsEstadoInspeccion.CERRADA)
                                group h by e.VehiculoId into g
-                               select new { VehiculoId = g.Key, Total = g.Count() }).ToListAsync(ct);
+                               select new { VehiculoId = g.Key, Total = g.Count(h => h.NivelSeveridad != null), SinCalificar = g.Count(h => h.NivelSeveridad == null) }).ToListAsync(ct);
         var porEtapas = etapas.ToDictionary(x => x.VehiculoId, x => x.Total);
         var porCompletas = conInformeCerrado.GroupBy(x => x.VehiculoId).ToDictionary(g => g.Key, g => g.Count());
         var porNovedades = novedades.ToDictionary(x => x.VehiculoId, x => x.Total);
+        var porSinCalificar = novedades.ToDictionary(x => x.VehiculoId, x => x.SinCalificar);
         var filas = filasPagina
             .Select(v => new ListadoVehiculoDto(
                 v.Id, v.Vin, v.Marca, v.Modelo, v.Color, v.Operacion, v.Activo,
-                porEtapas.GetValueOrDefault(v.Id), porCompletas.GetValueOrDefault(v.Id), porNovedades.GetValueOrDefault(v.Id)))
+                porEtapas.GetValueOrDefault(v.Id), porCompletas.GetValueOrDefault(v.Id), porNovedades.GetValueOrDefault(v.Id), porSinCalificar.GetValueOrDefault(v.Id)))
             .ToList();
         return (filas, total);
     }
@@ -257,8 +260,14 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
             e.Posicion))
             .ToList();
 
+        // Las mismas dos cifras del listado: solo la version vigente de cada informe (la que una correccion cerrada no reemplazo).
+        var reemplazadas = inspecciones.Where(i => i.CorrigeInspeccionId is not null && i.Estado == clsEstadoInspeccion.CERRADA).Select(i => i.CorrigeInspeccionId!.Value).ToHashSet();
+        var vigentes = inspecciones.Where(i => !reemplazadas.Contains(i.Id)).Select(i => i.Id).ToHashSet();
+        var deLaVersionVigente = hallazgos.Where(h => vigentes.Contains(h.InspeccionId)).ToList();
+
         return new InventarioDto(
             vehiculo.Id, vehiculo.Vin, vehiculo.Marca, vehiculo.TipoVehiculo, vehiculo.Modelo, vehiculo.Chasis,
-            vehiculo.Color, vehiculo.Operacion, vehiculo.Activo, vehiculo.CreatedAt, vehiculo.UpdatedAt, etapasDto);
+            vehiculo.Color, vehiculo.Operacion, vehiculo.Activo, vehiculo.CreatedAt, vehiculo.UpdatedAt, etapasDto,
+            deLaVersionVigente.Count(h => h.NivelSeveridad is not null), deLaVersionVigente.Count(h => h.NivelSeveridad is null));
     }
 }

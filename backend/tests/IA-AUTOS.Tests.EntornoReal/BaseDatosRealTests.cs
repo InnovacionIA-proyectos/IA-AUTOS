@@ -1042,6 +1042,18 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task El_dano_de_un_extra_del_conductor_tiene_donde_guardarse()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/47-dano-del-conductor-en-extras-y-conteo-vigente.sql.
+        await using var conexion = await AbrirAsync();
+
+        var sinOrigen = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_Extra' AND parent_object_id = OBJECT_ID(N'tblHallazgos') AND definition NOT LIKE N'%Origen%'");
+        var indicador = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'vwIndicadorDiario') AND definition LIKE N'%CorrigeInspeccionId%'");
+
+        Assert.True(sinOrigen == 1 && indicador == 1, "Falta el dano de los extras del conductor. Ejecute database/cambios-esquema/47-dano-del-conductor-en-extras-y-conteo-vigente.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

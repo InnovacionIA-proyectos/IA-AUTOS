@@ -31,7 +31,7 @@ public static class clsVisibilidadConductor
             EvidenciaFaltante = null,
             RevisadoPor = null,
             RevisadoAt = null,
-            // Lo que es de la calidad (el nivel) no se ve, y con ello tampoco si esta sin calificar.
+            // Lo que es de la calidad (el nivel) no se ve; solo se ve si ya esta calificado (Calificado, que no se toca aqui) y no el 'sin calificar' del lado de la calidad.
             SinCalificar = false,
         };
 

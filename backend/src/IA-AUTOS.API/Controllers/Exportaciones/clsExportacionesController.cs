@@ -72,7 +72,7 @@ public sealed class clsExportacionesController(clsExportacionesService servicio)
     /// <summary>
     /// Hallazgos en Excel: una fila por hallazgo con los datos del viaje y la etapa, la zona (lado + numero + nombre), la clase, el tamano, el nivel, si es preexistente, su origen, su estado de seguimiento y la
     /// fecha, hora y ubicacion de su foto. Filtros del listado de hallazgos: <c>estado_seguimiento</c>, <c>origen</c>, <c>revisado</c>, <c>cliente_id</c> (solo el super administrador), <c>viaje_id</c>, <c>vin</c>,
-    /// <c>inspeccion_id</c>, <c>nivel</c>, <c>cuadrante_numero</c>, <c>lado</c>, <c>proceso</c>, <c>desde</c> y <c>hasta</c>. Maximo 50000 filas.
+    /// <c>inspeccion_id</c>, <c>nivel</c>, <c>sin_calificar</c>, <c>cuadrante_numero</c>, <c>lado</c>, <c>proceso</c>, <c>desde</c> y <c>hasta</c>. Maximo 50000 filas.
     /// </summary>
     [HttpGet("hallazgos.xlsx")]
     [Produces(XLSX)]
@@ -91,7 +91,8 @@ public sealed class clsExportacionesController(clsExportacionesService servicio)
         [FromQuery] string? proceso,
         [FromQuery] string? desde,
         [FromQuery] string? hasta,
+        [FromQuery(Name = "sin_calificar")] string? sinCalificar,
         CancellationToken ct) =>
         Descargar(await servicio.ExportarHallazgosAsync(
-            new FiltrosHallazgosRequest(estadoSeguimiento, origen, revisado, clienteId, viajeId, vin, inspeccionId, nivel, cuadranteNumero, lado, proceso, desde, hasta, null, null, null), ct));
+            new FiltrosHallazgosRequest(estadoSeguimiento, origen, revisado, clienteId, viajeId, vin, inspeccionId, nivel, cuadranteNumero, lado, proceso, desde, hasta, null, null, null, sinCalificar), ct));
 }

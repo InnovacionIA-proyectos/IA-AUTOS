@@ -538,11 +538,13 @@ incluidos los que aún no están en un viaje. Inspector y conductor solo ven los
 {
   "items": [
     { "id": "uuid", "vin": "…", "marca": "Renault", "modelo": "Duster", "color": "Gris", "operacion": "nacional", "activo": true,
-      "etapas": 3, "completas": 3, "novedades": 1 }
+      "etapas": 3, "completas": 3, "novedades": 1, "sin_calificar": 0 }
   ],
   "total": 120, "pagina": 1, "tamano": 50
 }
 ```
+
+`novedades` cuenta los hallazgos **con nivel de la versión vigente** de cada informe del carro (los de una versión que una corrección cerrada ya reemplazó no cuentan: un carro con 4 daños en la versión 1 y 1 en la versión 2 devuelve 1) y `sin_calificar`, **aparte**, los de la versión vigente que aún no tienen nivel; un daño sin calificar pasa a `novedades` cuando se califica. Para el mismo carro y día coinciden con `sin_calificar` del indicador diario. El nombre `sin_calificar` es una propuesta, por confirmar.
 
 **Cambio frente a la versión anterior:** el listado ya no responde `rows`, `page` ni `pageSize`, ni acepta `page`, ni trae páginas fijas de 500; usa `items`, `pagina` y `tamano` (50 por defecto, máximo 200).
 
@@ -550,12 +552,14 @@ incluidos los que aún no están en un viaje. Inspector y conductor solo ven los
 Autenticado. Inventario completo de un VIN: etapas (de todos sus viajes), y dentro de cada una sus inspecciones con hallazgos, evidencias y
 transferencia. Un inspector o conductor recibe `403` si el VIN no está en sus viajes (`404` si no existe) y, del VIN, ve solo las etapas de sus viajes.
 
+`novedades` y `sin_calificar` son las mismas dos cifras del listado de vehículos (versión vigente de cada informe; con nivel y sin nivel), sobre las etapas que se devuelven.
+
 Cada etapa trae `posicion`: la posición (de 1 a la capacidad de la niñera de ese viaje) que tuvo el VIN en ella, o `null` si no se registró (los viajes anteriores al cambio y las unidades que no salen).
 
 ```json
 {
   "id": "uuid", "vin": "…", "marca": "…", "tipo_vehiculo": null, "modelo": null, "chasis": null, "color": null,
-  "operacion": "nacional", "activo": true, "created_at": "…", "updated_at": "…",
+  "operacion": "nacional", "activo": true, "created_at": "…", "updated_at": "…", "novedades": 1, "sin_calificar": 0,
   "etapas": [
     {
       "id": "uuid", "orden": 1, "proceso": "cargue", "lugar": "CEDI 1", "requiere_inspeccion": true,
@@ -1221,7 +1225,7 @@ Un cuadrante que **no lleva lado** (por ejemplo el 54 «Parabrisas») va sin `la
 | `lado` | si el cuadrante lleva lado | `izquierdo` o `derecho`, según `lleva_lado` del cuadrante en el catálogo (**ninguna regla usa números**). Si el cuadrante lleva lado y falta, `400` en `lado`; si no lo lleva y se envía, `400` en `lado` («Este cuadrante no lleva lado») |
 | `clase_dano` | sí | `codigo` **activo** del catálogo `clases-dano` |
 | `tamano_dano` | sí | `codigo` **activo** del catálogo `tamanos-dano` |
-| `nivel_severidad` | inspector y administrador | `codigo` **activo** de `niveles-severidad` (`v1_plus`, `v1`, `v2`, `v3`). El conductor **no lo envía** (`400`): queda vacío hasta que un inspector revise su novedad |
+| `nivel_severidad` | inspector y administrador | `codigo` **activo** de `niveles-severidad` (`v1_plus`, `v1`, `v2`, `v3`). El conductor **no lo envía**: la regla es una sola para el daño de una zona y el de un extra (ver «Nivel que manda el conductor») y su daño queda sin nivel hasta que un inspector lo califique |
 | `es_preexistente` | no | `true` si el daño ya existía. Exige `hallazgo_origen_id` |
 | `hallazgo_origen_id` | con `es_preexistente` | un hallazgo de una **inspección cerrada anterior del mismo VIN** (la lista de [`hallazgos-previos`](#get-apiinspeccionesidhallazgos-previos)) con la **misma zona y la misma clase**; si no, `400` en `hallazgo_origen_id`. Sin `es_preexistente` verdadero no se envía |
 | `nota` | no | máximo 500 caracteres |
@@ -1242,6 +1246,9 @@ Respuesta (`HallazgoCreadoDto`): el `HallazgoDto` más su `evidencia` (`Evidenci
 
 En el informe y el inventario, los hallazgos llegan como `HallazgoDto` (el mismo objeto sin `evidencia`) y sus fotos en `evidencias`, con `hallazgo_id`.
 
+**Nivel que manda el conductor.** El conductor no asigna el nivel de severidad, ni en el daño de una **zona** (`POST /api/inspecciones/{id}/hallazgos`) ni en el de un **extra** (`POST` y `PUT /api/inspecciones/{id}/extras`): si lo envía responde `400` con `details.fieldErrors.nivel_severidad`
+«El conductor no asigna el nivel de severidad: lo asigna el inspector», el mismo texto en los dos casos, y no se guarda nada (decisión propia sobre cómo responder, por confirmar con el negocio: la alternativa era ignorar el nivel). El daño del conductor nace **sin nivel** y con `origen: "conductor"`; un inspector lo califica después con `POST /api/hallazgos/{id}/revision`.
+
 ### Hallazgo por región
 Un hallazgo se atribuye a una **zona** del vehículo, no a una parte en texto libre. La zona es **lado + número** de un cuadrante (`izquierdo 7`); se guarda por lado + número, no por el panel donde se tocó: «izquierdo 7» es la misma zona se toque donde se toque. Que un cuadrante lleve lado o no lo declara el catálogo (`lleva_lado`): los laterales (por ejemplo del 1 al 35) llevan lado y las piezas centrales (50 a 59) no. **`izquierdo` es el lado del conductor, visto sentado al volante.** Ya no existen las zonas provisionales: los hallazgos de ese tipo se desvincularon (ver «Cuadrantes, regiones y paneles de daño»).
 
@@ -1251,7 +1258,9 @@ Campos del `HallazgoDto`:
 |---|---|
 | `cuadrante_numero`, `lado` | la zona; en un cuadrante que no lleva lado `lado` es `null`. Ambos son `null` en un hallazgo sin ubicar |
 | `cuadrante_nombre`, `zona`, `aiag_area` | el nombre de la pieza (del cuadrante), el texto listo para mostrar («Izquierdo 4 · Guardafango delantero», «54 · Parabrisas») y el código AIAG de esa zona («14/16»; texto, sin formato fijo; `null` si no tiene). En un hallazgo histórico sin ubicar, `zona` es la parte que se escribió entonces |
-| `nivel_severidad`, `nivel_nombre`, `nivel_accion` | el nivel V (`v1_plus`…`v3`), su nombre («V1+») y la acción del catálogo («Se rechaza el vehículo»). Los tres son `null` mientras la novedad de un conductor no se revise |
+| `nivel_severidad`, `nivel_nombre`, `nivel_accion` | el nivel V (`v1_plus`…`v3`), su nombre («V1+») y la acción del catálogo («Se rechaza el vehículo»). Los tres son `null` mientras el daño no se califique (la novedad o el daño de zona o de extra del conductor, o uno migrado sin nivel) |
+| `sin_calificar`, `calificado` | `sin_calificar` es `true` cuando el hallazgo no tiene nivel y `calificado` es lo contrario (`true` cuando ya lo tiene). Ven los dos todos los roles; el conductor recibe `sin_calificar: false` y `calificado`, que es lo único que sabe de la calificación (nunca el nivel) |
+| `extra_id` | el extra del que nace el daño (`null` en los demás hallazgos); ese daño no tiene zona |
 | `origen` | `inspector` o `conductor` |
 | `tipo_novedad` | solo en una novedad del conductor: `golpe`, `piedra`, `granizo` o `incidente_vial`; si no, `null` |
 | `nota` | texto libre, máximo 500 |
@@ -1338,15 +1347,15 @@ Un **extra** es un elemento del vehículo fuera del dibujo estándar (barras de 
 | `texto` | solo con `otro` | obligatorio con el tipo `otro` (máximo 100 caracteres) y **no se admite** con los demás (`400` en `texto`) |
 | `observacion` | no | máximo 500 caracteres |
 | `danado` | no | `true` marca el extra como dañado; sin él (o en `false`) el extra no tiene daño |
-| `clase_dano`, `tamano_dano`, `nivel_severidad` | los tres, con `danado: true` | un valor **activo** de `clases-dano`, `tamanos-dano` y `niveles-severidad` (`400` en cada campo que falte o sea inválido, todos juntos); sin `danado: true` no se admiten (`400` en ese campo) |
+| `clase_dano`, `tamano_dano`, `nivel_severidad` | con `danado: true`, los **tres** para el inspector, el administrador y el super administrador; el **conductor** envía solo `clase_dano` y `tamano_dano` | un valor **activo** de `clases-dano`, `tamanos-dano` y `niveles-severidad` (`400` en cada campo que falte o sea inválido, todos juntos, con los mensajes de siempre); el `nivel_severidad` que envía el conductor responde `400` (ver «Nivel que manda el conductor»); sin `danado: true` no se admiten (`400` en ese campo) |
 
 `POST` responde `201` con el `ExtraDto`: `{ id, inspeccion_id, tipo, tipo_nombre, texto, nombre, observacion, created_at, updated_at, fotos: [EvidenciaDto], dano }`, con `dano` en `null` si no está dañado; `nombre` es cómo se muestra («Platón», «Otro: portabicicletas»). `PUT /api/inspecciones/{id}/extras/{extra_id}` reemplaza los tres campos (`200` con el `ExtraDto`; el tipo actual de un extra se conserva aunque se haya inactivado después). `DELETE` responde `204`; un extra **con fotos o con daño no se quita** (`409`: la foto y el daño son evidencia y no se borran). `404` si el extra no es de esta inspección. Las **fotos** del extra se envían a `POST /api/inspecciones/{id}/evidencias` con `extra_id`, selladas como las demás (fecha, ubicación, precisión, dispositivo, hash y sello del servidor). Cada cambio queda auditado (`extra.crear|actualizar|quitar`).
 
 El detalle de la inspección (`GET /api/inspecciones/{id}`) y el inventario del VIN (`GET /api/vehiculos/{vin}/inventario`, en cada inspección) traen `extras` con el `ExtraDto` de cada uno y sus fotos. El informe PDF y el PDF del inventario los presentan en una sección propia («Extras del vehículo») con su galería sellada, dentro del máximo de 60 fotos. `inspecciones.xlsx` gana la columna **Extras** (cuántos reportó cada inspección). Un extra **sin daño** no entra en ninguna otra exportación, ni en el mapa de calor, los patrones, los indicadores o la tasa de rechazo; el **daño** de un extra entra como cualquier hallazgo.
 
-**Daño de un extra.** Con `danado: true` el extra guarda su daño con **clase, tamaño y nivel de severidad** (los tres obligatorios). El daño es un **hallazgo de siempre** ligado al extra (`extra_id`), del inspector: aparece en `GET /api/hallazgos` y en el detalle del informe, cuenta en los patrones, el mapa de calor, las averías y los
+**Daño de un extra.** Con `danado: true` el extra guarda su daño con **clase, tamaño y nivel de severidad** (los tres obligatorios para el inspector y el administrador; el conductor da la clase y el tamaño y su daño nace **sin nivel**, con `origen: "conductor"` y el nombre del extra como parte, como el daño de una zona suya). El daño es un **hallazgo de siempre** ligado al extra (`extra_id`), del inspector o del conductor: aparece en `GET /api/hallazgos` y en el detalle del informe, cuenta en los patrones, el mapa de calor, las averías y los
 indicadores, y cuenta en la tasa de rechazo como cualquier hallazgo (cuando su evidencia está completa). Como un extra no está en el dibujo, **el daño no tiene zona**: en el `HallazgoDto` `cuadrante_numero`, `lado`, `cuadrante_nombre` y `aiag_area` vienen `null` y `zona` trae el **nombre del extra** («Platón», «Otro: portabicicletas»),
-para que las pantallas no lo lean como un error; `extra_id` lo identifica como daño de un extra (`null` en los demás). Su foto es la del extra (no pide una foto propia: el extra ya exige al menos una para cerrar la inspección). `ExtraDto.dano` es `{ hallazgo_id, clase_dano, tamano_dano, nivel_severidad }`.
+para que las pantallas no lo lean como un error; `extra_id` lo identifica como daño de un extra (`null` en los demás). Su foto es la del extra (no pide una foto propia: el extra ya exige al menos una para cerrar la inspección). `ExtraDto.dano` es `{ hallazgo_id, clase_dano, tamano_dano, nivel_severidad }` (`nivel_severidad` es `null` en el daño del conductor mientras no se califique). El daño sin nivel de un extra se califica con `POST /api/hallazgos/{id}/revision` **sin zona** (ver «Revisión de la novedad»); una vez calificado conserva su extra y su nombre y sigue sin zona.
 `PUT` puede **agregar** el daño a un extra que aún no lo tiene; uno ya guardado es evidencia y **no se quita ni se cambia** (`409` con `danado: false` o con valores distintos; sin mencionarlo o con los mismos valores se conserva). Los extras reportados **antes** de este cambio siguen válidos y sin daño, sin migración. Un daño de extra queda auditado como `hallazgo.crear`.
 
 **La lista de evidencias.** La lista general de evidencias del informe (`evidencias` de `GET /api/inspecciones/{id}`) **incluye las fotos de los extras**, marcadas con su `extra_id` (y sin `vista_id` ni `hallazgo_id`); además cada extra trae las suyas en `fotos`. No son fotos libres de la acomodación.
@@ -1388,6 +1397,7 @@ Ver «Visibilidad por cliente».
 | `cliente_id` | un cliente: solo lo elige el `super_admin`; quien se limita a su cliente puede enviar el suyo y enviar otro responde `403` |
 | `viaje_id`, `vin`, `inspeccion_id` | los de ese viaje, VIN (sin distinguir mayúsculas) o inspección |
 | `nivel` | `v1_plus`, `v1`, `v2` o `v3` |
+| `sin_calificar` | `true`: los hallazgos **sin nivel** de la versión vigente del informe, de cualquier origen (zona o extra del conductor, novedad, daño migrado del inspector); `false`: los que ya tienen nivel. Cualquier otro valor responde `400`. Se combina con `viaje_id`, `vin`, `proceso`, `inspeccion_id`, `origen`, `revisado` y los demás filtros como una intersección (`sin_calificar=true&revisado=true` no trae nada, porque lo revisado ya tiene nivel); con `nivel` no tiene sentido y `sin_calificar=true&nivel=…` responde `400`. El nombre del filtro es una propuesta, por confirmar |
 | `cuadrante_numero`, `lado` | la zona numerada (`lado`: `izquierdo` o `derecho`); un lado sin número trae todas las zonas de ese lado |
 | `proceso` | el proceso de la etapa: `cargue`, `transporte`, `descargue`... |
 | `desde`, `hasta` | fecha ISO 8601 con zona: el **cierre de la inspección** del hallazgo (una inspección en borrador no tiene cierre y no entra en un rango) |
@@ -1401,15 +1411,15 @@ Cada fila (`HallazgoListadoDto`) es el `HallazgoDto` más el contexto de su insp
 así «Por revisar» no obliga a abrir cada informe. El nombre del conductor es un dato personal: va solo en este campo, nunca en textos libres.
 
 **Sin calificar.** El `HallazgoDto` (en el listado, el detalle y el informe) trae `sin_calificar`: `true` cuando el daño **no tiene nivel** (una novedad del conductor aún sin revisar o un daño sin nivel), para que las pantallas lo distingan a simple vista. Un viaje finalizado lo sigue mostrando, y
-finalizar un viaje con daños sin calificar funciona igual que siempre. El conductor no ve el nivel y recibe siempre `sin_calificar: false`.
+finalizar un viaje con daños sin calificar funciona igual que siempre. El conductor no ve el nivel y recibe siempre `sin_calificar: false`; el dato `calificado` (verdadero cuando ya tiene nivel) lo ve él también, sin el nivel, y llega en la ficha, el detalle del informe y el inventario.
 
 ### `GET /api/hallazgos/{id}`
 La misma fila más `seguimiento` (el historial, como en `GET /api/hallazgos/{id}/seguimiento`) y `notas_aclaratorias` (un arreglo que va vacío hasta que existan las notas aclaratorias de una inspección cerrada). `404` si no existe; `403` si es de un viaje ajeno (inspector) o de otro cliente.
 
 ## Revisión de la novedad
 
-La novedad que registra el conductor nace sin zona, clase ni nivel V: un inspector la revisa, la ubica y le asigna el nivel, que el conductor nunca asigna. A partir de la revisión el hallazgo entra al seguimiento y a los patrones. También se revisan
-así los hallazgos que el conductor registra en la salida de un Cargue que él hizo con la excepción «No hay inspector» y en la **llegada del Descargue que hace él** sin inspector en destino (que tampoco traen nivel).
+La novedad que registra el conductor nace sin zona, clase ni nivel V, y el daño que registra en una zona o en un extra nace sin nivel: un inspector lo revisa (lo **califica**), lo ubica si hace falta y le asigna el nivel, que el conductor nunca asigna. A partir de la revisión el hallazgo entra al seguimiento y a los patrones. También se revisan
+así los hallazgos que el conductor registra en la salida de un Cargue que él hizo con la excepción «No hay inspector» y en la **llegada del Descargue que hace él** sin inspector en destino (que tampoco traen nivel). La revisión acepta **cualquier hallazgo sin nivel**, venga de donde venga: el daño de una zona del conductor, el de un extra, una novedad o un daño migrado de origen inspector.
 Al revisar se puede confirmar que el daño **ya estaba registrado** (`es_preexistente` y `hallazgo_origen_id`); si el conductor lo anotó otra vez en la llegada, no queda como un daño del transporte.
 
 ### `POST /api/hallazgos/{id}/revision`
@@ -1418,19 +1428,21 @@ Al revisar se puede confirmar que el daño **ya estaba registrado** (`es_preexis
 { "cuadrante_numero": 7, "lado": "izquierdo", "clase_dano": "golpe", "nivel_severidad": "v1", "tamano_dano": "5_10cm", "nota": "Abolladura sobre la puerta" }
 ```
 
+El daño de un **extra** se califica sin zona: `{ "clase_dano": "golpe", "nivel_severidad": "v2" }`.
+
 Con «ya estaba registrado»: `{ …, "es_preexistente": true, "hallazgo_origen_id": "uuid" }`.
 
 | Campo | Obligatorio | Regla |
 |---|---|---|
-| `cuadrante_numero` (+ `lado` si el cuadrante lo lleva) | sí | las mismas reglas de la zona de `POST /api/inspecciones/{id}/hallazgos` (el lado lo decide el cuadrante; cuadrante **activo**) |
-| `clase_dano` | sí | un código **activo** de `clases-dano` |
+| `cuadrante_numero` (+ `lado` si el cuadrante lo lleva) | sí, salvo en un daño que ya tiene zona o que es de un extra | las mismas reglas de la zona de `POST /api/inspecciones/{id}/hallazgos` (el lado lo decide el cuadrante; cuadrante **activo**). Un daño **con zona conserva la suya** si la petición no manda otra (con otra, la cambia); el daño de un **extra no lleva zona**: no se exige y enviarla responde `400` en `cuadrante_numero`; la novedad sin zona sí la exige |
+| `clase_dano` | sí | un código **activo** de `clases-dano` (el del daño de una zona o de un extra es el que ya tiene; se vuelve a enviar) |
 | `nivel_severidad` | sí | un código **activo** de `niveles-severidad` (`v1_plus`, `v1`, `v2`, `v3`) |
 | `tamano_dano` | no | corrige el que eligió el conductor (un código activo de `tamanos-dano`); sin él se conserva el del conductor |
 | `nota` | no | máximo 500 caracteres |
 | `es_preexistente` + `hallazgo_origen_id` | no | la misma validación de cuando se crea un hallazgo (S6-HU-01.3): `es_preexistente: true` exige `hallazgo_origen_id`, y `hallazgo_origen_id` solo se envía con `es_preexistente: true` (`400` si no). El origen debe ser un hallazgo de una **inspección cerrada anterior del mismo VIN** (cerrada antes de que empezara la que se revisa) con **la misma zona (lado + número) y la misma clase** que se asignan en esa revisión; si no, `400` con `details.fieldErrors.hallazgo_origen_id` |
 
-Responde `200` con el `HallazgoDto` ya completo: `revisado_por` y `revisado_at` quedan guardados y `estado_seguimiento` sigue `pendiente`. Queda una fila `revision` en el historial del hallazgo (`GET /api/hallazgos/{id}/seguimiento`) con quién la hizo, su `nota` y en
-`detalle` lo asignado: `zona_id`, `cuadrante_numero`, `lado`, `clase_dano`, `nivel_severidad`, `tamano_dano` y `tamano_dano_anterior` (solo si se corrigió el tamaño); si se confirmó como ya registrado, también `es_preexistente: true`, `hallazgo_origen_id` y `confirmado_por`. El hallazgo queda con `es_preexistente: true`, su `hallazgo_origen_id` y `confirmado_por` (quien revisó) y **no cuenta como daño del transporte**. Queda en la auditoría (`hallazgo.revision`). Sin la revisión, el seguimiento del hallazgo responde `409`.
+Responde `200` con el `HallazgoDto` ya completo (un daño de extra conserva su `extra_id`, su nombre en `zona` y sus `cuadrante_numero` y `lado` en `null`): `revisado_por` y `revisado_at` quedan guardados y `estado_seguimiento` sigue `pendiente`. Queda una fila `revision` en el historial del hallazgo (`GET /api/hallazgos/{id}/seguimiento`) con quién la hizo, su `nota` y en
+`detalle` lo asignado: `zona_id` (nulo en un extra), `cuadrante_numero`, `lado`, `clase_dano`, `nivel_severidad`, `tamano_dano` y `tamano_dano_anterior` (solo si se corrigió el tamaño); si se confirmó como ya registrado, también `es_preexistente: true`, `hallazgo_origen_id` y `confirmado_por`. El hallazgo queda con `es_preexistente: true`, su `hallazgo_origen_id` y `confirmado_por` (quien revisó) y **no cuenta como daño del transporte**. Queda en la auditoría (`hallazgo.revision`). Sin la revisión, el seguimiento del hallazgo responde `409`.
 
 **Quién revisa.**
 
@@ -1438,13 +1450,15 @@ Responde `200` con el `HallazgoDto` ya completo: `revisado_por` y `revisado_at` 
 |---|---|
 | `inspector` | hallazgos de un VIN que está en alguno de sus viajes (`403` si no) |
 | `admin` y `super_admin` | los de su cliente (el `super_admin`, los de cualquiera) |
-| `coordinador_calidad` | **solo** los hallazgos del conductor de la salida de un Cargue que el conductor hizo con la excepción «No hay inspector» o de la **llegada del Descargue que hizo el conductor** (`403` en cualquier otro caso): los revisa a distancia con las fotos y les asigna el nivel V antes de que salga el viaje, de modo que un V1+ todavía se puede recuperar o marcar «no sale». Propuesta pendiente de confirmar por el negocio |
+| `coordinador_calidad` | **solo** los hallazgos **del conductor** (zona, extra o novedad) de la salida de un Cargue que el conductor hizo con la excepción «No hay inspector» o de la **llegada del Descargue que hizo el conductor** (`403` en cualquier otro caso, con el mismo mensaje; un daño sin nivel de origen inspector tampoco): los revisa a distancia con las fotos y les asigna el nivel V antes de que salga el viaje, de modo que un V1+ todavía se puede recuperar o marcar «no sale». Propuesta pendiente de confirmar por el negocio |
 | los demás roles | `403` |
 
-Quien se limita a su cliente recibe `403` con un hallazgo de otro cliente.
+Un inspector que no tiene el VIN en sus viajes recibe `403` «El VIN del hallazgo no pertenece a ninguno de sus viajes». Quien se limita a su cliente recibe `403` con un hallazgo de otro cliente. El inspector que tiene el reclamo de una parada del plan B también califica los daños del conductor de las revisiones de esa parada (se agrega con la entrega por parada).
 
-**Errores.** `400` si falta o es inválida la zona, la clase o el nivel (todos los errores juntos en `details.fieldErrors`); `404` si el hallazgo no existe; `409` con `code: "CONFLICT"` si el hallazgo **no es del conductor**; `409` con `code: "HALLAZGO_YA_REVISADO"`
-si ya fue revisado, también si dos usuarios lo revisan a la vez (solo la primera revisión se guarda y se conserva).
+**Nada obliga a calificar.** Ningún proceso exige calificar ni pone plazo: un daño sin nivel no impide cerrar informes, firmar ni finalizar el viaje.
+
+**Errores.** `400` si falta o es inválida la zona, la clase o el nivel (todos los errores juntos en `details.fieldErrors`); `404` si el hallazgo no existe; `409` con `code: "CONFLICT"` y el mensaje «El hallazgo ya tiene nivel» si el hallazgo **ya tiene nivel** (el del inspector nace con él; el texto es una propuesta, por confirmar); `409` con `code: "HALLAZGO_YA_REVISADO"`
+si ya fue calificado, también si dos usuarios lo revisan a la vez (solo la primera revisión se guarda y se conserva).
 
 **Hallazgo crítico.** Si el `nivel_severidad` asignado es crítico, se crea una notificación `hallazgo_critico` de urgencia **alta** para cada `coordinador_calidad` y `admin` activo del cliente del vehículo, por bandeja y push (ver [Notificaciones](#notificaciones)).
 Los niveles críticos son el parámetro `niveles_criticos` (por defecto `v1_plus,v1`).
@@ -1702,7 +1716,7 @@ Nada de otros viajes del mismo VIN: el inventario solo trae las etapas de sus vi
 
 | Endpoint | Para el conductor |
 |---|---|
-| `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` | los hallazgos de las inspecciones de **sus viajes**, con `zona` (texto y `cuadrante_numero` + `lado`) y `aiag_area`, `clase_dano`, `tamano_dano`, `tipo_novedad`, `origen`, `es_preexistente` y `created_at`, y su foto (`evidencias` con `hallazgo_id` y su URL firmada). Llegan en `null`: `nivel_severidad`, `nivel_nombre`, `nivel_accion`, `estado_seguimiento`, `evidencia_completa`, `evidencia_faltante`, `revisado_por`, `revisado_at`, `nota`, `hallazgo_origen_id` y `confirmado_por`; y sin la foto del sello de quien valida (`es_sello: true`) |
+| `GET /api/vehiculos/{vin}/inventario` y `GET /api/inspecciones/{id}` | los hallazgos de las inspecciones de **sus viajes**, con `zona` (texto y `cuadrante_numero` + `lado`) y `aiag_area`, `clase_dano`, `tamano_dano`, `tipo_novedad`, `origen`, `es_preexistente` y `created_at`, y su foto (`evidencias` con `hallazgo_id` y su URL firmada). Llegan en `null`: `nivel_severidad`, `nivel_nombre`, `nivel_accion`, `estado_seguimiento`, `evidencia_completa`, `evidencia_faltante`, `revisado_por`, `revisado_at`, `nota`, `hallazgo_origen_id` y `confirmado_por`; y sin la foto del sello de quien valida (`es_sello: true`). Trae `calificado`: `true` cuando el hallazgo ya tiene nivel (el conductor ve «Pendiente de calificar» y después «Calificado», nunca el nivel) |
 | `GET /api/inspecciones/{id}/pdf` | el PDF lleva esos hallazgos sin nivel, sin seguimiento, sin historial y sin notas aclaratorias de hallazgos |
 | `GET /api/inspecciones` | el listado no trae hallazgos |
 | `GET /api/inspecciones/{id}/hallazgos-previos`, `GET /api/hallazgos` y `GET /api/hallazgos/{id}` | `403` |
@@ -2381,7 +2395,7 @@ Todas las filas traen: **VIN, marca, tipo de vehículo, operación, cliente, via
 |---|---|---|---|
 | `GET /api/exportaciones/viajes.xlsx` | unidad (VIN), etapa y momento (salida o llegada) de cada viaje: los seis registros de la unidad | `estado`, `codigo_mtrack`, `vin`, `conductor_id`, `inspector_id`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` (sobre la creación del viaje) | estado del viaje y de la unidad, origen y destino; `Estado` es `sin_inspeccion`, `borrador` o `cerrada` (versión y fechas vacías si no hay inspección) |
 | `GET /api/exportaciones/inspecciones.xlsx` | inspección (cada versión) | `vin`, `usuario_id`, `viaje_id`, `momento`, `estado`, `proceso`, `operacion`, `marca`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` (sobre la fecha de la inspección) | el inspector y las **firmas** de la transferencia: tipo de cierre y, de quien entrega y de quien recibe, quién, fecha e IP |
-| `GET /api/exportaciones/hallazgos.xlsx` | hallazgo | `estado_seguimiento`, `origen`, `revisado`, `cliente_id`, `viaje_id`, `vin`, `inspeccion_id`, `nivel`, `cuadrante_numero`, `lado`, `proceso`, `desde`, `hasta` (sobre el cierre de la inspección) | **zona** (lado, número y nombre), clase, tamaño, nivel, si es preexistente, origen, estado de seguimiento y la **fecha, hora y ubicación de su foto** |
+| `GET /api/exportaciones/hallazgos.xlsx` | hallazgo | `estado_seguimiento`, `origen`, `revisado`, `cliente_id`, `viaje_id`, `vin`, `inspeccion_id`, `nivel`, `cuadrante_numero`, `lado`, `proceso`, `desde`, `hasta` (sobre el cierre de la inspección) y `sin_calificar` (el mismo filtro del listado de hallazgos) | **zona** (lado, número y nombre), clase, tamaño, nivel, si es preexistente, origen, estado de seguimiento y la **fecha, hora y ubicación de su foto** |
 
 Los filtros llevan los nombres `snake_case` de cada listado (ver «Paginación y filtros»); la exportación no pagina ni ordena (`pagina`, `tamano` y `orden` no aplican). El filtro `vin` sigue la regla única del VIN. `cliente_id` (viajes, inspecciones y hallazgos) solo lo elige el `super_admin`.
 
@@ -2543,7 +2557,7 @@ propuesta pendiente de confirmar por el negocio). `objetivo` es el parámetro `o
 }
 ```
 
-`sin_calificar` es una **cifra aparte**: los daños sin nivel (hallazgos, no unidades) de las unidades despachadas ese día. No se suma a `con_novedad` ni al porcentaje, y tampoco se descarta. La tasa de rechazo (`GET /api/metricas/rechazo`) no cambia: sigue contando las unidades con al menos un hallazgo.
+`sin_calificar` es una **cifra aparte**: los daños sin nivel (hallazgos, no unidades) de la **versión vigente** de los informes de las unidades despachadas ese día (los de una versión que una corrección cerrada ya reemplazó no cuentan). No se suma a `con_novedad` ni al porcentaje, y tampoco se descarta. La tasa de rechazo (`GET /api/metricas/rechazo`) no cambia: sigue contando las unidades con al menos un hallazgo.
 
 La tasa de rechazo (`GET /api/metricas/rechazo`) sigue publicada como está; no hay `GET /api/reportes/rechazo`.
 

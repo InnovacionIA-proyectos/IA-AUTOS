@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.21.0"
+    "version": "3.22.0"
   },
   "paths": {
     "/api/viajes": {
@@ -8847,7 +8847,8 @@
                         "created_at": "2026-10-22T14:30:00.000Z",
                         "updated_at": "2026-10-22T14:30:00.000Z",
                         "sin_calificar": true,
-                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "calificado": true
                       }
                     ]
                   ],
@@ -8926,7 +8927,8 @@
                         "created_at": "2026-10-22T14:30:00.000Z",
                         "updated_at": "2026-10-22T14:30:00.000Z",
                         "sin_calificar": true,
-                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "calificado": true
                       }
                     ]
                   ],
@@ -9005,7 +9007,8 @@
                         "created_at": "2026-10-22T14:30:00.000Z",
                         "updated_at": "2026-10-22T14:30:00.000Z",
                         "sin_calificar": true,
-                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "calificado": true
                       }
                     ]
                   ],
@@ -14668,6 +14671,13 @@
               "type": "integer",
               "format": "int32"
             }
+          },
+          {
+            "name": "sin_calificar",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -17524,7 +17534,8 @@
                         "created_at": "2026-10-22T14:30:00.000Z",
                         "updated_at": "2026-10-22T14:30:00.000Z",
                         "sin_calificar": true,
-                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "calificado": true
                       }
                     ]
                   ],
@@ -17603,7 +17614,8 @@
                         "created_at": "2026-10-22T14:30:00.000Z",
                         "updated_at": "2026-10-22T14:30:00.000Z",
                         "sin_calificar": true,
-                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "calificado": true
                       }
                     ]
                   ],
@@ -17682,7 +17694,8 @@
                         "created_at": "2026-10-22T14:30:00.000Z",
                         "updated_at": "2026-10-22T14:30:00.000Z",
                         "sin_calificar": true,
-                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                        "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "calificado": true
                       }
                     ]
                   ],
@@ -20841,6 +20854,13 @@
           },
           {
             "name": "hasta",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sin_calificar",
             "in": "query",
             "schema": {
               "type": "string"
@@ -29483,7 +29503,8 @@
             "created_at": "2026-10-22T14:30:00.000Z",
             "updated_at": "2026-10-22T14:30:00.000Z",
             "sin_calificar": true,
-            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "calificado": true
           }
         ],
         "required": [
@@ -29654,6 +29675,9 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "calificado": {
+            "type": "boolean"
           }
         }
       },
@@ -29779,7 +29803,8 @@
             "created_at": "2026-10-22T14:30:00.000Z",
             "updated_at": "2026-10-22T14:30:00.000Z",
             "sin_calificar": true,
-            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "calificado": true
           }
         ],
         "required": [
@@ -30011,6 +30036,9 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "calificado": {
+            "type": "boolean"
           }
         }
       },
@@ -30050,7 +30078,8 @@
             "created_at": "2026-10-22T14:30:00.000Z",
             "updated_at": "2026-10-22T14:30:00.000Z",
             "sin_calificar": true,
-            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "calificado": true
           }
         ],
         "required": [
@@ -30245,6 +30274,10 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "calificado": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -30321,7 +30354,8 @@
             "created_at": "2026-10-22T14:30:00.000Z",
             "updated_at": "2026-10-22T14:30:00.000Z",
             "sin_calificar": true,
-            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "calificado": true
           }
         ],
         "required": [
@@ -30547,6 +30581,9 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "calificado": {
+            "type": "boolean"
           }
         }
       },
@@ -30617,7 +30654,8 @@
             "created_at": "2026-10-22T14:30:00.000Z",
             "updated_at": "2026-10-22T14:30:00.000Z",
             "sin_calificar": true,
-            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+            "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "calificado": true
           }
         ],
         "required": [
@@ -30815,6 +30853,9 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "calificado": {
+            "type": "boolean"
           }
         }
       },
@@ -31050,7 +31091,8 @@
                 "created_at": "2026-10-22T14:30:00.000Z",
                 "updated_at": "2026-10-22T14:30:00.000Z",
                 "sin_calificar": true,
-                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "calificado": true
               }
             ],
             "evidencias": [
@@ -31995,7 +32037,9 @@
                 "inspecciones": [],
                 "posicion": 1
               }
-            ]
+            ],
+            "novedades": 1,
+            "sin_calificar": 1
           }
         ],
         "required": [
@@ -32065,6 +32109,16 @@
             "items": {
               "$ref": "#/components/schemas/InventarioEtapaDto"
             }
+          },
+          "novedades": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
+          },
+          "sin_calificar": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -32285,7 +32339,8 @@
                 "created_at": "2026-10-22T14:30:00.000Z",
                 "updated_at": "2026-10-22T14:30:00.000Z",
                 "sin_calificar": true,
-                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "calificado": true
               }
             ],
             "evidencias": [
@@ -32708,7 +32763,8 @@
                 "created_at": "2026-10-22T14:30:00.000Z",
                 "updated_at": "2026-10-22T14:30:00.000Z",
                 "sin_calificar": true,
-                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+                "extra_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "calificado": true
               }
             ],
             "total": 1,
@@ -32876,7 +32932,8 @@
             "activo": true,
             "etapas": 1,
             "completas": 1,
-            "novedades": 1
+            "novedades": 1,
+            "sin_calificar": 1
           }
         ],
         "required": [
@@ -32932,6 +32989,11 @@
           "novedades": {
             "type": "integer",
             "format": "int32"
+          },
+          "sin_calificar": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0
           }
         }
       },
@@ -34454,7 +34516,8 @@
                 "activo": true,
                 "etapas": 1,
                 "completas": 1,
-                "novedades": 1
+                "novedades": 1,
+                "sin_calificar": 1
               }
             ],
             "total": 1,
