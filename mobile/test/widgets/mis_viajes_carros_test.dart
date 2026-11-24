@@ -163,4 +163,30 @@ void main() {
       expect(find.text('VINCCCCCCCCCCCCC3'), findsNothing);
     });
   });
+
+  // S8-HU-01.3: la firma de la niñera se abre desde el viaje, para quienes la firman.
+  group('la firma de la niñera', () {
+    ViajesRepositorioFalso conFirma({bool cerrado = false}) => ViajesRepositorioFalso()
+      ..remotos = [viaje('v1', vines: [_vin], inspectorId: 'u1', conductorId: 'luis', cargueCerrado: cerrado)];
+
+    testWidgets('el conductor y el inspector del viaje la tienen en la tarjeta', (tester) async {
+      await abrir(tester, conFirma());
+      expect(find.widgetWithText(OutlinedButton, 'Firma de la niñera'), findsOneWidget, reason: 'conductor');
+    });
+
+    testWidgets('el inspector del viaje también', (tester) async {
+      await abrir(tester, conFirma(), arnes: Arnes());
+      expect(find.widgetWithText(OutlinedButton, 'Firma de la niñera'), findsOneWidget);
+    });
+
+    testWidgets('con el cargue cerrado ya no se ofrece', (tester) async {
+      await abrir(tester, conFirma(cerrado: true));
+      expect(find.widgetWithText(OutlinedButton, 'Firma de la niñera'), findsNothing);
+    });
+
+    testWidgets('a quien no es del viaje no se le ofrece', (tester) async {
+      await abrir(tester, ViajesRepositorioFalso()..remotos = [viaje('v1', vines: [_vin], inspectorId: 'otro', conductorId: 'otro2')]);
+      expect(find.widgetWithText(OutlinedButton, 'Firma de la niñera'), findsNothing);
+    });
+  });
 }

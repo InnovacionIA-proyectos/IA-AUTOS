@@ -67,6 +67,8 @@ void main() {
       'lugar_cargue_tiene_inspector',
       // S8-HU-03.2: el muelle, el lugar de donde salen los muelles y si la entrega del cargue ya se cerró.
       'lugar_cargue_id', 'muelle_id', 'muelle', 'cargue_firmado_por_ninera_at', 'cargue_no_firmado_at',
+      // S8-HU-01.3: el conductor del viaje es quien recibe en la firma de la niñera.
+      'conductor_id',
     ],
     // Quién recibe en un punto lo decide el servidor por punto, no por viaje.
     'EntregaPuntoDto': ['viaje_id', 'lugar_id', 'lugar', 'unidades', 'unidades_pendientes', 'entregada', 'lugar_tiene_inspector'],
@@ -203,6 +205,9 @@ void main() {
     'CambiarPinRequest': ['pin_actual', 'pin_nuevo'],
     // S8-HU-03.2: lo que el inspector cambia del viaje durante el cargue.
     'CambiarCargueDelViajeRequest': ['muelle_id', 'trailer'],
+    // S8-HU-01.3: la firma de toda la niñera, con el momento y el GPS, y su constancia de no firma.
+    'FirmarCargueRequest': ['firma', 'parte', 'fecha_momento', 'lat', 'lng', 'precision_m', 'reservas'],
+    'NoFirmaDelCargueRequest': ['parte', 'motivo', 'testigo_usuario_id', 'evidencia', 'fecha_momento', 'lat', 'lng', 'precision_m'],
     'CrearInspeccionRequest': ['etapa_id', 'momento', 'fecha', 'lat', 'lng', 'notas'],
     // Las diez claves van siempre, aunque algunas puedan ir nulas: la API las exige presentes.
     'CrearEvidenciaRequest': [
@@ -311,6 +316,8 @@ void main() {
       ('post', '/api/viajes/{}/vehiculos/{}/vuelve-a-salir'),
       // El muelle y el tráiler que el inspector cambia durante el cargue.
       ('patch', '/api/viajes/{}/cargue'),
+      ('post', '/api/viajes/{}/cargue/firma'),
+      ('post', '/api/viajes/{}/cargue/no-firma'),
       // El permiso de la excepción «No hay inspector» donde el punto de cargue sí tiene inspectores. Conceder no
       // está: eso se hace desde el portal, y la app solo pide y espera.
       ('post', '/api/viajes/{}/permiso-sin-inspector'),

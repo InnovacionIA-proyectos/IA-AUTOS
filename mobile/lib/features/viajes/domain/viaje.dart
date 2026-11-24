@@ -13,6 +13,7 @@ class Viaje {
     this.unidad,
     this.trailer,
     this.conductorNombre,
+    this.conductorId,
     this.inspectorId,
     this.inspectorNombre,
     this.origen,
@@ -36,6 +37,7 @@ class Viaje {
         unidad: json['unidad'] as String?,
         trailer: json['trailer'] as String?,
         conductorNombre: json['conductor_nombre'] as String?,
+        conductorId: json['conductor_id'] as String?,
         inspectorId: json['inspector_id'] as String?,
         inspectorNombre: json['inspector_nombre'] as String?,
         origen: json['origen'] as String?,
@@ -82,6 +84,9 @@ class Viaje {
   final String? trailer;
   final String? conductorNombre;
 
+  /// Quién lo conduce. Es quien recibe en la firma de la niñera.
+  final String? conductorId;
+
   /// Quién lo inspecciona. Con él se sabe si quien mira puede marcar que una unidad no sale.
   final String? inspectorId;
   final String? inspectorNombre;
@@ -120,6 +125,7 @@ class Viaje {
         'unidad': unidad,
         'trailer': trailer,
         'conductor_nombre': conductorNombre,
+        'conductor_id': conductorId,
         'inspector_id': inspectorId,
         'inspector_nombre': inspectorNombre,
         'origen': origen,

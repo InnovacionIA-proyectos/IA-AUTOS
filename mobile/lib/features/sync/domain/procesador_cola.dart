@@ -20,6 +20,9 @@ String? motivoDeRetiro(ErrorApi e, Job job) {
   final motivo = switch (e.details) { final Map m => m['motivo'], _ => null };
   if (e.status == 409 && (motivo == 'unidad_no_sale' || e.code == codigoUnidadNoSale)) return e.message;
   if (e.status == 409 && motivo == 'unidad_bajada') return mensajeCarroBajado;
+  // S8-HU-01.3 CA-11: en el cargue ya no se firma carro por carro; un envío viejo se retira con lo que dice el
+  // servidor («firma desde la pantalla de la niñera»), no queda «con error».
+  if (e.status == 409 && motivo == 'firma_por_ninera') return e.message;
   if (e.status == 404 && (job is NovedadJob || job is LlegadaJob)) return mensajeCarroBajado;
   return null;
 }
@@ -147,6 +150,19 @@ class ProcesadorCola {
               await _ejecutarEntregaPunto(job);
             case ReciboSinEntregaJob():
               await gateway.firmarReciboSinEntrega(job.inspeccionId, firma: job.firma);
+            case FirmaNineraJob():
+              await gateway.firmarCargueNinera(
+                job.viajeId,
+                parte: job.parte,
+                firma: job.firma,
+                fechaMomento: job.fechaMomento,
+                lat: job.lat,
+                lng: job.lng,
+                precisionM: job.precisionM,
+                reservas: job.reservas,
+              );
+            case NoFirmaNineraJob():
+              await _ejecutarNoFirmaNinera(job);
             case NovedadJob():
               if (await _ejecutarNovedad(job) == _Desenlace.espera) {
                 esperando.add(job.id);
@@ -364,6 +380,32 @@ class ProcesadorCola {
 
   /// La constancia va en dos pasos, como un hallazgo: primero el archivo, y el progreso se guarda, de modo
   /// que un corte entre la subida y el registro no vuelve a subir la foto.
+  /// Como la constancia por carro: la foto se sube primero y queda anotada, así un reintento no la sube dos veces.
+  Future<void> _ejecutarNoFirmaNinera(NoFirmaNineraJob job) async {
+    var actual = job;
+    if (actual.foto.storagePath == null) {
+      final subido = await gateway.subirImagen(await archivos.leerBytes(actual.foto.ruta), nombre: 'no-firma-ninera.jpg');
+      actual = actual.conFoto(actual.foto.copyWith(storagePath: subido.storagePath, hash: subido.hash));
+      await cola.guardar(actual);
+    }
+    await gateway.registrarNoFirmaNinera(
+      actual.viajeId,
+      parte: actual.parte,
+      motivo: actual.motivo,
+      testigoId: actual.testigoId,
+      foto: actual.foto,
+      fechaMomento: actual.fechaMomento,
+      lat: actual.lat,
+      lng: actual.lng,
+      precisionM: actual.precisionM,
+    );
+    try {
+      await archivos.borrar(actual.foto.ruta);
+    } catch (_) {
+      // Una foto que no se pudo borrar no invalida una constancia ya registrada.
+    }
+  }
+
   Future<void> _ejecutarNoFirma(NoFirmaJob job) async {
     var actual = job;
     if (actual.foto.storagePath == null) {

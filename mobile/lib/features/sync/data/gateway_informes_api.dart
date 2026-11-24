@@ -3,6 +3,7 @@ import '../../inspecciones/domain/extra_local.dart';
 import '../../inspecciones/domain/foto_local.dart';
 import '../../inspecciones/domain/hallazgo_local.dart';
 import '../../inspecciones/domain/nota_aclaratoria.dart';
+import '../domain/job.dart';
 import '../domain/puertos.dart';
 
 /// Implementación de [GatewayInformes] sobre la API REST (contrato en backend/docs/openapi.json).
@@ -288,6 +289,60 @@ class GatewayInformesApi implements GatewayInformes {
         'nota': foto.nota,
         'hash_sha256': foto.hash,
       },
+    });
+  }
+
+  @override
+  Future<void> firmarCargueNinera(
+    String viajeId, {
+    required String parte,
+    required String firma,
+    required String fechaMomento,
+    required double lat,
+    required double lng,
+    double? precisionM,
+    List<ReservaCarro> reservas = const [],
+  }) async {
+    await _api.post('/api/viajes/${Uri.encodeComponent(viajeId)}/cargue/firma', cuerpo: {
+      'firma': firma,
+      'parte': parte,
+      'fecha_momento': fechaMomento,
+      'lat': lat,
+      'lng': lng,
+      'precision_m': ?precisionM,
+      if (reservas.isNotEmpty) 'reservas': [for (final r in reservas) r.toJson()],
+    });
+  }
+
+  @override
+  Future<void> registrarNoFirmaNinera(
+    String viajeId, {
+    required String parte,
+    required String motivo,
+    required String testigoId,
+    required FotoLocal foto,
+    required String fechaMomento,
+    required double lat,
+    required double lng,
+    double? precisionM,
+  }) async {
+    await _api.post('/api/viajes/${Uri.encodeComponent(viajeId)}/cargue/no-firma', cuerpo: {
+      'parte': parte,
+      'motivo': motivo,
+      'testigo_usuario_id': testigoId,
+      'evidencia': {
+        'storage_path': foto.storagePath,
+        'sello_fecha': foto.selloFecha,
+        'sello_lat': foto.selloLat,
+        'sello_lng': foto.selloLng,
+        'precision': foto.precision,
+        'dispositivo_id': foto.dispositivoId,
+        'hash_sha256': foto.hash,
+      },
+      'fecha_momento': fechaMomento,
+      'lat': lat,
+      'lng': lng,
+      'precision_m': ?precisionM,
     });
   }
 

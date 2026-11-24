@@ -176,6 +176,32 @@ abstract interface class GatewayInformes {
     required FotoLocal foto,
   });
 
+  /// La firma de toda la niñera de una parte (S8-HU-01.3 CA-5), con la hora y el GPS del momento y, si es quien
+  /// recibe, sus reservas por carro.
+  Future<void> firmarCargueNinera(
+    String viajeId, {
+    required String parte,
+    required String firma,
+    required String fechaMomento,
+    required double lat,
+    required double lng,
+    double? precisionM,
+    List<ReservaCarro> reservas = const [],
+  });
+
+  /// La constancia de no firma de toda la niñera (CA-14), con la foto ya subida.
+  Future<void> registrarNoFirmaNinera(
+    String viajeId, {
+    required String parte,
+    required String motivo,
+    required String testigoId,
+    required FotoLocal foto,
+    required String fechaMomento,
+    required double lat,
+    required double lng,
+    double? precisionM,
+  });
+
   /// Agrega una nota aclaratoria al registro: `inspeccion`, `hallazgo` o `transferencia`. Cada uno tiene su ruta.
   Future<void> agregarNota({required String entidad, required String entidadId, required String texto});
 }

@@ -212,6 +212,8 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       _hallazgos.addAll(guardado.hallazgos);
       _extras.addAll(guardado.extras);
       _archivos.addAll(guardado.archivos);
+      // Los puestos elegidos antes de salir van encima de los que ya tiene el servidor (CA-4).
+      _posiciones.addAll(guardado.posiciones);
       _ofrecido = null;
     });
     // Escribirlas dispara el guardado de las notas, que vuelve a escribir lo mismo.
@@ -223,13 +225,13 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     final guardado = _ofrecido;
     final clave = _clave;
     if (guardado == null || clave == null) return;
-    final fotos = guardado.cuantasFotos == 1 ? '1 foto' : '${guardado.cuantasFotos} fotos';
-    final danos = guardado.cuantosDanos == 1 ? '1 daño' : '${guardado.cuantosDanos} daños';
     final confirmado = await showDialog<bool>(
       context: context,
       builder: (contexto) => AlertDialog(
         title: const Text('¿Empezar de nuevo?'),
-        content: Text('Se borra lo guardado en este teléfono para esta captura: $fotos y $danos. No se puede recuperar.'),
+        content: Text(
+          'Se borra lo guardado en este teléfono para esta captura: ${resumenBorrador(guardado)}. No se puede recuperar.',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.of(contexto).pop(false), child: const Text('Cancelar')),
           TextButton(onPressed: () => Navigator.of(contexto).pop(true), child: const Text('Borrar y empezar')),
@@ -256,6 +258,11 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         extras: [..._extras],
         notas: _notas.text,
         archivos: {..._archivos},
+        // Solo lo que se eligió aquí: lo que el servidor ya tiene vuelve con el viaje.
+        posiciones: {
+          for (final e in _posiciones.entries)
+            if (_posicionesPrevias[e.key] != e.value) e.key: e.value,
+        },
       );
 
   /// Cambia lo capturado y lo guarda en el teléfono.
@@ -338,7 +345,12 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       _viaje = viaje;
       _unidades = viaje.vehiculos;
       _posicionesPrevias = posicionesDelViaje(viaje);
-      _posiciones.addAll(_posicionesPrevias);
+      // Lo que ya se eligió aquí (un borrador que se continuó antes de que llegara el viaje) va encima.
+      final elegidas = {..._posiciones};
+      _posiciones
+        ..clear()
+        ..addAll(_posicionesPrevias)
+        ..addAll(elegidas);
     });
   }
 
@@ -671,6 +683,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                 unidades: _unidades,
                 posiciones: _posiciones,
                 fotosMinimas: _fotosAcomodacionMinimas,
+                fotosDelViaje: _viaje?.fotosAcomodacion ?? 0,
                 exigeMuelle: muellesDelLugar(ref.read(catalogosProvider), _viaje?.lugarCargueId).isNotEmpty,
                 muelleId: _viaje?.muelleId,
               )
@@ -900,7 +913,8 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                       posiciones: _posiciones,
                       fotos: _fotos,
                       fotosMinimas: _fotosAcomodacionMinimas,
-                      alElegir: (vin, posicion) => setState(() {
+                      // Cada puesto elegido se guarda en el teléfono al momento (S8-HU-01.3 CA-4).
+                      alElegir: (vin, posicion) => _cambiar(() {
                         if (posicion == null) {
                           _posiciones.remove(vin);
                         } else {

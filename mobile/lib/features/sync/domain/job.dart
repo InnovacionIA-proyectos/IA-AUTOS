@@ -69,6 +69,8 @@ sealed class Job {
         'recibo_sin_entrega' => ReciboSinEntregaJob.fromJson(json),
         'novedad' => NovedadJob.fromJson(json),
         'llegada' => LlegadaJob.fromJson(json),
+        'firma_ninera' => FirmaNineraJob.fromJson(json),
+        'no_firma_ninera' => NoFirmaNineraJob.fromJson(json),
         final otro => throw FormatException('Tipo de job desconocido: $otro'),
       };
 }
@@ -1007,5 +1009,270 @@ class LlegadaJob extends Job {
         'fecha': fecha,
         'lat': lat,
         'lng': lng,
+      };
+}
+
+/// Lo que quien recibe deja dicho de un carro al firmar la niñera: lo recibe, pero con esta observación.
+class ReservaCarro {
+  const ReservaCarro({required this.vin, required this.observaciones});
+
+  factory ReservaCarro.fromJson(Map<String, dynamic> json) =>
+      ReservaCarro(vin: json['vin'] as String, observaciones: json['observaciones'] as String);
+
+  final String vin;
+  final String observaciones;
+
+  Map<String, dynamic> toJson() => {'vin': vin, 'observaciones': observaciones};
+
+  @override
+  bool operator ==(Object other) => other is ReservaCarro && other.vin == vin && other.observaciones == observaciones;
+
+  @override
+  int get hashCode => Object.hash(vin, observaciones);
+}
+
+/// La hora del momento con su zona, como la pide el contrato: «2026-11-18T14:09:00-05:00».
+///
+/// La firma hecha sin señal se envía después, y lo que vale es cuándo se hizo en el patio, no cuándo llegó.
+String isoConZona(DateTime momento) {
+  final local = momento.toLocal();
+  String dos(int n) => n.abs().toString().padLeft(2, '0');
+  final desfase = local.timeZoneOffset;
+  final signo = desfase.isNegative ? '-' : '+';
+  return '${local.year.toString().padLeft(4, '0')}-${dos(local.month)}-${dos(local.day)}'
+      'T${dos(local.hour)}:${dos(local.minute)}:${dos(local.second)}'
+      '$signo${dos(desfase.inHours)}:${dos(desfase.inMinutes % 60)}';
+}
+
+/// La firma del cargue de toda la niñera (S8-HU-01.3 CA-5): una por parte para todos los carros activos del viaje,
+/// con la hora y el GPS del momento en que se firmó. Quien recibe puede dejar reservas en algunos carros (CA-13).
+///
+/// Va por la cola: se firma en el patio, donde puede no haber señal. Reenviarla no duplica nada: el servidor
+/// reconoce la misma firma sobre carros ya cerrados por esa parte.
+class FirmaNineraJob extends Job {
+  const FirmaNineraJob({
+    required super.id,
+    required super.etiqueta,
+    required super.creadoEn,
+    super.intentos,
+    super.error,
+    super.codigoError,
+    super.fallido,
+    super.usuarioId,
+    required this.viajeId,
+    required this.parte,
+    required this.firma,
+    required this.fechaMomento,
+    required this.lat,
+    required this.lng,
+    this.precisionM,
+    this.reservas = const [],
+  });
+
+  factory FirmaNineraJob.fromJson(Map<String, dynamic> json) => FirmaNineraJob(
+        id: json['id'] as String,
+        etiqueta: json['etiqueta'] as String,
+        creadoEn: json['creado_en'] as int,
+        intentos: json['intentos'] as int? ?? 0,
+        error: json['error'] as String?,
+        codigoError: json['codigo_error'] as String?,
+        fallido: json['fallido'] as bool? ?? false,
+        usuarioId: json['usuario_id'] as String?,
+        viajeId: json['viaje_id'] as String,
+        parte: json['parte'] as String,
+        firma: json['firma'] as String,
+        fechaMomento: json['fecha_momento'] as String,
+        lat: (json['lat'] as num).toDouble(),
+        lng: (json['lng'] as num).toDouble(),
+        precisionM: (json['precision_m'] as num?)?.toDouble(),
+        reservas: [for (final r in (json['reservas'] as List<dynamic>? ?? [])) ReservaCarro.fromJson(r as Map<String, dynamic>)],
+      );
+
+  final String viajeId;
+
+  /// `entrega` (el inspector del viaje) o `recibe` (su conductor).
+  final String parte;
+  final String firma;
+
+  /// Cuándo se firmó, con su zona ([isoConZona]).
+  final String fechaMomento;
+  final double lat;
+  final double lng;
+  final double? precisionM;
+
+  /// Solo de quien recibe.
+  final List<ReservaCarro> reservas;
+
+  @override
+  String get tipo => 'firma_ninera';
+
+  @override
+  FirmaNineraJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) =>
+      _copiar(intentos: intentos, error: error, codigoError: codigo, fallido: fallido);
+
+  @override
+  FirmaNineraJob conUsuario(String usuario) => _copiar(usuarioId: usuario);
+
+  FirmaNineraJob _copiar({int? intentos, String? error, String? codigoError, bool? fallido, String? usuarioId}) =>
+      FirmaNineraJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        intentos: intentos ?? this.intentos,
+        error: error,
+        codigoError: codigoError ?? this.codigoError,
+        fallido: fallido ?? this.fallido,
+        usuarioId: usuarioId ?? this.usuarioId,
+        viajeId: viajeId,
+        parte: parte,
+        firma: firma,
+        fechaMomento: fechaMomento,
+        lat: lat,
+        lng: lng,
+        precisionM: precisionM,
+        reservas: reservas,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'firma_ninera',
+        'id': id,
+        'etiqueta': etiqueta,
+        'creado_en': creadoEn,
+        'intentos': intentos,
+        'error': error,
+        'codigo_error': codigoError,
+        'fallido': fallido,
+        'usuario_id': usuarioId,
+        'viaje_id': viajeId,
+        'parte': parte,
+        'firma': firma,
+        'fecha_momento': fechaMomento,
+        'lat': lat,
+        'lng': lng,
+        'precision_m': precisionM,
+        'reservas': [for (final r in reservas) r.toJson()],
+      };
+}
+
+/// La constancia de no firma de toda la niñera (S8-HU-01.3 CA-14): la deja la parte que sí está cuando la otra se
+/// niega, con el motivo, la foto y un testigo, y cierra la entrega del cargue de todos los carros activos.
+class NoFirmaNineraJob extends Job {
+  const NoFirmaNineraJob({
+    required super.id,
+    required super.etiqueta,
+    required super.creadoEn,
+    super.intentos,
+    super.error,
+    super.codigoError,
+    super.fallido,
+    super.usuarioId,
+    required this.viajeId,
+    required this.parte,
+    required this.motivo,
+    required this.testigoId,
+    required this.foto,
+    required this.fechaMomento,
+    required this.lat,
+    required this.lng,
+    this.precisionM,
+  });
+
+  factory NoFirmaNineraJob.fromJson(Map<String, dynamic> json) => NoFirmaNineraJob(
+        id: json['id'] as String,
+        etiqueta: json['etiqueta'] as String,
+        creadoEn: json['creado_en'] as int,
+        intentos: json['intentos'] as int? ?? 0,
+        error: json['error'] as String?,
+        codigoError: json['codigo_error'] as String?,
+        fallido: json['fallido'] as bool? ?? false,
+        usuarioId: json['usuario_id'] as String?,
+        viajeId: json['viaje_id'] as String,
+        parte: json['parte'] as String,
+        motivo: json['motivo'] as String,
+        testigoId: json['testigo_id'] as String,
+        foto: FotoLocal.fromJson(json['foto'] as Map<String, dynamic>),
+        fechaMomento: json['fecha_momento'] as String,
+        lat: (json['lat'] as num).toDouble(),
+        lng: (json['lng'] as num).toDouble(),
+        precisionM: (json['precision_m'] as num?)?.toDouble(),
+      );
+
+  final String viajeId;
+
+  /// La parte que **se negó**: la otra es quien deja la constancia.
+  final String parte;
+  final String motivo;
+
+  /// Una tercera persona, ni el inspector ni el conductor del viaje.
+  final String testigoId;
+
+  /// La foto de la constancia, con su sello. Se sube antes de registrar; una sola sirve a todos los carros.
+  final FotoLocal foto;
+  final String fechaMomento;
+  final double lat;
+  final double lng;
+  final double? precisionM;
+
+  @override
+  String get tipo => 'no_firma_ninera';
+
+  NoFirmaNineraJob conFoto(FotoLocal nueva) => _copiar(foto: nueva);
+
+  @override
+  NoFirmaNineraJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) =>
+      _copiar(intentos: intentos, error: error, codigoError: codigo, fallido: fallido);
+
+  @override
+  NoFirmaNineraJob conUsuario(String usuario) => _copiar(usuarioId: usuario);
+
+  NoFirmaNineraJob _copiar({
+    int? intentos,
+    String? error,
+    String? codigoError,
+    bool? fallido,
+    String? usuarioId,
+    FotoLocal? foto,
+  }) =>
+      NoFirmaNineraJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        intentos: intentos ?? this.intentos,
+        error: error,
+        codigoError: codigoError ?? this.codigoError,
+        fallido: fallido ?? this.fallido,
+        usuarioId: usuarioId ?? this.usuarioId,
+        viajeId: viajeId,
+        parte: parte,
+        motivo: motivo,
+        testigoId: testigoId,
+        foto: foto ?? this.foto,
+        fechaMomento: fechaMomento,
+        lat: lat,
+        lng: lng,
+        precisionM: precisionM,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'no_firma_ninera',
+        'id': id,
+        'etiqueta': etiqueta,
+        'creado_en': creadoEn,
+        'intentos': intentos,
+        'error': error,
+        'codigo_error': codigoError,
+        'fallido': fallido,
+        'usuario_id': usuarioId,
+        'viaje_id': viajeId,
+        'parte': parte,
+        'motivo': motivo,
+        'testigo_id': testigoId,
+        'foto': foto.toJson(),
+        'fecha_momento': fechaMomento,
+        'lat': lat,
+        'lng': lng,
+        'precision_m': precisionM,
       };
 }

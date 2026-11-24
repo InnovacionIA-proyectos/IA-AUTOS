@@ -304,6 +304,44 @@ class GatewayFalso implements GatewayInformes {
     return _paso('registrarNoFirma');
   }
 
+  /// Las firmas de la niñera que se enviaron.
+  final List<({String viajeId, String parte, String fechaMomento, double lat, double lng, List<ReservaCarro> reservas})>
+      firmasNinera = [];
+
+  /// Las constancias de no firma de toda la niñera que se enviaron.
+  final List<({String viajeId, String parte, String motivo, String testigoId, FotoLocal foto})> constanciasNinera = [];
+
+  @override
+  Future<void> firmarCargueNinera(
+    String viajeId, {
+    required String parte,
+    required String firma,
+    required String fechaMomento,
+    required double lat,
+    required double lng,
+    double? precisionM,
+    List<ReservaCarro> reservas = const [],
+  }) {
+    firmasNinera.add((viajeId: viajeId, parte: parte, fechaMomento: fechaMomento, lat: lat, lng: lng, reservas: reservas));
+    return _paso('firmarCargueNinera');
+  }
+
+  @override
+  Future<void> registrarNoFirmaNinera(
+    String viajeId, {
+    required String parte,
+    required String motivo,
+    required String testigoId,
+    required FotoLocal foto,
+    required String fechaMomento,
+    required double lat,
+    required double lng,
+    double? precisionM,
+  }) {
+    constanciasNinera.add((viajeId: viajeId, parte: parte, motivo: motivo, testigoId: testigoId, foto: foto));
+    return _paso('registrarNoFirmaNinera');
+  }
+
   @override
   Future<void> agregarNota({required String entidad, required String entidadId, required String texto}) {
     notasEnviadas.add((entidad: entidad, entidadId: entidadId, texto: texto));

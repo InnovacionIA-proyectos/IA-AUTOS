@@ -22,10 +22,12 @@ Viaje viaje(
   Map<String, int> posiciones = const {},
   bool cargueTieneInspector = false,
   String? inspectorId,
+  String? conductorId,
   String? lugarCargueId,
   String? muelleId,
   String? muelle,
   bool cargueCerrado = false,
+  int fotosAcomodacion = 0,
   Map<String, String> destinos = const {},
   Map<String, DateTime> destinosCambiados = const {},
   /// El `estado_unidad` de cada VIN que no esté activo (`no_sale`, `bajado`), y el «no sale» de cada uno.
@@ -42,10 +44,12 @@ Viaje viaje(
       conductorNombre: conductor,
       cargueTieneInspector: cargueTieneInspector,
       inspectorId: inspectorId,
+      conductorId: conductorId,
       lugarCargueId: lugarCargueId,
       muelleId: muelleId,
       muelle: muelle,
       cargueCerrado: cargueCerrado,
+      fotosAcomodacion: fotosAcomodacion,
       vehiculos: [
         for (final v in vines)
           ViajeVehiculo(

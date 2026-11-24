@@ -149,11 +149,9 @@ BloqueoCierre? bloqueoDeCierre({
     final sin = vinesSinPosicion(acomodacion.unidades!, acomodacion.posiciones);
     if (sin.isNotEmpty) return FaltaPosicion(sin.first);
     if (acomodacion.exigeMuelle && acomodacion.muelleId == null) return const FaltaMuelle();
-    // Solo las de ESTE informe. El viaje ya tenga o no fotos de la acomodación, el servidor las cuenta por
-    // inspección (`ContarFotosLibresAsync(inspeccion.Id)`), así que contarlas por viaje dejaría cerrar aquí lo
-    // que allá vuelve con un 400 y deja el informe a medias. Que la niñera se fotografíe una sola vez por viaje
-    // (S7-HU-05 CA-2) necesita primero ese cambio en el servidor.
-    final hay = fotosDeAcomodacion(fotos).length;
+    // Por viaje (S8-HU-01.3 CA-3): el servidor cuenta las fotos de todas las salidas del cargue del viaje, así
+    // que una foto de la niñera sirve para todos los carros. Las que el viaje ya tiene más las de esta pantalla.
+    final hay = fotosDeAcomodacion(fotos).length + acomodacion.fotosDelViaje;
     if (hay < acomodacion.fotosMinimas) return FaltanFotosDeAcomodacion(minimas: acomodacion.fotosMinimas, hay: hay);
   }
 
@@ -180,6 +178,7 @@ class Acomodacion {
     required this.unidades,
     required this.posiciones,
     required this.fotosMinimas,
+    this.fotosDelViaje = 0,
     this.exigeMuelle = false,
     this.muelleId,
   });
@@ -187,6 +186,9 @@ class Acomodacion {
   final List<ViajeVehiculo>? unidades;
   final Map<String, int> posiciones;
   final int fotosMinimas;
+
+  /// Las fotos de la acomodación que el viaje ya tiene en el servidor, tomadas en la de cualquier carro.
+  final int fotosDelViaje;
 
   /// El lugar de cargue tiene al menos un muelle activo: entonces el viaje necesita el suyo para cerrar.
   final bool exigeMuelle;

@@ -14,6 +14,7 @@ class BorradorCaptura {
     this.extras = const [],
     this.notas = '',
     this.archivos = const {},
+    this.posiciones = const {},
   });
 
   factory BorradorCaptura.fromJson(Map<String, dynamic> json) => BorradorCaptura(
@@ -24,6 +25,9 @@ class BorradorCaptura {
         extras: [for (final e in json['extras'] as List<dynamic>? ?? const []) ExtraLocal.fromJson(e as Map<String, dynamic>)],
         notas: json['notas'] as String? ?? '',
         archivos: {for (final a in json['archivos'] as List<dynamic>? ?? const []) a as String},
+        posiciones: {
+          for (final e in (json['posiciones'] as Map<String, dynamic>? ?? const {}).entries) e.key: (e.value as num).toInt(),
+        },
       );
 
   /// Las fotos del checklist y de la acomodación.
@@ -36,13 +40,16 @@ class BorradorCaptura {
   /// lo que se borra al empezar de nuevo, para que no queden fotos sin dueño en el teléfono (CA-5).
   final Set<String> archivos;
 
+  /// Los puestos que se eligieron en la acomodación y el servidor todavía no tiene (S8-HU-01.3 CA-4): VIN → puesto.
+  final Map<String, int> posiciones;
+
   /// Lo que se cuenta como fotos al ofrecer continuar: las del checklist y la acomodación, y las de los extras.
   int get cuantasFotos => fotos.length + extras.fold(0, (n, e) => n + e.fotos.length);
 
   int get cuantosDanos => hallazgos.length;
 
   /// Sin nada capturado no hay nada que ofrecer continuar.
-  bool get vacio => fotos.isEmpty && hallazgos.isEmpty && extras.isEmpty && notas.trim().isEmpty;
+  bool get vacio => fotos.isEmpty && hallazgos.isEmpty && extras.isEmpty && notas.trim().isEmpty && posiciones.isEmpty;
 
   Map<String, dynamic> toJson() => {
         'fotos': [for (final f in fotos) f.toJson()],
@@ -50,14 +57,21 @@ class BorradorCaptura {
         'extras': [for (final e in extras) e.toJson()],
         'notas': notas,
         'archivos': archivos.toList(),
+        'posiciones': posiciones,
       };
 }
 
-/// «Continuar lo guardado (4 fotos, 1 daño)».
-String etiquetaContinuar(BorradorCaptura borrador) {
-  final fotos = borrador.cuantasFotos == 1 ? '1 foto' : '${borrador.cuantasFotos} fotos';
-  final danos = borrador.cuantosDanos == 1 ? '1 daño' : '${borrador.cuantosDanos} daños';
-  return 'Continuar lo guardado ($fotos, $danos)';
+/// «Continuar lo guardado (4 fotos, 1 daño)», y los puestos cuando los hay: «(1 foto, 0 daños, 3 puestos)».
+String etiquetaContinuar(BorradorCaptura borrador) => 'Continuar lo guardado (${resumenBorrador(borrador, ', ')})';
+
+/// Lo que hay guardado, dicho en pocas palabras: «2 fotos y 1 daño», «1 foto, 0 daños y 3 puestos».
+String resumenBorrador(BorradorCaptura borrador, [String ultimo = ' y ']) {
+  final partes = [
+    borrador.cuantasFotos == 1 ? '1 foto' : '${borrador.cuantasFotos} fotos',
+    borrador.cuantosDanos == 1 ? '1 daño' : '${borrador.cuantosDanos} daños',
+    if (borrador.posiciones.isNotEmpty) borrador.posiciones.length == 1 ? '1 puesto' : '${borrador.posiciones.length} puestos',
+  ];
+  return '${partes.sublist(0, partes.length - 1).join(', ')}$ultimo${partes.last}';
 }
 
 /// Un borrador por persona y por momento: el de la salida del cargue de un VIN no es el de su llegada, ni el de

@@ -19,6 +19,8 @@ import '../../auth/presentation/auth_controller.dart';
 import '../../catalogos/domain/catalogos.dart';
 import '../../catalogos/presentation/catalogos_controller.dart';
 import '../../dibujo_dano/domain/dibujo_dano.dart';
+import '../../custodia/domain/firma_ninera.dart';
+import '../../custodia/presentation/firma_ninera_page.dart';
 import '../../custodia/presentation/recibo_sin_entrega_page.dart';
 import '../../inspecciones/domain/acomodacion.dart';
 import '../../inspecciones/domain/novedad_pendiente.dart';
@@ -299,6 +301,7 @@ class _Detalle extends ConsumerWidget {
     final viaje = viajeId == null ? null : ref.watch(viajeDeEtapaProvider(viajeId)).value;
     final viajeTerminado = viaje != null && !viaje.admiteTrabajo;
     final unidadDelViaje = viaje?.vehiculos.where((v) => v.vin == inventario.vin).firstOrNull;
+    final yoId = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.id));
     final unidadFuera = unidadDelViaje != null && !unidadDelViaje.sale;
     // Donde el punto de cargue tiene inspectores, la excepción se pide y se espera. Solo entonces se consulta:
     // en los demás viajes ese permiso no existe y preguntarlo sería un 404 por cada ficha que se abre.
@@ -406,6 +409,16 @@ class _Detalle extends ConsumerWidget {
                 inspeccion: momento.inspeccion!,
                 viajeTerminado: viajeTerminado,
               ),
+              // S8-HU-01.3 CA-11: en el cargue la única firma es la de la niñera. La ofrece solo a quienes la
+              // firman: el inspector y el conductor del viaje.
+              alFirmarNinera: etapa.viajeId != null && viaje != null && parteEnLaNinera(viaje, yoId) != null
+                  ? () async {
+                      await Navigator.of(context).push<void>(
+                        MaterialPageRoute(builder: (_) => FirmaNineraPage(viajeId: etapa.viajeId!)),
+                      );
+                      ref.invalidate(inventarioProvider(inventario.vin));
+                    }
+                  : null,
               alFirmar: (accion) => alIr(
                 '/inspecciones/vin/$vinRuta/firma/${accion.inspeccionId}?proceso=${Uri.encodeQueryComponent(catalogos.etiqueta(Catalogo.etapas, etapa.proceso))}'
                 '&soloFirma=${accion.soloFirma ? 1 : 0}'
@@ -1026,10 +1039,14 @@ class _TarjetaEtapa extends StatelessWidget {
     required this.reciboSinEntrega,
     required this.alReciboSinEntrega,
     required this.alAbrirInforme,
+    required this.alFirmarNinera,
     this.viajeTerminado = false,
   });
 
   final EtapaVista etapa;
+
+  /// Lleva a la firma de la niñera; null si quien mira no la firma.
+  final VoidCallback? alFirmarNinera;
 
   /// El viaje ya termino: esta etapa no espera nada de nadie.
   final bool viajeTerminado;
@@ -1160,6 +1177,16 @@ class _TarjetaEtapa extends StatelessWidget {
                   if (reciboSinEntrega != null)
                     // Nadie de la empresa entrega: en vez de esperar una firma que no llega, el conductor cierra con la suya.
                     FilledButton(onPressed: alReciboSinEntrega, child: const Text('Firmar recibo sin entrega'))
+                  // S8-HU-01.3 CA-11: en el cargue no se firma carro por carro (el servidor responde 409
+                  // `firma_por_ninera`); la firma, las reservas y la constancia van en la pantalla de la niñera.
+                  else if (etapa.proceso == 'cargue')
+                    if (alFirmarNinera != null)
+                      FilledButton(onPressed: alFirmarNinera, child: const Text('Ir a la firma de la niñera'))
+                    else
+                      Text(
+                        'El cargue se firma por niñera: lo firman el inspector y el conductor del viaje.',
+                        style: tema.bodySmall,
+                      )
                   else
                     FilledButton(
                       onPressed: () => alFirmar(a),

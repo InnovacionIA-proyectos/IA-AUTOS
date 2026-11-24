@@ -287,6 +287,18 @@ void main() {
       expect(find.text('Sin posición todavía'), findsNothing);
     });
 
+    // S8-HU-01.3 CA-3 y ESC-01: una foto de la niñera tomada en la acomodación de otro carro sirve para este.
+    testWidgets('las fotos de la acomodación se cuentan por viaje', (tester) async {
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1', vines: [vinA], posiciones: {vinA: 1}, fotosAcomodacion: 1),
+        vistas: vistasDePrueba,
+        momento: Momento.salida,
+      );
+
+      expect(find.textContaining('Faltan fotos de la acomodación'), findsNothing);
+    });
+
     // S8-HU-02.2 CA-6: un carro bajado ya no va en la niñera ni pide puesto.
     testWidgets('un carro bajado no aparece en la niñera ni pide puesto', (tester) async {
       await abrir(

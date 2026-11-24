@@ -1079,4 +1079,41 @@ void main() {
 
     expect(find.textContaining('Posición en la niñera'), findsNothing);
   });
+
+  // S8-HU-01.3 CA-11: en el cargue no se firma carro por carro; la ficha lleva a la firma de la niñera.
+  group('la firma del cargue va por niñera', () {
+    ViajesRepositorioFalso delViaje() => ViajesRepositorioFalso()
+      ..viajeDeEtapa = const Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: 'en_curso',
+        inspectorId: 'u1',
+        conductorId: 'conductor-1',
+        vehiculos: [ViajeVehiculo(vin: 'VIN00000000000001')],
+      );
+
+    testWidgets('al inspector del viaje le ofrece ir a la firma de la niñera, no firmar este carro', (tester) async {
+      await abrir(tester, viajes: delViaje());
+
+      expect(find.widgetWithText(FilledButton, 'Ir a la firma de la niñera'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Firmar transferencia'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Revisar y firmar'), findsNothing);
+    });
+
+    testWidgets('al conductor del viaje también', (tester) async {
+      await abrir(tester, sesion: conductor, viajes: delViaje());
+
+      expect(find.widgetWithText(FilledButton, 'Ir a la firma de la niñera'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Revisar y firmar'), findsNothing);
+    });
+
+    testWidgets('a quien no la firma, ni carro por carro ni por niñera: dice quién la firma', (tester) async {
+      await abrir(tester, sesion: administrador, viajes: delViaje());
+
+      expect(find.widgetWithText(FilledButton, 'Ir a la firma de la niñera'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Firmar transferencia'), findsNothing);
+      expect(find.text('El cargue se firma por niñera: lo firman el inspector y el conductor del viaje.'), findsOneWidget);
+    });
+  });
 }

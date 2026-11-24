@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:traza_autos/core/tema/tema.dart';
+import 'package:traza_autos/core/ui/widgets.dart';
 import 'package:traza_autos/features/auth/presentation/auth_controller.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
 import 'package:traza_autos/features/inspecciones/domain/borrador_captura.dart';
@@ -12,6 +13,7 @@ import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
 import 'package:traza_autos/features/inspecciones/presentation/captura_page.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
+import 'package:traza_autos/features/viajes/domain/viaje.dart';
 import 'package:traza_autos/features/viajes/providers.dart';
 
 import '../support/arnes.dart';
@@ -51,7 +53,7 @@ Future<void> avanzar(WidgetTester tester) async {
 }
 
 /// La captura se abre desde otra pantalla, como en la app: así se puede salir de ella y volver.
-Future<Arnes> montar(WidgetTester tester, {Arnes? arnes}) async {
+Future<Arnes> montar(WidgetTester tester, {Arnes? arnes, String momento = Momento.llegada, Viaje? delViaje}) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final usado = arnes ?? Arnes();
@@ -60,7 +62,7 @@ Future<Arnes> montar(WidgetTester tester, {Arnes? arnes}) async {
       retry: (_, _) => null,
       overrides: [
         ...usado.overrides,
-        viajesRepositorioProvider.overrideWithValue(ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1')),
+        viajesRepositorioProvider.overrideWithValue(ViajesRepositorioFalso()..viajeDeEtapa = delViaje ?? viaje('v1')),
         catalogosRepositorioProvider.overrideWithValue(
           CatalogosRepositorioFalso()
             ..guardado = catalogosCon('Golpe')
@@ -88,11 +90,11 @@ Future<Arnes> montar(WidgetTester tester, {Arnes? arnes}) async {
             ),
             GoRoute(
               path: '/captura',
-              builder: (_, _) => const CapturaPage(
+              builder: (_, _) => CapturaPage(
                 vin: _vin,
                 etapaId: 'e1',
                 proceso: 'cargue',
-                momento: Momento.llegada,
+                momento: momento,
                 viajeId: 'v1',
               ),
             ),
@@ -119,6 +121,43 @@ Arnes conGuardado(BorradorCaptura borrador) {
 Finder get _cerrarInforme => find.widgetWithText(FilledButton, 'Cerrar informe');
 
 void main() {
+  // S8-HU-01.3 CA-4 y ESC-10: los puestos de la acomodación se guardan en el teléfono al elegirlos.
+  group('los puestos de la acomodación', () {
+    const vinA = 'VINA0000000000001';
+    const vinB = 'VINB0000000000002';
+    final claveSalida = claveBorrador(usuarioId: 'u1', vin: _vin, etapaId: 'e1', momento: Momento.salida);
+
+    testWidgets('elegir un puesto lo guarda en el teléfono, sin repetir lo que ya tiene el servidor', (tester) async {
+      final arnes = await montar(
+        tester,
+        momento: Momento.salida,
+        delViaje: viaje('v1', vines: [vinA, vinB], posiciones: {vinB: 3}),
+      );
+      await abrirCaptura(tester);
+
+      await tester.tap(find.descendant(of: find.widgetWithText(Tarjeta, vinA), matching: find.widgetWithText(ChoiceChip, '4')));
+      await avanzar(tester);
+
+      expect(BorradorCaptura.fromJson(arnes.borradores.guardados[claveSalida]!).posiciones, {vinA: 4});
+    });
+
+    testWidgets('al volver se ofrecen y continuar los pone en su puesto', (tester) async {
+      final arnes = Arnes();
+      arnes.borradores.guardados[claveSalida] = const BorradorCaptura(posiciones: {vinA: 4}).toJson();
+      await montar(tester, arnes: arnes, momento: Momento.salida, delViaje: viaje('v1', vines: [vinA, vinB]));
+      await abrirCaptura(tester);
+
+      await tester.tap(find.text('Continuar lo guardado (0 fotos, 0 daños, 1 puesto)'));
+      await avanzar(tester);
+
+      final elegidas = tester
+          .widgetList<ChoiceChip>(find.descendant(of: find.widgetWithText(Tarjeta, vinA), matching: find.byType(ChoiceChip)))
+          .where((c) => c.selected);
+      expect(elegidas.map((c) => ((c.label as SizedBox).child as Text).data), ['4']);
+      expect(find.text('Falta la posición de la unidad $vinB'), findsOneWidget);
+    });
+  });
+
   group('volver a una captura guardada', () {
     testWidgets('ofrece continuar con lo guardado o empezar de nuevo, y no deja capturar antes', (tester) async {
       await montar(tester, arnes: conGuardado(guardadoDeAna()));
@@ -342,7 +381,18 @@ void main() {
   });
 
   // CA-9: nada que la cola no guarde ya.
-  test('el guardado lleva solo fotos, daños, extras, notas y rutas de archivo', () {
-    expect(guardadoDeAna().toJson().keys.toSet(), {'fotos', 'hallazgos', 'extras', 'notas', 'archivos'});
+  test('el guardado lleva solo fotos, daños, extras, notas, rutas de archivo y puestos', () {
+    // Los puestos son VIN y número de puesto (S8-HU-01.3 CA-4): ningún dato personal.
+    expect(guardadoDeAna().toJson().keys.toSet(), {'fotos', 'hallazgos', 'extras', 'notas', 'archivos', 'posiciones'});
+  });
+
+  test('un guardado con solo puestos no está vacío y los cuenta al ofrecer continuar', () {
+    const conPuestos = BorradorCaptura(posiciones: {'VINA': 4, 'VINB': 2});
+    final leido = BorradorCaptura.fromJson(conPuestos.toJson());
+
+    expect(leido.posiciones, {'VINA': 4, 'VINB': 2});
+    expect(leido.vacio, isFalse);
+    expect(etiquetaContinuar(leido), 'Continuar lo guardado (0 fotos, 0 daños, 2 puestos)');
+    expect(etiquetaContinuar(const BorradorCaptura()), 'Continuar lo guardado (0 fotos, 0 daños)');
   });
 }
