@@ -146,7 +146,7 @@ public sealed class clsInspeccionYaFirmadaException : clsExcepcionDominio
     public clsInspeccionYaFirmadaException()
         : base(
             clsCodigosError.INSPECCION_YA_FIRMADA,
-            "Esta inspección ya fue firmada: ya no se corrige, nadie puede hacerlo. Agregue una nota aclaratoria o firme con reservas",
+            "Esta etapa ya fue firmada: ya no se corrige, nadie puede hacerlo. Deja una nota aclaratoria o firma con reservas",
             new Dictionary<string, object> { ["motivo"] = "inspeccion_firmada" })
     {
     }

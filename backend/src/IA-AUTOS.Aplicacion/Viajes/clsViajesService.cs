@@ -355,6 +355,12 @@ public sealed class clsViajesService(
             }
         }
 
+        if (solicitud.Posicion is null && enlace.Posicion is not null && await viajes.TieneAcomodacionCerradaAsync(id, ct))
+        {
+            // Con la acomodacion cerrada un puesto no se libera suelto: se libera desde «no sale» y desde «bajar del viaje». Con una correccion de la acomodacion en borrador si se puede.
+            throw new clsConflictoException("La acomodación ya está cerrada: el puesto se libera desde no sale y desde bajar del viaje", clsMotivosRechazo.ACOMODACION_CERRADA);
+        }
+
         var antes = enlace.Posicion;
         enlace.AsignarPosicion(solicitud.Posicion, reloj.Ahora, viaje.CapacidadEfectiva);
         await auditor.RegistrarDeViajeAsync(

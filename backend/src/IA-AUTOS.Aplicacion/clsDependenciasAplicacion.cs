@@ -59,6 +59,8 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsPermisosSinInspectorService>();
         servicios.AddScoped<clsPuntosDeInspectorService>();
         servicios.AddScoped<clsAccesoViajes>();
+        servicios.AddScoped<clsCargueNineraService>();
+        servicios.AddScoped<clsInformeNineraPdfService>();
         servicios.AddScoped<clsAuditoriaService>();
         servicios.AddScoped<clsReportesTableroService>();
         servicios.AddScoped<clsExportacionesService>();

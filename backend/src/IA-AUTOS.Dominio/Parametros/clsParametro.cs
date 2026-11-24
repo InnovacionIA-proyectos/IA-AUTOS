@@ -161,6 +161,9 @@ public static class clsClavesParametros
     public const string TRANSFERENCIA_PENDIENTE_MINUTOS = "transferencia_pendiente_minutos";
     public const string RECLAMO_SIN_ACTIVIDAD_MINUTOS = "reclamo_sin_actividad_minutos";
 
+    /// <summary>Minutos que la salida del cargue de un carro puede seguir cerrada sin la firma de una parte de la niñera antes de avisarle a esa parte.</summary>
+    public const string FIRMA_CARGUE_PENDIENTE_MINUTOS = "firma_cargue_pendiente_minutos";
+
     /// <summary>Radio, en metros, de un lugar de cargue para confirmar «en sitio» la evidencia (se usa si el lugar no trae su propio radio).</summary>
     public const string RADIO_LUGAR_CARGUE_M = "radio_lugar_cargue_m";
 

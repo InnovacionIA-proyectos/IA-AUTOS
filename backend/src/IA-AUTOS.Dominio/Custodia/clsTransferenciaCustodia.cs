@@ -21,6 +21,12 @@ public static class clsTipoCierre
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { FIRMADA, CON_RESERVAS, NO_FIRMA, RECIBO_SIN_ENTREGA };
 }
 
+/// <summary>
+/// La hora y el lugar del momento en que una parte firmo (no cuando la firma llego al servidor): una firma hecha sin senal se envia despues y conserva el momento y el GPS del patio.
+/// <c>PrecisionM</c> es la precision del GPS en metros, si se conoce.
+/// </summary>
+public sealed record MomentoDeFirma(DateTimeOffset Momento, double Lat, double Lng, double? PrecisionM);
+
 /// <summary>Las dos partes de una transferencia.</summary>
 public static class clsParteFirmante
 {
@@ -79,6 +85,27 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
     public DateTimeOffset? FirmaRecibeAt { get; private set; }
 
     public string? FirmaRecibeIp { get; private set; }
+
+    /// <summary>La hora del momento en que quien entrega firmo (distinta de <see cref="FirmaEntregaAt"/>, cuando llego al servidor); nula si no se envio.</summary>
+    public DateTimeOffset? FirmaEntregaMomentoAt { get; private set; }
+
+    public double? FirmaEntregaLat { get; private set; }
+
+    public double? FirmaEntregaLng { get; private set; }
+
+    public double? FirmaEntregaPrecisionM { get; private set; }
+
+    /// <summary>La hora del momento en que quien recibe firmo (distinta de <see cref="FirmaRecibeAt"/>, cuando llego al servidor); nula si no se envio.</summary>
+    public DateTimeOffset? FirmaRecibeMomentoAt { get; private set; }
+
+    public double? FirmaRecibeLat { get; private set; }
+
+    public double? FirmaRecibeLng { get; private set; }
+
+    public double? FirmaRecibePrecisionM { get; private set; }
+
+    /// <summary>La transferencia del cargue de un carro que se firmo por ninera: una sola firma de cada parte para todos los carros del viaje.</summary>
+    public bool FirmaPorNinera { get; private set; }
 
     /// <summary>Se sella solo cuando ambas firmas estan presentes.</summary>
     public DateTimeOffset? FirmadaAt { get; private set; }
@@ -395,7 +422,7 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
     /// un testigo con usuario (que no sea ninguna de las dos partes) y la foto de la constancia. Cierra la transferencia como «no firma».
     /// La parte que se nego no debe haber firmado ya.
     /// </summary>
-    public void RegistrarNoFirma(Guid usuarioId, string? parte, string? motivo, Guid? testigoUsuarioId, Guid? evidenciaConstanciaId, DateTimeOffset ahora)
+    public void RegistrarNoFirma(Guid usuarioId, string? parte, string? motivo, Guid? testigoUsuarioId, Guid? evidenciaConstanciaId, DateTimeOffset ahora, MomentoDeFirma? momento = null, bool porNinera = false)
     {
         var quienRegistra = ParteObligatoria(usuarioId, "registrar la no firma");
         if (parte is null || !clsParteFirmante.VALORES.Contains(parte))
@@ -445,10 +472,17 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
         TestigoUsuarioId = testigo;
         EvidenciaConstanciaId = foto;
         TipoCierre = clsTipoCierre.NO_FIRMA;
+        if (porNinera)
+        {
+            // La constancia de toda la ninera: quien la deja (la parte que si esta) guarda la hora y el GPS del momento.
+            FirmaPorNinera = true;
+            PonerMomento(quienRegistra, momento);
+        }
+
         Tocar(ahora);
     }
 
-    private void PonerFirma(string parte, string firma, string? ip, DateTimeOffset ahora)
+    private void PonerFirma(string parte, string firma, string? ip, DateTimeOffset ahora, MomentoDeFirma? momento = null)
     {
         var direccion = clsValidador.Opcional(ip) is { } d ? d[..Math.Min(d.Length, IP_MAX)] : null;
         if (parte == clsParteFirmante.ENTREGA)
@@ -456,13 +490,107 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
             FirmaEntrega = firma;
             FirmaEntregaAt = ahora;
             FirmaEntregaIp = direccion;
+            PonerMomento(parte, momento);
         }
         else
         {
             FirmaRecibe = firma;
             FirmaRecibeAt = ahora;
             FirmaRecibeIp = direccion;
+            PonerMomento(parte, momento);
         }
+    }
+
+    private void PonerMomento(string parte, MomentoDeFirma? momento)
+    {
+        if (parte == clsParteFirmante.ENTREGA)
+        {
+            FirmaEntregaMomentoAt = momento?.Momento;
+            FirmaEntregaLat = momento?.Lat;
+            FirmaEntregaLng = momento?.Lng;
+            FirmaEntregaPrecisionM = momento?.PrecisionM;
+        }
+        else
+        {
+            FirmaRecibeMomentoAt = momento?.Momento;
+            FirmaRecibeLat = momento?.Lat;
+            FirmaRecibeLng = momento?.Lng;
+            FirmaRecibePrecisionM = momento?.PrecisionM;
+        }
+    }
+
+    /// <summary>La firma de quien entrega se retira: el carro le pide su firma otra vez (con las reservas nuevas de quien recibe).</summary>
+    private void RetirarFirmaDeEntrega()
+    {
+        FirmaEntrega = null;
+        FirmaEntregaAt = null;
+        FirmaEntregaIp = null;
+        PonerMomento(clsParteFirmante.ENTREGA, null);
+    }
+
+    /// <summary>
+    /// La firma del cargue por niñera: la del propio usuario (quien entrega o quien recibe, 403 si es otro) con la hora y el GPS del <paramref name="momento"/> en que firmo, ademas de cuando llego al servidor. Quien recibe puede
+    /// dejar <paramref name="reservas"/> (de 1 a <see cref="RESERVAS_MAX"/> caracteres): con las dos firmas el carro cierra «con reservas» y, si quien entrega ya habia firmado antes de ver unas reservas nuevas o distintas,
+    /// su firma se retira y se le pide otra vez. Sin reservas cierra «firmada». Reenviar exactamente la misma firma (misma parte, mismo momento, mismas reservas) no cambia nada, aunque ya este cerrada; una firma distinta sobre
+    /// una transferencia cerrada es 409.
+    /// </summary>
+    public void FirmarPorNinera(Guid usuarioId, string? firma, string? reservas, MomentoDeFirma momento, string? ip, DateTimeOffset ahora)
+    {
+        var parte = ParteObligatoria(usuarioId, "firmar el cargue");
+        var limpia = FirmaValida(firma);
+        string? texto = null;
+        if (reservas is not null)
+        {
+            texto = clsValidador.Opcional(reservas) ?? throw clsErroresCampos.De("reservas", "Escriba las observaciones: no se puede recibir con reservas sin ellas");
+            if (texto.Length > RESERVAS_MAX)
+            {
+                throw clsErroresCampos.De("reservas", $"Las observaciones admiten máximo {RESERVAS_MAX} caracteres");
+            }
+
+            if (parte != clsParteFirmante.RECIBE)
+            {
+                throw new clsProhibidoException("Solo quien recibe puede firmar con reservas");
+            }
+        }
+
+        var firmaPrevia = parte == clsParteFirmante.ENTREGA ? FirmaEntrega : FirmaRecibe;
+        var momentoPrevio = parte == clsParteFirmante.ENTREGA ? FirmaEntregaMomentoAt : FirmaRecibeMomentoAt;
+        if (firmaPrevia == limpia && momentoPrevio == momento.Momento && (parte == clsParteFirmante.ENTREGA || ReservasTexto == texto))
+        {
+            return;
+        }
+
+        // Un carro que ya cerro con la firma de esta parte no cambia: quien firma otra vez (por ejemplo el inspector, que vuelve a firmar los carros que se reabrieron por unas reservas nuevas) deja intactos los que ya
+        // estan cerrados. Solo quien recibe no puede cambiar las reservas de un carro cerrado.
+        if (EstaCerrada && !string.IsNullOrEmpty(firmaPrevia))
+        {
+            if (parte == clsParteFirmante.RECIBE && texto != ReservasTexto)
+            {
+                throw ConflictoPorCierre();
+            }
+
+            return;
+        }
+
+        if (EstaCerrada)
+        {
+            throw ConflictoPorCierre();
+        }
+
+        FirmaPorNinera = true;
+        if (parte == clsParteFirmante.RECIBE)
+        {
+            var cambiaronLasReservas = texto is not null && texto != ReservasTexto;
+            ReservasTexto = texto;
+            if (cambiaronLasReservas && !string.IsNullOrEmpty(FirmaEntrega))
+            {
+                RetirarFirmaDeEntrega();
+            }
+        }
+
+        PonerFirma(parte, limpia, ip, ahora, momento);
+        CerrarSiEstanAmbas(ahora);
+        Tocar(ahora);
     }
 
     private void CerrarSiEstanAmbas(DateTimeOffset ahora)

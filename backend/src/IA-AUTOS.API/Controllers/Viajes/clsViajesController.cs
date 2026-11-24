@@ -25,6 +25,8 @@ public sealed class clsViajesController(
     clsTransferenciasService transferencias,
     clsNoSaleService noSale,
     clsEntregasService entregas,
+    clsCargueNineraService cargueNinera,
+    clsInformeNineraPdfService informeNinera,
     clsReclamosService reclamos,
     clsConductorService conductor,
     clsPermisosSinInspectorService permisosSinInspector) : clsControladorBase
@@ -111,6 +113,43 @@ public sealed class clsViajesController(
     [CuerpoSolicitud(typeof(FirmarEntregaRequest))]
     public async Task<IActionResult> FirmarEntrega(Guid id, Guid lugar, CancellationToken ct) =>
         Ok(await entregas.FirmarAsync(id, lugar, await LeerCuerpoAsync<FirmarEntregaRequest>(ct), Cliente(), ct));
+
+    /// <summary>
+    /// Firma el cargue de toda la niñera: una sola firma de cada parte (el inspector del viaje entrega, el conductor del viaje recibe) para todos los carros activos, con el trazo, la hora y el GPS del momento y, solo quien recibe,
+    /// las reservas por carro. 400 con lo que falta; 403 si no es la parte del usuario; 409 <c>cargue_incompleto</c> si algun carro activo tiene la llegada o la salida del cargue sin cerrar (el mensaje nombra cual) o si el viaje no esta activo.
+    /// Reenviar la misma firma no duplica nada.
+    /// </summary>
+    [HttpPost("{id:guid}/cargue/firma")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR)]
+    [ProducesResponseType<CargueNineraDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(FirmarCargueRequest))]
+    public async Task<IActionResult> FirmarCargue(Guid id, CancellationToken ct) =>
+        Ok(await cargueNinera.FirmarAsync(id, await LeerCuerpoAsync<FirmarCargueRequest>(ct), Cliente(), ct));
+
+    /// <summary>
+    /// El informe de la niñera del viaje en PDF, como descarga, armado al pedirlo con los informes del cargue de sus carros (no se guarda aparte): los puestos con el VIN de cada uno, los daños de cada carro, las fotos de la
+    /// niñera, la firma unica del cargue de cada parte con la hora y el GPS del momento en que firmo (o la constancia de no firma) y los carros que no salen marcados con su motivo. Lo ve quien puede ver el viaje (403 si es de otro
+    /// cliente o de un viaje ajeno) y al conductor se le quitan el nivel y la nota de cada daño. Con la acomodacion sin cerrar o el cargue sin firmar sale igual, con lo que hay y avisandolo. Un carro que se baja del viaje
+    /// deja de salir en el siguiente informe.
+    /// </summary>
+    [HttpGet("{id:guid}/ninera/pdf")]
+    [Produces("application/pdf")]
+    public async Task<IActionResult> InformeNinera(Guid id, CancellationToken ct)
+    {
+        var informe = await informeNinera.GenerarAsync(id, ct);
+        return File(informe.Contenido, "application/pdf", informe.Nombre);
+    }
+
+    /// <summary>
+    /// La constancia de no firma de toda la niñera: la deja la parte que si esta (nunca la que se nego, 403) con el motivo, un testigo con usuario, la foto y la hora y el GPS del momento; cierra como «no firma» el cargue de cada
+    /// carro activo y avisa al coordinador de calidad una vez por viaje. 409 si la parte que se nego ya firmo o si el cargue esta incompleto.
+    /// </summary>
+    [HttpPost("{id:guid}/cargue/no-firma")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR)]
+    [ProducesResponseType<CargueNineraDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(NoFirmaDelCargueRequest))]
+    public async Task<IActionResult> RegistrarNoFirmaDelCargue(Guid id, CancellationToken ct) =>
+        Ok(await cargueNinera.RegistrarNoFirmaAsync(id, await LeerCuerpoAsync<NoFirmaDelCargueRequest>(ct), Cliente(), ct));
 
     /// <summary>
     /// Cierra la entrega del punto con una sola firma y su <c>motivo</c> (obligatorio, hasta 300 caracteres): cada unidad pendiente queda como «recibo_sin_entrega» con la parte que no firmo, deja su novedad de proceso y

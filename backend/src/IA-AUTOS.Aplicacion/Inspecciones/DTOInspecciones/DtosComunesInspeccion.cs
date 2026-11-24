@@ -194,4 +194,13 @@ public sealed record TransferenciaDto(
     Guid? TestigoUsuarioId,
     Guid? EvidenciaConstanciaId,
     string? RecibeExternoNombre = null,
-    string? RecibeExternoCedula = null);
+    string? RecibeExternoCedula = null,
+    bool FirmaPorNinera = false,
+    DateTimeOffset? EntregaMomentoAt = null,
+    double? EntregaLat = null,
+    double? EntregaLng = null,
+    double? EntregaPrecisionM = null,
+    DateTimeOffset? RecibeMomentoAt = null,
+    double? RecibeLat = null,
+    double? RecibeLng = null,
+    double? RecibePrecisionM = null);

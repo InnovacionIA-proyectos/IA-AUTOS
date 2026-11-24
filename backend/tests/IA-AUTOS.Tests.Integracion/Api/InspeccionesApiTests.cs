@@ -88,6 +88,19 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
     }
 
+    /// <summary>
+    /// Una inspeccion en borrador de la etapa de Transporte sobre la que se firma la transferencia (el cargue se firma por niñera, no carro por carro): para poder crearla por la API la etapa anterior se deja con su
+    /// transferencia firmada y, ya creada la inspeccion, esa transferencia se quita para que las pruebas vean solo la suya.
+    /// </summary>
+    private async Task<Guid> CrearInspeccionFirmableAsync(Sesion inspector, Guid recibeUsuarioId, Guid[] etapas, string momento = "salida")
+    {
+        var previa = await Sembrador.InformeAsync(etapas[0], inspector.UsuarioId, cerrada: true, momento: "llegada");
+        await Sembrador.TransferenciaAsync(previa, inspector.UsuarioId, recibeUsuarioId, "firmada");
+        var id = await CrearInspeccionAsync(inspector, etapas[1], momento);
+        await Sembrador.EjecutarAsync("ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL; DELETE FROM dbo.tblTransferenciasCustodia; ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL");
+        return id;
+    }
+
     private Task<Guid> LlegadaCerradaAsync(Guid etapaId, Guid usuarioId) => Sembrador.InformeAsync(etapaId, usuarioId, cerrada: true, momento: "llegada");
 
     private Task<HttpResponseMessage> CerrarAsync(Sesion sesion, Guid id) => Cliente(sesion.Token).PostAsync($"/api/inspecciones/{id}/cerrar", null);
@@ -1463,7 +1476,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Cada_firma_la_envia_su_titular_y_guarda_su_propia_fecha_y_el_cierre_se_fija_con_la_segunda()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
 
         var primera = await FirmarAsync(inspector, id, inspector, conductor, "M0 0 L10 10");
         var t1 = await ClonarAsync(primera);
@@ -1476,6 +1489,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
             [
                 "id", "inspeccion_id", "entrega_usuario_id", "recibe_usuario_id", "firmada", "firmada_at", "created_at", "updated_at", "tipo_cierre",
                 "entrega_firmada_at", "recibe_firmada_at", "reservas_texto", "no_firma_parte", "motivo_no_firma", "testigo_usuario_id", "evidencia_constancia_id", "recibe_externo_nombre", "recibe_externo_cedula",
+                "firma_por_ninera", "entrega_momento_at", "entrega_lat", "entrega_lng", "entrega_precision_m", "recibe_momento_at", "recibe_lat", "recibe_lng", "recibe_precision_m",
             ],
             t1.EnumerateObject().Select(p => p.Name).ToList());
         Assert.False(t1.GetProperty("firmada").GetBoolean());
@@ -1500,7 +1514,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
         var intruso = await SesionAsync("intruso@ejemplo.com");
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
 
         var creaAjena = await FirmarAsync(intruso, id, inspector, conductor, "FIRMA-FALSA");
         Assert.Equal(HttpStatusCode.Forbidden, creaAjena.StatusCode);
@@ -1520,7 +1534,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Cada_uno_firma_su_parte_aunque_envie_los_dos_ids_y_los_firmantes_no_se_pueden_cambiar()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
         await FirmarAsync(inspector, id, inspector, conductor, "A");
 
         // El conductor envia los dos ids y su firma: se guarda como el recibo, nunca como la entrega.
@@ -1538,7 +1552,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Una_transferencia_firmada_es_inmutable_pero_acepta_el_reintento_identico()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        var id = await CrearInspeccionAsync(inspector, etapas[0], "llegada");
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas, "llegada");
         await TomarVistasObligatoriasAsync(inspector, id);
         Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(inspector, id)).StatusCode);
 
@@ -1560,7 +1574,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
         var ajeno = await SesionAsync("ajeno@ejemplo.com", clsRol.CONDUCTOR);
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
 
         var mismo = await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { entrega_usuario_id = inspector.UsuarioId, recibe_usuario_id = inspector.UsuarioId, firma = "A" });
         var inexistente = await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { entrega_usuario_id = inspector.UsuarioId, recibe_usuario_id = Guid.NewGuid(), firma = "A" });
@@ -1592,7 +1606,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Recibir_con_reservas_exige_las_observaciones_y_solo_lo_hace_quien_recibe()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
         await FirmarAsync(inspector, id, inspector, conductor, "A");
 
         var sinTexto = await Cliente(conductor.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia/reservas", new { firma = "B", reservas = "   " });
@@ -1618,7 +1632,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
         var testigo = await SesionAsync("testigo@ejemplo.com");
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
         await FirmarAsync(inspector, id, inspector, conductor, "A");
         var foto = await FotoConstanciaAsync(inspector);
         var ruta = $"/api/inspecciones/{id}/transferencia/no-firma";
@@ -1662,7 +1676,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
         var testigo = await SesionAsync("testigo@ejemplo.com");
-        var id = await CrearInspeccionAsync(inspector, etapas[0], "llegada");
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas, "llegada");
         await TomarVistasObligatoriasAsync(inspector, id);
         Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(inspector, id)).StatusCode);
 
@@ -1685,17 +1699,18 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Una_transferencia_sin_cierre_bloquea_la_salida_de_la_etapa_siguiente_hasta_que_se_cierra()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        await LlegadaCerradaAsync(etapas[0], inspector.UsuarioId);
-        var llegada = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblInspecciones WHERE EtapaId = @e", ("@e", etapas[0])))!;
+        // El cargue se firma por niñera: la transferencia por carro se prueba con la llegada del Transporte, cuya etapa siguiente es el Descargue.
+        await Sembrador.TransferenciaAsync(await LlegadaCerradaAsync(etapas[0], inspector.UsuarioId), inspector.UsuarioId, conductor.UsuarioId, "firmada");
+        var llegada = await LlegadaCerradaAsync(etapas[1], inspector.UsuarioId);
         await FirmarAsync(inspector, llegada, inspector, conductor, "A");
-        var salida = new { etapa_id = etapas[1], momento = "salida", fecha = FECHA };
+        var salida = new { etapa_id = etapas[2], momento = "salida", fecha = FECHA };
 
         var bloqueada = await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", salida);
         var error = await ClonarAsync(bloqueada);
         Assert.Equal(HttpStatusCode.Conflict, bloqueada.StatusCode);
         Assert.Equal("ETAPA_PREVIA_SIN_CIERRE", error.GetProperty("code").GetString());
         Assert.Equal("transferencia_sin_cierre", error.GetProperty("details").GetProperty("motivo").GetString());
-        Assert.Equal(etapas[0], error.GetProperty("details").GetProperty("etapa_previa_id").GetGuid());
+        Assert.Equal(etapas[1], error.GetProperty("details").GetProperty("etapa_previa_id").GetGuid());
 
         Assert.Equal(HttpStatusCode.Created, (await Cliente(conductor.Token).PostAsJsonAsync($"/api/inspecciones/{llegada}/transferencia/reservas", new { firma = "B", reservas = "Rayón" })).StatusCode);
 
@@ -1706,7 +1721,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task El_conductor_recibe_en_el_cargue_sin_que_la_respuesta_le_muestre_los_hallazgos()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
         var (ruta, _) = await SubirAsync(inspector);
         Assert.Equal(HttpStatusCode.Created, (await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new
         {
@@ -1732,7 +1747,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
         var ajeno = await SesionAsync("ajeno@ejemplo.com");
         var testigo = await SesionAsync("testigo@ejemplo.com");
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
         var ruta = $"/api/inspecciones/{id}/transferencia/constancia/pdf";
         Assert.Equal(HttpStatusCode.NotFound, (await Cliente(inspector.Token).GetAsync(ruta)).StatusCode);
         await FirmarAsync(inspector, id, inspector, conductor, "M0 0 L10 10 L20 0");
@@ -1792,7 +1807,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var receptor = await SesionAsync("recibe@ejemplo.com", clsRol.CONDUCTOR);
         // El receptor es el conductor del viaje: solo ve los informes de sus viajes.
         await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET ConductorId = @c WHERE Id = @v", ("@c", receptor.UsuarioId), ("@v", await Sembrador.ViajeDeEtapaAsync(etapas[0])));
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(sesion, receptor.UsuarioId, etapas);
         var (ruta, _) = await SubirAsync(sesion);
         await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new
         {
@@ -1812,7 +1827,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var inf = await ClonarAsync(r);
         Assert.Equal("VIN-INSP-0001", inf.GetProperty("vin").GetString());
         Assert.Equal("Renault", inf.GetProperty("marca").GetString());
-        Assert.Equal("cargue", inf.GetProperty("proceso").GetString());
+        Assert.Equal("transporte", inf.GetProperty("proceso").GetString());
         Assert.True(inf.GetProperty("requiere_inspeccion").GetBoolean());
         Assert.Equal("Nombre insp@ejemplo.com", inf.GetProperty("inspector_nombre").GetString());
         Assert.Equal(1, inf.GetProperty("hallazgos").GetArrayLength());

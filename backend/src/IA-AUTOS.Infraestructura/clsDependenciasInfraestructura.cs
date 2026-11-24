@@ -98,6 +98,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddSingleton<IGeneradorPdfInventario, clsGeneradorPdfInventario>();
         servicios.AddSingleton<IGeneradorPdfConstancia, clsGeneradorPdfConstancia>();
         servicios.AddSingleton<IGeneradorPdfInforme, clsGeneradorPdfInforme>();
+        servicios.AddSingleton<IGeneradorPdfNinera, clsGeneradorPdfNinera>();
 
         servicios.Configure<clsOpcionesNotificaciones>(configuracion.GetSection(clsOpcionesNotificaciones.SECCION));
         servicios.AddSingleton<IFirmadorUrls, clsFirmadorUrls>();

@@ -15,6 +15,12 @@ public interface IInspeccionRepository
     /// <summary>Las fotos de la inspeccion que no son de una vista, de un hallazgo, de una constancia ni de un sello: las fotos libres, como las de la acomodacion de la segunda inspeccion del cargue.</summary>
     Task<int> ContarFotosLibresAsync(Guid inspeccionId, CancellationToken ct = default);
 
+    /// <summary>Las fotos de la acomodacion del VIAJE: las fotos libres (sin vista, hallazgo, extra, constancia ni sello) de todas las salidas del cargue de sus carros. Una foto de la niñera sirve para todos los carros.</summary>
+    Task<int> ContarFotosDeAcomodacionDelViajeAsync(Guid viajeId, CancellationToken ct = default);
+
+    /// <summary>True si alguna transferencia de la ETAPA (de la llegada o de la salida, de cualquier version) ya tiene una firma o un cierre: la etapa ya no se corrige.</summary>
+    Task<bool> EtapaTieneFirmaOCierreAsync(Guid etapaId, CancellationToken ct = default);
+
     /// <summary>Los extras del vehiculo que reporta la inspeccion, en el orden en que se agregaron.</summary>
     Task<IReadOnlyList<clsInspeccionExtra>> ObtenerExtrasAsync(Guid inspeccionId, CancellationToken ct = default);
 

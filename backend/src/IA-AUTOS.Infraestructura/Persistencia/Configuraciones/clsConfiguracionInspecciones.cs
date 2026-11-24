@@ -194,6 +194,9 @@ internal sealed class clsConfiguracionTransferencia : IEntityTypeConfiguration<c
         builder.Property(t => t.FirmadaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
         builder.Property(t => t.FirmaEntregaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
         builder.Property(t => t.FirmaRecibeAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(t => t.FirmaEntregaMomentoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(t => t.FirmaRecibeMomentoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(t => t.FirmaPorNinera).HasDefaultValue(false);
         builder.Property(t => t.FirmaEntregaIp).HasColumnType("varchar(45)");
         builder.Property(t => t.FirmaRecibeIp).HasColumnType("varchar(45)");
         builder.Property(t => t.TipoCierre).HasColumnType("varchar(20)");

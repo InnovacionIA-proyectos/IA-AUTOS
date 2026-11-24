@@ -79,7 +79,7 @@ Todos los errores son JSON con la misma forma:
 | `HALLAZGO_YA_REVISADO` | 409 | la novedad del conductor ya fue revisada: su zona, clase y nivel ya no se cambian (ver «Revisión de la novedad») |
 | `UNIDAD_NO_SALE` | 409 | la unidad se marcó «no sale» del viaje: no admite novedades ni llegada |
 | `CORRECCION_SOLO_AUTOR` | 403 | corregir una inspección que hizo otra persona sin ser administrador: la corrigen quien la hizo y los administradores (ver «Corregir una inspección») |
-| `INSPECCION_YA_FIRMADA` | 409 | la transferencia de la inspección ya tiene una firma o un cierre: ya no se corrige, sea quien sea quien lo intente (ver «Corregir una inspección») |
+| `INSPECCION_YA_FIRMADA` | 409 | alguna transferencia de la **etapa** (de la llegada o de la salida) ya tiene una firma o un cierre: ya no se corrige, sea quien sea quien lo intente (ver «Corregir una inspección») |
 
 **El motivo fijo de los rechazos.** Los rechazos (`409`, `403` y `404`) de **viajes**, **usuarios**, **vehículos** y de la **descarga de la constancia** traen además, en `details.motivo`, un valor fijo en minúsculas (el mismo patrón de `ETAPA_PREVIA_SIN_CIERRE`): el portal y la app muestran el mensaje que corresponde a partir del
 motivo y no de la frase, que puede cambiar. El `code` y el `message` no cambian. Algunos traen datos propios junto al motivo (por ejemplo el viaje que impide la baja de un carro).
@@ -95,6 +95,7 @@ motivo y no de la frase, que puede cambiar. El `code` y el `message` no cambian.
 | `vehiculo_no_existe`, `vin_fuera_del_viaje` | el vehículo no existe o su VIN no está en ese viaje |
 | `hallazgo_de_version_reemplazada` | «no sale» con un hallazgo de una inspección que ya reemplazó una corrección cerrada |
 | `capacidad_no_baja`, `posicion_ocupada`, `sin_segunda_inspeccion_en_curso`, `descargue_con_informe_cerrado`, `conductor_sin_permiso_de_excepcion` | reglas de la niñera, el destino y el cargue sin inspector del viaje |
+| `cargue_incompleto`, `firma_por_ninera`, `acomodacion_cerrada` | el cargue por niñera: falta cerrar la llegada o la salida de algún carro, la firma carro por carro del cargue (se firma por niñera) y liberar un puesto con la acomodación cerrada (ver «Firma del cargue por niñera») |
 | `otro_cliente` | se pidió lo de un cliente que no es el suyo |
 | `vehiculo_en_viaje_activo` | el carro está en un viaje programado o en curso y no se da de baja (`details.viaje_id` y `details.codigo_mtrack` nombran el viaje) |
 | `usuario_no_existe`, `usuario_propio`, `usuario_de_otro_cliente` | el usuario no existe (o es de otro cliente), o se intentó eliminar o desactivar el propio |
@@ -1056,7 +1057,7 @@ que referencia a la anterior; **la anterior no cambia**. `201` con la `Inspeccio
 | Regla | Rechazo | Código |
 |---|---|---|
 | Solo corrige **quien hizo la inspección** (su `usuario_id`) **o un administrador** (`admin`, `super_admin`). Quien participa en el viaje pero no la hizo (por ejemplo el conductor con una inspección del inspector) no corrige | `403` «Esta inspección solo la corrigen quien la hizo o un administrador» | `CORRECCION_SOLO_AUTOR` |
-| Solo **mientras nadie la haya firmado**: si la transferencia de la inspección ya tiene una firma (de quien entrega o de quien recibe) o un cierre (firmada, con reservas, constancia de no firma o recibo sin entrega), **nadie** corrige, tampoco quien la hizo ni un administrador | `409` «Esta inspección ya fue firmada…» | `INSPECCION_YA_FIRMADA` |
+| Solo **mientras nadie la haya firmado**: si alguna transferencia de la **etapa** (la de la llegada o la de la salida, de cualquier versión) ya tiene una firma (de quien entrega o de quien recibe) o un cierre (firmada, con reservas, constancia de no firma o recibo sin entrega), **nadie** corrige, tampoco quien la hizo ni un administrador | `409` «Esta etapa ya fue firmada…» | `INSPECCION_YA_FIRMADA` |
 
 Los dos códigos son estables y distintos, con `details.motivo` (`solo_autor_o_administrador` e `inspeccion_firmada`), para que la app muestre el mensaje que corresponde. Si ambas se cumplen a la vez, gana la de la firma. Una transferencia ya registrada pero **sin ninguna firma** no impide corregir. **Después de firmar se sigue aclarando**: la nota aclaratoria
 (`POST /api/inspecciones/{id}/notas`) y la firma de quien recibe con reservas (`POST /api/inspecciones/{id}/transferencia/reservas`) funcionan igual y no cambian la inspección.
@@ -1222,7 +1223,7 @@ Campo (creador o administrador). Registra una foto **ya subida** con `POST /api/
 | `vista_id` | sí, si no hay `hallazgo_id` (salvo en la acomodación) | UUID de una vista **activa** del catálogo `vistas-foto` (una de las 7 obligatorias o de las 2 adicionales) |
 | `hallazgo_id` | sí, si no hay `vista_id` (salvo en la acomodación) | UUID de un hallazgo **de esta inspección** (`404` si es de otra) |
 
-En la **segunda inspección del cargue** (la salida de la etapa Cargue) la foto se envía **sin** `vista_id` ni `hallazgo_id`: es una foto de la acomodación en la niñera y cuenta para el mínimo `acomodacion_fotos_minimas` del cierre. En cualquier otra inspección esa foto responde `400` en `vista_id`.
+En la **segunda inspección del cargue** (la salida de la etapa Cargue) la foto se envía **sin** `vista_id` ni `hallazgo_id`: es una foto de la acomodación en la niñera y cuenta para el mínimo `acomodacion_fotos_minimas` del cierre; las fotos se cuentan **por viaje** (una foto de la niñera sirve para todos los carros). En cualquier otra inspección esa foto responde `400` en `vista_id`.
 | `storage_path` | sí | el `storage_path` que devolvió la subida (nombre plano, sin carpetas). **El archivo debe existir**: si no se subió, `400` |
 | `sello_fecha` | sí | ISO 8601 con zona horaria: fecha y hora de la foto según el dispositivo |
 | `sello_lat` / `sello_lng` | no | −90 a 90 / −180 a 180. Si falta alguna, la foto queda **sin ubicación** (`sin_ubicacion: true`) |
@@ -1468,7 +1469,7 @@ Responde `200` con el `ViajeDto`: cada unidad trae `posicion` (nulo si no la tie
 
 `409` si la posición **ya la ocupa otra unidad del viaje** («La posición N ya está ocupada por otra unidad de este viaje»; con solicitudes simultáneas por la misma gana exactamente una), si la unidad **no sale** del viaje o si el viaje **no tiene su segunda inspección del cargue en curso** (la de momento `salida` de la etapa Cargue, en borrador). `404` si el viaje o el VIN no existen o el VIN no está en el viaje.
 
-El cierre de esa inspección (`POST /api/inspecciones/{id}/cerrar`) deja de exigir las fotos de las vistas de estado y exige la posición de **cada unidad activa** y al menos `acomodacion_fotos_minimas` fotos de la acomodación (fotos sin vista ni hallazgo). Si falta algo responde `400` con una línea por cada unidad sin posición («Falta la posición de la unidad {VIN}») y, si no alcanzan las fotos, «Faltan fotos de la acomodación: se exige al menos {n} y hay {k}». Las unidades que no salen no exigen posición.
+El cierre de esa inspección (`POST /api/inspecciones/{id}/cerrar`) deja de exigir las fotos de las vistas de estado y exige la posición de **cada unidad activa** y al menos `acomodacion_fotos_minimas` fotos de la acomodación **del viaje** (fotos sin vista ni hallazgo de las salidas del cargue de todos sus carros). Si falta algo responde `400` con una línea por cada unidad sin posición («Falta la posición de la unidad {VIN}») y, si no alcanzan las fotos, «Faltan fotos de la acomodación: se exige al menos {n} y hay {k}». Las unidades que no salen no exigen posición.
 
 ## Conductor en ruta
 
@@ -1558,7 +1559,7 @@ Nada de otros viajes del mismo VIN: el inventario solo trae las etapas de sus vi
 
 Las alertas y los avisos llegan a una **bandeja** (el portal y la app) y, las urgentes, también por **push** al celular. La capacidad `ver_alertas` de `GET /api/auth/me` la tienen `coordinador_calidad`, `admin` y `super_admin` (las alertas preventivas
 de su cliente), `inspector` (solo los avisos operativos dirigidos a él: `captura_incompleta` de una inspección que inició y `transferencia_pendiente` de su firma) y `conductor` (solo `respuesta_conductor`, `captura_incompleta` de una inspección que
-él inició en la salida de un cargue y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `permiso_sin_inspector` (urgencia alta: el conductor pide el permiso de esa excepción, al inspector del punto y al coordinador del cliente, o se avisa que se concedió; con `datos`: `hecho` `solicitud` o `concesion`), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente`, `cargue_sin_reclamar` y `propuesta_ubicacion` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
+él inició en la salida de un cargue y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `permiso_sin_inspector` (urgencia alta: el conductor pide el permiso de esa excepción, al inspector del punto y al coordinador del cliente, o se avisa que se concedió; con `datos`: `hecho` `solicitud` o `concesion`), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente`, `cargue_sin_reclamar`, `propuesta_ubicacion` y `firma_cargue_pendiente` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
 Todo lo que se hace aquí queda en la auditoría.
 
 `NotificacionDto`:
@@ -1578,7 +1579,7 @@ Todo lo que se hace aquí queda en la auditoría.
 `{ "hecho": "entrega_con_una_firma", "lugar_id": "…", "lugar": "…", "parte_que_firmo": "entrega", "motivo": "…", "unidades": 3 }`. Y el de **umbral superado** (`umbral_patron`): `{ "tipo_umbral": "zona", "cuadrante_numero": 4, "lado": "izquierdo", "proceso": null, "total": 12, "umbral": 10, "ventana_dias": 30 }`
 cuando la zona (lado y número de cuadrante) llega al umbral, o `{ "tipo_umbral": "proceso", "cuadrante_numero": null, "lado": null, "proceso": "cargue", … }` cuando es el proceso; con esos campos el portal abre el tablero ya filtrado (`/api/reportes/patrones?proceso=…`). Un dato personal (como la cédula) nunca va en `datos`.
 
-`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar`, `propuesta_ubicacion` o `permiso_sin_inspector` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
+`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar`, `propuesta_ubicacion`, `permiso_sin_inspector` o `firma_cargue_pendiente` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
 
 ### `GET /api/notificaciones`
 Una página de la bandeja, las más recientes primero: `{ "items": [NotificacionDto], "total": 3, "pagina": 1, "tamano": 50, "no_leidas": 2 }`.
@@ -1680,9 +1681,10 @@ El sistema avisa de lo que requiere atención sin que nadie revise listados. Las
 | `captura_incompleta` | operativo | `media` | quien inició la inspección (el inspector o, solo en la salida de un Cargue, el conductor) | cada 10 minutos, si una inspección de Cargue o Descargue sigue en borrador y le faltan fotos de vistas obligatorias; una por inspección |
 | `transferencia_pendiente` | operativo | `media` | el firmante que falta (o, si aún no hay transferencia, el conductor o el inspector del viaje) | cada 10 minutos, si una llegada cerrada sigue sin transferencia con tipo de cierre; una por inspección y destinatario |
 | `cargue_sin_reclamar` | operativo | `media` | `coordinador_calidad` activos del cliente de las unidades del viaje | cada 10 minutos, si un cargue programado lleva `cargue_sin_reclamar_minutos` (30) pasada su hora programada, sin reclamo activo ni inspección iniciada (solo si esa hora fue en las últimas 24 horas); uno por viaje |
+| `firma_cargue_pendiente` | operativo | `media` | el inspector del viaje (si falta quien entrega) o su conductor (si falta quien recibe) | cada 10 minutos, si la salida del cargue de un carro lleva `firma_cargue_pendiente_minutos` (30) cerrada sin que su transferencia esté cerrada; uno por viaje y parte, con los VIN que faltan (ver «Firma del cargue por niñera») |
 | `propuesta_ubicacion` | operativo | `media` | `coordinador_calidad` activos del cliente | cada hora, cuando la autocalibración propone el centro y el radio de un lugar (ver «Ubicación de los lugares»); uno por propuesta |
 
-Los umbrales y los tiempos de espera son **parámetros** que se cambian sin desplegar (`niveles_criticos`, `umbral_patron_cantidad`, `umbral_patron_ventana_dias`, `captura_incompleta_minutos` y `transferencia_pendiente_minutos`; ver «Parámetros»). Las alertas preventivas nunca llegan a un usuario de otro cliente
+Los umbrales y los tiempos de espera son **parámetros** que se cambian sin desplegar (`niveles_criticos`, `umbral_patron_cantidad`, `umbral_patron_ventana_dias`, `captura_incompleta_minutos`, `transferencia_pendiente_minutos` y `firma_cargue_pendiente_minutos`; ver «Parámetros»). Las alertas preventivas nunca llegan a un usuario de otro cliente
 (ver «Visibilidad por cliente»). Cada una lleva su clave de dedupe: correr un proceso otra vez, o dos instancias a la vez, no repite nada. Llegan por **bandeja** y, por **push**, a los dispositivos activos del destinatario; **nunca por correo** (el único correo es el reporte diario).
 
 ## Notas aclaratorias
@@ -1901,6 +1903,77 @@ transferencia llega como `TransferenciaDetalleDto`: los mismos campos más `entr
 
 **El conductor recibe sin revisar los hallazgos.** En el cargue, quien recibe puede firmar el recibo sin abrir la lista de hallazgos: la firma no depende de ellos y su respuesta no los incluye.
 Que la app no se los muestre ni se los notifique en esa pantalla es una regla de la app; la API no la impone.
+
+## Firma del cargue por niñera
+
+El cargue ya **no se firma carro por carro**: la niñera se firma **una sola vez por parte** para todos los carros activos del viaje. Quien entrega es el **inspector del viaje** y quien recibe es el **conductor del viaje** (nadie firma por otro: `403`). Cada firma lleva la **hora y el GPS del momento en que se firmó** (no cuándo llegó al servidor: una firma hecha sin señal se envía después y conserva el momento y el lugar del patio), además de la fecha e IP de llegada que ya guardaba. La firma se guarda en la transferencia de cada carro, colgada de **su salida del cargue** (la acomodación).
+
+Los nombres de los endpoints y de los motivos están **a confirmar por backend** con la app que firma por niñera, que consume este contrato.
+
+### `POST /api/viajes/{id}/cargue/firma`
+Inspector o conductor del viaje. `200` con `CargueNineraDto`.
+
+```json
+{
+  "firma": "<trazo SVG o ruta>", "parte": "recibe",
+  "fecha_momento": "2026-11-18T14:09:00-05:00", "lat": 6.2442, "lng": -75.5812, "precision_m": 7.5,
+  "reservas": [ { "vin": "9FB45RFL8NM201001", "observaciones": "Rayón en la puerta izquierda" } ]
+}
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `firma` | sí | el trazo, como en la firma por carro |
+| `parte` | sí | `entrega` (el inspector del viaje) o `recibe` (su conductor); debe ser la parte del usuario del token |
+| `fecha_momento` | sí | ISO 8601 **con zona**: la hora en que se firmó |
+| `lat`, `lng` | sí | el GPS del momento (latitud de -90 a 90, longitud de -180 a 180, juntas); `precision_m` opcional, mayor o igual a 0 |
+| `reservas` | no, solo `recibe` | por carro: `vin` (de un carro **activo** del viaje, sin repetir) y `observaciones` (1 a 1 000 caracteres). Quien entrega no deja reservas (`403`) |
+
+- **Exige el cargue completo.** Cada carro activo debe tener la **llegada y la salida del cargue cerradas**; si no, `409` con `details.motivo: "cargue_incompleto"`, `details.faltantes` (una línea por lo que falta: «Falta la salida del cargue del VIN …») y el mismo texto en `message`. Los carros que **no salen** quedan fuera de lo que se exige y de la firma.
+- **Cierra cada carro.** Con la firma de las dos partes el carro queda `firmada`, o `con_reservas` si quien recibe dejó reservas sobre él. Si quien entrega ya había firmado y quien recibe deja reservas **nuevas o distintas** en un carro, la firma de quien entrega **se retira** en ese carro y se le pide otra vez; los carros sin reservas no cambian.
+- **Reenviar no duplica.** Repetir la misma firma, o firmar otra vez sobre carros que ya cerraron con la firma de esa parte, no cambia nada ni deja otro registro. Quien recibe no puede cambiar las reservas de un carro ya cerrado (`409`).
+- Un carro que ya se cerró **carro por carro, antes de este cambio**, cuenta como entrega cerrada y la firma por niñera no lo toca: lo ya firmado se sigue leyendo igual.
+
+`CargueNineraDto`: `{ viaje_id, parte, unidades, cerradas, cargue_firmado_por_ninera_at, detalle: [ { vin, tipo_cierre, por_ninera } ] }`. `tipo_cierre` es `abierta` mientras falta alguna firma, o `firmada`, `con_reservas`, `no_firma` o `recibo_sin_entrega`; `por_ninera` dice si se firmó por niñera; `cargue_firmado_por_ninera_at` es nulo mientras falte la otra parte.
+
+### `POST /api/viajes/{id}/cargue/no-firma`
+Inspector o conductor del viaje: la **constancia de no firma de toda la niñera**. `200` con `CargueNineraDto`.
+
+```json
+{
+  "parte": "recibe", "motivo": "Se niega a firmar el cargue", "testigo_usuario_id": "uuid",
+  "evidencia": { "storage_path": "3f2b…c1.png", "sello_fecha": "2026-11-18T19:09:00.000Z", "sello_lat": 6.24, "sello_lng": -75.58, "precision": 4.5, "dispositivo_id": "tablet-7", "hash_sha256": "…" },
+  "fecha_momento": "2026-11-18T14:09:00-05:00", "lat": 6.2442, "lng": -75.5812, "precision_m": 7.5
+}
+```
+
+`parte` es la que **se negó** (la deja la otra: `403` a quien declara su propia negativa o a quien no es del viaje). Mismas reglas del motivo, el testigo con usuario y la foto que la constancia por carro. Cierra como `no_firma` la transferencia de **cada carro activo**: no hay constancia para solo algunos carros (para eso están las reservas). Una sola foto de la constancia sirve a todos. `409` si la parte que se negó ya firmó o si el cargue está incompleto. Avisa **una vez por viaje** al coordinador de calidad y al administrador del cliente (`novedad_proceso`, `datos.hecho: "cargue_no_firmado"`, sin cédulas). Reenviar la misma constancia no crea otra.
+
+### `GET /api/viajes/{id}/ninera/pdf`
+Informe de la niñera del viaje en PDF, como descarga (`application/pdf`, archivo `ninera-{codigo_mtrack}.pdf`). Se **arma al pedirlo** con los informes del cargue de sus carros: no se guarda aparte, así que si un carro se baja del viaje el siguiente informe sale solo con los que van, sin tocar lo ya firmado. El nombre de la ruta está **a confirmar por backend** con la app.
+
+Lleva:
+- los **puestos** de la niñera en orden con el VIN de cada uno («Puesto 3 — VIN …», «Puesto 1 — libre»), los carros sin puesto y los carros que **no salen** marcados con su motivo («NO SALE — VIN …: motivo»);
+- los **daños de cada carro** (de su llegada y su salida del cargue vigentes, sin versiones reemplazadas): zona, clase y tamaño y, para quien puede verlos, el **nivel** y la **nota del inspector**;
+- las **fotos de la niñera** (las mismas que cuenta el cierre de la acomodación, hasta 20);
+- la **firma única del cargue** de cada parte con su nombre, la **hora y el GPS del momento** en que firmó y el trazo; o la **constancia de no firma** (parte que se negó, motivo y testigo).
+
+Permiso: **el mismo del detalle del viaje** (`GET /api/viajes/{id}`): `403` si el viaje es de otro cliente o no está asignado a quien lo pide y `404` si no existe. **Al conductor se le quitan el nivel y la nota de cada daño**; el coordinador, el inspector y los administradores lo reciben con ellos. Un viaje con la acomodación sin cerrar o el cargue sin firmar **no falla**: devuelve el PDF con lo que hay y dice «Acomodación sin cerrar», «Cargue sin firmar» o «Cargue sin firmar por esta parte» donde corresponde.
+
+### El cargue en el viaje
+`GET /api/viajes/{id}` (y el listado) trae tres campos **calculados** de las transferencias, sin datos aparte que puedan quedar desincronizados: `cargue_firmado_por_ninera_at` (cuándo se cerró la firma por niñera, nulo si no se firmó así), `cargue_no_firmado_at` (cuándo se dejó la constancia de no firma, nulo si no hay) y `cargue_no_firma_parte` (`entrega` o `recibe`, la parte que se negó).
+
+### La firma carro por carro del cargue se rechaza
+En el cargue, `POST …/transferencia`, `POST …/transferencia/reservas` y `POST …/transferencia/no-firma` responden **`409` con `details.motivo: "firma_por_ninera"`** para todos los roles: la firma, las reservas y la constancia se hacen por niñera. **El recibo sin entrega del conductor no cambia.** Estos mensajes **tienen que desplegarse junto con la app que firma por niñera o después**: una app que aún firma carro por carro recibe el rechazo.
+
+### Avisos
+Si la salida del cargue de un carro lleva cerrada `firma_cargue_pendiente_minutos` (30 por defecto, ajustable sin desplegar; el valor definitivo lo confirma el negocio) sin que su transferencia esté cerrada, la parte a la que le falta firmar recibe un aviso **`firma_cargue_pendiente`** (urgencia media, bandeja y push): el inspector del viaje si falta quien entrega, el conductor si falta quien recibe, con los VIN que faltan; **uno por viaje y parte**. La llegada del cargue **sin transferencia propia** deja de avisar como `transferencia_pendiente`.
+
+### Qué más cambia con la niñera
+- **Las fotos de la acomodación se cuentan por viaje**: el cierre de la acomodación y el PDF de cada carro cuentan y muestran las fotos de **todas** las salidas del cargue del viaje; una foto sirve para todos los carros.
+- **Con la acomodación cerrada un puesto no se libera suelto** (`PUT …/vehiculos/{vin}/posicion` con `null`): `409` con `details.motivo: "acomodacion_cerrada"`; el puesto se libera desde «no sale» y desde bajar el carro del viaje. Con una corrección de la acomodación en borrador sí se puede.
+- **Una etapa firmada ya no se corrige**: si cualquier transferencia de la **etapa** (la de la llegada o la de la salida, de cualquier versión) tiene una firma o un cierre, `POST …/corregir` responde `409 INSPECCION_YA_FIRMADA` aunque la inspección que se corrige no tenga firma propia.
+- La transferencia (`TransferenciaDto`) trae `firma_por_ninera`, `entrega_momento_at`, `entrega_lat`, `entrega_lng`, `entrega_precision_m`, `recibe_momento_at`, `recibe_lat`, `recibe_lng` y `recibe_precision_m` (nulos si no se enviaron).
 
 ## Catálogos maestros
 

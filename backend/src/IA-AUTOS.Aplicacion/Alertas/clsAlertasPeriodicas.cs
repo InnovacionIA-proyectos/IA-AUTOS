@@ -4,6 +4,7 @@ using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Aplicacion.Parametros;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Comun;
+using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Notificaciones;
 using IAAutos.Dominio.Parametros;
@@ -24,6 +25,12 @@ public sealed record clsCapturaAbierta(
 /// Una llegada cerrada cuya transferencia no tiene tipo de cierre: a quien le falta firmar (si la transferencia existe) o, si no existe, el conductor y el inspector del viaje y el proceso de la
 /// etapa que sigue.
 /// </summary>
+/// <summary>
+/// La salida del cargue de un carro, cerrada antes del limite, cuya transferencia (la de la firma por niñera) no tiene la firma de una parte: <c>FaltaEntrega</c> es verdadero si falta la del inspector del viaje y
+/// <c>FaltaRecibe</c> si falta la del conductor (sin transferencia faltan las dos).
+/// </summary>
+public sealed record clsFirmaCarguePendiente(Guid ViajeId, Guid ClienteId, Guid VehiculoId, string Vin, bool FaltaEntrega, bool FaltaRecibe, Guid? InspectorId, Guid? ConductorId);
+
 public sealed record clsTransferenciaPendiente(
     Guid InspeccionId, Guid ViajeId, Guid VehiculoId, Guid ClienteId, string Vin, string Proceso, bool ExisteTransferencia,
     Guid? EntregaUsuarioId, bool FaltaEntrega, Guid? RecibeUsuarioId, bool FaltaRecibe, string? ProcesoSiguiente, Guid? ConductorId, Guid? InspectorId);
@@ -66,6 +73,12 @@ public interface IConsultasAlertas
 
     /// <summary>Llegadas cerradas antes de <paramref name="cerradasAntesDe"/>, de unidades que salen de viajes activos, con la transferencia sin tipo de cierre (o sin transferencia).</summary>
     Task<IReadOnlyList<clsTransferenciaPendiente>> TransferenciasPendientesAsync(DateTimeOffset cerradasAntesDe, int limite, CancellationToken ct = default);
+
+    /// <summary>
+    /// Los carros activos de viajes activos cuya salida del cargue (ultima version, sin correccion) se cerro antes de <paramref name="cerradasAntesDe"/> y cuyo cargue sigue sin entregarse cerrado (sin ninguna transferencia con
+    /// tipo de cierre en la etapa): con lo que falta firmar de cada uno.
+    /// </summary>
+    Task<IReadOnlyList<clsFirmaCarguePendiente>> FirmasDelCarguePendientesAsync(DateTimeOffset cerradasAntesDe, int limite, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -91,6 +104,9 @@ public sealed class clsAlertasPeriodicas(
     public const int VENTANA_DIAS_POR_DEFECTO = 30;
     public const int CAPTURA_MINUTOS_POR_DEFECTO = 30;
     public const int TRANSFERENCIA_MINUTOS_POR_DEFECTO = 240;
+
+    /// <summary>Minutos por defecto (si el parametro <c>firma_cargue_pendiente_minutos</c> no existe) que la salida del cargue espera sin la firma de una parte antes de avisarle.</summary>
+    public const int FIRMA_CARGUE_MINUTOS_POR_DEFECTO = 30;
     public const int RECLAMO_MINUTOS_POR_DEFECTO = 30;
     public const int CARGUE_SIN_RECLAMAR_MINUTOS_POR_DEFECTO = 30;
     public const int VALVULA_PRECISION_POR_DEFECTO_M = 500;
@@ -165,7 +181,52 @@ public sealed class clsAlertasPeriodicas(
 
     /// <summary>Corre los avisos operativos: captura incompleta, transferencia pendiente y camion reclamado sin actividad. Devuelve cuantos avisos intento crear.</summary>
     public async Task<int> EjecutarAvisosAsync(CancellationToken ct = default) =>
-        await EjecutarCapturasIncompletasAsync(ct) + await EjecutarTransferenciasPendientesAsync(ct) + await EjecutarReclamosSinActividadAsync(ct) + await EjecutarCarguesSinReclamarAsync(ct);
+        await EjecutarCapturasIncompletasAsync(ct) + await EjecutarTransferenciasPendientesAsync(ct) + await EjecutarReclamosSinActividadAsync(ct) + await EjecutarCarguesSinReclamarAsync(ct)
+        + await EjecutarFirmasDelCarguePendientesAsync(ct);
+
+    /// <summary>
+    /// Avisa a la parte de la ninera a la que le falta firmar el cargue: cuando la salida del cargue de un carro lleva cerrada <c>firma_cargue_pendiente_minutos</c> (30 por defecto, ajustable sin desplegar) sin que su
+    /// transferencia tenga la firma de una parte, esa parte (el inspector del viaje si falta quien entrega, el conductor si falta quien recibe) recibe un aviso de urgencia media con los carros que faltan. Un solo aviso por viaje y
+    /// parte: las corridas siguientes no lo repiten.
+    /// </summary>
+    public async Task<int> EjecutarFirmasDelCarguePendientesAsync(CancellationToken ct = default)
+    {
+        var minutos = Math.Max(await parametros.EnteroAsync(clsClavesParametros.FIRMA_CARGUE_PENDIENTE_MINUTOS, FIRMA_CARGUE_MINUTOS_POR_DEFECTO, ct), 1);
+        var emitidas = 0;
+        foreach (var delViaje in (await consultas.FirmasDelCarguePendientesAsync(reloj.Ahora.AddMinutes(-minutos), LIMITE_POR_EJECUCION, ct)).GroupBy(f => f.ViajeId))
+        {
+            foreach (var (parte, destinatario, vines) in new[]
+                     {
+                         (clsParteFirmante.ENTREGA, delViaje.First().InspectorId, delViaje.Where(f => f.FaltaEntrega).Select(f => f.Vin).Order(StringComparer.Ordinal).ToList()),
+                         (clsParteFirmante.RECIBE, delViaje.First().ConductorId, delViaje.Where(f => f.FaltaRecibe).Select(f => f.Vin).Order(StringComparer.Ordinal).ToList()),
+                     })
+            {
+                if (destinatario is not { } usuarioId || vines.Count == 0)
+                {
+                    continue;
+                }
+
+                await emisor.EmitirAsync(
+                    new clsAlerta(
+                        clsTipoNotificacion.FIRMA_CARGUE_PENDIENTE,
+                        clsUrgenciaNotificacion.MEDIA,
+                        [usuarioId],
+                        delViaje.First().ClienteId,
+                        delViaje.Key,
+                        null,
+                        null,
+                        null,
+                        "Firma del cargue pendiente",
+                        $"La salida del cargue de {vines.Count} carro(s) lleva más de {minutos} minutos cerrada y falta su firma de la niñera ({(parte == clsParteFirmante.ENTREGA ? "entrega" : "recibo")}): {string.Join(", ", vines)}.",
+                        $"{clsTipoNotificacion.FIRMA_CARGUE_PENDIENTE}:{delViaje.Key}:{parte}",
+                        new Dictionary<string, object?> { ["viaje_id"] = delViaje.Key, ["vines"] = vines, ["parte_que_falta"] = parte }),
+                    ct);
+                emitidas++;
+            }
+        }
+
+        return emitidas;
+    }
 
     /// <summary>
     /// Avisa a los coordinadores de calidad del cliente de un cargue programado que lleva <c>cargue_sin_reclamar_minutos</c> (30 por defecto, ajustable sin desplegar) pasada su hora programada sin que ningun inspector lo

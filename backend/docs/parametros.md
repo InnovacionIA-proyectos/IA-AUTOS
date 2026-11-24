@@ -33,6 +33,7 @@ se aplica en un minuto o menos sin desplegar y cada cambio queda en la auditoria
 | `umbral_patron_ventana_dias` | numero | 30 | dias de la ventana en la que se cuentan los hallazgos de un patron |
 | `captura_incompleta_minutos` | numero | 30 | minutos que una inspeccion de Cargue o Descargue puede seguir en borrador sin todas las fotos antes de avisar a quien la inicio (la inspeccion FLASH AVES dura maximo 5 minutos) |
 | `transferencia_pendiente_minutos` | numero | 240 | minutos que una llegada cerrada puede seguir con la transferencia sin cierre antes de avisar al firmante que falta |
+| `firma_cargue_pendiente_minutos` | numero | 30 | minutos que la salida del cargue de un carro puede seguir cerrada sin la firma de una parte de la niñera antes de avisarle a esa parte (script `42-firma-del-cargue-por-ninera.sql`; el valor definitivo lo confirma el negocio) |
 | `acomodacion_fotos_minimas` | numero | 1 | fotos de la acomodacion de las unidades en la ninera que exige el cierre de la segunda inspeccion del cargue (el valor definitivo lo confirma el negocio; script `30-parametro-fotos-de-acomodacion.sql`) |
 | `radio_lugar_cargue_m` | numero | 1000 | radio, en metros, alrededor de un lugar de cargue dentro del cual la primera foto sellada confirma que el inspector esta en sitio (el valor definitivo lo confirma el negocio; script `32-ubicacion-con-rango-y-confirmacion-en-sitio.sql`) |
 | `radio_destino_m` | numero | 500 | radio, en metros, alrededor de un destino dentro del cual la primera foto sellada confirma que se esta en sitio |

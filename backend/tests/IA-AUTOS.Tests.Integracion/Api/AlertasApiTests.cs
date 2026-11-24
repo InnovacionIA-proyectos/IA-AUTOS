@@ -405,7 +405,10 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
     public async Task Sin_transferencia_el_aviso_va_al_conductor_si_sigue_el_transporte_y_al_inspector_si_sigue_el_descargue()
     {
         var e = await EscenarioAsync();
+        // La llegada del Cargue ya tiene su transferencia abierta (se firma por niñera): sigue avisando al conductor, que es quien recibe. Sin transferencia propia no avisa (ver el siguiente caso).
         var cargue = await LlegadaCerradaAsync(e.Etapas[0], e.Inspector.UsuarioId);
+        await Sembrador.TransferenciaAsync(cargue, e.Inspector.UsuarioId, e.Conductor.UsuarioId, tipoCierre: null);
+        await Sembrador.EjecutarAsync("ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL; UPDATE dbo.tblTransferenciasCustodia SET FirmaRecibe = NULL, FirmaRecibeAt = NULL; ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL");
         var transporte = await LlegadaCerradaAsync(e.Etapas[1], e.Conductor.UsuarioId);
 
         var primera = await ConProcesosAsync(p => p.EjecutarAvisosAsync());
@@ -478,7 +481,9 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
     public async Task No_avisa_de_una_llegada_reciente_de_una_unidad_que_no_sale_ni_de_la_ultima_etapa_y_los_minutos_son_un_parametro()
     {
         var e = await EscenarioAsync();
-        await LlegadaCerradaAsync(e.Etapas[0], e.Inspector.UsuarioId, minutosDesdeElCierre: 60);
+        var cargue = await LlegadaCerradaAsync(e.Etapas[0], e.Inspector.UsuarioId, minutosDesdeElCierre: 60);
+        await Sembrador.TransferenciaAsync(cargue, e.Inspector.UsuarioId, e.Conductor.UsuarioId, tipoCierre: null);
+        await Sembrador.EjecutarAsync("ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL; UPDATE dbo.tblTransferenciasCustodia SET FirmaRecibe = NULL, FirmaRecibeAt = NULL; ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL");
         // La llegada del Descargue no tiene etapa siguiente: no hay a quien avisar.
         await LlegadaCerradaAsync(e.Etapas[2], e.Inspector.UsuarioId);
         Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));

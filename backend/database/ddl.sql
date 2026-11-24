@@ -2320,5 +2320,58 @@ BEGIN
 END
 GO
 
+/* -----------------------------------------------------------------------------
+   Firma del cargue por ninera. tblTransferenciasCustodia: la hora y el GPS del momento en que cada parte firmo (FirmaEntregaMomentoAt/Lat/Lng/PrecisionM y las de FirmaRecibe...), ademas de la hora en que la
+   firma llego al servidor (FirmaEntregaAt/FirmaRecibeAt); la latitud y la longitud van juntas y dentro de su rango. FirmaPorNinera marca la transferencia del cargue de un carro que se firmo por ninera. El tipo de
+   aviso firma_cargue_pendiente y el parametro firma_cargue_pendiente_minutos (minutos que la salida del cargue puede seguir cerrada sin la firma de una parte antes de avisarle).
+   ----------------------------------------------------------------------------- */
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'FirmaEntregaMomentoAt') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD FirmaEntregaMomentoAt datetimeoffset(3) NULL;
+GO
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'FirmaEntregaLat') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD FirmaEntregaLat float NULL;
+GO
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'FirmaEntregaLng') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD FirmaEntregaLng float NULL;
+GO
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'FirmaEntregaPrecisionM') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD FirmaEntregaPrecisionM float NULL;
+GO
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'FirmaRecibeMomentoAt') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD FirmaRecibeMomentoAt datetimeoffset(3) NULL;
+GO
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'FirmaRecibeLat') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD FirmaRecibeLat float NULL;
+GO
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'FirmaRecibeLng') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD FirmaRecibeLng float NULL;
+GO
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'FirmaRecibePrecisionM') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD FirmaRecibePrecisionM float NULL;
+GO
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'FirmaPorNinera') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD FirmaPorNinera bit NOT NULL CONSTRAINT DF_tblTransferenciasCustodia_FirmaPorNinera DEFAULT (0);
+GO
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'FirmaEntregaLat') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_GpsEntrega' AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia'))
+    EXEC (N'ALTER TABLE dbo.tblTransferenciasCustodia ADD CONSTRAINT CK_tblTransferencias_GpsEntrega CHECK ((FirmaEntregaLat IS NULL AND FirmaEntregaLng IS NULL AND FirmaEntregaPrecisionM IS NULL) OR (FirmaEntregaLat IS NOT NULL AND FirmaEntregaLng IS NOT NULL AND FirmaEntregaLat BETWEEN -90 AND 90 AND FirmaEntregaLng BETWEEN -180 AND 180 AND (FirmaEntregaPrecisionM IS NULL OR FirmaEntregaPrecisionM >= 0)))');
+GO
+IF COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'FirmaRecibeLat') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_GpsRecibe' AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia'))
+    EXEC (N'ALTER TABLE dbo.tblTransferenciasCustodia ADD CONSTRAINT CK_tblTransferencias_GpsRecibe CHECK ((FirmaRecibeLat IS NULL AND FirmaRecibeLng IS NULL AND FirmaRecibePrecisionM IS NULL) OR (FirmaRecibeLat IS NOT NULL AND FirmaRecibeLng IS NOT NULL AND FirmaRecibeLat BETWEEN -90 AND 90 AND FirmaRecibeLng BETWEEN -180 AND 180 AND (FirmaRecibePrecisionM IS NULL OR FirmaRecibePrecisionM >= 0)))');
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%firma_cargue_pendiente%')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones'))
+        ALTER TABLE dbo.tblNotificaciones DROP CONSTRAINT CK_tblNotificaciones_Tipo;
+    ALTER TABLE dbo.tblNotificaciones ADD CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN ('novedad_conductor', 'respuesta_conductor', 'hallazgo_critico', 'umbral_patron', 'captura_incompleta', 'transferencia_pendiente', 'reporte_diario', 'novedad_proceso', 'reclamo_sin_actividad', 'fuera_de_rango', 'cargue_sin_reclamar', 'propuesta_ubicacion', 'permiso_sin_inspector', 'firma_cargue_pendiente'));
+END
+GO
+INSERT INTO dbo.tblParametros (Clave, Valor, Tipo, Descripcion)
+SELECT v.Clave, v.Valor, v.Tipo, v.Descripcion
+FROM (VALUES
+    ('firma_cargue_pendiente_minutos', N'30', 'numero', N'Minutos que la salida del cargue de un carro puede seguir cerrada sin la firma de una parte de la ninera antes de avisarle a esa parte (el valor definitivo lo confirma el negocio)')
+) AS v (Clave, Valor, Tipo, Descripcion)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblParametros p WHERE p.Clave = v.Clave);
+GO
+
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';
 GO

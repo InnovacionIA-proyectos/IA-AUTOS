@@ -7,6 +7,7 @@ using IAAutos.Aplicacion.Viajes;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Vehiculos;
+using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Viajes;
 using Microsoft.EntityFrameworkCore;
 
@@ -67,7 +68,10 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         string? LugarCargue,
         int TotalVehiculos,
         int VehiculosCompletos,
-        bool LugarCargueConInspector);
+        bool LugarCargueConInspector,
+        DateTimeOffset? CargueFirmadoPorNineraAt = null,
+        DateTimeOffset? CargueNoFirmadoAt = null,
+        string? CargueNoFirmaParte = null);
 
     /// <summary>El viaje tiene al menos un VIN de ese cliente.</summary>
     private Expression<Func<clsViaje, bool>> ConVehiculoDeCliente(Guid clienteId) =>
@@ -240,11 +244,27 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         var conInspector = lugaresDeCargue.Count == 0
             ? new HashSet<Guid>()
             : (await clsReglaInspectorDelPunto.LugaresConInspector(contexto).Where(l => lugaresDeCargue.Contains(l)).Distinct().ToListAsync(ct)).ToHashSet();
+        // Como se cerro el cargue por ninera de cada viaje (se calcula de las transferencias, sin un dato aparte que pueda quedar desincronizado): firmado por las dos partes (cuando) o con la constancia de no firma (cuando y
+        // que parte se nego). Un viaje cuyo cargue no se firmo por ninera no trae ninguno de los tres.
+        var porNinera = (await (from t in contexto.Transferencias.AsNoTracking()
+                                join i in contexto.Inspecciones.AsNoTracking() on t.InspeccionId equals i.Id
+                                where ids.Contains(i.ViajeId) && t.FirmaPorNinera
+                                select new { i.ViajeId, t.TipoCierre, t.FirmadaAt, t.NoFirmaParte, Momento = t.FirmaEntregaMomentoAt ?? t.FirmaRecibeMomentoAt ?? t.UpdatedAt }).ToListAsync(ct))
+            .ToLookup(x => x.ViajeId);
         return filas
-            .Select(f => new FilaViaje(
-                f.Viaje, f.Unidad, f.Conductor, f.Inspector, f.Origen, f.Destino, f.LugarCargue,
-                conteos.GetValueOrDefault(f.Viaje.Id)?.Total ?? 0, conteos.GetValueOrDefault(f.Viaje.Id)?.Completos ?? 0,
-                f.Viaje.LugarCargueId is { } cargue && conInspector.Contains(cargue)))
+            .Select(f =>
+            {
+                var del = porNinera[f.Viaje.Id].ToList();
+                var noFirma = del.Where(x => x.TipoCierre == clsTipoCierre.NO_FIRMA).ToList();
+                var firmadoAt = noFirma.Count == 0 && del.Count > 0 && del.All(x => x.TipoCierre is clsTipoCierre.FIRMADA or clsTipoCierre.CON_RESERVAS)
+                    ? del.Max(x => x.FirmadaAt)
+                    : null;
+                return new FilaViaje(
+                    f.Viaje, f.Unidad, f.Conductor, f.Inspector, f.Origen, f.Destino, f.LugarCargue,
+                    conteos.GetValueOrDefault(f.Viaje.Id)?.Total ?? 0, conteos.GetValueOrDefault(f.Viaje.Id)?.Completos ?? 0,
+                    f.Viaje.LugarCargueId is { } cargue && conInspector.Contains(cargue),
+                    firmadoAt, noFirma.Count > 0 ? noFirma.Max(x => x.Momento) : null, noFirma.FirstOrDefault()?.NoFirmaParte);
+            })
             .ToList();
     }
 
@@ -377,7 +397,8 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
         f.Viaje.Estado, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt, novedades,
         f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue,
-        f.Viaje.CapacidadEfectiva, Disposicion(f.Viaje.CapacidadEfectiva, vehiculos), fotosAcomodacion, f.LugarCargueConInspector);
+        f.Viaje.CapacidadEfectiva, Disposicion(f.Viaje.CapacidadEfectiva, vehiculos), fotosAcomodacion, f.LugarCargueConInspector,
+        f.CargueFirmadoPorNineraAt, f.CargueNoFirmadoAt, f.CargueNoFirmaParte);
 
     /// <summary>Los puestos de la ninera, del 1 a la capacidad, cada uno con el VIN que lo ocupa (los de las unidades que quien consulta puede ver).</summary>
     private static DisposicionDeNiniera Disposicion(int capacidad, IReadOnlyList<ViajeVehiculoDto> vehiculos)
