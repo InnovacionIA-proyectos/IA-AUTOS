@@ -164,7 +164,7 @@ public sealed class clsViajesService(
         return await consultas.TrailersAsync(actual.ClienteDelFiltro(cliente), ct);
     }
 
-    /// <summary>Los viajes del usuario (como conductor o inspector). Sin estado: los programados y en curso.</summary>
+    /// <summary>Los viajes del usuario (como conductor o inspector del viaje, o inspector con un reclamo activo de entrega), cada uno con su papel si es inspector. Sin estado: los programados y en curso.</summary>
     public async Task<IReadOnlyList<ViajeDto>> MiosAsync(string? estado, CancellationToken ct = default)
     {
         var errores = new Dictionary<string, string[]>();
@@ -176,9 +176,10 @@ public sealed class clsViajesService(
 
         string[] estados = filtro is null ? clsEstadoViaje.ACTIVOS : [filtro];
         // Un carro bajado del viaje no cuenta para quien trabaja el viaje: no sale en «mis viajes».
-        return (await consultas.MiosAsync(actual.IdObligatorio(), estados, ct))
+        var viajes = (await consultas.MiosAsync(actual.IdObligatorio(), estados, ct))
             .Select(v => (v with { Vehiculos = v.Vehiculos.Where(u => u.EstadoUnidad != clsEstadoUnidad.BAJADO).ToList() }).ParaConductor(actual))
             .ToList();
+        return await ConPapelAsync(viajes, ct);
     }
 
     public async Task<ViajeDto> ObtenerAsync(Guid id, CancellationToken ct = default)
@@ -515,8 +516,23 @@ public sealed class clsViajesService(
     private async Task<clsViaje> ObtenerViajeAsync(Guid id, CancellationToken ct) =>
         await viajes.ObtenerPorIdAsync(id, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE);
 
-    private async Task<ViajeDto> ObtenerDtoAsync(Guid id, CancellationToken ct) =>
-        (await consultas.ObtenerAsync(id, ClienteRestringido, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE)).ParaConductor(actual);
+    private async Task<ViajeDto> ObtenerDtoAsync(Guid id, CancellationToken ct)
+    {
+        var viaje = (await consultas.ObtenerAsync(id, ClienteRestringido, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE)).ParaConductor(actual);
+        return (await ConPapelAsync([viaje], ct))[0];
+    }
+
+    /// <summary>Al inspector se le dice su papel en cada viaje (carga, recibe o las dos); al conductor y a los roles de oficina, nulo.</summary>
+    private async Task<IReadOnlyList<ViajeDto>> ConPapelAsync(IReadOnlyList<ViajeDto> viajes, CancellationToken ct)
+    {
+        if (actual.Rol != clsRol.INSPECTOR || viajes.Count == 0)
+        {
+            return viajes;
+        }
+
+        var papeles = await consultas.PapelesDelInspectorAsync(actual.IdObligatorio(), viajes.Select(v => v.Id).ToList(), ct);
+        return viajes.Select(v => papeles.TryGetValue(v.Id, out var papel) ? v with { Papel = papel } : v).ToList();
+    }
 
     /// <summary>
     /// El viaje no tiene un cliente propio: se toma de sus VIN. Quien administra viajes sin ser super administrador (coordinador, administrador,
