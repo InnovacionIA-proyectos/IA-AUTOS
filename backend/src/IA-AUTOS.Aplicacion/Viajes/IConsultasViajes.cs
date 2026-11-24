@@ -17,8 +17,16 @@ public interface IConsultasViajes
     Task<(IReadOnlyList<ViajeResumenDto> Filas, int Total)> ListarAsync(
         FiltrosViajes filtros, Guid? soloDeUsuario, Guid? soloDeCliente, PaginaSolicitada pagina, OrdenSolicitado? orden, CancellationToken ct = default);
 
-    /// <summary>Viajes (con sus VIN) en los que el usuario es conductor o inspector, en los estados indicados.</summary>
+    /// <summary>
+    /// Viajes (con sus VIN) en los que el usuario es conductor o inspector del viaje, o inspector con un reclamo ACTIVO de entrega (de cualquier parada), en los estados indicados y sin repetir viajes.
+    /// </summary>
     Task<IReadOnlyList<ViajeDto>> MiosAsync(Guid usuarioId, IReadOnlyCollection<string> estados, CancellationToken ct = default);
+
+    /// <summary>
+    /// El papel del inspector en cada uno de los viajes (<see cref="IAAutos.Dominio.Viajes.clsPapelEnElViaje"/>): carga si es el inspector del viaje o tiene el reclamo activo del cargue, recibe si tiene un reclamo
+    /// activo de entrega. Los viajes en los que no hace ninguna de las dos cosas no salen en el resultado.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> PapelesDelInspectorAsync(Guid inspectorId, IReadOnlyCollection<Guid> viajeIds, CancellationToken ct = default);
 
     /// <summary>El viaje con sus VIN. Con <paramref name="soloDeCliente"/> solo los VIN de ese cliente (y solo esos clientes).</summary>
     Task<ViajeDto?> ObtenerAsync(Guid id, Guid? soloDeCliente = null, CancellationToken ct = default);

@@ -46,6 +46,19 @@ public sealed class CorregirQuienYHastaCuandoApiTests(clsBaseDatosFixture bd) : 
     // ------------------------------------------------------------------------------------- quien corrige
 
     [Fact]
+    public async Task El_super_administrador_no_corrige_y_no_se_crea_ninguna_version()
+    {
+        var e = await EscenarioAsync();
+        var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
+
+        var r = await CorregirAsync(superAdmin, e.Inspeccion);
+
+        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+        Assert.Equal(1, await VersionesAsync(e.Inspeccion));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'inspeccion.corregir'"));
+    }
+
+    [Fact]
     public async Task El_conductor_no_corrige_lo_que_hizo_el_inspector_y_no_se_crea_ninguna_version()
     {
         var e = await EscenarioAsync();

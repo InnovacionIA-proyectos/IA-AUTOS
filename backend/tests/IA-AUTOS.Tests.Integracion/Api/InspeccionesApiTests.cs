@@ -1911,7 +1911,10 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var porFecha = Items(await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?desde=2026-07-01T00:00:00Z&hasta=2026-07-31T00:00:00Z")));
 
         Assert.Equal(3, todas.GetArrayLength());
-        Assert.Equal(["iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre", "lugar", "codigo_mtrack", "unidad"], todas[0].EnumerateObject().Select(p => p.Name).TakeLast(8).ToList());
+        Assert.Equal(["iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre", "lugar", "codigo_mtrack", "unidad", "usuario_nombre"], todas[0].EnumerateObject().Select(p => p.Name).TakeLast(9).ToList());
+        // El nombre de quien hizo cada informe sale en la fila, con el mismo patron del nombre del conductor.
+        Assert.Equal("Nombre uno@ejemplo.com", todas.EnumerateArray().Single(i => i.GetProperty("id").GetGuid() == a).GetProperty("usuario_nombre").GetString());
+        Assert.Equal("Nombre dos@ejemplo.com", todas.EnumerateArray().Single(i => i.GetProperty("id").GetGuid() == b).GetProperty("usuario_nombre").GetString());
         Assert.Equal(["vin", "proceso"], todas[0].EnumerateObject().Select(p => p.Name).Skip(15).Take(2).ToList());
         Assert.Equal(2, porUsuario.GetArrayLength());
         Assert.Contains(porUsuario.EnumerateArray(), i => i.GetProperty("id").GetGuid() == b);
@@ -1921,6 +1924,22 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal("9FBHSR4E8PM000999", porVin[0].GetProperty("vin").GetString());
         // Solo las dos creadas por la API llevan la fecha del dispositivo (julio de 2026); la llegada sembrada lleva la de hoy.
         Assert.Equal(2, porFecha.GetArrayLength());
+    }
+
+    [Fact]
+    public async Task El_nombre_de_quien_hizo_el_informe_no_sale_a_un_coordinador_de_otro_cliente()
+    {
+        var (sesion, etapas) = await EscenarioAsync("uno@ejemplo.com");
+        await CrearInspeccionAsync(sesion, etapas[0]);
+        var otroCliente = Guid.NewGuid();
+        await Sembrador.EjecutarAsync("INSERT dbo.tblClientes (Id, Codigo, Nombre, Orden) VALUES (@id, 'otro', N'Otro cliente', 2)", ("@id", otroCliente));
+        var usuarioOtro = await Fabrica.SembrarUsuarioAsync("coord-otro@ejemplo.com", "Clave-Segura-1", clsRol.COORDINADOR_CALIDAD, nombre: "Coordinador otro", clienteId: otroCliente);
+        var tokenOtro = await LoginAsync("coord-otro@ejemplo.com", "Clave-Segura-1");
+        Assert.NotEqual(Guid.Empty, usuarioOtro.Id);
+
+        var delOtro = Items(await ClonarAsync(await Cliente(tokenOtro).GetAsync("/api/inspecciones")));
+
+        Assert.Equal(0, delOtro.GetArrayLength());
     }
 
     [Fact]
