@@ -15,7 +15,7 @@ import '../domain/pendiente.dart';
 import '../domain/viaje.dart';
 import '../providers.dart';
 import '../../custodia/domain/firma_ninera.dart';
-import '../../custodia/presentation/firma_ninera_page.dart';
+import '../../inspecciones/presentation/ninera_page.dart';
 import 'acciones_conductor.dart';
 import 'destinos_vistos.dart';
 import 'entrega_punto_page.dart';
@@ -308,18 +308,17 @@ class _TarjetaViaje extends ConsumerWidget {
               child: Text(cuantos == 1 ? 'Sin calificar (1)' : 'Sin calificar ($cuantos)'),
             ),
           ],
-          // S8-HU-01.3: el cargue se firma una vez por toda la niñera, desde el viaje. Solo a quienes la firman y
-          // mientras la entrega del cargue no se haya cerrado.
+          // S8-HU-01.3: la niñera del viaje (sus puestos, cada carro y la firma única) se abre desde el viaje, para el
+          // inspector y el conductor del viaje. Con el cargue cerrado se sigue viendo cómo quedó.
           if (viaje.admiteTrabajo &&
-              !viaje.cargueCerrado &&
               viaje.vehiculos.any((v) => v.sale) &&
               parteEnLaNinera(viaje, ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.id))) != null) ...[
             const SizedBox(height: Espacio.sm),
             OutlinedButton(
               onPressed: () => Navigator.of(context).push<void>(
-                MaterialPageRoute(builder: (_) => FirmaNineraPage(viajeId: viaje.id)),
+                MaterialPageRoute(builder: (_) => NineraPage(viajeId: viaje.id)),
               ),
-              child: const Text('Firma de la niñera'),
+              child: Text(viaje.cargueCerrado ? 'Niñera' : 'Niñera y firma del cargue'),
             ),
           ],
           // Entregar es lo que se hace con un viaje en ruta: en cada punto se firma una vez para todas sus unidades.

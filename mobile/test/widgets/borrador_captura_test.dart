@@ -10,6 +10,7 @@ import 'package:traza_autos/features/inspecciones/domain/borrador_captura.dart';
 import 'package:traza_autos/features/inspecciones/domain/extra_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
+import 'package:traza_autos/features/inspecciones/domain/puestos_guardados.dart';
 import 'package:traza_autos/features/inspecciones/presentation/captura_page.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
@@ -121,98 +122,83 @@ Arnes conGuardado(BorradorCaptura borrador) {
 Finder get _cerrarInforme => find.widgetWithText(FilledButton, 'Cerrar informe');
 
 void main() {
-  // S8-HU-01.3 CA-4 y ESC-10: los puestos de la acomodación se guardan en el teléfono al elegirlos.
+  // S8-HU-01.3 CA-4 y ESC-10: los puestos de la acomodación se guardan en el teléfono al elegirlos, por viaje.
   group('los puestos de la acomodación', () {
     const vinA = 'VINA0000000000001';
     const vinB = 'VINB0000000000002';
-    final claveSalida = claveBorrador(usuarioId: 'u1', vin: _vin, etapaId: 'e1', momento: Momento.salida);
+    final clave = clavePuestos(usuarioId: 'u1', viajeId: 'v1');
 
-    testWidgets('elegir un puesto lo guarda en el teléfono, sin repetir lo que ya tiene el servidor', (tester) async {
-      final arnes = await montar(
-        tester,
-        momento: Momento.salida,
-        delViaje: viaje('v1', vines: [vinA, vinB], posiciones: {vinB: 3}),
-      );
+    List<String> puestoDe(WidgetTester tester, String vin) => [
+          for (final c in tester.widgetList<ChoiceChip>(
+            find.descendant(of: find.widgetWithText(Tarjeta, vin), matching: find.byType(ChoiceChip)),
+          ))
+            if (c.selected) ((c.label as SizedBox).child as Text).data!,
+        ];
+
+    testWidgets('elegir un puesto lo guarda para el viaje, sin repetir lo que ya tiene el servidor', (tester) async {
+      final arnes = await montar(tester, momento: Momento.salida, delViaje: viaje('v1', vines: [vinA, vinB], posiciones: {vinB: 3}));
       await abrirCaptura(tester);
 
       await tester.tap(find.descendant(of: find.widgetWithText(Tarjeta, vinA), matching: find.widgetWithText(ChoiceChip, '4')));
       await avanzar(tester);
 
-      expect(BorradorCaptura.fromJson(arnes.borradores.guardados[claveSalida]!).posiciones, {vinA: 4});
+      final guardados = PuestosGuardados.fromJson(arnes.puestos.guardados[clave]!);
+      expect(guardados.cambios, {vinA: 4});
+      expect(arnes.borradores.guardados, isEmpty, reason: 'los puestos no van en el borrador del carro');
     });
 
-    // Revisión: quitar a un carro del puesto que el servidor ya tenía y poner otro ahí no debe volver con los dos.
-    testWidgets('un puesto liberado se guarda y al continuar sigue libre', (tester) async {
-      final arnes = await montar(
-        tester,
-        momento: Momento.salida,
-        delViaje: viaje('v1', vines: [vinA, vinB], posiciones: {vinA: 3}),
-      );
+    testWidgets('al volver siguen en su puesto, sin tener que continuar nada', (tester) async {
+      final arnes = Arnes();
+      arnes.puestos.guardados[clave] = const PuestosGuardados(cambios: {vinA: 4}, base: {vinA: null}).toJson();
+      await montar(tester, arnes: arnes, momento: Momento.salida, delViaje: viaje('v1', vines: [vinA, vinB]));
       await abrirCaptura(tester);
 
-      // A sale del 3 (tocar el puesto elegido lo suelta) y B entra al 3.
+      expect(find.textContaining('Continuar lo guardado'), findsNothing);
+      expect(puestoDe(tester, vinA), ['4']);
+      expect(find.text('Falta la posición de la unidad $vinB'), findsOneWidget);
+    });
+
+    // Revisión: quitar a un carro del puesto que el servidor ya tenía y poner otro ahí no vuelve con los dos.
+    testWidgets('un puesto liberado se guarda y al volver sigue libre, con el otro en su lugar', (tester) async {
+      final arnes = await montar(tester, momento: Momento.salida, delViaje: viaje('v1', vines: [vinA, vinB], posiciones: {vinA: 3}));
+      await abrirCaptura(tester);
+
       await tester.tap(find.descendant(of: find.widgetWithText(Tarjeta, vinA), matching: find.widgetWithText(ChoiceChip, '3')));
       await avanzar(tester);
       await tester.tap(find.descendant(of: find.widgetWithText(Tarjeta, vinB), matching: find.widgetWithText(ChoiceChip, '3')));
       await avanzar(tester);
 
-      final guardado = BorradorCaptura.fromJson(arnes.borradores.guardados[claveSalida]!);
-      expect(guardado.posiciones, {vinA: null, vinB: 3});
-      expect(guardado.posicionesBase, {vinA: 3, vinB: null});
-    });
-
-    testWidgets('al continuar, A queda libre y B en el 3: nunca dos en el mismo puesto', (tester) async {
-      final arnes = Arnes();
-      arnes.borradores.guardados[claveSalida] = const BorradorCaptura(
-        posiciones: {vinA: null, vinB: 3},
-        posicionesBase: {vinA: 3, vinB: null},
-      ).toJson();
-      await montar(tester, arnes: arnes, momento: Momento.salida, delViaje: viaje('v1', vines: [vinA, vinB], posiciones: {vinA: 3}));
-      await abrirCaptura(tester);
-
-      await tester.tap(find.text('Continuar lo guardado (0 fotos, 0 daños, 2 puestos)'));
-      await avanzar(tester);
-
-      expect(find.text('Falta la posición de la unidad $vinA'), findsOneWidget);
-      final deB = tester
-          .widgetList<ChoiceChip>(find.descendant(of: find.widgetWithText(Tarjeta, vinB), matching: find.byType(ChoiceChip)))
-          .where((c) => c.selected);
-      expect(deB.map((c) => ((c.label as SizedBox).child as Text).data), ['3']);
+      final guardados = PuestosGuardados.fromJson(arnes.puestos.guardados[clave]!);
+      expect(guardados.cambios, {vinA: null, vinB: 3});
+      expect(guardados.base, {vinA: 3, vinB: null});
+      expect(guardados.sobre({vinA: 3}), {vinB: 3}, reason: 'nunca dos en el mismo puesto');
     });
 
     testWidgets('un puesto guardado que el servidor cambió después no se aplica', (tester) async {
       final arnes = Arnes();
-      // Se guardó con A sin puesto; mientras tanto se acomodó desde otro carro y el servidor ya lo tiene en el 4.
-      arnes.borradores.guardados[claveSalida] = const BorradorCaptura(
-        posiciones: {vinA: 5},
-        posicionesBase: {vinA: null},
-      ).toJson();
+      // Se guardó con A sin puesto; mientras tanto se acomodó desde otro teléfono y el servidor ya lo tiene en el 4.
+      arnes.puestos.guardados[clave] = const PuestosGuardados(cambios: {vinA: 5}, base: {vinA: null}).toJson();
       await montar(tester, arnes: arnes, momento: Momento.salida, delViaje: viaje('v1', vines: [vinA, vinB], posiciones: {vinA: 4}));
       await abrirCaptura(tester);
 
-      await tester.tap(find.text('Continuar lo guardado (0 fotos, 0 daños, 1 puesto)'));
-      await avanzar(tester);
-
-      final deA = tester
-          .widgetList<ChoiceChip>(find.descendant(of: find.widgetWithText(Tarjeta, vinA), matching: find.byType(ChoiceChip)))
-          .where((c) => c.selected);
-      expect(deA.map((c) => ((c.label as SizedBox).child as Text).data), ['4'], reason: 'manda lo del servidor');
+      expect(puestoDe(tester, vinA), ['4'], reason: 'manda lo del servidor');
     });
 
-    testWidgets('al volver se ofrecen y continuar los pone en su puesto', (tester) async {
+    // CA-4: se borran al cerrar la acomodación, porque ya viajan con ese informe.
+    testWidgets('al cerrar la acomodación los puestos guardados se sueltan', (tester) async {
       final arnes = Arnes();
-      arnes.borradores.guardados[claveSalida] = const BorradorCaptura(posiciones: {vinA: 4}).toJson();
-      await montar(tester, arnes: arnes, momento: Momento.salida, delViaje: viaje('v1', vines: [vinA, vinB]));
+      arnes.puestos.guardados[clave] = const PuestosGuardados(cambios: {vinA: 1, vinB: 2}, base: {vinA: null, vinB: null}).toJson();
+      // Sin señal: el informe queda en la cola y se puede mirar lo que lleva.
+      arnes.red.estable = false;
+      await montar(tester, arnes: arnes, momento: Momento.salida, delViaje: viaje('v1', vines: [vinA, vinB], fotosAcomodacion: 1));
       await abrirCaptura(tester);
 
-      await tester.tap(find.text('Continuar lo guardado (0 fotos, 0 daños, 1 puesto)'));
+      await tester.tap(_cerrarInforme);
       await avanzar(tester);
 
-      final elegidas = tester
-          .widgetList<ChoiceChip>(find.descendant(of: find.widgetWithText(Tarjeta, vinA), matching: find.byType(ChoiceChip)))
-          .where((c) => c.selected);
-      expect(elegidas.map((c) => ((c.label as SizedBox).child as Text).data), ['4']);
-      expect(find.text('Falta la posición de la unidad $vinB'), findsOneWidget);
+      final job = arnes.cola.jobs.whereType<InformeJob>().single;
+      expect(job.posiciones, {vinA: 1, vinB: 2});
+      expect(arnes.puestos.guardados, isEmpty);
     });
   });
 
@@ -439,21 +425,16 @@ void main() {
   });
 
   // CA-9: nada que la cola no guarde ya.
-  test('el guardado lleva solo fotos, daños, extras, notas, rutas de archivo y puestos', () {
-    // Los puestos son VIN y número de puesto (S8-HU-01.3 CA-4): ningún dato personal.
-    expect(
-      guardadoDeAna().toJson().keys.toSet(),
-      {'fotos', 'hallazgos', 'extras', 'notas', 'archivos', 'posiciones', 'posiciones_base'},
-    );
+  test('el guardado lleva solo fotos, daños, extras, notas y rutas de archivo', () {
+    expect(guardadoDeAna().toJson().keys.toSet(), {'fotos', 'hallazgos', 'extras', 'notas', 'archivos'});
   });
 
-  test('un guardado con solo puestos no está vacío y los cuenta al ofrecer continuar', () {
-    const conPuestos = BorradorCaptura(posiciones: {'VINA': 4, 'VINB': 2});
-    final leido = BorradorCaptura.fromJson(conPuestos.toJson());
+  test('los puestos guardados son VIN y número, y vuelven igual', () {
+    const puestos = PuestosGuardados(cambios: {'VINA': 4, 'VINB': null}, base: {'VINA': null, 'VINB': 2});
+    final leidos = PuestosGuardados.fromJson(puestos.toJson());
 
-    expect(leido.posiciones, {'VINA': 4, 'VINB': 2});
-    expect(leido.vacio, isFalse);
-    expect(etiquetaContinuar(leido), 'Continuar lo guardado (0 fotos, 0 daños, 2 puestos)');
-    expect(etiquetaContinuar(const BorradorCaptura()), 'Continuar lo guardado (0 fotos, 0 daños)');
+    expect(leidos.cambios, {'VINA': 4, 'VINB': null});
+    expect(leidos.base, {'VINA': null, 'VINB': 2});
+    expect(puestos.toJson().keys.toSet(), {'cambios', 'base'});
   });
 }

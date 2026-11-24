@@ -14,8 +14,6 @@ class BorradorCaptura {
     this.extras = const [],
     this.notas = '',
     this.archivos = const {},
-    this.posiciones = const {},
-    this.posicionesBase = const {},
   });
 
   factory BorradorCaptura.fromJson(Map<String, dynamic> json) => BorradorCaptura(
@@ -26,13 +24,6 @@ class BorradorCaptura {
         extras: [for (final e in json['extras'] as List<dynamic>? ?? const []) ExtraLocal.fromJson(e as Map<String, dynamic>)],
         notas: json['notas'] as String? ?? '',
         archivos: {for (final a in json['archivos'] as List<dynamic>? ?? const []) a as String},
-        posiciones: {
-          for (final e in (json['posiciones'] as Map<String, dynamic>? ?? const {}).entries) e.key: (e.value as num?)?.toInt(),
-        },
-        posicionesBase: {
-          for (final e in (json['posiciones_base'] as Map<String, dynamic>? ?? const {}).entries)
-            e.key: (e.value as num?)?.toInt(),
-        },
       );
 
   /// Las fotos del checklist y de la acomodación.
@@ -45,13 +36,6 @@ class BorradorCaptura {
   /// lo que se borra al empezar de nuevo, para que no queden fotos sin dueño en el teléfono (CA-5).
   final Set<String> archivos;
 
-  /// Los cambios de puesto de la acomodación que el servidor todavía no tiene (S8-HU-01.3 CA-4): VIN → puesto,
-  /// o null cuando se liberó un puesto que el servidor sí tenía.
-  final Map<String, int?> posiciones;
-
-  /// El puesto que el servidor tenía de cada uno de esos VIN cuando se guardó. Si al volver ya es otro (se acomodó
-  /// desde otro carro, o se cerró la acomodación), ese cambio guardado quedó viejo y no se aplica.
-  final Map<String, int?> posicionesBase;
 
   /// Lo que se cuenta como fotos al ofrecer continuar: las del checklist y la acomodación, y las de los extras.
   int get cuantasFotos => fotos.length + extras.fold(0, (n, e) => n + e.fotos.length);
@@ -59,7 +43,7 @@ class BorradorCaptura {
   int get cuantosDanos => hallazgos.length;
 
   /// Sin nada capturado no hay nada que ofrecer continuar.
-  bool get vacio => fotos.isEmpty && hallazgos.isEmpty && extras.isEmpty && notas.trim().isEmpty && posiciones.isEmpty;
+  bool get vacio => fotos.isEmpty && hallazgos.isEmpty && extras.isEmpty && notas.trim().isEmpty;
 
   Map<String, dynamic> toJson() => {
         'fotos': [for (final f in fotos) f.toJson()],
@@ -67,23 +51,17 @@ class BorradorCaptura {
         'extras': [for (final e in extras) e.toJson()],
         'notas': notas,
         'archivos': archivos.toList(),
-        'posiciones': posiciones,
-        'posiciones_base': posicionesBase,
       };
 }
 
-/// «Continuar lo guardado (4 fotos, 1 daño)», y los puestos cuando los hay: «(1 foto, 0 daños, 3 puestos)».
+/// «Continuar lo guardado (4 fotos, 1 daño)». Los puestos de la niñera no van aquí: son del viaje
+/// (ver `PuestosGuardados`).
 String etiquetaContinuar(BorradorCaptura borrador) => 'Continuar lo guardado (${resumenBorrador(borrador, ', ')})';
 
-/// Lo que hay guardado, dicho en pocas palabras: «2 fotos y 1 daño», «1 foto, 0 daños y 3 puestos».
-String resumenBorrador(BorradorCaptura borrador, [String ultimo = ' y ']) {
-  final partes = [
-    borrador.cuantasFotos == 1 ? '1 foto' : '${borrador.cuantasFotos} fotos',
-    borrador.cuantosDanos == 1 ? '1 daño' : '${borrador.cuantosDanos} daños',
-    if (borrador.posiciones.isNotEmpty) borrador.posiciones.length == 1 ? '1 puesto' : '${borrador.posiciones.length} puestos',
-  ];
-  return '${partes.sublist(0, partes.length - 1).join(', ')}$ultimo${partes.last}';
-}
+/// Lo que hay guardado, dicho en pocas palabras: «2 fotos y 1 daño».
+String resumenBorrador(BorradorCaptura borrador, [String ultimo = ' y ']) =>
+    '${borrador.cuantasFotos == 1 ? '1 foto' : '${borrador.cuantasFotos} fotos'}$ultimo'
+    '${borrador.cuantosDanos == 1 ? '1 daño' : '${borrador.cuantosDanos} daños'}';
 
 /// Un borrador por persona y por momento: el de la salida del cargue de un VIN no es el de su llegada, ni el de
 /// una corrección es el de la primera captura, ni el de Ana es el de Diana en el mismo teléfono.

@@ -26,6 +26,7 @@ import 'package:traza_autos/features/sync/domain/puertos.dart';
 import 'package:traza_autos/features/sync/providers.dart';
 import 'package:traza_autos/features/viajes/presentation/destinos_vistos.dart';
 import 'package:traza_autos/features/viajes/presentation/tomados.dart';
+import 'package:traza_autos/features/inspecciones/domain/puestos_guardados.dart';
 
 import 'dobles_dibujo.dart';
 import 'dobles_sync.dart';
@@ -283,9 +284,13 @@ class Arnes {
   /// Lo último que el inspector tenía tomado, guardado en el teléfono, en memoria.
   final tomadosGuardados = TomadosEnMemoria();
 
+  /// Los puestos de la niñera elegidos en el teléfono, en memoria.
+  final puestos = PuestosEnMemoria();
+
   List<Override> get overrides => [
         almacenDestinosVistosProvider.overrideWithValue(destinosVistos),
         almacenTomadosProvider.overrideWithValue(tomadosGuardados),
+        almacenPuestosProvider.overrideWithValue(puestos),
         entornoProvider.overrideWithValue(entorno),
         almacenSesionProvider.overrideWithValue(almacen),
         authRepositorioProvider.overrideWithValue(auth),
@@ -414,4 +419,19 @@ class TomadosEnMemoria implements AlmacenTomados {
 
   @override
   Future<void> escribir(String clave, String valor) async => guardados[clave] = valor;
+}
+
+class PuestosEnMemoria implements AlmacenPuestos {
+  final Map<String, Map<String, dynamic>> guardados = {};
+
+  @override
+  Future<PuestosGuardados?> leer(String clave) async =>
+      guardados[clave] == null ? null : PuestosGuardados.fromJson(guardados[clave]!);
+
+  @override
+  Future<void> guardar(String clave, PuestosGuardados puestos) async =>
+      guardados[clave] = jsonDecode(jsonEncode(puestos.toJson())) as Map<String, dynamic>;
+
+  @override
+  Future<void> borrar(String clave) async => guardados.remove(clave);
 }

@@ -28,6 +28,7 @@ import '../../viajes/presentation/cambios_del_cargue.dart';
 import '../../viajes/providers.dart';
 import '../domain/acomodacion.dart';
 import '../domain/borrador_captura.dart';
+import '../domain/puestos_guardados.dart';
 import '../domain/checklist_vistas.dart';
 import '../domain/extra_local.dart';
 import '../domain/foto_local.dart';
@@ -122,8 +123,12 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   final _posiciones = <String, int>{};
   var _posicionesPrevias = const <String, int>{};
 
-  /// Los cambios de puesto de un borrador que se continuó antes de que llegara el viaje: se aplican al llegar.
-  ({Map<String, int?> cambios, Map<String, int?> base})? _puestosPorAplicar;
+  /// Los puestos de la niñera elegidos en este teléfono para el viaje (S8-HU-01.3 CA-4): se leen al abrir y se
+  /// aplican cuando llega el viaje; cada puesto elegido aquí se vuelve a guardar.
+  late final AlmacenPuestos _almacenPuestos;
+  PuestosGuardados? _puestosLeidos;
+  bool _puestosListos = false;
+  bool _puestosAplicados = false;
   bool _guardandoFoto = false;
   bool _cerrando = false;
 
@@ -165,6 +170,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   void initState() {
     super.initState();
     _almacen = ref.read(almacenBorradoresProvider);
+    _almacenPuestos = ref.read(almacenPuestosProvider);
     _cierre = ref.read(cierreDeCapturaProvider);
     _sync = ref.read(syncControllerProvider.notifier);
     _cola = ref.read(colaRepositorioProvider);
@@ -179,6 +185,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       );
     }
     _leerBorrador();
+    _leerPuestos();
     // En el cargue se piden los catálogos otra vez (con su ETag, así que casi siempre no baja nada): un muelle
     // que el negocio acaba de crear tiene que poder elegirse, y sin él el cierre se rechaza (S8-HU-03.2 ESC-08).
     if (widget.proceso == 'cargue') {
@@ -232,14 +239,6 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       _hallazgos.addAll(guardado.hallazgos);
       _extras.addAll(guardado.extras);
       _archivos.addAll(guardado.archivos);
-      // Los puestos elegidos antes de salir van encima de los que ya tiene el servidor (CA-4). Si el viaje todavía
-      // no llega, se aplican cuando llegue.
-      final puestos = (cambios: guardado.posiciones, base: guardado.posicionesBase);
-      if (_unidades == null) {
-        _puestosPorAplicar = puestos;
-      } else {
-        _aplicarPuestos(puestos);
-      }
       _ofrecido = null;
     });
     // Escribirlas dispara el guardado de las notas, que vuelve a escribir lo mismo.
@@ -284,9 +283,6 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         extras: [..._extras],
         notas: _notas.text,
         archivos: {..._archivos},
-        // Solo lo que cambió aquí, también lo liberado (null): lo que el servidor ya tiene vuelve con el viaje.
-        posiciones: _cambiosDePuesto,
-        posicionesBase: {for (final vin in _cambiosDePuesto.keys) vin: _posicionesPrevias[vin]},
       );
 
   /// Cambia lo capturado y lo guarda en el teléfono.
@@ -322,6 +318,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   /// que usa los borra la cola cuando el servidor los recibe, y los que no usa (la foto de un daño o de un extra
   /// que se quitó) se borran aquí. Si no se pudo encolar, el borrador sigue guardado como estaba.
   Future<void> _encolarYSoltar(InformeJob job) async {
+    final clavePuestosAlCerrar = _clavePuestos;
     // Desde aquí ninguna escritura del borrador corre: la que estaba en camino se espera, y las siguientes ven
     // `_encolado` y no hacen nada.
     _encolado = true;
@@ -334,6 +331,8 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       _guardarBorrador();
       rethrow;
     }
+    // Los puestos ya viajan con este informe: los guardados del viaje se sueltan (CA-4: se borran al cerrar).
+    if (clavePuestosAlCerrar case final clave?) await _almacenPuestos.borrar(clave);
     // Las rutas del job que se encoló, no las de la pantalla: mientras se guardaba, la pantalla seguía respondiendo
     // y quitar un daño en ese instante borraba una foto que el job sí lleva.
     await _borrarArchivos(_archivos.difference({
@@ -377,33 +376,47 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       _unidades = viaje.vehiculos;
       _posicionesPrevias = posicionesDelViaje(viaje);
       _posiciones.addAll(_posicionesPrevias);
-      if (_puestosPorAplicar case final puestos?) {
-        _aplicarPuestos(puestos);
-        _puestosPorAplicar = null;
-      }
+    });
+    _aplicarPuestosGuardados();
+  }
+
+  /// Dónde se guardan los puestos de este viaje; null si no es la acomodación o no se sabe quién captura.
+  String? get _clavePuestos {
+    final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
+    final viajeId = widget.viajeId;
+    if (!_esAcomodacion || usuarioId == null || viajeId == null) return null;
+    return clavePuestos(usuarioId: usuarioId, viajeId: viajeId);
+  }
+
+  Future<void> _leerPuestos() async {
+    final clave = _clavePuestos;
+    final leidos = clave == null ? null : await _almacenPuestos.leer(clave);
+    if (!mounted) return;
+    _puestosLeidos = leidos;
+    _puestosListos = true;
+    _aplicarPuestosGuardados();
+  }
+
+  /// Con el viaje y lo guardado en la mano, pone los puestos elegidos en este teléfono encima de los del servidor.
+  /// Lo que el servidor cambió desde entonces manda (ver [PuestosGuardados.sobre]).
+  void _aplicarPuestosGuardados() {
+    if (!_puestosListos || _unidades == null || _puestosAplicados) return;
+    _puestosAplicados = true;
+    final guardados = _puestosLeidos;
+    if (guardados == null || guardados.vacio) return;
+    setState(() {
+      _posiciones
+        ..clear()
+        ..addAll(guardados.sobre(_posicionesPrevias));
     });
   }
 
-  /// Lo que cambió en los puestos frente a lo que tiene el servidor: VIN → puesto nuevo, o null si se liberó.
-  Map<String, int?> get _cambiosDePuesto => {
-        for (final vin in {..._posicionesPrevias.keys, ..._posiciones.keys})
-          if (_posiciones[vin] != _posicionesPrevias[vin]) vin: _posiciones[vin],
-      };
-
-  /// Aplica los puestos de un borrador. Uno cuyo puesto en el servidor ya no es el que había al guardarlo quedó
-  /// viejo (se acomodó o se cerró desde otro carro) y no se aplica: mandarlo haría fallar el informe.
-  void _aplicarPuestos(({Map<String, int?> cambios, Map<String, int?> base}) puestos) {
-    for (final e in puestos.cambios.entries) {
-      if (_posicionesPrevias[e.key] != puestos.base[e.key]) continue;
-      final puesto = e.value;
-      if (puesto == null) {
-        _posiciones.remove(e.key);
-      } else {
-        // Nadie más en ese puesto: el que lo tenía en el servidor se movió o se liberó en el mismo borrador.
-        _posiciones.removeWhere((vin, p) => p == puesto && vin != e.key && !puestos.cambios.containsKey(vin));
-        _posiciones[e.key] = puesto;
-      }
-    }
+  /// Guarda en el teléfono los puestos tal como quedaron, frente a los del servidor.
+  void _guardarPuestos() {
+    final clave = _clavePuestos;
+    if (clave == null || !_puestosAplicados) return;
+    final puestos = PuestosGuardados.entre(servidor: _posicionesPrevias, elegidos: _posiciones);
+    (puestos.vacio ? _almacenPuestos.borrar(clave) : _almacenPuestos.guardar(clave, puestos)).ignore();
   }
 
   /// Vuelve a buscar sola en cuanto el GPS se enciende.
@@ -972,14 +985,17 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                       posiciones: _posiciones,
                       fotos: _fotos,
                       fotosMinimas: _fotosAcomodacionMinimas,
-                      // Cada puesto elegido se guarda en el teléfono al momento (S8-HU-01.3 CA-4).
-                      alElegir: (vin, posicion) => _cambiar(() {
-                        if (posicion == null) {
-                          _posiciones.remove(vin);
-                        } else {
-                          _posiciones[vin] = posicion;
-                        }
-                      }),
+                      // Cada puesto elegido se guarda en el teléfono al momento, para todo el viaje (S8-HU-01.3 CA-4).
+                      alElegir: (vin, posicion) {
+                        setState(() {
+                          if (posicion == null) {
+                            _posiciones.remove(vin);
+                          } else {
+                            _posiciones[vin] = posicion;
+                          }
+                        });
+                        _guardarPuestos();
+                      },
                       alTomarFoto: _guardandoFoto ? null : _tomarFotoAcomodacion,
                       alReintentar: () => ref.invalidate(viajeDeEtapaProvider(widget.viajeId!)),
                       precisionBaja: ref.watch(entornoProvider).precisionBajaMetros,

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/proveedores.dart';
 import '../../core/db/cache_lecturas.dart';
 import 'data/borradores_en_cache.dart';
+import 'data/puestos_en_cache.dart';
+import 'domain/puestos_guardados.dart';
 import 'data/cierre_de_captura.dart';
 import 'data/hallazgos_previos_repositorio.dart';
 import 'data/inspecciones_repositorio.dart';
@@ -17,6 +19,9 @@ final cacheLecturasProvider = Provider<CacheLecturasRepo>((ref) => CacheLecturas
 /// Lo capturado de un informe sin cerrar, guardado en el teléfono mientras se hace (S8-HU-11.2 CA-4).
 final almacenBorradoresProvider =
     Provider<AlmacenBorradores>((ref) => BorradoresEnCache(ref.watch(cacheLecturasProvider)));
+
+/// Los puestos de la niñera elegidos en el teléfono, por viaje (S8-HU-01.3 CA-4).
+final almacenPuestosProvider = Provider<AlmacenPuestos>((ref) => PuestosEnCache(ref.watch(cacheLecturasProvider)));
 
 /// Encolar el informe y soltar su borrador, en un solo paso.
 final cierreDeCapturaProvider = Provider<CierreDeCaptura>((ref) => CierreDeCapturaDrift(ref.watch(appDatabaseProvider)));

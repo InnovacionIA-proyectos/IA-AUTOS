@@ -164,29 +164,31 @@ void main() {
     });
   });
 
-  // S8-HU-01.3: la firma de la niñera se abre desde el viaje, para quienes la firman.
-  group('la firma de la niñera', () {
+  // S8-HU-01.3: la niñera (puestos y firma) se abre desde el viaje, para el inspector y el conductor del viaje.
+  group('la niñera del viaje', () {
     ViajesRepositorioFalso conFirma({bool cerrado = false}) => ViajesRepositorioFalso()
       ..remotos = [viaje('v1', vines: [_vin], inspectorId: 'u1', conductorId: 'luis', cargueCerrado: cerrado)];
 
     testWidgets('el conductor y el inspector del viaje la tienen en la tarjeta', (tester) async {
       await abrir(tester, conFirma());
-      expect(find.widgetWithText(OutlinedButton, 'Firma de la niñera'), findsOneWidget, reason: 'conductor');
+      expect(find.widgetWithText(OutlinedButton, 'Niñera y firma del cargue'), findsOneWidget, reason: 'conductor');
     });
 
     testWidgets('el inspector del viaje también', (tester) async {
       await abrir(tester, conFirma(), arnes: Arnes());
-      expect(find.widgetWithText(OutlinedButton, 'Firma de la niñera'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Niñera y firma del cargue'), findsOneWidget);
     });
 
-    testWidgets('con el cargue cerrado ya no se ofrece', (tester) async {
+    testWidgets('con el cargue cerrado se sigue viendo la niñera, sin la firma', (tester) async {
       await abrir(tester, conFirma(cerrado: true));
-      expect(find.widgetWithText(OutlinedButton, 'Firma de la niñera'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Niñera y firma del cargue'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Niñera'), findsOneWidget);
     });
 
     testWidgets('a quien no es del viaje no se le ofrece', (tester) async {
       await abrir(tester, ViajesRepositorioFalso()..remotos = [viaje('v1', vines: [_vin], inspectorId: 'otro', conductorId: 'otro2')]);
-      expect(find.widgetWithText(OutlinedButton, 'Firma de la niñera'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Niñera y firma del cargue'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Niñera'), findsNothing);
     });
   });
 }

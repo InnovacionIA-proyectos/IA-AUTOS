@@ -57,7 +57,7 @@ class SeccionAcomodacion extends StatelessWidget {
           style: tema.bodySmall,
         ),
         const SizedBox(height: Espacio.md),
-        _Esquema(posiciones: posiciones, puestos: puestosDe(viaje)),
+        EsquemaNinera(posiciones: posiciones, puestos: puestosDe(viaje)),
         const SizedBox(height: Espacio.md),
         if (lista == null)
           Tarjeta(
@@ -113,11 +113,14 @@ class SeccionAcomodacion extends StatelessWidget {
 ///
 /// Los puestos y su orden llegan del servidor: la app no lleva escrita ninguna disposición. Con una niñera de
 /// nueve se dibujan nueve; con un viaje antiguo que no trae disposición, tantos como su capacidad.
-class _Esquema extends StatelessWidget {
-  const _Esquema({required this.posiciones, required this.puestos});
+/// Los puestos de la niñera, con el carro de cada uno. Con [alTocar], cada puesto se puede tocar (la pantalla de la
+/// niñera abre ahí el carro o asigna uno al puesto libre).
+class EsquemaNinera extends StatelessWidget {
+  const EsquemaNinera({super.key, required this.posiciones, required this.puestos, this.alTocar});
 
   final Map<String, int> posiciones;
   final List<PuestoNinera> puestos;
+  final void Function(PuestoNinera puesto, String? vin)? alTocar;
 
   @override
   Widget build(BuildContext context) {
@@ -137,7 +140,14 @@ class _Esquema extends StatelessWidget {
                 for (final puesto in puestos)
                   SizedBox(
                     width: 80,
-                    child: _Lugar(puesto: puesto, vin: ocupante(posiciones, puesto.numero)),
+                    child: switch ((alTocar, ocupante(posiciones, puesto.numero))) {
+                      (final tocar?, final vin) => InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () => tocar(puesto, vin),
+                          child: _Lugar(puesto: puesto, vin: vin),
+                        ),
+                      (null, final vin) => _Lugar(puesto: puesto, vin: vin),
+                    },
                   ),
               ],
             ),
