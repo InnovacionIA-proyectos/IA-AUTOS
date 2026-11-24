@@ -737,7 +737,7 @@ public sealed class BaseDatosRealTests
 
         var indice = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblReclamos_Activo' AND object_id = OBJECT_ID(N'tblReclamos') AND is_unique = 1 AND has_filter = 1");
         var parametro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave = N'reclamo_sin_actividad_minutos' AND Tipo = N'numero'");
-        var reclamosActivosRepetidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM (SELECT ViajeId, Proceso FROM tblReclamos WHERE LiberadoAt IS NULL GROUP BY ViajeId, Proceso HAVING COUNT(*) > 1) AS x");
+        var reclamosActivosRepetidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM (SELECT ViajeId, Proceso, LugarId FROM tblReclamos WHERE LiberadoAt IS NULL GROUP BY ViajeId, Proceso, LugarId HAVING COUNT(*) > 1) AS x");
 
         Assert.True(indice == 1, "Falta el indice unico de reclamos activos. Ejecute database/cambios-esquema/26-reclamo-inspector.sql.");
         Assert.True(parametro == 1, "Falta el parametro reclamo_sin_actividad_minutos. Ejecute database/cambios-esquema/26-reclamo-inspector.sql.");
