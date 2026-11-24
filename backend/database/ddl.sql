@@ -2509,5 +2509,171 @@ BEGIN
 END
 GO
 
+/* -----------------------------------------------------------------------------
+   La entrega por parada, el rechazo por novedad y los motivos del cierre con una sola firma. tblReclamos.LugarId (la parada del reclamo de la entrega; el indice unico de reclamos activos pasa a ser por viaje, proceso y parada),
+   tblInspecciones.Ciclo (la revision de llegada de un carro rechazado se conserva como evidencia y la del destino nuevo es otro ciclo de la misma etapa), tblTransferenciasCustodia (MotivoCodigo, el testigo sin usuario, el rechazo y su tipo de
+   cierre) y el tipo de aviso carro_rechazado_en_destino. Cada paso es su propio lote y se protege si la tabla aun no tiene lo que usa (una base muy antigua lo recibe con sus scripts de cambios).
+   ----------------------------------------------------------------------------- */
+-- tblReclamos: LugarId (la parada del reclamo)
+IF OBJECT_ID(N'dbo.tblReclamos', N'U') IS NOT NULL
+    EXEC (N'IF COL_LENGTH(N''dbo.tblReclamos'', N''LugarId'') IS NULL
+    ALTER TABLE dbo.tblReclamos ADD LugarId uniqueidentifier NULL');
+GO
+-- tblReclamos: llave foranea a la parada
+IF OBJECT_ID(N'dbo.tblReclamos', N'U') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N''FK_tblReclamos_Lugar'' AND parent_object_id = OBJECT_ID(N''dbo.tblReclamos''))
+    ALTER TABLE dbo.tblReclamos ADD CONSTRAINT FK_tblReclamos_Lugar FOREIGN KEY (LugarId) REFERENCES dbo.tblLugares (Id)');
+GO
+-- tblReclamos: se quita el indice unico anterior
+IF OBJECT_ID(N'dbo.tblReclamos', N'U') IS NOT NULL
+    EXEC (N'IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N''UX_tblReclamos_Activo'' AND object_id = OBJECT_ID(N''dbo.tblReclamos''))
+   AND NOT EXISTS (SELECT 1 FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+                   WHERE i.name = N''UX_tblReclamos_Activo'' AND i.object_id = OBJECT_ID(N''dbo.tblReclamos'') AND COL_NAME(ic.object_id, ic.column_id) = N''LugarId'')
+    DROP INDEX UX_tblReclamos_Activo ON dbo.tblReclamos');
+GO
+-- tblReclamos: cada entrega activa queda con su parada
+IF OBJECT_ID(N'dbo.tblReclamos', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblViajeVehiculos', N'EstadoUnidad') IS NOT NULL AND COL_LENGTH(N'dbo.tblViajeVehiculos', N'LugarDestinoId') IS NOT NULL AND COL_LENGTH(N'dbo.tblReclamos', N'LugarId') IS NOT NULL AND OBJECT_ID(N'dbo.tblInspectorLugares', N'U') IS NOT NULL
+    EXEC (N'DECLARE @m TABLE (ReclamoId uniqueidentifier, ViajeId uniqueidentifier, InspectorId uniqueidentifier, ReclamadoAt datetimeoffset(3), LugarId uniqueidentifier, rn int);
+INSERT @m (ReclamoId, ViajeId, InspectorId, ReclamadoAt, LugarId, rn)
+SELECT r.Id, r.ViajeId, r.InspectorId, r.ReclamadoAt, d.LugarId, ROW_NUMBER() OVER (PARTITION BY r.Id ORDER BY d.LugarId)
+FROM dbo.tblReclamos r
+JOIN (SELECT DISTINCT vv.ViajeId, vv.LugarDestinoId AS LugarId FROM dbo.tblViajeVehiculos vv WHERE vv.LugarDestinoId IS NOT NULL AND vv.EstadoUnidad = N''activa'') d ON d.ViajeId = r.ViajeId
+WHERE r.Proceso = N''entrega'' AND r.LiberadoAt IS NULL AND r.LugarId IS NULL
+  AND EXISTS (SELECT 1 FROM dbo.tblInspectorLugares il WHERE il.UsuarioId = r.InspectorId AND il.LugarId = d.LugarId);
+INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso, ReclamadoAt, LugarId)
+SELECT NEWID(), ViajeId, InspectorId, N''entrega'', ReclamadoAt, LugarId FROM @m WHERE rn > 1;
+UPDATE r SET LugarId = m.LugarId FROM dbo.tblReclamos r JOIN @m m ON m.ReclamoId = r.Id AND m.rn = 1;
+UPDATE r SET LugarId = (SELECT TOP 1 vv.LugarDestinoId FROM dbo.tblViajeVehiculos vv WHERE vv.ViajeId = r.ViajeId AND vv.LugarDestinoId IS NOT NULL ORDER BY vv.LugarDestinoId)
+FROM dbo.tblReclamos r WHERE r.Proceso = N''entrega'' AND r.LiberadoAt IS NULL AND r.LugarId IS NULL;
+UPDATE dbo.tblReclamos SET LiberadoAt = SYSDATETIMEOFFSET(), LiberadoPor = InspectorId
+WHERE Proceso = N''entrega'' AND LiberadoAt IS NULL AND LugarId IS NULL');
+GO
+-- tblReclamos: un reclamo activo por viaje, proceso y parada
+IF OBJECT_ID(N'dbo.tblReclamos', N'U') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N''UX_tblReclamos_Activo'' AND object_id = OBJECT_ID(N''dbo.tblReclamos''))
+    CREATE UNIQUE INDEX UX_tblReclamos_Activo ON dbo.tblReclamos (ViajeId, Proceso, LugarId) WHERE LiberadoAt IS NULL');
+GO
+-- tblReclamos: la entrega activa siempre tiene parada
+IF OBJECT_ID(N'dbo.tblReclamos', N'U') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblReclamos_Parada'' AND parent_object_id = OBJECT_ID(N''dbo.tblReclamos''))
+    ALTER TABLE dbo.tblReclamos ADD CONSTRAINT CK_tblReclamos_Parada CHECK ((Proceso = N''cargue'' AND LugarId IS NULL) OR (Proceso = N''entrega'' AND (LugarId IS NOT NULL OR LiberadoAt IS NOT NULL)))');
+GO
+-- tblInspecciones: Ciclo
+IF OBJECT_ID(N'dbo.tblInspecciones', N'U') IS NOT NULL
+    EXEC (N'IF COL_LENGTH(N''dbo.tblInspecciones'', N''Ciclo'') IS NULL
+    ALTER TABLE dbo.tblInspecciones ADD Ciclo int NOT NULL CONSTRAINT DF_tblInspecciones_Ciclo DEFAULT (1)');
+GO
+-- tblInspecciones: una original por etapa, momento y ciclo
+IF OBJECT_ID(N'dbo.tblInspecciones', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblInspecciones', N'Ciclo') IS NOT NULL AND COL_LENGTH(N'dbo.tblInspecciones', N'CorrigeInspeccionId') IS NOT NULL
+    EXEC (N'IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N''UX_tblInspecciones_Etapa_Momento_Original'' AND object_id = OBJECT_ID(N''dbo.tblInspecciones''))
+   AND NOT EXISTS (SELECT 1 FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+                   WHERE i.name = N''UX_tblInspecciones_Etapa_Momento_Original'' AND i.object_id = OBJECT_ID(N''dbo.tblInspecciones'') AND COL_NAME(ic.object_id, ic.column_id) = N''Ciclo'')
+    DROP INDEX UX_tblInspecciones_Etapa_Momento_Original ON dbo.tblInspecciones;
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N''UX_tblInspecciones_Etapa_Momento_Original'' AND object_id = OBJECT_ID(N''dbo.tblInspecciones''))
+    CREATE UNIQUE INDEX UX_tblInspecciones_Etapa_Momento_Original ON dbo.tblInspecciones (EtapaId, Momento, Ciclo) WHERE CorrigeInspeccionId IS NULL');
+GO
+-- tblInspecciones: el ciclo empieza en 1
+IF OBJECT_ID(N'dbo.tblInspecciones', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblInspecciones', N'Ciclo') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblInspecciones_Ciclo'' AND parent_object_id = OBJECT_ID(N''dbo.tblInspecciones''))
+    ALTER TABLE dbo.tblInspecciones ADD CONSTRAINT CK_tblInspecciones_Ciclo CHECK (Ciclo >= 1)');
+GO
+-- tblTransferenciasCustodia: MotivoCodigo
+IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NOT NULL
+    EXEC (N'IF COL_LENGTH(N''dbo.tblTransferenciasCustodia'', N''MotivoCodigo'') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD MotivoCodigo varchar(30) NULL');
+GO
+-- tblTransferenciasCustodia: TestigoNombre
+IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NOT NULL
+    EXEC (N'IF COL_LENGTH(N''dbo.tblTransferenciasCustodia'', N''TestigoNombre'') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD TestigoNombre nvarchar(150) NULL');
+GO
+-- tblTransferenciasCustodia: TestigoCedula
+IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NOT NULL
+    EXEC (N'IF COL_LENGTH(N''dbo.tblTransferenciasCustodia'', N''TestigoCedula'') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD TestigoCedula varchar(30) NULL');
+GO
+-- tblTransferenciasCustodia: RechazoHallazgoId
+IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NOT NULL
+    EXEC (N'IF COL_LENGTH(N''dbo.tblTransferenciasCustodia'', N''RechazoHallazgoId'') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD RechazoHallazgoId uniqueidentifier NULL');
+GO
+-- tblTransferenciasCustodia: RechazoMarcadoPor
+IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NOT NULL
+    EXEC (N'IF COL_LENGTH(N''dbo.tblTransferenciasCustodia'', N''RechazoMarcadoPor'') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD RechazoMarcadoPor uniqueidentifier NULL');
+GO
+-- tblTransferenciasCustodia: llaves foraneas del rechazo
+IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N''FK_tblTransferencias_RechazoHallazgo'' AND parent_object_id = OBJECT_ID(N''dbo.tblTransferenciasCustodia''))
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD CONSTRAINT FK_tblTransferencias_RechazoHallazgo FOREIGN KEY (RechazoHallazgoId) REFERENCES dbo.tblHallazgos (Id);
+IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N''FK_tblTransferencias_RechazoMarcadoPor'' AND parent_object_id = OBJECT_ID(N''dbo.tblTransferenciasCustodia''))
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD CONSTRAINT FK_tblTransferencias_RechazoMarcadoPor FOREIGN KEY (RechazoMarcadoPor) REFERENCES dbo.tblUsuarios (Id)');
+GO
+-- tblTransferenciasCustodia: motivo codificado del cierre con una sola firma
+IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblTransferencias_MotivoCodigo'' AND parent_object_id = OBJECT_ID(N''dbo.tblTransferenciasCustodia''))
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD CONSTRAINT CK_tblTransferencias_MotivoCodigo CHECK (MotivoCodigo IS NULL OR MotivoCodigo IN (''se_nego_a_firmar'', ''no_habia_nadie'', ''sin_inspector_del_punto'', ''otro''))');
+GO
+-- tblTransferenciasCustodia: testigo externo con nombre y cedula juntos
+IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblTransferencias_TestigoExterno'' AND parent_object_id = OBJECT_ID(N''dbo.tblTransferenciasCustodia''))
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD CONSTRAINT CK_tblTransferencias_TestigoExterno CHECK ((TestigoNombre IS NULL AND TestigoCedula IS NULL) OR (TestigoNombre IS NOT NULL AND TestigoNombre <> '''' AND TestigoCedula IS NOT NULL AND TestigoCedula <> ''''))');
+GO
+-- tblTransferenciasCustodia: el rechazo lleva su dano y quien lo marco
+IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'TipoCierre') IS NOT NULL AND COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'RechazoHallazgoId') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblTransferencias_Rechazo'' AND parent_object_id = OBJECT_ID(N''dbo.tblTransferenciasCustodia''))
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD CONSTRAINT CK_tblTransferencias_Rechazo CHECK ((RechazoHallazgoId IS NULL AND RechazoMarcadoPor IS NULL) OR (RechazoHallazgoId IS NOT NULL AND RechazoMarcadoPor IS NOT NULL AND TipoCierre = ''rechazado''))');
+GO
+-- tblTransferenciasCustodia: tipo de cierre rechazado
+IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_TipoCierre' AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND definition LIKE N'%recibo_sin_entrega%')
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblTransferencias_TipoCierre'' AND parent_object_id = OBJECT_ID(N''dbo.tblTransferenciasCustodia'') AND definition LIKE N''%rechazado%'')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblTransferencias_TipoCierre'' AND parent_object_id = OBJECT_ID(N''dbo.tblTransferenciasCustodia''))
+        ALTER TABLE dbo.tblTransferenciasCustodia DROP CONSTRAINT CK_tblTransferencias_TipoCierre;
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD CONSTRAINT CK_tblTransferencias_TipoCierre CHECK (TipoCierre IS NULL OR TipoCierre IN (''firmada'', ''con_reservas'', ''no_firma'', ''recibo_sin_entrega'', ''rechazado''));
+END');
+GO
+-- tblTransferenciasCustodia: cierre del carro rechazado
+IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'RechazoHallazgoId') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblTransferencias_Cierre' AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND definition LIKE N'%recibo_sin_entrega%NoFirmaParte%')
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblTransferencias_Cierre'' AND parent_object_id = OBJECT_ID(N''dbo.tblTransferenciasCustodia'') AND definition LIKE N''%rechazado%'')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblTransferencias_Cierre'' AND parent_object_id = OBJECT_ID(N''dbo.tblTransferenciasCustodia''))
+        ALTER TABLE dbo.tblTransferenciasCustodia DROP CONSTRAINT CK_tblTransferencias_Cierre;
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD CONSTRAINT CK_tblTransferencias_Cierre CHECK (
+        TipoCierre IS NULL
+        OR (TipoCierre = ''firmada'' AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> '''' AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '''' AND ReservasTexto IS NULL)
+        OR (TipoCierre = ''con_reservas'' AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> '''' AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '''' AND ReservasTexto IS NOT NULL AND ReservasTexto <> '''')
+        -- Un carro rechazado por una novedad: las dos partes firman la constancia del rechazo, que queda unida al dano que lo motivo.
+        OR (TipoCierre = ''rechazado'' AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> '''' AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '''' AND ReservasTexto IS NULL AND RechazoHallazgoId IS NOT NULL)
+        OR (TipoCierre = ''no_firma'' AND NoFirmaParte IS NOT NULL AND MotivoNoFirma IS NOT NULL AND MotivoNoFirma <> '''' AND TestigoUsuarioId IS NOT NULL AND EvidenciaConstanciaId IS NOT NULL)
+        -- Una sola firma y su motivo: firma solo quien recibe (nadie entrego) o firma solo quien entrega (quien recibe no firmo).
+        OR (TipoCierre = ''recibo_sin_entrega'' AND NoFirmaParte IS NOT NULL AND MotivoNoFirma IS NOT NULL AND MotivoNoFirma <> '''' AND ReservasTexto IS NULL
+            AND ((NoFirmaParte = ''entrega'' AND EntregaUsuarioId IS NULL AND FirmaEntrega IS NULL AND FirmaEntregaAt IS NULL AND FirmaEntregaIp IS NULL
+                  AND FirmaRecibe IS NOT NULL AND FirmaRecibe <> '''')
+              OR (NoFirmaParte = ''recibe'' AND EntregaUsuarioId IS NOT NULL AND FirmaEntrega IS NOT NULL AND FirmaEntrega <> ''''
+                  AND FirmaRecibe IS NULL AND FirmaRecibeAt IS NULL AND FirmaRecibeIp IS NULL))));
+END');
+GO
+-- tblMotivosSinInspector: motivos del cierre con una sola firma
+IF OBJECT_ID(N'dbo.tblMotivosSinInspector', N'U') IS NOT NULL
+    EXEC (N'INSERT dbo.tblMotivosSinInspector (Id, Codigo, Nombre, RequiereTexto, Orden, Activo)
+SELECT NEWID(), v.Codigo, v.Nombre, 0, v.Orden, 0
+FROM (VALUES
+    (''se_nego_a_firmar'', N''Quien recibe se neg'' + NCHAR(243) + N'' a firmar'', 100),
+    (''no_habia_nadie'', N''No hab'' + NCHAR(237) + N''a nadie para recibir'', 101),
+    (''sin_inspector_del_punto'', N''El punto tiene inspector y no lleg'' + NCHAR(243), 102)
+) AS v (Codigo, Nombre, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblMotivosSinInspector m WHERE m.Codigo = v.Codigo)');
+GO
+-- tblNotificaciones: tipo carro_rechazado_en_destino
+IF OBJECT_ID(N'dbo.tblNotificaciones', N'U') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblNotificaciones_Tipo'' AND parent_object_id = OBJECT_ID(N''dbo.tblNotificaciones'') AND definition LIKE N''%carro_rechazado_en_destino%'')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblNotificaciones_Tipo'' AND parent_object_id = OBJECT_ID(N''dbo.tblNotificaciones''))
+        ALTER TABLE dbo.tblNotificaciones DROP CONSTRAINT CK_tblNotificaciones_Tipo;
+    ALTER TABLE dbo.tblNotificaciones ADD CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN (''novedad_conductor'', ''respuesta_conductor'', ''hallazgo_critico'', ''umbral_patron'', ''captura_incompleta'', ''transferencia_pendiente'', ''reporte_diario'', ''novedad_proceso'', ''reclamo_sin_actividad'', ''fuera_de_rango'', ''cargue_sin_reclamar'', ''propuesta_ubicacion'', ''permiso_sin_inspector'', ''firma_cargue_pendiente'', ''cambio_cargue_inspector'', ''cambio_destino_unidad'', ''carro_rechazado_en_destino''));
+END');
+GO
+
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';
 GO

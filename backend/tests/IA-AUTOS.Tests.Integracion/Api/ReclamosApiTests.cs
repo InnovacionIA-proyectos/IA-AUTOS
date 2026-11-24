@@ -80,11 +80,11 @@ public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         return id;
     }
 
-    private Task<HttpResponseMessage> ReclamarAsync(Sesion quien, Guid viaje, string proceso = "cargue") =>
-        Como(quien).PostAsync($"/api/viajes/{viaje}/reclamos", Cuerpo(new { proceso }));
+    private Task<HttpResponseMessage> ReclamarAsync(Sesion quien, Guid viaje, string proceso = "cargue", Guid? lugar = null) =>
+        Como(quien).PostAsync($"/api/viajes/{viaje}/reclamos", Cuerpo(lugar is null ? new { proceso } : new { proceso, lugar_id = lugar }));
 
-    private Task<HttpResponseMessage> LiberarAsync(Sesion quien, Guid viaje, string proceso = "cargue") =>
-        Como(quien).DeleteAsync($"/api/viajes/{viaje}/reclamos/{proceso}");
+    private Task<HttpResponseMessage> LiberarAsync(Sesion quien, Guid viaje, string proceso = "cargue", Guid? lugar = null) =>
+        Como(quien).DeleteAsync($"/api/viajes/{viaje}/reclamos/{proceso}" + (lugar is null ? string.Empty : $"?lugar_id={lugar}"));
 
     private Task<object?> InspectorDelViajeAsync(Guid viaje) => Sembrador.EscalarAsync("SELECT InspectorId FROM dbo.tblViajes WHERE Id = @v", ("@v", viaje));
 
@@ -100,7 +100,7 @@ public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var reclamo = await JsonAsync(r);
-        Assert.Equal(["id", "viaje_id", "proceso", "inspector_id", "inspector_nombre", "reclamado_at", "activo", "liberado_at", "liberado_por", "liberado_por_nombre"], reclamo.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["id", "viaje_id", "proceso", "inspector_id", "inspector_nombre", "reclamado_at", "activo", "liberado_at", "liberado_por", "liberado_por_nombre", "lugar_id", "lugar"], reclamo.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal(viaje, reclamo.GetProperty("viaje_id").GetGuid());
         Assert.Equal("cargue", reclamo.GetProperty("proceso").GetString());
         Assert.Equal(e.Esleider.UsuarioId, reclamo.GetProperty("inspector_id").GetGuid());
@@ -311,9 +311,9 @@ public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         await PuntoAsync(otraDeCartagena, e.Cartagena);
         var viaje = await ViajeAsync(e, "MTK-2201", e.Envigado, FechaDeHoy(), destino: e.Cartagena, conductor: e.Conductor);
 
-        var deEnvigado = await ReclamarAsync(e.Esleider, viaje, "entrega");
-        var paula = await ReclamarAsync(e.Paula, viaje, "entrega");
-        var otra = await ReclamarAsync(otraDeCartagena, viaje, "entrega");
+        var deEnvigado = await ReclamarAsync(e.Esleider, viaje, "entrega", e.Cartagena);
+        var paula = await ReclamarAsync(e.Paula, viaje, "entrega", e.Cartagena);
+        var otra = await ReclamarAsync(otraDeCartagena, viaje, "entrega", e.Cartagena);
 
         Assert.Equal(HttpStatusCode.Forbidden, deEnvigado.StatusCode);
         Assert.Equal(HttpStatusCode.Created, paula.StatusCode);
@@ -327,9 +327,9 @@ public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         Assert.Equal(HttpStatusCode.Forbidden, (await Como(otraDeCartagena).GetAsync($"/api/viajes/{viaje}/entregas")).StatusCode);
 
         // La libera ella: otra del punto puede tomarla.
-        Assert.Equal(HttpStatusCode.OK, (await LiberarAsync(e.Paula, viaje, "entrega")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await LiberarAsync(e.Paula, viaje, "entrega", e.Cartagena)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Como(e.Paula).GetAsync($"/api/viajes/{viaje}/entregas")).StatusCode);
-        Assert.Equal(HttpStatusCode.Created, (await ReclamarAsync(otraDeCartagena, viaje, "entrega")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await ReclamarAsync(otraDeCartagena, viaje, "entrega", e.Cartagena)).StatusCode);
     }
 
     [Fact]
@@ -339,7 +339,7 @@ public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         var viaje = await ViajeAsync(e, "MTK-2201", e.Envigado, FechaDeHoy(), destino: e.Cartagena);
 
         var cargue = await ReclamarAsync(e.Esleider, viaje, "cargue");
-        var entrega = await ReclamarAsync(e.Paula, viaje, "entrega");
+        var entrega = await ReclamarAsync(e.Paula, viaje, "entrega", e.Cartagena);
         var liberaCargue = await LiberarAsync(e.Esleider, viaje, "cargue");
 
         Assert.Equal(HttpStatusCode.Created, cargue.StatusCode);

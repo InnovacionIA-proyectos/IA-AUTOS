@@ -62,6 +62,34 @@ public class GeneradorPdfConstanciaTests
     }
 
     [Fact]
+    public void La_constancia_muestra_la_hora_y_el_lugar_del_momento_de_cada_firma_o_que_no_tuvo_ubicacion_ademas_de_la_hora_de_envio()
+    {
+        var momento = new MomentoDeFirma(new DateTimeOffset(2026, 7, 17, 9, 10, 0, TimeSpan.FromHours(-5)), 10.39, -75.48, 6);
+        var sinGps = new MomentoDeFirma(new DateTimeOffset(2026, 7, 17, 9, 12, 0, TimeSpan.FromHours(-5)), null, null, null);
+
+        var texto = Texto(Generar(Datos(entrega: Firma("Ines Inspectora") with { Momento = momento }, recibe: Firma("Carlos Conductor", ip: "10.0.0.9") with { Momento = sinGps })));
+
+        Assert.Contains("Momento de la firma: 2026-07-17 14:10:00 UTC", texto);
+        Assert.Contains("10.39, -75.48", texto);
+        Assert.Contains("Momento de la firma: 2026-07-17 14:12:00 UTC", texto);
+        Assert.Contains("sin ubicaci", texto);
+        // La hora de envio sigue saliendo.
+        Assert.Contains("2026-07-17 12:01:00 UTC", texto);
+    }
+
+    [Fact]
+    public void La_constancia_de_un_carro_rechazado_y_la_de_una_sola_firma_dicen_su_cierre_y_su_motivo()
+    {
+        var rechazado = Texto(Generar(Datos(clsTipoCierre.RECHAZADO)));
+        var unaFirma = Texto(Generar(Datos(clsTipoCierre.RECIBO_SIN_ENTREGA, recibe: SinFirma("Rosa Ríos"), noFirmaParte: clsParteFirmante.RECIBE, motivo: "No había nadie para recibir") with { Proceso = "descargue" }));
+        Assert.DoesNotContain("no hubo entrega", unaFirma);
+
+        Assert.Contains("(Cierre de la transferencia: carro rechazado en su parada) Tj", rechazado);
+        Assert.Contains("(Cierre con una sola firma) Tj", unaFirma);
+        Assert.Contains("Motivo: No hab", unaFirma);
+    }
+
+    [Fact]
     public void La_constancia_con_reservas_lleva_las_observaciones_con_los_parentesis_escapados()
     {
         var texto = Texto(Generar(Datos(clsTipoCierre.CON_RESERVAS, reservas: "Rayón (lado izquierdo) \\ puerta")));

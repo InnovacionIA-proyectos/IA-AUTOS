@@ -51,6 +51,12 @@ public sealed class clsInspeccion : clsEntidadBase
     /// <summary>1 en la original; 2, 3... en las correcciones.</summary>
     public int Version { get; private set; } = 1;
 
+    /// <summary>
+    /// 1 en la revision de siempre; 2, 3... cuando la etapa se revisa de nuevo porque el carro se rechazo en su destino y recibio otro (la revision del rechazo se conserva como evidencia). Las correcciones heredan el ciclo
+    /// de su original.
+    /// </summary>
+    public int Ciclo { get; private set; } = 1;
+
     /// <summary>La version que esta corrige. Nulo en la original.</summary>
     public Guid? CorrigeInspeccionId { get; private set; }
 
@@ -86,8 +92,9 @@ public sealed class clsInspeccion : clsEntidadBase
         string? notas,
         DateTimeOffset ahora,
         string? motivoSinInspector = null,
-        string? motivoSinInspectorTexto = null) =>
-        Nueva(etapaId, viajeId, usuarioId, momento, fecha, lat, lng, estado, notas, version: 1, corrigeInspeccionId: null, ahora, motivoSinInspector, motivoSinInspectorTexto);
+        string? motivoSinInspectorTexto = null,
+        int ciclo = 1) =>
+        Nueva(etapaId, viajeId, usuarioId, momento, fecha, lat, lng, estado, notas, version: 1, corrigeInspeccionId: null, ahora, motivoSinInspector, motivoSinInspectorTexto, ciclo);
 
     /// <summary>
     /// Crea la version siguiente de una inspeccion CERRADA para corregirla: misma etapa, viaje y momento, en borrador y vacia (se vuelven a
@@ -101,7 +108,7 @@ public sealed class clsInspeccion : clsEntidadBase
         }
 
         // La correccion conserva el motivo: sigue siendo una salida hecha por el conductor porque el inspector no estaba.
-        return Nueva(EtapaId, ViajeId, usuarioId, Momento, fecha, lat, lng, null, notas, Version + 1, Id, ahora, MotivoSinInspector, MotivoSinInspectorTexto);
+        return Nueva(EtapaId, ViajeId, usuarioId, Momento, fecha, lat, lng, null, notas, Version + 1, Id, ahora, MotivoSinInspector, MotivoSinInspectorTexto, Ciclo);
     }
 
     private static clsInspeccion Nueva(
@@ -118,7 +125,8 @@ public sealed class clsInspeccion : clsEntidadBase
         Guid? corrigeInspeccionId,
         DateTimeOffset ahora,
         string? motivoSinInspector,
-        string? motivoSinInspectorTexto)
+        string? motivoSinInspectorTexto,
+        int ciclo)
     {
         clsValidador.EnCatalogo(momento, clsMomento.VALORES, "momento");
         var estadoFinal = estado ?? clsEstadoInspeccion.BORRADOR;
@@ -162,6 +170,7 @@ public sealed class clsInspeccion : clsEntidadBase
             IniciadaAt = ahora,
             CerradaAt = estadoFinal == clsEstadoInspeccion.CERRADA ? ahora : null,
             Version = version,
+            Ciclo = ciclo,
             CorrigeInspeccionId = corrigeInspeccionId,
             MotivoSinInspector = motivo,
             MotivoSinInspectorTexto = motivoTexto,

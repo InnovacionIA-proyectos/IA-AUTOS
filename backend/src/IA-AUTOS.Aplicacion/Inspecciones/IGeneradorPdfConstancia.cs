@@ -1,10 +1,12 @@
+using IAAutos.Dominio.Custodia;
+
 namespace IAAutos.Aplicacion.Inspecciones;
 
 /// <summary>
 /// Una firma de la constancia. <c>Imagen</c> es la firma cuando se guardo como archivo (se incrusta en el PDF); <c>Trazo</c> es la firma cuando
 /// se guardo como trazo (ruta SVG), que el PDF dibuja. Sin ninguno de los dos, la parte no firmo.
 /// </summary>
-public sealed record FirmaConstancia(string Persona, DateTimeOffset? Fecha, string? Ip, string? Trazo, byte[]? Imagen);
+public sealed record FirmaConstancia(string Persona, DateTimeOffset? Fecha, string? Ip, string? Trazo, byte[]? Imagen, MomentoDeFirma? Momento = null);
 
 /// <summary>Una foto de la constancia con su pie (por ejemplo, su sello).</summary>
 public sealed record FotoConstancia(byte[] Contenido, string Pie);

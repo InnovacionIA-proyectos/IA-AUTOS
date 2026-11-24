@@ -198,13 +198,13 @@ public sealed class clsTransferenciasService(
             ?? throw new clsEntidadNoEncontradaException("La inspección no tiene transferencia de custodia", clsMotivosRechazo.INSPECCION_SIN_TRANSFERENCIA);
 
         var entrega = transferencia.EntregaUsuarioId is { } entregaId
-            ? await ArmarFirmaAsync(entregaId, transferencia.FirmaEntrega, transferencia.FirmaEntregaAt, transferencia.FirmaEntregaIp, ct)
+            ? await ArmarFirmaAsync(entregaId, transferencia.FirmaEntrega, transferencia.FirmaEntregaAt, transferencia.FirmaEntregaIp, ct, MomentoDeEntrega(transferencia))
             : new FirmaConstancia("Sin entrega", null, null, null, null);
         var recibe = transferencia.RecibeEsExterno
             ? await clsArmadorFirmas.ArmarAsync(
-                almacen, $"{transferencia.RecibeExternoNombre} (documento {transferencia.RecibeExternoCedula})", transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct)
+                almacen, $"{transferencia.RecibeExternoNombre} (documento {transferencia.RecibeExternoCedula})", transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct, MomentoDeRecibe(transferencia))
             : transferencia.RecibeUsuarioId is { } recibeId
-                ? await ArmarFirmaAsync(recibeId, transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct)
+                ? await ArmarFirmaAsync(recibeId, transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct, MomentoDeRecibe(transferencia))
                 : new FirmaConstancia("Nadie recibió", null, null, null, null);
         string? testigo = null;
         var fotos = new List<FotoConstancia>();
@@ -275,6 +275,11 @@ public sealed class clsTransferenciasService(
         if (codigo == clsCodigosEtapa.CARGUE)
         {
             throw new clsConflictoException("En el cargue se firma por niñera: firma desde la pantalla de la niñera", clsMotivosRechazo.FIRMA_POR_NINERA);
+        }
+
+        if (codigo == clsCodigosEtapa.DESCARGUE)
+        {
+            throw new clsConflictoException("En el destino la entrega se firma por parada: usa «Entregar en esta parada»", clsMotivosRechazo.ENTREGA_POR_PARADA);
         }
     }
 
@@ -361,6 +366,12 @@ public sealed class clsTransferenciasService(
     }
 
     /// <summary>La firma de una parte para el PDF: si se guardo como archivo se incrusta la imagen; si no, se dibuja el trazo.</summary>
-    private async Task<FirmaConstancia> ArmarFirmaAsync(Guid usuarioId, string? firma, DateTimeOffset? fecha, string? ip, CancellationToken ct) =>
-        await clsArmadorFirmas.ArmarAsync(almacen, (await usuarios.ObtenerPorIdAsync(usuarioId, ct))?.Nombre ?? "—", firma, fecha, ip, ct);
+    private async Task<FirmaConstancia> ArmarFirmaAsync(Guid usuarioId, string? firma, DateTimeOffset? fecha, string? ip, CancellationToken ct, MomentoDeFirma? momento = null) =>
+        await clsArmadorFirmas.ArmarAsync(almacen, (await usuarios.ObtenerPorIdAsync(usuarioId, ct))?.Nombre ?? "—", firma, fecha, ip, ct, momento);
+
+    private static MomentoDeFirma? MomentoDeEntrega(clsTransferenciaCustodia t) =>
+        t.FirmaEntregaMomentoAt is { } momento ? new MomentoDeFirma(momento, t.FirmaEntregaLat, t.FirmaEntregaLng, t.FirmaEntregaPrecisionM) : null;
+
+    private static MomentoDeFirma? MomentoDeRecibe(clsTransferenciaCustodia t) =>
+        t.FirmaRecibeMomentoAt is { } momento ? new MomentoDeFirma(momento, t.FirmaRecibeLat, t.FirmaRecibeLng, t.FirmaRecibePrecisionM) : null;
 }

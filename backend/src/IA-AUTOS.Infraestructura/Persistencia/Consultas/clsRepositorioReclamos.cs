@@ -5,8 +5,11 @@ namespace IAAutos.Infraestructura.Persistencia.Consultas;
 
 internal sealed class clsRepositorioReclamos(clsAppDbContext contexto) : IReclamoRepository
 {
-    public Task<clsReclamo?> ObtenerActivoAsync(Guid viajeId, string proceso, CancellationToken ct = default) =>
-        contexto.Reclamos.FirstOrDefaultAsync(r => r.ViajeId == viajeId && r.Proceso == proceso && r.LiberadoAt == null, ct);
+    public Task<clsReclamo?> ObtenerActivoAsync(Guid viajeId, string proceso, Guid? lugarId = null, CancellationToken ct = default) =>
+        contexto.Reclamos.FirstOrDefaultAsync(r => r.ViajeId == viajeId && r.Proceso == proceso && r.LiberadoAt == null && r.LugarId == lugarId, ct);
+
+    public async Task<IReadOnlyList<clsReclamo>> ObtenerActivosDeEntregaAsync(Guid viajeId, CancellationToken ct = default) =>
+        await contexto.Reclamos.Where(r => r.ViajeId == viajeId && r.Proceso == clsProcesoReclamo.ENTREGA && r.LiberadoAt == null).ToListAsync(ct);
 
     public async Task<IReadOnlyList<clsReclamo>> ObtenerDeViajeAsync(Guid viajeId, CancellationToken ct = default) =>
         await contexto.Reclamos.Where(r => r.ViajeId == viajeId).OrderByDescending(r => r.ReclamadoAt).ToListAsync(ct);

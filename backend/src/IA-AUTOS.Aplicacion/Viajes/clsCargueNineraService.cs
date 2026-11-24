@@ -229,7 +229,7 @@ public sealed class clsCargueNineraService(
     }
 
     /// <summary>Las reservas por carro (VIN normalizado -> observaciones): de 1 a 1 000 caracteres cada una, sin VIN repetidos (400 en <c>reservas</c> con lo que falla).</summary>
-    private static Dictionary<string, string> LimpiarReservas(IReadOnlyList<ReservaDelCargueRequest>? reservas, Dictionary<string, string[]> errores)
+    internal static Dictionary<string, string> LimpiarReservas(IReadOnlyList<ReservaDelCargueRequest>? reservas, Dictionary<string, string[]> errores)
     {
         var resultado = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var problemas = new List<string>();

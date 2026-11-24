@@ -40,4 +40,7 @@ public interface IConsultasPendientes
     /// ellos, de viajes activos, cada uno con su estado respecto de <paramref name="usuarioId"/>.
     /// </summary>
     Task<IReadOnlyList<PendienteDto>> ListarAsync(Guid usuarioId, IReadOnlyCollection<Guid> lugares, DateTimeOffset desde, DateTimeOffset hasta, CancellationToken ct = default);
+
+    /// <summary>Cuantas unidades activas del viaje faltan por entregar en esa parada: las que no tienen su entrega cerrada ni estan rechazadas en ella (un carro rechazado al que ya se le cambio el destino vuelve a faltar).</summary>
+    Task<int> UnidadesPorEntregarAsync(Guid viajeId, Guid lugarId, CancellationToken ct = default);
 }

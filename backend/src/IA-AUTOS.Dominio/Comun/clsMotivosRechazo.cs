@@ -32,6 +32,16 @@ public static class clsMotivosRechazo
     public const string FIRMA_POR_NINERA = "firma_por_ninera";
     public const string ACOMODACION_CERRADA = "acomodacion_cerrada";
 
+    // ---- La entrega por parada
+    public const string SIN_RECEPTOR = "sin_receptor";
+    public const string ENTREGA_TOMADA = "entrega_tomada";
+    public const string CONDUCTOR_SIN_LLEGADA = "conductor_sin_llegada";
+    public const string SIN_NOVEDAD_PARA_RECHAZAR = "sin_novedad_para_rechazar";
+    public const string LLEGADA_ABIERTA = "llegada_abierta";
+    public const string SIN_LLEGUE = "sin_llegue";
+    public const string ENTREGA_POR_PARADA = "entrega_por_parada";
+    public const string NO_ES_SU_PUNTO = "no_es_su_punto";
+
     // ---- No sale, vuelve a salir y bajar del viaje
     public const string CARGUE_FIRMADO = "cargue_firmado";
     public const string SIN_CUPO = "sin_cupo";

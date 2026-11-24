@@ -487,10 +487,12 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
         Assert.Equal(HttpStatusCode.OK, lectura.StatusCode);
         Assert.NotNull(lectura.Headers.ETag);
         var items = (await ComoJsonAsync(lectura)).GetProperty("items").EnumerateArray().ToList();
-        Assert.Equal(["inspector_no_llego", "inspector_no_disponible", "otro"], items.Select(i => i.GetProperty("codigo").GetString()).ToList());
+        // Los tres primeros son los del cargue sin inspector; los otros tres son motivos codificados del cierre con una sola firma, inactivos: no se ofrecen aqui, solo los guarda la novedad de la entrega.
+        Assert.Equal(["inspector_no_llego", "inspector_no_disponible", "otro", "se_nego_a_firmar", "no_habia_nadie", "sin_inspector_del_punto"], items.Select(i => i.GetProperty("codigo").GetString()).ToList());
+        Assert.Equal([true, true, true, false, false, false], items.Select(i => i.GetProperty("activo").GetBoolean()).ToList());
         Assert.Equal(["id", "codigo", "nombre", "orden", "activo", "requiere_texto"], items[0].EnumerateObject().Select(p => p.Name).ToList());
-        Assert.Equal([false, false, true], items.Select(i => i.GetProperty("requiere_texto").GetBoolean()).ToList());
-        Assert.Equal(3, todos.GetProperty("catalogos").GetProperty("motivos-sin-inspector").GetArrayLength());
+        Assert.Equal([false, false, true, false, false, false], items.Select(i => i.GetProperty("requiere_texto").GetBoolean()).ToList());
+        Assert.Equal(6, todos.GetProperty("catalogos").GetProperty("motivos-sin-inspector").GetArrayLength());
 
         // Quien administra los demas catalogos administra este; el inspector y el conductor no.
         var nuevo = new { codigo = "zz_emergencia", nombre = "Emergencia familiar", requiere_texto = true };

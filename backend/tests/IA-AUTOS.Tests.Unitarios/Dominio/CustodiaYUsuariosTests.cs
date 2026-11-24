@@ -307,7 +307,7 @@ public class TransferenciaCustodiaTests
     [Fact]
     public void Los_tipos_de_cierre_y_las_partes_son_los_del_contrato()
     {
-        Assert.Equal(["con_reservas", "firmada", "no_firma", "recibo_sin_entrega"], clsTipoCierre.VALORES.Order(StringComparer.Ordinal));
+        Assert.Equal(["con_reservas", "firmada", "no_firma", "rechazado", "recibo_sin_entrega"], clsTipoCierre.VALORES.Order(StringComparer.Ordinal));
         Assert.Equal(["entrega", "recibe"], clsParteFirmante.VALORES.Order(StringComparer.Ordinal));
     }
 }

@@ -44,8 +44,9 @@ internal sealed class clsConfiguracionInspeccion : IEntityTypeConfiguration<clsI
             .HasConstraintName("FK_tblInspecciones_Viaje").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(i => i.UsuarioId)
             .HasConstraintName("FK_tblInspecciones_Usuario").OnDelete(DeleteBehavior.NoAction);
-        // Una sola inspeccion original por etapa y momento; las correcciones (versiones siguientes) no cuentan, y cada version se corrige una vez.
-        builder.HasIndex(i => new { i.EtapaId, i.Momento }).IsUnique().HasFilter("[CorrigeInspeccionId] IS NULL")
+        // Una sola inspeccion original por etapa, momento y ciclo; las correcciones (versiones siguientes) no cuentan, y cada version se corrige una vez.
+        builder.Property(i => i.Ciclo).HasDefaultValue(1);
+        builder.HasIndex(i => new { i.EtapaId, i.Momento, i.Ciclo }).IsUnique().HasFilter("[CorrigeInspeccionId] IS NULL")
             .HasDatabaseName("UX_tblInspecciones_Etapa_Momento_Original");
         builder.HasIndex(i => i.CorrigeInspeccionId).IsUnique().HasFilter("[CorrigeInspeccionId] IS NOT NULL")
             .HasDatabaseName("UX_tblInspecciones_Corrige");
@@ -205,7 +206,11 @@ internal sealed class clsConfiguracionTransferencia : IEntityTypeConfiguration<c
         builder.Property(t => t.MotivoNoFirma).HasMaxLength(clsTransferenciaCustodia.MOTIVO_MAX);
         builder.Property(t => t.RecibeExternoNombre).HasMaxLength(clsTransferenciaCustodia.NOMBRE_EXTERNO_MAX);
         builder.Property(t => t.RecibeExternoCedula).HasColumnType("varchar(30)");
+        builder.Property(t => t.MotivoCodigo).HasColumnType("varchar(30)");
+        builder.Property(t => t.TestigoNombre).HasMaxLength(clsTransferenciaCustodia.NOMBRE_EXTERNO_MAX);
+        builder.Property(t => t.TestigoCedula).HasColumnType("varchar(30)");
         builder.Ignore(t => t.RecibeEsExterno);
+        builder.Ignore(t => t.EstaRechazada);
         // El testigo y la foto de la constancia: ningun borrado en cascada (la inspeccion arrastra la transferencia y la foto a la vez).
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.TestigoUsuarioId)
             .HasConstraintName("FK_tblTransferencias_Testigo").OnDelete(DeleteBehavior.NoAction);
@@ -217,6 +222,10 @@ internal sealed class clsConfiguracionTransferencia : IEntityTypeConfiguration<c
             .HasConstraintName("FK_tblTransferencias_Entrega").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.RecibeUsuarioId)
             .HasConstraintName("FK_tblTransferencias_Recibe").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(t => t.RechazoHallazgoId)
+            .HasConstraintName("FK_tblTransferencias_RechazoHallazgo").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.RechazoMarcadoPor)
+            .HasConstraintName("FK_tblTransferencias_RechazoMarcadoPor").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(t => t.InspeccionId).IsUnique().HasDatabaseName("UQ_tblTransferencias_Inspeccion");
     }
 }

@@ -120,7 +120,7 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             DELETE FROM dbo.tblLugares;
             DELETE FROM dbo.tblEstadosSofasa;
             DELETE FROM dbo.tblTiposExtra WHERE Codigo NOT IN ('barras_techo', 'volco', 'platon', 'otro');
-            DELETE FROM dbo.tblMotivosSinInspector WHERE Codigo NOT IN ('inspector_no_llego', 'inspector_no_disponible', 'otro');
+            DELETE FROM dbo.tblMotivosSinInspector WHERE Codigo NOT IN ('inspector_no_llego', 'inspector_no_disponible', 'otro', 'se_nego_a_firmar', 'no_habia_nadie', 'sin_inspector_del_punto');
             DELETE FROM dbo.tblEtapasCatalogo WHERE Codigo NOT IN ('cargue', 'transporte', 'descargue');
             DELETE FROM dbo.tblPuntosCustodia WHERE Codigo NOT IN ('cedi_1', 'origen', 'certificadora', 'destino', 'cedi_2', 'concesionario');
             DELETE FROM dbo.tblClientes WHERE Codigo <> 'sofasa';
@@ -133,7 +133,7 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             UPDATE dbo.tblPuntosCustodia SET Activo = 1;
             UPDATE dbo.tblTiposUnidadTransportadora SET Activo = 1;
             UPDATE dbo.tblClientes SET Activo = 1, Orden = 1;
-            UPDATE dbo.tblMotivosSinInspector SET Activo = 1;
+            UPDATE dbo.tblMotivosSinInspector SET Activo = CASE WHEN Codigo IN ('se_nego_a_firmar', 'no_habia_nadie', 'sin_inspector_del_punto') THEN 0 ELSE 1 END;
             UPDATE dbo.tblTiposExtra SET Activo = 1;
             UPDATE dbo.tblClasesDano SET Activo = 1;
             UPDATE dbo.tblTamanosDano SET Activo = 1;

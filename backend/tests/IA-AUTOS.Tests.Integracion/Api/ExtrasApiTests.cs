@@ -361,7 +361,8 @@ public sealed partial class ExtrasApiTests(clsBaseDatosFixture bd) : clsPruebaAp
         var (titulos, filas) = LeerHoja(await excel.Content.ReadAsByteArrayAsync());
         var columna = titulos.IndexOf("Extras");
         Assert.True(columna >= 0, "Falta la columna Extras");
-        Assert.Equal(titulos.Count - 1, columna);
+        // Despues de «Extras» van las cuatro columnas del momento y la ubicacion de cada firma.
+        Assert.Equal(titulos.Count - 5, columna);
         Assert.Equal(2, filas.Sum(f => f.TryGetValue(columna, out var cantidad) && int.TryParse(cantidad, out var n) ? n : 0));
     }
 

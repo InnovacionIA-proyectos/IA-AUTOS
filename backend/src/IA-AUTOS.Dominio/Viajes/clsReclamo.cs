@@ -12,8 +12,9 @@ public static class clsProcesoReclamo
 }
 
 /// <summary>
-/// El reclamo de un camion por un inspector: quien lo reclamo, cuando y, al liberarse, quien y cuando lo libero. Solo hay un reclamo ACTIVO (sin liberar) por viaje y proceso: lo garantiza un indice unico
-/// de la base, asi que si dos inspectores reclaman a la vez gana uno y el otro recibe 409. No caduca: solo lo libera una persona. Los reclamos liberados son el historial y no se borran.
+/// El reclamo de un camion por un inspector: quien lo reclamo, cuando y, al liberarse, quien y cuando lo libero. Solo hay un reclamo ACTIVO (sin liberar) por viaje y proceso y, en la entrega, por PARADA (el lugar
+/// de destino): lo garantiza un indice unico de la base, asi que si dos inspectores reclaman a la vez gana uno y el otro recibe 409. No caduca: solo lo libera una persona. Los reclamos liberados son el historial y no se
+/// borran.
 /// </summary>
 public sealed class clsReclamo
 {
@@ -29,6 +30,9 @@ public sealed class clsReclamo
 
     public string Proceso { get; private set; } = string.Empty;
 
+    /// <summary>La parada (el lugar de destino) de un reclamo de entrega; nulo en el reclamo del cargue (y en los reclamos de entrega anteriores que ya se liberaron).</summary>
+    public Guid? LugarId { get; private set; }
+
     public DateTimeOffset ReclamadoAt { get; private set; }
 
     public DateTimeOffset? LiberadoAt { get; private set; }
@@ -37,10 +41,15 @@ public sealed class clsReclamo
 
     public bool EstaActivo => LiberadoAt is null;
 
-    public static clsReclamo Crear(Guid viajeId, Guid inspectorId, string proceso, DateTimeOffset ahora)
+    public static clsReclamo Crear(Guid viajeId, Guid inspectorId, string proceso, DateTimeOffset ahora, Guid? lugarId = null)
     {
         clsValidador.EnCatalogo(proceso, clsProcesoReclamo.VALORES, "proceso");
-        return new clsReclamo { Id = Guid.NewGuid(), ViajeId = viajeId, InspectorId = inspectorId, Proceso = proceso, ReclamadoAt = ahora };
+        if (proceso == clsProcesoReclamo.ENTREGA && lugarId is null)
+        {
+            throw clsErroresCampos.De("lugar_id", "La entrega se reclama por parada: indique el lugar de destino (lugar_id)");
+        }
+
+        return new clsReclamo { Id = Guid.NewGuid(), ViajeId = viajeId, InspectorId = inspectorId, Proceso = proceso, ReclamadoAt = ahora, LugarId = proceso == clsProcesoReclamo.ENTREGA ? lugarId : null };
     }
 
     /// <summary>Libera el reclamo: queda quien y cuando. Un reclamo ya liberado no se libera otra vez (409).</summary>
@@ -78,8 +87,11 @@ public sealed class clsInspectorLugar
 
 public interface IReclamoRepository
 {
-    /// <summary>El reclamo activo (sin liberar) del viaje y proceso, o nulo.</summary>
-    Task<clsReclamo?> ObtenerActivoAsync(Guid viajeId, string proceso, CancellationToken ct = default);
+    /// <summary>El reclamo activo (sin liberar) del viaje y proceso, o nulo. En la entrega es el de esa parada (<paramref name="lugarId"/>); el cargue no lleva parada.</summary>
+    Task<clsReclamo?> ObtenerActivoAsync(Guid viajeId, string proceso, Guid? lugarId = null, CancellationToken ct = default);
+
+    /// <summary>Los reclamos de entrega activos del viaje, uno por parada.</summary>
+    Task<IReadOnlyList<clsReclamo>> ObtenerActivosDeEntregaAsync(Guid viajeId, CancellationToken ct = default);
 
     /// <summary>Todos los reclamos del viaje (activos y liberados), del mas reciente al mas antiguo.</summary>
     Task<IReadOnlyList<clsReclamo>> ObtenerDeViajeAsync(Guid viajeId, CancellationToken ct = default);

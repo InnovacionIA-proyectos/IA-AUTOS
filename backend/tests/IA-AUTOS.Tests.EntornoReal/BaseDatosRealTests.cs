@@ -737,7 +737,7 @@ public sealed class BaseDatosRealTests
 
         var indice = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblReclamos_Activo' AND object_id = OBJECT_ID(N'tblReclamos') AND is_unique = 1 AND has_filter = 1");
         var parametro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave = N'reclamo_sin_actividad_minutos' AND Tipo = N'numero'");
-        var reclamosActivosRepetidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM (SELECT ViajeId, Proceso FROM tblReclamos WHERE LiberadoAt IS NULL GROUP BY ViajeId, Proceso HAVING COUNT(*) > 1) AS x");
+        var reclamosActivosRepetidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM (SELECT ViajeId, Proceso, LugarId FROM tblReclamos WHERE LiberadoAt IS NULL GROUP BY ViajeId, Proceso, LugarId HAVING COUNT(*) > 1) AS x");
 
         Assert.True(indice == 1, "Falta el indice unico de reclamos activos. Ejecute database/cambios-esquema/26-reclamo-inspector.sql.");
         Assert.True(parametro == 1, "Falta el parametro reclamo_sin_actividad_minutos. Ejecute database/cambios-esquema/26-reclamo-inspector.sql.");
@@ -1020,6 +1020,25 @@ public sealed class BaseDatosRealTests
         var soloJson = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblMapeosCargaViajes_Json'");
 
         Assert.True(tabla == 1 && unico == 1 && soloJson == 1, "Falta el mapeo de columnas de la carga de viajes. Ejecute database/cambios-esquema/45-mapeo-de-columnas-de-la-carga-de-viajes.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task La_entrega_por_parada_el_rechazo_y_los_motivos_del_cierre_existen()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/46-entrega-por-parada-rechazo-y-motivos-del-cierre.sql.
+        await using var conexion = await AbrirAsync();
+
+        var entregasSinParada = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblReclamos WHERE Proceso = N'entrega' AND LiberadoAt IS NULL AND LugarId IS NULL");
+        var indiceUnicoPorParada = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id WHERE i.name = N'UX_tblReclamos_Activo' AND i.object_id = OBJECT_ID(N'tblReclamos') AND COL_NAME(ic.object_id, ic.column_id) = N'LugarId'");
+        var ciclo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id WHERE i.name = N'UX_tblInspecciones_Etapa_Momento_Original' AND i.object_id = OBJECT_ID(N'tblInspecciones') AND COL_NAME(ic.object_id, ic.column_id) = N'Ciclo'");
+        var columnas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND name IN (N'MotivoCodigo', N'TestigoNombre', N'TestigoCedula', N'RechazoHallazgoId', N'RechazoMarcadoPor')");
+        var cierre = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblTransferencias_TipoCierre', N'CK_tblTransferencias_Cierre') AND parent_object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND definition LIKE N'%rechazado%'");
+        var motivos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblMotivosSinInspector WHERE Codigo IN (N'se_nego_a_firmar', N'no_habia_nadie', N'sin_inspector_del_punto')");
+        var aviso = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%carro_rechazado_en_destino%'");
+
+        Assert.True(
+            entregasSinParada == 0 && indiceUnicoPorParada == 1 && ciclo == 1 && columnas == 5 && cierre == 2 && motivos == 3 && aviso == 1,
+            "Falta la entrega por parada. Ejecute database/cambios-esquema/46-entrega-por-parada-rechazo-y-motivos-del-cierre.sql.");
     }
 
     [FactEntornoReal]
