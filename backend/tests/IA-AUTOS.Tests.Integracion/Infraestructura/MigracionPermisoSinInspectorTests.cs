@@ -162,6 +162,7 @@ public sealed partial class MigracionPermisoSinInspectorTests : IAsyncLifetime
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.check_constraints WHERE name = 'CK_tblNotificaciones_Tipo'"));
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.foreign_keys WHERE name = 'FK_tblNovedadesProceso_Permiso'"));
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM dbo.tblNovedadesProceso"));
-        Assert.Equal(0, await ErrorDeAsync(Permiso()));
+        // Con el ddl vigente cada solicitud guarda su plazo (VenceAt).
+        Assert.Equal(0, await ErrorDeAsync(Permiso(", VenceAt", ", DATEADD(MINUTE, 10, SYSDATETIMEOFFSET())")));
     }
 }

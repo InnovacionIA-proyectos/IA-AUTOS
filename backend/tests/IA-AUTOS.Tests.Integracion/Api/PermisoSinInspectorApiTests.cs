@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using IAAutos.Aplicacion.Alertas;
 using IAAutos.Aplicacion.Notificaciones;
+using IAAutos.Dominio.Notificaciones;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Tests.Integracion.Infraestructura;
 using Microsoft.Extensions.DependencyInjection;
@@ -105,7 +106,7 @@ public sealed class PermisoSinInspectorApiTests(clsBaseDatosFixture bd) : clsPru
         Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'permiso_sin_inspector' AND Urgencia = 'alta' AND Canal = 'bandeja' AND UsuarioId = @u", ("@u", usuario));
 
     private Task EnvejecerPermisoAsync(Guid viaje, int minutos) =>
-        Sembrador.EjecutarAsync("UPDATE dbo.tblPermisosSinInspector SET CreatedAt = DATEADD(MINUTE, -@m, SYSDATETIMEOFFSET()) WHERE ViajeId = @v", ("@m", minutos), ("@v", viaje));
+        Sembrador.EjecutarAsync("UPDATE dbo.tblPermisosSinInspector SET CreatedAt = DATEADD(MINUTE, -@m, CreatedAt), VenceAt = DATEADD(MINUTE, -@m, VenceAt) WHERE ViajeId = @v", ("@m", minutos), ("@v", viaje));
 
     // ------------------------------------------------------------------------------------------------ los puntos del inspector
 
@@ -377,5 +378,190 @@ public sealed class PermisoSinInspectorApiTests(clsBaseDatosFixture bd) : clsPru
         var sinPermiso = await Como(conPunto.Conductor).PutAsync($"/api/viajes/{conPunto.Viaje}/vehiculos/{conPunto.Vin}/posicion", Cuerpo(new { posicion = 1 }));
         Assert.Equal(HttpStatusCode.Forbidden, sinPermiso.StatusCode);
         Assert.Null(await Sembrador.EscalarAsync("SELECT Posicion FROM dbo.tblViajeVehiculos WHERE ViajeId = @v", ("@v", conPunto.Viaje)));
+    }
+
+    // ------------------------------------------------------------------------------------------------ el plazo es un parametro
+
+    private Task<HttpResponseMessage> CambiarParametroAsync(Sesion quien, string clave, int valor) =>
+        Como(quien).PatchAsync($"/api/parametros/{clave}", Cuerpo(new { valor }));
+
+    private Task<object?> PlazoDelPermisoAsync(Guid viaje) => Sembrador.EscalarAsync("SELECT DATEDIFF(MINUTE, CreatedAt, VenceAt) FROM dbo.tblPermisosSinInspector WHERE ViajeId = @v", ("@v", viaje));
+
+    [Fact]
+    public async Task Con_la_espera_en_15_minutos_el_permiso_no_se_concede_a_los_10_y_si_a_los_15_y_el_mensaje_lo_dice()
+    {
+        var e = await EscenarioAsync();
+        Assert.Equal(HttpStatusCode.OK, (await CambiarParametroAsync(e.Admin, "permiso_sin_inspector_minutos", 15)).StatusCode);
+
+        var pedido = await PedirAsync(e.Conductor, e.Viaje);
+
+        // La solicitud nace con el plazo del parametro vigente y los avisos y el rechazo hablan de 15 minutos.
+        Assert.Equal(HttpStatusCode.Created, pedido.StatusCode);
+        var dto = await JsonAsync(pedido);
+        Assert.Equal(dto.GetProperty("solicitado_at").GetDateTimeOffset().AddMinutes(15), dto.GetProperty("vence_at").GetDateTimeOffset());
+        Assert.Equal(15, Convert.ToInt32(await PlazoDelPermisoAsync(e.Viaje)));
+        var rechazo = await ExcepcionAsync(e.Conductor, e.EtapaCargue);
+        Assert.Equal(HttpStatusCode.Forbidden, rechazo.StatusCode);
+        Assert.Contains("15 minutos", (await JsonAsync(rechazo)).GetProperty("message").GetString());
+        Assert.Contains("15 minutos", (string)(await Sembrador.EscalarAsync("SELECT Mensaje FROM dbo.tblNotificaciones WHERE Tipo = 'permiso_sin_inspector' AND Canal = 'bandeja' AND UsuarioId = @u", ("@u", e.Coordinador.UsuarioId)))!);
+
+        // A los 11 minutos no se concede (ni el proceso, ni abrir la solicitud, ni empezar la excepcion); a los 16 si.
+        await EnvejecerPermisoAsync(e.Viaje, 11);
+        Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarPermisosSinInspectorAsync()));
+        Assert.Equal("pendiente", (await JsonAsync(await Como(e.Conductor).GetAsync($"/api/viajes/{e.Viaje}/permiso-sin-inspector"))).GetProperty("estado").GetString());
+        Assert.Equal(HttpStatusCode.Forbidden, (await ExcepcionAsync(e.Conductor, e.EtapaCargue)).StatusCode);
+        await EnvejecerPermisoAsync(e.Viaje, 5);
+        Assert.Equal(1, await ConProcesosAsync(p => p.EjecutarPermisosSinInspectorAsync()));
+        var concedido = await JsonAsync(await Como(e.Coordinador).GetAsync($"/api/viajes/{e.Viaje}/permiso-sin-inspector"));
+        Assert.True(concedido.GetProperty("autorizado_por_tiempo").GetBoolean());
+        Assert.Contains("15 minutos", (string)(await Sembrador.EscalarAsync("SELECT TOP 1 Mensaje FROM dbo.tblNotificaciones WHERE Tipo = 'permiso_sin_inspector' AND Canal = 'bandeja' AND UsuarioId = @u AND Titulo LIKE N'Permiso concedido%'", ("@u", e.Coordinador.UsuarioId)))!);
+    }
+
+    [Fact]
+    public async Task Una_solicitud_pendiente_conserva_su_plazo_aunque_TI_cambie_el_parametro_despues()
+    {
+        var e = await EscenarioAsync();
+        Assert.Equal(HttpStatusCode.Created, (await PedirAsync(e.Conductor, e.Viaje)).StatusCode);
+        Assert.Equal(10, Convert.ToInt32(await PlazoDelPermisoAsync(e.Viaje)));
+
+        Assert.Equal(HttpStatusCode.OK, (await CambiarParametroAsync(e.Admin, "permiso_sin_inspector_minutos", 30)).StatusCode);
+
+        Assert.Equal(10, Convert.ToInt32(await PlazoDelPermisoAsync(e.Viaje)));
+        await EnvejecerPermisoAsync(e.Viaje, 11);
+        Assert.Equal(1, await ConProcesosAsync(p => p.EjecutarPermisosSinInspectorAsync()));
+    }
+
+    [Fact]
+    public async Task El_permiso_vencido_se_concede_en_la_misma_peticion_que_empieza_la_excepcion_sin_esperar_al_proceso_periodico()
+    {
+        var e = await EscenarioAsync();
+        Assert.Equal(HttpStatusCode.Created, (await PedirAsync(e.Conductor, e.Viaje)).StatusCode);
+        // Antes del plazo sigue el rechazo de hoy.
+        await EnvejecerPermisoAsync(e.Viaje, 9);
+        Assert.Equal(HttpStatusCode.Forbidden, (await ExcepcionAsync(e.Conductor, e.EtapaCargue)).StatusCode);
+
+        // Cumplido el plazo, sin que corra el proceso de cada minuto, la peticion concede por tiempo y se acepta.
+        await EnvejecerPermisoAsync(e.Viaje, 2);
+        var excepcion = await ExcepcionAsync(e.Conductor, e.EtapaCargue);
+
+        Assert.Equal(HttpStatusCode.Created, excepcion.StatusCode);
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblPermisosSinInspector WHERE ViajeId = @v AND Estado = 'concedido' AND PorTiempo = 1 AND ConcedidoPor IS NULL", ("@v", e.Viaje)));
+        // La misma auditoria y el mismo aviso que el proceso periodico; este ya no tiene nada que conceder.
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'permiso_sin_inspector.conceder_por_tiempo' AND ViajeId = @v", ("@v", e.Viaje)));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'permiso_sin_inspector' AND Titulo LIKE N'Permiso concedido%' AND Canal = 'bandeja' AND UsuarioId = @u", ("@u", e.Conductor.UsuarioId)));
+        Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarPermisosSinInspectorAsync()));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNovedadesProceso n JOIN dbo.tblPermisosSinInspector p ON p.Id = n.PermisoId WHERE p.ViajeId = @v AND p.PorTiempo = 1", ("@v", e.Viaje)));
+    }
+
+    [Fact]
+    public async Task Asignar_un_puesto_con_el_permiso_pendiente_y_vencido_lo_concede_por_tiempo_en_esa_peticion_y_antes_del_plazo_sigue_el_rechazo()
+    {
+        var e = await EscenarioAsync();
+        Assert.Equal(HttpStatusCode.Created, (await PedirAsync(e.Conductor, e.Viaje)).StatusCode);
+        var puesto = () => Como(e.Conductor).PutAsync($"/api/viajes/{e.Viaje}/vehiculos/{e.Vin}/posicion", Cuerpo(new { posicion = 3 }));
+
+        await EnvejecerPermisoAsync(e.Viaje, 9);
+        Assert.Equal(HttpStatusCode.Forbidden, (await puesto()).StatusCode);
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblPermisosSinInspector WHERE Estado = 'concedido'"));
+
+        // Cumplido el plazo, la peticion deja de ser 403: concede por tiempo y sigue con lo suyo (aun no hay segunda inspeccion del cargue en curso: 409).
+        await EnvejecerPermisoAsync(e.Viaje, 2);
+        Assert.Equal(HttpStatusCode.Conflict, (await puesto()).StatusCode);
+
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblPermisosSinInspector WHERE ViajeId = @v AND Estado = 'concedido' AND PorTiempo = 1", ("@v", e.Viaje)));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'permiso_sin_inspector.conceder_por_tiempo' AND ViajeId = @v", ("@v", e.Viaje)));
+    }
+
+    [Fact]
+    public async Task Un_valor_fuera_de_rango_del_parametro_se_rechaza_y_el_parametro_sigue_como_estaba()
+    {
+        var e = await EscenarioAsync();
+
+        var cero = await CambiarParametroAsync(e.Admin, "permiso_sin_inspector_minutos", 0);
+
+        Assert.Equal(HttpStatusCode.BadRequest, cero.StatusCode);
+        Assert.Contains("valor", (await JsonAsync(cero)).GetProperty("details").GetProperty("fieldErrors").EnumerateObject().Select(p => p.Name));
+        Assert.Equal("10", (string)(await Sembrador.EscalarAsync("SELECT Valor FROM dbo.tblParametros WHERE Clave = 'permiso_sin_inspector_minutos'"))!);
+    }
+
+    // ------------------------------------------------------------------------------------------------ las seis filas y la ruta de la app
+
+    [Fact]
+    public async Task Los_seis_parametros_se_listan_con_su_valor_inicial_y_se_cambian_con_la_validacion_de_hoy()
+    {
+        var e = await EscenarioAsync();
+
+        var lista = (await JsonAsync(await Como(e.Admin).GetAsync("/api/parametros"))).EnumerateArray().ToDictionary(p => p.GetProperty("clave").GetString()!);
+
+        foreach (var (clave, valor) in new Dictionary<string, string>
+        {
+            ["permiso_sin_inspector_minutos"] = "10", ["espera_inspector_aviso_minutos"] = "15", ["espera_inspector_plan_b_minutos"] = "30",
+            ["viaje_sin_movimiento_horas"] = "24", ["firma_cargue_pendiente_minutos"] = "30", ["propuesta_ubicacion_visitas"] = "3",
+        })
+        {
+            Assert.Equal(valor, lista[clave].GetProperty("valor").GetString());
+            Assert.Equal("numero", lista[clave].GetProperty("tipo").GetString());
+            Assert.False(string.IsNullOrWhiteSpace(lista[clave].GetProperty("descripcion").GetString()));
+        }
+
+        var cambio = await CambiarParametroAsync(e.Coordinador, "espera_inspector_aviso_minutos", 20);
+        Assert.Equal(HttpStatusCode.OK, cambio.StatusCode);
+        Assert.Equal("20", (await JsonAsync(cambio)).GetProperty("valor").GetString());
+        Assert.Equal(HttpStatusCode.BadRequest, (await CambiarParametroAsync(e.Coordinador, "viaje_sin_movimiento_horas", -1)).StatusCode);
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'parametro.actualizar' AND UsuarioId = @u AND Detalle LIKE N'%espera_inspector_aviso_minutos%'", ("@u", e.Coordinador.UsuarioId)));
+    }
+
+    [Fact]
+    public async Task La_ruta_de_la_app_entrega_solo_los_dos_parametros_con_su_valor_vigente_a_todos_los_roles_que_operan_y_exige_sesion()
+    {
+        var e = await EscenarioAsync();
+        var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
+        var comercial = await SesionAsync("ventas@ejemplo.com", clsRol.COMERCIAL);
+
+        foreach (var quien in new[] { e.Inspector, e.Conductor, e.Coordinador, e.Admin, superAdmin })
+        {
+            var r = await Como(quien).GetAsync("/api/parametros/app");
+
+            Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+            var cuerpo = await JsonAsync(r);
+            Assert.Equal(["acomodacion_fotos_minimas", "gps_precision_minima_m"], cuerpo.EnumerateObject().Select(p => p.Name).Order().ToList());
+            Assert.Equal(1, cuerpo.GetProperty("acomodacion_fotos_minimas").GetInt32());
+            Assert.Equal(30, cuerpo.GetProperty("gps_precision_minima_m").GetInt32());
+        }
+
+        // Cambiarlos se ve de inmediato (el cambio invalida la cache).
+        Assert.Equal(HttpStatusCode.OK, (await CambiarParametroAsync(e.Admin, "acomodacion_fotos_minimas", 2)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await CambiarParametroAsync(e.Admin, "gps_precision_minima_m", 15)).StatusCode);
+        var nuevo = await JsonAsync(await Como(e.Inspector).GetAsync("/api/parametros/app"));
+        Assert.Equal(2, nuevo.GetProperty("acomodacion_fotos_minimas").GetInt32());
+        Assert.Equal(15, nuevo.GetProperty("gps_precision_minima_m").GetInt32());
+        // Sin sesion 401; un rol que no opera, 403; y el listado completo sigue siendo de quien administra los catalogos.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await Cliente(fabrica: _api).GetAsync("/api/parametros/app")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Como(comercial).GetAsync("/api/parametros/app")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Como(e.Inspector).GetAsync("/api/parametros")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Como(e.Conductor).PatchAsync("/api/parametros/acomodacion_fotos_minimas", Cuerpo(new { valor = 5 }))).StatusCode);
+    }
+
+    // ------------------------------------------------------------------------------------------------ al celular solo llegan los urgentes
+
+    [Fact]
+    public async Task Un_aviso_de_urgencia_media_queda_solo_en_la_bandeja_y_uno_de_urgencia_alta_tambien_llega_al_celular()
+    {
+        var e = await EscenarioAsync();
+        Assert.Equal(HttpStatusCode.OK, (await Como(e.Coordinador).PostAsJsonAsync("/api/dispositivos", new { token_fcm = "tk-coord", plataforma = "android", modelo = "Pixel" })).StatusCode);
+
+        using (var alcance = _api.Services.CreateScope())
+        {
+            var emisor = alcance.ServiceProvider.GetRequiredService<clsEmisorNotificaciones>();
+            await emisor.EmitirAsync(new clsAlerta(clsTipoNotificacion.NOVEDAD_PROCESO, clsUrgenciaNotificacion.MEDIA, [e.Coordinador.UsuarioId], null, null, null, null, null, "Aviso medio", "Solo bandeja", "k:media"));
+            await emisor.EmitirAsync(new clsAlerta(clsTipoNotificacion.NOVEDAD_PROCESO, clsUrgenciaNotificacion.ALTA, [e.Coordinador.UsuarioId], null, null, null, null, null, "Aviso alto", "Bandeja y celular", "k:alta"));
+        }
+
+        Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE UsuarioId = @u AND Canal = 'bandeja'", ("@u", e.Coordinador.UsuarioId)));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE UsuarioId = @u AND Canal = 'push' AND Urgencia = 'media'", ("@u", e.Coordinador.UsuarioId)));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE UsuarioId = @u AND Canal = 'push' AND Urgencia = 'alta' AND EnviadaAt IS NOT NULL", ("@u", e.Coordinador.UsuarioId)));
+        var enviado = Assert.Single(_push.Enviados);
+        Assert.Equal("tk-coord", enviado.Token);
+        Assert.Equal("Aviso alto", enviado.Mensaje.Titulo);
     }
 }

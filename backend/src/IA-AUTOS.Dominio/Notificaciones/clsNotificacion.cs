@@ -47,9 +47,12 @@ public static class clsTipoNotificacion
     /// <summary>A los coordinadores de calidad del cliente: un carro se rechazo en su destino por una novedad de su revision de llegada (urgencia alta).</summary>
     public const string CARRO_RECHAZADO_EN_DESTINO = "carro_rechazado_en_destino";
 
+    /// <summary>A los coordinadores de calidad y administradores del cliente de quien la fijo: alguien fijo la ubicacion de un lugar «aqui» y queda pendiente de confirmar (urgencia media, solo bandeja).</summary>
+    public const string UBICACION_FIJADA = "ubicacion_fijada";
+
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string>
     {
-        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD, FUERA_DE_RANGO, CARGUE_SIN_RECLAMAR, PROPUESTA_UBICACION, PERMISO_SIN_INSPECTOR, FIRMA_CARGUE_PENDIENTE, CAMBIO_CARGUE_INSPECTOR, CAMBIO_DESTINO_UNIDAD, CARRO_RECHAZADO_EN_DESTINO,
+        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD, FUERA_DE_RANGO, CARGUE_SIN_RECLAMAR, PROPUESTA_UBICACION, PERMISO_SIN_INSPECTOR, FIRMA_CARGUE_PENDIENTE, CAMBIO_CARGUE_INSPECTOR, CAMBIO_DESTINO_UNIDAD, CARRO_RECHAZADO_EN_DESTINO, UBICACION_FIJADA,
     };
 }
 

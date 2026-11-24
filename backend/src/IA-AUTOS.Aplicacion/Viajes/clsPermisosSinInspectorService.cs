@@ -2,10 +2,12 @@ using IAAutos.Aplicacion.Auth;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Notificaciones;
+using IAAutos.Aplicacion.Parametros;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Notificaciones;
+using IAAutos.Dominio.Parametros;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
@@ -15,8 +17,9 @@ namespace IAAutos.Aplicacion.Viajes;
 /// <summary>
 /// El permiso de la excepcion «No hay inspector». Donde el punto de cargue NO tiene inspectores asignados el conductor la activa en el momento (como siempre); donde los TIENE la excepcion se pide: el conductor registra
 /// su solicitud (motivo, fecha y GPS), se avisa a los inspectores del punto y a los coordinadores y administradores del cliente, y un coordinador o administrador la concede (el conductor queda habilitado de inmediato).
-/// Si nadie responde en <see cref="clsPermisoSinInspector.MINUTOS_DE_ESPERA"/> minutos la concede el reloj, marcada como autorizada por tiempo: lo hace un proceso periodico (no depende de que alguien abra una pantalla)
-/// y nunca antes del plazo. Todo queda en la auditoria y en la novedad de proceso de la excepcion.
+/// Si nadie responde dentro del plazo de la solicitud (el parametro <c>permiso_sin_inspector_minutos</c> vigente el dia que se pidio, 10 por defecto) la concede el reloj, marcada como autorizada por tiempo: lo hace un
+/// proceso periodico (no depende de que alguien abra una pantalla) y, dentro de la peticion que la necesita, <see cref="ConcederSiVencidoAsync"/>; nunca antes del plazo. Todo queda en la auditoria y en la novedad de
+/// proceso de la excepcion.
 /// </summary>
 public sealed class clsPermisosSinInspectorService(
     IPermisoSinInspectorRepository permisos,
@@ -30,7 +33,8 @@ public sealed class clsPermisosSinInspectorService(
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
-    IReloj reloj)
+    IReloj reloj,
+    IParametros parametros)
 {
     private const int LIMITE_POR_EJECUCION = 200;
 
@@ -72,7 +76,8 @@ public sealed class clsPermisosSinInspectorService(
             throw clsErroresCampos.Varios(errores);
         }
 
-        var permiso = clsPermisoSinInspector.Solicitar(viajeId, viaje.ConductorId!.Value, lugarId, motivo, solicitud.MotivoSinInspectorTexto, fecha!.Value, solicitud.Lat, solicitud.Lng, reloj.Ahora);
+        var permiso = clsPermisoSinInspector.Solicitar(
+            viajeId, viaje.ConductorId!.Value, lugarId, motivo, solicitud.MotivoSinInspectorTexto, fecha!.Value, solicitud.Lat, solicitud.Lng, reloj.Ahora, await EsperaVigenteAsync(ct));
         permisos.Agregar(permiso);
         var clienteId = await ClienteDelViajeAsync(viaje, ct);
         await auditor.RegistrarDeViajeAsync(
@@ -127,7 +132,7 @@ public sealed class clsPermisosSinInspectorService(
         }
 
         var permiso = await permisos.ObtenerDeViajeAsync(viajeId, ct) ?? throw new clsEntidadNoEncontradaException("El viaje no tiene una solicitud de permiso");
-        if (!permiso.EstaConcedido && reloj.Ahora >= permiso.VenceAt)
+        if (permiso.EstaVencido(reloj.Ahora))
         {
             await ConcederPorTiempoAsync(permiso, viaje, ct);
         }
@@ -141,13 +146,32 @@ public sealed class clsPermisosSinInspectorService(
 
     // --------------------------------------------------------------------------------------------- el reloj
 
+    /// <summary>Los minutos que espera una solicitud nueva: el parametro <c>permiso_sin_inspector_minutos</c> (10 por defecto si la fila no existe), al menos 1. Se lee en cada solicitud.</summary>
+    public async Task<int> EsperaVigenteAsync(CancellationToken ct = default) =>
+        Math.Max(await parametros.EnteroAsync(clsClavesParametros.PERMISO_SIN_INSPECTOR_MINUTOS, clsPermisoSinInspector.MINUTOS_POR_DEFECTO, ct), 1);
+
     /// <summary>
-    /// Concede por tiempo las solicitudes que cumplieron <see cref="clsPermisoSinInspector.MINUTOS_DE_ESPERA"/> minutos sin respuesta, nunca antes. Lo corre el proceso periodico (cada minuto). Devuelve cuantas concedio.
+    /// La funcion reutilizable de la concesion por tiempo dentro de la peticion: si el viaje tiene una solicitud pendiente cuyo plazo ya se cumplio, la concede aqui mismo, con la misma auditoria y el mismo aviso que el
+    /// proceso periodico, sin esperar a su siguiente corrida. Devuelve la solicitud del viaje (concedida ahora, concedida antes o aun pendiente), o nulo si el viaje no tiene solicitud. Nunca responde «espere» despues del plazo.
+    /// </summary>
+    public async Task<clsPermisoSinInspector?> ConcederSiVencidoAsync(Guid viajeId, CancellationToken ct = default)
+    {
+        var permiso = await permisos.ObtenerDeViajeAsync(viajeId, ct);
+        if (permiso is not null && permiso.EstaVencido(reloj.Ahora) && await viajes.ObtenerPorIdAsync(viajeId, ct) is { } viaje)
+        {
+            await ConcederPorTiempoAsync(permiso, viaje, ct);
+        }
+
+        return permiso;
+    }
+
+    /// <summary>
+    /// Concede por tiempo las solicitudes cuyo plazo ya se cumplio sin respuesta, nunca antes. Lo corre el proceso periodico (cada minuto). Devuelve cuantas concedio.
     /// </summary>
     public async Task<int> ConcederVencidosAsync(CancellationToken ct = default)
     {
         var concedidos = 0;
-        foreach (var permiso in await permisos.ObtenerPendientesAsync(reloj.Ahora.AddMinutes(-clsPermisoSinInspector.MINUTOS_DE_ESPERA), LIMITE_POR_EJECUCION, ct))
+        foreach (var permiso in await permisos.ObtenerVencidasAsync(reloj.Ahora, LIMITE_POR_EJECUCION, ct))
         {
             var viaje = await viajes.ObtenerPorIdAsync(permiso.ViajeId, ct);
             if (viaje is not null)
@@ -267,7 +291,7 @@ public sealed class clsPermisosSinInspectorService(
                     null,
                     null,
                     $"Solicitud de permiso: no hay inspector en {lugar}",
-                    $"El conductor pide permiso para hacer el cargue sin inspector en {lugar}{codigo}. Si nadie responde en {clsPermisoSinInspector.MINUTOS_DE_ESPERA} minutos, el permiso se concede por tiempo.",
+                    $"El conductor pide permiso para hacer el cargue sin inspector en {lugar}{codigo}. Si nadie responde en {permiso.EsperaMinutos} minutos, el permiso se concede por tiempo.",
                     $"{clsTipoNotificacion.PERMISO_SIN_INSPECTOR}:solicitud:{viaje.Id}",
                     new Dictionary<string, object?>
                     {
@@ -299,7 +323,7 @@ public sealed class clsPermisosSinInspectorService(
             }
 
             var lugar = await NombreDelLugarAsync(permiso.LugarId, ct);
-            var quien = permiso.PorTiempo ? $"se concedió por tiempo (pasaron {clsPermisoSinInspector.MINUTOS_DE_ESPERA} minutos sin respuesta)" : "fue concedido";
+            var quien = permiso.PorTiempo ? $"se concedió por tiempo (pasaron {permiso.EsperaMinutos} minutos sin respuesta)" : "fue concedido";
             await emisor.EmitirAsync(
                 new clsAlerta(
                     clsTipoNotificacion.PERMISO_SIN_INSPECTOR,

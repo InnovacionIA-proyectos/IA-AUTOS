@@ -206,7 +206,8 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
         foreach (var destinatario in new[] { e.Coordinador, e.Admin })
         {
             Assert.Equal(2, await NotificacionesAsync("umbral_patron", destinatario.UsuarioId));
-            Assert.Equal(2, await NotificacionesAsync("umbral_patron", destinatario.UsuarioId, "push"));
+            // Son de urgencia media: quedan solo en la bandeja y no salen al celular.
+            Assert.Equal(0, await NotificacionesAsync("umbral_patron", destinatario.UsuarioId, "push"));
         }
 
         var mensajes = (await ComoJsonAsync(await Como(e.Coordinador).GetAsync("/api/notificaciones?tipo=umbral_patron"))).GetProperty("items").EnumerateArray()
@@ -314,7 +315,8 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
         Assert.Equal(1, primera);
         Assert.Equal(1, segunda);
         Assert.Equal(1, await NotificacionesAsync("captura_incompleta", e.Inspector.UsuarioId));
-        Assert.Equal(1, await NotificacionesAsync("captura_incompleta", e.Inspector.UsuarioId, "push"));
+        // Es de urgencia media: queda solo en la bandeja y no sale al celular.
+        Assert.Equal(0, await NotificacionesAsync("captura_incompleta", e.Inspector.UsuarioId, "push"));
         var aviso = (await ComoJsonAsync(await Como(e.Inspector).GetAsync("/api/notificaciones?tipo=captura_incompleta"))).GetProperty("items").EnumerateArray().Single();
         Assert.Equal("media", aviso.GetProperty("urgencia").GetString());
         Assert.Equal(inspeccion, aviso.GetProperty("inspeccion_id").GetGuid());

@@ -1499,6 +1499,22 @@ INSERT #r SELECT N'Dano de un extra: la restriccion solo exige que no tenga zona
 INSERT #r SELECT N'Indicador diario: SinCalificar cuenta solo la version vigente de cada informe',
     CASE WHEN EXISTS (SELECT 1 FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'dbo.vwIndicadorDiario') AND definition LIKE N'%CorrigeInspeccionId%') THEN 1 ELSE 0 END, NULL;
 
+-- 7g) Los parametros de los tiempos y los avisos, el plazo de cada permiso, la precision del lugar y el aviso de la ubicacion fijada
+INSERT #r SELECT N'Parametros de tiempos y avisos: las seis filas existen con su valor inicial',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblParametros WHERE Tipo = 'numero' AND ((Clave = 'permiso_sin_inspector_minutos' AND Valor = N'10') OR (Clave = 'espera_inspector_aviso_minutos' AND Valor = N'15')
+        OR (Clave = 'espera_inspector_plan_b_minutos' AND Valor = N'30') OR (Clave = 'viaje_sin_movimiento_horas' AND Valor = N'24') OR (Clave = 'firma_cargue_pendiente_minutos' AND Valor = N'30')
+        OR (Clave = 'propuesta_ubicacion_visitas' AND Valor = N'3'))) = 6 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Permiso sin inspector: el plazo de cada solicitud es obligatorio',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblPermisosSinInspector') AND name = N'VenceAt' AND is_nullable = 0) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Permiso sin inspector: el reloj no concede antes del plazo guardado en la solicitud',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblPermisosSinInspector_Reloj' AND parent_object_id = OBJECT_ID(N'dbo.tblPermisosSinInspector') AND definition LIKE N'%VenceAt%')
+         AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblPermisosSinInspector_Plazo' AND parent_object_id = OBJECT_ID(N'dbo.tblPermisosSinInspector')) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Lugares: la precision del GPS con que se fijo la ubicacion (nula o no negativa)',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblLugares') AND name = N'PrecisionM' AND is_nullable = 1)
+         AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblLugares_Precision' AND parent_object_id = OBJECT_ID(N'dbo.tblLugares')) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Ubicacion fijada: la notificacion admite el tipo ubicacion_fijada',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%ubicacion_fijada%') THEN 1 ELSE 0 END, NULL;
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';

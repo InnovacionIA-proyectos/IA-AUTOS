@@ -8,11 +8,11 @@ public sealed record clsCalibracionPropuesta(double CentroLat, double CentroLng,
 /// <summary>
 /// La autocalibracion de la ubicacion de un lugar: a partir de las fotos selladas con ubicacion de sus visitas propone el CENTRO en la mediana de las coordenadas (la latitud y la longitud por separado, para
 /// que una foto lejana no lo arrastre) y el RADIO segun la dispersion: la distancia al centro que cubre al 90 % de las fotos, redondeada hacia arriba a 10 m, entre <see cref="RADIO_MINIMO_M"/> y
-/// <see cref="RADIO_MAXIMO_M"/>. Solo propone con al menos <see cref="VISITAS_MINIMAS"/> visitas distintas (dato ilustrativo que confirma el negocio, SUP-002).
+/// <see cref="RADIO_MAXIMO_M"/>. Solo propone con al menos <see cref="VISITAS_MINIMAS"/> visitas distintas por defecto (el parametro <c>propuesta_ubicacion_visitas</c> lo ajusta sin desplegar).
 /// </summary>
 public static class clsAutocalibracion
 {
-    /// <summary>Visitas distintas que hacen falta para proponer (ilustrativo; lo confirma el negocio).</summary>
+    /// <summary>Visitas distintas que hacen falta para proponer cuando el parametro <c>propuesta_ubicacion_visitas</c> no existe.</summary>
     public const int VISITAS_MINIMAS = 3;
 
     public const int RADIO_MINIMO_M = 100;
@@ -40,11 +40,12 @@ public static class clsAutocalibracion
     }
 
     /// <param name="fotos">Las coordenadas de las fotos (latitud, longitud) y la visita (el viaje) de cada una.</param>
-    /// <returns>La propuesta, o nulo si las fotos no son de al menos <see cref="VISITAS_MINIMAS"/> visitas distintas.</returns>
-    public static clsCalibracionPropuesta? Proponer(IReadOnlyList<(double Lat, double Lng, Guid Visita)> fotos)
+    /// <param name="visitasMinimas">Las visitas distintas que hacen falta (el parametro <c>propuesta_ubicacion_visitas</c>; al menos 1).</param>
+    /// <returns>La propuesta, o nulo si las fotos no son de al menos <paramref name="visitasMinimas"/> visitas distintas.</returns>
+    public static clsCalibracionPropuesta? Proponer(IReadOnlyList<(double Lat, double Lng, Guid Visita)> fotos, int visitasMinimas = VISITAS_MINIMAS)
     {
         var visitas = fotos.Select(f => f.Visita).Distinct().Count();
-        if (visitas < VISITAS_MINIMAS || fotos.Count == 0)
+        if (visitas < Math.Max(visitasMinimas, 1) || fotos.Count == 0)
         {
             return null;
         }

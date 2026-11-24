@@ -12,14 +12,14 @@ internal sealed class clsRepositorioPropuestasUbicacion(clsAppDbContext contexto
 {
     public Task<clsPropuestaUbicacion?> ObtenerAsync(Guid id, CancellationToken ct = default) => contexto.PropuestasUbicacion.FirstOrDefaultAsync(p => p.Id == id, ct);
 
-    public async Task<IReadOnlyList<(clsPropuestaUbicacion Propuesta, string LugarNombre)>> ListarAsync(string? estado, CancellationToken ct = default)
+    public async Task<IReadOnlyList<(clsPropuestaUbicacion Propuesta, string LugarNombre, double? PrecisionM)>> ListarAsync(string? estado, CancellationToken ct = default)
     {
         var filas = await (from p in contexto.PropuestasUbicacion.AsNoTracking()
                            join l in contexto.Lugares.AsNoTracking() on p.LugarId equals l.Id
                            where estado == null || p.Estado == estado
                            orderby p.CreatedAt descending
-                           select new { Propuesta = p, LugarNombre = l.Nombre }).ToListAsync(ct);
-        return filas.Select(f => (f.Propuesta, f.LugarNombre)).ToList();
+                           select new { Propuesta = p, LugarNombre = l.Nombre, l.PrecisionM }).ToListAsync(ct);
+        return filas.Select(f => (f.Propuesta, f.LugarNombre, f.PrecisionM)).ToList();
     }
 
     public async Task<IReadOnlyDictionary<Guid, clsPropuestaUbicacion>> UltimaPorLugarAsync(IReadOnlyCollection<Guid> lugarIds, CancellationToken ct = default)

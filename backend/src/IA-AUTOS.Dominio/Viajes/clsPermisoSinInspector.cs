@@ -12,12 +12,13 @@ public static class clsEstadoPermiso
 /// <summary>
 /// La solicitud del conductor para activar la excepcion «No hay inspector» cuando el punto de cargue TIENE inspectores asignados (donde no los hay la excepcion se activa en el momento). Una por viaje: guarda el motivo, su
 /// texto y la fecha y el GPS del momento en que el conductor la pidio. La concede un coordinador de calidad o un administrador (<see cref="ConcedidoPor"/>) y el conductor queda habilitado de inmediato; si nadie responde
-/// en <see cref="MINUTOS_DE_ESPERA"/> minutos la concede el reloj, marcada como autorizada por tiempo (<see cref="PorTiempo"/>), nunca antes de ese plazo.
+/// en el plazo de la solicitud (<see cref="VenceAt"/>, que se guarda al crearla con la espera vigente del parametro <c>permiso_sin_inspector_minutos</c>) la concede el reloj, marcada como autorizada por tiempo
+/// (<see cref="PorTiempo"/>), nunca antes de ese plazo. Cambiar el parametro despues no cambia el plazo de una solicitud ya pedida.
 /// </summary>
 public sealed class clsPermisoSinInspector : clsEntidadBase
 {
-    /// <summary>Los minutos que se espera una respuesta antes de que el reloj conceda el permiso.</summary>
-    public const int MINUTOS_DE_ESPERA = 10;
+    /// <summary>Los minutos que se espera una respuesta cuando el parametro <c>permiso_sin_inspector_minutos</c> no existe.</summary>
+    public const int MINUTOS_POR_DEFECTO = 10;
 
     public const int TEXTO_MAX = 300;
 
@@ -52,16 +53,23 @@ public sealed class clsPermisoSinInspector : clsEntidadBase
     /// <summary>Quien lo concedio; nulo si lo concedio el reloj (<see cref="PorTiempo"/>) o mientras sigue pendiente.</summary>
     public Guid? ConcedidoPor { get; private set; }
 
-    /// <summary>True si nadie respondio y el permiso lo concedio el reloj a los <see cref="MINUTOS_DE_ESPERA"/> minutos.</summary>
+    /// <summary>True si nadie respondio y el permiso lo concedio el reloj cuando se cumplio el plazo (<see cref="VenceAt"/>).</summary>
     public bool PorTiempo { get; private set; }
+
+    /// <summary>Desde cuando el reloj puede conceder el permiso: el plazo que la solicitud guardo al nacer (su fecha mas la espera vigente ese dia).</summary>
+    public DateTimeOffset VenceAt { get; private set; }
 
     public bool EstaConcedido => Estado == clsEstadoPermiso.CONCEDIDO;
 
-    /// <summary>Desde cuando el reloj puede conceder el permiso: <see cref="MINUTOS_DE_ESPERA"/> minutos despues de la solicitud.</summary>
-    public DateTimeOffset VenceAt => CreatedAt.AddMinutes(MINUTOS_DE_ESPERA);
+    /// <summary>Los minutos de espera con que nacio la solicitud (el plazo menos su fecha).</summary>
+    public int EsperaMinutos => (int)Math.Round((VenceAt - CreatedAt).TotalMinutes);
 
+    /// <summary>True si la solicitud sigue pendiente y ya se cumplio su plazo: el reloj puede concederla.</summary>
+    public bool EstaVencido(DateTimeOffset ahora) => !EstaConcedido && ahora >= VenceAt;
+
+    /// <param name="esperaMinutos">La espera vigente del parametro <c>permiso_sin_inspector_minutos</c>: con ella nace el plazo de la solicitud (al menos 1 minuto).</param>
     public static clsPermisoSinInspector Solicitar(
-        Guid viajeId, Guid conductorId, Guid lugarId, string? motivoCodigo, string? motivoTexto, DateTimeOffset fecha, double? lat, double? lng, DateTimeOffset ahora)
+        Guid viajeId, Guid conductorId, Guid lugarId, string? motivoCodigo, string? motivoTexto, DateTimeOffset fecha, double? lat, double? lng, DateTimeOffset ahora, int esperaMinutos = MINUTOS_POR_DEFECTO)
     {
         clsValidador.Latitud(lat, "lat");
         clsValidador.Longitud(lng, "lng");
@@ -81,6 +89,7 @@ public sealed class clsPermisoSinInspector : clsEntidadBase
             Fecha = fecha,
             Lat = lat,
             Lng = lng,
+            VenceAt = ahora.AddMinutes(Math.Max(esperaMinutos, 1)),
         };
         permiso.Inicializar(ahora);
         return permiso;
@@ -97,13 +106,13 @@ public sealed class clsPermisoSinInspector : clsEntidadBase
         Tocar(ahora);
     }
 
-    /// <summary>Concede el permiso el reloj, porque nadie respondio. Nunca antes de <see cref="MINUTOS_DE_ESPERA"/> minutos desde la solicitud (409); 409 si ya esta concedido.</summary>
+    /// <summary>Concede el permiso el reloj, porque nadie respondio. Nunca antes del plazo guardado en la solicitud (<see cref="VenceAt"/>, 409); 409 si ya esta concedido.</summary>
     public void ConcederPorTiempo(DateTimeOffset ahora)
     {
         AsegurarPendiente();
         if (ahora < VenceAt)
         {
-            throw new clsConflictoException($"El permiso no se concede por tiempo antes de {MINUTOS_DE_ESPERA} minutos desde la solicitud");
+            throw new clsConflictoException($"El permiso no se concede por tiempo antes de {EsperaMinutos} minutos desde la solicitud");
         }
 
         Estado = clsEstadoPermiso.CONCEDIDO;
@@ -127,8 +136,8 @@ public interface IPermisoSinInspectorRepository
     /// <summary>La solicitud del viaje (una sola), o nulo si no hay.</summary>
     Task<clsPermisoSinInspector?> ObtenerDeViajeAsync(Guid viajeId, CancellationToken ct = default);
 
-    /// <summary>Las solicitudes aun pendientes pedidas hasta <paramref name="pedidasHasta"/> (las que ya cumplieron la espera del reloj), de la mas antigua a la mas reciente.</summary>
-    Task<IReadOnlyList<clsPermisoSinInspector>> ObtenerPendientesAsync(DateTimeOffset pedidasHasta, int limite, CancellationToken ct = default);
+    /// <summary>Las solicitudes aun pendientes cuyo plazo (<see cref="clsPermisoSinInspector.VenceAt"/>) ya se cumplio en <paramref name="ahora"/> (las que el reloj puede conceder), de la mas antigua a la mas reciente.</summary>
+    Task<IReadOnlyList<clsPermisoSinInspector>> ObtenerVencidasAsync(DateTimeOffset ahora, int limite, CancellationToken ct = default);
 
     void Agregar(clsPermisoSinInspector permiso);
 }

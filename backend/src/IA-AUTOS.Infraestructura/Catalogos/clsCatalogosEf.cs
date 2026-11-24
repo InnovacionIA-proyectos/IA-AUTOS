@@ -211,7 +211,7 @@ internal sealed class clsCatalogoEstadosSofasa(clsAppDbContext contexto, IReloj 
 
 /// <summary>
 /// Los lugares reales (CEDI Envigado, Concesionario Autolarte Medellin...): <c>nombre</c> (unico), <c>tipo</c> (el codigo de un tipo de lugar de <c>puntos-custodia</c>), <c>ciudad</c>, <c>orden</c> y
-/// <c>activo</c>. Salen ademas el nombre del tipo, la ubicacion (<c>latitud</c>, <c>longitud</c> y <c>radio_metros</c>, nulos mientras no se fijan) y <c>sin_ubicacion</c>. Un lugar que un viaje o una unidad usa
+/// <c>activo</c>. Salen ademas el nombre del tipo, la ubicacion (<c>latitud</c>, <c>longitud</c> y <c>radio_metros</c>, nulos mientras no se fijan), <c>precision_m</c> (la del GPS con que se fijo «aqui»; nula si no se guardo) y <c>sin_ubicacion</c>. Un lugar que un viaje o una unidad usa
 /// no se borra (409): se inactiva.
 /// </summary>
 internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj, IUsuarioActual actual) : clsCatalogoEf<clsLugar>(contexto, reloj, clsNombresCatalogo.LUGARES)
@@ -239,6 +239,7 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj,
         ["latitud"] = l.Latitud,
         ["longitud"] = l.Longitud,
         ["radio_metros"] = l.RadioMetros,
+        ["precision_m"] = l.PrecisionM,
         ["sin_ubicacion"] = l.SinUbicacion,
         ["estado_ubicacion"] = l.EstadoUbicacion,
         ["ubicacion_fijada_por"] = l.UbicacionFijadaPor,

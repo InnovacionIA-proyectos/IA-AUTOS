@@ -1,13 +1,15 @@
 using IAAutos.Aplicacion.Comun;
+using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Comun;
+using IAAutos.Dominio.Notificaciones;
 using IAAutos.Dominio.Usuarios;
 
 namespace IAAutos.Aplicacion.Catalogos;
 
 /// <summary>
 /// Un lugar con su ubicacion: <c>EstadoUbicacion</c> es sin_ubicacion, pendiente_confirmar o confirmada; <c>UbicacionFijadaPorNombre</c> es el nombre de quien la fijo (nulo si no aplica); <c>PrecisionM</c> es la del
-/// GPS con que se fijo «aqui» (solo en la respuesta de esa operacion).
+/// GPS con que se fijo «aqui» (guardada en el lugar; nula en los lugares fijados antes de guardarla o cargados a mano).
 /// </summary>
 public sealed record LugarUbicacionDto(
     Guid Id, string Nombre, double? Latitud, double? Longitud, int? RadioMetros, string EstadoUbicacion, Guid? UbicacionFijadaPor, DateTimeOffset? UbicacionFijadaAt, double? PrecisionM = null, string? UbicacionFijadaPorNombre = null);
@@ -15,9 +17,9 @@ public sealed record LugarUbicacionDto(
 /// <summary>La posicion de quien esta en el lugar: <c>Lat</c> y <c>Lng</c> son obligatorias; <c>Precision</c> (metros) es la del GPS del dispositivo.</summary>
 public sealed record FijarUbicacionRequest(double? Lat, double? Lng, double? Precision);
 
-/// <summary>Una propuesta de la autocalibracion: el centro (mediana de las fotos) y el radio (segun su dispersion) que se proponen para el lugar, las fotos y las visitas que los sustentan y su decision (con el nombre de quien la decidio; nulo si esta pendiente).</summary>
+/// <summary>Una propuesta de la autocalibracion: el centro (mediana de las fotos) y el radio (segun su dispersion) que se proponen para el lugar, las fotos y las visitas que los sustentan y su decision (con el nombre de quien la decidio; nulo si esta pendiente). <c>PrecisionM</c> es la precision del GPS con que se fijo la ubicacion actual del lugar (nula si no se guardo).</summary>
 public sealed record PropuestaUbicacionDto(
-    Guid Id, Guid LugarId, string Lugar, double CentroLat, double CentroLng, int RadioMetros, int Fotos, int Visitas, string Estado, Guid? DecididaPor, DateTimeOffset? DecididaAt, DateTimeOffset CreatedAt, string? DecididaPorNombre = null);
+    Guid Id, Guid LugarId, string Lugar, double CentroLat, double CentroLng, int RadioMetros, int Fotos, int Visitas, string Estado, Guid? DecididaPor, DateTimeOffset? DecididaAt, DateTimeOffset CreatedAt, string? DecididaPorNombre = null, double? PrecisionM = null);
 
 /// <summary>
 /// La ubicacion de los lugares fuera del CRUD del catalogo: «fijar ubicacion aqui» (quien esta en un lugar sin ubicacion deja la suya, que queda pendiente de confirmar) y las propuestas de autocalibracion que el
@@ -31,11 +33,13 @@ public sealed class clsLugaresService(
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
-    IReloj reloj)
+    IReloj reloj,
+    clsEmisorNotificaciones emisor)
 {
     /// <summary>
     /// Fija la ubicacion de un lugar SIN ubicacion con la posicion y la precision enviadas; queda «pendiente de confirmar» y todavia no genera marcas de «fuera del rango». 400 sin coordenadas validas o con precision
-    /// negativa; 404 si el lugar no existe; 409 si el lugar ya tiene ubicacion (pendiente o confirmada). La precision queda en la auditoria de la operacion.
+    /// negativa; 404 si el lugar no existe; 409 si el lugar ya tiene ubicacion (pendiente o confirmada). La precision queda guardada en el lugar y en la auditoria de la operacion, y se avisa (urgencia media, solo
+    /// bandeja) a los coordinadores de calidad y administradores del cliente de quien la fijo.
     /// </summary>
     public async Task<LugarUbicacionDto> FijarUbicacionAquiAsync(Guid id, FijarUbicacionRequest solicitud, CancellationToken ct = default)
     {
@@ -62,11 +66,59 @@ public sealed class clsLugaresService(
 
         var lugar = await lugares.ObtenerAsync(id, ct) ?? throw new clsEntidadNoEncontradaException($"Lugar {id} no encontrado");
         var antes = Instantanea(lugar);
-        lugar.FijarUbicacionAqui(solicitud.Lat!.Value, solicitud.Lng!.Value, actual.IdObligatorio(), reloj.Ahora);
+        lugar.FijarUbicacionAqui(solicitud.Lat!.Value, solicitud.Lng!.Value, actual.IdObligatorio(), reloj.Ahora, solicitud.Precision);
         auditor.Registrar("lugar.fijar_ubicacion", "lugares", lugar.Id, detalle: new DetalleAuditoria(antes, new { Instantanea(lugar).Latitud, Instantanea(lugar).Longitud, estado_ubicacion = lugar.EstadoUbicacion, precision_m = solicitud.Precision }));
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         catalogos.InvalidarCache();
-        return await ConNombreAsync(Dto(lugar, solicitud.Precision), ct);
+        var dto = await ConNombreAsync(Dto(lugar), ct);
+        await AvisarUbicacionFijadaAsync(lugar, dto.UbicacionFijadaPorNombre, ct);
+        return dto;
+    }
+
+    /// <summary>
+    /// Avisa que se fijo la ubicacion de un lugar «aqui» (urgencia media, solo bandeja) a los coordinadores de calidad y administradores del cliente de quien la fijo: quien, cuando y con que precision. Un aviso por lugar.
+    /// Nunca lanza: la ubicacion ya quedo guardada y no se deshace.
+    /// </summary>
+    private async Task AvisarUbicacionFijadaAsync(clsLugar lugar, string? quien, CancellationToken ct)
+    {
+        try
+        {
+            if (actual.ClienteId is not { } clienteId)
+            {
+                return;
+            }
+
+            var destinatarios = (await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN], clienteId, ct)).Select(u => u.Id).ToList();
+            var fijadaAt = lugar.UbicacionFijadaAt ?? reloj.Ahora;
+            var cuando = fijadaAt.ToOffset(TimeSpan.FromHours(-5)).ToString("dd/MM/yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+            var precision = lugar.PrecisionM is { } p ? $"precisión {p:0.#} m" : "sin precisión del GPS";
+            await emisor.EmitirAsync(
+                new clsAlerta(
+                    clsTipoNotificacion.UBICACION_FIJADA,
+                    clsUrgenciaNotificacion.MEDIA,
+                    destinatarios,
+                    clienteId,
+                    null,
+                    null,
+                    null,
+                    null,
+                    $"Ubicación fijada: {lugar.Nombre}",
+                    $"{quien ?? "Un usuario"} fijó la ubicación de {lugar.Nombre} el {cuando} ({precision}). Queda pendiente de confirmar.",
+                    $"{clsTipoNotificacion.UBICACION_FIJADA}:{lugar.Id}",
+                    new Dictionary<string, object?>
+                    {
+                        ["lugar_id"] = lugar.Id,
+                        ["lugar"] = lugar.Nombre,
+                        ["usuario_nombre"] = quien,
+                        ["precision_m"] = lugar.PrecisionM,
+                        ["fijada_at"] = fijadaAt,
+                    }),
+                ct);
+        }
+        catch (Exception)
+        {
+            // El aviso es un efecto aparte: la ubicacion ya quedo guardada y no se deshace.
+        }
     }
 
     /// <summary>Las propuestas de autocalibracion, las mas recientes primero; con <paramref name="estado"/> (pendiente, confirmada o descartada) solo las de ese estado (400 si no es uno de los tres).</summary>
@@ -79,7 +131,7 @@ public sealed class clsLugaresService(
 
         var filas = await propuestas.ListarAsync(estado, ct);
         var nombres = await usuarios.NombresAsync(filas.Where(x => x.Propuesta.DecididaPor is not null).Select(x => x.Propuesta.DecididaPor!.Value).ToList(), ct);
-        return filas.Select(x => Dto(x.Propuesta, x.LugarNombre, x.Propuesta.DecididaPor is { } id ? nombres.GetValueOrDefault(id) : null)).ToList();
+        return filas.Select(x => Dto(x.Propuesta, x.LugarNombre, x.Propuesta.DecididaPor is { } id ? nombres.GetValueOrDefault(id) : null, x.PrecisionM)).ToList();
     }
 
     /// <summary>Confirma la propuesta: el lugar queda con su centro y su radio como ubicacion CONFIRMADA y la propuesta queda decidida con su autor y su fecha. 404 si no existe; 409 si ya estaba decidida.</summary>
@@ -113,11 +165,11 @@ public sealed class clsLugaresService(
     private async Task<LugarUbicacionDto> ConNombreAsync(LugarUbicacionDto dto, CancellationToken ct) =>
         dto.UbicacionFijadaPor is { } id ? dto with { UbicacionFijadaPorNombre = (await usuarios.NombresAsync([id], ct)).GetValueOrDefault(id) } : dto;
 
-    private static LugarUbicacionDto Instantanea(clsLugar l) => Dto(l, null);
+    private static LugarUbicacionDto Instantanea(clsLugar l) => Dto(l);
 
-    private static LugarUbicacionDto Dto(clsLugar l, double? precision) =>
-        new(l.Id, l.Nombre, l.Latitud, l.Longitud, l.RadioMetros, l.EstadoUbicacion, l.UbicacionFijadaPor, l.UbicacionFijadaAt, precision);
+    private static LugarUbicacionDto Dto(clsLugar l) =>
+        new(l.Id, l.Nombre, l.Latitud, l.Longitud, l.RadioMetros, l.EstadoUbicacion, l.UbicacionFijadaPor, l.UbicacionFijadaAt, l.PrecisionM);
 
-    private static PropuestaUbicacionDto Dto(clsPropuestaUbicacion p, string lugar, string? decididaPorNombre) =>
-        new(p.Id, p.LugarId, lugar, p.CentroLat, p.CentroLng, p.RadioMetros, p.Fotos, p.Visitas, p.Estado, p.DecididaPor, p.DecididaAt, p.CreatedAt, decididaPorNombre);
+    private static PropuestaUbicacionDto Dto(clsPropuestaUbicacion p, string lugar, string? decididaPorNombre, double? precisionM = null) =>
+        new(p.Id, p.LugarId, lugar, p.CentroLat, p.CentroLng, p.RadioMetros, p.Fotos, p.Visitas, p.Estado, p.DecididaPor, p.DecididaAt, p.CreatedAt, decididaPorNombre, precisionM);
 }

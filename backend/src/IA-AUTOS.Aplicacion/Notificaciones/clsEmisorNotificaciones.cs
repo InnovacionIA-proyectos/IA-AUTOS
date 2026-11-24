@@ -25,8 +25,8 @@ public sealed record clsAlerta(
     bool SoloBandeja = false);
 
 /// <summary>
-/// Crea las notificaciones de una alerta: una por destinatario en la bandeja y una por destinatario por push (FCM a todos sus dispositivos activos). El envio nunca rompe la peticion que
-/// lo origino: si FCM falla, la notificacion de push queda guardada con su <c>ErrorEnvio</c>. Una alerta con la misma clave no se repite. Quien lo llama ya confirmo lo suyo: aqui se
+/// Crea las notificaciones de una alerta: una por destinatario en la bandeja y, solo si la urgencia es <c>alta</c>, una por destinatario por push (FCM a todos sus dispositivos activos); los avisos de urgencia <c>media</c>
+/// quedan solo en la bandeja. El envio nunca rompe la peticion que lo origino: si FCM falla, la notificacion de push queda guardada con su <c>ErrorEnvio</c>. Una alerta con la misma clave no se repite. Quien lo llama ya confirmo lo suyo: aqui se
 /// guardan solo las notificaciones.
 /// </summary>
 public sealed class clsEmisorNotificaciones(
@@ -77,9 +77,9 @@ public sealed class clsEmisorNotificaciones(
                 creadas = true;
             }
 
-            // Un aviso solo de bandeja no sale al celular.
+            // Al celular solo llegan los avisos urgentes: uno solo de bandeja o de urgencia media no sale (ni deja fila de push).
             var clavePush = Clave(alerta, destinatario, clsCanalNotificacion.PUSH);
-            if (alerta.SoloBandeja || existentes.Contains(clavePush))
+            if (alerta.SoloBandeja || alerta.Urgencia != clsUrgenciaNotificacion.ALTA || existentes.Contains(clavePush))
             {
                 continue;
             }

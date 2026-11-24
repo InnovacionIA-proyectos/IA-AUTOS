@@ -11,14 +11,23 @@ namespace IAAutos.API.Controllers.Parametros;
 
 /// <summary>
 /// Los parametros que el negocio ajusta sin desplegar codigo (capacidad <c>administrar_catalogos</c>: admin, super_admin y coordinador_calidad; 403 los demas). La API solo cambia valores: no crea ni
-/// borra claves.
+/// borra claves. La lectura de los dos valores que usa la app (<c>/api/parametros/app</c>) la hacen tambien el inspector y el conductor.
 /// </summary>
 [Route("api/parametros")]
-[RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
 public sealed class clsParametrosController(clsParametrosAdminService servicio) : clsControladorBase
 {
+    /// <summary>
+    /// Los dos parametros que la app lee del servidor: <c>acomodacion_fotos_minimas</c> (fotos que exige el cierre de la acomodacion) y <c>gps_precision_minima_m</c> (precision del GPS, en metros, a partir de la cual se avisa de
+    /// precision baja), con su valor vigente (se aplica en un minuto o menos). Inspector, conductor, coordinador, administrador y super administrador; 401 sin sesion.
+    /// </summary>
+    [HttpGet("app")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType<ParametrosDeLaAppDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> DeLaApp(CancellationToken ct) => Ok(await servicio.ParametrosDeLaAppAsync(ct));
+
     /// <summary>Todos los parametros, ordenados por clave: <c>clave</c>, <c>valor</c> (nulo si no tiene), <c>tipo</c>, <c>descripcion</c>, <c>actualizado_por</c> y <c>updated_at</c>.</summary>
     [HttpGet]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
     [ProducesResponseType<IReadOnlyList<ParametroDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Listar(CancellationToken ct) => Ok(await servicio.ListarAsync(ct));
 
@@ -27,6 +36,7 @@ public sealed class clsParametrosController(clsParametrosAdminService servicio) 
     /// 404 si la clave no existe. Se aplica en un minuto o menos y queda en la auditoria con el valor antes y despues.
     /// </summary>
     [HttpPatch("{clave}")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
     [ProducesResponseType<ParametroDto>(StatusCodes.Status200OK)]
     [CuerpoSolicitud(typeof(ActualizarParametroRequest))]
     public async Task<IActionResult> Actualizar(string clave, CancellationToken ct)

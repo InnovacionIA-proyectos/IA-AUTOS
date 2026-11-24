@@ -2680,5 +2680,63 @@ BEGIN
 END');
 GO
 
+/* -----------------------------------------------------------------------------
+   Los parametros de los tiempos y los avisos (permiso_sin_inspector_minutos, espera_inspector_aviso_minutos, espera_inspector_plan_b_minutos, viaje_sin_movimiento_horas, firma_cargue_pendiente_minutos y
+   propuesta_ubicacion_visitas), el plazo guardado en cada permiso "No hay inspector" (tblPermisosSinInspector.VenceAt; el reloj nunca concede antes de el), la precision del GPS con que se fijo la ubicacion de un lugar
+   (tblLugares.PrecisionM) y el tipo de aviso ubicacion_fijada.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblParametros', N'U') IS NOT NULL
+    INSERT INTO dbo.tblParametros (Clave, Valor, Tipo, Descripcion)
+    SELECT v.Clave, v.Valor, v.Tipo, v.Descripcion
+    FROM (VALUES
+        ('permiso_sin_inspector_minutos',   N'10', 'numero', N'Minutos que espera el permiso de la excepcion No hay inspector del cargue, sin respuesta de nadie, antes de que el sistema lo conceda por tiempo (cada solicitud guarda el plazo con que nacio)'),
+        ('espera_inspector_aviso_minutos',  N'15', 'numero', N'Minutos desde que el conductor activa la excepcion No hay inspector en un destino, sin que nadie tome la entrega, antes de avisar al coordinador'),
+        ('espera_inspector_plan_b_minutos', N'30', 'numero', N'Minutos adicionales, despues de la espera del aviso, para habilitar la entrega sin inspector del punto'),
+        ('viaje_sin_movimiento_horas',      N'24', 'numero', N'Horas que un viaje en curso puede seguir sin movimiento antes de avisar al coordinador'),
+        ('firma_cargue_pendiente_minutos',  N'30', 'numero', N'Minutos que la salida del cargue de un carro puede seguir cerrada sin la firma de una parte de la ninera antes de avisarle a esa parte'),
+        ('propuesta_ubicacion_visitas',     N'3',  'numero', N'Visitas distintas con fotos selladas a un lugar sin ubicacion confirmada que hacen falta para proponer su ubicacion')
+    ) AS v (Clave, Valor, Tipo, Descripcion)
+    WHERE NOT EXISTS (SELECT 1 FROM dbo.tblParametros p WHERE p.Clave = v.Clave);
+GO
+-- tblPermisosSinInspector: el plazo de cada solicitud
+IF OBJECT_ID(N'dbo.tblPermisosSinInspector', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblPermisosSinInspector', N'VenceAt') IS NULL
+    ALTER TABLE dbo.tblPermisosSinInspector ADD VenceAt datetimeoffset(3) NULL;
+GO
+IF OBJECT_ID(N'dbo.tblPermisosSinInspector', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblPermisosSinInspector', N'VenceAt') IS NOT NULL
+    EXEC (N'UPDATE dbo.tblPermisosSinInspector SET VenceAt = DATEADD(MINUTE, 10, CreatedAt) WHERE VenceAt IS NULL');
+GO
+IF OBJECT_ID(N'dbo.tblPermisosSinInspector', N'U') IS NOT NULL AND EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblPermisosSinInspector') AND name = N'VenceAt' AND is_nullable = 1)
+    ALTER TABLE dbo.tblPermisosSinInspector ALTER COLUMN VenceAt datetimeoffset(3) NOT NULL;
+GO
+IF OBJECT_ID(N'dbo.tblPermisosSinInspector', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblPermisosSinInspector', N'VenceAt') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblPermisosSinInspector_Reloj'' AND parent_object_id = OBJECT_ID(N''dbo.tblPermisosSinInspector'') AND definition LIKE N''%VenceAt%'')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblPermisosSinInspector_Reloj'' AND parent_object_id = OBJECT_ID(N''dbo.tblPermisosSinInspector''))
+        ALTER TABLE dbo.tblPermisosSinInspector DROP CONSTRAINT CK_tblPermisosSinInspector_Reloj;
+    ALTER TABLE dbo.tblPermisosSinInspector ADD CONSTRAINT CK_tblPermisosSinInspector_Reloj CHECK (PorTiempo = 0 OR ConcedidoAt >= VenceAt);
+END');
+GO
+IF OBJECT_ID(N'dbo.tblPermisosSinInspector', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblPermisosSinInspector', N'VenceAt') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblPermisosSinInspector_Plazo'' AND parent_object_id = OBJECT_ID(N''dbo.tblPermisosSinInspector''))
+    ALTER TABLE dbo.tblPermisosSinInspector ADD CONSTRAINT CK_tblPermisosSinInspector_Plazo CHECK (VenceAt >= CreatedAt)');
+GO
+-- tblLugares: la precision del GPS con que se fijo la ubicacion
+IF OBJECT_ID(N'dbo.tblLugares', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblLugares', N'PrecisionM') IS NULL
+    ALTER TABLE dbo.tblLugares ADD PrecisionM float NULL;
+GO
+IF OBJECT_ID(N'dbo.tblLugares', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblLugares', N'PrecisionM') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblLugares_Precision'' AND parent_object_id = OBJECT_ID(N''dbo.tblLugares''))
+    ALTER TABLE dbo.tblLugares ADD CONSTRAINT CK_tblLugares_Precision CHECK (PrecisionM IS NULL OR PrecisionM >= 0)');
+GO
+-- tblNotificaciones: tipo ubicacion_fijada
+IF OBJECT_ID(N'dbo.tblNotificaciones', N'U') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblNotificaciones_Tipo'' AND parent_object_id = OBJECT_ID(N''dbo.tblNotificaciones'') AND definition LIKE N''%ubicacion_fijada%'')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblNotificaciones_Tipo'' AND parent_object_id = OBJECT_ID(N''dbo.tblNotificaciones''))
+        ALTER TABLE dbo.tblNotificaciones DROP CONSTRAINT CK_tblNotificaciones_Tipo;
+    ALTER TABLE dbo.tblNotificaciones ADD CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN (''novedad_conductor'', ''respuesta_conductor'', ''hallazgo_critico'', ''umbral_patron'', ''captura_incompleta'', ''transferencia_pendiente'', ''reporte_diario'', ''novedad_proceso'', ''reclamo_sin_actividad'', ''fuera_de_rango'', ''cargue_sin_reclamar'', ''propuesta_ubicacion'', ''permiso_sin_inspector'', ''firma_cargue_pendiente'', ''cambio_cargue_inspector'', ''cambio_destino_unidad'', ''carro_rechazado_en_destino'', ''ubicacion_fijada''));
+END');
+GO
+
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';
 GO

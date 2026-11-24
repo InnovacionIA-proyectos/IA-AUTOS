@@ -8,6 +8,9 @@ namespace IAAutos.Aplicacion.Parametros;
 /// <summary>Un parametro tal como lo ve el portal: su valor (nulo si no tiene), su tipo, para que sirve y quien lo cambio por ultima vez (nulo en el valor inicial) y cuando.</summary>
 public sealed record ParametroDto(string Clave, string? Valor, string Tipo, string Descripcion, Guid? ActualizadoPor, DateTimeOffset UpdatedAt);
 
+/// <summary>Los dos parametros que la app lee del servidor en lugar de llevarlos fijos: las fotos minimas de la acomodacion y la precision minima del GPS (metros), con su valor vigente.</summary>
+public sealed record ParametrosDeLaAppDto(int AcomodacionFotosMinimas, int GpsPrecisionMinimaM);
+
 /// <summary>Cuerpo de cambiar un parametro: el valor nuevo (texto o numero); nulo lo deja sin valor, solo en los parametros que lo admiten.</summary>
 public sealed record ActualizarParametroRequest(string? Valor);
 
@@ -24,11 +27,20 @@ public sealed class clsParametrosAdminService(
     IUsuarioActual actual,
     IReloj reloj)
 {
+    private const int ACOMODACION_FOTOS_MINIMAS_POR_DEFECTO = 1;
+    private const int GPS_PRECISION_MINIMA_POR_DEFECTO_M = 30;
+
     /// <summary>El catalogo cuyos codigos acepta cada parametro de tipo lista.</summary>
     private static readonly IReadOnlyDictionary<string, string> CATALOGO_DE_LISTA = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         [clsClavesParametros.NIVELES_CRITICOS] = clsNombresCatalogo.NIVELES_SEVERIDAD,
     };
+
+    /// <summary>Las fotos minimas de la acomodacion (1 por defecto) y la precision minima del GPS (30 m por defecto) con su valor vigente (cache de un minuto). Los leen la app del inspector y la del conductor.</summary>
+    public async Task<ParametrosDeLaAppDto> ParametrosDeLaAppAsync(CancellationToken ct = default) =>
+        new(
+            await lector.EnteroAsync(clsClavesParametros.ACOMODACION_FOTOS_MINIMAS, ACOMODACION_FOTOS_MINIMAS_POR_DEFECTO, ct),
+            await lector.EnteroAsync(clsClavesParametros.GPS_PRECISION_MINIMA_M, GPS_PRECISION_MINIMA_POR_DEFECTO_M, ct));
 
     public async Task<IReadOnlyList<ParametroDto>> ListarAsync(CancellationToken ct = default) =>
         (await parametros.ListarAsync(ct)).OrderBy(p => p.Clave, StringComparer.Ordinal).Select(ADto).ToList();
