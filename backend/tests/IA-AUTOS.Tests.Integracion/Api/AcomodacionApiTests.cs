@@ -345,7 +345,7 @@ public sealed partial class AcomodacionApiTests(clsBaseDatosFixture bd) : clsPru
         Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[2], 6)).StatusCode);
         var (_, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[2][2], e.Inspector.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!, nivel: "v1_plus");
 
-        var r = await Como(e.Coordinador).PostAsync($"/api/viajes/{e.Viaje}/vehiculos/{VINES[2]}/no-sale", Cuerpo(new { motivo = "Golpe en el capó", hallazgo_id = hallazgo }));
+        var r = await Como(e.Coordinador).PostAsync($"/api/viajes/{e.Viaje}/vehiculos/{VINES[2]}/no-sale", Cuerpo(new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe en el capó", hallazgo_id = hallazgo }));
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         Assert.Null(await PosicionDeAsync(e.Viaje, VINES[2]));

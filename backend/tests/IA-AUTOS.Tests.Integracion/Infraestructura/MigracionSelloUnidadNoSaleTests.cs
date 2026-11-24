@@ -171,7 +171,8 @@ public sealed partial class MigracionSelloUnidadNoSaleTests : IAsyncLifetime
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM sys.check_constraints WHERE name = 'CK_tblEvidencias_Sello'"));
         Assert.Equal(0, await ErrorDeAsync(SELLO_EN_CERRADA));
         Assert.Equal(51002, await ErrorDeAsync(FOTO_EN_CERRADA));
-        await EjecutarAsync(_cadena, MARCAR_NO_SALE);
+        // Con el ddl nuevo, un «no sale» lleva el codigo de su motivo.
+        await EjecutarAsync(_cadena, MARCAR_NO_SALE.Replace("NoSaleMotivo =", "NoSaleMotivoCodigo = 'dano_v1_plus', NoSaleMotivo ="));
         Assert.Equal(0, await ContarAsync("SELECT COUNT(*) FROM dbo.vwViajesCompletos"));
         Assert.Equal(1, await ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos"));
     }

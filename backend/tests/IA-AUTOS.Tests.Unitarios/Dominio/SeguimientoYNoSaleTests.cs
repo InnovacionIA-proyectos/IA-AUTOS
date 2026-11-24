@@ -147,10 +147,11 @@ public class SeguimientoYNoSaleTests
         var reemplazo = Guid.NewGuid();
         var luego = AHORA.AddHours(2);
 
-        unidad.MarcarNoSale("  Golpe estructural  ", hallazgo, usuario, reemplazo, luego);
+        unidad.MarcarNoSale("dano_v1_plus", "  Golpe estructural  ", hallazgo, usuario, reemplazo, luego);
 
         Assert.True(unidad.NoSale);
         Assert.Equal(clsEstadoUnidad.NO_SALE, unidad.EstadoUnidad);
+        Assert.Equal("dano_v1_plus", unidad.NoSaleMotivoCodigo);
         Assert.Equal("Golpe estructural", unidad.NoSaleMotivo);
         Assert.Equal(hallazgo, unidad.NoSaleHallazgoId);
         Assert.Equal(usuario, unidad.NoSaleMarcadoPor);
@@ -163,31 +164,86 @@ public class SeguimientoYNoSaleTests
     {
         var unidad = clsViajeVehiculo.Crear(Guid.NewGuid(), Guid.NewGuid(), AHORA);
 
-        unidad.MarcarNoSale("Golpe", Guid.NewGuid(), Guid.NewGuid(), null, AHORA);
+        unidad.MarcarNoSale("dano_v1_plus", "Golpe", Guid.NewGuid(), Guid.NewGuid(), null, AHORA);
 
         Assert.Null(unidad.ReemplazoVehiculoId);
-        Assert.Throws<clsConflictoException>(() => unidad.MarcarNoSale("Otra vez", Guid.NewGuid(), Guid.NewGuid(), null, AHORA));
+        Assert.Throws<clsConflictoException>(() => unidad.MarcarNoSale("dano_v1_plus", "Otra vez", Guid.NewGuid(), Guid.NewGuid(), null, AHORA));
+    }
+
+    [Fact]
+    public void Un_no_sale_no_exige_hallazgo_ni_texto_pero_el_texto_admite_hasta_300_caracteres()
+    {
+        var unidad = clsViajeVehiculo.Crear(Guid.NewGuid(), Guid.NewGuid(), AHORA);
+
+        Assert.Throws<clsValidacionException>(() => unidad.MarcarNoSale("otro", new string('m', 301), null, Guid.NewGuid(), null, AHORA));
+        Assert.False(unidad.NoSale);
+        unidad.MarcarNoSale("no_llego_al_patio", null, null, Guid.NewGuid(), null, AHORA);
+
+        Assert.True(unidad.NoSale);
+        Assert.Equal("no_llego_al_patio", unidad.NoSaleMotivoCodigo);
+        Assert.Null(unidad.NoSaleMotivo);
+        Assert.Null(unidad.NoSaleHallazgoId);
+    }
+
+    [Fact]
+    public void Vuelve_a_salir_deja_la_unidad_activa_sin_posicion_y_sin_la_marca_y_solo_si_no_sale()
+    {
+        var unidad = clsViajeVehiculo.Crear(Guid.NewGuid(), Guid.NewGuid(), AHORA);
+        Assert.Throws<clsConflictoException>(() => unidad.VolverASalir(AHORA));
+        unidad.AsignarPosicion(3, AHORA);
+        unidad.MarcarNoSale("dano_v1_plus", "Golpe", Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), AHORA);
+
+        unidad.VolverASalir(AHORA.AddMinutes(20));
+
+        Assert.True(unidad.EstaActiva);
+        Assert.Null(unidad.Posicion);
+        Assert.Null(unidad.NoSaleMotivoCodigo);
+        Assert.Null(unidad.NoSaleMotivo);
+        Assert.Null(unidad.NoSaleHallazgoId);
+        Assert.Null(unidad.NoSaleMarcadoPor);
+        Assert.Null(unidad.NoSaleAt);
+        Assert.Null(unidad.ReemplazoVehiculoId);
+    }
+
+    [Fact]
+    public void Bajar_guarda_cuando_quien_y_por_que_libera_el_puesto_y_una_unidad_que_no_sale_tambien_se_baja()
+    {
+        var usuario = Guid.NewGuid();
+        var activa = clsViajeVehiculo.Crear(Guid.NewGuid(), Guid.NewGuid(), AHORA);
+        activa.AsignarPosicion(2, AHORA);
+        var noSale = clsViajeVehiculo.Crear(Guid.NewGuid(), Guid.NewGuid(), AHORA);
+        noSale.MarcarNoSale("no_esta_listo", null, null, Guid.NewGuid(), null, AHORA);
+
+        activa.Bajar("  Cambio de pedido  ", usuario, AHORA.AddHours(1));
+        noSale.Bajar("Cambio de pedido", usuario, AHORA.AddHours(1));
+
+        Assert.True(activa.Bajado);
+        Assert.False(activa.EstaActiva);
+        Assert.Null(activa.Posicion);
+        Assert.Equal("Cambio de pedido", activa.BajadoMotivo);
+        Assert.Equal(usuario, activa.BajadoPor);
+        Assert.Equal(AHORA.AddHours(1), activa.BajadoAt);
+        Assert.True(noSale.Bajado);
+        // Conserva los datos de su «no sale».
+        Assert.Equal("no_esta_listo", noSale.NoSaleMotivoCodigo);
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("   ")]
-    public void El_motivo_es_obligatorio(string? motivo)
+    public void Bajar_exige_el_motivo_y_admite_hasta_300_caracteres_y_una_unidad_bajada_no_se_baja_ni_se_marca(string? motivo)
     {
         var unidad = clsViajeVehiculo.Crear(Guid.NewGuid(), Guid.NewGuid(), AHORA);
 
-        Assert.Throws<clsValidacionException>(() => unidad.MarcarNoSale(motivo, Guid.NewGuid(), Guid.NewGuid(), null, AHORA));
-        Assert.False(unidad.NoSale);
-    }
+        Assert.Throws<clsValidacionException>(() => unidad.Bajar(motivo, Guid.NewGuid(), AHORA));
+        Assert.Throws<clsValidacionException>(() => unidad.Bajar(new string('m', 301), Guid.NewGuid(), AHORA));
+        Assert.False(unidad.Bajado);
+        unidad.Bajar(new string('m', 300), Guid.NewGuid(), AHORA);
 
-    [Fact]
-    public void El_motivo_admite_hasta_500_caracteres()
-    {
-        var unidad = clsViajeVehiculo.Crear(Guid.NewGuid(), Guid.NewGuid(), AHORA);
-
-        Assert.Throws<clsValidacionException>(() => unidad.MarcarNoSale(new string('m', 501), Guid.NewGuid(), Guid.NewGuid(), null, AHORA));
-        unidad.MarcarNoSale(new string('m', 500), Guid.NewGuid(), Guid.NewGuid(), null, AHORA);
-        Assert.Equal(500, unidad.NoSaleMotivo!.Length);
+        Assert.Throws<clsConflictoException>(() => unidad.Bajar("Otra vez", Guid.NewGuid(), AHORA));
+        Assert.Throws<clsConflictoException>(() => unidad.MarcarNoSale("no_esta_listo", null, null, Guid.NewGuid(), null, AHORA));
+        Assert.Throws<clsConflictoException>(() => unidad.AsignarPosicion(1, AHORA));
+        Assert.Throws<clsConflictoException>(() => unidad.CambiarLugarDestino(Guid.NewGuid(), AHORA));
     }
 
     // ------------------------------------------------------------------------------------ capacidades

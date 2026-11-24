@@ -152,7 +152,7 @@ public sealed class clsConductorService(
         var vinNormalizado = clsVin.Normalizar(vin);
         var vehiculo = await vehiculos.ObtenerPorVinAsync(vinNormalizado, ct) ?? throw new clsEntidadNoEncontradaException($"Vehículo con VIN {vinNormalizado} no encontrado");
         var enlace = await viajes.ObtenerVehiculoAsync(viaje.Id, vehiculo.Id, ct) ?? throw new clsEntidadNoEncontradaException($"El VIN {vehiculo.Vin} no está en este viaje");
-        if (enlace.NoSale)
+        if (!enlace.EstaActiva)
         {
             throw new clsUnidadNoSaleException(vehiculo.Vin);
         }

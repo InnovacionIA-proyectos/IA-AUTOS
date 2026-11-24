@@ -317,13 +317,17 @@ public static class clsEstadoTransporte
     };
 }
 
-/// <summary>Estado de una unidad dentro de un viaje: activa, o que no sale (un hallazgo grave la retiro del viaje).</summary>
+/// <summary>
+/// Estado de una unidad dentro de un viaje: activa; que no sale (la retiro un motivo de la lista, y puede volver a salir mientras no se firme el cargue); o bajada del viaje (sale del viaje conservando su historia:
+/// sus etapas, inspecciones, fotos y firmas siguen guardadas pero ya no cuenta en nada del viaje).
+/// </summary>
 public static class clsEstadoUnidad
 {
     public const string ACTIVA = "activa";
     public const string NO_SALE = "no_sale";
+    public const string BAJADO = "bajado";
 
-    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { ACTIVA, NO_SALE };
+    public static readonly IReadOnlySet<string> VALORES = new HashSet<string> { ACTIVA, NO_SALE, BAJADO };
 }
 
 /// <summary>
@@ -333,6 +337,9 @@ public static class clsEstadoUnidad
 public sealed class clsViajeVehiculo : clsEntidadBase
 {
     public const int NO_SALE_MOTIVO_MAX = 500;
+
+    /// <summary>El texto que acompana el motivo «otro» de un «no sale» y el motivo de bajar un carro del viaje admiten hasta 300 caracteres.</summary>
+    public const int MOTIVO_TEXTO_MAX = 300;
 
     private clsViajeVehiculo()
     {
@@ -345,9 +352,21 @@ public sealed class clsViajeVehiculo : clsEntidadBase
     /// <summary><see cref="clsEstadoUnidad"/>.</summary>
     public string EstadoUnidad { get; private set; } = clsEstadoUnidad.ACTIVA;
 
+    /// <summary>El texto del motivo de «no sale» (el que escribe quien lo marca; obligatorio solo con el motivo «otro»). El motivo mismo es <see cref="NoSaleMotivoCodigo"/>.</summary>
     public string? NoSaleMotivo { get; private set; }
 
+    /// <summary>El codigo del motivo de «no sale» (catalogo <c>motivos-no-sale</c>).</summary>
+    public string? NoSaleMotivoCodigo { get; private set; }
+
+    /// <summary>El hallazgo que causa el «no sale»; nulo en los motivos que no lo exigen.</summary>
     public Guid? NoSaleHallazgoId { get; private set; }
+
+    /// <summary>Cuando se bajo la unidad del viaje; nulo si no esta bajada.</summary>
+    public DateTimeOffset? BajadoAt { get; private set; }
+
+    public Guid? BajadoPor { get; private set; }
+
+    public string? BajadoMotivo { get; private set; }
 
     public Guid? NoSaleMarcadoPor { get; private set; }
 
@@ -369,6 +388,11 @@ public sealed class clsViajeVehiculo : clsEntidadBase
 
     public bool NoSale => EstadoUnidad == clsEstadoUnidad.NO_SALE;
 
+    public bool Bajado => EstadoUnidad == clsEstadoUnidad.BAJADO;
+
+    /// <summary>La unidad va en el viaje: ni «no sale» ni bajada. Solo una unidad activa se acomoda, se revisa, se firma y cuenta en la cobertura, las entregas y los avisos.</summary>
+    public bool EstaActiva => EstadoUnidad == clsEstadoUnidad.ACTIVA;
+
     /// <summary>
     /// Registra la posicion de la unidad (400 si no esta entre 1 y la <paramref name="capacidad"/> de la ninera del viaje, 7 por defecto; nulo la libera). Una unidad que no sale del viaje no tiene posicion (409).
     /// </summary>
@@ -379,9 +403,9 @@ public sealed class clsViajeVehiculo : clsEntidadBase
             throw clsErroresCampos.De("posicion", $"La niñera tiene {capacidad} puestos: la posición debe estar entre {POSICION_MINIMA} y {capacidad}");
         }
 
-        if (posicion is not null && NoSale)
+        if (posicion is not null && !EstaActiva)
         {
-            throw new clsConflictoException("La unidad no sale del viaje: no tiene posición");
+            throw new clsConflictoException(Bajado ? "La unidad se bajó del viaje: no tiene posición" : "La unidad no sale del viaje: no tiene posición");
         }
 
         Posicion = (byte?)posicion;
@@ -395,15 +419,15 @@ public sealed class clsViajeVehiculo : clsEntidadBase
     public bool Completa { get; private set; }
 
     /// <summary>
-    /// La unidad no sale de este viaje por el hallazgo indicado: queda con su motivo, el hallazgo, quien la marco y cuando. Conserva sus etapas e inspecciones y el
-    /// viaje sigue. 409 si ya estaba marcada.
+    /// La unidad no sale de este viaje por el motivo de catalogo indicado: queda con su motivo, su texto (si lo trae), el hallazgo que lo causa (solo en los motivos que lo exigen), quien la marco y cuando; libera
+    /// su posicion. Conserva sus etapas e inspecciones y el viaje sigue. 409 si ya no esta activa.
     /// </summary>
-    public void MarcarNoSale(string? motivo, Guid hallazgoId, Guid marcadoPor, Guid? reemplazoVehiculoId, DateTimeOffset ahora)
+    public void MarcarNoSale(string motivoCodigo, string? motivoTexto, Guid? hallazgoId, Guid marcadoPor, Guid? reemplazoVehiculoId, DateTimeOffset ahora)
     {
-        var texto = clsValidador.Requerido(motivo, "El motivo es requerido");
-        if (texto.Length > NO_SALE_MOTIVO_MAX)
+        var texto = clsValidador.Opcional(motivoTexto);
+        if (texto is not null && texto.Length > MOTIVO_TEXTO_MAX)
         {
-            throw clsErroresCampos.De("motivo", $"El motivo admite máximo {NO_SALE_MOTIVO_MAX} caracteres");
+            throw clsErroresCampos.De("motivo_texto", $"El motivo admite máximo {MOTIVO_TEXTO_MAX} caracteres");
         }
 
         if (NoSale)
@@ -411,8 +435,14 @@ public sealed class clsViajeVehiculo : clsEntidadBase
             throw new clsConflictoException("La unidad ya está marcada como que no sale de este viaje");
         }
 
+        if (Bajado)
+        {
+            throw new clsConflictoException("La unidad se bajó del viaje");
+        }
+
         EstadoUnidad = clsEstadoUnidad.NO_SALE;
         Posicion = null;
+        NoSaleMotivoCodigo = motivoCodigo;
         NoSaleMotivo = texto;
         NoSaleHallazgoId = hallazgoId;
         NoSaleMarcadoPor = marcadoPor;
@@ -421,12 +451,58 @@ public sealed class clsViajeVehiculo : clsEntidadBase
         Tocar(ahora);
     }
 
+    /// <summary>
+    /// «Vuelve a salir»: la unidad que no sale vuelve a estar activa, sin posicion (se acomoda otra vez), y se borra la marca de «no sale»; el historial queda en la auditoria. 409 si no esta marcada «no sale».
+    /// </summary>
+    public void VolverASalir(DateTimeOffset ahora)
+    {
+        if (!NoSale)
+        {
+            throw new clsConflictoException("La unidad no está marcada como que no sale de este viaje");
+        }
+
+        EstadoUnidad = clsEstadoUnidad.ACTIVA;
+        Posicion = null;
+        NoSaleMotivoCodigo = null;
+        NoSaleMotivo = null;
+        NoSaleHallazgoId = null;
+        NoSaleMarcadoPor = null;
+        NoSaleAt = null;
+        ReemplazoVehiculoId = null;
+        Tocar(ahora);
+    }
+
+    /// <summary>
+    /// «Bajar del viaje»: la unidad sale del viaje (un cambio de pedido) conservando su historia con la marca de cuando, quien y por que. Libera su posicion; una unidad que no sale tambien se puede bajar y conserva
+    /// los datos de su «no sale». 400 si el motivo falta o pasa de 300 caracteres; 409 si ya estaba bajada.
+    /// </summary>
+    public void Bajar(string? motivo, Guid usuarioId, DateTimeOffset ahora)
+    {
+        var texto = clsValidador.Requerido(motivo, "El motivo es requerido");
+        if (texto.Length > MOTIVO_TEXTO_MAX)
+        {
+            throw clsErroresCampos.De("motivo", $"El motivo admite máximo {MOTIVO_TEXTO_MAX} caracteres");
+        }
+
+        if (Bajado)
+        {
+            throw new clsConflictoException("La unidad ya se bajó de este viaje");
+        }
+
+        EstadoUnidad = clsEstadoUnidad.BAJADO;
+        Posicion = null;
+        BajadoAt = ahora;
+        BajadoPor = usuarioId;
+        BajadoMotivo = texto;
+        Tocar(ahora);
+    }
+
     /// <summary>Cambia el lugar de destino de esta unidad (solo la suya: las demas unidades del viaje no se tocan). La unidad que no sale ya no tiene entrega: 409.</summary>
     public void CambiarLugarDestino(Guid lugarDestinoId, DateTimeOffset ahora)
     {
-        if (NoSale)
+        if (!EstaActiva)
         {
-            throw new clsConflictoException("La unidad está marcada como que no sale del viaje: su destino ya no se cambia");
+            throw new clsConflictoException(Bajado ? "La unidad se bajó del viaje: su destino ya no se cambia" : "La unidad está marcada como que no sale del viaje: su destino ya no se cambia");
         }
 
         LugarDestinoId = lugarDestinoId;

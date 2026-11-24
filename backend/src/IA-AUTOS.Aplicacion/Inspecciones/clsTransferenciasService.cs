@@ -34,6 +34,7 @@ public sealed class clsTransferenciasService(
     IAlmacenArchivos almacen,
     IGeneradorPdfConstancia generadorPdf,
     clsAccesoViajes acceso,
+    clsGuardaDeUnidad guardaDeUnidad,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -47,6 +48,7 @@ public sealed class clsTransferenciasService(
     public async Task<TransferenciaDto> FirmarAsync(Guid inspeccionId, FirmarTransferenciaRequest solicitud, ContextoCliente cliente, CancellationToken ct = default)
     {
         await validadorFirma.ValidarOLanzarAsync(solicitud, ct);
+        await guardaDeUnidad.AsegurarActivaDeInspeccionAsync(inspeccionId, ct);
         await AsegurarQueNoEsElCargueAsync(inspeccionId, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
         var antes = clsInstantaneasAuditoria.De(transferencia);
@@ -61,6 +63,7 @@ public sealed class clsTransferenciasService(
     public async Task<TransferenciaDto> RecibirConReservasAsync(Guid inspeccionId, RecibirConReservasRequest solicitud, ContextoCliente cliente, CancellationToken ct = default)
     {
         await validadorReservas.ValidarOLanzarAsync(solicitud, ct);
+        await guardaDeUnidad.AsegurarActivaDeInspeccionAsync(inspeccionId, ct);
         await AsegurarQueNoEsElCargueAsync(inspeccionId, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
         var antes = clsInstantaneasAuditoria.De(transferencia);
@@ -78,6 +81,7 @@ public sealed class clsTransferenciasService(
     public async Task<TransferenciaDto> RegistrarNoFirmaAsync(Guid inspeccionId, RegistrarNoFirmaRequest solicitud, ContextoCliente cliente, CancellationToken ct = default)
     {
         await validadorNoFirma.ValidarOLanzarAsync(solicitud, ct);
+        await guardaDeUnidad.AsegurarActivaDeInspeccionAsync(inspeccionId, ct);
         await AsegurarQueNoEsElCargueAsync(inspeccionId, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
         var antes = clsInstantaneasAuditoria.De(transferencia);

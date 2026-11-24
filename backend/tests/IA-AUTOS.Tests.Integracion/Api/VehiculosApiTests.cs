@@ -322,9 +322,10 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
             Assert.Equal("no_sale", e.GetProperty("estado_unidad").GetString());
             var noSale = e.GetProperty("no_sale");
             Assert.Equal(
-                ["motivo", "hallazgo_id", "marcado_por", "marcado_por_nombre", "fecha", "vin_reemplazo"],
+                ["motivo_codigo", "motivo", "motivo_texto", "hallazgo_id", "marcado_por", "marcado_por_nombre", "fecha", "vin_reemplazo"],
                 noSale.EnumerateObject().Select(p => p.Name).ToList());
-            Assert.Equal("Golpe estructural en el frente", noSale.GetProperty("motivo").GetString());
+            Assert.Equal("Daño V1+", noSale.GetProperty("motivo").GetString());
+            Assert.Equal("Golpe estructural en el frente", noSale.GetProperty("motivo_texto").GetString());
             Assert.Equal(hallazgo, noSale.GetProperty("hallazgo_id").GetGuid());
             Assert.Equal(usuarioId, noSale.GetProperty("marcado_por").GetGuid());
             Assert.Equal("Usuario de prueba", noSale.GetProperty("marcado_por_nombre").GetString());

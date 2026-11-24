@@ -597,7 +597,7 @@ INSERT @casosZona VALUES
  (N'CHECK un hallazgo preexistente exige su hallazgo de origen', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ClaseDano,TamanoDano,EsPreexistente) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''golpe'',''1_5cm'',1)', 547),
  (N'FK nivel de severidad inexistente', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ClaseDano,TamanoDano,NivelSeveridad) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''golpe'',''1_5cm'',''v9'')', 547),
  (N'FK zona inexistente en el hallazgo', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ClaseDano,TamanoDano,ZonaId) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''golpe'',''1_5cm'',NEWID())', 547),
- (N'CHECK una unidad que no sale exige su motivo, hallazgo y responsable', N'UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = ''no_sale'' WHERE VehiculoId = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0006'')', 547),
+ (N'CHECK una unidad que no sale exige su motivo y responsable', N'UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = ''no_sale'' WHERE VehiculoId = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0006'')', 547),
  (N'CHECK una unidad activa no lleva datos de no sale', N'UPDATE dbo.tblViajeVehiculos SET NoSaleMotivo = N''x'' WHERE VehiculoId = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0006'')', 547),
  (N'CHECK estado de la unidad del viaje', N'UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = ''perdida'' WHERE VehiculoId = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0006'')', 547);
 
@@ -690,7 +690,7 @@ INSERT #r SELECT N'Patrones: la novedad del conductor revisada cuenta en su zona
     CASE WHEN EXISTS (SELECT 1 FROM dbo.vwPatronesPorCuadrante WHERE CuadranteId = @cuad7 AND Lado = 'derecho' AND NivelSeveridad = 'v1' AND Total = 1) THEN 1 ELSE 0 END, NULL;
 
 -- Una unidad puede no salir del viaje: queda con su motivo, el hallazgo que lo causa y quien lo marco, y conserva su vinculo con el viaje.
-UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = 'no_sale', NoSaleMotivo = N'Hallazgo V1+', NoSaleHallazgoId = @hNuevo, NoSaleMarcadoPor = @u1, NoSaleAt = SYSDATETIMEOFFSET()
+UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = 'no_sale', NoSaleMotivoCodigo = 'dano_v1_plus', NoSaleMotivo = N'Hallazgo V1+', NoSaleHallazgoId = @hNuevo, NoSaleMarcadoPor = @u1, NoSaleAt = SYSDATETIMEOFFSET()
 WHERE VehiculoId = @v5;
 INSERT #r SELECT N'Unidad del viaje: no sale con su motivo, hallazgo y responsable, sin borrar el vinculo',
     CASE WHEN EXISTS (SELECT 1 FROM dbo.tblViajeVehiculos WHERE VehiculoId = @v5 AND EstadoUnidad = 'no_sale' AND NoSaleHallazgoId = @hNuevo) THEN 1 ELSE 0 END, NULL;
@@ -1443,6 +1443,18 @@ INSERT #r SELECT N'Cargue por ninera: la notificacion admite el tipo firma_cargu
     CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%firma_cargue_pendiente%') THEN 1 ELSE 0 END, NULL;
 INSERT #r SELECT N'Cargue por ninera: el parametro firma_cargue_pendiente_minutos existe',
     CASE WHEN EXISTS (SELECT 1 FROM dbo.tblParametros WHERE Clave = 'firma_cargue_pendiente_minutos') THEN 1 ELSE 0 END, NULL;
+
+-- 7c) «No sale» con motivo de catalogo y «bajar del viaje»: el catalogo, las columnas, el estado y las vistas
+INSERT #r SELECT N'No sale: el catalogo trae los seis motivos con sus marcas',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblMotivosNoSale WHERE Codigo IN ('dano_v1_plus', 'dano_reportado_conductor', 'no_llego_al_patio', 'faltan_documentos', 'no_esta_listo', 'otro')) = 6
+          AND EXISTS (SELECT 1 FROM dbo.tblMotivosNoSale WHERE Codigo = 'otro' AND ExigeTexto = 1 AND ExigeHallazgo = 0)
+          AND EXISTS (SELECT 1 FROM dbo.tblMotivosNoSale WHERE Codigo = 'dano_reportado_conductor' AND ExigeHallazgo = 1 AND SoloSinInspector = 1) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'No sale: la unidad guarda el codigo del motivo y, bajada, cuando, quien y por que',
+    CASE WHEN (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND name IN (N'NoSaleMotivoCodigo', N'BajadoAt', N'BajadoPor', N'BajadoMotivo')) = 4 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'No sale: el estado bajado y lo que lleva cada estado estan en las restricciones',
+    CASE WHEN (SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblViajeVehiculos_EstadoUnidad', N'CK_tblViajeVehiculos_NoSale') AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND definition LIKE N'%bajado%') = 2 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'No sale: las vistas de completos y de cobertura no cuentan a la unidad bajada',
+    CASE WHEN (SELECT COUNT(*) FROM sys.sql_modules WHERE object_id IN (OBJECT_ID(N'dbo.vwViajesCompletos'), OBJECT_ID(N'dbo.vwCobertura')) AND definition LIKE N'%bajado%') = 2 THEN 1 ELSE 0 END, NULL;
 
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;

@@ -564,7 +564,7 @@ public sealed partial class CargueNineraApiTests(clsBaseDatosFixture bd) : clsPr
         Assert.Contains("Viaje M-NINERA", texto);
         Assert.Contains($"Puesto 3 — VIN {VINES[0]}", texto);
         Assert.Contains("Puesto 1 — libre", texto);
-        Assert.Contains($"NO SALE — VIN {VINES[1]}: Abolladura en la puerta", texto);
+        Assert.Contains($"NO SALE — VIN {VINES[1]}: Daño V1+: Abolladura en la puerta", texto);
         Assert.Contains("Clase: golpe", texto);
         Assert.Contains("Tamaño: 5_10cm", texto);
         Assert.Contains("Clase: mancha", texto);

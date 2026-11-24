@@ -339,6 +339,39 @@ internal sealed class clsCatalogoMotivosSinInspector(clsAppDbContext contexto, I
     }
 }
 
+/// <summary>
+/// Los motivos por los que un carro no sale del viaje: codigo, nombre, orden, activo y las tres marcas <c>exige_hallazgo</c>, <c>exige_texto</c> y <c>solo_sin_inspector</c>. Un motivo que un «no sale» usa no se borra (409):
+/// se inactiva.
+/// </summary>
+internal sealed class clsCatalogoMotivosNoSale(clsAppDbContext contexto, IReloj reloj)
+    : clsCatalogoEf<clsMotivoNoSale>(contexto, reloj, clsNombresCatalogo.MOTIVOS_NO_SALE)
+{
+    protected override IReadOnlyList<string> CamposPermitidos { get; } = [.. clsCamposCatalogo.COMUNES, "exige_hallazgo", "exige_texto", "solo_sin_inspector"];
+
+    protected override ValorCatalogo Mapear(clsMotivoNoSale m)
+    {
+        var valor = Comunes(m);
+        valor["exige_hallazgo"] = m.ExigeHallazgo;
+        valor["exige_texto"] = m.ExigeTexto;
+        valor["solo_sin_inspector"] = m.SoloSinInspector;
+        return valor;
+    }
+
+    protected override Task<clsMotivoNoSale> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct) =>
+        Task.FromResult(clsMotivoNoSale.Crear(
+            campos.Texto("codigo"), campos.Texto("nombre"), campos.Booleano("exige_hallazgo"), campos.Booleano("exige_texto"), campos.Booleano("solo_sin_inspector"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora));
+
+    protected override Task AplicarAsync(clsMotivoNoSale entidad, clsCamposCatalogo campos, CancellationToken ct)
+    {
+        if (campos.Tiene("exige_hallazgo") || campos.Tiene("exige_texto") || campos.Tiene("solo_sin_inspector"))
+        {
+            entidad.CambiarMarcas(campos.Booleano("exige_hallazgo"), campos.Booleano("exige_texto"), campos.Booleano("solo_sin_inspector"), Reloj.Ahora);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
 internal sealed class clsCatalogoNiveles(clsAppDbContext contexto, IReloj reloj)
     : clsCatalogoEf<clsNivelSeveridad>(contexto, reloj, clsNombresCatalogo.NIVELES_SEVERIDAD)
 {

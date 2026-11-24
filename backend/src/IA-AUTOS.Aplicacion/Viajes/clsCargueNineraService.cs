@@ -303,7 +303,7 @@ public sealed class clsCargueNineraService(
         var codigos = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).ToDictionary(v => v.Id, v => v.Codigo);
         var etapas = await viajes.ObtenerEtapasAsync(viaje.Id, null, ct);
         var resultado = new List<Carro>();
-        foreach (var enlace in (await viajes.ObtenerVehiculosAsync(viaje.Id, ct)).Where(e => !e.NoSale))
+        foreach (var enlace in (await viajes.ObtenerVehiculosAsync(viaje.Id, ct)).Where(e => e.EstaActiva))
         {
             var vehiculo = await vehiculos.ObtenerPorIdAsync(enlace.VehiculoId, ct) ?? throw new clsEntidadNoEncontradaException("El vehículo del viaje no existe");
             var cargue = etapas.FirstOrDefault(e => e.VehiculoId == enlace.VehiculoId && codigos.TryGetValue(e.EtapaCatalogoId, out var codigo) && codigo == clsCodigosEtapa.CARGUE);

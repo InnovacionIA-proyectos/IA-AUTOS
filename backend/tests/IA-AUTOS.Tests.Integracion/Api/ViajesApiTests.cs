@@ -608,11 +608,12 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(JsonValueKind.Null, antesUnidad.GetProperty("no_sale").ValueKind);
         var unidad = despues.GetProperty("vehiculos")[0];
         Assert.Equal(
-            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale", "estado_transporte", "novedades", "lugar_destino_id", "lugar_destino", "posicion"],
+            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale", "estado_transporte", "novedades", "lugar_destino_id", "lugar_destino", "posicion", "bajado"],
             unidad.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("no_sale", unidad.GetProperty("estado_unidad").GetString());
         var noSale = unidad.GetProperty("no_sale");
-        Assert.Equal("Dano grave en el frente", noSale.GetProperty("motivo").GetString());
+        Assert.Equal("Daño V1+", noSale.GetProperty("motivo").GetString());
+        Assert.Equal("Dano grave en el frente", noSale.GetProperty("motivo_texto").GetString());
         Assert.Equal(hallazgo, noSale.GetProperty("hallazgo_id").GetGuid());
         Assert.Equal(coordinador.UsuarioId, noSale.GetProperty("marcado_por").GetGuid());
         Assert.Equal("Nombre coord@ejemplo.com", noSale.GetProperty("marcado_por_nombre").GetString());

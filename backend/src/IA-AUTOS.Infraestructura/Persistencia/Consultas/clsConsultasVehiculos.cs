@@ -184,6 +184,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                                  ViajeCreado = vj.CreatedAt,
                                  EstadoUnidad = vv.EstadoUnidad ?? clsEstadoUnidad.ACTIVA,
                                  vv.NoSaleMotivo,
+                                 vv.NoSaleMotivoCodigo,
                                  vv.NoSaleHallazgoId,
                                  vv.NoSaleMarcadoPor,
                                  MarcadoPorNombre = (string?)um.Nombre,
@@ -234,6 +235,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                 extras.GetValueOrDefault(i.Id) ?? []);
         }
 
+        var motivosNoSale = await contexto.MotivosNoSale.AsNoTracking().ToDictionaryAsync(m => m.Codigo, m => m.Nombre, ct);
         var etapasDto = etapas.Select(e => new InventarioEtapaDto(
             e.Etapa.Id,
             e.Etapa.Orden,
@@ -243,7 +245,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
             e.Etapa.ViajeId,
             e.CodigoMtrack,
             e.EstadoUnidad,
-            clsMapeadorViajes.ANoSale(e.EstadoUnidad, e.NoSaleMotivo, e.NoSaleHallazgoId, e.NoSaleMarcadoPor, e.MarcadoPorNombre, e.NoSaleAt, e.VinReemplazo),
+            clsMapeadorViajes.ANoSale(e.EstadoUnidad, e.NoSaleMotivoCodigo, e.NoSaleMotivo, e.NoSaleHallazgoId, e.NoSaleMarcadoPor, e.MarcadoPorNombre, e.NoSaleAt, e.VinReemplazo, motivosNoSale),
             inspecciones.Where(i => i.EtapaId == e.Etapa.Id).Select(AInspeccion).ToList(),
             e.Posicion))
             .ToList();

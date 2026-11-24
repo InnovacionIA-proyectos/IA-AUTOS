@@ -119,6 +119,11 @@ internal sealed class clsConfiguracionMotivoSinInspector : IEntityTypeConfigurat
     public void Configure(EntityTypeBuilder<clsMotivoSinInspector> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblMotivosSinInspector");
 }
 
+internal sealed class clsConfiguracionMotivoNoSale : IEntityTypeConfiguration<clsMotivoNoSale>
+{
+    public void Configure(EntityTypeBuilder<clsMotivoNoSale> builder) => clsConfiguracionCatalogo.Codificado(builder, "tblMotivosNoSale");
+}
+
 internal sealed class clsConfiguracionVistaFoto : IEntityTypeConfiguration<clsVistaFoto>
 {
     public void Configure(EntityTypeBuilder<clsVistaFoto> builder)

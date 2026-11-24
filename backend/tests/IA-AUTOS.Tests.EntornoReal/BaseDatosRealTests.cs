@@ -982,6 +982,20 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Los_motivos_de_no_sale_y_el_estado_bajado_de_la_unidad_existen()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/43-no-sale-con-motivo-y-bajar-del-viaje.sql.
+        await using var conexion = await AbrirAsync();
+
+        var motivos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblMotivosNoSale WHERE Codigo IN (N'dano_v1_plus', N'dano_reportado_conductor', N'no_llego_al_patio', N'faltan_documentos', N'no_esta_listo', N'otro')");
+        var columnas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajeVehiculos') AND name IN (N'NoSaleMotivoCodigo', N'BajadoAt', N'BajadoPor', N'BajadoMotivo')");
+        var restricciones = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblViajeVehiculos_EstadoUnidad', N'CK_tblViajeVehiculos_NoSale') AND parent_object_id = OBJECT_ID(N'tblViajeVehiculos') AND definition LIKE N'%bajado%'");
+        var sinCodigo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblViajeVehiculos WHERE EstadoUnidad = N'no_sale' AND NoSaleMotivoCodigo IS NULL");
+
+        Assert.True(motivos == 6 && columnas == 4 && restricciones == 2 && sinCodigo == 0, "Faltan los motivos de no sale y el estado bajado. Ejecute database/cambios-esquema/43-no-sale-con-motivo-y-bajar-del-viaje.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

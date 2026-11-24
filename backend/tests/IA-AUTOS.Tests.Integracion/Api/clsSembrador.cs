@@ -225,7 +225,7 @@ public sealed class clsSembrador(string cadenaConexion)
     /// <summary>Marca la unidad como «no sale» del viaje, con el hallazgo que la causo y quien la marco.</summary>
     public Task UnidadNoSaleAsync(Guid viajeId, Guid vehiculoId, Guid hallazgoId, Guid marcadoPor, string motivo, Guid? reemplazoId = null) =>
         EjecutarAsync(
-            "UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = 'no_sale', NoSaleMotivo = @m, NoSaleHallazgoId = @h, NoSaleMarcadoPor = @u, NoSaleAt = SYSDATETIMEOFFSET(), ReemplazoVehiculoId = @r WHERE ViajeId = @v AND VehiculoId = @veh",
+            "UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = 'no_sale', NoSaleMotivoCodigo = 'dano_v1_plus', NoSaleMotivo = @m, NoSaleHallazgoId = @h, NoSaleMarcadoPor = @u, NoSaleAt = SYSDATETIMEOFFSET(), ReemplazoVehiculoId = @r WHERE ViajeId = @v AND VehiculoId = @veh",
             ("@m", motivo), ("@h", hallazgoId), ("@u", marcadoPor), ("@r", (object?)reemplazoId ?? DBNull.Value), ("@v", viajeId), ("@veh", vehiculoId));
 
     /// <summary>Las vistas de foto activas (obligatorias o adicionales) del catalogo, en su orden: id y nombre.</summary>

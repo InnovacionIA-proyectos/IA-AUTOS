@@ -217,7 +217,7 @@ public sealed class clsInformePdfService(
     private async Task<IReadOnlyList<UnidadAcomodacionInforme>> UnidadesDeAcomodacionAsync(Guid viajeId, CancellationToken ct)
     {
         var unidades = new List<UnidadAcomodacionInforme>();
-        foreach (var enlace in await viajes.ObtenerVehiculosAsync(viajeId, ct))
+        foreach (var enlace in (await viajes.ObtenerVehiculosAsync(viajeId, ct)).Where(e => !e.Bajado))
         {
             var vin = (await vehiculos.ObtenerPorIdAsync(enlace.VehiculoId, ct))?.Vin ?? enlace.VehiculoId.ToString();
             unidades.Add(new UnidadAcomodacionInforme(vin, enlace.Posicion, enlace.NoSale));

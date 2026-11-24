@@ -53,7 +53,7 @@ informe cerrado, y la unidad no esta marcada `no_sale`. Asi un listado de miles 
 |---|---|
 | un informe se crea, se cierra o se borra | `TR_tblInspecciones_Completa` |
 | una etapa se agrega o se quita | `TR_tblEtapas_Completa` |
-| un VIN entra al viaje o cambia el estado de su unidad (`activa` / `no_sale`) | `TR_tblViajeVehiculos_Completa` |
+| un VIN entra al viaje o cambia el estado de su unidad (`activa` / `no_sale` / `bajado`) | `TR_tblViajeVehiculos_Completa` |
 
 `EXEC dbo.usp_RecalcularCompleta` recalcula todas las filas con la regla de la vista (solo toca las que difieren). **Hay que ejecutarlo despues de cualquier carga o limpieza que apague los triggers** (`DISABLE TRIGGER`).
 
