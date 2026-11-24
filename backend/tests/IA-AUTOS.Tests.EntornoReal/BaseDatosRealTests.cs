@@ -1069,6 +1069,20 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_espera_del_inspector_del_punto_y_la_marca_de_la_entrega_estan_migradas()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/49-espera-del-inspector-del-punto.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblEsperasInspectorPunto' AND schema_id = SCHEMA_ID()");
+        var unica = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblEsperasInspectorPunto_Abierta' AND is_unique = 1 AND has_filter = 1");
+        var marca = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND name = N'SinInspectorDelPunto' AND is_nullable = 0");
+        var aviso = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%espera_inspector_punto%'");
+
+        Assert.True(tabla == 1 && unica == 1 && marca == 1 && aviso == 1, "Falta la espera del inspector del punto, la marca de la entrega sin inspector del punto o el tipo de aviso. Ejecute database/cambios-esquema/49-espera-del-inspector-del-punto.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

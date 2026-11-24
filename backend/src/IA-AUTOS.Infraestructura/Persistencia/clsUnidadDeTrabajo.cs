@@ -1,5 +1,6 @@
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Viajes;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -108,6 +109,11 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         catch (DbUpdateConcurrencyException ex) when (ex.Entries.Any(e => e.Entity is clsHallazgo { RevisadoAt: not null }))
         {
             throw new clsHallazgoYaRevisadoException();
+        }
+        catch (DbUpdateConcurrencyException ex) when (ex.Entries.Any(e => e.Entity is clsEsperaInspectorPunto))
+        {
+            // La espera de una parada cambio mientras se guardaba (un inspector tomo la entrega y el conductor cerro con el plan B a la vez): gana el primero y el otro responde conflicto.
+            throw new clsConflictoException("La espera del inspector del punto cambió mientras se guardaba: vuelva a consultar la parada");
         }
         catch (DbUpdateException ex) when (ex.InnerException is SqlException sql)
         {

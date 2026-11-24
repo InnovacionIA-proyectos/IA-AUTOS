@@ -86,6 +86,8 @@ public sealed class clsInspeccionesService(
     INovedadProcesoRepository novedades,
     clsPermisosSinInspectorService permisos,
     IReclamoRepository reclamos,
+    IEsperaInspectorPuntoRepository esperas,
+    clsEsperaDelDestino plazos,
     ITransferenciaCustodiaRepository transferencias,
     clsEmisorNotificaciones emisor,
     IDescriptorHallazgos descriptorHallazgos,
@@ -135,6 +137,10 @@ public sealed class clsInspeccionesService(
         if (solicitud.Momento == clsMomento.LLEGADA && await CodigoDeEtapaAsync(etapa, ct) == clsCodigosEtapa.DESCARGUE)
         {
             ciclo = await CicloDeLaLlegadaDelDescargueAsync(etapa, viaje, ct);
+            if (actual.Rol == clsRol.CONDUCTOR)
+            {
+                await AsegurarLlegadaDelConductorAsync(viaje, etapa, ct);
+            }
         }
 
         // La salida de un Cargue la hace siempre el inspector: el conductor solo firma el recibo. Si no hay inspector, el conductor del viaje la hace activando en el momento la excepcion
@@ -814,6 +820,39 @@ public sealed class clsInspeccionesService(
         var transferencia = await transferencias.ObtenerPorInspeccionAsync(ultima.Id, ct);
         var enlace = await viajes.ObtenerVehiculoAsync(viaje.Id, descargue.VehiculoId, ct);
         return transferencia is { EstaRechazada: true, FirmadaAt: { } rechazadoAt } && enlace?.LugarDestinoCambiadoAt is { } cambiadoAt && cambiadoAt > rechazadoAt ? ultima.Ciclo + 1 : ultima.Ciclo;
+    }
+
+    /// <summary>
+    /// En una parada con inspectores asignados la revision de llegada la hace el inspector del punto: el conductor solo la crea con el plan B habilitado (la espera de la parada activada y X mas Y minutos cumplidos, evaluados en esta
+    /// misma peticion). Antes responde 409 <c>llegada_del_inspector_del_punto</c> con lo que falta o con lo que debe hacer. En una parada sin inspectores el conductor la crea como siempre.
+    /// </summary>
+    private async Task AsegurarLlegadaDelConductorAsync(clsViaje viaje, clsEtapa descargue, CancellationToken ct)
+    {
+        var enlace = await viajes.ObtenerVehiculoAsync(viaje.Id, descargue.VehiculoId, ct);
+        if (enlace?.LugarDestinoId is not { } lugar || !await reclamos.LugarTieneInspectoresAsync(lugar, ct))
+        {
+            return;
+        }
+
+        if (await esperas.ObtenerAbiertaAsync(viaje.Id, lugar, ct) is { } espera)
+        {
+            var habilita = (await plazos.PlazosAsync(espera.ActivadaAt, ct)).HabilitaPlanBAt;
+            var ahora = reloj.Ahora;
+            if (ahora >= habilita)
+            {
+                return;
+            }
+
+            var faltan = Math.Max((int)Math.Ceiling((habilita - ahora).TotalMinutes), 1);
+            throw new clsConflictoException(
+                $"La revisión de llegada en esta parada la hace el inspector del punto: podrás hacerla sin él en {faltan} minutos",
+                clsMotivosRechazo.LLEGADA_DEL_INSPECTOR_DEL_PUNTO,
+                new Dictionary<string, object> { ["faltan_minutos"] = faltan, ["plan_b_desde"] = habilita });
+        }
+
+        throw await reclamos.ObtenerActivoAsync(viaje.Id, clsProcesoReclamo.ENTREGA, lugar, ct) is not null
+            ? new clsConflictoException("Un inspector del punto tomó la entrega de esta parada: la revisión de llegada la hace él", clsMotivosRechazo.LLEGADA_DEL_INSPECTOR_DEL_PUNTO)
+            : new clsConflictoException("La revisión de llegada en esta parada la hace el inspector del punto: si no llega, activa «No hay inspector»", clsMotivosRechazo.LLEGADA_DEL_INSPECTOR_DEL_PUNTO);
     }
 
     private async Task<bool> EsCargueAsync(clsEtapa etapa, CancellationToken ct) =>

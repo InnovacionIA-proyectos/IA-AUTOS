@@ -98,7 +98,8 @@ public sealed class clsAlertasPeriodicas(
     clsEmisorNotificaciones emisor,
     IReloj reloj,
     ILogger<clsAlertasPeriodicas> registro,
-    IAAutos.Aplicacion.Viajes.clsPermisosSinInspectorService permisosSinInspector)
+    IAAutos.Aplicacion.Viajes.clsPermisosSinInspectorService permisosSinInspector,
+    IAAutos.Aplicacion.Viajes.clsEntregasService entregas)
 {
     public const int UMBRAL_POR_DEFECTO = 10;
     public const int VENTANA_DIAS_POR_DEFECTO = 30;
@@ -178,6 +179,12 @@ public sealed class clsAlertasPeriodicas(
     /// la espera no dependa de que alguien abra una pantalla. Devuelve cuantos concedio.
     /// </summary>
     public Task<int> EjecutarPermisosSinInspectorAsync(CancellationToken ct = default) => permisosSinInspector.ConcederVencidosAsync(ct);
+
+    /// <summary>
+    /// Avisa al coordinador de calidad de las esperas del inspector del punto que cumplieron los minutos del parametro <c>espera_inspector_aviso_minutos</c> (15 por defecto) sin que nadie tomara la entrega, una vez por espera.
+    /// Corre cada minuto, aparte de los demas avisos, para que no dependa de que alguien abra una pantalla. Devuelve cuantos avisos intento.
+    /// </summary>
+    public Task<int> EjecutarEsperasDelDestinoAsync(CancellationToken ct = default) => entregas.AvisarEsperasVencidasAsync(ct);
 
     /// <summary>Corre los avisos operativos: captura incompleta, transferencia pendiente y camion reclamado sin actividad. Devuelve cuantos avisos intento crear.</summary>
     public async Task<int> EjecutarAvisosAsync(CancellationToken ct = default) =>

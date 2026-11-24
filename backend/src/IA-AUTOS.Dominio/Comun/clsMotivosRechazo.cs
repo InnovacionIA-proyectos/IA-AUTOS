@@ -42,6 +42,15 @@ public static class clsMotivosRechazo
     public const string ENTREGA_POR_PARADA = "entrega_por_parada";
     public const string NO_ES_SU_PUNTO = "no_es_su_punto";
 
+    // ---- La espera del inspector del punto
+    public const string PARADA_SIN_INSPECTORES = "parada_sin_inspectores";
+    public const string SIN_LLEGUE_EN_PARADA = "sin_llegue_en_parada";
+    public const string ENTREGA_CERRADA = "entrega_cerrada";
+    public const string PLAN_B_NO_HABILITADO = "plan_b_no_habilitado";
+    public const string ENTREGA_CERRADA_SIN_INSPECTOR = "entrega_cerrada_sin_inspector";
+    public const string LLEGADA_DEL_INSPECTOR_DEL_PUNTO = "llegada_del_inspector_del_punto";
+    public const string DANOS_SIN_CALIFICAR = "danos_sin_calificar";
+
     // ---- No sale, vuelve a salir y bajar del viaje
     public const string CARGUE_FIRMADO = "cargue_firmado";
     public const string SIN_CUPO = "sin_cupo";

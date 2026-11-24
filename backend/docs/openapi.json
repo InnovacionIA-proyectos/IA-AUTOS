@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.23.0"
+    "version": "3.24.0"
   },
   "paths": {
     "/api/viajes": {
@@ -2181,6 +2181,212 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/EntregaPuntoDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/entregas/{lugar}/sin-inspector": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_ActivarSinInspector",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "lugar",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActivarSinInspectorRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/EsperaDelPuntoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EsperaDelPuntoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EsperaDelPuntoDto"
                 }
               }
             }
@@ -24697,6 +24903,63 @@
   },
   "components": {
     "schemas": {
+      "ActivarSinInspectorRequest": {
+        "examples": [
+          {
+            "motivo_sin_inspector": "texto",
+            "motivo_sin_inspector_texto": "texto",
+            "fecha_momento": "2026-10-22T14:30:00.000Z",
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "precision_m": 1.5
+          }
+        ],
+        "required": [
+          "motivo_sin_inspector"
+        ],
+        "type": "object",
+        "properties": {
+          "motivo_sin_inspector": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo_sin_inspector_texto": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fecha_momento": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "precision_m": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          }
+        }
+      },
       "ActualizarExtraRequest": {
         "examples": [
           {
@@ -28042,6 +28305,53 @@
           }
         }
       },
+      "DanoPorCalificarDto": {
+        "examples": [
+          {
+            "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "vin": "9FBHSR4E8PM000001",
+            "parte": "texto",
+            "clase_dano": "golpe",
+            "evidencia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "required": [
+          "hallazgo_id",
+          "vin",
+          "parte",
+          "clase_dano",
+          "evidencia_id"
+        ],
+        "type": "object",
+        "properties": {
+          "hallazgo_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "vin": {
+            "type": "string"
+          },
+          "parte": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "clase_dano": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "evidencia_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "DestinoDeUnidadesDto": {
         "examples": [
           {
@@ -28264,14 +28574,48 @@
                   "marcado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                   "marcado_por_nombre": "texto",
                   "motivo": "Mensaje de ejemplo"
-                }
+                },
+                "entregada_sin_inspector_del_punto": true
               }
             ],
             "lugar_tiene_inspector": true,
             "estado_parada": "texto",
             "receptor": "texto",
             "receptor_nombre": "texto",
-            "conductor_llego": true
+            "conductor_llego": true,
+            "espera": {
+              "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "estado": "borrador",
+              "conductor_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "motivo_sin_inspector": "texto",
+              "motivo_sin_inspector_texto": "texto",
+              "activada_at": "2026-10-22T14:30:00.000Z",
+              "recibida_at": "2026-10-22T14:30:00.000Z",
+              "lat": 4.6097,
+              "lng": -74.0817,
+              "precision_m": 1.5,
+              "aviso_desde": "2026-10-22T14:30:00.000Z",
+              "aviso_at": "2026-10-22T14:30:00.000Z",
+              "plan_b_desde": "2026-10-22T14:30:00.000Z",
+              "plan_b_habilitado": true,
+              "inspector_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "inspector_nombre": "texto",
+              "inspector_llego_at": "2026-10-22T14:30:00.000Z",
+              "cerrada_at": "2026-10-22T14:30:00.000Z"
+            },
+            "espera_aviso_minutos": 1,
+            "espera_plan_b_minutos": 1,
+            "danos_por_calificar": [
+              {
+                "hallazgo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "vin": "9FBHSR4E8PM000001",
+                "parte": "texto",
+                "clase_dano": "golpe",
+                "evidencia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+              }
+            ]
           }
         ],
         "required": [
@@ -28345,6 +28689,35 @@
           "conductor_llego": {
             "type": "boolean",
             "default": false
+          },
+          "espera": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EsperaDelPuntoDto"
+              }
+            ]
+          },
+          "espera_aviso_minutos": {
+            "type": "integer",
+            "format": "int32",
+            "default": 15
+          },
+          "espera_plan_b_minutos": {
+            "type": "integer",
+            "format": "int32",
+            "default": 30
+          },
+          "danos_por_calificar": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/DanoPorCalificarDto"
+            }
           }
         }
       },
@@ -28369,7 +28742,32 @@
                 "estado_parada": "texto",
                 "receptor": "texto",
                 "receptor_nombre": "texto",
-                "conductor_llego": true
+                "conductor_llego": true,
+                "espera": {
+                  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "estado": "borrador",
+                  "conductor_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "motivo_sin_inspector": "texto",
+                  "motivo_sin_inspector_texto": "texto",
+                  "activada_at": "2026-10-22T14:30:00.000Z",
+                  "recibida_at": "2026-10-22T14:30:00.000Z",
+                  "lat": 4.6097,
+                  "lng": -74.0817,
+                  "precision_m": 1.5,
+                  "aviso_desde": "2026-10-22T14:30:00.000Z",
+                  "aviso_at": "2026-10-22T14:30:00.000Z",
+                  "plan_b_desde": "2026-10-22T14:30:00.000Z",
+                  "plan_b_habilitado": true,
+                  "inspector_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "inspector_nombre": "texto",
+                  "inspector_llego_at": "2026-10-22T14:30:00.000Z",
+                  "cerrada_at": "2026-10-22T14:30:00.000Z"
+                },
+                "espera_aviso_minutos": 1,
+                "espera_plan_b_minutos": 1,
+                "danos_por_calificar": []
               }
             ]
           }
@@ -28440,7 +28838,8 @@
               "marcado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
               "marcado_por_nombre": "texto",
               "motivo": "Mensaje de ejemplo"
-            }
+            },
+            "entregada_sin_inspector_del_punto": true
           }
         ],
         "required": [
@@ -28565,6 +28964,10 @@
                 "$ref": "#/components/schemas/RechazoDeEntregaDto"
               }
             ]
+          },
+          "entregada_sin_inspector_del_punto": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -28641,6 +29044,143 @@
           },
           "error": {
             "type": "string"
+          }
+        }
+      },
+      "EsperaDelPuntoDto": {
+        "examples": [
+          {
+            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "viaje_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "estado": "borrador",
+            "conductor_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "motivo_sin_inspector": "texto",
+            "motivo_sin_inspector_texto": "texto",
+            "activada_at": "2026-10-22T14:30:00.000Z",
+            "recibida_at": "2026-10-22T14:30:00.000Z",
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "precision_m": 1.5,
+            "aviso_desde": "2026-10-22T14:30:00.000Z",
+            "aviso_at": "2026-10-22T14:30:00.000Z",
+            "plan_b_desde": "2026-10-22T14:30:00.000Z",
+            "plan_b_habilitado": true,
+            "inspector_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "inspector_nombre": "texto",
+            "inspector_llego_at": "2026-10-22T14:30:00.000Z",
+            "cerrada_at": "2026-10-22T14:30:00.000Z"
+          }
+        ],
+        "required": [
+          "id",
+          "viaje_id",
+          "lugar_id",
+          "estado",
+          "conductor_id",
+          "motivo_sin_inspector",
+          "motivo_sin_inspector_texto",
+          "activada_at",
+          "recibida_at",
+          "lat",
+          "lng",
+          "precision_m",
+          "aviso_desde",
+          "aviso_at",
+          "plan_b_desde",
+          "plan_b_habilitado",
+          "inspector_id",
+          "inspector_nombre",
+          "inspector_llego_at",
+          "cerrada_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "viaje_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lugar_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "estado": {
+            "type": "string"
+          },
+          "conductor_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "motivo_sin_inspector": {
+            "type": "string"
+          },
+          "motivo_sin_inspector_texto": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "activada_at": {
+            "format": "date-time"
+          },
+          "recibida_at": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "precision_m": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "aviso_desde": {
+            "format": "date-time"
+          },
+          "aviso_at": {
+            "format": "date-time"
+          },
+          "plan_b_desde": {
+            "format": "date-time"
+          },
+          "plan_b_habilitado": {
+            "type": "boolean"
+          },
+          "inspector_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "inspector_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "inspector_llego_at": {
+            "format": "date-time"
+          },
+          "cerrada_at": {
+            "format": "date-time"
           }
         }
       },

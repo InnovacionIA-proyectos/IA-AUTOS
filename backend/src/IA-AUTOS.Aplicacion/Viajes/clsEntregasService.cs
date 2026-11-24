@@ -24,7 +24,7 @@ namespace IAAutos.Aplicacion.Viajes;
 /// Una sola firma no bloquea: se puede cerrar la entrega con una firma y su motivo codificado (con su evidencia), que deja la novedad de proceso y avisa a los coordinadores de calidad. Todo el orden del destino se hace cumplir:
 /// el conductor marca «Llegue», se cierra la revision de llegada de cada carro y despues se firma la parada. El viaje pasa a finalizado cuando todas sus unidades activas tienen el Descargue cerrado y entregado.
 /// </summary>
-public sealed class clsEntregasService(
+public sealed partial class clsEntregasService(
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
     IInspeccionRepository inspecciones,
@@ -37,6 +37,8 @@ public sealed class clsEntregasService(
     IValidator<FotoEvidenciaRequest> validadorFoto,
     clsEmisorNotificaciones emisor,
     IReclamoRepository reclamos,
+    IEsperaInspectorPuntoRepository esperas,
+    clsEsperaDelDestino plazos,
     clsAccesoViajes acceso,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
@@ -82,7 +84,7 @@ public sealed class clsEntregasService(
     }
 
     /// <summary>Con quien se firma una parada: quien entrega, quien recibe y el papel del usuario que actua.</summary>
-    private sealed record Firmantes(Guid Entrega, Receptor Recibe, bool ConInspector, bool ActorRecibe, bool ActorEntrega);
+    private sealed record Firmantes(Guid Entrega, Receptor Recibe, bool ConInspector, bool ActorRecibe, bool ActorEntrega, clsEsperaInspectorPunto? EsperaPlanB = null);
 
     // ---------------------------------------------------------------------------------------------- consulta
 
@@ -146,12 +148,14 @@ public sealed class clsEntregasService(
         var actorId = actual.IdObligatorio();
         var unidades = await CargarUnidadesAsync(viaje, ct);
         var delPunto = DelPunto(unidades, lugarId);
-        var firmantes = await ResolverFirmantesAsync(viaje, lugarId, actorId, solicitud.RecibeNombre, solicitud.RecibeCedula, solicitud.FirmaRecibe, unaFirma: false, ct);
+        var firmantes = await ResolverFirmantesAsync(viaje, lugarId, actorId, solicitud.RecibeNombre, solicitud.RecibeCedula, solicitud.FirmaRecibe, unaFirma: false, sinInspectorDelPunto: false, ct);
         var pendientes = PendientesConRevisionCerrada(delPunto);
         if (actual.Rol == clsRol.INSPECTOR && !delPunto.Any(u => u.ConductorLlego))
         {
             throw new clsConflictoException("El conductor aún no marca «Llegué» en esta parada", clsMotivosRechazo.CONDUCTOR_SIN_LLEGADA);
         }
+
+        await AsegurarDanosCalificadosAsync(delPunto, firmantes, ct);
 
         VerificarReservas(reservas, pendientes, firmantes);
         var hallazgosDelRechazo = await VerificarRechazosAsync(rechazos, pendientes, firmantes, ct);
@@ -164,6 +168,11 @@ public sealed class clsEntregasService(
             var antes = clsInstantaneasAuditoria.De(transferencia);
             Guid? rechazo = hallazgosDelRechazo.TryGetValue(unidad.Vehiculo.Vin, out var hallazgoId) ? hallazgoId : null;
             reservas.TryGetValue(unidad.Vehiculo.Vin, out var observaciones);
+            if (firmantes.EsperaPlanB is not null && rechazo is null)
+            {
+                transferencia.MarcarSinInspectorDelPunto();
+            }
+
             if (firmantes.Recibe.EsExterno)
             {
                 // Quien entrega firma por si mismo y registra la firma de la persona del lugar, con sus reservas, que no se borran.
@@ -200,8 +209,9 @@ public sealed class clsEntregasService(
             }
         }
 
+        await CerrarEsperaAsync(firmantes.EsperaPlanB, viaje, lugarId, actorId, firmantes.Recibe.Nombre, ahora, delPunto[0].Vehiculo.ClienteId, ct);
         await FinalizarSiCompletoAsync(viaje, unidades, ct);
-        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        await GuardarCerrandoEsperaAsync(firmantes.EsperaPlanB, viaje.Id, lugarId, ct);
         foreach (var (unidad, hallazgoId) in marcados)
         {
             await AvisarRechazoAsync(viaje, lugarId, unidad, hallazgoId, actorId, firmantes.ActorEntrega ? clsParteFirmante.ENTREGA : clsParteFirmante.RECIBE, ct);
@@ -212,7 +222,7 @@ public sealed class clsEntregasService(
 
     /// <summary>
     /// Cierra la entrega de la parada con UNA sola firma (la del usuario autenticado, que es quien entrega o quien recibe) y su motivo codificado: <c>se_nego_a_firmar</c> (exige al menos una foto), <c>no_habia_nadie</c> (la
-    /// evidencia son las fotos de la revision de llegada de cada carro, que ya debe estar cerrada) o <c>sin_inspector_del_punto</c> (todavia no habilitado). Cada unidad pendiente queda cerrada como «recibo_sin_entrega» con la parte que
+    /// evidencia son las fotos de la revision de llegada de cada carro, que ya debe estar cerrada) o <c>sin_inspector_del_punto</c> (el cierre del plan B: solo el conductor, con la espera del inspector del punto de la parada activada y sus plazos cumplidos). Cada unidad pendiente queda cerrada como «recibo_sin_entrega» con la parte que
     /// no firmo, deja su novedad de proceso con el codigo del motivo y los coordinadores de calidad reciben un solo aviso por entrega y parada. 403 si no es el conductor ni el inspector de la parada; 409 si la otra parte ya firmo, si el
     /// punto tiene inspectores y nadie tomo la entrega (<c>sin_receptor</c>, tambien con <c>no_habia_nadie</c>) o si la revision de llegada de algun carro sigue abierta.
     /// </summary>
@@ -264,15 +274,11 @@ public sealed class clsEntregasService(
         var actorId = actual.IdObligatorio();
         var unidades = await CargarUnidadesAsync(viaje, ct);
         var delPunto = DelPunto(unidades, lugarId);
-        var firmantes = await ResolverFirmantesAsync(viaje, lugarId, actorId, null, null, null, unaFirma: true, ct);
+        var firmantes = await ResolverFirmantesAsync(viaje, lugarId, actorId, null, null, null, unaFirma: true, sinInspectorDelPunto: codigo == clsMotivoUnaFirma.SIN_INSPECTOR_DEL_PUNTO, ct);
+        await AsegurarDanosCalificadosAsync(delPunto, firmantes, ct);
         if (firmantes.ConInspector && codigo == clsMotivoUnaFirma.NO_HABIA_NADIE)
         {
             throw new clsConflictoException(MENSAJE_SIN_RECEPTOR, clsMotivosRechazo.SIN_RECEPTOR);
-        }
-
-        if (codigo == clsMotivoUnaFirma.SIN_INSPECTOR_DEL_PUNTO)
-        {
-            throw new clsConflictoException("El motivo «el inspector del punto no llegó» todavía no está habilitado: la excepción del destino sin inspector aún no existe", clsMotivosRechazo.MOTIVO_NO_APLICA);
         }
 
         var pendientes = PendientesConRevisionCerrada(delPunto);
@@ -296,6 +302,11 @@ public sealed class clsEntregasService(
         {
             var transferencia = ObtenerOCrear(unidad, firmantes.Entrega, firmantes.Recibe, ahora);
             var antes = clsInstantaneasAuditoria.De(transferencia);
+            if (firmantes.EsperaPlanB is not null)
+            {
+                transferencia.MarcarSinInspectorDelPunto();
+            }
+
             transferencia.CerrarConUnaFirma(actorId, solicitud.Firma, motivoEscrito, cliente.Ip, ahora, momento, codigo, testigoNombre, testigoCedula);
             foreach (var foto in fotos.Where(f => string.Equals(clsVin.Normalizar(f.Vin!), unidad.Vehiculo.Vin, StringComparison.OrdinalIgnoreCase)))
             {
@@ -321,8 +332,9 @@ public sealed class clsEntregasService(
                 "novedad_proceso.crear", "novedades_proceso", novedad.Id, viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(novedad)), unidad.Vehiculo.ClienteId, ct);
         }
 
+        await CerrarEsperaAsync(firmantes.EsperaPlanB, viaje, lugarId, actorId, null, ahora, delPunto[0].Vehiculo.ClienteId, ct);
         await FinalizarSiCompletoAsync(viaje, unidades, ct);
-        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        await GuardarCerrandoEsperaAsync(firmantes.EsperaPlanB, viaje.Id, lugarId, ct);
 
         await AvisarUnaFirmaAsync(viaje, lugarId, lugar, pendientes, codigo!, motivoEscrito, actorId, fotosCreadas, testigoNombre, ct);
         return await ArmarPuntoDeAsync(viaje, lugarId, unidades, ct);
@@ -347,10 +359,12 @@ public sealed class clsEntregasService(
     /// <summary>
     /// Quien entrega y quien recibe en la parada. Entrega siempre el conductor del viaje. Si el punto tiene inspectores recibe el inspector que tomo la entrega de ESTA parada: sin reclamo es 409 <c>sin_receptor</c> (nunca se cae
     /// al inspector del viaje) y los campos de la persona externa se rechazan (400). Si no tiene inspectores recibe la persona del lugar: nombre, cedula y firma obligatorios (400 con lo que falta), registrada por el conductor; en
-    /// el cierre con una sola firma (<paramref name="unaFirma"/>) nadie recibe. 403 si el usuario no es el conductor del viaje ni el inspector de la parada.
+    /// el cierre con una sola firma (<paramref name="unaFirma"/>) nadie recibe. Solo hay una salida cuando el punto tiene inspectores y nadie tomo la entrega: el plan B, que el conductor tiene con la espera del inspector del punto
+    /// activada y sus plazos cumplidos (X mas Y minutos desde su hora, evaluados aqui mismo): ahi recibe la persona del lugar o nadie, como en un punto sin inspectores; antes del plazo es 409 <c>plan_b_no_habilitado</c>. 403 si el
+    /// usuario no es el conductor del viaje ni el inspector de la parada.
     /// </summary>
     private async Task<Firmantes> ResolverFirmantesAsync(
-        clsViaje viaje, Guid lugarId, Guid actorId, string? recibeNombre, string? recibeCedula, string? firmaRecibe, bool unaFirma, CancellationToken ct)
+        clsViaje viaje, Guid lugarId, Guid actorId, string? recibeNombre, string? recibeCedula, string? firmaRecibe, bool unaFirma, bool sinInspectorDelPunto, CancellationToken ct)
     {
         var esConductor = viaje.ConductorId == actorId;
         var conInspector = await reclamos.LugarTieneInspectoresAsync(lugarId, ct);
@@ -382,10 +396,34 @@ public sealed class clsEntregasService(
         var cedula = clsValidador.Opcional(recibeCedula);
         var firma = string.IsNullOrWhiteSpace(firmaRecibe) ? null : firmaRecibe;
         var traeExterno = nombre is not null || cedula is not null || firma is not null;
-        if (conInspector)
+
+        // El plan B: el conductor, en un punto con inspectores donde nadie tomo la entrega, con la espera activada y sus plazos cumplidos.
+        clsEsperaInspectorPunto? planB = null;
+        if (conInspector && reclamo is null && esConductor && await esperas.ObtenerAbiertaAsync(viaje.Id, lugarId, ct) is { } abierta)
+        {
+            planB = await AsegurarPlanBHabilitadoAsync(abierta, ct);
+        }
+
+        if (sinInspectorDelPunto && planB is null)
+        {
+            throw !esConductor
+                ? new clsConflictoException("Solo el conductor cierra la entrega sin inspector del punto", clsMotivosRechazo.MOTIVO_NO_APLICA)
+                : !conInspector
+                    ? new clsConflictoException("El motivo no aplica: esta parada no tiene inspectores asignados", clsMotivosRechazo.MOTIVO_NO_APLICA)
+                    : reclamo is not null
+                        ? new clsConflictoException("Un inspector del punto tomó la entrega: firma con él", clsMotivosRechazo.ENTREGA_TOMADA)
+                        : new clsConflictoException(MENSAJE_SIN_RECEPTOR, clsMotivosRechazo.SIN_RECEPTOR);
+        }
+
+        if (conInspector && planB is null)
         {
             if (traeExterno)
             {
+                if (reclamo is not null && esConductor && await esperas.ObtenerUltimaAsync(viaje.Id, lugarId, ct) is { Estado: clsEstadoEspera.INSPECTOR_LLEGO })
+                {
+                    throw new clsConflictoException("Un inspector del punto tomó la entrega: firma con él", clsMotivosRechazo.ENTREGA_TOMADA);
+                }
+
                 var rechazados = new Dictionary<string, string[]>();
                 if (nombre is not null)
                 {
@@ -412,14 +450,14 @@ public sealed class clsEntregasService(
         }
 
         var entrega = viaje.ConductorId ?? throw clsErroresCampos.De("entrega_usuario_id", "El viaje no tiene conductor: quien entrega es el conductor del viaje");
-        if (conInspector)
+        if (conInspector && planB is null)
         {
             return new Firmantes(entrega, Receptor.DeUsuario(reclamo!.InspectorId), true, ActorRecibe: actorId == reclamo.InspectorId, ActorEntrega: esConductor);
         }
 
         if (unaFirma && !traeExterno)
         {
-            return new Firmantes(entrega, Receptor.NADIE, false, ActorRecibe: false, ActorEntrega: true);
+            return new Firmantes(entrega, Receptor.NADIE, false, ActorRecibe: false, ActorEntrega: true, planB);
         }
 
         var errores = new Dictionary<string, string[]>();
@@ -438,7 +476,7 @@ public sealed class clsEntregasService(
             throw clsErroresCampos.Varios(errores);
         }
 
-        return new Firmantes(entrega, new Receptor(null, nombre, cedula, firma), false, ActorRecibe: false, ActorEntrega: true);
+        return new Firmantes(entrega, new Receptor(null, nombre, cedula, firma), false, ActorRecibe: false, ActorEntrega: true, planB);
     }
 
     private static bool Igual(string? a, string? b) => string.Equals(a?.Trim(), b?.Trim(), StringComparison.OrdinalIgnoreCase);
@@ -681,7 +719,8 @@ public sealed class clsEntregasService(
                 DeMomento(t?.FirmaEntregaMomentoAt, t?.FirmaEntregaLat, t?.FirmaEntregaLng, t?.FirmaEntregaPrecisionM),
                 DeMomento(t?.FirmaRecibeMomentoAt, t?.FirmaRecibeLat, t?.FirmaRecibeLng, t?.FirmaRecibePrecisionM),
                 danosNuevos,
-                rechazo));
+                rechazo,
+                t is { SinInspectorDelPunto: true } && u.Cerrada));
         }
 
         var entregadas = delPunto.Count(u => u.Cerrada);
@@ -692,8 +731,10 @@ public sealed class clsEntregasService(
         string? nombre = null;
         if (lugarTieneInspector)
         {
-            receptor = reclamo is null ? "sin_receptor" : "inspector_del_punto";
-            nombre = reclamo is null ? null : (await usuarios.ObtenerPorIdAsync(reclamo.InspectorId, ct))?.Nombre;
+            // Donde el conductor cerro con el plan B recibio la persona del lugar: su nombre queda en la parada aunque tenga inspectores.
+            var externo = reclamo is null ? delPunto.Select(u => u.Transferencia?.RecibeExternoNombre).FirstOrDefault(n => n is not null) : null;
+            receptor = reclamo is not null ? "inspector_del_punto" : externo is not null ? "persona_del_lugar" : "sin_receptor";
+            nombre = reclamo is null ? externo : (await usuarios.ObtenerPorIdAsync(reclamo.InspectorId, ct))?.Nombre;
         }
         else
         {
@@ -702,7 +743,8 @@ public sealed class clsEntregasService(
         }
 
         return new EntregaPuntoDto(
-            viaje.Id, viaje.Estado, lugarId, lugar.Nombre, lugar.Ciudad, filas.Count, pendientes, pendientes == 0 && entregadas > 0, filas, lugarTieneInspector, estado, receptor, nombre, delPunto.Any(u => u.ConductorLlego));
+            viaje.Id, viaje.Estado, lugarId, lugar.Nombre, lugar.Ciudad, filas.Count, pendientes, pendientes == 0 && entregadas > 0, filas, lugarTieneInspector, estado, receptor, nombre, delPunto.Any(u => u.ConductorLlego),
+            lugarTieneInspector ? await EsperaDeLaParadaAsync(viaje.Id, lugarId, ct) : null, await plazos.AvisoMinutosAsync(ct), await plazos.PlanBMinutosAsync(ct), await DanosPorCalificarAsync(delPunto, ct));
     }
 
     private static MomentoDeFirmaDto? DeMomento(DateTimeOffset? momento, double? lat, double? lng, double? precisionM) =>
