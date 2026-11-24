@@ -903,6 +903,29 @@ Ambos responden con la misma forma:
 `confirmado` es `false` en la vista previa; `viajes` es cuántos viajes se crearían (vista previa) o se crearon (confirmación). Al confirmar, `viaje_id` trae el viaje de cada
 fila guardada. La confirmación vuelve a validar todo: no depende de la vista previa.
 
+**Conductor de una fila sin cédula** *(regla confirmada)*. La fila que **no trae `cedula_conductor`** crea su viaje **sin conductor**: no se busca por nombre ni por ningún otro dato, y la fila se guarda como válida. El conductor se asigna después **desde el viaje** (`PATCH /api/viajes/{id}` con `conductor_id`). El portal puede mostrar en esa fila «Sin conductor: se asigna desde el viaje». Una fila **con** cédula sigue asignando al conductor (activo, con rol `conductor`) y una cédula que no corresponde a uno sigue marcando solo esa fila. La búsqueda por nombre (cuando la columna trae el nombre y no la cédula) **no existe**: si se agrega, con 0 coincidencias o con 2 o más el viaje quedará sin conductor y la fila lo dirá, nunca se elige uno al azar (PAB-004, a confirmar por negocio).
+
+#### Mapeo de columnas compartido por cliente
+El portal lee el archivo, decide qué columna es cada campo y envía las filas ya mapeadas (la carga no cambia). Para que **no tenga que repetir esa decisión** cada vez ni en cada computador, el servidor guarda el mapeo **por cliente y por «forma del archivo»**. *(Rutas y forma a confirmar por backend con el portal.)*
+
+- **Forma del archivo.** Es la lista de sus columnas, cada una como `{ "encabezado": "Placa Camión", "ocurrencia": 1 }`: el título y su número de repetición (1 la primera vez que el título aparece, 2 la segunda...). El servidor **normaliza** el título (sin tildes, en minúscula y con los espacios simples, recortados) y calcula la **huella**: los títulos normalizados con su repetición, **ordenados**, así que **el orden de las columnas no importa** (el mismo archivo con las columnas en otro orden es el mismo archivo). La clave es el cliente más la huella: dos archivos del mismo cliente con títulos distintos (por ejemplo uno de 28 y otro de 35 columnas) **conviven** y guardar uno no pisa al otro.
+- **Qué se guarda.** Solo los títulos y el campo elegido para cada uno. Un cuerpo con cualquier otro campo (también dentro de una columna) responde `400` «Campo no admitido», y **ninguna respuesta ni registro de auditoría contiene valores de las filas** (VIN, placa, nombres ni fechas).
+
+`POST /api/viajes/cargar/mapeo/buscar` — **gestión de viajes** (`admin`, `super_admin`, `coordinador_calidad`; `403` al resto). Cuerpo `{ "columnas": [ { "encabezado": "VIN", "ocurrencia": 1 }, ... ] }`, en cualquier orden. `200` con el mapeo guardado de ese cliente para esa forma, o `404` «Sin mapeo» si no hay (también si lo hubiera de **otro** cliente: nunca se distingue).
+
+```json
+{ "version": 1,
+  "columnas": [ { "encabezado": "vin", "ocurrencia": 1 }, { "encabezado": "placa camion", "ocurrencia": 1 }, { "encabezado": "observaciones", "ocurrencia": 1 } ],
+  "campos": [ "vin", "placa", null ],
+  "actualizado_por": "…", "actualizado_por_nombre": "Carlos Coordinador", "actualizado_at": "2026-11-23T14:05:00.000Z" }
+```
+
+`PUT /api/viajes/cargar/mapeo` — mismos roles. Cuerpo `{ "version": 1, "columnas": [...], "campos": [...] }`: `campos` lleva **uno por columna, en el mismo orden**, y cada uno es `vin`, `placa`, `trailer`, `cedula_conductor`, `unidad`, `codigo_mtrack`, `fecha_programada`, `origen` o `destino` (`null` = la columna se ignora). Guarda el mapeo de esa forma o **reemplaza** el que ya había, y responde `200` con el mismo cuerpo de la lectura (con quién lo guardó por última vez y cuándo; los títulos como quedaron normalizados). `400` si faltan las columnas o los campos, si no van en la misma cantidad, si hay más de 200 columnas o un título vacío o de más de 200 caracteres, si un campo no existe o está elegido para dos columnas, si las repeticiones de un título no van de 1 a N sin saltos, o si `version` no es 1.
+
+**Cliente.** Quien pertenece a un cliente recibe y guarda **siempre el suyo** y `403` si pide otro con `cliente_id`; el `super_admin` **indica el cliente** con `cliente_id` (`400` si no lo hace o no es un UUID), como en los listados.
+
+**Auditoría.** Cada guardado deja la acción `viajes.mapeo.guardar` (entidad `mapeos_carga_viajes`) con quién lo hizo, cuándo, el cliente y, en `despues`, la huella y las columnas con su campo.
+
 ### Visibilidad por viaje
 `inspector` y `conductor` ven **solo lo de los viajes en los que participan** (son su conductor o su inspector, y el viaje no está cancelado); el resto de roles ven todo.
 Se aplica a:

@@ -1467,6 +1467,13 @@ INSERT #r SELECT N'Muelles: el codigo es unico dentro del lugar',
 INSERT #r SELECT N'Muelles: la notificacion admite los tipos cambio_cargue_inspector y cambio_destino_unidad',
     CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%cambio_cargue_inspector%' AND definition LIKE N'%cambio_destino_unidad%') THEN 1 ELSE 0 END, NULL;
 
+-- 7e) El mapeo de columnas de la carga de viajes
+INSERT #r SELECT N'Mapeo de carga: la tabla existe y es unica por cliente y forma del archivo',
+    CASE WHEN OBJECT_ID(N'dbo.tblMapeosCargaViajes', N'U') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblMapeosCargaViajes_Cliente_Huella' AND parent_object_id = OBJECT_ID(N'dbo.tblMapeosCargaViajes')) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Mapeo de carga: columnas y campos solo admiten JSON',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblMapeosCargaViajes_Json' AND parent_object_id = OBJECT_ID(N'dbo.tblMapeosCargaViajes')) THEN 1 ELSE 0 END, NULL;
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';

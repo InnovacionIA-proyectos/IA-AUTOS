@@ -30,7 +30,8 @@ public sealed class clsViajesController(
     clsCambioCargueService cambioCargue,
     clsReclamosService reclamos,
     clsConductorService conductor,
-    clsPermisosSinInspectorService permisosSinInspector) : clsControladorBase
+    clsPermisosSinInspectorService permisosSinInspector,
+    clsMapeoCargaViajesService mapeoCarga) : clsControladorBase
 {
     /// <summary>
     /// Crea un viaje con su unidad, placa, trailer, conductor, codigo MTrack, <c>fecha_programada</c> y <c>lugar_cargue_id</c> (obligatorios) y, opcionalmente, sus unidades (cada una con su <c>vin</c> y su
@@ -404,6 +405,28 @@ public sealed class clsViajesController(
         var solicitud = await LeerCuerpoAsync<CargarViajesRequest>(ct);
         return Creado(await carga.CargarAsync(solicitud, ct));
     }
+
+    /// <summary>
+    /// El mapeo de columnas guardado para la forma de este archivo (sus <c>columnas</c>: titulo y repeticion, en cualquier orden), o 404 «Sin mapeo» si el cliente no tiene uno. <c>cliente_id</c> solo lo elige el
+    /// super administrador; los demas reciben el de su cliente y 403 si piden otro.
+    /// </summary>
+    [HttpPost("cargar/mapeo/buscar")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<MapeoCargaViajesDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(BuscarMapeoCargaRequest))]
+    public async Task<IActionResult> BuscarMapeoCarga([FromQuery(Name = "cliente_id")] string? clienteId, CancellationToken ct) =>
+        Ok(await mapeoCarga.BuscarAsync(clienteId, await LeerCuerpoSoloAsync<BuscarMapeoCargaRequest>(ct, ["columnas"], "columnas", ["encabezado", "ocurrencia"]), ct));
+
+    /// <summary>
+    /// Guarda (o actualiza) el mapeo de columnas de esa forma de archivo: <c>columnas</c> y, en el mismo orden, el <c>campos</c> elegido para cada una (nulo = se ignora). Solo titulos y campos: nunca valores de las filas.
+    /// 400 si falta algo, si un campo no existe o si va en dos columnas. Queda en la auditoria.
+    /// </summary>
+    [HttpPut("cargar/mapeo")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<MapeoCargaViajesDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(GuardarMapeoCargaRequest))]
+    public async Task<IActionResult> GuardarMapeoCarga([FromQuery(Name = "cliente_id")] string? clienteId, CancellationToken ct) =>
+        Ok(await mapeoCarga.GuardarAsync(clienteId, await LeerCuerpoSoloAsync<GuardarMapeoCargaRequest>(ct, ["version", "columnas", "campos"], "columnas", ["encabezado", "ocurrencia"]), ct));
 
     private ContextoCliente Cliente() =>
         new(HttpContext.Connection.RemoteIpAddress?.ToString(), Request.Headers.UserAgent.ToString());

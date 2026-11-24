@@ -23,7 +23,14 @@ public abstract class clsControladorBase : ControllerBase
     /// </summary>
     protected Task<T> LeerCuerpoSoloAsync<T>(CancellationToken ct, params string[] permitidos) => LeerCuerpoAsync<T>(ct, [], permitidos);
 
-    private async Task<T> LeerCuerpoAsync<T>(CancellationToken ct, string[] noAdmitidos, string[]? permitidos)
+    /// <summary>
+    /// Como <see cref="LeerCuerpoSoloAsync{T}(CancellationToken, string[])"/> y, ademas, cada objeto del arreglo <paramref name="arreglo"/> solo puede traer los campos de <paramref name="permitidosDelArreglo"/>:
+    /// el campo de mas se reporta como <c>arreglo[i].campo</c> con «Campo no admitido».
+    /// </summary>
+    protected Task<T> LeerCuerpoSoloAsync<T>(CancellationToken ct, string[] permitidos, string arreglo, string[] permitidosDelArreglo) =>
+        LeerCuerpoAsync<T>(ct, [], permitidos, (arreglo, permitidosDelArreglo));
+
+    private async Task<T> LeerCuerpoAsync<T>(CancellationToken ct, string[] noAdmitidos, string[]? permitidos, (string Arreglo, string[] Permitidos)? anidado = null)
     {
         JsonDocument documento;
         try
@@ -45,6 +52,20 @@ public abstract class clsControladorBase : ControllerBase
             var presentes = permitidos is null
                 ? noAdmitidos.Where(c => documento.RootElement.TryGetProperty(c, out _)).ToList()
                 : documento.RootElement.EnumerateObject().Select(p => p.Name).Where(c => !permitidos.Contains(c, StringComparer.Ordinal)).Order(StringComparer.Ordinal).ToList();
+            if (anidado is { } hijos && documento.RootElement.TryGetProperty(hijos.Arreglo, out var lista) && lista.ValueKind == JsonValueKind.Array)
+            {
+                var indice = 0;
+                foreach (var elemento in lista.EnumerateArray())
+                {
+                    if (elemento.ValueKind == JsonValueKind.Object)
+                    {
+                        presentes.AddRange(elemento.EnumerateObject().Select(p => p.Name).Where(c => !hijos.Permitidos.Contains(c, StringComparer.Ordinal)).Order(StringComparer.Ordinal).Select(c => $"{hijos.Arreglo}[{indice}].{c}"));
+                    }
+
+                    indice++;
+                }
+            }
+
             if (presentes.Count > 0)
             {
                 throw new clsValidacionException(
