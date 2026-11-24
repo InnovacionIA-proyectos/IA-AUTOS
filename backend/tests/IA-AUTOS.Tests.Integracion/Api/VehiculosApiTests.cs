@@ -212,7 +212,9 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var c = novedad.GetProperty("items")[0];
         Assert.Equal("VIN-C-NOVEDAD", c.GetProperty("vin").GetString());
         Assert.Equal(1, c.GetProperty("completas").GetInt32());
-        Assert.Equal(2, c.GetProperty("novedades").GetInt32());
+        // Los dos hallazgos del informe no tienen nivel: no son novedades, se cuentan aparte como sin calificar.
+        Assert.Equal(0, c.GetProperty("novedades").GetInt32());
+        Assert.Equal(2, c.GetProperty("sin_calificar").GetInt32());
     }
 
     [Fact]
@@ -258,7 +260,7 @@ public sealed class VehiculosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal(vehiculoId, inv.GetProperty("id").GetGuid());
         Assert.Equal("INV-VIN-0001", inv.GetProperty("vin").GetString());
         Assert.Equal(
-            ["id", "vin", "marca", "tipo_vehiculo", "modelo", "chasis", "color", "operacion", "activo", "created_at", "updated_at", "etapas"],
+            ["id", "vin", "marca", "tipo_vehiculo", "modelo", "chasis", "color", "operacion", "activo", "created_at", "updated_at", "etapas", "novedades", "sin_calificar"],
             inv.EnumerateObject().Select(p => p.Name).ToList());
         var listaEtapas = inv.GetProperty("etapas");
         Assert.Equal(["cargue", "transporte", "descargue"], listaEtapas.EnumerateArray().Select(e => e.GetProperty("proceso").GetString()).ToList());

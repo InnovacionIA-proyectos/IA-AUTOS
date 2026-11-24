@@ -124,7 +124,7 @@ public class NovedadesYNotificacionesTests
     }
 
     [Fact]
-    public void Solo_se_revisa_un_hallazgo_del_conductor()
+    public void Un_hallazgo_que_ya_tiene_nivel_no_se_revisa()
     {
         var delInspector = clsHallazgo.Crear(Guid.NewGuid(), Guid.NewGuid(), "golpe", "1_5cm", "v2", clsOrigenHallazgo.INSPECTOR, null, null, null, AHORA);
 

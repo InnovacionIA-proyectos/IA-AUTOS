@@ -32,12 +32,12 @@ documento describe el modelo de datos; el modelo del propio hallazgo y de su zon
 
 ## Revision de la novedad
 
-`POST /api/hallazgos/{id}/revision` completa el hallazgo que registro el conductor (zona, clase y nivel V, y el tamano si se corrige) con `clsHallazgo.Revisar`: guarda `RevisadoPor` y `RevisadoAt`, escribe una fila `revision` en `tblHallazgoSeguimiento` con el detalle y, si el nivel es critico, `clsAlertaHallazgoCritico` crea la notificacion `hallazgo_critico`. `RevisadoAt` es un token de concurrencia: si dos usuarios revisan a la vez, el cambio del segundo no encuentra el hallazgo sin revisar y responde `409 HALLAZGO_YA_REVISADO`. Los niveles criticos son el parametro `niveles_criticos` (por defecto `v1_plus,v1`; ver [alertas.md](alertas.md)). Ver [CONTRATO.md](../CONTRATO.md) («Revision de la novedad»).
+`POST /api/hallazgos/{id}/revision` califica cualquier hallazgo **sin nivel** (el dano de una zona o de un extra del conductor, una novedad o un dano migrado del inspector: zona, clase y nivel V, y el tamano si se corrige) con `clsHallazgo.Revisar`; la zona se conserva si el hallazgo ya la tiene y el dano de un extra no lleva zona (`ExtraId` y `ZonaId` son excluyentes: `CK_tblHallazgos_Extra`). Un hallazgo que ya tiene nivel responde `409` y uno ya calificado `409 HALLAZGO_YA_REVISADO`. Guarda `RevisadoPor` y `RevisadoAt`, escribe una fila `revision` en `tblHallazgoSeguimiento` con el detalle y, si el nivel es critico, `clsAlertaHallazgoCritico` crea la notificacion `hallazgo_critico`. `RevisadoAt` es un token de concurrencia: si dos usuarios revisan a la vez, el cambio del segundo no encuentra el hallazgo sin revisar y responde `409 HALLAZGO_YA_REVISADO`. Los niveles criticos son el parametro `niveles_criticos` (por defecto `v1_plus,v1`; ver [alertas.md](alertas.md)). Ver [CONTRATO.md](../CONTRATO.md) («Revision de la novedad»).
 
 ## Listado
 
 `GET /api/hallazgos` lee `tblHallazgos` con su inspeccion, etapa, vehiculo, viaje y zona; los indices `IX_tblHallazgos_Zona_Clase` e `IX_tblHallazgos_Seguimiento` sirven a los filtros por zona y por estado de seguimiento y origen.
-El filtro `revisado` usa `RevisadoAt` y solo aplica al origen conductor. Ver [CONTRATO.md](../CONTRATO.md) («Listado de hallazgos»).
+El filtro `revisado` usa `RevisadoAt` y solo aplica al origen conductor. El filtro `sin_calificar=true` trae los de nivel nulo de la version vigente del informe (sin una correccion cerrada que la reemplace) y `sin_calificar=false` los que tienen nivel; la exportacion `hallazgos.xlsx` lo comparte. Ver [CONTRATO.md](../CONTRATO.md) («Listado de hallazgos»).
 
 ## Patrones por zona
 

@@ -316,6 +316,10 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                           && (f.Vin == null || v.Vin == f.Vin)
                           && (f.InspeccionId == null || h.InspeccionId == f.InspeccionId)
                           && (f.Nivel == null || h.NivelSeveridad == f.Nivel)
+                          && (f.SinCalificar == null
+                              || (f.SinCalificar == true
+                                  ? h.NivelSeveridad == null && !contexto.Inspecciones.Any(co => co.CorrigeInspeccionId == i.Id && co.Estado == clsEstadoInspeccion.CERRADA)
+                                  : h.NivelSeveridad != null))
                           && (f.CuadranteNumero == null || z.Numero == f.CuadranteNumero)
                           && (f.Lado == null || z.Lado == f.Lado)
                           && (f.Proceso == null || ec.Codigo == f.Proceso)

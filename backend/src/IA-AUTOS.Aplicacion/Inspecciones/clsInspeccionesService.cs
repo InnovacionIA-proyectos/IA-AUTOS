@@ -474,6 +474,11 @@ public sealed class clsInspeccionesService(
         var extra = await ObtenerExtraDeInspeccionAsync(inspeccionId, extraId, ct);
         await ValidarTipoDeExtraAsync(solicitud.Tipo, extra.Tipo, ct);
         var existente = await inspecciones.ObtenerHallazgoDeExtraAsync(extra.Id, ct);
+        if (actual.Rol == clsRol.CONDUCTOR && clsValidador.Opcional(solicitud.NivelSeveridad) is not null)
+        {
+            throw clsErroresCampos.De("nivel_severidad", clsHallazgo.MENSAJE_NIVEL_DEL_CONDUCTOR);
+        }
+
         DanoDeExtra? nuevoDano = null;
         if (existente is not null)
         {
@@ -525,11 +530,11 @@ public sealed class clsInspeccionesService(
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
     }
 
-    private sealed record DanoDeExtra(string Clase, string Tamano, string Nivel);
+    private sealed record DanoDeExtra(string Clase, string Tamano, string? Nivel);
 
     /// <summary>
-    /// El dano de un extra: con <c>danado: true</c> la clase, el tamano y el nivel son obligatorios (400 nombrando cada uno que falta) y deben ser de un valor activo de sus catalogos; sin <c>danado</c> (o en
-    /// falso) ninguno de los tres se admite (400). Devuelve nulo si el extra no esta danado.
+    /// El dano de un extra: con <c>danado: true</c> la clase, el tamano y el nivel son obligatorios (400 nombrando cada uno que falta) y deben ser de un valor activo de sus catalogos; el conductor da solo la
+    /// clase y el tamano y el nivel que envie se rechaza igual que en una zona (el dano nace sin calificar); sin <c>danado</c> (o en falso) ninguno de los tres se admite (400). Devuelve nulo si el extra no esta danado.
     /// </summary>
     private async Task<DanoDeExtra?> ValidarDanoDelExtraAsync(bool? danado, string? claseDano, string? tamanoDano, string? nivelSeveridad, CancellationToken ct)
     {
@@ -572,15 +577,30 @@ public sealed class clsInspeccionesService(
 
         await Revisar("clase_dano", clase, clsNombresCatalogo.CLASES_DANO, "La clase del daño es obligatoria cuando el extra está dañado", "Clase de daño inválida");
         await Revisar("tamano_dano", tamano, clsNombresCatalogo.TAMANOS_DANO, "El tamaño del daño es obligatorio cuando el extra está dañado", "Tamaño de daño inválido");
-        await Revisar("nivel_severidad", nivel, clsNombresCatalogo.NIVELES_SEVERIDAD, "El nivel de severidad es obligatorio cuando el extra está dañado", "Nivel de severidad inválido");
-        return errores.Count > 0 ? throw clsErroresCampos.Varios(errores) : new DanoDeExtra(clase!, tamano!, nivel!);
+        if (actual.Rol == clsRol.CONDUCTOR)
+        {
+            if (nivel is not null)
+            {
+                errores["nivel_severidad"] = [clsHallazgo.MENSAJE_NIVEL_DEL_CONDUCTOR];
+            }
+        }
+        else
+        {
+            await Revisar("nivel_severidad", nivel, clsNombresCatalogo.NIVELES_SEVERIDAD, "El nivel de severidad es obligatorio cuando el extra está dañado", "Nivel de severidad inválido");
+        }
+
+        return errores.Count > 0 ? throw clsErroresCampos.Varios(errores) : new DanoDeExtra(clase!, tamano!, nivel);
     }
 
-    /// <summary>El dano del extra queda como un hallazgo de siempre (sin zona, con el nombre del extra como parte del vehiculo): cuenta en los listados, los patrones y la tasa de rechazo.</summary>
+    /// <summary>
+    /// El dano del extra queda como un hallazgo de siempre (sin zona, con el nombre del extra como parte del vehiculo): cuenta en los listados, los patrones y la tasa de rechazo. El origen sale del rol, como el de un
+    /// dano de zona: el del conductor nace sin nivel.
+    /// </summary>
     private async Task AgregarDanoDelExtraAsync(clsInspeccion inspeccion, clsInspeccionExtra extra, DanoDeExtra dano, CancellationToken ct)
     {
         var nombreDelTipo = (await NombresDeTiposDeExtraAsync(ct)).GetValueOrDefault(extra.Tipo) ?? extra.Tipo;
-        var hallazgo = clsHallazgo.CrearDeExtra(inspeccion.Id, extra.Id, clsInspeccionExtra.NombreParaMostrar(extra.Tipo, nombreDelTipo, extra.Texto), dano.Clase, dano.Tamano, dano.Nivel, reloj.Ahora);
+        var hallazgo = clsHallazgo.CrearDeExtra(inspeccion.Id, extra.Id, clsInspeccionExtra.NombreParaMostrar(extra.Tipo, nombreDelTipo, extra.Texto), dano.Clase, dano.Tamano, dano.Nivel, reloj.Ahora,
+            actual.Rol == clsRol.CONDUCTOR ? clsOrigenHallazgo.CONDUCTOR : clsOrigenHallazgo.INSPECTOR);
         inspecciones.Agregar(hallazgo);
         await auditor.RegistrarDeViajeAsync(
             "hallazgo.crear", "hallazgos", hallazgo.Id, inspeccion.ViajeId, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(hallazgo)), ct: ct);

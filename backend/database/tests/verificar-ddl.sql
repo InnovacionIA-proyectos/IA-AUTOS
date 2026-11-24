@@ -1493,6 +1493,12 @@ INSERT #r SELECT N'Cierre con una sola firma: el motivo codificado, el testigo s
 INSERT #r SELECT N'Rechazo por novedad: la notificacion admite el tipo carro_rechazado_en_destino',
     CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%carro_rechazado_en_destino%') THEN 1 ELSE 0 END, NULL;
 
+-- 7f) El dano de un extra del conductor y el conteo de lo sin calificar con la version vigente
+INSERT #r SELECT N'Dano de un extra: la restriccion solo exige que no tenga zona (el conductor tambien lo registra)',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblHallazgos') AND definition LIKE N'%ZonaId%' AND definition NOT LIKE N'%Origen%') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Indicador diario: SinCalificar cuenta solo la version vigente de cada informe',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'dbo.vwIndicadorDiario') AND definition LIKE N'%CorrigeInspeccionId%') THEN 1 ELSE 0 END, NULL;
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';

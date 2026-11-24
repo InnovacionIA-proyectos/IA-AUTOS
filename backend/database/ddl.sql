@@ -1901,7 +1901,7 @@ GO
    (salida y llegada de las 3 etapas) y Completa = 1 solo con los 6. vwAdopcion (por carro): por dia y por el destino de cada unidad, Programados = VIN de los viajes no cancelados programados ese dia y ConSalidaDigital = los que tienen una inspeccion de salida CERRADA. vwAdopcionPorCamion:
    lo mismo contando cada viaje una sola vez (adoptado si alguna de sus unidades tiene su salida cerrada), agrupado por el destino del viaje (el de sus unidades si es uno solo; nulo si son varios o falta alguno). vwTiempoCaptura: una fila por inspeccion cerrada de Cargue y Descargue, con Minutos = cierre - inicio.
    vwAveriasPorConfiguracion: una fila por hallazgo de una inspeccion cerrada (tambien el dano sin calificar, sin nivel), con la configuracion del viaje y la zona (lado + numero). vwIndicadorDiario: por dia,
-   Despachados, ConNovedad (unidades con al menos un hallazgo V1 o V1+ ese dia) y SinCalificar (los danos sin nivel de esas unidades ese dia, una cifra aparte que no se suma a ConNovedad). Se crean con SQL dinamico para poder ejecutar este script tambien sobre una base que aun no tiene las columnas que usan.
+   Despachados, ConNovedad (unidades con al menos un hallazgo V1 o V1+ ese dia) y SinCalificar (los danos sin nivel de la version vigente de los informes de esas unidades ese dia, una cifra aparte que no se suma a ConNovedad). Se crean con SQL dinamico para poder ejecutar este script tambien sobre una base que aun no tiene las columnas que usan.
    ----------------------------------------------------------------------------- */
 IF COL_LENGTH(N'dbo.tblViajeVehiculos', N'EstadoUnidad') IS NOT NULL
    AND COL_LENGTH(N'dbo.tblHallazgos', N'NivelSeveridad') IS NOT NULL
@@ -2040,6 +2040,7 @@ FROM (
             JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
             WHERE e.ViajeId = c.ViajeId AND e.VehiculoId = c.VehiculoId
               AND h.NivelSeveridad IS NULL
+              AND NOT EXISTS (SELECT 1 FROM dbo.tblInspecciones co WHERE co.CorrigeInspeccionId = i.Id AND co.Estado = ''cerrada'')
               AND CAST(SWITCHOFFSET(i.CerradaAt, N''-05:00'') AS date) = c.Fecha) AS SinCalificar
     FROM dbo.vwCobertura c
 ) AS x
@@ -2134,7 +2135,7 @@ GO
 
 /* -----------------------------------------------------------------------------
    Dano en un extra. tblHallazgos.ExtraId: el hallazgo que nace de un extra marcado como danado (clase, tamano y nivel); es el hallazgo de siempre (cuenta en los listados, los patrones y la tasa de rechazo)
-   sin zona del dibujo (ZonaId nulo) y de origen inspector. Un extra tiene a lo sumo un hallazgo (UQ_tblHallazgos_Extra) y, como un hallazgo no se borra, un extra con dano no se quita.
+   sin zona del dibujo (ZonaId nulo), de origen inspector (con nivel) o conductor (sin nivel hasta que un inspector lo califica). Un extra tiene a lo sumo un hallazgo (UQ_tblHallazgos_Extra) y, como un hallazgo no se borra, un extra con dano no se quita.
    ----------------------------------------------------------------------------- */
 IF COL_LENGTH(N'dbo.tblHallazgos', N'ExtraId') IS NULL
     ALTER TABLE dbo.tblHallazgos ADD ExtraId uniqueidentifier NULL;
@@ -2142,9 +2143,13 @@ GO
 IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblHallazgos_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblHallazgos'))
     ALTER TABLE dbo.tblHallazgos ADD CONSTRAINT FK_tblHallazgos_Extra FOREIGN KEY (ExtraId) REFERENCES dbo.tblInspeccionExtras (Id);
 -- Se crea con SQL dinamico y solo si las columnas que compara existen, para poder ejecutar este script tambien sobre una base que aun no las tiene.
+-- El dano de un extra no lleva zona del dibujo y lo registra el inspector (con nivel) o el conductor (sin nivel, que un inspector califica despues): la restriccion solo exige la ausencia de zona. Una base con la
+-- version anterior (que ademas exigia el origen inspector) la cambia aqui.
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblHallazgos') AND definition LIKE N'%Origen%')
+    ALTER TABLE dbo.tblHallazgos DROP CONSTRAINT CK_tblHallazgos_Extra;
 IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblHallazgos'))
-   AND COL_LENGTH(N'dbo.tblHallazgos', N'ZonaId') IS NOT NULL AND COL_LENGTH(N'dbo.tblHallazgos', N'Origen') IS NOT NULL
-    EXEC (N'ALTER TABLE dbo.tblHallazgos ADD CONSTRAINT CK_tblHallazgos_Extra CHECK (ExtraId IS NULL OR (ZonaId IS NULL AND Origen = ''inspector''))');
+   AND COL_LENGTH(N'dbo.tblHallazgos', N'ZonaId') IS NOT NULL
+    EXEC (N'ALTER TABLE dbo.tblHallazgos ADD CONSTRAINT CK_tblHallazgos_Extra CHECK (ExtraId IS NULL OR ZonaId IS NULL)');
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UQ_tblHallazgos_Extra' AND object_id = OBJECT_ID(N'dbo.tblHallazgos'))
     CREATE UNIQUE INDEX UQ_tblHallazgos_Extra ON dbo.tblHallazgos (ExtraId) WHERE ExtraId IS NOT NULL;
 GO
