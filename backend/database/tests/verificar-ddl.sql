@@ -958,10 +958,10 @@ INSERT @casosNov (Prueba, Sentencia, Esperado) VALUES
  (N'Trigger: la novedad de proceso no se borra', N'DELETE FROM dbo.tblNovedadesProceso WHERE InspeccionId = ''' + @i1Nov + N'''', 51003),
  (N'UNIQUE motivo sin inspector por codigo', N'INSERT dbo.tblMotivosSinInspector (Id, Codigo, Nombre) VALUES (NEWID(), ''otro'', N''Otro de nuevo'')', 2627),
  (N'CHECK motivo sin inspector: nombre vacio', N'INSERT dbo.tblMotivosSinInspector (Id, Codigo, Nombre) VALUES (NEWID(), ''zz_test_motivo'', N''  '')', 547),
- (N'CHECK inspeccion: el motivo sin inspector solo es de una salida', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector) VALUES (NEWID(), ''' + @e1Nov + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''llegada'', SYSDATETIMEOFFSET(), ''otro'')', 547),
  (N'CHECK inspeccion: el texto del motivo sin motivo', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspectorTexto) VALUES (NEWID(), ''' + @e1Nov + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''llegada'', SYSDATETIMEOFFSET(), N''zz texto'')', 547),
  (N'CHECK inspeccion: el texto del motivo en blanco', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector, MotivoSinInspectorTexto) VALUES (NEWID(), ''' + @e4Txt + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''salida'', SYSDATETIMEOFFSET(), ''otro'', N''  '')', 547),
  (N'FK inspeccion: motivo sin inspector inexistente', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector) VALUES (NEWID(), ''' + @e1Nov + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''llegada'', SYSDATETIMEOFFSET(), ''zz_no_existe'')', 547),
+ (N'CHECK inspeccion: el motivo sin inspector se admite en una llegada', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector) VALUES (NEWID(), ''' + @e1Nov + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''llegada'', SYSDATETIMEOFFSET(), ''otro'')', 0),
  (N'Notificacion: el tipo novedad_proceso se guarda', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''novedad_proceso'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-1'')', 0),
  (N'Notificacion: el tipo reclamo_sin_actividad se guarda', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''reclamo_sin_actividad'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-3'')', 0),
  (N'CHECK notificacion: un tipo que no existe', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''zz_tipo'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-2'')', 547);
@@ -1556,6 +1556,14 @@ INSERT #r SELECT N'Novedad de un carro: el identificador del envio es nulo y uni
          AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblHallazgos_Envio' AND object_id = OBJECT_ID(N'dbo.tblHallazgos') AND is_unique = 1 AND has_filter = 1) THEN 1 ELSE 0 END, NULL;
 INSERT #r SELECT N'Novedad del viaje: la notificacion admite el tipo novedad_viaje',
     CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%novedad_viaje%') THEN 1 ELSE 0 END, NULL;
+
+-- 7j) El dato del lugar "admite cargue sin inspector": la columna obligatoria y en falso para los lugares que ya existian
+INSERT #r SELECT N'Lugar: admite cargue sin inspector es obligatorio, en falso por defecto',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblLugares') AND name = N'AdmiteCargueSinInspector' AND is_nullable = 0)
+         AND EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'DF_tblLugares_AdmiteCargueSinInspector' AND parent_object_id = OBJECT_ID(N'dbo.tblLugares') AND definition LIKE N'%0%') THEN 1 ELSE 0 END, NULL;
+
+INSERT #r SELECT N'Inspeccion: el motivo de la excepcion No hay inspector se admite en la salida y en la llegada',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_MotivoSinInspector' AND parent_object_id = OBJECT_ID(N'dbo.tblInspecciones') AND definition LIKE N'%llegada%') THEN 1 ELSE 0 END, NULL;
 
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;

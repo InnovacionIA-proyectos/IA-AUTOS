@@ -33,6 +33,18 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     /// <summary>Crea la inspeccion. La salida del cargue que hace el conductor lleva el motivo de la excepcion «No hay inspector» (<paramref name="motivo"/>).</summary>
     private async Task<Guid> CrearInspeccionAsync(Sesion sesion, Guid etapaId, string momento = "salida", bool conGps = true, string? motivo = null)
     {
+        // El informe de transporte lo arma el sistema con «Reportar novedad» y «Llegué»: nadie lo crea por la API, asi que se siembra el borrador.
+        if (await Sembrador.EscalarAsync("SELECT c.Codigo FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE e.Id = @e", ("@e", etapaId)) is "transporte")
+        {
+            var borrador = await Sembrador.InformeAsync(etapaId, sesion.UsuarioId, cerrada: false, momento: momento);
+            if (!conGps)
+            {
+                await Sembrador.EjecutarAsync("UPDATE dbo.tblInspecciones SET Lat = NULL, Lng = NULL WHERE Id = @i", ("@i", borrador));
+            }
+
+            return borrador;
+        }
+
         var r = await Cliente(sesion.Token).PostAsJsonAsync(
             "/api/inspecciones",
             new Dictionary<string, object?>
@@ -225,30 +237,26 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     // ---------------------------------------------------------------- etapa anterior
 
     [Fact]
-    public async Task La_salida_exige_que_la_llegada_de_la_etapa_anterior_este_cerrada()
+    public async Task La_salida_de_transporte_no_se_crea_a_mano_tenga_o_no_cerrada_la_llegada_de_la_etapa_anterior()
     {
         var (sesion, etapas) = await EscenarioAsync();
 
         // La primera etapa no tiene anterior.
         await CrearInspeccionAsync(sesion, etapas[0]);
-        // Con la etapa anterior sin llegada (solo hay una salida en borrador), no se puede crear la salida de la siguiente.
-        var bloqueada = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA });
+        // El informe de transporte lo arma el sistema con «Reportar novedad» y «Llegué» (que si exigen la etapa anterior cerrada): por la API nadie lo crea.
+        var sinLlegada = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA });
 
-        Assert.Equal(HttpStatusCode.Conflict, bloqueada.StatusCode);
-        var error = await ClonarAsync(bloqueada);
-        Assert.Equal("ETAPA_PREVIA_SIN_CIERRE", error.GetProperty("code").GetString());
-        Assert.Equal("etapa_previa_sin_cierre", error.GetProperty("details").GetProperty("motivo").GetString());
-        Assert.Equal(etapas[0], error.GetProperty("details").GetProperty("etapa_previa_id").GetGuid());
-        Assert.Equal("Cargue", error.GetProperty("details").GetProperty("etapa_previa").GetString());
+        Assert.Equal(HttpStatusCode.Conflict, sinLlegada.StatusCode);
+        var error = await ClonarAsync(sinLlegada);
+        Assert.Equal("CONFLICT", error.GetProperty("code").GetString());
+        Assert.Equal("transporte_lo_arma_el_sistema", error.GetProperty("details").GetProperty("motivo").GetString());
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones"));
 
-        // Una llegada en borrador tampoco alcanza; cerrada, si.
-        await Sembrador.InformeAsync(etapas[0], sesion.UsuarioId, cerrada: false, momento: "llegada");
-        Assert.Equal(HttpStatusCode.Conflict, (await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA })).StatusCode);
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE EtapaId = @e AND Momento = 'llegada'", ("@e", etapas[0]));
+        await Sembrador.InformeAsync(etapas[0], sesion.UsuarioId, cerrada: true, momento: "llegada");
+        var conLlegada = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA });
 
-        var permitida = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA });
-        Assert.Equal(HttpStatusCode.Created, permitida.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, conLlegada.StatusCode);
+        Assert.Equal("transporte_lo_arma_el_sistema", (await ClonarAsync(conLlegada)).GetProperty("details").GetProperty("motivo").GetString());
     }
 
     [Fact]
@@ -1262,7 +1270,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
-    public async Task El_conductor_crea_la_salida_de_transporte_y_la_llegada_de_descargue_aunque_el_cargue_tenga_personal_de_apoyo_y_la_salida_de_descargue_ya_no_existe()
+    public async Task El_conductor_no_crea_a_mano_la_salida_de_transporte_pero_si_la_llegada_de_descargue_aunque_el_cargue_tenga_personal_de_apoyo_y_la_salida_de_descargue_ya_no_existe()
     {
         var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-COND-0003", conductorId: conductor.UsuarioId);
@@ -1274,13 +1282,15 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var salidaDelDescargue = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
         var llegadaDelCargue = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[0], momento = "llegada", fecha = FECHA, lat = 4.6, lng = -74.1 });
 
-        Assert.Equal(HttpStatusCode.Created, transporte.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, transporte.StatusCode);
+        Assert.Equal("transporte_lo_arma_el_sistema", (await ClonarAsync(transporte)).GetProperty("details").GetProperty("motivo").GetString());
         Assert.Equal(HttpStatusCode.Created, descargue.StatusCode);
         // El Descargue tiene una sola revision: su salida ya no se crea.
         Assert.Equal(HttpStatusCode.Conflict, salidaDelDescargue.StatusCode);
         Assert.Equal("MOMENTO_NO_ADMITIDO", (await ClonarAsync(salidaDelDescargue)).GetProperty("code").GetString());
-        // El bloqueo es de la salida del Cargue: lo demas del Cargue (por ejemplo la llegada) no cambia.
-        Assert.NotEqual(HttpStatusCode.Forbidden, llegadaDelCargue.StatusCode);
+        // La llegada del Cargue del conductor tambien exige la excepcion «No hay inspector» (aqui no la activo): 403 con su motivo.
+        Assert.Equal(HttpStatusCode.Forbidden, llegadaDelCargue.StatusCode);
+        Assert.Equal("conductor_sin_permiso_de_excepcion", (await ClonarAsync(llegadaDelCargue)).GetProperty("details").GetProperty("motivo").GetString());
     }
 
     [Fact]
@@ -1927,8 +1937,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(2, porMomento.EnumerateArray().Count(i => i.GetProperty("momento_nombre").GetString() == "Inspección de llegada"));
         Assert.Equal("transporte", porProceso[0].GetProperty("proceso").GetString());
         Assert.Equal("9FBHSR4E8PM000999", porVin[0].GetProperty("vin").GetString());
-        // Solo las dos creadas por la API llevan la fecha del dispositivo (julio de 2026); la llegada sembrada lleva la de hoy.
-        Assert.Equal(2, porFecha.GetArrayLength());
+        // Solo la creada por la API lleva la fecha del dispositivo (julio de 2026); las sembradas llevan la de hoy.
+        Assert.Equal(1, porFecha.GetArrayLength());
     }
 
     [Fact]

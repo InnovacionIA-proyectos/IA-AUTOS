@@ -211,7 +211,8 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
         var e = await EscenarioAsync();
         var delInspector = await SalidaDelCargueAsync(e.Inspector, e.Etapas[0]);
         await Sembrador.InformeAsync(e.Etapas[0], e.Conductor.UsuarioId, cerrada: true, momento: "llegada");
-        var transporte = await SalidaDelCargueAsync(e.Conductor, e.Etapas[1], motivo: null);
+        // El informe de transporte lo arma el sistema (nadie lo crea por la API): se siembra el borrador de la salida.
+        var transporte = await Sembrador.InformeAsync(e.Etapas[1], e.Conductor.UsuarioId, cerrada: false, momento: "salida");
 
         var salidaDelInspector = await SinEntregaAsync(e.Conductor, delInspector);
         var deTransporte = await SinEntregaAsync(e.Conductor, transporte);
@@ -231,16 +232,16 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
         await Sembrador.InformeAsync(e.Etapas[0], e.Conductor.UsuarioId, cerrada: true, momento: "llegada");
         // La transferencia sigue abierta (quien recibe firmo su parte y quien entrega no): la etapa siguiente espera.
         await TransferenciaAbiertaAsync(e, inspeccion, firmoEntrega: false);
-        var antes = await Como(e.Conductor).PostAsJsonAsync("/api/inspecciones", new { etapa_id = e.Etapas[1], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
+        var antes = await Como(e.Conductor).PostAsJsonAsync($"/api/viajes/{e.Viaje}/vehiculos/{e.Vin}/llegada", new { fecha = FECHA, lat = 4.9, lng = -74.4 });
 
         Assert.Equal(HttpStatusCode.Created, (await SinEntregaAsync(e.Conductor, inspeccion)).StatusCode);
-        var despues = await Como(e.Conductor).PostAsJsonAsync("/api/inspecciones", new { etapa_id = e.Etapas[1], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
+        var despues = await Como(e.Conductor).PostAsJsonAsync($"/api/viajes/{e.Viaje}/vehiculos/{e.Vin}/llegada", new { fecha = FECHA, lat = 4.9, lng = -74.4 });
 
         Assert.Equal(HttpStatusCode.Conflict, antes.StatusCode);
         var cuerpo = await ComoJsonAsync(antes);
         Assert.Equal("ETAPA_PREVIA_SIN_CIERRE", cuerpo.GetProperty("code").GetString());
         Assert.Equal("transferencia_sin_cierre", cuerpo.GetProperty("details").GetProperty("motivo").GetString());
-        Assert.Equal(HttpStatusCode.Created, despues.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, despues.StatusCode);
     }
 
     [Fact]

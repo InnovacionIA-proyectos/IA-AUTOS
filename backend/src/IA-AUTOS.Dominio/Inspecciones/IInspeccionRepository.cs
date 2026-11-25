@@ -42,6 +42,9 @@ public interface IInspeccionRepository
     /// <summary>True si alguna inspeccion de la etapa tiene una transferencia sin tipo de cierre (abierta): bloquea iniciar la etapa siguiente.</summary>
     Task<bool> TieneTransferenciaSinCierreAsync(Guid etapaId, CancellationToken ct = default);
 
+    /// <summary>La etapa tiene al menos una transferencia con tipo de cierre (firmada, con reservas, no firma o recibo sin entrega).</summary>
+    Task<bool> TieneTransferenciaConCierreAsync(Guid etapaId, CancellationToken ct = default);
+
     /// <summary>La version mas reciente de la inspeccion de ese momento (salida o llegada) de la etapa, o nulo si no la tiene.</summary>
     Task<clsInspeccion?> ObtenerUltimaDeEtapaAsync(Guid etapaId, string momento, CancellationToken ct = default);
 

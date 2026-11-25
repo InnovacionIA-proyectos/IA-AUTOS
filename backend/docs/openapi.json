@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.28.0"
+    "version": "3.29.0"
   },
   "paths": {
     "/api/viajes": {
@@ -628,7 +628,9 @@
                             "lugar_destino": "texto",
                             "posicion": 1,
                             "bajado": null,
-                            "lugar_destino_cambiado_at": "2026-10-22T14:30:00.000Z"
+                            "lugar_destino_cambiado_at": "2026-10-22T14:30:00.000Z",
+                            "puede_registrar_ruta": true,
+                            "motivo_sin_ruta": "texto"
                           }
                         ],
                         "clientes": [
@@ -713,7 +715,8 @@
                             "foto": null,
                             "created_at": "2026-10-22T14:30:00.000Z"
                           }
-                        ]
+                        ],
+                        "lugar_cargue_admite_sin_inspector": true
                       }
                     ]
                   ],
@@ -761,7 +764,9 @@
                             "lugar_destino": "texto",
                             "posicion": 1,
                             "bajado": null,
-                            "lugar_destino_cambiado_at": "2026-10-22T14:30:00.000Z"
+                            "lugar_destino_cambiado_at": "2026-10-22T14:30:00.000Z",
+                            "puede_registrar_ruta": true,
+                            "motivo_sin_ruta": "texto"
                           }
                         ],
                         "clientes": [
@@ -846,7 +851,8 @@
                             "foto": null,
                             "created_at": "2026-10-22T14:30:00.000Z"
                           }
-                        ]
+                        ],
+                        "lugar_cargue_admite_sin_inspector": true
                       }
                     ]
                   ],
@@ -894,7 +900,9 @@
                             "lugar_destino": "texto",
                             "posicion": 1,
                             "bajado": null,
-                            "lugar_destino_cambiado_at": "2026-10-22T14:30:00.000Z"
+                            "lugar_destino_cambiado_at": "2026-10-22T14:30:00.000Z",
+                            "puede_registrar_ruta": true,
+                            "motivo_sin_ruta": "texto"
                           }
                         ],
                         "clientes": [
@@ -979,7 +987,8 @@
                             "foto": null,
                             "created_at": "2026-10-22T14:30:00.000Z"
                           }
-                        ]
+                        ],
+                        "lugar_cargue_admite_sin_inspector": true
                       }
                     ]
                   ],
@@ -36037,7 +36046,8 @@
                 "lugar_cargue_tiene_inspector": true,
                 "muelle_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                 "muelle": "texto",
-                "eliminable": true
+                "eliminable": true,
+                "lugar_cargue_admite_sin_inspector": true
               }
             ],
             "total": 1,
@@ -39354,7 +39364,9 @@
                   "bajado_por_nombre": "texto",
                   "fecha": "2026-10-22T14:30:00.000Z"
                 },
-                "lugar_destino_cambiado_at": "2026-10-22T14:30:00.000Z"
+                "lugar_destino_cambiado_at": "2026-10-22T14:30:00.000Z",
+                "puede_registrar_ruta": true,
+                "motivo_sin_ruta": "texto"
               }
             ],
             "clientes": [
@@ -39464,7 +39476,8 @@
                 },
                 "created_at": "2026-10-22T14:30:00.000Z"
               }
-            ]
+            ],
+            "lugar_cargue_admite_sin_inspector": true
           }
         ],
         "required": [
@@ -39686,6 +39699,10 @@
             "items": {
               "$ref": "#/components/schemas/NovedadViajeDto"
             }
+          },
+          "lugar_cargue_admite_sin_inspector": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -39731,7 +39748,8 @@
             "lugar_cargue_tiene_inspector": true,
             "muelle_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "muelle": "texto",
-            "eliminable": true
+            "eliminable": true,
+            "lugar_cargue_admite_sin_inspector": true
           }
         ],
         "required": [
@@ -39911,6 +39929,10 @@
           "eliminable": {
             "type": "boolean",
             "default": false
+          },
+          "lugar_cargue_admite_sin_inspector": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -39947,7 +39969,9 @@
               "bajado_por_nombre": "texto",
               "fecha": "2026-10-22T14:30:00.000Z"
             },
-            "lugar_destino_cambiado_at": "2026-10-22T14:30:00.000Z"
+            "lugar_destino_cambiado_at": "2026-10-22T14:30:00.000Z",
+            "puede_registrar_ruta": true,
+            "motivo_sin_ruta": "texto"
           }
         ],
         "required": [
@@ -40049,7 +40073,17 @@
               }
             ]
           },
-          "lugar_destino_cambiado_at": {}
+          "lugar_destino_cambiado_at": {},
+          "puede_registrar_ruta": {
+            "type": "boolean",
+            "default": false
+          },
+          "motivo_sin_ruta": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
         }
       }
     },

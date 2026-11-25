@@ -212,6 +212,12 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
          where i.EtapaId == etapaId && t.TipoCierre == null
          select t.Id).AnyAsync(ct);
 
+    public Task<bool> TieneTransferenciaConCierreAsync(Guid etapaId, CancellationToken ct = default) =>
+        (from t in contexto.Transferencias
+         join i in contexto.Inspecciones on t.InspeccionId equals i.Id
+         where i.EtapaId == etapaId && t.TipoCierre != null
+         select t.Id).AnyAsync(ct);
+
     public Task<clsInspeccion?> ObtenerUltimaDeEtapaAsync(Guid etapaId, string momento, CancellationToken ct = default) =>
         contexto.Inspecciones.Where(i => i.EtapaId == etapaId && i.Momento == momento).OrderByDescending(i => i.Ciclo).ThenByDescending(i => i.Version).FirstOrDefaultAsync(ct);
 

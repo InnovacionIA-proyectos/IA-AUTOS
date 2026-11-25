@@ -782,7 +782,7 @@ BEGIN
         CONSTRAINT CK_tblInspecciones_Lat CHECK (Lat IS NULL OR (Lat BETWEEN -90 AND 90)),
         CONSTRAINT CK_tblInspecciones_Lng CHECK (Lng IS NULL OR (Lng BETWEEN -180 AND 180)),
         -- El motivo por el que no estaba el inspector es de una inspeccion de salida; su texto acompana a un motivo y no queda en blanco.
-        CONSTRAINT CK_tblInspecciones_MotivoSinInspector CHECK (MotivoSinInspector IS NULL OR Momento = 'salida'),
+        CONSTRAINT CK_tblInspecciones_MotivoSinInspector CHECK (MotivoSinInspector IS NULL OR Momento IN ('salida', 'llegada')),
         CONSTRAINT CK_tblInspecciones_MotivoTexto CHECK (MotivoSinInspectorTexto IS NULL OR (MotivoSinInspector IS NOT NULL AND LEN(LTRIM(RTRIM(MotivoSinInspectorTexto))) > 0))
     );
     -- A lo sumo una inspeccion ORIGINAL por etapa y momento; las correcciones (con CorrigeInspeccionId) no cuentan.
@@ -2980,6 +2980,22 @@ BEGIN
     DECLARE @nueva nvarchar(max) = N'ALTER TABLE dbo.tblNotificaciones DROP CONSTRAINT CK_tblNotificaciones_Tipo; ALTER TABLE dbo.tblNotificaciones ADD CONSTRAINT CK_tblNotificaciones_Tipo CHECK ' + LEFT(@actual, LEN(@actual) - 1) + N' OR [Tipo] = ''novedad_viaje'')';
     EXEC (@nueva);
 END
+GO
+
+/* -----------------------------------------------------------------------------
+   El dato del lugar "admite cargue sin inspector". tblLugares.AdmiteCargueSinInspector (0 por defecto): si el lugar admite que el cargue lo haga el conductor cuando no hay inspector (la excepcion "No hay inspector" y su
+   permiso). Todos los lugares existentes quedan en 0; lo activa el coordinador de calidad lugar por lugar.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblLugares', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblLugares', N'AdmiteCargueSinInspector') IS NULL
+    ALTER TABLE dbo.tblLugares ADD AdmiteCargueSinInspector bit NOT NULL CONSTRAINT DF_tblLugares_AdmiteCargueSinInspector DEFAULT (0);
+GO
+IF OBJECT_ID(N'dbo.tblInspecciones', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblInspecciones', N'MotivoSinInspector') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblInspecciones_MotivoSinInspector'' AND parent_object_id = OBJECT_ID(N''dbo.tblInspecciones'') AND definition LIKE N''%llegada%'')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblInspecciones_MotivoSinInspector'' AND parent_object_id = OBJECT_ID(N''dbo.tblInspecciones''))
+        ALTER TABLE dbo.tblInspecciones DROP CONSTRAINT CK_tblInspecciones_MotivoSinInspector;
+    ALTER TABLE dbo.tblInspecciones ADD CONSTRAINT CK_tblInspecciones_MotivoSinInspector CHECK (MotivoSinInspector IS NULL OR Momento IN (''salida'', ''llegada''));
+END');
 GO
 
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';

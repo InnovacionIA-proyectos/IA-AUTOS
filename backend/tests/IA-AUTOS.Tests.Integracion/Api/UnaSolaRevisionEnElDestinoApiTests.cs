@@ -110,6 +110,7 @@ public sealed class UnaSolaRevisionEnElDestinoApiTests(clsBaseDatosFixture bd) :
     public async Task Llegue_sin_novedades_crea_y_cierra_la_salida_de_transporte_con_la_fecha_y_el_gps_del_llegue_y_la_llegada_a_la_misma_hora()
     {
         var e = await EscenarioAsync();
+        await Sembrador.EntregaDelCargueCerradaAsync(e.Etapas[0], e.Conductor.UsuarioId, e.Coordinador.UsuarioId);
 
         var r = await Cliente(e.Conductor.Token).PostAsync($"/api/viajes/{e.Viaje}/vehiculos/VIN-UNA-0001/llegada", Cuerpo(new { fecha = "2026-11-20T14:10:00-05:00", lat = 4.9, lng = -74.4 }));
 
@@ -127,6 +128,7 @@ public sealed class UnaSolaRevisionEnElDestinoApiTests(clsBaseDatosFixture bd) :
     public async Task Llegue_con_una_novedad_cierra_la_salida_que_ya_estaba_abierta_y_no_crea_otra()
     {
         var e = await EscenarioAsync();
+        await Sembrador.EntregaDelCargueCerradaAsync(e.Etapas[0], e.Conductor.UsuarioId, e.Coordinador.UsuarioId);
         await Sembrador.InformeAsync(e.Etapas[1], e.Conductor.UsuarioId, cerrada: false, momento: "salida");
 
         var r = await Cliente(e.Conductor.Token).PostAsync($"/api/viajes/{e.Viaje}/vehiculos/VIN-UNA-0001/llegada", Cuerpo(new { fecha = "2026-11-20T14:10:00-05:00", lat = 4.9, lng = -74.4 }));
@@ -140,6 +142,7 @@ public sealed class UnaSolaRevisionEnElDestinoApiTests(clsBaseDatosFixture bd) :
     public async Task Llegue_repetido_responde_llegada_ya_cerrada_y_no_crea_otra_salida()
     {
         var e = await EscenarioAsync();
+        await Sembrador.EntregaDelCargueCerradaAsync(e.Etapas[0], e.Conductor.UsuarioId, e.Coordinador.UsuarioId);
         var cuerpo = Cuerpo(new { fecha = "2026-11-20T14:10:00-05:00", lat = 4.9, lng = -74.4 });
         Assert.Equal(HttpStatusCode.OK, (await Cliente(e.Conductor.Token).PostAsync($"/api/viajes/{e.Viaje}/vehiculos/VIN-UNA-0001/llegada", cuerpo)).StatusCode);
 

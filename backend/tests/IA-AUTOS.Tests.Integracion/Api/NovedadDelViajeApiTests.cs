@@ -435,7 +435,7 @@ public sealed class NovedadDelViajeApiTests(clsBaseDatosFixture bd) : clsPruebaA
     public async Task La_cola_reenvia_la_novedad_de_un_carro_y_queda_una_sola_con_una_sola_foto_y_un_solo_aviso()
     {
         var e = await EscenarioAsync();
-        await Sembrador.InformeAsync(e.Etapas[0], e.Conductor.UsuarioId, cerrada: true, momento: "llegada");
+        await Sembrador.EntregaDelCargueCerradaAsync(e.Etapas[0], e.Conductor.UsuarioId, e.Coordinador.UsuarioId);
         var (ruta, hash) = await SubirAsync(e.Conductor);
         var cuerpo = new Dictionary<string, object?>
         {
@@ -466,7 +466,7 @@ public sealed class NovedadDelViajeApiTests(clsBaseDatosFixture bd) : clsPruebaA
     public async Task La_novedad_de_un_carro_reenviada_despues_de_confirmar_la_llegada_responde_lo_mismo()
     {
         var e = await EscenarioAsync();
-        await Sembrador.InformeAsync(e.Etapas[0], e.Conductor.UsuarioId, cerrada: true, momento: "llegada");
+        await Sembrador.EntregaDelCargueCerradaAsync(e.Etapas[0], e.Conductor.UsuarioId, e.Coordinador.UsuarioId);
         var (ruta, hash) = await SubirAsync(e.Conductor);
         var cuerpo = new Dictionary<string, object?>
         {

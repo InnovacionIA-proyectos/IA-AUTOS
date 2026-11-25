@@ -70,11 +70,38 @@ public sealed class clsSembrador(string cadenaConexion)
         var id = Guid.NewGuid();
         var n = Interlocked.Increment(ref _viajes);
         var tipo = (Guid)(await EscalarAsync("SELECT Id FROM dbo.tblTiposUnidadTransportadora WHERE Codigo = 'ninera'"))!;
+        var lugarDeCargue = await LugarQueAdmiteCargueSinInspectorAsync();
         await EjecutarAsync(
-            "INSERT dbo.tblViajes (Id, CodigoMtrack, TipoUnidadId, Placa, ConductorId, InspectorId, Estado) VALUES (@id, @codigo, @tipo, @placa, @c, @i, @estado)",
+            "INSERT dbo.tblViajes (Id, CodigoMtrack, TipoUnidadId, Placa, ConductorId, InspectorId, Estado, LugarCargueId) VALUES (@id, @codigo, @tipo, @placa, @c, @i, @estado, @lugar)",
             ("@id", id), ("@codigo", codigoMtrack ?? $"MTK-S{n:0000}-{id.ToString()[..6]}"), ("@tipo", tipo), ("@placa", $"PLA{n:000}"),
-            ("@c", (object?)conductorId ?? DBNull.Value), ("@i", (object?)inspectorId ?? DBNull.Value), ("@estado", estado));
+            ("@c", (object?)conductorId ?? DBNull.Value), ("@i", (object?)inspectorId ?? DBNull.Value), ("@estado", estado), ("@lugar", lugarDeCargue));
         return id;
+    }
+
+    /// <summary>
+    /// El lugar de cargue de los viajes sembrados: «Cargue de pruebas», que admite cargue sin inspector y no tiene inspectores asignados (la excepcion «No hay inspector» se activa en el momento). Se crea una vez por base.
+    /// </summary>
+    public async Task<Guid> LugarQueAdmiteCargueSinInspectorAsync()
+    {
+        if (await EscalarAsync("SELECT Id FROM dbo.tblLugares WHERE Nombre = N'Cargue de pruebas'") is Guid existente)
+        {
+            return existente;
+        }
+
+        var id = Guid.NewGuid();
+        await EjecutarAsync(
+            "INSERT dbo.tblLugares (Id, Nombre, TipoId, Ciudad, AdmiteCargueSinInspector) SELECT @id, N'Cargue de pruebas', (SELECT TOP 1 Id FROM dbo.tblPuntosCustodia), N'Medellin', 1",
+            ("@id", id));
+        return id;
+    }
+
+    /// <summary>
+    /// La entrega del cargue de una unidad cerrada: la llegada del cargue cerrada y su transferencia firmada (la regla que el conductor necesita para registrar novedades y confirmar la llegada).
+    /// </summary>
+    public async Task EntregaDelCargueCerradaAsync(Guid etapaCargueId, Guid entregaId, Guid recibeId)
+    {
+        var llegada = await InformeAsync(etapaCargueId, entregaId, cerrada: true, momento: "llegada");
+        await TransferenciaAsync(llegada, entregaId, recibeId, "firmada");
     }
 
     public async Task<Guid> ViajeDeEtapaAsync(Guid etapaId) =>

@@ -54,6 +54,8 @@ public sealed class clsConductorService(
 
         var unidad = await ResolverUnidadAsync(viajeId, vin, ct);
         var ahora = reloj.Ahora;
+        // La regla de la entrega del cargue va antes de crear nada y vale aunque la salida de transporte ya exista (un envio viejo de la cola no puede saltarse el cierre del cargue).
+        await etapaPrevia.AsegurarCerradaAsync(unidad.Transporte, ct, exigeEntregaDelCargue: true);
         var salida = await inspecciones.ObtenerUltimaDeEtapaAsync(unidad.Transporte.Id, clsMomento.SALIDA, ct);
 
         // Un reenvio de algo que ya se guardo responde lo mismo, aunque la salida ya se haya cerrado con la llegada.
@@ -64,7 +66,6 @@ public sealed class clsConductorService(
 
         if (salida is null)
         {
-            await etapaPrevia.AsegurarCerradaAsync(unidad.Transporte, ct);
             salida = clsInspeccion.Crear(
                 unidad.Transporte.Id, unidad.Viaje.Id, actual.IdObligatorio(), clsMomento.SALIDA, solicitud.Fecha!.Value, solicitud.Lat, solicitud.Lng, null, null, ahora);
             inspecciones.Agregar(salida);
@@ -133,6 +134,9 @@ public sealed class clsConductorService(
         {
             throw new clsLlegadaYaCerradaException(unidad.Vehiculo.Vin);
         }
+
+        // La entrega del cargue tiene que estar cerrada (y existir) antes de confirmar la llegada.
+        await etapaPrevia.AsegurarCerradaAsync(unidad.Transporte, ct, exigeEntregaDelCargue: true);
 
         // La salida abierta (con las novedades) se cierra con la llegada: ya no se agregan novedades a esa unidad.
         var salida = await inspecciones.ObtenerUltimaDeEtapaAsync(unidad.Transporte.Id, clsMomento.SALIDA, ct);
