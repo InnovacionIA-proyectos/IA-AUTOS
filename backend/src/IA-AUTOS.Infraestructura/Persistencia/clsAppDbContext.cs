@@ -39,6 +39,7 @@ public sealed class clsAppDbContext : DbContext
     public DbSet<clsEstadoSofasa> EstadosSofasa => Set<clsEstadoSofasa>();
     public DbSet<clsMotivoSinInspector> MotivosSinInspector => Set<clsMotivoSinInspector>();
     public DbSet<clsMotivoNoSale> MotivosNoSale => Set<clsMotivoNoSale>();
+    public DbSet<clsTipoNovedadViaje> TiposNovedadViaje => Set<clsTipoNovedadViaje>();
     public DbSet<clsMuelle> Muelles => Set<clsMuelle>();
     public DbSet<clsLugar> Lugares => Set<clsLugar>();
     public DbSet<clsVistaFoto> VistasFoto => Set<clsVistaFoto>();
@@ -62,6 +63,7 @@ public sealed class clsAppDbContext : DbContext
     public DbSet<clsNotaAclaratoria> NotasAclaratorias => Set<clsNotaAclaratoria>();
 
     public DbSet<clsNovedadProceso> NovedadesProceso => Set<clsNovedadProceso>();
+    public DbSet<clsNovedadViaje> NovedadesViaje => Set<clsNovedadViaje>();
 
     public DbSet<clsReclamo> Reclamos => Set<clsReclamo>();
 

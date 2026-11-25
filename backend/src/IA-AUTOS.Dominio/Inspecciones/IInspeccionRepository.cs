@@ -83,6 +83,9 @@ public interface IInspeccionRepository
     /// <summary>El hallazgo que nacio del dano de un extra, o nulo si el extra no esta danado.</summary>
     Task<clsHallazgo?> ObtenerHallazgoDeExtraAsync(Guid extraId, CancellationToken ct = default);
 
+    /// <summary>La novedad del conductor que ya se guardo en la inspeccion con ese identificador de envio del celular, o nula.</summary>
+    Task<clsHallazgo?> ObtenerHallazgoPorEnvioAsync(Guid inspeccionId, Guid idEnvio, CancellationToken ct = default);
+
     /// <summary>Los hallazgos de la inspeccion (para recalcular su evidencia).</summary>
     Task<IReadOnlyList<clsHallazgo>> ObtenerHallazgosDeInspeccionAsync(Guid inspeccionId, CancellationToken ct = default);
 

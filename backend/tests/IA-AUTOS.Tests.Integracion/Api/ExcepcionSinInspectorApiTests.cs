@@ -244,12 +244,12 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
         var r = await ConMotivoAsync(e.Conductor, e.Etapas[0], "otro", "El inspector no pudo viajar");
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
-        var inspeccion = (await ComoJsonAsync(r)).GetProperty("id").GetGuid();
         foreach (var destinatario in new[] { e.Coordinador, e.Admin, segundoAdmin })
         {
+            // El aviso es del viaje: no cuelga de una unidad ni de una inspeccion; los VIN van en el mensaje y en los datos.
             Assert.Equal(1, await Sembrador.ContarAsync(
-                "SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'novedad_proceso' AND Urgencia = 'alta' AND Canal = 'bandeja' AND UsuarioId = @u AND InspeccionId = @i AND ViajeId = @v AND VehiculoId = @ve AND EnviadaAt IS NOT NULL",
-                ("@u", destinatario.UsuarioId), ("@i", inspeccion), ("@v", e.Viaje), ("@ve", e.Vehiculo)));
+                "SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'novedad_proceso' AND Urgencia = 'alta' AND Canal = 'bandeja' AND UsuarioId = @u AND InspeccionId IS NULL AND ViajeId = @v AND VehiculoId IS NULL AND EnviadaAt IS NOT NULL",
+                ("@u", destinatario.UsuarioId), ("@v", e.Viaje)));
             Assert.Equal(1, await Sembrador.ContarAsync(
                 "SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'novedad_proceso' AND Canal = 'push' AND UsuarioId = @u AND EnviadaAt IS NOT NULL AND ErrorEnvio IS NULL", ("@u", destinatario.UsuarioId)));
         }
@@ -264,7 +264,8 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
         var enviado = _push.Enviados.First().Mensaje;
         Assert.Equal("novedad_proceso", enviado.Datos["tipo"]);
         Assert.Equal(e.Viaje.ToString(), enviado.Datos["viaje_id"]);
-        Assert.Contains(e.Vin, enviado.Titulo);
+        Assert.Contains("Cargue sin inspector", enviado.Titulo);
+        Assert.Contains(e.Vin, enviado.Mensaje);
         Assert.Contains("El inspector no pudo viajar", enviado.Mensaje);
 
         // El coordinador la ve en su bandeja con el tipo nuevo.
@@ -519,5 +520,33 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
 
         Assert.Equal(HttpStatusCode.Created, conNuevo.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, enUso.StatusCode);
+    }
+
+    [Fact]
+    public async Task La_excepcion_deja_un_solo_aviso_por_viaje_con_la_lista_de_los_VIN_y_cada_carro_conserva_su_novedad_de_proceso()
+    {
+        var e = await EscenarioAsync();
+        var segundo = await Sembrador.VehiculoConRutaAsync("VIN-SIN-0002", viajeId: e.Viaje);
+        var tercero = await Sembrador.VehiculoConRutaAsync("VIN-SIN-0003", viajeId: e.Viaje);
+
+        foreach (var etapa in new[] { e.Etapas[0], segundo.EtapaIds[0], tercero.EtapaIds[0] })
+        {
+            Assert.Equal(HttpStatusCode.Created, (await ConMotivoAsync(e.Conductor, etapa, "otro", "El inspector no se presentó")).StatusCode);
+        }
+
+        // Cada carro conserva su novedad de proceso; el aviso es uno solo por destinatario, del viaje y con los tres VIN.
+        Assert.Equal(3, await NovedadesAsync());
+        foreach (var destinatario in new[] { e.Coordinador, e.Admin })
+        {
+            Assert.Equal(1, await Sembrador.ContarAsync(
+                "SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'novedad_proceso' AND Canal = 'bandeja' AND UsuarioId = @u AND ViajeId = @v AND VehiculoId IS NULL AND InspeccionId IS NULL", ("@u", destinatario.UsuarioId), ("@v", e.Viaje)));
+        }
+
+        var datos = JsonDocument.Parse((string)(await Sembrador.EscalarAsync("SELECT TOP 1 Datos FROM dbo.tblNotificaciones WHERE Tipo = 'novedad_proceso' AND UsuarioId = @u", ("@u", e.Coordinador.UsuarioId)))!).RootElement;
+        Assert.Equal("cargue_sin_inspector", datos.GetProperty("hecho").GetString());
+        Assert.Equal(["VIN-SIN-0001", "VIN-SIN-0002", "VIN-SIN-0003"], datos.GetProperty("vins").EnumerateArray().Select(v => v.GetString()).Order().ToList());
+        Assert.Equal("otro", datos.GetProperty("motivo").GetString());
+        var viaje = await ComoJsonAsync(await Como(e.Coordinador).GetAsync($"/api/viajes/{e.Viaje}"));
+        Assert.Equal(3, viaje.GetProperty("novedades_proceso").GetArrayLength());
     }
 }

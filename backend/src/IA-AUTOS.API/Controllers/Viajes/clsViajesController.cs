@@ -31,7 +31,8 @@ public sealed class clsViajesController(
     clsReclamosService reclamos,
     clsConductorService conductor,
     clsPermisosSinInspectorService permisosSinInspector,
-    clsMapeoCargaViajesService mapeoCarga) : clsControladorBase
+    clsMapeoCargaViajesService mapeoCarga,
+    clsNovedadesViajeService novedadesViaje) : clsControladorBase
 {
     /// <summary>
     /// Crea un viaje con su unidad, placa, trailer, conductor, codigo MTrack, <c>fecha_programada</c> y <c>lugar_cargue_id</c> (obligatorios) y, opcionalmente, sus unidades (cada una con su <c>vin</c> y su
@@ -358,19 +359,40 @@ public sealed class clsViajesController(
     /// <summary>
     /// El conductor del viaje registra una novedad del recorrido de la unidad (<c>fecha</c>, <c>lat</c>, <c>lng</c>, <c>tipo_novedad</c>, <c>tamano_dano</c> y la <c>evidencia</c> con su foto sellada), sin texto libre
     /// (<c>nota</c> responde 400 «Campo no admitido»). Crea la salida de Transporte en borrador si aun no existe (409 ETAPA_PREVIA_SIN_CIERRE si el Cargue no esta cerrado), responde 201 con el hallazgo
-    /// y avisa a los coordinadores de calidad y administradores del cliente del vehiculo. 403 si el viaje no es suyo; 409 UNIDAD_NO_SALE si la unidad no sale del viaje.
+    /// y avisa a los coordinadores de calidad y administradores del cliente del vehiculo. 403 si el viaje no es suyo; 409 UNIDAD_NO_SALE si la unidad no sale del viaje. Con <c>id_envio</c> (UUID del celular, opcional) un
+    /// reenvio responde 200 con la misma novedad, sin otra foto ni otro aviso; con otro contenido, 409 con el motivo <c>envio_repetido_distinto</c>.
     /// </summary>
     [HttpPost("{id:guid}/vehiculos/{vin}/novedades")]
     [RolesPermitidos(clsRol.CONDUCTOR)]
     [CodigoError("ETAPA_PREVIA_SIN_CIERRE", "El Cargue de la unidad aun no esta cerrado")]
     [CodigoError("UNIDAD_NO_SALE", "La unidad se marco «no sale» del viaje: no admite novedades")]
     [ProducesResponseType<HallazgoCreadoDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<HallazgoCreadoDto>(StatusCodes.Status200OK)]
     [CuerpoSolicitud(typeof(RegistrarNovedadRequest))]
     public async Task<IActionResult> RegistrarNovedad(Guid id, string vin, CancellationToken ct)
     {
         var solicitud = await LeerCuerpoAsync<RegistrarNovedadRequest>(
             ct, "nota", "clase_dano", "nivel_severidad", "cuadrante_numero", "lado", "zona_provisional", "es_preexistente", "hallazgo_origen_id");
-        return Creado(await conductor.RegistrarNovedadAsync(id, vin, solicitud, ct));
+        var (hallazgo, creada) = await conductor.RegistrarNovedadAsync(id, vin, solicitud, ct);
+        return creada ? Creado(hallazgo) : Ok(hallazgo);
+    }
+
+    /// <summary>
+    /// El conductor del viaje o un inspector que participa reporta una novedad del VIAJE (no de un carro): <c>tipo</c> (codigo activo de <c>tipos-novedad-viaje</c> para su rol), <c>texto</c> (1 a 300 caracteres), <c>fecha</c> del
+    /// celular, <c>lat</c> y <c>lng</c> (opcionales y juntas: sin GPS queda «sin ubicacion»), <c>evidencia</c> opcional (foto sellada), <c>id_envio</c> opcional (UUID del celular: un reenvio responde 200 con la misma novedad) y, solo el
+    /// inspector, <c>proceso</c> (<c>cargue</c> o <c>entrega</c>) y, en la entrega, <c>lugar_id</c>. Responde 201 con la novedad y avisa al coordinador. No toca ningun carro. 400 con un tipo desconocido, de otro rol, un texto vacio o de
+    /// mas de 300 caracteres; 403 si no es el conductor del viaje ni un inspector con ese proceso (motivo <c>inspector_sin_ese_proceso</c>); 409 si el viaje no esta activo o el <c>id_envio</c> ya se uso con otro contenido
+    /// (motivo <c>envio_repetido_distinto</c>).
+    /// </summary>
+    [HttpPost("{id:guid}/novedades-viaje")]
+    [RolesPermitidos(clsRol.CONDUCTOR, clsRol.INSPECTOR)]
+    [ProducesResponseType<NovedadViajeDto>(StatusCodes.Status201Created)]
+    [ProducesResponseType<NovedadViajeDto>(StatusCodes.Status200OK)]
+    [CuerpoSolicitud(typeof(RegistrarNovedadViajeRequest))]
+    public async Task<IActionResult> RegistrarNovedadDelViaje(Guid id, CancellationToken ct)
+    {
+        var (novedad, creada) = await novedadesViaje.RegistrarAsync(id, await LeerCuerpoAsync<RegistrarNovedadViajeRequest>(ct), ct);
+        return creada ? Creado(novedad) : Ok(novedad);
     }
 
     /// <summary>

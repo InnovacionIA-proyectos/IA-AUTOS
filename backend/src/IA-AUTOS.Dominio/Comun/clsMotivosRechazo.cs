@@ -68,6 +68,9 @@ public static class clsMotivosRechazo
     public const string INFORME_CERRADO = "informe_cerrado";
     public const string INFORME_CON_FIRMAS = "informe_con_firmas";
     public const string INFORME_DESCARTADO = "informe_descartado";
+    // ---- La novedad del viaje y el reenvio de las novedades
+    public const string INSPECTOR_SIN_ESE_PROCESO = "inspector_sin_ese_proceso";
+    public const string ENVIO_REPETIDO_DISTINTO = "envio_repetido_distinto";
 
     // ---- Vehiculos
     public const string VEHICULO_EN_VIAJE_ACTIVO = "vehiculo_en_viaje_activo";

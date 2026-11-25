@@ -88,6 +88,7 @@ internal sealed class clsConfiguracionHallazgo : IEntityTypeConfiguration<clsHal
         builder.HasOne<clsInspeccionExtra>().WithMany().HasForeignKey(h => h.ExtraId)
             .HasConstraintName("FK_tblHallazgos_Extra").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(h => h.ExtraId).IsUnique().HasFilter("[ExtraId] IS NOT NULL").HasDatabaseName("UQ_tblHallazgos_Extra");
+        builder.HasIndex(h => new { h.InspeccionId, h.IdEnvio }).IsUnique().HasFilter("[IdEnvio] IS NOT NULL").HasDatabaseName("UX_tblHallazgos_Envio");
         builder.HasOne<clsZonaDano>().WithMany().HasForeignKey(h => h.ZonaId)
             .HasConstraintName("FK_tblHallazgos_Zona").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsNivelSeveridad>().WithMany().HasForeignKey(h => h.NivelSeveridad).HasPrincipalKey(n => n.Codigo)

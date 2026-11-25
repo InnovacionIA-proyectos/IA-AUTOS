@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.27.0"
+    "version": "3.28.0"
   },
   "paths": {
     "/api/viajes": {
@@ -693,7 +693,27 @@
                         "muelle_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "muelle": "texto",
                         "eliminable": true,
-                        "papel": "texto"
+                        "papel": "texto",
+                        "novedades_viaje": [
+                          {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "tipo": "texto",
+                            "tipo_nombre": "texto",
+                            "urgencia": "texto",
+                            "rol": "inspector",
+                            "proceso": "cargue",
+                            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "lugar": "texto",
+                            "texto": "texto",
+                            "usuario_nombre": "texto",
+                            "fecha": "2026-10-22T14:30:00.000Z",
+                            "lat": 4.6097,
+                            "lng": -74.0817,
+                            "sin_ubicacion": true,
+                            "foto": null,
+                            "created_at": "2026-10-22T14:30:00.000Z"
+                          }
+                        ]
                       }
                     ]
                   ],
@@ -806,7 +826,27 @@
                         "muelle_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "muelle": "texto",
                         "eliminable": true,
-                        "papel": "texto"
+                        "papel": "texto",
+                        "novedades_viaje": [
+                          {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "tipo": "texto",
+                            "tipo_nombre": "texto",
+                            "urgencia": "texto",
+                            "rol": "inspector",
+                            "proceso": "cargue",
+                            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "lugar": "texto",
+                            "texto": "texto",
+                            "usuario_nombre": "texto",
+                            "fecha": "2026-10-22T14:30:00.000Z",
+                            "lat": 4.6097,
+                            "lng": -74.0817,
+                            "sin_ubicacion": true,
+                            "foto": null,
+                            "created_at": "2026-10-22T14:30:00.000Z"
+                          }
+                        ]
                       }
                     ]
                   ],
@@ -919,7 +959,27 @@
                         "muelle_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                         "muelle": "texto",
                         "eliminable": true,
-                        "papel": "texto"
+                        "papel": "texto",
+                        "novedades_viaje": [
+                          {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "tipo": "texto",
+                            "tipo_nombre": "texto",
+                            "urgencia": "texto",
+                            "rol": "inspector",
+                            "proceso": "cargue",
+                            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "lugar": "texto",
+                            "texto": "texto",
+                            "usuario_nombre": "texto",
+                            "fecha": "2026-10-22T14:30:00.000Z",
+                            "lat": 4.6097,
+                            "lng": -74.0817,
+                            "sin_ubicacion": true,
+                            "foto": null,
+                            "created_at": "2026-10-22T14:30:00.000Z"
+                          }
+                        ]
                       }
                     ]
                   ],
@@ -6471,6 +6531,26 @@
               }
             }
           },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoCreadoDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoCreadoDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HallazgoCreadoDto"
+                }
+              }
+            }
+          },
           "400": {
             "description": "Error 400: VALIDATION_ERROR",
             "content": {
@@ -6604,6 +6684,223 @@
                       "error": "La unidad se marco «no sale» del viaje: no admite novedades",
                       "code": "UNIDAD_NO_SALE",
                       "message": "La unidad se marco «no sale» del viaje: no admite novedades",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error inesperado (INTERNAL_ERROR, 500) o indisponibilidad de la base (DB_UNAVAILABLE, 503). Ver docs/api.md.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "INTERNAL_ERROR": {
+                    "summary": "Error inesperado",
+                    "value": {
+                      "error": "Error inesperado",
+                      "code": "INTERNAL_ERROR",
+                      "message": "Error inesperado",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {}
+        ]
+      }
+    },
+    "/api/viajes/{id}/novedades-viaje": {
+      "post": {
+        "tags": [
+          "Viajes"
+        ],
+        "operationId": "Viajes_RegistrarNovedadDelViaje",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrarNovedadViajeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NovedadViajeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NovedadViajeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NovedadViajeDto"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/NovedadViajeDto"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NovedadViajeDto"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NovedadViajeDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error 400: VALIDATION_ERROR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "VALIDATION_ERROR": {
+                    "summary": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                    "value": {
+                      "error": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "code": "VALIDATION_ERROR",
+                      "message": "Cuerpo o filtros invalidos; details.fieldErrors dice cada campo",
+                      "timestamp": "2026-10-22T14:30:00.000Z",
+                      "details": {
+                        "formErrors": [],
+                        "fieldErrors": {
+                          "campo": [
+                            "mensaje"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error 401: UNAUTHORIZED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "UNAUTHORIZED": {
+                    "summary": "Sin sesion, sesion vencida o credenciales incorrectas",
+                    "value": {
+                      "error": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "code": "UNAUTHORIZED",
+                      "message": "Sin sesion, sesion vencida o credenciales incorrectas",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error 403: FORBIDDEN, PIN_CHANGE_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "FORBIDDEN": {
+                    "summary": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                    "value": {
+                      "error": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "code": "FORBIDDEN",
+                      "message": "El rol no puede hacerlo o el dato es de otro cliente o de un viaje ajeno",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "PIN_CHANGE_REQUIRED": {
+                    "summary": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                    "value": {
+                      "error": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "code": "PIN_CHANGE_REQUIRED",
+                      "message": "El PIN es temporal: hay que cambiarlo con POST /api/auth/cambiar-pin",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error 404: NOT_FOUND",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "NOT_FOUND": {
+                    "summary": "El recurso no existe",
+                    "value": {
+                      "error": "El recurso no existe",
+                      "code": "NOT_FOUND",
+                      "message": "El recurso no existe",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error 409: CONFLICT",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorApiDto"
+                },
+                "examples": {
+                  "CONFLICT": {
+                    "summary": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                    "value": {
+                      "error": "El estado actual no admite la accion (duplicado, ya cerrado...)",
+                      "code": "CONFLICT",
+                      "message": "El estado actual no admite la accion (duplicado, ya cerrado...)",
                       "timestamp": "2026-10-22T14:30:00.000Z"
                     }
                   }
@@ -30250,6 +30547,78 @@
           }
         }
       },
+      "FotoNovedadViajeDto": {
+        "examples": [
+          {
+            "sello_fecha": "2026-10-22T14:30:00.000Z",
+            "sello_lat": 1.5,
+            "sello_lng": 1.5,
+            "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+            "url_expira_at": "2026-10-22T14:30:00.000Z",
+            "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "precision": 1.5,
+            "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "sin_ubicacion": true,
+            "ruta_archivo": "texto"
+          }
+        ],
+        "required": [
+          "sello_fecha",
+          "sello_lat",
+          "sello_lng",
+          "url",
+          "url_expira_at",
+          "hash_sha256",
+          "precision",
+          "dispositivo_id",
+          "sin_ubicacion"
+        ],
+        "type": "object",
+        "properties": {
+          "sello_fecha": {
+            "format": "date-time"
+          },
+          "sello_lat": {
+            "type": "number",
+            "format": "double"
+          },
+          "sello_lng": {
+            "type": "number",
+            "format": "double"
+          },
+          "url": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "url_expira_at": {
+            "format": "date-time"
+          },
+          "hash_sha256": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "precision": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "dispositivo_id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sin_ubicacion": {
+            "type": "boolean"
+          }
+        }
+      },
       "GuardarMapeoCargaRequest": {
         "examples": [
           {
@@ -35149,6 +35518,137 @@
           }
         }
       },
+      "NovedadViajeDto": {
+        "examples": [
+          {
+            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "tipo": "texto",
+            "tipo_nombre": "texto",
+            "urgencia": "texto",
+            "rol": "inspector",
+            "proceso": "cargue",
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "lugar": "texto",
+            "texto": "texto",
+            "usuario_nombre": "texto",
+            "fecha": "2026-10-22T14:30:00.000Z",
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "sin_ubicacion": true,
+            "foto": {
+              "sello_fecha": "2026-10-22T14:30:00.000Z",
+              "sello_lat": 1.5,
+              "sello_lng": 1.5,
+              "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+              "url_expira_at": "2026-10-22T14:30:00.000Z",
+              "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "precision": 1.5,
+              "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "sin_ubicacion": true,
+              "ruta_archivo": "texto"
+            },
+            "created_at": "2026-10-22T14:30:00.000Z"
+          }
+        ],
+        "required": [
+          "id",
+          "tipo",
+          "tipo_nombre",
+          "urgencia",
+          "rol",
+          "proceso",
+          "lugar_id",
+          "lugar",
+          "texto",
+          "usuario_nombre",
+          "fecha",
+          "lat",
+          "lng",
+          "sin_ubicacion",
+          "foto",
+          "created_at"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tipo": {
+            "type": "string"
+          },
+          "tipo_nombre": {
+            "type": "string"
+          },
+          "urgencia": {
+            "type": "string"
+          },
+          "rol": {
+            "type": "string"
+          },
+          "proceso": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lugar_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "lugar": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "texto": {
+            "type": "string"
+          },
+          "usuario_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fecha": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "sin_ubicacion": {
+            "type": "boolean"
+          },
+          "foto": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FotoNovedadViajeDto"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time"
+          }
+        }
+      },
       "OrdenSofasaDto": {
         "examples": [
           {
@@ -37088,7 +37588,8 @@
               "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
               "nota": "Mensaje de ejemplo",
               "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-            }
+            },
+            "id_envio": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
           }
         ],
         "required": [
@@ -37204,6 +37705,175 @@
                 ]
               }
             }
+          },
+          "id_envio": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "RegistrarNovedadViajeRequest": {
+        "examples": [
+          {
+            "tipo": "texto",
+            "texto": "texto",
+            "fecha": "2026-10-22T14:30:00.000Z",
+            "lat": 4.6097,
+            "lng": -74.0817,
+            "evidencia": {
+              "storage_path": "ejemplo.jpg",
+              "sello_fecha": "2026-10-22T14:30:00.000Z",
+              "sello_lat": 1.5,
+              "sello_lng": 1.5,
+              "precision": 1.5,
+              "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "nota": "Mensaje de ejemplo",
+              "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "id_envio": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            "proceso": "cargue",
+            "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+          }
+        ],
+        "required": [
+          "tipo",
+          "texto",
+          "fecha",
+          "lat",
+          "lng",
+          "evidencia",
+          "id_envio",
+          "proceso",
+          "lugar_id"
+        ],
+        "type": "object",
+        "properties": {
+          "tipo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "texto": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fecha": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "evidencia": {
+            "examples": [
+              {
+                "storage_path": "ejemplo.jpg",
+                "sello_fecha": "2026-10-22T14:30:00.000Z",
+                "sello_lat": 1.5,
+                "sello_lng": 1.5,
+                "precision": 1.5,
+                "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "nota": "Mensaje de ejemplo",
+                "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            ],
+            "required": [
+              "storage_path",
+              "sello_fecha",
+              "sello_lat",
+              "sello_lng",
+              "precision",
+              "dispositivo_id",
+              "nota",
+              "hash_sha256"
+            ],
+            "type": "object",
+            "properties": {
+              "storage_path": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "sello_fecha": {
+                "format": "date-time"
+              },
+              "sello_lat": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "sello_lng": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "precision": {
+                "type": [
+                  "null",
+                  "number"
+                ],
+                "format": "double"
+              },
+              "dispositivo_id": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "nota": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "hash_sha256": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            }
+          },
+          "id_envio": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "proceso": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lugar_id": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
           }
         }
       },
@@ -38763,7 +39433,38 @@
             "muelle_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "muelle": "texto",
             "eliminable": true,
-            "papel": "texto"
+            "papel": "texto",
+            "novedades_viaje": [
+              {
+                "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "tipo": "texto",
+                "tipo_nombre": "texto",
+                "urgencia": "texto",
+                "rol": "inspector",
+                "proceso": "cargue",
+                "lugar_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "lugar": "texto",
+                "texto": "texto",
+                "usuario_nombre": "texto",
+                "fecha": "2026-10-22T14:30:00.000Z",
+                "lat": 4.6097,
+                "lng": -74.0817,
+                "sin_ubicacion": true,
+                "foto": {
+                  "sello_fecha": "2026-10-22T14:30:00.000Z",
+                  "sello_lat": 1.5,
+                  "sello_lng": 1.5,
+                  "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                  "url_expira_at": "2026-10-22T14:30:00.000Z",
+                  "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "precision": 1.5,
+                  "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "sin_ubicacion": true,
+                  "ruta_archivo": "texto"
+                },
+                "created_at": "2026-10-22T14:30:00.000Z"
+              }
+            ]
           }
         ],
         "required": [
@@ -38976,6 +39677,15 @@
               "null",
               "string"
             ]
+          },
+          "novedades_viaje": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/NovedadViajeDto"
+            }
           }
         }
       },

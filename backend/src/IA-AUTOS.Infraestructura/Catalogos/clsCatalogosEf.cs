@@ -374,6 +374,38 @@ internal sealed class clsCatalogoMotivosNoSale(clsAppDbContext contexto, IReloj 
 }
 
 /// <summary>
+/// Los tipos de novedad del viaje: codigo, nombre, orden, activo, <c>rol</c> (quien puede reportarlo: <c>conductor</c>, <c>inspector</c> o <c>todos</c>) y <c>urgencia</c> (<c>alta</c> o <c>media</c>, la del aviso que genera).
+/// Un tipo que una novedad del viaje usa no se borra (409): se inactiva.
+/// </summary>
+internal sealed class clsCatalogoTiposNovedadViaje(clsAppDbContext contexto, IReloj reloj)
+    : clsCatalogoEf<clsTipoNovedadViaje>(contexto, reloj, clsNombresCatalogo.TIPOS_NOVEDAD_VIAJE)
+{
+    protected override IReadOnlyList<string> CamposPermitidos { get; } = [.. clsCamposCatalogo.COMUNES, "rol", "urgencia"];
+
+    protected override ValorCatalogo Mapear(clsTipoNovedadViaje t)
+    {
+        var valor = Comunes(t);
+        valor["rol"] = t.Rol;
+        valor["urgencia"] = t.Urgencia;
+        return valor;
+    }
+
+    protected override Task<clsTipoNovedadViaje> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct) =>
+        Task.FromResult(clsTipoNovedadViaje.Crear(
+            campos.Texto("codigo"), campos.Texto("nombre"), campos.Texto("rol"), campos.Texto("urgencia"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora));
+
+    protected override Task AplicarAsync(clsTipoNovedadViaje entidad, clsCamposCatalogo campos, CancellationToken ct)
+    {
+        if (campos.Tiene("rol") || campos.Tiene("urgencia"))
+        {
+            entidad.Cambiar(campos.Texto("rol"), campos.Texto("urgencia"), Reloj.Ahora);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
 /// Los muelles de cada lugar (<c>lugar_id</c>, <c>codigo</c> unico dentro del lugar, <c>nombre</c>, <c>orden</c> y <c>activo</c>): se leen junto a los lugares y se administran con las mismas rutas y roles que ellos. El lugar de un
 /// muelle no se cambia (se crea otro e inactiva este); un muelle que un viaje usa no se borra (409): se inactiva.
 /// </summary>

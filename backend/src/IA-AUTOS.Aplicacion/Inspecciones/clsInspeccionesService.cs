@@ -74,6 +74,7 @@ public sealed class clsInspeccionesService(
     IEtapaRepository etapas,
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
+    ILugarRepository lugares,
     clsFabricaEvidencias fabricaEvidencias,
     clsConfirmacionEnSitioService confirmacionEnSitio,
     clsVerificadorEtapaPrevia etapaPrevia,
@@ -222,9 +223,9 @@ public sealed class clsInspeccionesService(
 
         // Un usuario inexistente (404) y una segunda inspeccion original del mismo momento en la etapa (409) se traducen al confirmar.
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        if (novedad is not null && vehiculo is not null)
+        if (novedad is not null)
         {
-            await AvisarCargueSinInspectorAsync(novedad, vehiculo, viaje, motivo!, ct);
+            await AvisarCargueSinInspectorAsync(novedad, viaje, motivo!, ct);
         }
 
         var conductor = viaje.ConductorId is { } conductorId ? (await usuarios.ObtenerPorIdAsync(conductorId, ct))?.Nombre : null;
@@ -340,29 +341,58 @@ public sealed class clsInspeccionesService(
     }
 
     /// <summary>
-    /// El aviso de urgencia alta (bandeja y push) a los coordinadores de calidad y administradores activos del cliente del vehiculo, nunca de otro cliente. Un fallo al avisar no deshace la
-    /// inspeccion ni la novedad, que ya quedaron guardadas.
+    /// El aviso de urgencia alta (bandeja y push) de la excepcion «No hay inspector»: UNO solo por viaje, con la lista de los VIN activos del viaje, para los coordinadores de calidad y administradores activos de cada cliente con
+    /// carros en el viaje (cada uno recibe solo los VIN de su cliente, nunca los de otro). Sale con la primera activacion; las siguientes del mismo viaje no avisan porque su clave es la misma (cada carro conserva su novedad de
+    /// proceso y su auditoria). Un fallo al avisar no deshace la inspeccion ni la novedad, que ya quedaron guardadas.
     /// </summary>
-    private async Task AvisarCargueSinInspectorAsync(clsNovedadProceso novedad, clsVehiculo vehiculo, clsViaje viaje, ValorCatalogo motivo, CancellationToken ct)
+    private async Task AvisarCargueSinInspectorAsync(clsNovedadProceso novedad, clsViaje viaje, ValorCatalogo motivo, CancellationToken ct)
     {
-        var destinatarios = await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN], vehiculo.ClienteId, ct);
+        var vinesPorCliente = new Dictionary<Guid, List<string>>();
+        foreach (var enlace in (await viajes.ObtenerVehiculosAsync(viaje.Id, ct)).Where(e => e.EstaActiva))
+        {
+            if (await vehiculos.ObtenerPorIdAsync(enlace.VehiculoId, ct) is not { } unidad)
+            {
+                continue;
+            }
+
+            if (!vinesPorCliente.TryGetValue(unidad.ClienteId, out var vines))
+            {
+                vinesPorCliente[unidad.ClienteId] = vines = [];
+            }
+
+            vines.Add(unidad.Vin);
+        }
+
         var autor = (await usuarios.ObtenerPorIdAsync(novedad.UsuarioId, ct))?.Nombre ?? "El conductor";
         var detalle = novedad.MotivoTexto is null ? string.Empty : $": {novedad.MotivoTexto}";
         var codigoViaje = viaje.CodigoMtrack is { } codigo ? $" (viaje {codigo})" : string.Empty;
-        await emisor.EmitirAsync(
-            new clsAlerta(
-                clsTipoNotificacion.NOVEDAD_PROCESO,
-                clsUrgenciaNotificacion.ALTA,
-                destinatarios.Select(d => d.Id).ToList(),
-                vehiculo.ClienteId,
-                viaje.Id,
-                vehiculo.Id,
-                null,
-                novedad.InspeccionId,
-                $"Cargue sin inspector: {vehiculo.Vin}",
-                $"{autor} hizo el cargue de la unidad {vehiculo.Vin}{codigoViaje} sin inspector. Motivo: {motivo["nombre"]}{detalle}.",
-                $"{clsTipoNotificacion.NOVEDAD_PROCESO}:{novedad.Id}"),
-            ct);
+        var lugar = viaje.LugarCargueId is { } lugarId ? (await lugares.ObtenerAsync(lugarId, ct))?.Nombre : null;
+        foreach (var (clienteId, vines) in vinesPorCliente)
+        {
+            var destinatarios = await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN], clienteId, ct);
+            await emisor.EmitirAsync(
+                new clsAlerta(
+                    clsTipoNotificacion.NOVEDAD_PROCESO,
+                    clsUrgenciaNotificacion.ALTA,
+                    destinatarios.Select(d => d.Id).ToList(),
+                    clienteId,
+                    viaje.Id,
+                    null,
+                    null,
+                    null,
+                    $"Cargue sin inspector{codigoViaje}",
+                    $"{autor} hizo el cargue del viaje{codigoViaje} sin inspector. Motivo: {motivo["nombre"]}{detalle}. Carros: {string.Join(", ", vines)}.",
+                    $"{clsTipoNotificacion.NOVEDAD_PROCESO}:{clsTipoNovedadProceso.CARGUE_SIN_INSPECTOR}:{viaje.Id}",
+                    new Dictionary<string, object?>
+                    {
+                        ["hecho"] = clsTipoNovedadProceso.CARGUE_SIN_INSPECTOR,
+                        ["vins"] = vines,
+                        ["motivo"] = novedad.MotivoCodigo,
+                        ["motivo_nombre"] = motivo["nombre"],
+                        ["lugar"] = lugar,
+                    }),
+                ct);
+        }
     }
 
     /// <summary>

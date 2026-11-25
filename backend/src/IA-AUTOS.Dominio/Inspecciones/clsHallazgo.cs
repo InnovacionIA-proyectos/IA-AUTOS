@@ -80,6 +80,9 @@ public sealed class clsHallazgo : clsEntidadBase
     /// <summary><see cref="clsOrigenHallazgo"/>.</summary>
     public string Origen { get; private set; } = clsOrigenHallazgo.INSPECTOR;
 
+    /// <summary>El identificador del envio que el celular le puso a la novedad del conductor: un reenvio con el mismo identificador no crea otra. Nulo en los demas hallazgos y en los envios de la app anterior.</summary>
+    public Guid? IdEnvio { get; private set; }
+
     public string? Nota { get; private set; }
 
     public bool EsPreexistente { get; private set; }
@@ -278,7 +281,7 @@ public sealed class clsHallazgo : clsEntidadBase
     /// Crea la novedad que registra el conductor en ruta: un tipo de la lista y un tamano, sin zona, clase, nivel ni texto libre. Esos datos los completa el inspector al
     /// revisarla; mientras tanto la novedad no tiene nivel V.
     /// </summary>
-    public static clsHallazgo CrearNovedad(Guid inspeccionId, string tipoNovedad, string tamanoDano, DateTimeOffset ahora)
+    public static clsHallazgo CrearNovedad(Guid inspeccionId, string tipoNovedad, string tamanoDano, DateTimeOffset ahora, Guid? idEnvio = null)
     {
         clsValidador.EnCatalogo(tipoNovedad, clsTipoNovedad.VALORES, "tipo_novedad");
         var hallazgo = new clsHallazgo
@@ -287,6 +290,7 @@ public sealed class clsHallazgo : clsEntidadBase
             TipoNovedad = tipoNovedad,
             TamanoDano = clsValidador.Requerido(tamanoDano, "tamano_dano es requerido"),
             Origen = clsOrigenHallazgo.CONDUCTOR,
+            IdEnvio = idEnvio,
         };
         hallazgo.Inicializar(ahora);
         return hallazgo;

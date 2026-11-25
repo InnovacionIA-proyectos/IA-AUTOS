@@ -58,6 +58,7 @@ public static class clsDependenciasAplicacion
         servicios.AddScoped<clsFinalizadorDelViaje>();
         servicios.AddScoped<clsReclamosService>();
         servicios.AddScoped<clsPermisosSinInspectorService>();
+        servicios.AddScoped<clsNovedadesViajeService>();
         servicios.AddScoped<clsEsperaDelDestino>();
         servicios.AddScoped<clsMapeoCargaViajesService>();
         servicios.AddScoped<clsPuntosDeInspectorService>();
