@@ -51,6 +51,9 @@ public static class clsMotivosRechazo
     public const string LLEGADA_DEL_INSPECTOR_DEL_PUNTO = "llegada_del_inspector_del_punto";
     public const string DANOS_SIN_CALIFICAR = "danos_sin_calificar";
 
+    // ---- Una sola revision en el descargue
+    public const string SALIDA_DESCARGUE = "salida_descargue";
+
     // ---- No sale, vuelve a salir y bajar del viaje
     public const string CARGUE_FIRMADO = "cargue_firmado";
     public const string SIN_CUPO = "sin_cupo";

@@ -21,7 +21,7 @@ public sealed class clsReportesTableroController(clsReportesTableroService servi
         string? desde, string? hasta, string? operacion, string? clienteId, string? puntoId, string? marca, string? trailer, string? proceso, string? nivel, string? fecha = null) =>
         new(desde, hasta, operacion, clienteId, puntoId, marca, trailer, proceso, nivel, fecha);
 
-    /// <summary>Cobertura: unidades despachadas (VIN de un viaje con la salida del Cargue cerrada, sin las que no salen) y las que tienen sus seis registros cerrados. Meta 90 %. Por operacion, cliente y punto.</summary>
+    /// <summary>Cobertura: unidades despachadas (VIN de un viaje con la salida del Cargue cerrada, sin las que no salen) y las que tienen sus cinco registros cerrados. Meta 90 %. Por operacion, cliente y punto.</summary>
     [HttpGet("cobertura")]
     [ProducesResponseType<CoberturaDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Cobertura(

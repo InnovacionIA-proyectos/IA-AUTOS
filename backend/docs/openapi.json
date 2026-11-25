@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.26.0"
+    "version": "3.27.0"
   },
   "paths": {
     "/api/viajes": {
@@ -16511,7 +16511,7 @@
             }
           },
           "409": {
-            "description": "Error 409: CONFLICT, ETAPA_PREVIA_SIN_CIERRE",
+            "description": "Error 409: CONFLICT, ETAPA_PREVIA_SIN_CIERRE, MOMENTO_NO_ADMITIDO",
             "content": {
               "application/json": {
                 "schema": {
@@ -16533,6 +16533,15 @@
                       "error": "La salida exige la llegada cerrada de la etapa anterior del VIN (details.etapa_previa dice cual)",
                       "code": "ETAPA_PREVIA_SIN_CIERRE",
                       "message": "La salida exige la llegada cerrada de la etapa anterior del VIN (details.etapa_previa dice cual)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "MOMENTO_NO_ADMITIDO": {
+                    "summary": "La salida del Descargue ya no existe: el Descargue tiene una sola revision, la de llegada (details.motivo: salida_descargue)",
+                    "value": {
+                      "error": "La salida del Descargue ya no existe: el Descargue tiene una sola revision, la de llegada (details.motivo: salida_descargue)",
+                      "code": "MOMENTO_NO_ADMITIDO",
+                      "message": "La salida del Descargue ya no existe: el Descargue tiene una sola revision, la de llegada (details.motivo: salida_descargue)",
                       "timestamp": "2026-10-22T14:30:00.000Z"
                     }
                   }
@@ -16972,7 +16981,7 @@
             }
           },
           "409": {
-            "description": "Error 409: CONFLICT, INSPECCION_YA_FIRMADA",
+            "description": "Error 409: CONFLICT, INSPECCION_YA_FIRMADA, MOMENTO_NO_ADMITIDO",
             "content": {
               "application/json": {
                 "schema": {
@@ -16994,6 +17003,15 @@
                       "error": "La transferencia de la inspeccion ya tiene una firma o un cierre: ya no se corrige (se aclara con una nota)",
                       "code": "INSPECCION_YA_FIRMADA",
                       "message": "La transferencia de la inspeccion ya tiene una firma o un cierre: ya no se corrige (se aclara con una nota)",
+                      "timestamp": "2026-10-22T14:30:00.000Z"
+                    }
+                  },
+                  "MOMENTO_NO_ADMITIDO": {
+                    "summary": "Una salida del Descargue (que ya no existe) no se corrige (details.motivo: salida_descargue)",
+                    "value": {
+                      "error": "Una salida del Descargue (que ya no existe) no se corrige (details.motivo: salida_descargue)",
+                      "code": "MOMENTO_NO_ADMITIDO",
+                      "message": "Una salida del Descargue (que ya no existe) no se corrige (details.motivo: salida_descargue)",
                       "timestamp": "2026-10-22T14:30:00.000Z"
                     }
                   }
@@ -26522,7 +26540,8 @@
       "CambiarEstadoViajeRequest": {
         "examples": [
           {
-            "estado": "borrador"
+            "estado": "borrador",
+            "motivo": "Mensaje de ejemplo"
           }
         ],
         "required": [
@@ -26531,6 +26550,12 @@
         "type": "object",
         "properties": {
           "estado": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "motivo": {
             "type": [
               "null",
               "string"

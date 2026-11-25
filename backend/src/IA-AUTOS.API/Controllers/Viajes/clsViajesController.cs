@@ -249,7 +249,7 @@ public sealed class clsViajesController(
     public async Task<IActionResult> CambiarCargue(Guid id, CancellationToken ct) =>
         Ok(await cambioCargue.CambiarAsync(id, await LeerCamposAsync(ct), ct));
 
-    /// <summary>Cambia el estado: programado a en_curso, en_curso a finalizado, o cancelar un viaje programado o en curso.</summary>
+    /// <summary>Cambia el estado: programado a en_curso, en_curso a finalizado, o cancelar un viaje programado o en curso. Finalizar a mano un viaje en curso con carros pendientes de entrega exige <c>motivo</c> (1 a 300 caracteres; 400 sin el); queda en la auditoria.</summary>
     [HttpPatch("{id:guid}/estado")]
     [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
     [ProducesResponseType<ViajeDto>(StatusCodes.Status200OK)]

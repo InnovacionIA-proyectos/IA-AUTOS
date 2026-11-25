@@ -15,10 +15,10 @@ public sealed class clsEtapaCatalogo : clsCatalogoCodificado
     }
 
     /// <summary>
-    /// Las inspecciones de Cargue y Descargue exigen las fotos de las vistas obligatorias; en Transporte la salida y la llegada son registros
-    /// del conductor y no las exigen.
+    /// Solo la llegada del Cargue y la llegada del Descargue exigen las fotos de las vistas obligatorias. La salida del Cargue es la acomodacion en la ninera (sus propias exigencias), en Transporte la salida
+    /// y la llegada son registros del conductor y no las exigen, y el Descargue ya no tiene salida: una salida del Descargue anterior (un borrador que quedo abierto) tampoco las exige.
     /// </summary>
-    public static bool ExigeVistas(string? codigo) => codigo is CARGUE or DESCARGUE;
+    public static bool ExigeVistas(string? codigo, string? momento) => momento == Inspecciones.clsMomento.LLEGADA && codigo is CARGUE or DESCARGUE;
 
     public static clsEtapaCatalogo Crear(string? codigo, string? nombre, int? orden, bool? activo, DateTimeOffset ahora)
     {

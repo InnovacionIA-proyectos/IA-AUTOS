@@ -604,8 +604,8 @@ public sealed class BaseDatosRealTests
         var vistas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE schema_id = SCHEMA_ID() AND name IN (N'vwCobertura', N'vwAdopcion', N'vwTiempoCaptura', N'vwAveriasPorConfiguracion', N'vwIndicadorDiario')");
         Assert.True(vistas == 5, $"Faltan vistas de indicadores (hay {vistas} de 5). Ejecute database/cambios-esquema/20-vistas-de-indicadores.sql.");
 
-        var cobertura = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura WHERE RegistrosCerrados BETWEEN 1 AND 6 AND Fecha IS NOT NULL AND ClienteId IS NOT NULL");
-        var completasMalContadas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura WHERE (Completa = 1 AND RegistrosCerrados <> 6) OR (Completa = 0 AND RegistrosCerrados = 6)");
+        var cobertura = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura WHERE RegistrosCerrados BETWEEN 1 AND 5 AND Fecha IS NOT NULL AND ClienteId IS NOT NULL");
+        var completasMalContadas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura WHERE (Completa = 1 AND RegistrosCerrados <> 5) OR (Completa = 0 AND RegistrosCerrados = 5)");
         var sinNoSale = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura c JOIN tblViajeVehiculos vv ON vv.ViajeId = c.ViajeId AND vv.VehiculoId = c.VehiculoId WHERE vv.EstadoUnidad = 'no_sale'");
         var tiempos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwTiempoCaptura WHERE Proceso NOT IN ('cargue', 'descargue') OR Minutos < 0");
         var adopcion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwAdopcion WHERE ConSalidaDigital > Programados");
@@ -1094,6 +1094,19 @@ public sealed class BaseDatosRealTests
         var correccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblInspecciones_Corrige' AND object_id = OBJECT_ID(N'tblInspecciones') AND is_unique = 1 AND filter_definition LIKE N'%descartada%' AND filter_definition LIKE N'%superada%'");
 
         Assert.True(estados == 1 && cierre == 1 && original == 1 && correccion == 1, "tblInspecciones no admite los estados descartada y superada o sus indices unicos las cuentan. Ejecute database/cambios-esquema/50-descartar-informe-en-borrador.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task La_cobertura_cuenta_cinco_registros_y_el_aviso_de_viaje_sin_movimiento_esta_migrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/51-cobertura-con-cinco-registros-y-aviso-de-viaje-sin-movimiento.sql.
+        await using var conexion = await AbrirAsync();
+
+        var cinco = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'vwCobertura') AND definition LIKE N'%RegistrosCerrados >= 5%'");
+        var sinSalidaDelDescargue = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'vwCobertura') AND definition LIKE N'%NOT (ec.Codigo = ''descargue'' AND i.Momento = ''salida'')%'");
+        var aviso = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%viaje_sin_movimiento%'");
+
+        Assert.True(cinco == 1 && sinSalidaDelDescargue == 1 && aviso == 1, "Falta la cobertura con cinco registros o el tipo de aviso viaje_sin_movimiento. Ejecute database/cambios-esquema/51-cobertura-con-cinco-registros-y-aviso-de-viaje-sin-movimiento.sql.");
     }
 
     [FactEntornoReal]

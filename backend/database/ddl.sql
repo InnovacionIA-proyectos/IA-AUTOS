@@ -1897,8 +1897,8 @@ GO
 
 /* -----------------------------------------------------------------------------
    Vistas de los indicadores del tablero (cobertura, adopcion, tiempo de captura, averias por configuracion e indicador diario). Todas calculan el cliente por el vehiculo y los dias en
-   hora de Colombia (UTC-5). vwCobertura: una fila por unidad despachada (VIN de un viaje con la salida de su Cargue cerrada, sin las unidades "no sale"); RegistrosCerrados cuenta de 0 a 6
-   (salida y llegada de las 3 etapas) y Completa = 1 solo con los 6. vwAdopcion (por carro): por dia y por el destino de cada unidad, Programados = VIN de los viajes no cancelados programados ese dia y ConSalidaDigital = los que tienen una inspeccion de salida CERRADA. vwAdopcionPorCamion:
+   hora de Colombia (UTC-5). vwCobertura: una fila por unidad despachada (VIN de un viaje con la salida de su Cargue cerrada, sin las unidades "no sale"); RegistrosCerrados cuenta de 0 a 5
+   (llegada y salida del Cargue, llegada y salida de Transporte y llegada del Descargue: el Descargue ya no tiene salida) y Completa = 1 solo con los 5. vwAdopcion (por carro): por dia y por el destino de cada unidad, Programados = VIN de los viajes no cancelados programados ese dia y ConSalidaDigital = los que tienen una inspeccion de salida CERRADA. vwAdopcionPorCamion:
    lo mismo contando cada viaje una sola vez (adoptado si alguna de sus unidades tiene su salida cerrada), agrupado por el destino del viaje (el de sus unidades si es uno solo; nulo si son varios o falta alguno). vwTiempoCaptura: una fila por inspeccion cerrada de Cargue y Descargue, con Minutos = cierre - inicio.
    vwAveriasPorConfiguracion: una fila por hallazgo de una inspeccion cerrada (tambien el dano sin calificar, sin nivel), con la configuracion del viaje y la zona (lado + numero). vwIndicadorDiario: por dia,
    Despachados, ConNovedad (unidades con al menos un hallazgo V1 o V1+ ese dia) y SinCalificar (los danos sin nivel de la version vigente de los informes de esas unidades ese dia, una cifra aparte que no se suma a ConNovedad). Se crean con SQL dinamico para poder ejecutar este script tambien sobre una base que aun no tiene las columnas que usan.
@@ -1916,7 +1916,7 @@ SELECT vv.ViajeId, vv.VehiculoId, v.Vin, v.ClienteId, v.Operacion, vj.OrigenId, 
        d.FechaDespacho,
        CAST(SWITCHOFFSET(d.FechaDespacho, N''-05:00'') AS date) AS Fecha,
        r.RegistrosCerrados,
-       CAST(CASE WHEN r.RegistrosCerrados >= 6 THEN 1 ELSE 0 END AS bit) AS Completa
+       CAST(CASE WHEN r.RegistrosCerrados >= 5 THEN 1 ELSE 0 END AS bit) AS Completa
 FROM dbo.tblViajeVehiculos vv
 JOIN dbo.tblViajes vj ON vj.Id = vv.ViajeId
 JOIN dbo.tblVehiculos v ON v.Id = vv.VehiculoId
@@ -1928,12 +1928,14 @@ CROSS APPLY (
     WHERE e.ViajeId = vv.ViajeId AND e.VehiculoId = vv.VehiculoId AND ec.Codigo = ''cargue'' AND i.Momento = ''salida'' AND i.Estado = ''cerrada''
 ) d
 CROSS APPLY (
-    SELECT CASE WHEN COUNT(*) > 6 THEN 6 ELSE COUNT(*) END AS RegistrosCerrados
+    SELECT CASE WHEN COUNT(*) > 5 THEN 5 ELSE COUNT(*) END AS RegistrosCerrados
     FROM (
         SELECT DISTINCT i.EtapaId, i.Momento
         FROM dbo.tblInspecciones i
         JOIN dbo.tblEtapas e ON e.Id = i.EtapaId
+        JOIN dbo.tblEtapasCatalogo ec ON ec.Id = e.EtapaCatalogoId
         WHERE e.ViajeId = vv.ViajeId AND e.VehiculoId = vv.VehiculoId AND i.Estado = ''cerrada''
+          AND NOT (ec.Codigo = ''descargue'' AND i.Momento = ''salida'')
     ) AS registros
 ) r
 WHERE vv.EstadoUnidad NOT IN (''no_sale'', ''bajado'') AND d.FechaDespacho IS NOT NULL');
@@ -2836,6 +2838,18 @@ IF OBJECT_ID(N'dbo.tblInspecciones', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblI
     DROP INDEX UX_tblInspecciones_Corrige ON dbo.tblInspecciones;
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N''UX_tblInspecciones_Corrige'' AND object_id = OBJECT_ID(N''dbo.tblInspecciones''))
     CREATE UNIQUE INDEX UX_tblInspecciones_Corrige ON dbo.tblInspecciones (CorrigeInspeccionId) WHERE CorrigeInspeccionId IS NOT NULL AND Estado <> ''descartada'' AND Estado <> ''superada''');
+GO
+
+/* -----------------------------------------------------------------------------
+   El tipo de aviso viaje_sin_movimiento (un viaje en curso lleva mas horas que el parametro sin ningun movimiento). La cobertura con cinco registros esta en la definicion de vwCobertura, mas arriba.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblNotificaciones', N'U') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblNotificaciones_Tipo'' AND parent_object_id = OBJECT_ID(N''dbo.tblNotificaciones'') AND definition LIKE N''%viaje_sin_movimiento%'')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblNotificaciones_Tipo'' AND parent_object_id = OBJECT_ID(N''dbo.tblNotificaciones''))
+        ALTER TABLE dbo.tblNotificaciones DROP CONSTRAINT CK_tblNotificaciones_Tipo;
+    ALTER TABLE dbo.tblNotificaciones ADD CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN (''novedad_conductor'', ''respuesta_conductor'', ''hallazgo_critico'', ''umbral_patron'', ''captura_incompleta'', ''transferencia_pendiente'', ''reporte_diario'', ''novedad_proceso'', ''reclamo_sin_actividad'', ''fuera_de_rango'', ''cargue_sin_reclamar'', ''propuesta_ubicacion'', ''permiso_sin_inspector'', ''firma_cargue_pendiente'', ''cambio_cargue_inspector'', ''cambio_destino_unidad'', ''carro_rechazado_en_destino'', ''ubicacion_fijada'', ''espera_inspector_punto'', ''viaje_sin_movimiento''));
+END');
 GO
 
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';

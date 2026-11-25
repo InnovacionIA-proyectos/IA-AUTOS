@@ -23,6 +23,9 @@ public static class clsCodigosError
     /// <summary>La llegada de Transporte de esa unidad ya estaba cerrada (409): un reintento del conductor es un exito, el servidor no la repite.</summary>
     public const string LLEGADA_YA_CERRADA = "LLEGADA_YA_CERRADA";
 
+    /// <summary>El momento de la inspeccion no existe en esa etapa (409): el Descargue solo tiene la revision de llegada; <c>details.motivo</c> dice cual (<c>salida_descargue</c>).</summary>
+    public const string MOMENTO_NO_ADMITIDO = "MOMENTO_NO_ADMITIDO";
+
     /// <summary>La URL de la foto no tiene firma, la firma no coincide o ya vencio (403): hay que pedir una URL nueva al sistema.</summary>
     public const string URL_FIRMADA_INVALIDA = "URL_FIRMADA_INVALIDA";
 

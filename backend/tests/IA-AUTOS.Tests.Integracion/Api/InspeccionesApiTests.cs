@@ -1262,7 +1262,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
-    public async Task El_conductor_crea_la_salida_de_transporte_y_de_descargue_aunque_el_cargue_tenga_personal_de_apoyo()
+    public async Task El_conductor_crea_la_salida_de_transporte_y_la_llegada_de_descargue_aunque_el_cargue_tenga_personal_de_apoyo_y_la_salida_de_descargue_ya_no_existe()
     {
         var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-COND-0003", conductorId: conductor.UsuarioId);
@@ -1270,11 +1270,15 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var transporte = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
         await LlegadaCerradaAsync(etapas[1], conductor.UsuarioId);
 
-        var descargue = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
+        var descargue = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "llegada", fecha = FECHA, lat = 4.6, lng = -74.1 });
+        var salidaDelDescargue = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
         var llegadaDelCargue = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[0], momento = "llegada", fecha = FECHA, lat = 4.6, lng = -74.1 });
 
         Assert.Equal(HttpStatusCode.Created, transporte.StatusCode);
         Assert.Equal(HttpStatusCode.Created, descargue.StatusCode);
+        // El Descargue tiene una sola revision: su salida ya no se crea.
+        Assert.Equal(HttpStatusCode.Conflict, salidaDelDescargue.StatusCode);
+        Assert.Equal("MOMENTO_NO_ADMITIDO", (await ClonarAsync(salidaDelDescargue)).GetProperty("code").GetString());
         // El bloqueo es de la salida del Cargue: lo demas del Cargue (por ejemplo la llegada) no cambia.
         Assert.NotEqual(HttpStatusCode.Forbidden, llegadaDelCargue.StatusCode);
     }
@@ -1698,7 +1702,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
-    public async Task Una_transferencia_sin_cierre_bloquea_la_salida_de_la_etapa_siguiente_hasta_que_se_cierra()
+    public async Task El_descargue_ya_no_tiene_salida_ni_con_la_transferencia_de_la_llegada_de_transporte_sin_cierre_ni_despues_de_cerrarla_y_su_llegada_se_crea_igual()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
         // El cargue se firma por niñera: la transferencia por carro se prueba con la llegada del Transporte, cuya etapa siguiente es el Descargue.
@@ -1707,16 +1711,17 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         await FirmarAsync(inspector, llegada, inspector, conductor, "A");
         var salida = new { etapa_id = etapas[2], momento = "salida", fecha = FECHA };
 
-        var bloqueada = await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", salida);
-        var error = await ClonarAsync(bloqueada);
-        Assert.Equal(HttpStatusCode.Conflict, bloqueada.StatusCode);
-        Assert.Equal("ETAPA_PREVIA_SIN_CIERRE", error.GetProperty("code").GetString());
-        Assert.Equal("transferencia_sin_cierre", error.GetProperty("details").GetProperty("motivo").GetString());
-        Assert.Equal(etapas[1], error.GetProperty("details").GetProperty("etapa_previa_id").GetGuid());
+        // El Descargue tiene una sola revision, la de llegada: su salida se rechaza siempre (ya no hay bloqueo por transferencia porque ya no hay salida).
+        var rechazada = await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", salida);
+        var error = await ClonarAsync(rechazada);
+        Assert.Equal(HttpStatusCode.Conflict, rechazada.StatusCode);
+        Assert.Equal("MOMENTO_NO_ADMITIDO", error.GetProperty("code").GetString());
+        Assert.Equal("salida_descargue", error.GetProperty("details").GetProperty("motivo").GetString());
 
         Assert.Equal(HttpStatusCode.Created, (await Cliente(conductor.Token).PostAsJsonAsync($"/api/inspecciones/{llegada}/transferencia/reservas", new { firma = "B", reservas = "Rayón" })).StatusCode);
 
-        Assert.Equal(HttpStatusCode.Created, (await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", salida)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", salida)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "llegada", fecha = FECHA })).StatusCode);
     }
 
     [Fact]
