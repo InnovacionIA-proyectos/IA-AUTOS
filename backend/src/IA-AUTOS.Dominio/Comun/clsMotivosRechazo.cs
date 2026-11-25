@@ -72,6 +72,11 @@ public static class clsMotivosRechazo
     public const string INSPECTOR_SIN_ESE_PROCESO = "inspector_sin_ese_proceso";
     public const string ENVIO_REPETIDO_DISTINTO = "envio_repetido_distinto";
 
+    // ---- Cuando se puede: el cargue sin inspector, la ruta de la unidad y el transporte
+    public const string LUGAR_NO_ADMITE_CARGUE_SIN_INSPECTOR = "lugar_no_admite_cargue_sin_inspector";
+    public const string ENTREGA_DEL_CARGUE_SIN_CERRAR = "entrega_del_cargue_sin_cerrar";
+    public const string TRANSPORTE_LO_ARMA_EL_SISTEMA = "transporte_lo_arma_el_sistema";
+
     // ---- Vehiculos
     public const string VEHICULO_EN_VIAJE_ACTIVO = "vehiculo_en_viaje_activo";
 

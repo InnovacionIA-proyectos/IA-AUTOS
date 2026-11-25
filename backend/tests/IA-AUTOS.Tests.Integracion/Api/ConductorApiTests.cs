@@ -53,7 +53,7 @@ public sealed class ConductorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         var (vehiculo, etapas) = await Sembrador.VehiculoConRutaAsync(vin, conductorId: conductor.UsuarioId);
         if (cargueCerrado)
         {
-            await Sembrador.InformeAsync(etapas[0], conductor.UsuarioId, cerrada: true, momento: "llegada");
+            await Sembrador.EntregaDelCargueCerradaAsync(etapas[0], conductor.UsuarioId, coordinador.UsuarioId);
         }
 
         return new Escenario(await Sembrador.ViajeDeEtapaAsync(etapas[0]), vehiculo, etapas, vin, conductor, coordinador, admin);

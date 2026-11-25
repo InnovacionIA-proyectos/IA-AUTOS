@@ -124,7 +124,9 @@ public sealed record ViajeVehiculoDto(
     string? LugarDestino = null,
     int? Posicion = null,
     BajadoDto? Bajado = null,
-    DateTimeOffset? LugarDestinoCambiadoAt = null);
+    DateTimeOffset? LugarDestinoCambiadoAt = null,
+    bool PuedeRegistrarRuta = false,
+    string? MotivoSinRuta = null);
 
 /// <summary>
 /// Algo que paso en el proceso del viaje y no es un dano (una novedad de proceso): <c>Tipo</c> es <c>cargue_sin_inspector</c> (la excepcion «No hay inspector» que el conductor activo en el momento) o
@@ -183,7 +185,8 @@ public sealed record ViajeDto(
     string? Muelle = null,
     bool Eliminable = false,
     string? Papel = null,
-    IReadOnlyList<NovedadViajeDto>? NovedadesViaje = null);
+    IReadOnlyList<NovedadViajeDto>? NovedadesViaje = null,
+    bool LugarCargueAdmiteSinInspector = false);
 
 /// <summary>Un puesto de la ninera: su <c>Numero</c> (el que se envia como posicion de una unidad), la <c>Etiqueta</c> con que se muestra (hoy el mismo numero) y el <c>Vin</c> de la unidad que lo ocupa (nulo si esta libre).</summary>
 public sealed record PuestoDeNiniera(int Numero, string Etiqueta, string? Vin);
@@ -229,7 +232,8 @@ public sealed record ViajeResumenDto(
     bool LugarCargueTieneInspector = false,
     Guid? MuelleId = null,
     string? Muelle = null,
-    bool Eliminable = false);
+    bool Eliminable = false,
+    bool LugarCargueAdmiteSinInspector = false);
 
 /// <summary>
 /// Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio. <c>Pagina</c>, <c>Tamano</c> y <c>Orden</c> son el formato comun de los listados; la exportacion a Excel los

@@ -47,6 +47,12 @@ public sealed class clsLugar : clsCatalogoBase
     /// <summary>La precision, en metros, del GPS con que se fijo la ubicacion «aqui». Nula en los lugares fijados antes de guardarla, en los de carga manual y mientras el lugar no tiene ubicacion; cambiar las coordenadas la borra.</summary>
     public double? PrecisionM { get; private set; }
 
+    /// <summary>
+    /// Si el lugar admite que el cargue lo haga el conductor cuando no hay inspector (la excepcion «No hay inspector» y su permiso). Es falso en todos los lugares hasta que el coordinador de calidad lo activa; donde es falso
+    /// el cargue lo hace siempre el inspector.
+    /// </summary>
+    public bool AdmiteCargueSinInspector { get; private set; }
+
     public const int RADIO_MAXIMO_M = 100_000;
 
     /// <summary>True mientras el lugar no tiene coordenadas.</summary>
@@ -72,6 +78,13 @@ public sealed class clsLugar : clsCatalogoBase
             Ciudad = CiudadValida(ciudad);
         }
 
+        Tocar(ahora);
+    }
+
+    /// <summary>Activa o desactiva el cargue sin inspector del lugar.</summary>
+    public void CambiarAdmiteCargueSinInspector(bool admite, DateTimeOffset ahora)
+    {
+        AdmiteCargueSinInspector = admite;
         Tocar(ahora);
     }
 

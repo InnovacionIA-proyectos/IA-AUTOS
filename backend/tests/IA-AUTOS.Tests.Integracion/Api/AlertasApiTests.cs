@@ -85,8 +85,8 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
     private async Task<HttpResponseMessage> CerrarTransporteConHallazgosAsync(Escenario e, params string[] niveles)
     {
         await Sembrador.InformeAsync(e.Etapas[0], e.Inspector.UsuarioId, cerrada: true, momento: "llegada");
-        var inspeccion = await ComoJsonAsync(await Como(e.Inspector).PostAsJsonAsync("/api/inspecciones", new { etapa_id = e.Etapas[1], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 }));
-        var id = inspeccion.GetProperty("id").GetGuid();
+        // El informe de transporte lo arma el sistema (nadie lo crea por la API): se siembra el borrador de la salida.
+        var id = await Sembrador.InformeAsync(e.Etapas[1], e.Inspector.UsuarioId, cerrada: false, momento: "salida");
         foreach (var nivel in niveles)
         {
             var subida = await ComoJsonAsync(await Como(e.Inspector).PostAsJsonAsync("/api/uploads", new { data = Convert.ToBase64String(FIRMA_PNG.Concat(Guid.NewGuid().ToByteArray()).ToArray()), ext = "png" }));

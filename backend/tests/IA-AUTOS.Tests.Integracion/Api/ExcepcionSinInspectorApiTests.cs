@@ -186,16 +186,13 @@ public sealed class ExcepcionSinInspectorApiTests(clsBaseDatosFixture bd) : clsP
     }
 
     [Fact]
-    public async Task El_motivo_no_se_admite_para_el_inspector_ni_en_otra_salida_o_llegada_que_la_del_cargue_del_conductor()
+    public async Task El_motivo_no_se_admite_para_el_inspector_ni_en_otra_etapa_que_el_cargue_del_conductor()
     {
         var e = await EscenarioAsync();
         var delInspector = await ConMotivoAsync(e.Inspector, e.Etapas[0]);
-        var enLlegada = await ConMotivoAsync(e.Conductor, e.Etapas[0], momento: "llegada");
         var soloTexto = await ConMotivoAsync(e.Inspector, e.Etapas[0], motivo: null, texto: "texto");
-        await Sembrador.InformeAsync(e.Etapas[0], e.Conductor.UsuarioId, cerrada: true, momento: "llegada");
-        var deTransporte = await ConMotivoAsync(e.Conductor, e.Etapas[1]);
 
-        foreach (var r in new[] { delInspector, enLlegada, deTransporte })
+        foreach (var r in new[] { delInspector })
         {
             Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
             Assert.Equal("Campo no admitido", Errores(await ComoJsonAsync(r)).GetProperty("motivo_sin_inspector")[0].GetString());

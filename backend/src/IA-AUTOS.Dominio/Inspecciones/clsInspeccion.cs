@@ -144,7 +144,7 @@ public sealed class clsInspeccion : clsEntidadBase
 
         var motivo = clsValidador.Opcional(motivoSinInspector);
         var motivoTexto = clsValidador.Opcional(motivoSinInspectorTexto);
-        if (motivo is not null && momento != clsMomento.SALIDA)
+        if (motivo is not null && momento is not (clsMomento.SALIDA or clsMomento.LLEGADA))
         {
             throw clsErroresCampos.De("motivo_sin_inspector", "Campo no admitido");
         }

@@ -72,6 +72,12 @@ public sealed class ConfirmacionEnSitioApiTests(clsBaseDatosFixture bd) : clsPru
 
     private async Task<Guid> InspeccionAsync(Sesion quien, Guid etapa, string momento = "llegada")
     {
+        // El informe de transporte lo arma el sistema (nadie lo crea por la API): se siembra el borrador.
+        if (await Sembrador.EscalarAsync("SELECT c.Codigo FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE e.Id = @e", ("@e", etapa)) is "transporte")
+        {
+            return await Sembrador.InformeAsync(etapa, quien.UsuarioId, cerrada: false, momento: momento);
+        }
+
         var r = await Como(quien).PostAsync("/api/inspecciones", Cuerpo(new { etapa_id = etapa, momento, fecha = FECHA, lat = LAT, lng = LNG }));
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         return (await JsonAsync(r)).GetProperty("id").GetGuid();

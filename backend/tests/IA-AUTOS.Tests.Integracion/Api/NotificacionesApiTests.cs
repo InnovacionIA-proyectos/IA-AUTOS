@@ -51,7 +51,7 @@ public sealed class NotificacionesApiTests(clsBaseDatosFixture bd) : clsPruebaAp
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
         var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-NTF-0001", conductorId: conductor.UsuarioId);
-        await Sembrador.InformeAsync(etapas[0], conductor.UsuarioId, cerrada: true, momento: "llegada");
+        await Sembrador.EntregaDelCargueCerradaAsync(etapas[0], conductor.UsuarioId, coordinador.UsuarioId);
         var viaje = await Sembrador.ViajeDeEtapaAsync(etapas[0]);
 
         var subida = await Como(conductor).PostAsJsonAsync("/api/uploads", new { data = Convert.ToBase64String(FIRMA_PNG.Concat(Guid.NewGuid().ToByteArray()).ToArray()), ext = "png" });

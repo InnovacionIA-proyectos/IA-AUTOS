@@ -216,7 +216,7 @@ internal sealed class clsCatalogoEstadosSofasa(clsAppDbContext contexto, IReloj 
 /// </summary>
 internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj, IUsuarioActual actual) : clsCatalogoEf<clsLugar>(contexto, reloj, clsNombresCatalogo.LUGARES)
 {
-    protected override IReadOnlyList<string> CamposPermitidos { get; } = ["nombre", "tipo", "ciudad", "orden", "activo", "latitud", "longitud", "radio_metros"];
+    protected override IReadOnlyList<string> CamposPermitidos { get; } = ["nombre", "tipo", "ciudad", "orden", "activo", "latitud", "longitud", "radio_metros", "admite_cargue_sin_inspector"];
 
     private async Task<Dictionary<Guid, (string Codigo, string Nombre)>> TiposAsync(CancellationToken ct) =>
         (await Contexto.PuntosCustodia.AsNoTracking().Select(p => new { p.Id, p.Codigo, p.Nombre }).ToListAsync(ct)).ToDictionary(p => p.Id, p => (p.Codigo, p.Nombre));
@@ -241,6 +241,7 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj,
         ["radio_metros"] = l.RadioMetros,
         ["precision_m"] = l.PrecisionM,
         ["sin_ubicacion"] = l.SinUbicacion,
+        ["admite_cargue_sin_inspector"] = l.AdmiteCargueSinInspector,
         ["estado_ubicacion"] = l.EstadoUbicacion,
         ["ubicacion_fijada_por"] = l.UbicacionFijadaPor,
         ["ubicacion_fijada_por_nombre"] = l.UbicacionFijadaPor is { } fijador && nombres is not null ? nombres.GetValueOrDefault(fijador) : null,
@@ -263,6 +264,7 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj,
     {
         var lugar = clsLugar.Crear(campos.Texto("nombre"), await TipoActivoAsync(campos.Texto("tipo"), requerido: true, ct) ?? Guid.Empty, campos.Texto("ciudad"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora);
         AplicarUbicacion(lugar, campos);
+        AplicarCargueSinInspector(lugar, campos);
         return lugar;
     }
 
@@ -274,6 +276,20 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj,
         }
 
         AplicarUbicacion(entidad, campos);
+        AplicarCargueSinInspector(entidad, campos);
+    }
+
+    /// <summary>El dato «admite cargue sin inspector»: lo cambia quien administra el catalogo (coordinador de calidad, admin y super admin); un valor nulo o que no sea booleano se rechaza con 400 y lo que no se envia se conserva.</summary>
+    private void AplicarCargueSinInspector(clsLugar lugar, clsCamposCatalogo campos)
+    {
+        if (!campos.Tiene("admite_cargue_sin_inspector"))
+        {
+            return;
+        }
+
+        var admite = campos.Booleano("admite_cargue_sin_inspector")
+            ?? throw clsErroresCampos.De("admite_cargue_sin_inspector", "Debe ser verdadero o falso");
+        lugar.CambiarAdmiteCargueSinInspector(admite, Reloj.Ahora);
     }
 
     /// <summary>

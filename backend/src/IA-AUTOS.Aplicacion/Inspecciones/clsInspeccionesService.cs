@@ -124,6 +124,9 @@ public sealed class clsInspeccionesService(
             throw new clsProhibidoException("El viaje de esta etapa no está asignado a su usuario");
         }
 
+        // El informe de transporte lo arma el sistema con «Reportar novedad» y «Llegué»: nadie lo crea a mano.
+        await AsegurarQueNoEsTransporteAsync(etapa, ct);
+
         if (!viaje.EstaActivo)
         {
             throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite inspecciones nuevas");
@@ -147,22 +150,49 @@ public sealed class clsInspeccionesService(
             }
         }
 
-        // La salida de un Cargue la hace siempre el inspector: el conductor solo firma el recibo. Si no hay inspector, el conductor del viaje la hace activando en el momento la excepcion
-        // «No hay inspector» (con su motivo); sin motivo es 403 y en cualquier otro caso el motivo no se admite (400).
-        var porExcepcion = actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && await EsCargueAsync(etapa, ct);
-        var motivo = await ResolverMotivoAsync(solicitud, porExcepcion, ct);
+        // El cargue lo hace el inspector. Solo si no hay inspector, y solo en un lugar que lo admite, el conductor del viaje hace la salida (y la llegada) del cargue activando la excepcion «No hay inspector»: donde el punto
+        // TIENE inspectores se pide el permiso y lo concede un coordinador (o el reloj al cumplirse el plazo de la solicitud); donde no los hay se activa en el momento con su motivo. Donde el lugar no la admite, 409.
+        var esCargueDelConductor = actual.Rol == clsRol.CONDUCTOR && await EsCargueAsync(etapa, ct);
+        var esLlegadaDelConductor = esCargueDelConductor && solicitud.Momento == clsMomento.LLEGADA;
+        var porExcepcion = esCargueDelConductor && (solicitud.Momento == clsMomento.SALIDA || esLlegadaDelConductor);
+        var lugarConInspectores = false;
+        if (porExcepcion)
+        {
+            await AsegurarQueElLugarAdmiteCargueSinInspectorAsync(viaje.LugarCargueId, ct);
+            lugarConInspectores = await reclamos.LugarTieneInspectoresAsync(viaje.LugarCargueId!.Value, ct);
+        }
 
-        // Donde el punto de cargue TIENE inspectores la excepcion se pide y la concede un coordinador (o el reloj al cumplirse el plazo de la solicitud); donde no los hay se activa en el momento, como siempre. Una solicitud
-        // pendiente con el plazo ya cumplido se concede por tiempo en esta misma peticion: no se responde «espere» despues del plazo.
+        // La llegada del cargue del conductor exige primero la excepcion activa: el permiso concedido (donde el punto tiene inspectores) o su motivo (donde no los tiene). Un permiso pendiente con el plazo ya cumplido se
+        // concede por tiempo en esta misma peticion.
         clsPermisoSinInspector? permiso = null;
-        if (porExcepcion && viaje.LugarCargueId is { } lugarDeCargue && await reclamos.LugarTieneInspectoresAsync(lugarDeCargue, ct))
+        if (esLlegadaDelConductor && lugarConInspectores)
+        {
+            permiso = await permisos.ConcederSiVencidoAsync(viaje.Id, ct);
+            if (permiso is not { EstaConcedido: true })
+            {
+                throw new clsProhibidoException(
+                    "Pide el permiso «No hay inspector» y espera a que el coordinador lo conceda", clsMotivosRechazo.CONDUCTOR_SIN_PERMISO_DE_EXCEPCION);
+            }
+        }
+
+        // Con el permiso concedido la llegada no repite el motivo: es el que el conductor dio al pedirlo.
+        if (esLlegadaDelConductor && permiso is not null && clsValidador.Opcional(solicitud.MotivoSinInspector) is null)
+        {
+            solicitud = solicitud with { MotivoSinInspector = permiso.MotivoCodigo, MotivoSinInspectorTexto = permiso.MotivoTexto };
+        }
+
+        var motivo = await ResolverMotivoAsync(solicitud, porExcepcion, esLlegadaDelConductor, ct);
+
+        // La salida con inspectores en el punto: el permiso concedido (o vencido y concedido por tiempo en esta peticion); no se responde «espere» despues del plazo.
+        if (porExcepcion && !esLlegadaDelConductor && lugarConInspectores)
         {
             permiso = await permisos.ConcederSiVencidoAsync(viaje.Id, ct);
             if (permiso is not { EstaConcedido: true })
             {
                 var espera = permiso?.EsperaMinutos ?? await permisos.EsperaVigenteAsync(ct);
                 throw new clsProhibidoException(
-                    $"El punto de cargue tiene inspectores: pida el permiso de la excepción «No hay inspector» y espere a que lo conceda el coordinador (o a que pasen {espera} minutos sin respuesta)");
+                    $"El punto de cargue tiene inspectores: pida el permiso de la excepción «No hay inspector» y espere a que lo conceda el coordinador (o a que pasen {espera} minutos sin respuesta)",
+                    clsMotivosRechazo.CONDUCTOR_SIN_PERMISO_DE_EXCEPCION);
             }
         }
 
@@ -298,11 +328,31 @@ public sealed class clsInspeccionesService(
         return clsMapeadorInspecciones.AInspeccion(inspeccion, viaje.Placa, viaje.Trailer, conductor, await consultasNovedades.DeInspeccionAsync(inspeccion.Id, ct));
     }
 
+    public const string MENSAJE_LUGAR_NO_ADMITE = "Este lugar de cargue no admite cargue sin inspector: el cargue lo hace el inspector";
+
+    /// <summary>409 LUGAR_NO_ADMITE_CARGUE_SIN_INSPECTOR si el lugar de cargue del viaje no admite cargue sin inspector (o el viaje no tiene lugar de cargue). El dato se lee en cada peticion.</summary>
+    private async Task AsegurarQueElLugarAdmiteCargueSinInspectorAsync(Guid? lugarCargueId, CancellationToken ct)
+    {
+        if (lugarCargueId is not { } lugarId || await lugares.ObtenerAsync(lugarId, ct) is not { AdmiteCargueSinInspector: true })
+        {
+            throw new clsConflictoException(MENSAJE_LUGAR_NO_ADMITE, clsMotivosRechazo.LUGAR_NO_ADMITE_CARGUE_SIN_INSPECTOR);
+        }
+    }
+
+    /// <summary>409 TRANSPORTE_LO_ARMA_EL_SISTEMA: el informe de transporte lo arman «Reportar novedad» y «Llegué»; no se crea ni se corrige a mano.</summary>
+    private async Task AsegurarQueNoEsTransporteAsync(clsEtapa etapa, CancellationToken ct)
+    {
+        if (await CodigoDeEtapaAsync(etapa, ct) == clsCodigosEtapa.TRANSPORTE)
+        {
+            throw new clsConflictoException("El informe de transporte lo arma el sistema con «Reportar novedad» y «Llegué»", clsMotivosRechazo.TRANSPORTE_LO_ARMA_EL_SISTEMA);
+        }
+    }
+
     /// <summary>
     /// El motivo del conductor que hace la salida de un Cargue con personal de apoyo porque el inspector previsto no esta. Sin motivo, 403 (el conductor solo firma el recibo); un motivo que no
     /// existe o esta inactivo, o un texto que falta o que el motivo no admite, 400 con <c>fieldErrors</c>. Fuera de esa salida el motivo y su texto no se admiten (400 «Campo no admitido»).
     /// </summary>
-    private async Task<ValorCatalogo?> ResolverMotivoAsync(CrearInspeccionRequest solicitud, bool porExcepcion, CancellationToken ct)
+    private async Task<ValorCatalogo?> ResolverMotivoAsync(CrearInspeccionRequest solicitud, bool porExcepcion, bool esLlegada, CancellationToken ct)
     {
         if (!porExcepcion)
         {
@@ -323,7 +373,9 @@ public sealed class clsInspeccionesService(
         var codigo = clsValidador.Opcional(solicitud.MotivoSinInspector);
         if (codigo is null)
         {
-            throw new clsProhibidoException("La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción");
+            throw esLlegada
+                ? new clsProhibidoException("Activa «No hay inspector» con su motivo para hacer esta revisión", clsMotivosRechazo.CONDUCTOR_SIN_PERMISO_DE_EXCEPCION)
+                : new clsProhibidoException("La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción");
         }
 
         var motivo = (await catalogos.ValoresAsync(clsNombresCatalogo.MOTIVOS_SIN_INSPECTOR, ct)).FirstOrDefault(m => m.Codigo == codigo && m.Activo)
@@ -411,6 +463,12 @@ public sealed class clsInspeccionesService(
         if (actual.SoloSusViajes() is { } usuarioViaje && !await acceso.ParticipaOReclamaAsync(viaje, usuarioViaje, ct))
         {
             throw new clsProhibidoException("El viaje de esta inspección no está asignado a su usuario");
+        }
+
+        // El informe de transporte lo arma el sistema: tampoco se corrige a mano.
+        if (await etapas.ObtenerPorIdAsync(original.EtapaId, ct) is { } etapaDelInforme)
+        {
+            await AsegurarQueNoEsTransporteAsync(etapaDelInforme, ct);
         }
 
         if (!viaje.EstaActivo)

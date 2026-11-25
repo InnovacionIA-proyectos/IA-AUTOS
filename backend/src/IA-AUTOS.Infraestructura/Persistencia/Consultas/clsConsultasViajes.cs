@@ -73,7 +73,8 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         DateTimeOffset? CargueNoFirmadoAt = null,
         string? CargueNoFirmaParte = null,
         string? Muelle = null,
-        bool Eliminable = false);
+        bool Eliminable = false,
+        bool LugarCargueAdmiteSinInspector = false);
 
     /// <summary>El viaje tiene al menos un VIN de ese cliente.</summary>
     private Expression<Func<clsViaje, bool>> ConVehiculoDeCliente(Guid clienteId) =>
@@ -272,6 +273,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                     Origen = (string?)o.Nombre,
                     Destino = (string?)d.Nombre,
                     LugarCargue = (string?)lc.Nombre,
+                    LugarCargueAdmite = lc != null && lc.AdmiteCargueSinInspector,
                 }).ToListAsync(ct);
 
         // Los conteos de los viajes se piden aparte, una consulta por tabla agrupada por viaje (y no una subconsulta por cada fila). Completa es la regla de vwViajesCompletos guardada en cada VIN.
@@ -311,7 +313,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                     conteos.GetValueOrDefault(f.Viaje.Id)?.Total ?? 0, conteos.GetValueOrDefault(f.Viaje.Id)?.Completos ?? 0,
                     f.Viaje.LugarCargueId is { } cargue && conInspector.Contains(cargue),
                     firmadoAt, noFirma.Count > 0 ? noFirma.Max(x => x.Momento) : null, noFirma.FirstOrDefault()?.NoFirmaParte,
-                    f.Viaje.MuelleId is { } muelle ? muelles.GetValueOrDefault(muelle) : null, !conInspecciones.Contains(f.Viaje.Id));
+                    f.Viaje.MuelleId is { } muelle ? muelles.GetValueOrDefault(muelle) : null, !conInspecciones.Contains(f.Viaje.Id), f.LugarCargueAdmite);
             })
             .ToList();
     }
@@ -391,6 +393,18 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                    Novedades = contexto.Hallazgos.Count(x => x.TipoNovedad != null
                                        && contexto.Inspecciones.Any(i => i.Id == x.InspeccionId
                                            && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id))),
+                                   EntregaDelCargueCerrada =
+                                       contexto.Inspecciones.Any(i => i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA
+                                           && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
+                                               && contexto.EtapasCatalogo.Any(p => p.Id == e.EtapaCatalogoId && p.Codigo == clsCodigosEtapa.CARGUE)))
+                                       && contexto.Transferencias.Any(t => t.TipoCierre != null
+                                           && contexto.Inspecciones.Any(i => i.Id == t.InspeccionId
+                                               && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
+                                                   && contexto.EtapasCatalogo.Any(p => p.Id == e.EtapaCatalogoId && p.Codigo == clsCodigosEtapa.CARGUE))))
+                                       && !contexto.Transferencias.Any(t => t.TipoCierre == null
+                                           && contexto.Inspecciones.Any(i => i.Id == t.InspeccionId
+                                               && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
+                                                   && contexto.EtapasCatalogo.Any(p => p.Id == e.EtapaCatalogoId && p.Codigo == clsCodigosEtapa.CARGUE)))),
                                    LlegadaCerrada = contexto.Inspecciones.Any(i => i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA
                                        && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
                                            && contexto.EtapasCatalogo.Any(p => p.Id == e.EtapaCatalogoId && p.Codigo == clsCodigosEtapa.TRANSPORTE))),
@@ -403,7 +417,9 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                 v.EstadoUnidad,
                 clsMapeadorViajes.ANoSale(v.EstadoUnidad, v.NoSaleMotivoCodigo, v.NoSaleMotivo, v.NoSaleHallazgoId, v.NoSaleMarcadoPor, v.MarcadoPorNombre, v.NoSaleAt, v.VinReemplazo, motivosNoSale),
                 clsEstadoTransporte.De(v.LlegadaCerrada, v.Novedades), v.Novedades, v.LugarDestinoId, v.LugarDestino, v.Posicion,
-                clsMapeadorViajes.ABajado(v.EstadoUnidad, v.BajadoMotivo, v.BajadoPor, v.BajadoPorNombre, v.BajadoAt), v.LugarDestinoCambiadoAt));
+                clsMapeadorViajes.ABajado(v.EstadoUnidad, v.BajadoMotivo, v.BajadoPor, v.BajadoPorNombre, v.BajadoAt), v.LugarDestinoCambiadoAt,
+                v.EstadoUnidad == clsEstadoUnidad.ACTIVA && v.EntregaDelCargueCerrada,
+                clsMotivoSinRuta.De(v.EstadoUnidad, v.EntregaDelCargueCerrada)));
         var clientes = await ClientesPorViajeAsync(ids, soloDeCliente, ct);
 
         // Las novedades de proceso de las unidades del viaje (las que quien consulta puede ver), de la mas antigua a la mas reciente.
@@ -449,7 +465,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
         f.Viaje.Estado, f.TotalVehiculos, f.VehiculosCompletos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt,
-        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue, destinos, f.LugarCargueConInspector, f.Viaje.MuelleId, f.Muelle, f.Eliminable);
+        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue, destinos, f.LugarCargueConInspector, f.Viaje.MuelleId, f.Muelle, f.Eliminable, LugarCargueAdmiteSinInspector: f.LugarCargueAdmiteSinInspector);
 
     private static ViajeDto ADto(
         FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<NovedadDelViajeDto> novedades, IReadOnlyList<EvidenciaDto> fotosAcomodacion,
@@ -459,7 +475,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         f.Viaje.Estado, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt, novedades,
         f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue,
         f.Viaje.CapacidadEfectiva, Disposicion(f.Viaje.CapacidadEfectiva, vehiculos), fotosAcomodacion, f.LugarCargueConInspector,
-        f.CargueFirmadoPorNineraAt, f.CargueNoFirmadoAt, f.CargueNoFirmaParte, f.Viaje.MuelleId, f.Muelle, f.Eliminable, NovedadesViaje: novedadesViaje);
+        f.CargueFirmadoPorNineraAt, f.CargueNoFirmadoAt, f.CargueNoFirmaParte, f.Viaje.MuelleId, f.Muelle, f.Eliminable, NovedadesViaje: novedadesViaje, LugarCargueAdmiteSinInspector: f.LugarCargueAdmiteSinInspector);
 
     /// <summary>Los puestos de la ninera, del 1 a la capacidad, cada uno con el VIN que lo ocupa (los de las unidades que quien consulta puede ver).</summary>
     private static DisposicionDeNiniera Disposicion(int capacidad, IReadOnlyList<ViajeVehiculoDto> vehiculos)

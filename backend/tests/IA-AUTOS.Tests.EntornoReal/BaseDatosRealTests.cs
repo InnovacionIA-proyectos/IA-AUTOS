@@ -1125,6 +1125,18 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task El_dato_del_lugar_admite_cargue_sin_inspector_esta_migrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/53-lugar-admite-cargue-sin-inspector.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblLugares') AND name = N'AdmiteCargueSinInspector' AND is_nullable = 0");
+        var motivoEnLaLlegada = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_MotivoSinInspector' AND parent_object_id = OBJECT_ID(N'tblInspecciones') AND definition LIKE N'%llegada%'");
+
+        Assert.True(columna == 1 && motivoEnLaLlegada == 1, "Falta tblLugares.AdmiteCargueSinInspector o el motivo de la excepcion no se admite en la llegada. Ejecute database/cambios-esquema/53-lugar-admite-cargue-sin-inspector.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();
