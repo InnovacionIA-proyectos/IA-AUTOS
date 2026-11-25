@@ -30,6 +30,7 @@ public sealed class clsViajesService(
     clsEnsamblajeViajes ensamblaje,
     clsAccesoViajes acceso,
     IReclamoRepository reclamos,
+    IEsperaInspectorPuntoRepository esperas,
     clsEmisorNotificaciones emisor,
     clsPermisosSinInspectorService permisos,
     IInspeccionRepository inspecciones,
@@ -274,6 +275,19 @@ public sealed class clsViajesService(
         viaje.CambiarEstado(solicitud.Estado!, reloj.Ahora);
         await auditor.RegistrarDeViajeAsync(
             $"viaje.estado.{viaje.Estado}", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(new { estado = estadoAnterior }, new { estado = viaje.Estado }), ct: ct);
+
+        // Un viaje cancelado o finalizado a mano ya no espera a ningun inspector: sus esperas abiertas quedan anuladas.
+        if (viaje.Estado is clsEstadoViaje.CANCELADO or clsEstadoViaje.FINALIZADO)
+        {
+            foreach (var espera in await esperas.ObtenerAbiertasDeViajeAsync(viaje.Id, ct))
+            {
+                var antes = clsInstantaneasAuditoria.De(espera);
+                espera.Anular(reloj.Ahora);
+                await auditor.RegistrarDeViajeAsync(
+                    "espera_inspector_punto.anular", "esperas_inspector_punto", espera.Id, viaje.Id, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(espera)), ct: ct);
+            }
+        }
+
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ObtenerDtoAsync(id, ct);
     }

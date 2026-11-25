@@ -20,6 +20,7 @@ Todas se guardan como notificaciones (ver [notificaciones.md](notificaciones.md)
 | `firma_cargue_pendiente` | operativo | media | inspector del viaje (si falta quien entrega) o conductor (si falta quien recibe) | proceso **cada 10 minutos** | `firma_cargue_pendiente:{viaje}:{parte}`: una por viaje y parte |
 | `propuesta_ubicacion` | operativo | media | coordinador de calidad del cliente | proceso **cada hora** (con `propuesta_ubicacion_visitas` visitas distintas, 3 por defecto) | `propuesta_ubicacion:{propuesta}`: una por propuesta |
 | `ubicacion_fijada` | operativo | media | coordinadores de calidad y administradores del cliente de quien la fijó | cuando alguien fija la ubicación de un lugar «aquí» (`POST /api/lugares/{id}/ubicacion`; solo bandeja) | `ubicacion_fijada:{lugar}`: uno por lugar |
+| `espera_inspector_punto` | operativo | alta | coordinadores de calidad del cliente | proceso **cada minuto** y la petición que activa la espera: el conductor activó «No hay inspector» en una parada con inspectores y pasaron `espera_inspector_aviso_minutos` (15 por defecto) sin que nadie tomara la entrega | `espera_inspector_punto:{espera}`: uno por espera |
 | `fuera_de_rango` (entrega) | operativo | alta | coordinador de calidad del cliente | cuando el inspector toma una entrega (`POST /api/viajes/{id}/reclamos`) con su posición fuera del rango del lugar de la parada | `fuera_de_rango:reclamo:{reclamo}`: uno por reclamo |
 
 ## Parametros

@@ -17,6 +17,7 @@ namespace IAAutos.Aplicacion.Viajes;
 /// </summary>
 public sealed class clsReclamosService(
     IReclamoRepository reclamos,
+    IEsperaInspectorPuntoRepository esperas,
     IViajeRepository viajes,
     IUsuarioRepository usuarios,
     IConsultasViajes consultas,
@@ -93,6 +94,12 @@ public sealed class clsReclamosService(
                 throw new clsProhibidoException("La parada no es de ninguno de sus puntos", clsMotivosRechazo.NO_ES_SU_PUNTO);
             }
 
+            // Una entrega que el conductor cerro con el plan B, sin inspector del punto, es definitiva: el inspector que llega despues recibe el rechazo que se lo dice y nada se reabre.
+            if (await esperas.ObtenerUltimaAsync(viajeId, parada, ct) is { Estado: clsEstadoEspera.CERRADA_SIN_INSPECTOR_DEL_PUNTO } cerrada)
+            {
+                throw CerradaSinInspector(cerrada);
+            }
+
             if (!(await viajes.ObtenerVehiculosAsync(viajeId, ct)).Any(v => v.EstaActiva && v.LugarDestinoId == parada) || await pendientes.UnidadesPorEntregarAsync(viajeId, parada, ct) == 0)
             {
                 throw new clsEntidadNoEncontradaException("La parada no tiene carros activos por entregar en este viaje");
@@ -111,6 +118,17 @@ public sealed class clsReclamosService(
         var reclamo = clsReclamo.Crear(viajeId, inspectorId, proceso, ahora, lugarEntrega);
         reclamos.Agregar(reclamo);
         var antesViaje = viaje.InspectorId;
+
+        // Si el conductor esperaba al inspector de esta parada, la espera termina como «el inspector llego»: se guarda junto con el reclamo, y si el conductor cierra con el plan B a la vez gana uno solo.
+        clsEsperaInspectorPunto? espera = null;
+        if (proceso == clsProcesoReclamo.ENTREGA && lugarEntrega is { } paradaEnEspera && await esperas.ObtenerAbiertaAsync(viajeId, paradaEnEspera, ct) is { } abierta)
+        {
+            espera = abierta;
+            var antesEspera = clsInstantaneasAuditoria.De(espera);
+            espera.RegistrarLlegadaDelInspector(inspectorId, ahora);
+            await auditor.RegistrarDeViajeAsync(
+                "espera_inspector_punto.inspector_llego", "esperas_inspector_punto", espera.Id, viaje.Id, new DetalleAuditoria(antesEspera, clsInstantaneasAuditoria.De(espera)), ct: ct);
+        }
 
         // La posicion del inspector solo cuenta en la entrega (el cargue no cambia) y nunca bloquea: solo se compara con el lugar de la parada.
         EvaluacionDeEntrega? evaluacion = null;
@@ -144,6 +162,13 @@ public sealed class clsReclamosService(
         }
         catch (clsConflictoException) when (proceso == clsProcesoReclamo.ENTREGA)
         {
+            // Si perdio contra el cierre con el plan B del conductor, el motivo es ese; si perdio contra otro inspector, que la tomo primero.
+            unidadDeTrabajo.DescartarCambios();
+            if (espera is not null && lugarEntrega is { } paradaPerdida && await esperas.ObtenerUltimaAsync(viajeId, paradaPerdida, ct) is { Estado: clsEstadoEspera.CERRADA_SIN_INSPECTOR_DEL_PUNTO } cerradaAntes)
+            {
+                throw CerradaSinInspector(cerradaAntes);
+            }
+
             throw new clsConflictoException("Ya fue tomado por otro inspector", clsMotivosRechazo.ENTREGA_TOMADA);
         }
 
@@ -153,6 +178,16 @@ public sealed class clsReclamosService(
         }
 
         return (await ADtoAsync(reclamo, ct), true);
+    }
+
+    /// <summary>409 <c>entrega_cerrada_sin_inspector</c> con la hora del cierre (en la hora de Colombia, y completa en <c>details.cerrada_at</c>).</summary>
+    private static clsConflictoException CerradaSinInspector(clsEsperaInspectorPunto espera)
+    {
+        var cierre = espera.CerradaAt ?? espera.UpdatedAt;
+        return new clsConflictoException(
+            $"Esta entrega se cerró sin inspector del punto a las {cierre.ToOffset(COLOMBIA).ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)}: el cierre es definitivo",
+            clsMotivosRechazo.ENTREGA_CERRADA_SIN_INSPECTOR,
+            new Dictionary<string, object> { ["cerrada_at"] = cierre });
     }
 
     /// <summary>La posicion del inspector es opcional, pero va completa: la latitud y la longitud juntas, dentro de su rango, y una precision en metros no negativa. 400 en el campo que no cumple.</summary>

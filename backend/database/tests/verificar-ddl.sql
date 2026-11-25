@@ -1515,6 +1515,18 @@ INSERT #r SELECT N'Lugares: la precision del GPS con que se fijo la ubicacion (n
 INSERT #r SELECT N'Ubicacion fijada: la notificacion admite el tipo ubicacion_fijada',
     CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%ubicacion_fijada%') THEN 1 ELSE 0 END, NULL;
 
+-- 7h) La espera del inspector del punto: la tabla con sus restricciones, la unica espera abierta por parada, la marca de la entrega y el tipo de aviso
+INSERT #r SELECT N'Espera del inspector del punto: la tabla existe con sus ocho restricciones y sus llaves',
+    CASE WHEN OBJECT_ID(N'dbo.tblEsperasInspectorPunto', N'U') IS NOT NULL
+          AND (SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.tblEsperasInspectorPunto') AND name LIKE N'CK[_]tblEsperasInspectorPunto[_]%') = 8
+          AND (SELECT COUNT(*) FROM sys.foreign_keys WHERE parent_object_id = OBJECT_ID(N'dbo.tblEsperasInspectorPunto')) = 6 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Espera del inspector del punto: una sola espera abierta por viaje y parada',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblEsperasInspectorPunto_Abierta' AND object_id = OBJECT_ID(N'dbo.tblEsperasInspectorPunto') AND is_unique = 1 AND has_filter = 1) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Entrega sin inspector del punto: la transferencia lleva su marca (falsa por defecto)',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND name = N'SinInspectorDelPunto' AND is_nullable = 0) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Espera del inspector del punto: la notificacion admite el tipo espera_inspector_punto',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%espera_inspector_punto%') THEN 1 ELSE 0 END, NULL;
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';

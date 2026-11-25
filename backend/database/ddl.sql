@@ -2738,5 +2738,72 @@ BEGIN
 END');
 GO
 
+/* -----------------------------------------------------------------------------
+   La espera del inspector del punto en la entrega. tblEsperasInspectorPunto: la espera que el conductor activa en una parada con inspectores donde nadie tomo la entrega (motivo, hora y GPS del celular, aviso, y como
+   termino: esperando, inspector_llego, cerrada_sin_inspector_del_punto o anulada); una sola abierta por viaje y parada (UX_tblEsperasInspectorPunto_Abierta). tblTransferenciasCustodia.SinInspectorDelPunto: la marca
+   "entregada sin inspector del punto" del carro que el conductor entrego con el plan B. Y el tipo de aviso espera_inspector_punto.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblEsperasInspectorPunto', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblEsperasInspectorPunto
+    (
+        Id               uniqueidentifier  NOT NULL CONSTRAINT PK_tblEsperasInspectorPunto PRIMARY KEY,
+        ViajeId          uniqueidentifier  NOT NULL,
+        LugarId          uniqueidentifier  NOT NULL,
+        ConductorId      uniqueidentifier  NOT NULL,
+        MotivoCodigo     varchar(30)       NOT NULL,
+        MotivoTexto      nvarchar(300)     NULL,
+        ActivadaAt       datetimeoffset(3) NOT NULL,
+        Lat              float             NULL,
+        Lng              float             NULL,
+        PrecisionM       float             NULL,
+        Estado           varchar(40)       NOT NULL CONSTRAINT DF_tblEsperasInspectorPunto_Estado DEFAULT ('esperando'),
+        AvisoAt          datetimeoffset(3) NULL,
+        InspectorId      uniqueidentifier  NULL,
+        InspectorLlegoAt datetimeoffset(3) NULL,
+        CerradaAt        datetimeoffset(3) NULL,
+        CerradaPor       uniqueidentifier  NULL,
+        CreatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEsperasInspectorPunto_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt        datetimeoffset(3) NOT NULL CONSTRAINT DF_tblEsperasInspectorPunto_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblEsperasInspectorPunto_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
+        CONSTRAINT FK_tblEsperasInspectorPunto_Lugar FOREIGN KEY (LugarId) REFERENCES dbo.tblLugares (Id),
+        CONSTRAINT FK_tblEsperasInspectorPunto_Conductor FOREIGN KEY (ConductorId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblEsperasInspectorPunto_Motivo FOREIGN KEY (MotivoCodigo) REFERENCES dbo.tblMotivosSinInspector (Codigo),
+        CONSTRAINT FK_tblEsperasInspectorPunto_Inspector FOREIGN KEY (InspectorId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblEsperasInspectorPunto_CerradaPor FOREIGN KEY (CerradaPor) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT CK_tblEsperasInspectorPunto_Estado CHECK (Estado IN ('esperando', 'inspector_llego', 'cerrada_sin_inspector_del_punto', 'anulada')),
+        CONSTRAINT CK_tblEsperasInspectorPunto_Texto CHECK (MotivoTexto IS NULL OR LEN(LTRIM(RTRIM(MotivoTexto))) > 0),
+        CONSTRAINT CK_tblEsperasInspectorPunto_Lat CHECK (Lat IS NULL OR (Lat BETWEEN -90 AND 90)),
+        CONSTRAINT CK_tblEsperasInspectorPunto_Lng CHECK (Lng IS NULL OR (Lng BETWEEN -180 AND 180)),
+        CONSTRAINT CK_tblEsperasInspectorPunto_Precision CHECK (PrecisionM IS NULL OR PrecisionM >= 0),
+        CONSTRAINT CK_tblEsperasInspectorPunto_Activacion CHECK (ActivadaAt <= CreatedAt),
+        CONSTRAINT CK_tblEsperasInspectorPunto_Llegada CHECK ((Estado = 'inspector_llego' AND InspectorId IS NOT NULL AND InspectorLlegoAt IS NOT NULL) OR (Estado <> 'inspector_llego' AND InspectorId IS NULL AND InspectorLlegoAt IS NULL)),
+        CONSTRAINT CK_tblEsperasInspectorPunto_Cierre CHECK ((Estado = 'cerrada_sin_inspector_del_punto' AND CerradaAt IS NOT NULL AND CerradaPor IS NOT NULL) OR (Estado <> 'cerrada_sin_inspector_del_punto' AND CerradaAt IS NULL AND CerradaPor IS NULL))
+    );
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblEsperasInspectorPunto_Abierta' AND object_id = OBJECT_ID(N'dbo.tblEsperasInspectorPunto'))
+    CREATE UNIQUE INDEX UX_tblEsperasInspectorPunto_Abierta ON dbo.tblEsperasInspectorPunto (ViajeId, LugarId) WHERE Estado = 'esperando';
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblEsperasInspectorPunto_Parada' AND object_id = OBJECT_ID(N'dbo.tblEsperasInspectorPunto'))
+    CREATE INDEX IX_tblEsperasInspectorPunto_Parada ON dbo.tblEsperasInspectorPunto (ViajeId, LugarId, ActivadaAt);
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblEsperasInspectorPunto_Estado' AND object_id = OBJECT_ID(N'dbo.tblEsperasInspectorPunto'))
+    CREATE INDEX IX_tblEsperasInspectorPunto_Estado ON dbo.tblEsperasInspectorPunto (Estado, ActivadaAt);
+GO
+-- tblTransferenciasCustodia: la marca "entregada sin inspector del punto"
+IF OBJECT_ID(N'dbo.tblTransferenciasCustodia', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblTransferenciasCustodia', N'SinInspectorDelPunto') IS NULL
+    ALTER TABLE dbo.tblTransferenciasCustodia ADD SinInspectorDelPunto bit NOT NULL CONSTRAINT DF_tblTransferencias_SinInspectorDelPunto DEFAULT (0);
+GO
+-- tblNotificaciones: tipo espera_inspector_punto
+IF OBJECT_ID(N'dbo.tblNotificaciones', N'U') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblNotificaciones_Tipo'' AND parent_object_id = OBJECT_ID(N''dbo.tblNotificaciones'') AND definition LIKE N''%espera_inspector_punto%'')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblNotificaciones_Tipo'' AND parent_object_id = OBJECT_ID(N''dbo.tblNotificaciones''))
+        ALTER TABLE dbo.tblNotificaciones DROP CONSTRAINT CK_tblNotificaciones_Tipo;
+    ALTER TABLE dbo.tblNotificaciones ADD CONSTRAINT CK_tblNotificaciones_Tipo CHECK (Tipo IN (''novedad_conductor'', ''respuesta_conductor'', ''hallazgo_critico'', ''umbral_patron'', ''captura_incompleta'', ''transferencia_pendiente'', ''reporte_diario'', ''novedad_proceso'', ''reclamo_sin_actividad'', ''fuera_de_rango'', ''cargue_sin_reclamar'', ''propuesta_ubicacion'', ''permiso_sin_inspector'', ''firma_cargue_pendiente'', ''cambio_cargue_inspector'', ''cambio_destino_unidad'', ''carro_rechazado_en_destino'', ''ubicacion_fijada'', ''espera_inspector_punto''));
+END');
+GO
+
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';
 GO

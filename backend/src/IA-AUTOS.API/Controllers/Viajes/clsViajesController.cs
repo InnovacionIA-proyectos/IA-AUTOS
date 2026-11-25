@@ -167,6 +167,22 @@ public sealed class clsViajesController(
         Ok(await entregas.CerrarConUnaFirmaAsync(id, lugar, await LeerCuerpoAsync<CerrarEntregaUnaFirmaRequest>(ct, "rechazos"), Cliente(), ct));
 
     /// <summary>
+    /// El conductor activa «No hay inspector» en una parada con inspectores donde nadie tomo la entrega: <c>motivo_sin_inspector</c> (codigo activo de <c>motivos-sin-inspector</c>), su texto si el motivo lo pide (hasta 300), y la hora
+    /// (<c>fecha_momento</c>) y el GPS (<c>lat</c>, <c>lng</c>, <c>precision_m</c>) de su celular en ese momento. Desde esa hora corren los plazos que ajusta TI: a los X minutos se avisa al coordinador y a los X mas Y se habilita el
+    /// plan B (la revision de llegada del conductor y el cierre sin inspector del punto). 201 con la espera; 200 con la misma espera si ya estaba abierta (el reloj no se reinicia). 403 si no es el conductor del viaje; 400 con el
+    /// motivo o la hora invalidos; 409 con el motivo <c>parada_sin_inspectores</c>, <c>entrega_tomada</c>, <c>entrega_cerrada</c> o <c>sin_llegue_en_parada</c>.
+    /// </summary>
+    [HttpPost("{id:guid}/entregas/{lugar:guid}/sin-inspector")]
+    [RolesPermitidos(clsRol.CONDUCTOR)]
+    [ProducesResponseType<EsperaDelPuntoDto>(StatusCodes.Status201Created)]
+    [CuerpoSolicitud(typeof(ActivarSinInspectorRequest))]
+    public async Task<IActionResult> ActivarSinInspector(Guid id, Guid lugar, CancellationToken ct)
+    {
+        var (espera, creada) = await entregas.ActivarSinInspectorAsync(id, lugar, await LeerCuerpoAsync<ActivarSinInspectorRequest>(ct), ct);
+        return creada ? Creado(espera) : Ok(espera);
+    }
+
+    /// <summary>
     /// El inspector reclama la revision del viaje («revisar este»): <c>proceso</c> <c>cargue</c> (un cargue programado para hoy en uno de sus puntos; queda como inspector del viaje) o <c>entrega</c> (UNA parada de un viaje que llega
     /// a uno de sus puntos: <c>lugar_id</c> es obligatorio, 400 sin el). <c>201</c> con el reclamo; <c>200</c> si ya era suyo. 403 si el viaje o la parada no es de ninguno de sus puntos; 404 si la parada no tiene carros por entregar;
     /// 409 «Ya fue tomado por otro inspector» (en la entrega con el motivo <c>entrega_tomada</c>) si otro lo reclamo antes (si dos lo hacen a la vez, gana uno).

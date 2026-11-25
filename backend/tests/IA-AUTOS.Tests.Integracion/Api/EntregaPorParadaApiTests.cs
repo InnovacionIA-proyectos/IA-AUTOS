@@ -444,9 +444,12 @@ public sealed class EntregaPorParadaApiTests(clsBaseDatosFixture bd) : clsPrueba
             Assert.Equal("El conductor aún no marca «Llegué» para el VIN VIN-LLE-1", Mensaje(error));
         }
 
-        // Con el llegue confirmado la revision se crea (un ciclo 1).
+        // Con el llegue confirmado la revision se crea (un ciclo 1): en una parada con inspectores la hace el inspector y el conductor no.
         await Sembrador.InformeAsync(await EtapaAsync(viaje, "VIN-LLE-1", "transporte"), conductor.UsuarioId, cerrada: true, momento: "llegada");
-        var creada = await Como(conductor).PostAsync("/api/inspecciones", Cuerpo(new { etapa_id = descargue, momento = "llegada", fecha = MOMENTO, lat = 4.6, lng = -74.1 }));
+        var delConductor = await Como(conductor).PostAsync("/api/inspecciones", Cuerpo(new { etapa_id = descargue, momento = "llegada", fecha = MOMENTO, lat = 4.6, lng = -74.1 }));
+        Assert.Equal(HttpStatusCode.Conflict, delConductor.StatusCode);
+        Assert.Equal("llegada_del_inspector_del_punto", Motivo(await JsonAsync(delConductor)));
+        var creada = await Como(pedro).PostAsync("/api/inspecciones", Cuerpo(new { etapa_id = descargue, momento = "llegada", fecha = MOMENTO, lat = 4.6, lng = -74.1 }));
         Assert.Equal(HttpStatusCode.Created, creada.StatusCode);
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones WHERE EtapaId = @e AND Ciclo = 1", ("@e", descargue)));
     }
@@ -637,14 +640,16 @@ public sealed class EntregaPorParadaApiTests(clsBaseDatosFixture bd) : clsPrueba
         Assert.Equal(2, (await PuntoAsync(e.Conductor, e.Viaje, e.Norte)).GetProperty("unidades_total").GetInt32());
 
         // Su revision nueva es otro ciclo de la misma etapa (la del rechazo no se toca) y se entrega con las reglas de siempre.
+        // El Sur tiene inspectora: la revision de llegada la hace Diana, que toma la entrega de esa parada.
+        Assert.Equal(HttpStatusCode.Created, (await ReclamarEntregaAsync(e.Diana, e.Viaje, e.Sur)).StatusCode);
         var descargue = await EtapaAsync(e.Viaje, "VIN-PAR-N2", "descargue");
-        var creada = await Como(e.Conductor).PostAsync("/api/inspecciones", Cuerpo(new { etapa_id = descargue, momento = "llegada", fecha = MOMENTO, lat = 4.6, lng = -74.1 }));
+        var creada = await Como(e.Diana).PostAsync("/api/inspecciones", Cuerpo(new { etapa_id = descargue, momento = "llegada", fecha = MOMENTO, lat = 4.6, lng = -74.1 }));
         Assert.Equal(HttpStatusCode.Created, creada.StatusCode);
         Assert.Equal(2, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones WHERE EtapaId = @e AND Momento = 'llegada'", ("@e", descargue)));
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones WHERE EtapaId = @e AND Momento = 'llegada' AND Ciclo = 2", ("@e", descargue)));
         Assert.Equal("en_curso", await Sembrador.EscalarAsync("SELECT Estado FROM dbo.tblViajes WHERE Id = @v", ("@v", e.Viaje)));
         // Un segundo ciclo igual en la misma etapa no se admite.
-        Assert.Equal(HttpStatusCode.Conflict, (await Como(e.Conductor).PostAsync("/api/inspecciones", Cuerpo(new { etapa_id = descargue, momento = "llegada", fecha = MOMENTO, lat = 4.6, lng = -74.1 }))).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Como(e.Diana).PostAsync("/api/inspecciones", Cuerpo(new { etapa_id = descargue, momento = "llegada", fecha = MOMENTO, lat = 4.6, lng = -74.1 }))).StatusCode);
     }
 
     // ------------------------------------------------------------------------------------------------ las reservas
@@ -863,7 +868,7 @@ public sealed class EntregaPorParadaApiTests(clsBaseDatosFixture bd) : clsPrueba
     }
 
     [Fact]
-    public async Task El_motivo_sin_inspector_del_punto_todavia_no_se_acepta_y_el_cierre_de_la_otra_parte_ya_firmada_sigue_siendo_409()
+    public async Task El_motivo_sin_inspector_del_punto_no_aplica_en_una_parada_sin_inspectores_y_el_cierre_de_la_otra_parte_ya_firmada_sigue_siendo_409()
     {
         var e = await EscenarioAsync();
         Assert.Equal(HttpStatusCode.Created, (await ReclamarEntregaAsync(e.Pedro, e.Viaje, e.Puerto)).StatusCode);

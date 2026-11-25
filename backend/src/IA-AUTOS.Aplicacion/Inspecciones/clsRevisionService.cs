@@ -65,6 +65,7 @@ public sealed class clsRevisionService(
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
     IConsultasViajes consultasViajes,
+    IReclamoRepository reclamos,
     IConsultasInspecciones consultas,
     ICatalogosLectura catalogos,
     clsResolutorZona resolutorZona,
@@ -157,7 +158,7 @@ public sealed class clsRevisionService(
 
         switch (actual.Rol)
         {
-            case clsRol.INSPECTOR when !await consultasViajes.UsuarioVeVinAsync(vehiculo.Vin, actual.IdObligatorio(), ct):
+            case clsRol.INSPECTOR when !await consultasViajes.UsuarioVeVinAsync(vehiculo.Vin, actual.IdObligatorio(), ct) && !await TieneLaParadaDelDanoAsync(vehiculo, hallazgo, inspeccion, etapa, viaje, ct):
                 throw new clsProhibidoException("El VIN del hallazgo no pertenece a ninguno de sus viajes");
             case clsRol.COORDINADOR_CALIDAD when hallazgo.Origen != clsOrigenHallazgo.CONDUCTOR || !await EsInspeccionSinInspectorAsync(inspeccion, etapa, viaje, ct):
                 throw new clsProhibidoException(
@@ -167,6 +168,26 @@ public sealed class clsRevisionService(
             default:
                 throw new clsProhibidoException("No tiene permisos para revisar hallazgos");
         }
+    }
+
+    /// <summary>
+    /// El inspector que tiene el reclamo de la entrega de la parada donde esta el carro califica los danos que el conductor marco en su revision de llegada del Descargue (la que hizo con el plan B antes de que el inspector
+    /// llegara), aunque no sea el inspector del viaje. Los demas danos del viaje siguen la regla de siempre.
+    /// </summary>
+    private async Task<bool> TieneLaParadaDelDanoAsync(clsVehiculo vehiculo, clsHallazgo hallazgo, clsInspeccion inspeccion, clsEtapa etapa, clsViaje viaje, CancellationToken ct)
+    {
+        if (hallazgo.Origen != clsOrigenHallazgo.CONDUCTOR || inspeccion.Momento != clsMomento.LLEGADA || inspeccion.UsuarioId != viaje.ConductorId)
+        {
+            return false;
+        }
+
+        var proceso = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
+        if (proceso != clsCodigosEtapa.DESCARGUE || (await viajes.ObtenerVehiculoAsync(viaje.Id, vehiculo.Id, ct))?.LugarDestinoId is not { } parada)
+        {
+            return false;
+        }
+
+        return await reclamos.ObtenerActivoAsync(viaje.Id, clsProcesoReclamo.ENTREGA, parada, ct) is { } reclamo && reclamo.InspectorId == actual.IdObligatorio();
     }
 
     /// <summary>
