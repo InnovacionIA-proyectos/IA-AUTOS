@@ -1527,6 +1527,14 @@ INSERT #r SELECT N'Entrega sin inspector del punto: la transferencia lleva su ma
 INSERT #r SELECT N'Espera del inspector del punto: la notificacion admite el tipo espera_inspector_punto',
     CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%espera_inspector_punto%') THEN 1 ELSE 0 END, NULL;
 
+-- 7h) Descartar un informe en borrador: los estados nuevos y los indices unicos que no cuentan los descartados ni los superados
+INSERT #r SELECT N'Informe descartado: el estado admite descartada y superada y no tienen fecha de cierre',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_Estado' AND parent_object_id = OBJECT_ID(N'dbo.tblInspecciones') AND definition LIKE N'%descartada%' AND definition LIKE N'%superada%')
+         AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_Cierre' AND parent_object_id = OBJECT_ID(N'dbo.tblInspecciones') AND definition LIKE N'%descartada%') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Informe descartado: la original y la correccion unicas no cuentan las descartadas ni las superadas',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblInspecciones_Etapa_Momento_Original' AND object_id = OBJECT_ID(N'dbo.tblInspecciones') AND is_unique = 1 AND filter_definition LIKE N'%descartada%' AND filter_definition LIKE N'%superada%')
+         AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblInspecciones_Corrige' AND object_id = OBJECT_ID(N'dbo.tblInspecciones') AND is_unique = 1 AND filter_definition LIKE N'%descartada%' AND filter_definition LIKE N'%superada%') THEN 1 ELSE 0 END, NULL;
+
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_0001';

@@ -80,6 +80,9 @@ public sealed class clsInspeccion : clsEntidadBase
 
     public bool EstaCerrada => Estado == clsEstadoInspeccion.CERRADA;
 
+    /// <summary>True si el informe se descarto o lo supero otro: se conserva con su autor, pero ya no es el informe de su momento.</summary>
+    public bool EstaFueraDeJuego => clsEstadoInspeccion.FUERA_DE_JUEGO.Contains(Estado);
+
     public static clsInspeccion Crear(
         Guid etapaId,
         Guid viajeId,
@@ -203,6 +206,45 @@ public sealed class clsInspeccion : clsEntidadBase
         {
             throw new clsConflictoException("La inspección está cerrada y es inmutable; no admite cambios");
         }
+
+        AsegurarVigente();
+    }
+
+    /// <summary>Un informe descartado o superado se conserva como registro, pero ya no admite fotos, hallazgos, extras ni cierre.</summary>
+    private void AsegurarVigente()
+    {
+        if (EstaFueraDeJuego)
+        {
+            throw new clsConflictoException("La inspección fue descartada: ya no admite cambios", clsMotivosRechazo.INFORME_DESCARTADO);
+        }
+    }
+
+    /// <summary>
+    /// Descarta el borrador: pasa a <see cref="clsEstadoInspeccion.DESCARTADA"/> y su momento queda libre para una inspeccion original nueva. Una cerrada es evidencia y nunca se descarta (409); quien llama
+    /// comprueba antes quien puede hacerlo y que no tenga firmas.
+    /// </summary>
+    public void Descartar(DateTimeOffset ahora)
+    {
+        if (EstaCerrada)
+        {
+            throw new clsInformeCerradoNoSeDescartaException();
+        }
+
+        AsegurarVigente();
+        Estado = clsEstadoInspeccion.DESCARTADA;
+        Tocar(ahora);
+    }
+
+    /// <summary>El borrador de otra persona deja de ser el informe de su momento porque quien toma el carro lo captura de cero: pasa a <see cref="clsEstadoInspeccion.SUPERADA"/> y se conserva con su autor.</summary>
+    public void Superar(DateTimeOffset ahora)
+    {
+        if (Estado != clsEstadoInspeccion.BORRADOR)
+        {
+            throw new clsConflictoException("Solo un borrador puede quedar superado por un informe nuevo");
+        }
+
+        Estado = clsEstadoInspeccion.SUPERADA;
+        Tocar(ahora);
     }
 
     /// <summary>
@@ -218,6 +260,7 @@ public sealed class clsInspeccion : clsEntidadBase
             throw new clsConflictoException("La inspección ya está cerrada");
         }
 
+        AsegurarVigente();
         var errores = new List<string>();
         errores.AddRange(vistasFaltantes.Select(vista => $"Falta la foto de la vista «{vista}»"));
         if (otrosFaltantes is not null)

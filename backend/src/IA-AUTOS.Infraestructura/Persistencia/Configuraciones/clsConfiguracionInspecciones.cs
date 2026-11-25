@@ -46,10 +46,13 @@ internal sealed class clsConfiguracionInspeccion : IEntityTypeConfiguration<clsI
             .HasConstraintName("FK_tblInspecciones_Usuario").OnDelete(DeleteBehavior.NoAction);
         // Una sola inspeccion original por etapa, momento y ciclo; las correcciones (versiones siguientes) no cuentan, y cada version se corrige una vez.
         builder.Property(i => i.Ciclo).HasDefaultValue(1);
-        builder.HasIndex(i => new { i.EtapaId, i.Momento, i.Ciclo }).IsUnique().HasFilter("[CorrigeInspeccionId] IS NULL")
+        // Un borrador descartado o superado se conserva, pero ya no es el informe de su momento: no cuenta para la unicidad.
+        builder.HasIndex(i => new { i.EtapaId, i.Momento, i.Ciclo }).IsUnique().HasFilter("[CorrigeInspeccionId] IS NULL AND [Estado] <> 'descartada' AND [Estado] <> 'superada'")
             .HasDatabaseName("UX_tblInspecciones_Etapa_Momento_Original");
-        builder.HasIndex(i => i.CorrigeInspeccionId).IsUnique().HasFilter("[CorrigeInspeccionId] IS NOT NULL")
+        builder.HasIndex(i => i.CorrigeInspeccionId).IsUnique().HasFilter("[CorrigeInspeccionId] IS NOT NULL AND [Estado] <> 'descartada' AND [Estado] <> 'superada'")
             .HasDatabaseName("UX_tblInspecciones_Corrige");
+        // Los informes descartados o superados no salen en ninguna consulta: solo se abren por su id (ObtenerPorIdAsync y el informe detallado).
+        builder.HasQueryFilter(i => i.Estado != clsEstadoInspeccion.DESCARTADA && i.Estado != clsEstadoInspeccion.SUPERADA);
     }
 }
 

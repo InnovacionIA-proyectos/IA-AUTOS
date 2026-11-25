@@ -168,6 +168,10 @@ public sealed class clsInspeccionesService(
             await etapaPrevia.AsegurarCerradaAsync(etapa, ct);
         }
 
+        // Quien toma el carro con el reclamo liberado captura el momento de cero: el borrador de otra persona se conserva con su autor, pero deja de ser el informe de este momento. Se confirma antes de crear el nuevo
+        // para que el indice unico de la inspeccion original ya no lo cuente.
+        await SuperarBorradorAjenoAsync(etapa, viaje, solicitud.Momento!, ciclo, ct);
+
         // El usuario siempre sale del token: el cliente no puede crear informes a nombre de otro.
         var inspeccion = clsInspeccion.Crear(
             etapa.Id,
@@ -220,6 +224,72 @@ public sealed class clsInspeccionesService(
             await AvisarCargueSinInspectorAsync(novedad, vehiculo, viaje, motivo!, ct);
         }
 
+        var conductor = viaje.ConductorId is { } conductorId ? (await usuarios.ObtenerPorIdAsync(conductorId, ct))?.Nombre : null;
+        return clsMapeadorInspecciones.AInspeccion(inspeccion, viaje.Placa, viaje.Trailer, conductor, await consultasNovedades.DeInspeccionAsync(inspeccion.Id, ct));
+    }
+
+    /// <summary>
+    /// Si quien crea es un inspector, el momento tiene el borrador de OTRO inspector, este ya no tiene el reclamo del viaje y su transferencia no tiene ninguna firma, el borrador pasa a «superada»: se conserva con su autor y
+    /// deja el momento libre para el informe que se va a crear. Si no se cumple alguna condicion (por ejemplo, el conductor que crea la salida con la excepcion «No hay inspector» frente al borrador de un inspector) no se toca
+    /// nada y el indice unico sigue respondiendo 409.
+    /// </summary>
+    private async Task SuperarBorradorAjenoAsync(clsEtapa etapa, clsViaje viaje, string momento, int ciclo, CancellationToken ct)
+    {
+        if (actual.Rol != clsRol.INSPECTOR
+            || await inspecciones.ObtenerBorradorAjenoAsync(etapa.Id, momento, ciclo, actual.IdObligatorio(), ct) is not { } ajeno
+            || (await usuarios.ObtenerPorIdAsync(ajeno.UsuarioId, ct))?.Rol != clsRol.INSPECTOR)
+        {
+            return;
+        }
+
+        var sigueReclamando = (await reclamos.ObtenerDeViajeAsync(viaje.Id, ct)).Any(r => r.LiberadoAt is null && r.InspectorId == ajeno.UsuarioId);
+        if (sigueReclamando || await inspecciones.TransferenciaTieneFirmaOCierreAsync(ajeno.Id, ct))
+        {
+            return;
+        }
+
+        var antes = clsInstantaneasAuditoria.De(ajeno);
+        ajeno.Superar(reloj.Ahora);
+        await auditor.RegistrarDeViajeAsync("inspeccion.superar", "inspecciones", ajeno.Id, viaje.Id, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(ajeno)), ct: ct);
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+    }
+
+    /// <summary>
+    /// Descarta un informe en BORRADOR: pasa a «descartada», se conserva con su autor y su momento queda libre para una inspeccion original nueva. Lo descartan quien lo creo y el coordinador de calidad de su cliente; cualquier
+    /// otra persona, incluidos el administrador y el super administrador, recibe 403 DESCARTE_SOLO_AUTOR_O_COORDINADOR. Un informe cerrado o un borrador cuya transferencia ya tiene una firma es evidencia y no se descarta
+    /// (409 INFORME_CERRADO_NO_SE_DESCARTA). Queda en la auditoria del viaje con las fotos y los danos que tenia.
+    /// </summary>
+    public async Task<InspeccionDto> DescartarAsync(Guid inspeccionId, CancellationToken ct = default)
+    {
+        var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct)
+            ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
+        var viaje = await viajes.ObtenerPorIdAsync(inspeccion.ViajeId, ct)
+            ?? throw new clsEntidadNoEncontradaException("El viaje de la inspección no existe");
+
+        var esAutor = inspeccion.UsuarioId == actual.IdObligatorio();
+        if (!esAutor && actual.Rol != clsRol.COORDINADOR_CALIDAD)
+        {
+            throw new clsDescarteSoloDelAutorException();
+        }
+
+        // El coordinador de calidad solo descarta informes de VIN de su cliente.
+        if (!esAutor)
+        {
+            await AsegurarClienteAsync(inspeccionId, ct);
+        }
+
+        if (!inspeccion.EstaCerrada && !inspeccion.EstaFueraDeJuego && await inspecciones.TransferenciaTieneFirmaOCierreAsync(inspeccionId, ct))
+        {
+            throw new clsInformeCerradoNoSeDescartaException(conFirmas: true);
+        }
+
+        var resumen = await inspecciones.ObtenerResumenCierreAsync(inspeccionId, ct);
+        var antes = new { inspeccion.Momento, inspeccion.Estado, inspeccion.UsuarioId, Fotos = resumen.TotalEvidencias, Danos = resumen.TotalHallazgos };
+        var ahora = reloj.Ahora;
+        inspeccion.Descartar(ahora);
+        await auditor.RegistrarDeViajeAsync(
+            "inspeccion.descartar", "inspecciones", inspeccion.Id, viaje.Id, new DetalleAuditoria(antes, new { inspeccion.Momento, inspeccion.Estado, inspeccion.UsuarioId, Fotos = resumen.TotalEvidencias, Danos = resumen.TotalHallazgos }), ct: ct);
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
         var conductor = viaje.ConductorId is { } conductorId ? (await usuarios.ObtenerPorIdAsync(conductorId, ct))?.Nombre : null;
         return clsMapeadorInspecciones.AInspeccion(inspeccion, viaje.Placa, viaje.Trailer, conductor, await consultasNovedades.DeInspeccionAsync(inspeccion.Id, ct));
     }

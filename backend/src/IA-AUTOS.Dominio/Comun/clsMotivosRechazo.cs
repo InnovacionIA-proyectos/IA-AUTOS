@@ -60,6 +60,12 @@ public static class clsMotivosRechazo
     public const string MOTIVO_NO_APLICA = "motivo_no_aplica";
     public const string FIRMANTES_DE_LA_TRANSFERENCIA = "firmantes_de_la_transferencia";
 
+    // ---- Descartar un informe en borrador
+    public const string SOLO_AUTOR_O_COORDINADOR = "solo_autor_o_coordinador";
+    public const string INFORME_CERRADO = "informe_cerrado";
+    public const string INFORME_CON_FIRMAS = "informe_con_firmas";
+    public const string INFORME_DESCARTADO = "informe_descartado";
+
     // ---- Vehiculos
     public const string VEHICULO_EN_VIAJE_ACTIVO = "vehiculo_en_viaje_activo";
 

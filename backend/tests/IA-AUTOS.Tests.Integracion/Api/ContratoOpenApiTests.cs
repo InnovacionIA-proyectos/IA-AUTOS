@@ -310,6 +310,8 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     [InlineData("/api/hallazgos/{id}/revision", "post", "409", "HALLAZGO_YA_REVISADO")]
     [InlineData("/api/inspecciones/{id}/corregir", "post", "403", "CORRECCION_SOLO_AUTOR")]
     [InlineData("/api/inspecciones/{id}/corregir", "post", "409", "INSPECCION_YA_FIRMADA")]
+    [InlineData("/api/inspecciones/{id}/descartar", "post", "403", "DESCARTE_SOLO_AUTOR_O_COORDINADOR")]
+    [InlineData("/api/inspecciones/{id}/descartar", "post", "409", "INFORME_CERRADO_NO_SE_DESCARTA")]
     [InlineData("/api/uploads/{archivo}", "get", "403", "URL_FIRMADA_INVALIDA")]
     [InlineData("/api/auth/login-conductor", "post", "423", "ACCOUNT_LOCKED")]
     [InlineData("/api/auth/login-portal", "post", "403", "PORTAL_USER_NOT_LINKED")]

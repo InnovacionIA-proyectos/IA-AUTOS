@@ -1083,6 +1083,20 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task Un_informe_en_borrador_se_puede_descartar_y_su_momento_queda_libre()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/50-descartar-informe-en-borrador.sql.
+        await using var conexion = await AbrirAsync();
+
+        var estados = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_Estado' AND parent_object_id = OBJECT_ID(N'tblInspecciones') AND definition LIKE N'%descartada%' AND definition LIKE N'%superada%'");
+        var cierre = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_Cierre' AND parent_object_id = OBJECT_ID(N'tblInspecciones') AND definition LIKE N'%descartada%'");
+        var original = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblInspecciones_Etapa_Momento_Original' AND object_id = OBJECT_ID(N'tblInspecciones') AND is_unique = 1 AND filter_definition LIKE N'%descartada%' AND filter_definition LIKE N'%superada%'");
+        var correccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblInspecciones_Corrige' AND object_id = OBJECT_ID(N'tblInspecciones') AND is_unique = 1 AND filter_definition LIKE N'%descartada%' AND filter_definition LIKE N'%superada%'");
+
+        Assert.True(estados == 1 && cierre == 1 && original == 1 && correccion == 1, "tblInspecciones no admite los estados descartada y superada o sus indices unicos las cuentan. Ejecute database/cambios-esquema/50-descartar-informe-en-borrador.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

@@ -81,6 +81,8 @@ Todos los errores son JSON con la misma forma:
 | `HALLAZGO_YA_REVISADO` | 409 | la novedad del conductor ya fue revisada: su zona, clase y nivel ya no se cambian (ver «Revisión de la novedad») |
 | `UNIDAD_NO_SALE` | 409 | la unidad se marcó «no sale» del viaje: no admite novedades ni llegada |
 | `CORRECCION_SOLO_AUTOR` | 403 | corregir una inspección que hizo otra persona sin ser administrador: la corrigen quien la hizo y los administradores (ver «Corregir una inspección») |
+| `DESCARTE_SOLO_AUTOR_O_COORDINADOR` | 403 | descartar un informe en borrador que hizo otra persona sin ser el coordinador de calidad: lo descartan quien lo hizo y el coordinador; el administrador y el super administrador no (ver «Descartar un informe en borrador») |
+| `INFORME_CERRADO_NO_SE_DESCARTA` | 409 | descartar un informe cerrado, o un borrador cuya transferencia ya tiene una firma: es evidencia y no se descarta; `details.motivo` dice `informe_cerrado` o `informe_con_firmas` (ver «Descartar un informe en borrador») |
 | `INSPECCION_YA_FIRMADA` | 409 | alguna transferencia de la **etapa** (de la llegada o de la salida) ya tiene una firma o un cierre: ya no se corrige, sea quien sea quien lo intente (ver «Corregir una inspección») |
 
 **El motivo fijo de los rechazos.** Los rechazos (`409`, `403` y `404`) de **viajes**, **usuarios**, **vehículos** y de la **descarga de la constancia** traen además, en `details.motivo`, un valor fijo en minúsculas (el mismo patrón de `ETAPA_PREVIA_SIN_CIERRE`): el portal y la app muestran el mensaje que corresponde a partir del
@@ -1056,7 +1058,7 @@ En Transporte y Descargue el conductor sí la crea. La regla es de la salida del
 **transferencia sin tipo de cierre**, la salida responde `409` con `code: "ETAPA_PREVIA_SIN_CIERRE"` y `details` con `motivo` (`etapa_previa_sin_cierre` si falta cerrar la llegada,
 `transferencia_sin_cierre` si falta cerrar la transferencia), `etapa_previa_id` y `etapa_previa` (el nombre de la etapa que falta terminar), para que la app muestre el bloqueo. La primera
 etapa y la llegada no tienen este bloqueo. Una etapa ya tiene su inspección original de ese momento: crear otra responde `409` (para
-cambiarla, se corrige).
+cambiarla, se corrige), salvo que la original sea un borrador **descartado** o **superado** (ver «Descartar un informe en borrador»).
 
 ```json
 {
@@ -1179,6 +1181,24 @@ Los dos códigos son estables y distintos, con `details.motivo` (`solo_autor_o_a
 - `409` si la inspección no está cerrada (se sigue editando), si ya fue corregida (se corrige la última versión) o si el viaje está finalizado o cancelado. `403` si el viaje no es del usuario. `404` si no existe.
 - La versión nueva tiene sus propias fotos, hallazgos, transferencia y reglas de cierre. Una etapa puede tener varias versiones; los listados e informes las muestran todas con su `version`.
 
+### Descartar un informe en borrador: `POST /api/inspecciones/{id}/descartar`
+Autenticado, **sin cuerpo**. Descarta un informe que sigue en `borrador` (por ejemplo, el que se abrió por error o la versión vacía de una corrección abandonada): pasa a `estado: "descartada"`, **se conserva con su autor y con sus fotos y daños** (la evidencia no se borra) y su
+momento queda libre para una inspección original nueva. `200` con la `InspeccionDto` descartada. *La operación y sus códigos son propuestas por confirmar con el negocio (PAB-001: se marca y no se borra, porque la base impide borrar un borrador con fotos, hallazgos o transferencia).*
+
+| Regla | Rechazo | Código |
+|---|---|---|
+| Solo descarta **quien creó el informe** (su `usuario_id`) y el **coordinador de calidad** del cliente del VIN. Cualquier otro rol —otro inspector, el conductor, el comercial, el administrador y el super administrador— recibe el rechazo: ninguno gana la acción | `403` «No puedes descartar este informe: lo creó otra persona» con `details.motivo: "solo_autor_o_coordinador"` | `DESCARTE_SOLO_AUTOR_O_COORDINADOR` |
+| Solo mientras está en `borrador`: un informe **cerrado** es evidencia y nunca se descarta, y un borrador cuya transferencia ya tiene una firma tampoco | `409` «Este informe ya está cerrado: es evidencia y no se descarta» (`details.motivo: "informe_cerrado"`) o «Este informe ya tiene una firma: es evidencia y no se descarta» (`"informe_con_firmas"`) | `INFORME_CERRADO_NO_SE_DESCARTA` |
+| Uno que ya está descartado o superado | `409` con `details.motivo: "informe_descartado"` | `CONFLICT` |
+
+- `404` si el informe no existe; el coordinador de calidad recibe `403` si el VIN es de otro cliente. Si ambas se cumplen, gana la de la autoría.
+- **La auditoría del viaje** registra `inspeccion.descartar` con quién, cuándo y, en `detalle.antes` y `detalle.despues`, el `momento`, el `estado` y cuántas `fotos` y `danos` tenía el borrador.
+- **Cómo distinguen la app y el portal un descartado.** El estado nuevo `descartada` (y `superada`, abajo) **no sale en ningún listado**: ni `GET /api/inspecciones`, ni el detalle del viaje, ni el inventario del carro, ni la cobertura, ni los avisos; el momento vuelve a ofrecer «Capturar». Solo se abre **por su id** (`GET /api/inspecciones/{id}`, que trae `estado: "descartada"` y la auditoría lo enlaza): el portal lo muestra con la etiqueta «Descartado» y no con el código crudo. El filtro `estado` del listado sigue admitiendo solo `borrador` y `cerrada`. Las respuestas anteriores se leen igual: los informes de siempre son `borrador` o `cerrada`.
+- Un descartado **no admite** fotos, hallazgos, extras ni cierre (`409`, `details.motivo: "informe_descartado"`) y no genera el aviso «Captura incompleta».
+- Descartar la versión vacía de una corrección abandonada deja la inspección cerrada otra vez **corregible** (la restricción de «una sola corrección» ya no la cuenta).
+
+**Quien toma el carro con un borrador ajeno empieza de cero.** Cuando un **inspector** crea la inspección de un momento (`POST /api/inspecciones`) que ya tiene el borrador **de otro inspector**, si este **ya no tiene el reclamo** del viaje y su transferencia **no tiene ninguna firma**, el borrador anterior pasa a `estado: "superada"`: se conserva con su autor, no se borra y no es el informe vigente de ese momento (queda `inspeccion.superar` en la auditoría), y la inspección nueva se crea (`201`). Si el autor sigue reclamando, o el borrador ya tiene una firma, nada cambia y la creación responde `409` como hasta ahora. Quien repite su propio borrador, y el conductor que crea la salida con la excepción «No hay inspector» frente al borrador de un inspector, siguen recibiendo `409`. *(Por confirmar: que «sin el reclamo» sea la condición de dejar atrás un borrador ajeno.)*
+
 ### `GET /api/inspecciones`
 Autenticado. Una **página** de informes (`{ items, total, pagina, tamano }`; 50 por defecto, máximo 200; los más recientes primero; ver «Paginación y filtros» para `pagina`, `tamano` y `orden`). Todos los filtros son opcionales y van en la consulta:
 
@@ -1188,7 +1208,7 @@ Autenticado. Una **página** de informes (`{ items, total, pagina, tamano }`; 50
 | `usuario_id` | UUID del inspector |
 | `viaje_id` | UUID del viaje |
 | `momento` | `salida` o `llegada` |
-| `estado` | `borrador` o `cerrada` |
+| `estado` | `borrador` o `cerrada` (los informes `descartada` y `superada` no salen en el listado) |
 | `proceso` | `codigo` de una etapa del catálogo `etapas` (por ejemplo `cargue`, `transporte` o `descargue`), activa o no |
 | `operacion` | `importacion`, `exportacion` o `nacional` (la del vehículo) |
 | `marca` | la marca del vehículo |
@@ -1213,7 +1233,7 @@ Las imágenes salen del almacén; una foto cuyo archivo ya no está se indica en
 `403` si es de otro cliente o de un viaje ajeno (inspector y conductor), y el conductor lo recibe con los hallazgos en lectura (sin nivel, seguimiento ni historial); `404` si no existe. Reemplaza al PDF de texto plano.
 
 ### `GET /api/inspecciones/{id}`
-Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de la inspección más el contexto y sus partes. Inspector y conductor reciben `403` si el informe es de un viaje que no es suyo.
+Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de la inspección más el contexto y sus partes. Inspector y conductor reciben `403` si el informe es de un viaje que no es suyo. Abre también un informe `descartada` o `superada` (su `estado` lo dice).
 
 ```json
 {
@@ -1985,7 +2005,7 @@ Toda acción de escritura (y el inicio de sesión) queda en un registro **que na
 (`X-Dispositivo-Id` o, si no llega, el `User-Agent`; ambos `null` en las acciones del sistema, como la ingesta Sofasa), el **detalle** del cambio y el **viaje** y el **cliente** de lo auditado. El detalle nunca incluye contraseñas, PIN ni tokens.
 
 Acciones registradas: inicio de sesión, PIN errado y bloqueo (`auth.*`); usuarios (`usuario.*`); catálogos (`catalogo.{nombre}.*`); vehículos (`vehiculos.cargar`, `vehiculo.baja`); viajes (`viaje.*`, `viajes.cargar`);
-inspecciones (`inspeccion.crear`, `inspeccion.cerrar`, `inspeccion.corregir`, `llegada.registrar`); hallazgos y novedades (`hallazgo.crear`, `novedad.crear`, `hallazgo.revision`, `hallazgo.seguimiento`); evidencias (`evidencia.crear`);
+inspecciones (`inspeccion.crear`, `inspeccion.cerrar`, `inspeccion.corregir`, `inspeccion.descartar`, `inspeccion.superar`, `llegada.registrar`); hallazgos y novedades (`hallazgo.crear`, `novedad.crear`, `hallazgo.revision`, `hallazgo.seguimiento`); evidencias (`evidencia.crear`);
 transferencias (`transferencia.firmar`, `transferencia.reservas`, `transferencia.no_firma`, `transferencia.sin_entrega`); notas aclaratorias (`nota.crear`); notificaciones (`notificacion.leer`, `notificacion.responder`); dispositivos y la ingesta Sofasa.
 
 ### `GET /api/auditoria`

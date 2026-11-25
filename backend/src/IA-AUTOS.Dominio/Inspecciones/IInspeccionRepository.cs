@@ -4,7 +4,16 @@ namespace IAAutos.Dominio.Inspecciones;
 
 public interface IInspeccionRepository
 {
+    /// <summary>La inspeccion por id, tambien si esta descartada o superada (esas no salen en ninguna otra consulta).</summary>
     Task<clsInspeccion?> ObtenerPorIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// El borrador ORIGINAL de ese momento y ciclo de la etapa cuando lo hizo otra persona (no <paramref name="usuarioId"/>), o nulo: el que quien toma el carro con el reclamo liberado deja atras al capturar ese momento de cero.
+    /// </summary>
+    Task<clsInspeccion?> ObtenerBorradorAjenoAsync(Guid etapaId, string momento, int ciclo, Guid usuarioId, CancellationToken ct = default);
+
+    /// <summary>True si la transferencia de esa inspeccion ya tiene una firma o un cierre: es evidencia y la inspeccion no se descarta.</summary>
+    Task<bool> TransferenciaTieneFirmaOCierreAsync(Guid inspeccionId, CancellationToken ct = default);
 
     /// <summary>Lo que tiene la inspeccion (fotos, ubicaciones, hallazgos sin foto y vistas fotografiadas) para decidir si puede cerrarse.</summary>
     Task<clsResumenCierre> ObtenerResumenCierreAsync(Guid inspeccionId, CancellationToken ct = default);

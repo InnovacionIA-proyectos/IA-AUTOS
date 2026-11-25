@@ -2805,5 +2805,38 @@ BEGIN
 END');
 GO
 
+/* -----------------------------------------------------------------------------
+   Descartar un informe en borrador. tblInspecciones.Estado admite descartada (el borrador que su autor o el coordinador de calidad descarto) y superada (el borrador de otra persona que dejo de ser el informe de su
+   momento porque quien tomo el carro lo capturo de cero); una y otra se conservan, no tienen fecha de cierre y no cuentan para la inspeccion original unica por etapa, momento y ciclo ni para la correccion unica.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblInspecciones', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblInspecciones', N'Estado') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblInspecciones_Estado'' AND parent_object_id = OBJECT_ID(N''dbo.tblInspecciones'') AND definition LIKE N''%descartada%'')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblInspecciones_Estado'' AND parent_object_id = OBJECT_ID(N''dbo.tblInspecciones''))
+        ALTER TABLE dbo.tblInspecciones DROP CONSTRAINT CK_tblInspecciones_Estado;
+    ALTER TABLE dbo.tblInspecciones ADD CONSTRAINT CK_tblInspecciones_Estado CHECK (Estado IN (''borrador'', ''cerrada'', ''descartada'', ''superada''));
+END');
+GO
+IF OBJECT_ID(N'dbo.tblInspecciones', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblInspecciones', N'Estado') IS NOT NULL AND COL_LENGTH(N'dbo.tblInspecciones', N'CerradaAt') IS NOT NULL
+    EXEC (N'IF NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblInspecciones_Cierre'' AND parent_object_id = OBJECT_ID(N''dbo.tblInspecciones'') AND definition LIKE N''%descartada%'')
+BEGIN
+    IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N''CK_tblInspecciones_Cierre'' AND parent_object_id = OBJECT_ID(N''dbo.tblInspecciones''))
+        ALTER TABLE dbo.tblInspecciones DROP CONSTRAINT CK_tblInspecciones_Cierre;
+    ALTER TABLE dbo.tblInspecciones ADD CONSTRAINT CK_tblInspecciones_Cierre CHECK ((Estado IN (''borrador'', ''descartada'', ''superada'') AND CerradaAt IS NULL) OR (Estado = ''cerrada'' AND CerradaAt IS NOT NULL));
+END');
+GO
+IF OBJECT_ID(N'dbo.tblInspecciones', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblInspecciones', N'Ciclo') IS NOT NULL AND COL_LENGTH(N'dbo.tblInspecciones', N'Estado') IS NOT NULL AND COL_LENGTH(N'dbo.tblInspecciones', N'CorrigeInspeccionId') IS NOT NULL
+    EXEC (N'IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N''UX_tblInspecciones_Etapa_Momento_Original'' AND object_id = OBJECT_ID(N''dbo.tblInspecciones'') AND filter_definition NOT LIKE N''%descartada%'')
+    DROP INDEX UX_tblInspecciones_Etapa_Momento_Original ON dbo.tblInspecciones;
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N''UX_tblInspecciones_Etapa_Momento_Original'' AND object_id = OBJECT_ID(N''dbo.tblInspecciones''))
+    CREATE UNIQUE INDEX UX_tblInspecciones_Etapa_Momento_Original ON dbo.tblInspecciones (EtapaId, Momento, Ciclo) WHERE CorrigeInspeccionId IS NULL AND Estado <> ''descartada'' AND Estado <> ''superada''');
+GO
+IF OBJECT_ID(N'dbo.tblInspecciones', N'U') IS NOT NULL AND COL_LENGTH(N'dbo.tblInspecciones', N'Estado') IS NOT NULL AND COL_LENGTH(N'dbo.tblInspecciones', N'CorrigeInspeccionId') IS NOT NULL
+    EXEC (N'IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = N''UX_tblInspecciones_Corrige'' AND object_id = OBJECT_ID(N''dbo.tblInspecciones'') AND filter_definition NOT LIKE N''%descartada%'')
+    DROP INDEX UX_tblInspecciones_Corrige ON dbo.tblInspecciones;
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N''UX_tblInspecciones_Corrige'' AND object_id = OBJECT_ID(N''dbo.tblInspecciones''))
+    CREATE UNIQUE INDEX UX_tblInspecciones_Corrige ON dbo.tblInspecciones (CorrigeInspeccionId) WHERE CorrigeInspeccionId IS NOT NULL AND Estado <> ''descartada'' AND Estado <> ''superada''');
+GO
+
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';
 GO
