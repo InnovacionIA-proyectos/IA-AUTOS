@@ -200,9 +200,39 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
     public async Task<IReadOnlyList<ViajeDto>> MiosAsync(Guid usuarioId, IReadOnlyCollection<string> estados, CancellationToken ct = default)
     {
         var consulta = contexto.Viajes.AsNoTracking()
-            .Where(v => (v.ConductorId == usuarioId || v.InspectorId == usuarioId) && estados.Contains(v.Estado))
+            .Where(v => estados.Contains(v.Estado)
+                        && (v.ConductorId == usuarioId
+                            || v.InspectorId == usuarioId
+                            // Un inspector que tomo la entrega de una parada ve el viaje aunque no sea el suyo: una sola vez, sin importar cuantas paradas reclamo.
+                            || contexto.Reclamos.Any(r => r.ViajeId == v.Id && r.InspectorId == usuarioId && r.Proceso == clsProcesoReclamo.ENTREGA && r.LiberadoAt == null)))
             .OrderByDescending(v => v.CreatedAt);
         return await ConVehiculosAsync((await ProyectarAsync(consulta, null, ct)).OrderByDescending(f => f.Viaje.CreatedAt).ToList(), null, ct);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, string>> PapelesDelInspectorAsync(Guid inspectorId, IReadOnlyCollection<Guid> viajeIds, CancellationToken ct = default)
+    {
+        if (viajeIds.Count == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        var delViaje = (await contexto.Viajes.AsNoTracking().Where(v => viajeIds.Contains(v.Id) && v.InspectorId == inspectorId).Select(v => v.Id).ToListAsync(ct)).ToHashSet();
+        var reclamos = await contexto.Reclamos.AsNoTracking()
+            .Where(r => viajeIds.Contains(r.ViajeId) && r.InspectorId == inspectorId && r.LiberadoAt == null)
+            .Select(r => new { r.ViajeId, r.Proceso })
+            .ToListAsync(ct);
+        var papeles = new Dictionary<Guid, string>();
+        foreach (var viajeId in viajeIds)
+        {
+            var carga = delViaje.Contains(viajeId) || reclamos.Any(r => r.ViajeId == viajeId && r.Proceso == clsProcesoReclamo.CARGUE);
+            var recibe = reclamos.Any(r => r.ViajeId == viajeId && r.Proceso == clsProcesoReclamo.ENTREGA);
+            if (clsPapelEnElViaje.De(carga, recibe) is { } papel)
+            {
+                papeles[viajeId] = papel;
+            }
+        }
+
+        return papeles;
     }
 
     public async Task<ViajeDto?> ObtenerAsync(Guid id, Guid? soloDeCliente = null, CancellationToken ct = default) =>

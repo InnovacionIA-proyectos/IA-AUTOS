@@ -652,7 +652,8 @@ Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viaj
   "fecha_programada": "2026-11-03T11:00:00.000Z", "lugar_cargue_id": "uuid", "lugar_cargue": "CEDI Envigado",
   "capacidad": 9,
   "disposicion": { "puestos": [ { "numero": 1, "etiqueta": "1", "vin": "9FB45RFL8NM201001" }, { "numero": 2, "etiqueta": "2", "vin": null } ] },
-  "fotos_acomodacion": [ { /* EvidenciaDto con es_acomodacion: true */ } ]
+  "fotos_acomodacion": [ { /* EvidenciaDto con es_acomodacion: true */ } ],
+  "papel": null
 }
 ```
 
@@ -749,8 +750,13 @@ viajes o que no existe da una página vacía; un valor que no es uuid, `400`. **
 si lo creó alguien de su cliente (así quien lo crea lo encuentra antes de asignarle unidades) y el super administrador, pero no sale al filtrar por `cliente_id`.
 
 ### `GET /api/viajes/mios`
-Autenticado. Los viajes del usuario (donde es conductor o inspector) **con sus VIN**, como `ViajeDto`. Sin parámetros trae los `programado` y `en_curso`;
-con `?estado=` trae los de ese estado (`finalizado`, por ejemplo). Es la entrada de «Mis viajes» en la app.
+Autenticado. Los viajes del usuario (donde es conductor, inspector del viaje o, si es inspector, **donde tiene un reclamo activo de entrega** de alguna parada) **con sus VIN**, como `ViajeDto`. Sin parámetros trae los `programado` y `en_curso`;
+con `?estado=` trae los de ese estado (`finalizado`, por ejemplo). Es la entrada de «Mis viajes» en la app. Un viaje sale **una sola vez** aunque el inspector tenga el reclamo de varias paradas, y deja de salir en la consulta siguiente a liberar su último reclamo de entrega,
+salvo que además sea su inspector del viaje (el que cargó recibe solo si está asignado a esa parada). El reclamo del cargue no cambia nada: reclamarlo ya lo vuelve inspector del viaje.
+
+**El papel del inspector.** Cada viaje de `mios` y el detalle del viaje traen `papel`, que dice qué hace en él **quien consulta si es inspector**: `carga` (es el inspector del viaje o tiene el reclamo del cargue), `recibe` (solo tomó la entrega de una o más paradas) o `carga_y_recibe`
+(el inspector del viaje que además tomó la entrega de una parada suya). Es `null` para el conductor y para los roles de oficina (coordinador, comercial, administrador y super administrador) y en los viajes donde un inspector no hace ninguna de las dos cosas. Es un campo nuevo: ninguno de los anteriores cambia.
+Los nombres (`papel` y sus tres valores) son propuestos y quedan **por confirmar por backend**.
 
 ### `GET /api/viajes/{id}`
 Autenticado. El `ViajeDto`. `403` si es un inspector o conductor y el viaje no es suyo, o si el rol no es el super administrador y el viaje no tiene unidades de su cliente;
@@ -1217,7 +1223,8 @@ Autenticado. Una **página** de informes (`{ items, total, pagina, tamano }`; 50
 | `desde`, `hasta` | fecha ISO sobre la fecha de la inspección |
 
 Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es el `InspeccionDto` más `vin` y `proceso`, y `lugar` (el punto de custodia de la etapa, el mismo que trae el detalle del informe), `codigo_mtrack` (el del viaje) y `unidad` (el tipo de unidad transportadora del viaje), para no abrir cada informe;
-los tres son `null` cuando no hay (una etapa sin punto de custodia, un viaje sin código o sin tipo de unidad). Inspector y conductor solo reciben los informes de sus viajes.
+los tres son `null` cuando no hay (una etapa sin punto de custodia, un viaje sin código o sin tipo de unidad). Trae además `usuario_nombre`: **el nombre de quien hizo el informe**, con el mismo join y el mismo alcance por cliente que `conductor_nombre` (`null` si el usuario ya no existe; una fila de otro cliente no sale, así que su autor tampoco).
+El nombre va solo en este campo del listado: no se agrega a ningún aviso, texto ni exportación. Inspector y conductor solo reciben los informes de sus viajes.
 
 ### `GET /api/inspecciones/{id}/pdf`
 Autenticado. El **informe de la inspección en PDF** (`Content-Type: application/pdf`, nombre `informe-{vin}-{proceso}-{momento}-v{version}.pdf`), como descarga binaria (use `fetch` con el token y descargue el `blob`). Lleva:

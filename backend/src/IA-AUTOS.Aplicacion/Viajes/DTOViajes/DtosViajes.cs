@@ -141,7 +141,8 @@ public sealed record NovedadDelViajeDto(
 /// <summary>
 /// Viaje completo con sus VIN. <c>NovedadesProceso</c> son las novedades de proceso de sus unidades (la excepcion «No hay inspector» y el recibo sin entrega), de la mas antigua a la mas reciente. El viaje no tiene un cliente propio: <c>Clientes</c>
 /// son los de los VIN que quien consulta puede ver (todos para el conductor, el inspector y el super administrador; solo los de su cliente
-/// para el resto) y <c>Vehiculos</c> trae esos mismos VIN.
+/// para el resto) y <c>Vehiculos</c> trae esos mismos VIN. <c>Papel</c> dice, para un inspector, si en este viaje carga, recibe o ambas cosas (<see cref="IAAutos.Dominio.Viajes.clsPapelEnElViaje"/>); es nulo para el
+/// conductor y para los roles de oficina.
 /// </summary>
 public sealed record ViajeDto(
     Guid Id,
@@ -176,7 +177,8 @@ public sealed record ViajeDto(
     string? CargueNoFirmaParte = null,
     Guid? MuelleId = null,
     string? Muelle = null,
-    bool Eliminable = false);
+    bool Eliminable = false,
+    string? Papel = null);
 
 /// <summary>Un puesto de la ninera: su <c>Numero</c> (el que se envia como posicion de una unidad), la <c>Etiqueta</c> con que se muestra (hoy el mismo numero) y el <c>Vin</c> de la unidad que lo ocupa (nulo si esta libre).</summary>
 public sealed record PuestoDeNiniera(int Numero, string Etiqueta, string? Vin);
