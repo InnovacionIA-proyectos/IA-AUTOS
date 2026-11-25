@@ -41,9 +41,10 @@ public sealed class clsConductorService(
     /// <summary>
     /// Guarda la novedad del conductor con su foto: la crea sobre la inspeccion de salida de Transporte del VIN (que crea en borrador, con la fecha y el GPS de la novedad, si aun no existe)
     /// y avisa a los coordinadores de calidad y administradores del cliente del vehiculo. 403 si el viaje no es suyo; 409 si el Cargue no esta cerrado (ETAPA_PREVIA_SIN_CIERRE), si la
-    /// unidad no sale (UNIDAD_NO_SALE) o si la salida de Transporte ya se cerro.
+    /// unidad no sale (UNIDAD_NO_SALE) o si la salida de Transporte ya se cerro. Con un <c>id_envio</c> que ya se guardo para esa unidad devuelve la misma novedad (sin otra foto ni otro aviso) y <c>Creada</c> en falso; si el
+    /// contenido es otro, 409 con el motivo <c>envio_repetido_distinto</c>.
     /// </summary>
-    public async Task<HallazgoCreadoDto> RegistrarNovedadAsync(Guid viajeId, string vin, RegistrarNovedadRequest solicitud, CancellationToken ct = default)
+    public async Task<(HallazgoCreadoDto Hallazgo, bool Creada)> RegistrarNovedadAsync(Guid viajeId, string vin, RegistrarNovedadRequest solicitud, CancellationToken ct = default)
     {
         await validadorNovedad.ValidarOLanzarAsync(solicitud, ct);
         if (!(await catalogos.CodigosAsync(clsNombresCatalogo.TAMANOS_DANO, soloActivos: true, ct)).Contains(solicitud.TamanoDano!.Trim()))
@@ -54,6 +55,13 @@ public sealed class clsConductorService(
         var unidad = await ResolverUnidadAsync(viajeId, vin, ct);
         var ahora = reloj.Ahora;
         var salida = await inspecciones.ObtenerUltimaDeEtapaAsync(unidad.Transporte.Id, clsMomento.SALIDA, ct);
+
+        // Un reenvio de algo que ya se guardo responde lo mismo, aunque la salida ya se haya cerrado con la llegada.
+        if (solicitud.IdEnvio is { } idEnvio && salida is not null && await inspecciones.ObtenerHallazgoPorEnvioAsync(salida.Id, idEnvio, ct) is { } previo)
+        {
+            return (await NovedadRepetidaAsync(previo, solicitud, ct), false);
+        }
+
         if (salida is null)
         {
             await etapaPrevia.AsegurarCerradaAsync(unidad.Transporte, ct);
@@ -69,7 +77,7 @@ public sealed class clsConductorService(
         }
 
         var foto = solicitud.Evidencia!;
-        var hallazgo = clsHallazgo.CrearNovedad(salida.Id, solicitud.TipoNovedad!, solicitud.TamanoDano!.Trim(), ahora);
+        var hallazgo = clsHallazgo.CrearNovedad(salida.Id, solicitud.TipoNovedad!, solicitud.TamanoDano!.Trim(), ahora, solicitud.IdEnvio);
         var evidencia = await fabricaEvidencias.CrearAsync(
             salida.Id, hallazgo.Id, null, esConstancia: false, foto.StoragePath!, foto.SelloFecha!.Value, foto.SelloLat, foto.SelloLng, foto.Precision, foto.DispositivoId, null,
             foto.HashSha256, ct);
@@ -80,10 +88,35 @@ public sealed class clsConductorService(
             "novedad.crear", "hallazgos", hallazgo.Id, unidad.Viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(hallazgo)), unidad.Vehiculo.ClienteId, ct);
         await auditor.RegistrarDeViajeAsync(
             "evidencia.crear", "evidencias", evidencia.Id, unidad.Viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(evidencia)), unidad.Vehiculo.ClienteId, ct);
-        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        try
+        {
+            await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        }
+        catch (clsConflictoException) when (solicitud.IdEnvio is not null)
+        {
+            // Dos envios del mismo identificador a la vez: gana el primero y el otro recibe la misma novedad.
+            unidadDeTrabajo.DescartarCambios();
+            var ganadora = await inspecciones.ObtenerUltimaDeEtapaAsync(unidad.Transporte.Id, clsMomento.SALIDA, ct) is { } salidaGanadora
+                ? await inspecciones.ObtenerHallazgoPorEnvioAsync(salidaGanadora.Id, solicitud.IdEnvio.Value, ct)
+                : null;
+            return ganadora is null ? throw new clsConflictoException("Esa novedad ya fue enviada") : (await NovedadRepetidaAsync(ganadora, solicitud, ct), false);
+        }
 
         await AvisarNovedadAsync(unidad, hallazgo, ct);
-        return clsMapeadorInspecciones.AHallazgoCreado((await descriptorHallazgos.DescribirAsync([hallazgo], ct))[0], evidencia);
+        return (clsMapeadorInspecciones.AHallazgoCreado((await descriptorHallazgos.DescribirAsync([hallazgo], ct))[0], evidencia), true);
+    }
+
+    /// <summary>La novedad que ya estaba guardada con ese identificador de envio, con su foto: la misma si el contenido coincide (tipo, tamano y archivo de la foto) y 409 <c>envio_repetido_distinto</c> si no.</summary>
+    private async Task<HallazgoCreadoDto> NovedadRepetidaAsync(clsHallazgo previo, RegistrarNovedadRequest solicitud, CancellationToken ct)
+    {
+        var fotos = await inspecciones.PrimeraFotoDeHallazgosAsync([previo.Id], ct);
+        var foto = fotos.TryGetValue(previo.Id, out var fotoId) ? await inspecciones.ObtenerEvidenciaAsync(fotoId, ct) : null;
+        if (foto is null || previo.TipoNovedad != solicitud.TipoNovedad || previo.TamanoDano != solicitud.TamanoDano?.Trim() || foto.StoragePath != solicitud.Evidencia?.StoragePath?.Trim())
+        {
+            throw new clsConflictoException("Ese identificador de envío ya se usó con otra novedad", clsMotivosRechazo.ENVIO_REPETIDO_DISTINTO);
+        }
+
+        return clsMapeadorInspecciones.AHallazgoCreado((await descriptorHallazgos.DescribirAsync([previo], ct))[0], foto);
     }
 
     /// <summary>

@@ -2852,5 +2852,135 @@ BEGIN
 END');
 GO
 
+/* -----------------------------------------------------------------------------
+   La novedad del viaje. tblTiposNovedadViaje: el catalogo de tipos (codigo, nombre, rol de quien lo reporta: conductor, inspector o todos, y urgencia del aviso: alta o media) con sus diez valores iniciales.
+   tblNovedadesViaje: lo que el conductor o un inspector reporta sobre el VIAJE y no sobre un carro: viaje, tipo, quien la reporto y su rol, el proceso y la parada (solo si la reporto un inspector), el texto (hasta 300), la
+   fecha y el GPS del celular (opcional, siempre juntos), la foto sellada (opcional) y el identificador del envio (unico por viaje cuando existe). Es append-only: UPDATE falla con 51005 y DELETE con 51003.
+   tblHallazgos.IdEnvio: el identificador del envio de la novedad de un carro (nulo en todo lo que ya existia), unico por inspeccion cuando existe: un reenvio no la duplica.
+   ----------------------------------------------------------------------------- */
+IF OBJECT_ID(N'dbo.tblTiposNovedadViaje', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblTiposNovedadViaje
+    (
+        Id        uniqueidentifier  NOT NULL CONSTRAINT PK_tblTiposNovedadViaje PRIMARY KEY,
+        Codigo    varchar(30)       NOT NULL,
+        Nombre    nvarchar(100)     NOT NULL,
+        Rol       varchar(10)       NOT NULL CONSTRAINT DF_tblTiposNovedadViaje_Rol DEFAULT ('todos'),
+        Urgencia  varchar(10)       NOT NULL CONSTRAINT DF_tblTiposNovedadViaje_Urgencia DEFAULT ('media'),
+        Orden     int               NOT NULL CONSTRAINT DF_tblTiposNovedadViaje_Orden DEFAULT (0),
+        Activo    bit               NOT NULL CONSTRAINT DF_tblTiposNovedadViaje_Activo DEFAULT (1),
+        CreatedAt datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTiposNovedadViaje_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        UpdatedAt datetimeoffset(3) NOT NULL CONSTRAINT DF_tblTiposNovedadViaje_UpdatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT UQ_tblTiposNovedadViaje_Codigo UNIQUE (Codigo),
+        CONSTRAINT CK_tblTiposNovedadViaje_Nombre CHECK (LEN(LTRIM(RTRIM(Nombre))) > 0),
+        CONSTRAINT CK_tblTiposNovedadViaje_Rol CHECK (Rol IN ('conductor', 'inspector', 'todos')),
+        CONSTRAINT CK_tblTiposNovedadViaje_Urgencia CHECK (Urgencia IN ('alta', 'media'))
+    );
+END
+GO
+INSERT INTO dbo.tblTiposNovedadViaje (Id, Codigo, Nombre, Rol, Urgencia, Orden)
+SELECT NEWID(), v.Codigo, v.Nombre, v.Rol, v.Urgencia, v.Orden
+FROM (VALUES
+    ('falla_camion',         N'Falla del cami' + NCHAR(243) + N'n',                       'conductor', 'alta',  1),
+    ('dano_ninera',          N'Da' + NCHAR(241) + N'o en la ni' + NCHAR(241) + N'era',    'conductor', 'media', 2),
+    ('bloqueo_via',          N'Bloqueo de v' + NCHAR(237) + N'a',                         'conductor', 'media', 3),
+    ('intento_robo',         N'Intento de robo',                                          'conductor', 'alta',  4),
+    ('accidente',            N'Accidente',                                                'conductor', 'alta',  5),
+    ('carro_no_llego_patio', N'Carro no lleg' + NCHAR(243) + N' al patio',                'inspector', 'media', 6),
+    ('puesto_ninera_danado', N'Puesto de la ni' + NCHAR(241) + N'era da' + NCHAR(241) + N'ado', 'inspector', 'media', 7),
+    ('faltan_documentos',    N'Faltan documentos',                                        'inspector', 'media', 8),
+    ('camion_llego_tarde',   N'El cami' + NCHAR(243) + N'n lleg' + NCHAR(243) + N' tarde', 'inspector', 'media', 9),
+    ('otro',                 N'Otro',                                                     'todos',     'media', 10)
+) AS v (Codigo, Nombre, Rol, Urgencia, Orden)
+WHERE NOT EXISTS (SELECT 1 FROM dbo.tblTiposNovedadViaje t WHERE t.Codigo = v.Codigo);
+GO
+IF OBJECT_ID(N'dbo.tblNovedadesViaje', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.tblNovedadesViaje
+    (
+        Id                uniqueidentifier  NOT NULL CONSTRAINT PK_tblNovedadesViaje PRIMARY KEY,
+        ViajeId           uniqueidentifier  NOT NULL,
+        TipoCodigo        varchar(30)       NOT NULL,
+        UsuarioId         uniqueidentifier  NOT NULL,
+        Rol               varchar(10)       NOT NULL,
+        Proceso           varchar(10)       NULL,
+        LugarId           uniqueidentifier  NULL,
+        Texto             nvarchar(300)     NOT NULL,
+        Fecha             datetimeoffset(3) NOT NULL,
+        Lat               float             NULL,
+        Lng               float             NULL,
+        IdEnvio           uniqueidentifier  NULL,
+        FotoStoragePath   nvarchar(500)     NULL,
+        FotoSelloFecha    datetimeoffset(3) NULL,
+        FotoSelloLat      float             NULL,
+        FotoSelloLng      float             NULL,
+        FotoPrecision     float             NULL,
+        FotoDispositivoId nvarchar(100)     NULL,
+        FotoHashSha256    char(64)          NULL,
+        CreatedAt         datetimeoffset(3) NOT NULL CONSTRAINT DF_tblNovedadesViaje_CreatedAt DEFAULT (SYSDATETIMEOFFSET()),
+        CONSTRAINT FK_tblNovedadesViaje_Viaje FOREIGN KEY (ViajeId) REFERENCES dbo.tblViajes (Id),
+        CONSTRAINT FK_tblNovedadesViaje_Tipo FOREIGN KEY (TipoCodigo) REFERENCES dbo.tblTiposNovedadViaje (Codigo),
+        CONSTRAINT FK_tblNovedadesViaje_Usuario FOREIGN KEY (UsuarioId) REFERENCES dbo.tblUsuarios (Id),
+        CONSTRAINT FK_tblNovedadesViaje_Lugar FOREIGN KEY (LugarId) REFERENCES dbo.tblLugares (Id),
+        CONSTRAINT CK_tblNovedadesViaje_Rol CHECK (Rol IN ('conductor', 'inspector')),
+        CONSTRAINT CK_tblNovedadesViaje_Proceso CHECK (Proceso IS NULL OR Proceso IN ('cargue', 'entrega')),
+        -- El conductor no indica proceso ni parada; el inspector indica el proceso y, en la entrega, la parada (y en el cargue no).
+        CONSTRAINT CK_tblNovedadesViaje_RolProceso CHECK (
+            (Rol = 'conductor' AND Proceso IS NULL AND LugarId IS NULL)
+            OR (Rol = 'inspector' AND Proceso IS NOT NULL AND ((Proceso = 'entrega' AND LugarId IS NOT NULL) OR (Proceso = 'cargue' AND LugarId IS NULL)))),
+        CONSTRAINT CK_tblNovedadesViaje_Texto CHECK (LEN(LTRIM(RTRIM(Texto))) > 0),
+        -- El GPS es opcional pero siempre completo: sin el la novedad queda "sin ubicacion".
+        CONSTRAINT CK_tblNovedadesViaje_Ubicacion CHECK ((Lat IS NULL AND Lng IS NULL) OR (Lat IS NOT NULL AND Lng IS NOT NULL AND Lat BETWEEN -90 AND 90 AND Lng BETWEEN -180 AND 180)),
+        CONSTRAINT CK_tblNovedadesViaje_Foto CHECK (
+            (FotoStoragePath IS NULL AND FotoSelloFecha IS NULL AND FotoSelloLat IS NULL AND FotoSelloLng IS NULL AND FotoPrecision IS NULL AND FotoDispositivoId IS NULL AND FotoHashSha256 IS NULL)
+            OR (FotoStoragePath IS NOT NULL AND FotoSelloFecha IS NOT NULL AND FotoSelloLat IS NOT NULL AND FotoSelloLng IS NOT NULL AND FotoHashSha256 IS NOT NULL)),
+        CONSTRAINT CK_tblNovedadesViaje_FotoSello CHECK (
+            FotoStoragePath IS NULL
+            OR (FotoSelloLat BETWEEN -90 AND 90 AND FotoSelloLng BETWEEN -180 AND 180 AND (FotoPrecision IS NULL OR FotoPrecision >= 0) AND FotoHashSha256 NOT LIKE '%[^0-9a-f]%'))
+    );
+END
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblNovedadesViaje_Envio' AND object_id = OBJECT_ID(N'dbo.tblNovedadesViaje'))
+    CREATE UNIQUE INDEX UX_tblNovedadesViaje_Envio ON dbo.tblNovedadesViaje (ViajeId, IdEnvio) WHERE IdEnvio IS NOT NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_tblNovedadesViaje_Viaje' AND object_id = OBJECT_ID(N'dbo.tblNovedadesViaje'))
+    CREATE INDEX IX_tblNovedadesViaje_Viaje ON dbo.tblNovedadesViaje (ViajeId, Fecha);
+GO
+CREATE OR ALTER TRIGGER dbo.TR_tblNovedadesViaje_NoModificar
+ON dbo.tblNovedadesViaje
+INSTEAD OF UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    THROW 51005, 'Una novedad del viaje no se modifica', 1;
+END
+GO
+CREATE OR ALTER TRIGGER dbo.TR_tblNovedadesViaje_NoBorrar
+ON dbo.tblNovedadesViaje
+INSTEAD OF DELETE
+AS
+BEGIN
+    SET NOCOUNT ON;
+    THROW 51003, 'Una novedad del viaje es evidencia y no se puede borrar', 1;
+END
+GO
+-- tblHallazgos: el identificador del envio de la novedad de un carro
+IF COL_LENGTH(N'dbo.tblHallazgos', N'IdEnvio') IS NULL
+    ALTER TABLE dbo.tblHallazgos ADD IdEnvio uniqueidentifier NULL;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblHallazgos_Envio' AND object_id = OBJECT_ID(N'dbo.tblHallazgos'))
+    CREATE UNIQUE INDEX UX_tblHallazgos_Envio ON dbo.tblHallazgos (InspeccionId, IdEnvio) WHERE IdEnvio IS NOT NULL;
+GO
+-- tblNotificaciones: tipo novedad_viaje (se suma a los tipos que la restriccion ya admite, sean los que sean)
+IF OBJECT_ID(N'dbo.tblNotificaciones', N'U') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%novedad_viaje%')
+   AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones'))
+BEGIN
+    DECLARE @actual nvarchar(max) = (SELECT definition FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones'));
+    DECLARE @nueva nvarchar(max) = N'ALTER TABLE dbo.tblNotificaciones DROP CONSTRAINT CK_tblNotificaciones_Tipo; ALTER TABLE dbo.tblNotificaciones ADD CONSTRAINT CK_tblNotificaciones_Tipo CHECK ' + LEFT(@actual, LEN(@actual) - 1) + N' OR [Tipo] = ''novedad_viaje'')';
+    EXEC (@nueva);
+END
+GO
+
 PRINT 'IA-AUTOS: esquema aplicado correctamente.';
 GO

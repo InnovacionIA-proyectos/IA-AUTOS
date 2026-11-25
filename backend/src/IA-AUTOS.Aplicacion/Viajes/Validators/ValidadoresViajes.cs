@@ -1,4 +1,5 @@
 using FluentValidation;
+using IAAutos.Aplicacion.Inspecciones.Validators;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Viajes;
 
@@ -79,5 +80,32 @@ public sealed class CargarViajesRequestValidator : AbstractValidator<CargarViaje
             .Must(f => f is { Count: > 0 }).WithMessage("Se requiere al menos una fila")
             .Must(f => f is null || f.Count <= MAXIMO_FILAS).WithMessage($"Máximo {MAXIMO_FILAS} filas por carga");
         RuleForEach(x => x.Filas).Must(f => f is not null).WithMessage("La fila no puede ser nula");
+    }
+}
+
+/// <summary>
+/// La novedad del viaje: tipo, texto de 1 a 300 caracteres y la fecha del celular son obligatorios; el GPS es opcional (sin el queda «sin ubicacion») pero latitud y longitud van juntas. La foto, si viene, es la misma foto sellada
+/// de la novedad de un carro, sin texto libre; su GPS tampoco es obligatorio.
+/// </summary>
+public sealed class RegistrarNovedadViajeRequestValidator : AbstractValidator<RegistrarNovedadViajeRequest>
+{
+    public RegistrarNovedadViajeRequestValidator()
+    {
+        RuleFor(x => x.Tipo).Must(t => !string.IsNullOrWhiteSpace(t)).WithMessage("Tipo de novedad desconocido");
+        RuleFor(x => x.Texto).Must(t => !string.IsNullOrWhiteSpace(t)).WithMessage("Escribe qué pasó");
+        RuleFor(x => x.Texto).Must(t => t is null || t.Trim().Length <= clsNovedadViaje.TEXTO_MAX).WithMessage($"Escribe máximo {clsNovedadViaje.TEXTO_MAX} caracteres");
+        RuleFor(x => x.Fecha).Must(f => f is not null).WithMessage(clsReglasComunes.MENSAJE_FECHA);
+        RuleFor(x => x.Lat).InclusiveBetween(-90, 90).When(x => x.Lat is not null).WithMessage("lat fuera de rango (-90 a 90)");
+        RuleFor(x => x.Lng).InclusiveBetween(-180, 180).When(x => x.Lng is not null).WithMessage("lng fuera de rango (-180 a 180)");
+        RuleFor(x => x.Lat).Must(v => v is not null).When(x => x.Lng is not null).WithMessage("Envíe la latitud y la longitud juntas, o ninguna si no hay GPS");
+        RuleFor(x => x.Lng).Must(v => v is not null).When(x => x.Lat is not null).WithMessage("Envíe la latitud y la longitud juntas, o ninguna si no hay GPS");
+        RuleFor(x => x.IdEnvio).Must(v => v is null || v != Guid.Empty).WithMessage(clsReglasViajes.MENSAJE_UUID);
+        RuleFor(x => x.LugarId).Must(clsReglasViajes.UuidOpcionalValido).WithMessage(clsReglasViajes.MENSAJE_UUID);
+        RuleFor(x => x.Proceso).Must(p => p is null || clsProcesoDeNovedadViaje.VALORES.Contains(p)).WithMessage("El proceso debe ser cargue o entrega");
+        When(x => x.Evidencia is not null, () =>
+        {
+            RuleFor(x => x.Evidencia!).SetValidator(new FotoEvidenciaRequestValidator());
+            RuleFor(x => x.Evidencia!.Nota).Must(n => string.IsNullOrWhiteSpace(n)).WithMessage("La novedad no admite texto libre en la foto");
+        });
     }
 }

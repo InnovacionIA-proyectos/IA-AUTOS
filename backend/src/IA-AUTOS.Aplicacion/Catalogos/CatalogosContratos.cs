@@ -24,6 +24,7 @@ public static class clsNombresCatalogo
     public const string MUELLES = "muelles";
     public const string TIPOS_EXTRA = "tipos-extra";
     public const string LUGARES = "lugares";
+    public const string TIPOS_NOVEDAD_VIAJE = "tipos-novedad-viaje";
 }
 
 /// <summary>Un valor de catalogo tal como lo ve el cliente: solo los campos propios de ese catalogo (snake_case), con id, codigo, nombre, orden y activo.</summary>

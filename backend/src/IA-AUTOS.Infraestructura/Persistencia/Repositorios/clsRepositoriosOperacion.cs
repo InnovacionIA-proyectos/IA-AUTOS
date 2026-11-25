@@ -270,6 +270,9 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
 
     public Task<clsHallazgo?> ObtenerHallazgoDeExtraAsync(Guid extraId, CancellationToken ct = default) => contexto.Hallazgos.FirstOrDefaultAsync(h => h.ExtraId == extraId, ct);
 
+    public Task<clsHallazgo?> ObtenerHallazgoPorEnvioAsync(Guid inspeccionId, Guid idEnvio, CancellationToken ct = default) =>
+        contexto.Hallazgos.AsNoTracking().FirstOrDefaultAsync(h => h.InspeccionId == inspeccionId && h.IdEnvio == idEnvio, ct);
+
     public async Task<IReadOnlyList<clsHallazgo>> ObtenerHallazgosDeInspeccionAsync(Guid inspeccionId, CancellationToken ct = default) =>
         await contexto.Hallazgos.Where(h => h.InspeccionId == inspeccionId).ToListAsync(ct);
 

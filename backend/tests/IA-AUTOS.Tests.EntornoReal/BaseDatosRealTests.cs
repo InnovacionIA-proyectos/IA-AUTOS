@@ -1110,6 +1110,21 @@ public sealed class BaseDatosRealTests
     }
 
     [FactEntornoReal]
+    public async Task La_novedad_del_viaje_y_el_envio_sin_duplicar_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/52-novedad-del-viaje-y-reenvio-sin-duplicar.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tipos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblTiposNovedadViaje' AND schema_id = SCHEMA_ID()");
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblNovedadesViaje' AND schema_id = SCHEMA_ID()");
+        var envioDelViaje = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblNovedadesViaje_Envio' AND is_unique = 1 AND has_filter = 1");
+        var envioDelCarro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblHallazgos_Envio' AND is_unique = 1 AND has_filter = 1");
+        var aviso = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%novedad_viaje%'");
+
+        Assert.True(tipos == 1 && tabla == 1 && envioDelViaje == 1 && envioDelCarro == 1 && aviso == 1, "Falta el catalogo de tipos o la tabla de la novedad del viaje, el identificador de envio o el tipo de aviso. Ejecute database/cambios-esquema/52-novedad-del-viaje-y-reenvio-sin-duplicar.sql.");
+    }
+
+    [FactEntornoReal]
     public async Task Cada_etapa_e_inspeccion_cuelga_de_un_viaje_coherente()
     {
         await using var conexion = await AbrirAsync();

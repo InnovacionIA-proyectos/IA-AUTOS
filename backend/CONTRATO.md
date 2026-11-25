@@ -672,6 +672,7 @@ el lugar de entrega de **cada unidad**; los tres pueden ser `null` en los viajes
 y el dato sigue lo que asigna el coordinador: asignar o quitar el punto cambia el valor en la **siguiente lectura**. Un viaje sin lugar de cargue (anteriores a la programación) dice `false`, como el servidor lo trata. Lo lee quien ya puede leer ese viaje o esa entrega, ni más ni menos, y **no trae nombres ni identificadores de inspectores**. Es un campo nuevo que se suma: las respuestas anteriores se leen igual y los rechazos de la entrega, del cargue y del permiso no cambian.
 
 `novedades_proceso` son las novedades de proceso de las unidades del viaje (la excepción «No hay inspector» que activó el conductor y el recibo sin entrega), de la más antigua a la más reciente, cada una con `{ tipo, motivo_codigo, motivo, texto, usuario_nombre, fecha, vin, inspeccion_id }`: es un registro aparte, que no cuenta en los patrones por zona ni en la tasa diaria de novedad.
+`novedades_viaje` son las novedades que el conductor y los inspectores reportaron sobre el **viaje** (no sobre un carro; ver `POST /api/viajes/{id}/novedades-viaje`), de la más antigua a la más reciente, cada una con `{ id, tipo, tipo_nombre, urgencia, rol, proceso, lugar_id, lugar, texto, usuario_nombre, fecha, lat, lng, sin_ubicacion, foto, created_at }` (`[]` si no tiene): las ve quien puede ver el viaje y no cuentan en las novedades ni en los daños de ninguna unidad. Es un campo nuevo que se suma: las respuestas anteriores se leen igual.
 `codigo_mtrack`, `tipo_unidad_id` y `placa` pueden ser `null` solo en los viajes migrados desde las asignaciones anteriores. `etapas` y `completas`
 de cada VIN cuentan sus etapas del viaje y las que ya tienen informe cerrado. `estado_unidad` es `activa` o `no_sale` y `no_sale` trae el motivo, el hallazgo, quién la marcó y
 cuándo (el mismo objeto del inventario); una unidad que no sale **sigue en la lista de VIN del viaje**. `estado_transporte` (`sin_registro`, `con_novedad`, `sin_novedad` o `llegada_con_novedad`) y `novedades`
@@ -1137,7 +1138,7 @@ La inspección sigue las reglas de la salida que hace el conductor (las 7 vistas
 
 - la inspección guarda `motivo_sin_inspector` y su texto (los conserva también la versión que la corrija);
 - se crea la **novedad de proceso** `cargue_sin_inspector` con el motivo, quién la registró y la `fecha`, `lat` y `lng` **del cuerpo** (los del momento en que el conductor eligió el motivo, aunque la envíe después por falta de señal);
-- se crea la notificación `novedad_proceso` (urgencia `alta`, por bandeja y push) para los `coordinador_calidad` y `admin` activos del **cliente del vehículo**, nunca de otro cliente; un fallo del push no deshace nada;
+- se crea la notificación `novedad_proceso` (urgencia `alta`, por bandeja y push) para los `coordinador_calidad` y `admin` activos de **cada cliente con carros en el viaje**, nunca de otro cliente; un fallo del push no deshace nada. **Es un solo aviso por viaje**: sale con la primera activación, enlazado al viaje (sin `vehiculo_id` ni `inspeccion_id`), con la clave `novedad_proceso:cargue_sin_inspector:{viaje}`, título «Cargue sin inspector (viaje …)», un mensaje que lista los carros y `datos` `{ "hecho": "cargue_sin_inspector", "vins": [los VIN activos del viaje de ese cliente], "motivo", "motivo_nombre", "lugar" }`; las activaciones siguientes del mismo viaje no avisan otra vez (cada carro conserva su novedad de proceso y su auditoría). Los avisos por carro anteriores al cambio se conservan;
 - queda en la auditoría: `inspeccion.crear` (con el motivo) y `novedad_proceso.crear` (entidad `novedades_proceso`).
 
 Una novedad de proceso **no es un hallazgo**: no tiene zona, clase ni nivel y no cuenta en los patrones, el mapa de calor ni la tasa de rechazo.
@@ -1729,6 +1730,7 @@ El celular guarda la novedad y la llegada con su fecha, hora y GPS aunque no hay
 | `tipo_novedad` | sí | `golpe`, `piedra`, `granizo` o `incidente_vial` |
 | `tamano_dano` | sí | un código **activo** del catálogo `tamanos-dano` |
 | `evidencia` | sí | la foto de la novedad ya subida con `POST /api/uploads`, con su sello **completo** (`sello_fecha`, `sello_lat` y `sello_lng`; sin ubicación no se podría cerrar el registro). `nota` no se admite (`400`) |
+| `id_envio` | no | un UUID que el celular le pone al envío: **un reenvío con el mismo identificador no crea otra novedad** (ver abajo). Un UUID vacío responde `400` |
 
 **No hay texto libre ni se indican cuadrante, clase o nivel**: `nota`, `clase_dano`, `nivel_severidad`, `cuadrante_numero`, `lado`, `zona_provisional`, `es_preexistente` y `hallazgo_origen_id` responden `400` con `Campo no admitido` en ese campo.
 El cuadrante, la clase y el nivel V quedan vacíos hasta que un inspector revisa la novedad.
@@ -1739,10 +1741,61 @@ Un viaje `programado` pasa a `en_curso`. Todo queda en la auditoría (`novedad.c
 
 Responde `201` con el `HallazgoCreadoDto`: `origen: "conductor"`, `tipo_novedad`, `tamano_dano`, `clase_dano`, `cuadrante_numero`, `lado`, `nivel_severidad`, `nota` y `revisado_at` en `null`, `estado_seguimiento: "pendiente"` y la `evidencia` con su `url`.
 
+**El reenvío no duplica.** `id_envio` es único **por unidad** (por la salida de Transporte del VIN en ese viaje). Con un `id_envio` que ya se guardó para esa unidad y el **mismo contenido** (tipo, tamaño y foto) responde `200` con la **misma novedad** (mismo `id`, misma foto), sin crear otra foto ni otro aviso, aunque la salida ya se haya cerrado con la llegada; con otro contenido, `409` con `details.motivo: "envio_repetido_distinto"`. Sin `id_envio` todo se comporta como siempre. Los envíos de la app anterior no llevan identificador.
+
 `409` más con `code: "UNIDAD_NO_SALE"` si la unidad se marcó «no sale» del viaje, y `409` (`CONFLICT`) si la salida de Transporte ya está cerrada (por la llegada): ya no se agregan novedades.
 
 **Aviso.** Al guardar la novedad se crea una notificación `novedad_conductor` de urgencia **alta** para cada `coordinador_calidad` y `admin` **activo del cliente del vehículo** (ninguno de otro cliente, ni el `comercial`, el `inspector` o el conductor), por
 **bandeja** y por **push** a sus dispositivos activos. Si el envío por FCM falla, la petición responde igual y la notificación de push queda con su motivo en `ErrorEnvio`. No se envía correo (el correo es solo del reporte diario).
+
+### `POST /api/viajes/{id}/novedades-viaje`
+
+La **novedad del viaje**: lo que el conductor del viaje o un inspector que participa reporta sobre el **viaje** y no sobre un carro (una falla del camión, un bloqueo de vía, un carro que no llegó al patio). **No es un hallazgo ni cuelga de una unidad**: no crea ni toca la salida de transporte, no suma a `novedades` ni cambia `estado_transporte` de ningún carro, no entra en patrones, mapa de calor, tasa de rechazo, cobertura ni conteos de daños, no cambia el estado del viaje y no marca que «el camión salió» (eso lo marca el cierre de la entrega del cargue).
+
+```json
+{
+  "tipo": "falla_camion", "texto": "Se reventó una llanta en la vía",
+  "fecha": "2026-10-21T14:05:00-05:00", "lat": 4.7, "lng": -74.2,
+  "evidencia": { "storage_path": "abc.png", "sello_fecha": "2026-10-21T14:05:00-05:00", "sello_lat": 4.7, "sello_lng": -74.2, "precision": 5.0, "dispositivo_id": "celular-1", "hash_sha256": "…" },
+  "id_envio": "uuid", "proceso": "cargue", "lugar_id": "uuid"
+}
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `tipo` | sí | el código de un tipo **activo** del catálogo `tipos-novedad-viaje` cuyo `rol` sea el de quien reporta (o `todos`). Un código que no existe o está inactivo responde `400` «Tipo de novedad desconocido»; uno del otro rol, `400` «Ese tipo de novedad no es para tu rol» |
+| `texto` | sí | de 1 a 300 caracteres (se recortan los espacios de los extremos): vacío responde `400` «Escribe qué pasó» y de más de 300, `400` «Escribe máximo 300 caracteres» |
+| `fecha` | sí | fecha ISO 8601 con zona, la del celular: se conserva aunque la novedad llegue después, sin señal |
+| `lat`, `lng` | no | el GPS del celular. Van **juntas o ninguna** (`400` si llega una sola o está fuera de rango). **Sin GPS la novedad se acepta** (`201`) y queda `sin_ubicacion: true` |
+| `evidencia` | no | una foto ya subida con `POST /api/uploads`, con la misma forma que la de la novedad de un carro (`storage_path`, `sello_fecha`, `sello_lat`, `sello_lng`, `precision`, `dispositivo_id`, `hash_sha256`); aquí su GPS tampoco es obligatorio (sin él la foto queda «sin ubicación») y `nota` no se admite (`400`) |
+| `id_envio` | no | un UUID que el celular le pone al envío (ver «El reenvío no duplica» abajo). Un UUID vacío responde `400` |
+| `proceso`, `lugar_id` | solo el inspector | `proceso` es `cargue` o `entrega`; en la entrega, `lugar_id` es la parada (obligatoria) y en el cargue no se envía. **El conductor no los envía**: `400` si los manda |
+
+**Quién reporta.** El **conductor del viaje** mientras el viaje esté activo (`programado` o `en_curso`) y el **inspector que participa**: con `proceso = cargue`, el inspector del viaje o quien tiene el reclamo del cargue; con `proceso = entrega`, quien tiene el reclamo activo de **esa parada**. Un inspector con un proceso que no le corresponde recibe `403` con `details.motivo: "inspector_sin_ese_proceso"`; el inspector que no indica el proceso (o la parada de la entrega), `400`. El `coordinador_calidad`, el `admin`, el `super_admin`, el `comercial` y cualquier conductor de otro viaje reciben `403`. Un viaje que no está activo responde `409`. **Ningún rol recibe un permiso nuevo** con esta ruta.
+
+Responde `201` con la `NovedadViajeDto`:
+
+```json
+{
+  "id": "uuid", "tipo": "falla_camion", "tipo_nombre": "Falla del camión", "urgencia": "alta", "rol": "conductor",
+  "proceso": null, "lugar_id": null, "lugar": null, "texto": "Se reventó una llanta en la vía", "usuario_nombre": "Luis",
+  "fecha": "2026-10-21T19:05:00.000Z", "lat": 4.7, "lng": -74.2, "sin_ubicacion": false,
+  "foto": { "sello_fecha": "…", "sello_lat": 4.7, "sello_lng": -74.2, "url": "https://…?exp=…&firma=…", "url_expira_at": "…", "hash_sha256": "…", "precision": 5.0, "dispositivo_id": "celular-1", "sin_ubicacion": false },
+  "created_at": "2026-10-21T19:05:03.412Z"
+}
+```
+
+`rol` es el de quien la reportó (`conductor` o `inspector`), `urgencia` la de su tipo, `lugar` el nombre de la parada (solo en la novedad de la entrega) y `foto` es `null` si no trae foto; su `url` es una URL firmada de lectura, como la de las demás evidencias. `created_at` es la hora en que llegó al servidor. Se guarda **sin edición ni borrado** (la base lo impide) y queda en la auditoría (`novedad_viaje.crear`, entidad `novedades_viaje`).
+
+**Dónde se lee.** `GET /api/viajes/{id}` y `GET /api/viajes/mios` traen `novedades_viaje`: la lista de `NovedadViajeDto` del viaje, de la más antigua a la más reciente por `fecha` (`[]` si no tiene), para quien puede ver el viaje. `novedades_proceso` no cambia de forma: la novedad del viaje no aparece ahí ni en el reporte `novedades-proceso`, y ninguna novedad de proceso aparece en `novedades_viaje`.
+
+**Aviso.** Al guardarla se crea una notificación `novedad_viaje` con la **urgencia de su tipo** (`alta`: bandeja y push; `media`: solo bandeja) para los `coordinador_calidad` y `admin` activos de **cada cliente con carros en el viaje** (nunca de otro cliente), enlazada al viaje y sin `vehiculo_id` ni `hallazgo_id`. Título «Novedad del viaje: {tipo} ({código del viaje})»; el mensaje lleva el tipo y el texto, **sin el nombre de nadie** («{tipo}: {texto}»). Los `datos` son `{ "tipo_novedad", "tipo_novedad_nombre", "rol", "proceso", "lugar", "usuario_nombre", "con_foto" }`. La clave de deduplicación es la de la novedad (`novedad_viaje:{novedad}`): un reenvío no avisa dos veces.
+
+**El reenvío no duplica.** `id_envio` es el UUID que el celular genera una vez por novedad y repite en cada reintento. Es **único por viaje**:
+
+- con un `id_envio` que ya se guardó para ese viaje y el **mismo contenido** (mismo usuario, tipo, texto y foto), responde `200` con la **misma novedad** (mismo `id`, misma foto): no crea otra fila, otra foto ni otro aviso. Vale también si el viaje ya no está activo, porque la cola del celular puede llegar tarde;
+- con otro contenido responde `409` con `details.motivo: "envio_repetido_distinto"`;
+- sin `id_envio` todo se comporta como siempre: cada envío es una novedad. Los envíos de la app anterior no llevan identificador.
 
 ### `POST /api/viajes/{id}/vehiculos/{vin}/llegada`
 
@@ -1813,7 +1866,7 @@ Todo lo que se hace aquí queda en la auditoría.
 `{ "hecho": "entrega_con_una_firma", "lugar_id": "…", "lugar": "…", "parte_que_firmo": "entrega", "motivo": "…", "unidades": 3 }`. Y el de **umbral superado** (`umbral_patron`): `{ "tipo_umbral": "zona", "cuadrante_numero": 4, "lado": "izquierdo", "proceso": null, "total": 12, "umbral": 10, "ventana_dias": 30 }`
 cuando la zona (lado y número de cuadrante) llega al umbral, o `{ "tipo_umbral": "proceso", "cuadrante_numero": null, "lado": null, "proceso": "cargue", … }` cuando es el proceso; con esos campos el portal abre el tablero ya filtrado (`/api/reportes/patrones?proceso=…`). Un dato personal (como la cédula) nunca va en `datos`.
 
-`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar`, `propuesta_ubicacion`, `permiso_sin_inspector`, `firma_cargue_pendiente`, `cambio_cargue_inspector`, `cambio_destino_unidad`, `carro_rechazado_en_destino`, `ubicacion_fijada`, `espera_inspector_punto` o `viaje_sin_movimiento` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
+`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar`, `propuesta_ubicacion`, `permiso_sin_inspector`, `firma_cargue_pendiente`, `cambio_cargue_inspector`, `cambio_destino_unidad`, `carro_rechazado_en_destino`, `ubicacion_fijada`, `espera_inspector_punto`, `viaje_sin_movimiento` o `novedad_viaje` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
 
 ### `GET /api/notificaciones`
 Una página de la bandeja, las más recientes primero: `{ "items": [NotificacionDto], "total": 3, "pagina": 1, "tamano": 50, "no_leidas": 2 }`.
@@ -2267,6 +2320,7 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | `tipos-extra` | Los tipos de extra del vehículo fuera del dibujo estándar: `barras_techo` «Barras de techo», `volco` «Volco», `platon` «Platón» y `otro` «Otro» (el único que admite un texto libre; **está protegido**: no se inactiva, no se borra y no cambia de nombre, `409`, porque no tiene reemplazo; sí admite cambiar su orden). Lo administra Calidad: lo crean y editan `admin`, `super_admin` y `coordinador_calidad` (`403` los demás); un tipo con extras reportados **no se borra** (`409`): se inactiva y los extras conservan su tipo, pero ya no se ofrece para extras nuevos | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `muelles` | Los muelles de cada lugar (hijo de `lugares`): `m1`… dentro de su lugar; no viene sembrado | `id`, `codigo`, `nombre`, `orden`, `activo`, `lugar_id` |
 | `motivos-no-sale` | Los motivos por los que un carro no sale del viaje: `dano_v1_plus`, `dano_reportado_conductor`, `no_llego_al_patio`, `faltan_documentos`, `no_esta_listo` y `otro` (que exige texto) | `id`, `codigo`, `nombre`, `orden`, `activo`, `exige_hallazgo`, `exige_texto`, `solo_sin_inspector` |
+| `tipos-novedad-viaje` | Los tipos de la novedad del **viaje** (no de un carro): `falla_camion` (alta), `dano_ninera`, `bloqueo_via`, `intento_robo` (alta) y `accidente` (alta) para el conductor; `carro_no_llego_patio`, `puesto_ninera_danado`, `faltan_documentos` y `camion_llego_tarde` para el inspector; y `otro` para los dos (la lista y las urgencias las confirma el negocio). Un tipo que una novedad usa no se borra (`409`): se inactiva | `id`, `codigo`, `nombre`, `orden`, `activo`, `rol` (`conductor`, `inspector` o `todos`: quién puede elegirlo; en `POST`/`PATCH` es opcional y por defecto `todos`) y `urgencia` (`alta` o `media`: la del aviso que genera; por defecto `media`); un valor fuera de esas listas responde `400` |
 | `motivos-sin-inspector` | Los motivos por los que no hay inspector en un cargue (la excepción «No hay inspector», que activa el conductor en el momento): `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto); trae además, **inactivos** (`activo: false`, no se ofrecen en la excepción), `se_nego_a_firmar`, `no_habia_nadie` y `sin_inspector_del_punto`: los motivos codificados del cierre de una entrega con una sola firma, que la novedad de proceso de ese cierre guarda como su `motivo_codigo` | `id`, `codigo`, `nombre`, `orden`, `activo`, `requiere_texto` |
 
 **Estados Sofasa (`estados-sofasa`).** `GET /api/sofasa/ordenes` sigue devolviendo `status_code` **sin traducir**; el portal lo traduce con este catálogo (`items.find(i => i.codigo === orden.status_code)?.nombre`; si el estado no está, muestra el código). A diferencia de los demás
@@ -2298,6 +2352,7 @@ Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inacti
     ],
     "muelles": [ { "id": "uuid", "codigo": "m1", "nombre": "Muelle 1", "orden": 0, "activo": true, "lugar_id": "uuid" } ],
     "motivos-no-sale": [ { "id": "uuid", "codigo": "otro", "nombre": "Otro", "orden": 6, "activo": true, "exige_hallazgo": false, "exige_texto": true, "solo_sin_inspector": false } ],
+    "tipos-novedad-viaje": [ { "id": "uuid", "codigo": "falla_camion", "nombre": "Falla del camión", "orden": 1, "activo": true, "rol": "conductor", "urgencia": "alta" } ],
     "motivos-sin-inspector": [ { "id": "uuid", "codigo": "otro", "nombre": "Otro", "orden": 3, "activo": true, "requiere_texto": true } ],
     "paneles-dano": [ { "id": "uuid", "codigo": "costado_izquierdo", "nombre": "Costado izquierdo", "orden": 1, "activo": true, "ancho_ref": 1071, "alto_ref": 491, "version": 6, "imagen_url": "/api/catalogos/paneles-dano/costado_izquierdo/imagen?v=3f2b…c1" } ],
     "cuadrante-regiones": [ { "id": "uuid", "panel": "costado_izquierdo", "cuadrante_id": "uuid", "numero": 1, "nombre": "Esquina del parachoques delantero", "lado": "izquierdo", "prioridad": 1, "geometria": { "puntos": [ [0.34, 0.30], [0.59, 0.30], [0.59, 0.48] ] } } ],

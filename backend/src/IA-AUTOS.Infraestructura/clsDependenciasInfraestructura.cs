@@ -87,6 +87,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddSingleton<IGeneradorExcel, clsGeneradorExcel>();
         servicios.AddScoped<INotaAclaratoriaRepository, clsNotaAclaratoriaRepository>();
         servicios.AddScoped<INovedadProcesoRepository, clsNovedadProcesoRepository>();
+        servicios.AddScoped<INovedadViajeRepository, clsRepositorioNovedadesViaje>();
         servicios.AddScoped<IReclamoRepository, clsRepositorioReclamos>();
         servicios.AddScoped<IPermisoSinInspectorRepository, clsRepositorioPermisosSinInspector>();
         servicios.AddScoped<IEsperaInspectorPuntoRepository, clsRepositorioEsperasInspectorPunto>();
@@ -95,6 +96,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<IPropuestaUbicacionRepository, clsRepositorioPropuestasUbicacion>();
         servicios.AddScoped<IAAutos.Aplicacion.Viajes.DTOViajes.IConsultasPendientes, clsConsultasPendientes>();
         servicios.AddScoped<IAAutos.Aplicacion.Inspecciones.DTOInspecciones.IConsultasNovedadesProceso, clsConsultasNovedadesProceso>();
+        servicios.AddScoped<IAAutos.Aplicacion.Viajes.DTOViajes.IConsultasNovedadesViaje, clsConsultasNovedadesViaje>();
         servicios.AddScoped<IParametroRepository, clsParametroRepository>();
         servicios.AddScoped<IConsultasReportes, clsConsultasReportes>();
         servicios.AddSingleton<IGeneradorPdfInventario, clsGeneradorPdfInventario>();
@@ -166,6 +168,7 @@ public static class clsDependenciasInfraestructura
         servicios.AddScoped<ICatalogo, clsCatalogoEstadosSofasa>();
         servicios.AddScoped<ICatalogo, clsCatalogoMotivosSinInspector>();
         servicios.AddScoped<ICatalogo, clsCatalogoMotivosNoSale>();
+        servicios.AddScoped<ICatalogo, clsCatalogoTiposNovedadViaje>();
         servicios.AddScoped<ICatalogo, clsCatalogoMuelles>();
         servicios.AddScoped<ICatalogo, clsCatalogoLugares>();
         servicios.AddScoped<ICatalogo, clsCatalogoVistas>();

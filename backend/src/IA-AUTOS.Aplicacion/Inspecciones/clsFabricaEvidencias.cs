@@ -87,7 +87,7 @@ public sealed class clsFabricaEvidencias(IAlmacenArchivos almacen, IReloj reloj)
     }
 
     /// <summary>El SHA-256 del archivo subido; 400 si el archivo no se ha subido o el hash que declaro el cliente no coincide.</summary>
-    private async Task<string> HashDelArchivoAsync(string storagePath, string? hashCliente, CancellationToken ct)
+    public async Task<string> HashDelArchivoAsync(string storagePath, string? hashCliente, CancellationToken ct)
     {
         var contenido = await almacen.LeerAsync(storagePath.Trim(), ct)
             ?? throw clsErroresCampos.De("storage_path", "El archivo no se ha subido: suba la foto con POST /api/uploads antes de registrarla");

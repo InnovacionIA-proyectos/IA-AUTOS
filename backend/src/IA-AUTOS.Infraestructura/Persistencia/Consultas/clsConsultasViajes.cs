@@ -440,7 +440,9 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                             orderby e.CreatedAt
                             select new { i.ViajeId, Foto = e }).ToListAsync(ct))
             .ToLookup(x => x.ViajeId, x => clsMapeadorInspecciones.AEvidencia(x.Foto));
-        return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id], novedadesPorViaje[f.Viaje.Id].ToList(), fotos[f.Viaje.Id].ToList())).ToList();
+        // Las novedades del viaje no son de un carro: las ve quien puede ver el viaje.
+        var novedadesDelViaje = await new clsConsultasNovedadesViaje(contexto).DeViajesAsync(ids, ct);
+        return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id], novedadesPorViaje[f.Viaje.Id].ToList(), fotos[f.Viaje.Id].ToList(), novedadesDelViaje.GetValueOrDefault(f.Viaje.Id) ?? [])).ToList();
     }
 
     private static ViajeResumenDto AResumen(FilaViaje f, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<DestinoDeUnidadesDto> destinos) => new(
@@ -450,13 +452,14 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue, destinos, f.LugarCargueConInspector, f.Viaje.MuelleId, f.Muelle, f.Eliminable);
 
     private static ViajeDto ADto(
-        FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<NovedadDelViajeDto> novedades, IReadOnlyList<EvidenciaDto> fotosAcomodacion) => new(
+        FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<NovedadDelViajeDto> novedades, IReadOnlyList<EvidenciaDto> fotosAcomodacion,
+        IReadOnlyList<NovedadViajeDto> novedadesViaje) => new(
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
         f.Viaje.Estado, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt, novedades,
         f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue,
         f.Viaje.CapacidadEfectiva, Disposicion(f.Viaje.CapacidadEfectiva, vehiculos), fotosAcomodacion, f.LugarCargueConInspector,
-        f.CargueFirmadoPorNineraAt, f.CargueNoFirmadoAt, f.CargueNoFirmaParte, f.Viaje.MuelleId, f.Muelle, f.Eliminable);
+        f.CargueFirmadoPorNineraAt, f.CargueNoFirmadoAt, f.CargueNoFirmaParte, f.Viaje.MuelleId, f.Muelle, f.Eliminable, NovedadesViaje: novedadesViaje);
 
     /// <summary>Los puestos de la ninera, del 1 a la capacidad, cada uno con el VIN que lo ocupa (los de las unidades que quien consulta puede ver).</summary>
     private static DisposicionDeNiniera Disposicion(int capacidad, IReadOnlyList<ViajeVehiculoDto> vehiculos)
