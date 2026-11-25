@@ -33,7 +33,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
     }
 
     public Task<bool> EsDeClienteAsync(Guid inspeccionId, Guid clienteId, CancellationToken ct = default) =>
-        (from i in contexto.Inspecciones.AsNoTracking()
+        (from i in contexto.Inspecciones.IgnoreQueryFilters().AsNoTracking()
          join e in contexto.Etapas on i.EtapaId equals e.Id
          join v in contexto.Vehiculos on e.VehiculoId equals v.Id
          where i.Id == inspeccionId && v.ClienteId == clienteId
@@ -177,7 +177,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
 
     public async Task<InformeDetalleDto?> ObtenerInformeAsync(Guid id, CancellationToken ct = default)
     {
-        var fila = await (from i in contexto.Inspecciones.AsNoTracking()
+        var fila = await (from i in contexto.Inspecciones.IgnoreQueryFilters().AsNoTracking()
                           join e in contexto.Etapas on i.EtapaId equals e.Id
                           join v in contexto.Vehiculos on e.VehiculoId equals v.Id
                           join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id

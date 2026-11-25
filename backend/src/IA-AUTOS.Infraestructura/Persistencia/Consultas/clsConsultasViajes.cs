@@ -267,7 +267,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         // El nombre del muelle de cada viaje y si es eliminable: ninguna inspeccion, en borrador o cerrada.
         var muelleIds = filas.Where(f => f.Viaje.MuelleId is not null).Select(f => f.Viaje.MuelleId!.Value).Distinct().ToList();
         var muelles = muelleIds.Count == 0 ? [] : await contexto.Muelles.AsNoTracking().Where(m => muelleIds.Contains(m.Id)).ToDictionaryAsync(m => m.Id, m => m.Nombre, ct);
-        var conInspecciones = (await contexto.Inspecciones.AsNoTracking().Where(i => ids.Contains(i.ViajeId)).Select(i => i.ViajeId).Distinct().ToListAsync(ct)).ToHashSet();
+        var conInspecciones = (await contexto.Inspecciones.IgnoreQueryFilters().AsNoTracking().Where(i => ids.Contains(i.ViajeId)).Select(i => i.ViajeId).Distinct().ToListAsync(ct)).ToHashSet();
         return filas
             .Select(f =>
             {

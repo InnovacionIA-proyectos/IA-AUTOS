@@ -122,7 +122,7 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
     }
 
     public async Task<bool> TieneHistorialAsync(Guid id, CancellationToken ct = default) =>
-        await contexto.Inspecciones.AnyAsync(i => i.UsuarioId == id, ct)
+        await contexto.Inspecciones.IgnoreQueryFilters().AnyAsync(i => i.UsuarioId == id, ct)
         || await contexto.Transferencias.AnyAsync(t => t.EntregaUsuarioId == id || t.RecibeUsuarioId == id, ct)
         || await contexto.Viajes.AnyAsync(v => v.ConductorId == id || v.InspectorId == id || v.CreadoPor == id, ct)
         || await contexto.AuditLog.AnyAsync(a => a.UsuarioId == id, ct);
@@ -135,7 +135,17 @@ internal sealed class clsUsuarioRepository(clsAppDbContext contexto) : IUsuarioR
 internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspeccionRepository
 {
     public Task<clsInspeccion?> ObtenerPorIdAsync(Guid id, CancellationToken ct = default) =>
-        contexto.Inspecciones.FirstOrDefaultAsync(i => i.Id == id, ct);
+        contexto.Inspecciones.IgnoreQueryFilters().FirstOrDefaultAsync(i => i.Id == id, ct);
+
+    public Task<clsInspeccion?> ObtenerBorradorAjenoAsync(Guid etapaId, string momento, int ciclo, Guid usuarioId, CancellationToken ct = default) =>
+        contexto.Inspecciones.FirstOrDefaultAsync(
+            i => i.EtapaId == etapaId && i.Momento == momento && i.Ciclo == ciclo && i.CorrigeInspeccionId == null && i.Estado == clsEstadoInspeccion.BORRADOR && i.UsuarioId != usuarioId, ct);
+
+    public Task<bool> TransferenciaTieneFirmaOCierreAsync(Guid inspeccionId, CancellationToken ct = default) =>
+        contexto.Transferencias.AsNoTracking().AnyAsync(
+            t => t.InspeccionId == inspeccionId
+                && (t.TipoCierre != null || t.FirmaEntregaAt != null || t.FirmaRecibeAt != null || (t.FirmaEntrega != null && t.FirmaEntrega != "") || (t.FirmaRecibe != null && t.FirmaRecibe != "")),
+            ct);
 
     public async Task<clsResumenCierre> ObtenerResumenCierreAsync(Guid inspeccionId, CancellationToken ct = default)
     {

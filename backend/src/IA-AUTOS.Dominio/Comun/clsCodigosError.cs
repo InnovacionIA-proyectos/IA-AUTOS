@@ -38,6 +38,12 @@ public static class clsCodigosError
     /// <summary>La transferencia de la inspeccion ya tiene una firma o un cierre (409): una inspeccion firmada ya no se corrige, sea quien sea quien lo intente; se aclara con una nota.</summary>
     public const string INSPECCION_YA_FIRMADA = "INSPECCION_YA_FIRMADA";
 
+    /// <summary>Descartar un borrador que hizo otra persona sin ser el coordinador de calidad (403): lo descartan quien lo hizo y el coordinador de calidad; el administrador y el super administrador no.</summary>
+    public const string DESCARTE_SOLO_AUTOR_O_COORDINADOR = "DESCARTE_SOLO_AUTOR_O_COORDINADOR";
+
+    /// <summary>Descartar un informe cerrado (409): es evidencia inmutable y nunca se descarta; details.motivo dice si esta cerrado o si ya tiene firmas.</summary>
+    public const string INFORME_CERRADO_NO_SE_DESCARTA = "INFORME_CERRADO_NO_SE_DESCARTA";
+
     /// <summary>El PIN fue asignado o reiniciado y hay que cambiarlo antes de usar el resto de la API (403).</summary>
     public const string PIN_CHANGE_REQUIRED = "PIN_CHANGE_REQUIRED";
 

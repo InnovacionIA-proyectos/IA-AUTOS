@@ -115,7 +115,7 @@ internal sealed class clsViajeRepository(clsAppDbContext contexto) : IViajeRepos
     }
 
     public Task<bool> TieneInspeccionesAsync(Guid viajeId, Guid? vehiculoId, CancellationToken ct = default) =>
-        contexto.Inspecciones.AsNoTracking().AnyAsync(
+        contexto.Inspecciones.IgnoreQueryFilters().AsNoTracking().AnyAsync(
             i => i.ViajeId == viajeId
               && (vehiculoId == null || contexto.Etapas.Any(e => e.Id == i.EtapaId && e.VehiculoId == vehiculoId)),
             ct);

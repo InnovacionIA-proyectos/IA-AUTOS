@@ -140,6 +140,30 @@ public sealed class clsCorreccionSoloDelAutorException : clsExcepcionDominio
     }
 }
 
+/// <summary>Descartar un borrador que hizo otra persona sin ser el coordinador de calidad: 403 DESCARTE_SOLO_AUTOR_O_COORDINADOR.</summary>
+public sealed class clsDescarteSoloDelAutorException : clsExcepcionDominio
+{
+    public clsDescarteSoloDelAutorException()
+        : base(
+            clsCodigosError.DESCARTE_SOLO_AUTOR_O_COORDINADOR,
+            "No puedes descartar este informe: lo creó otra persona",
+            new Dictionary<string, object> { ["motivo"] = clsMotivosRechazo.SOLO_AUTOR_O_COORDINADOR })
+    {
+    }
+}
+
+/// <summary>Descartar un informe cerrado, o un borrador con firmas: es evidencia y no se descarta: 409 INFORME_CERRADO_NO_SE_DESCARTA.</summary>
+public sealed class clsInformeCerradoNoSeDescartaException : clsExcepcionDominio
+{
+    public clsInformeCerradoNoSeDescartaException(bool conFirmas = false)
+        : base(
+            clsCodigosError.INFORME_CERRADO_NO_SE_DESCARTA,
+            conFirmas ? "Este informe ya tiene una firma: es evidencia y no se descarta" : "Este informe ya está cerrado: es evidencia y no se descarta",
+            new Dictionary<string, object> { ["motivo"] = conFirmas ? clsMotivosRechazo.INFORME_CON_FIRMAS : clsMotivosRechazo.INFORME_CERRADO })
+    {
+    }
+}
+
 /// <summary>La transferencia de la inspeccion ya tiene una firma o un cierre, asi que ya no se corrige: 409 INSPECCION_YA_FIRMADA.</summary>
 public sealed class clsInspeccionYaFirmadaException : clsExcepcionDominio
 {

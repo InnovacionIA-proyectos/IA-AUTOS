@@ -48,6 +48,17 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
     }
 
     /// <summary>
+    /// Descarta un informe en BORRADOR (por ejemplo, el que se abrio por error): pasa a <c>descartada</c>, se conserva con su autor y su momento queda libre para una inspeccion original nueva. Lo descartan quien lo creo y el coordinador
+    /// de calidad de su cliente; cualquier otra persona, incluidos el administrador y el super administrador, recibe 403 DESCARTE_SOLO_AUTOR_O_COORDINADOR. Un informe cerrado, o un borrador cuya transferencia ya tiene una firma, es evidencia:
+    /// 409 INFORME_CERRADO_NO_SE_DESCARTA. Un informe descartado no sale en ningun listado, en el detalle del viaje ni en el inventario; solo se abre por su id, con <c>estado</c> <c>descartada</c>. Sin cuerpo.
+    /// </summary>
+    [HttpPost("{id:guid}/descartar")]
+    [CodigoError("DESCARTE_SOLO_AUTOR_O_COORDINADOR", "El informe lo creo otra persona y quien intenta no es el coordinador de calidad: lo descartan quien lo creo y el coordinador (details.motivo = solo_autor_o_coordinador)")]
+    [CodigoError("INFORME_CERRADO_NO_SE_DESCARTA", "El informe esta cerrado o ya tiene una firma: es evidencia y no se descarta (details.motivo = informe_cerrado o informe_con_firmas)")]
+    [ProducesResponseType<InspeccionDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Descartar(Guid id, CancellationToken ct) => Ok(await servicio.DescartarAsync(id, ct));
+
+    /// <summary>
     /// Una pagina de informes <c>{items, total, pagina, tamano}</c> (mas recientes primero por defecto). Filtros: <c>vin</c>, <c>viaje_id</c>, <c>usuario_id</c>, <c>momento</c>, <c>estado</c>, <c>proceso</c>, <c>operacion</c>,
     /// <c>marca</c>, <c>cliente_id</c> (solo el super administrador elige otro), <c>origen_id</c>, <c>destino_id</c>, <c>desde</c> y <c>hasta</c>; <c>pagina</c>, <c>tamano</c> (50, maximo 200) y <c>orden</c> (<c>campo:asc|desc</c>).
     /// Inspectores y conductores ven solo los informes de sus viajes.
