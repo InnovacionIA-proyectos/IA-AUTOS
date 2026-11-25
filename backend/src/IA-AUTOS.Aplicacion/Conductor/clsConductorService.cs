@@ -87,7 +87,7 @@ public sealed class clsConductorService(
     }
 
     /// <summary>
-    /// Confirma la llegada de la unidad: cierra la salida de Transporte si esta abierta y crea y cierra la llegada con la fecha y el GPS recibidos. Responde con la llegada y cuantas
+    /// Confirma la llegada de la unidad: cierra la salida de Transporte si esta abierta (o la crea y la cierra «sin novedades» si no hubo ninguna) y crea y cierra la llegada con la fecha y el GPS recibidos. Responde con la llegada y cuantas
     /// novedades registro el conductor. 409 LLEGADA_YA_CERRADA si ya estaba confirmada (un reintento del celular es un exito) y 409 UNIDAD_NO_SALE si la unidad no sale del viaje.
     /// </summary>
     public async Task<LlegadaDto> RegistrarLlegadaAsync(Guid viajeId, string vin, RegistrarLlegadaRequest solicitud, CancellationToken ct = default)
@@ -103,7 +103,17 @@ public sealed class clsConductorService(
 
         // La salida abierta (con las novedades) se cierra con la llegada: ya no se agregan novedades a esa unidad.
         var salida = await inspecciones.ObtenerUltimaDeEtapaAsync(unidad.Transporte.Id, clsMomento.SALIDA, ct);
-        if (salida is { EstaCerrada: false })
+        if (salida is null)
+        {
+            // Sin novedades en el recorrido tambien queda la salida de Transporte: se crea y se cierra «sin novedades» con la fecha y el GPS del «Llegué».
+            salida = clsInspeccion.Crear(
+                unidad.Transporte.Id, unidad.Viaje.Id, actual.IdObligatorio(), clsMomento.SALIDA, solicitud.Fecha!.Value, solicitud.Lat, solicitud.Lng, null, null, ahora);
+            inspecciones.Agregar(salida);
+            await auditor.RegistrarDeViajeAsync(
+                "inspeccion.crear", "inspecciones", salida.Id, unidad.Viaje.Id, new DetalleAuditoria(null, clsInstantaneasAuditoria.De(salida)), unidad.Vehiculo.ClienteId, ct);
+            salida.Cerrar(new clsResumenCierre(0, 0, 0, 0, []), [], exigeUbicacionPropia: true, ahora);
+        }
+        else if (!salida.EstaCerrada)
         {
             var salidaAntes = clsInstantaneasAuditoria.De(salida);
             salida.Cerrar(await inspecciones.ObtenerResumenCierreAsync(salida.Id, ct), [], exigeUbicacionPropia: true, ahora);
@@ -132,7 +142,7 @@ public sealed class clsConductorService(
             "llegada.registrar", "inspecciones", llegada.Id, unidad.Viaje.Id, new DetalleAuditoria(llegadaAntes, clsInstantaneasAuditoria.De(llegada)), unidad.Vehiculo.ClienteId, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
 
-        var novedades = salida is null ? 0 : await inspecciones.ContarNovedadesAsync(salida.Id, ct);
+        var novedades = await inspecciones.ContarNovedadesAsync(salida.Id, ct);
         var conductor = (await usuarios.ObtenerPorIdAsync(actual.IdObligatorio(), ct))?.Nombre;
         return new LlegadaDto(clsMapeadorInspecciones.AInspeccion(llegada, unidad.Viaje.Placa, unidad.Viaje.Trailer, conductor, NovedadesDeInspeccionDto.VACIAS), novedades, novedades == 0);
     }

@@ -1514,6 +1514,11 @@ INSERT #r SELECT N'Lugares: la precision del GPS con que se fijo la ubicacion (n
          AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblLugares_Precision' AND parent_object_id = OBJECT_ID(N'dbo.tblLugares')) THEN 1 ELSE 0 END, NULL;
 INSERT #r SELECT N'Ubicacion fijada: la notificacion admite el tipo ubicacion_fijada',
     CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%ubicacion_fijada%') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Cobertura: vwCobertura cuenta cinco registros (el Descargue ya no tiene salida) y Completa con los cinco',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'dbo.vwCobertura') AND definition LIKE N'%RegistrosCerrados >= 5%')
+         AND EXISTS (SELECT 1 FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'dbo.vwCobertura') AND definition LIKE N'%NOT (ec.Codigo = ''descargue'' AND i.Momento = ''salida'')%') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Viaje sin movimiento: la notificacion admite el tipo viaje_sin_movimiento',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%viaje_sin_movimiento%') THEN 1 ELSE 0 END, NULL;
 
 -- 7h) La espera del inspector del punto: la tabla con sus restricciones, la unica espera abierta por parada, la marca de la entrega y el tipo de aviso
 INSERT #r SELECT N'Espera del inspector del punto: la tabla existe con sus ocho restricciones y sus llaves',

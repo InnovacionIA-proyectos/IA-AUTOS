@@ -122,7 +122,7 @@ public sealed class DanoSinCalificarApiTests(clsBaseDatosFixture bd) : clsPrueba
         var viajeA = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = 'MTK-IND-A'"))!;
 
         // CA-7: finalizar el viaje con danos sin calificar funciona igual que antes.
-        var finalizar = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{viajeB}/estado", new StringContent(Cuerpo(new { estado = "finalizado" }), Encoding.UTF8, "application/json"));
+        var finalizar = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{viajeB}/estado", new StringContent(Cuerpo(new { estado = "finalizado", motivo = "Cierre de la prueba" }), Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.OK, finalizar.StatusCode);
         Assert.Equal("finalizado", await Sembrador.EscalarAsync("SELECT Estado FROM dbo.tblViajes WHERE Id = @v", ("@v", viajeB)));
 

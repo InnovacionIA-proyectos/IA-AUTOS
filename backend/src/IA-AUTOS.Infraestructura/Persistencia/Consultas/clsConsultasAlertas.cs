@@ -116,6 +116,73 @@ internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultas
         return filas.Select(f => new clsCargueSinReclamar(f.ViajeId, f.CodigoMtrack, f.Placa, f.FechaProgramada, f.Lugar, f.ClienteId)).ToList();
     }
 
+    public async Task<IReadOnlyList<clsViajeSinMovimiento>> ViajesSinMovimientoAsync(DateTimeOffset sinMovimientoDesde, int limite, CancellationToken ct = default)
+    {
+        // Los viajes en curso con el cliente de cada unidad activa; el ultimo movimiento se calcula aparte por viaje, con un agregado por cada fuente (inspecciones, danos y novedades, novedades de proceso y firmas).
+        var viajes = await (from vj in contexto.Viajes.AsNoTracking()
+                            join vv in contexto.ViajeVehiculos.AsNoTracking() on vj.Id equals vv.ViajeId
+                            join v in contexto.Vehiculos.AsNoTracking() on vv.VehiculoId equals v.Id
+                            where vj.Estado == clsEstadoViaje.EN_CURSO && vv.EstadoUnidad == clsEstadoUnidad.ACTIVA
+                            select new { ViajeId = vj.Id, vj.CodigoMtrack, v.ClienteId, Tocado = vj.UpdatedAt }).Distinct().ToListAsync(ct);
+        if (viajes.Count == 0)
+        {
+            return [];
+        }
+
+        var ultimos = new Dictionary<Guid, DateTimeOffset>();
+        void Considerar(Guid viajeId, DateTimeOffset? momento)
+        {
+            if (momento is { } m && (!ultimos.TryGetValue(viajeId, out var actual) || m > actual))
+            {
+                ultimos[viajeId] = m;
+            }
+        }
+
+        foreach (var lote in viajes.Select(x => x.ViajeId).Distinct().Chunk(1000))
+        {
+            var ids = lote.ToList();
+            foreach (var f in await contexto.Inspecciones.AsNoTracking().Where(i => ids.Contains(i.ViajeId)).GroupBy(i => i.ViajeId)
+                         .Select(g => new { ViajeId = g.Key, Iniciada = g.Max(i => (DateTimeOffset?)i.IniciadaAt), Cerrada = g.Max(i => i.CerradaAt) }).ToListAsync(ct))
+            {
+                Considerar(f.ViajeId, f.Iniciada);
+                Considerar(f.ViajeId, f.Cerrada);
+            }
+
+            foreach (var f in await (from h in contexto.Hallazgos.AsNoTracking()
+                                     join i in contexto.Inspecciones.AsNoTracking() on h.InspeccionId equals i.Id
+                                     where ids.Contains(i.ViajeId)
+                                     group h by i.ViajeId into g
+                                     select new { ViajeId = g.Key, Ultimo = g.Max(h => (DateTimeOffset?)h.CreatedAt) }).ToListAsync(ct))
+            {
+                Considerar(f.ViajeId, f.Ultimo);
+            }
+
+            foreach (var f in await contexto.NovedadesProceso.AsNoTracking().Where(n => ids.Contains(n.ViajeId)).GroupBy(n => n.ViajeId)
+                         .Select(g => new { ViajeId = g.Key, Ultimo = g.Max(n => (DateTimeOffset?)n.CreatedAt) }).ToListAsync(ct))
+            {
+                Considerar(f.ViajeId, f.Ultimo);
+            }
+
+            foreach (var f in await (from t in contexto.Transferencias.AsNoTracking()
+                                     join i in contexto.Inspecciones.AsNoTracking() on t.InspeccionId equals i.Id
+                                     where ids.Contains(i.ViajeId)
+                                     group t by i.ViajeId into g
+                                     select new { ViajeId = g.Key, Entrega = g.Max(t => t.FirmaEntregaAt), Recibe = g.Max(t => t.FirmaRecibeAt), Creada = g.Max(t => (DateTimeOffset?)t.CreatedAt) }).ToListAsync(ct))
+            {
+                Considerar(f.ViajeId, f.Entrega);
+                Considerar(f.ViajeId, f.Recibe);
+                Considerar(f.ViajeId, f.Creada);
+            }
+        }
+
+        return viajes
+            .Select(x => new clsViajeSinMovimiento(x.ViajeId, x.CodigoMtrack, x.ClienteId, ultimos.TryGetValue(x.ViajeId, out var ultimo) ? ultimo : x.Tocado))
+            .Where(x => x.UltimoMovimientoAt < sinMovimientoDesde)
+            .OrderBy(x => x.UltimoMovimientoAt)
+            .Take(limite)
+            .ToList();
+    }
+
     public async Task<IReadOnlyList<clsReclamoSinActividad>> ReclamosSinActividadAsync(DateTimeOffset reclamadosAntesDe, int limite, CancellationToken ct = default) =>
         await (from r in contexto.Reclamos.AsNoTracking()
                join vj in contexto.Viajes.AsNoTracking() on r.ViajeId equals vj.Id
@@ -186,7 +253,7 @@ internal sealed class clsConsultasAlertas(clsAppDbContext contexto) : IConsultas
                            join vj in contexto.Viajes on i.ViajeId equals vj.Id
                            join u in contexto.Usuarios on i.UsuarioId equals u.Id
                            where i.Estado == clsEstadoInspeccion.BORRADOR && i.IniciadaAt < iniciadasAntesDe && u.Activo
-                              && (p.Codigo == clsCodigosEtapa.CARGUE || p.Codigo == clsCodigosEtapa.DESCARGUE)
+                              && (p.Codigo == clsCodigosEtapa.CARGUE || p.Codigo == clsCodigosEtapa.DESCARGUE) && i.Momento == clsMomento.LLEGADA
                               && (vj.Estado == clsEstadoViaje.PROGRAMADO || vj.Estado == clsEstadoViaje.EN_CURSO)
                            orderby i.IniciadaAt
                            select new FilaCaptura

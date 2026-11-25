@@ -8,7 +8,7 @@ reglas y cómo encajan con el resto.
 | Acción | Ruta | Resultado |
 |---|---|---|
 | Registrar una novedad | `POST /api/viajes/{id}/vehiculos/{vin}/novedades` | un hallazgo `origen = conductor` en la inspección de **salida de Transporte** de la unidad (se crea en borrador con la primera novedad) |
-| Confirmar la llegada | `POST /api/viajes/{id}/vehiculos/{vin}/llegada` | cierra la salida de Transporte y crea y cierra la inspección de **llegada**; responde `{ inspeccion, novedades, sin_novedad }` |
+| Confirmar la llegada | `POST /api/viajes/{id}/vehiculos/{vin}/llegada` | cierra la salida de Transporte (si no hubo novedades la crea y la cierra «sin novedades», con la fecha y el GPS del «Llegué») y crea y cierra la inspección de **llegada**; responde `{ inspeccion, novedades, sin_novedad }` |
 | Ver su viaje | `GET /api/viajes/mios` | cada VIN con `estado_transporte` (`sin_registro`, `con_novedad`, `sin_novedad`, `llegada_con_novedad`) y `novedades` |
 
 Las dos son **solo del `conductor` del viaje**: cualquier otro usuario (también un administrador) recibe `403`; `404` si el viaje o el VIN no existen o el VIN no está en el viaje; `409` si el viaje está finalizado o cancelado.

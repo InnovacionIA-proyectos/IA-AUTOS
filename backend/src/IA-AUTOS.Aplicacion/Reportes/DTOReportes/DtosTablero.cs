@@ -4,7 +4,7 @@ namespace IAAutos.Aplicacion.Reportes.DTOReportes;
 
 // ----------------------------------------------------------------------------------------------- cobertura
 
-/// <summary>Unidades despachadas (un VIN de un viaje con la salida de su Cargue cerrada, sin las que no salen) y cuantas tienen sus seis registros cerrados.</summary>
+/// <summary>Unidades despachadas (un VIN de un viaje con la salida de su Cargue cerrada, sin las que no salen) y cuantas tienen sus cinco registros cerrados.</summary>
 public sealed record CoberturaGrupoDto(int Despachadas, int Completas, decimal Cobertura);
 
 public sealed record CoberturaOperacionDto(string Operacion, int Despachadas, int Completas, decimal Cobertura);
@@ -32,7 +32,7 @@ public sealed record CoberturaClienteDto(Guid ClienteId, string? ClienteNombre, 
 
 public sealed record CoberturaPuntoDto(Guid PuntoId, string? PuntoNombre, int Despachadas, int Completas, decimal Cobertura);
 
-/// <summary>Cobertura = unidades con sus seis registros cerrados / unidades despachadas. <c>Meta</c> es el objetivo (90 %).</summary>
+/// <summary>Cobertura = unidades con sus cinco registros cerrados / unidades despachadas. <c>Meta</c> es el objetivo (90 %).</summary>
 public sealed record CoberturaDto(
     int Despachadas,
     int Completas,

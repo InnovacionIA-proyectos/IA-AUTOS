@@ -47,6 +47,8 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
 
         public required string Etapa { get; init; }
 
+        public string? EtapaCodigo { get; init; }
+
         public string? Lugar { get; init; }
 
         public required string EstadoViaje { get; init; }
@@ -106,6 +108,7 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                            ConductorNombre = c.Nombre,
                            ConductorCedula = c.Cedula,
                            Etapa = ec.Nombre,
+                           EtapaCodigo = ec.Codigo,
                            Lugar = pl.Nombre,
                            EstadoViaje = vj.Estado,
                            EstadoUnidad = vv.EstadoUnidad,
@@ -113,8 +116,8 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                            Destino = d.Nombre,
                        };
 
-        // Cada etapa da dos filas (salida y llegada): se piden las etapas necesarias para pasar del maximo.
-        var etapas = await consulta.Take((maximo / 2) + 1).ToListAsync(ct);
+        // Cada etapa da una o dos filas (el descargue solo la llegada): se piden tantas etapas como filas maximas mas una, para saber si el resultado se corto.
+        var etapas = await consulta.Take(maximo + 1).ToListAsync(ct);
         var ultimas = new Dictionary<(Guid Etapa, string Momento), (int Version, string Estado, DateTimeOffset Inicio, DateTimeOffset? Cierre)>();
         foreach (var lote in etapas.Select(e => e.EtapaId).Chunk(1000))
         {
@@ -135,6 +138,12 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                 e.Vin, e.Marca, e.TipoVehiculo, e.Operacion, e.ClienteId, e.CodigoMtrack, e.Placa, e.Trailer, e.Unidad, e.ConductorNombre, e.ConductorCedula, e.Etapa, e.Lugar);
             foreach (var momento in new[] { clsMomento.SALIDA, clsMomento.LLEGADA })
             {
+                // El descargue tiene una sola revision, la llegada: su salida solo se exporta si existe de antes (una salida cerrada historica), nunca como fila «sin_inspeccion».
+                if (momento == clsMomento.SALIDA && e.EtapaCodigo == clsCodigosEtapa.DESCARGUE && !ultimas.ContainsKey((e.EtapaId, momento)))
+                {
+                    continue;
+                }
+
                 filas.Add(ultimas.TryGetValue((e.EtapaId, momento), out var i)
                     ? new FilaExportViaje(contextoFila, e.EstadoViaje, e.EstadoUnidad, e.Origen, e.Destino, momento, i.Version, i.Estado, i.Inicio, i.Cierre)
                     : new FilaExportViaje(contextoFila, e.EstadoViaje, e.EstadoUnidad, e.Origen, e.Destino, momento, null, "sin_inspeccion", null, null));

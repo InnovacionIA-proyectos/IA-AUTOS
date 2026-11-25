@@ -40,6 +40,7 @@ public sealed partial class clsEntregasService(
     IEsperaInspectorPuntoRepository esperas,
     clsEsperaDelDestino plazos,
     clsAccesoViajes acceso,
+    clsFinalizadorDelViaje finalizador,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -663,9 +664,7 @@ public sealed partial class clsEntregasService(
             return;
         }
 
-        viaje.CambiarEstado(clsEstadoViaje.FINALIZADO, reloj.Ahora);
-        await auditor.RegistrarDeViajeAsync(
-            $"viaje.estado.{viaje.Estado}", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(new { estado = clsEstadoViaje.EN_CURSO }, new { estado = viaje.Estado }), ct: ct);
+        await finalizador.FinalizarAsync(viaje, ct);
     }
 
     private async Task<IReadOnlyDictionary<Guid, (string Nombre, string? Ciudad)>> LugaresAsync(CancellationToken ct) =>

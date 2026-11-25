@@ -62,7 +62,11 @@ public sealed class CambiarEstadoViajeRequestValidator : AbstractValidator<Cambi
     {
         RuleFor(x => x.Estado).Must(e => e is not null && clsEstadoViaje.VALORES.Contains(e))
             .WithMessage($"Estado inválido. Permitidos: {string.Join(", ", clsEstadoViaje.VALORES.Order())}");
+        RuleFor(x => x.Motivo).Must(m => m is null || m.Trim().Length <= MOTIVO_MAX)
+            .WithMessage($"El motivo admite máximo {MOTIVO_MAX} caracteres");
     }
+
+    public const int MOTIVO_MAX = 300;
 }
 
 public sealed class CargarViajesRequestValidator : AbstractValidator<CargarViajesRequest>

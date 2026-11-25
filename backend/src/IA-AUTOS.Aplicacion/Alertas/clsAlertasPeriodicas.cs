@@ -19,7 +19,7 @@ public sealed record clsConteoPatron(Guid ClienteId, string Clave, string Nombre
 
 /// <summary>Una inspeccion en borrador de Cargue o Descargue que sigue abierta: quien la inicio, a que unidad y proceso, y si su creador es un conductor en un cargue sin personal de apoyo.</summary>
 public sealed record clsCapturaAbierta(
-    Guid InspeccionId, Guid EtapaId, Guid ViajeId, Guid VehiculoId, Guid ClienteId, string Vin, string Proceso, Guid UsuarioId, string RolCreador, DateTimeOffset IniciadaAt);
+    Guid InspeccionId, Guid EtapaId, Guid ViajeId, Guid VehiculoId, Guid ClienteId, string Vin, string Proceso, Guid UsuarioId, string RolCreador, DateTimeOffset IniciadaAt, string Momento = clsMomento.LLEGADA);
 
 /// <summary>
 /// Una llegada cerrada cuya transferencia no tiene tipo de cierre: a quien le falta firmar (si la transferencia existe) o, si no existe, el conductor y el inspector del viaje y el proceso de la
@@ -42,6 +42,9 @@ public sealed record clsReclamoSinActividad(
 /// <summary>Una foto sellada con ubicacion de una visita a un lugar sin ubicacion confirmada: de que lugar, de que viaje (la visita), de que cliente y sus coordenadas.</summary>
 public sealed record clsFotoDeLugar(Guid LugarId, string LugarNombre, Guid ViajeId, Guid ClienteId, double Lat, double Lng);
 
+/// <summary>Un viaje en curso, por cliente de sus unidades, y el momento de su ultimo movimiento (la ultima inspeccion creada o cerrada, novedad, llegada o firma).</summary>
+public sealed record clsViajeSinMovimiento(Guid ViajeId, string? CodigoMtrack, Guid ClienteId, DateTimeOffset UltimoMovimientoAt);
+
 /// <summary>Un cargue programado cuya hora ya paso y que nadie reclamo: el viaje, su lugar, su hora programada y el cliente de una de sus unidades.</summary>
 public sealed record clsCargueSinReclamar(Guid ViajeId, string? CodigoMtrack, string? Placa, DateTimeOffset FechaProgramada, string? Lugar, Guid ClienteId);
 
@@ -53,6 +56,12 @@ public interface IConsultasAlertas
     /// del viaje y el destino de la unidad), para la autocalibracion.
     /// </summary>
     Task<IReadOnlyList<clsFotoDeLugar>> FotosPorLugarAsync(double valvulaPrecisionM, int limite, CancellationToken ct = default);
+
+    /// <summary>
+    /// Los viajes en curso (uno por cliente de sus unidades) cuyo ultimo movimiento fue antes de <paramref name="sinMovimientoDesde"/>: el movimiento es lo mas reciente entre una inspeccion creada o cerrada, un dano o novedad de
+    /// una inspeccion, una novedad de proceso y una firma de entrega o de recibo (la llegada de una unidad es una inspeccion cerrada); sin ninguno, la ultima vez que se toco el viaje.
+    /// </summary>
+    Task<IReadOnlyList<clsViajeSinMovimiento>> ViajesSinMovimientoAsync(DateTimeOffset sinMovimientoDesde, int limite, CancellationToken ct = default);
 
     /// <summary>Los viajes programados con fecha programada entre <paramref name="programadosDesde"/> y <paramref name="programadosAntesDe"/>, sin ningun reclamo activo del cargue ni ninguna inspeccion iniciada.</summary>
     Task<IReadOnlyList<clsCargueSinReclamar>> CarguesSinReclamarAsync(DateTimeOffset programadosDesde, DateTimeOffset programadosAntesDe, int limite, CancellationToken ct = default);
@@ -110,6 +119,7 @@ public sealed class clsAlertasPeriodicas(
     public const int FIRMA_CARGUE_MINUTOS_POR_DEFECTO = 30;
     public const int RECLAMO_MINUTOS_POR_DEFECTO = 30;
     public const int CARGUE_SIN_RECLAMAR_MINUTOS_POR_DEFECTO = 30;
+    public const int VIAJE_SIN_MOVIMIENTO_HORAS_POR_DEFECTO = 24;
     public const int VALVULA_PRECISION_POR_DEFECTO_M = 500;
 
     /// <summary>Un cargue sin reclamar solo se avisa mientras su hora programada sea de las ultimas horas: un viaje programado hace dias que nadie reclamo ya no es un aviso operativo.</summary>
@@ -189,7 +199,53 @@ public sealed class clsAlertasPeriodicas(
     /// <summary>Corre los avisos operativos: captura incompleta, transferencia pendiente y camion reclamado sin actividad. Devuelve cuantos avisos intento crear.</summary>
     public async Task<int> EjecutarAvisosAsync(CancellationToken ct = default) =>
         await EjecutarCapturasIncompletasAsync(ct) + await EjecutarTransferenciasPendientesAsync(ct) + await EjecutarReclamosSinActividadAsync(ct) + await EjecutarCarguesSinReclamarAsync(ct)
-        + await EjecutarFirmasDelCarguePendientesAsync(ct);
+        + await EjecutarFirmasDelCarguePendientesAsync(ct) + await EjecutarViajesSinMovimientoAsync(ct);
+
+    /// <summary>
+    /// Avisa a los coordinadores de calidad del cliente de un viaje en curso que lleva <c>viaje_sin_movimiento_horas</c> (24 por defecto, ajustable sin desplegar) sin ningun movimiento: ni una inspeccion creada o cerrada, ni una
+    /// novedad, ni una llegada, ni una firma. Un solo aviso por viaje y ultimo movimiento (urgencia media, solo bandeja): no se repite mientras no haya un movimiento nuevo y nunca avisa de un viaje finalizado o cancelado.
+    /// </summary>
+    public async Task<int> EjecutarViajesSinMovimientoAsync(CancellationToken ct = default)
+    {
+        var horas = Math.Max(await parametros.EnteroAsync(clsClavesParametros.VIAJE_SIN_MOVIMIENTO_HORAS, VIAJE_SIN_MOVIMIENTO_HORAS_POR_DEFECTO, ct), 1);
+        var ahora = reloj.Ahora;
+        var emitidas = 0;
+        foreach (var viaje in await consultas.ViajesSinMovimientoAsync(ahora.AddHours(-horas), LIMITE_POR_EJECUCION, ct))
+        {
+            var destinatarios = (await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD], viaje.ClienteId, ct)).Select(u => u.Id).ToList();
+            if (destinatarios.Count == 0)
+            {
+                continue;
+            }
+
+            var transcurridas = (int)Math.Floor((ahora - viaje.UltimoMovimientoAt).TotalHours);
+            var codigo = viaje.CodigoMtrack ?? "sin código";
+            await emisor.EmitirAsync(
+                new clsAlerta(
+                    clsTipoNotificacion.VIAJE_SIN_MOVIMIENTO,
+                    clsUrgenciaNotificacion.MEDIA,
+                    destinatarios,
+                    viaje.ClienteId,
+                    viaje.ViajeId,
+                    null,
+                    null,
+                    null,
+                    $"Viaje sin movimiento: {codigo}",
+                    $"El viaje {codigo} lleva {transcurridas} horas sin movimiento: su último movimiento fue hace {transcurridas} horas.",
+                    $"{clsTipoNotificacion.VIAJE_SIN_MOVIMIENTO}:{viaje.ViajeId}:{viaje.UltimoMovimientoAt.ToUnixTimeMilliseconds()}",
+                    new Dictionary<string, object?>
+                    {
+                        ["viaje_id"] = viaje.ViajeId,
+                        ["codigo_mtrack"] = viaje.CodigoMtrack,
+                        ["ultimo_movimiento_at"] = viaje.UltimoMovimientoAt,
+                        ["horas_sin_movimiento"] = transcurridas,
+                    }),
+                ct);
+            emitidas += destinatarios.Count;
+        }
+
+        return emitidas;
+    }
 
     /// <summary>
     /// Avisa a la parte de la ninera a la que le falta firmar el cargue: cuando la salida del cargue de un carro lleva cerrada <c>firma_cargue_pendiente_minutos</c> (30 por defecto, ajustable sin desplegar) sin que su
@@ -387,8 +443,8 @@ public sealed class clsAlertasPeriodicas(
     }
 
     /// <summary>
-    /// Avisa a quien inicio una inspeccion de Cargue o Descargue que sigue en borrador, sin todas las vistas obligatorias, pasados los <c>captura_incompleta_minutos</c>: el inspector o, solo en un cargue
-    /// sin personal de apoyo, el conductor. Un aviso por inspeccion.
+    /// Avisa a quien inicio la revision de llegada de un Cargue o de un Descargue que sigue en borrador, sin todas las vistas obligatorias, pasados los <c>captura_incompleta_minutos</c>: el inspector o, solo en un cargue
+    /// sin personal de apoyo, el conductor. La acomodacion (la salida del Cargue) no cuenta: no exige vistas. Un aviso por inspeccion.
     /// </summary>
     public async Task<int> EjecutarCapturasIncompletasAsync(CancellationToken ct = default)
     {
@@ -396,6 +452,12 @@ public sealed class clsAlertasPeriodicas(
         var emitidas = 0;
         foreach (var captura in await consultas.CapturasAbiertasAsync(reloj.Ahora.AddMinutes(-minutos), LIMITE_POR_EJECUCION, ct))
         {
+            // Solo las llegadas del cargue y del descargue reclaman las vistas: la acomodacion (la salida del cargue) y las salidas que quedaron abiertas del descargue no.
+            if (!clsEtapaCatalogo.ExigeVistas(captura.Proceso, captura.Momento))
+            {
+                continue;
+            }
+
             // El conductor solo recibe el aviso de la salida de un cargue que el inicio (la unica que hace, con la excepcion «No hay inspector»).
             if (captura.RolCreador == clsRol.CONDUCTOR && captura.Proceso != clsCodigosEtapa.CARGUE)
             {

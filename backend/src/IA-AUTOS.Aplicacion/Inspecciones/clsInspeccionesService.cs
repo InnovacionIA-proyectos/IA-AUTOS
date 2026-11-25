@@ -128,6 +128,9 @@ public sealed class clsInspeccionesService(
             throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite inspecciones nuevas");
         }
 
+        // El Descargue tiene una sola revision, la de llegada: la salida del Descargue ya no se crea, la haga quien la haga.
+        await AsegurarMomentoAdmitidoAsync(etapa, solicitud.Momento, ct);
+
         // Una unidad que no sale (o que se bajo) del viaje no se revisa.
         await guardaDeUnidad.AsegurarActivaAsync(etapa.ViajeId, etapa.VehiculoId, ct);
 
@@ -386,6 +389,12 @@ public sealed class clsInspeccionesService(
         }
 
         await guardaDeUnidad.AsegurarActivaDeInspeccionAsync(original, ct);
+
+        // Corregir crea una version nueva: la salida del Descargue (que ya no existe) tampoco se corrige.
+        if (await etapas.ObtenerPorIdAsync(original.EtapaId, ct) is { } etapaDeLaCorreccion)
+        {
+            await AsegurarMomentoAdmitidoAsync(etapaDeLaCorreccion, original.Momento, ct);
+        }
 
         if (await inspecciones.ObtenerCorreccionIdAsync(inspeccionId, ct) is { } corregidaPor)
         {
@@ -783,7 +792,7 @@ public sealed class clsInspeccionesService(
         // La segunda inspeccion del cargue (la salida del Cargue) documenta la acomodacion en la ninera: no exige las fotos de las vistas de estado (quedan solo en la primera) sino la posicion de cada
         // unidad activa del viaje y las fotos de la acomodacion.
         var esAcomodacion = EsSegundaInspeccionDelCargue(codigoEtapa, inspeccion);
-        var exigeVistas = clsEtapaCatalogo.ExigeVistas(codigoEtapa) && !esAcomodacion;
+        var exigeVistas = clsEtapaCatalogo.ExigeVistas(codigoEtapa, inspeccion.Momento) && !esAcomodacion;
         var faltantes = exigeVistas && !inspeccion.EstaCerrada ? await calculadoraVistas.FaltantesAsync(etapa, resumen, ct) : [];
         var otrosFaltantes = new List<string>();
         if (!inspeccion.EstaCerrada)
@@ -860,6 +869,15 @@ public sealed class clsInspeccionesService(
         var etapa = await etapas.ObtenerPorIdAsync(inspeccion.EtapaId, ct);
         var codigo = etapa is null ? null : (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
         return EsSegundaInspeccionDelCargue(codigo, inspeccion);
+    }
+
+    /// <summary>La salida del Descargue ya no se crea ni se corrige: 409 <c>MOMENTO_NO_ADMITIDO</c> con el motivo <c>salida_descargue</c>. Un borrador de salida del Descargue anterior si se puede cerrar.</summary>
+    private async Task AsegurarMomentoAdmitidoAsync(clsEtapa etapa, string? momento, CancellationToken ct)
+    {
+        if (momento == clsMomento.SALIDA && await CodigoDeEtapaAsync(etapa, ct) == clsCodigosEtapa.DESCARGUE)
+        {
+            throw new clsMomentoNoAdmitidoException("El descargue tiene una sola revisión, la de llegada: la salida del descargue ya no se registra", clsMotivosRechazo.SALIDA_DESCARGUE);
+        }
     }
 
     /// <summary>True si la etapa es el Cargue (la etapa del catalogo con ese codigo).</summary>

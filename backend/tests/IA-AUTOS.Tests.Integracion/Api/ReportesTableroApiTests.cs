@@ -70,7 +70,7 @@ public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaT
     // ------------------------------------------------------------------------------------ cobertura
 
     [Fact]
-    public async Task La_cobertura_cuenta_las_unidades_despachadas_con_sus_seis_registros_cerrados_de_su_cliente()
+    public async Task La_cobertura_cuenta_las_unidades_despachadas_con_sus_cinco_registros_cerrados_de_su_cliente()
     {
         var e = await EscenarioAsync();
         var coordinador = await SesionAsync(clsRol.COORDINADOR_CALIDAD);
@@ -78,7 +78,7 @@ public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaT
         var r = await ConsultarAsync(coordinador, "/api/reportes/cobertura");
 
         Assert.Equal(["despachadas", "completas", "cobertura", "meta", "por_operacion", "por_cliente", "por_punto"], r.EnumerateObject().Select(p => p.Name).ToList());
-        // V1, V2 y V3 se despacharon (V4 es de otro cliente, V5 fue hace cuarenta dias y V6 nunca salio); solo V1 tiene los seis registros.
+        // V1, V2 y V3 se despacharon (V4 es de otro cliente, V5 fue hace cuarenta dias y V6 nunca salio); solo V1 tiene los cinco registros (y la salida del Descargue de antes no cuenta).
         Assert.Equal(3, r.GetProperty("despachadas").GetInt32());
         Assert.Equal(1, r.GetProperty("completas").GetInt32());
         Assert.Equal(33.33m, r.GetProperty("cobertura").GetDecimal());
@@ -97,6 +97,47 @@ public sealed class ReportesTableroApiTests(clsBaseDatosFixture bd) : clsPruebaT
         Assert.All(porPunto, p => Assert.Equal(2, p.GetProperty("despachadas").GetInt32()));
         Assert.Contains(porPunto, p => p.GetProperty("punto_id").GetGuid() == e.Origen);
         Assert.Contains(porPunto, p => p.GetProperty("punto_id").GetGuid() == e.Destino);
+    }
+
+    [Fact]
+    public async Task La_cobertura_completa_con_cinco_registros_sin_salida_del_descargue_y_esa_salida_no_cuenta_como_el_registro_que_falta()
+    {
+        await EscenarioAsync();
+        var coordinador = await SesionAsync(clsRol.COORDINADOR_CALIDAD);
+        var antes = await ConsultarAsync(coordinador, "/api/reportes/cobertura");
+        Assert.Equal(1, antes.GetProperty("completas").GetInt32());
+
+        // V2 (viaje A) suma la llegada del Cargue, la salida y la llegada de Transporte y la llegada del Descargue: con la salida del Cargue que ya tenia son cinco, sin salida del Descargue.
+        // V3 (viaje B) suma la salida y la llegada de Transporte y solo la SALIDA del Descargue: con el Cargue son cinco parejas cerradas, pero la salida del Descargue no cuenta y le falta la llegada.
+        await Sembrador.EjecutarAsync(
+            """
+            ALTER TABLE dbo.tblInspecciones DISABLE TRIGGER ALL;
+            DECLARE @descargue uniqueidentifier = (SELECT Id FROM dbo.tblEtapasCatalogo WHERE Codigo = 'descargue');
+            DECLARE @a uniqueidentifier = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = 'MTK-IND-A');
+            DECLARE @b uniqueidentifier = (SELECT Id FROM dbo.tblViajes WHERE CodigoMtrack = 'MTK-IND-B');
+            DECLARE @v2 uniqueidentifier = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = 'VIN-IND-0002');
+            DECLARE @v3 uniqueidentifier = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = 'VIN-IND-0003');
+            DECLARE @usuario uniqueidentifier = (SELECT TOP 1 UsuarioId FROM dbo.tblInspecciones);
+            DECLARE @d2 uniqueidentifier = NEWID(), @d3 uniqueidentifier = NEWID();
+            INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) VALUES (@d2, @v2, @a, @descargue, 3), (@d3, @v3, @b, @descargue, 3);
+            CREATE TABLE #n (EtapaId uniqueidentifier, ViajeId uniqueidentifier, Momento varchar(20));
+            INSERT #n
+            SELECT e.Id, e.ViajeId, m.Momento FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId
+            CROSS JOIN (VALUES ('salida'), ('llegada')) AS m (Momento)
+            WHERE (e.VehiculoId = @v2 AND ((c.Codigo = 'cargue' AND m.Momento = 'llegada') OR c.Codigo = 'transporte'))
+               OR (e.VehiculoId = @v3 AND c.Codigo = 'transporte');
+            INSERT #n VALUES (@d2, @a, 'llegada'), (@d3, @b, 'salida');
+            INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, IniciadaAt, Estado, CerradaAt)
+            SELECT NEWID(), EtapaId, ViajeId, @usuario, Momento, SYSDATETIMEOFFSET(), DATEADD(MINUTE, -5, SYSDATETIMEOFFSET()), 'cerrada', SYSDATETIMEOFFSET() FROM #n;
+            DROP TABLE #n;
+            ALTER TABLE dbo.tblInspecciones ENABLE TRIGGER ALL;
+            """);
+
+        var r = await ConsultarAsync(coordinador, "/api/reportes/cobertura");
+
+        Assert.Equal(3, r.GetProperty("despachadas").GetInt32());
+        Assert.Equal(2, r.GetProperty("completas").GetInt32());
+        Assert.Equal(66.67m, r.GetProperty("cobertura").GetDecimal());
     }
 
     [Fact]

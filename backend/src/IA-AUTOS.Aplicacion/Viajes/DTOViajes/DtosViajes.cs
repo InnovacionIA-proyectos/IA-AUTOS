@@ -48,7 +48,11 @@ public sealed record CambiarCargueDelViajeRequest(Guid? MuelleId, string? Traile
 /// <summary>Cambia el lugar de destino de una unidad del viaje (un lugar activo del catalogo <c>lugares</c>).</summary>
 public sealed record CambiarDestinoUnidadRequest(Guid? LugarDestinoId);
 
-public sealed record CambiarEstadoViajeRequest(string? Estado);
+/// <summary>
+/// El estado nuevo del viaje. <c>Motivo</c> (1 a 300 caracteres) es obligatorio para finalizar a mano un viaje en curso con carros pendientes de entrega y opcional en cualquier otro cambio; queda en la auditoria junto con el
+/// estado de antes y el de despues.
+/// </summary>
+public sealed record CambiarEstadoViajeRequest(string? Estado, string? Motivo = null);
 
 /// <summary>
 /// El conductor pide el permiso de la excepcion «No hay inspector» (el punto de cargue tiene inspectores): su <c>MotivoSinInspector</c> (codigo activo del catalogo <c>motivos-sin-inspector</c>), el

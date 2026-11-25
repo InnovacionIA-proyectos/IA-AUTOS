@@ -416,13 +416,17 @@ public class HallazgosYEvidenciasTests
     }
 
     [Theory]
-    [InlineData("cargue", true)]
-    [InlineData("descargue", true)]
-    [InlineData("transporte", false)]
-    [InlineData("otra_etapa", false)]
-    [InlineData(null, false)]
-    public void Solo_cargue_y_descargue_exigen_las_vistas_obligatorias(string? etapa, bool esperado)
+    [InlineData("cargue", "llegada", true)]
+    [InlineData("descargue", "llegada", true)]
+    [InlineData("cargue", "salida", false)]
+    [InlineData("descargue", "salida", false)]
+    [InlineData("transporte", "llegada", false)]
+    [InlineData("transporte", "salida", false)]
+    [InlineData("otra_etapa", "llegada", false)]
+    [InlineData(null, "llegada", false)]
+    [InlineData("cargue", null, false)]
+    public void Solo_la_llegada_del_cargue_y_la_del_descargue_exigen_las_vistas_obligatorias(string? etapa, string? momento, bool esperado)
     {
-        Assert.Equal(esperado, clsEtapaCatalogo.ExigeVistas(etapa));
+        Assert.Equal(esperado, clsEtapaCatalogo.ExigeVistas(etapa, momento));
     }
 }

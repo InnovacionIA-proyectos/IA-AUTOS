@@ -19,6 +19,7 @@ Todas se guardan como notificaciones (ver [notificaciones.md](notificaciones.md)
 | `cambio_destino_unidad` | operativo | media | conductor del viaje e inspectores del lugar nuevo | cuando se cambia el destino de una unidad | `cambio_destino_unidad:{viaje}:{vehiculo}:{instante}`: uno por cambio |
 | `firma_cargue_pendiente` | operativo | media | inspector del viaje (si falta quien entrega) o conductor (si falta quien recibe) | proceso **cada 10 minutos** | `firma_cargue_pendiente:{viaje}:{parte}`: una por viaje y parte |
 | `propuesta_ubicacion` | operativo | media | coordinador de calidad del cliente | proceso **cada hora** (con `propuesta_ubicacion_visitas` visitas distintas, 3 por defecto) | `propuesta_ubicacion:{propuesta}`: una por propuesta |
+| `viaje_sin_movimiento` | operativo | media | coordinadores de calidad del cliente de las unidades del viaje | proceso **cada 10 minutos**, si un viaje en curso lleva `viaje_sin_movimiento_horas` sin ninguna inspeccion, novedad, llegada ni firma | `viaje_sin_movimiento:{viaje}:{ultimo movimiento}`: uno por viaje y ultimo movimiento |
 | `ubicacion_fijada` | operativo | media | coordinadores de calidad y administradores del cliente de quien la fijó | cuando alguien fija la ubicación de un lugar «aquí» (`POST /api/lugares/{id}/ubicacion`; solo bandeja) | `ubicacion_fijada:{lugar}`: uno por lugar |
 | `espera_inspector_punto` | operativo | alta | coordinadores de calidad del cliente | proceso **cada minuto** y la petición que activa la espera: el conductor activó «No hay inspector» en una parada con inspectores y pasaron `espera_inspector_aviso_minutos` (15 por defecto) sin que nadie tomara la entrega | `espera_inspector_punto:{espera}`: uno por espera |
 | `fuera_de_rango` (entrega) | operativo | alta | coordinador de calidad del cliente | cuando el inspector toma una entrega (`POST /api/viajes/{id}/reclamos`) con su posición fuera del rango del lugar de la parada | `fuera_de_rango:reclamo:{reclamo}`: uno por reclamo |
@@ -58,9 +59,13 @@ El reporte `GET /api/reportes/patrones` marca `supera_umbral` con estos mismos p
 
 ## Captura incompleta
 
-Cada 10 minutos se buscan las inspecciones en **borrador** de **Cargue o Descargue** de viajes activos, iniciadas hace mas de `captura_incompleta_minutos`, a las que **aun les falta la foto de alguna vista obligatoria** (el mismo calculo que usa el cierre,
+Cada 10 minutos se buscan las inspecciones de **llegada** en **borrador** del **Cargue o del Descargue** de viajes activos (la acomodacion, que es la salida del Cargue, y una salida del Descargue que quedo abierta de antes **no cuentan**: no exigen vistas), iniciadas hace mas de `captura_incompleta_minutos`, a las que **aun les falta la foto de alguna vista obligatoria** (el mismo calculo que usa el cierre,
 `clsCalculadoraVistas`). Se avisa a quien la inicio, con las vistas que faltan: el inspector o, **solo en la salida de un Cargue**, el conductor (un Descargue iniciado por el conductor no avisa). Un aviso por inspeccion.
 No avisa de una inspeccion cerrada, descartada o superada por otra, ni de Transporte, ni de un usuario retirado.
+
+## Viaje sin movimiento
+
+Cada 10 minutos se buscan los viajes `en_curso` cuyo ultimo movimiento fue hace mas de `viaje_sin_movimiento_horas` (24 por defecto si la fila no existe, ajustable sin desplegar). El **ultimo movimiento** es lo mas reciente entre una inspeccion creada o cerrada del viaje (la llegada y la salida de Transporte incluidas), un dano o novedad, una novedad de proceso y una firma de entrega o de recibo; sin ninguno, la ultima vez que se toco el viaje. Se avisa a los coordinadores de calidad del cliente de cada unidad (urgencia media, solo bandeja) con el codigo del viaje y las horas; una sola vez por viaje y ultimo movimiento. Nunca avisa de un viaje programado, finalizado o cancelado.
 
 ## Camión reclamado sin actividad
 

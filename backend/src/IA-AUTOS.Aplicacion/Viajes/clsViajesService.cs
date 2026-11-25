@@ -36,6 +36,7 @@ public sealed class clsViajesService(
     IInspeccionRepository inspecciones,
     ITransferenciaCustodiaRepository transferencias,
     INovedadProcesoRepository novedadesProceso,
+    clsFinalizadorDelViaje finalizador,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -268,14 +269,25 @@ public sealed class clsViajesService(
         return await ObtenerDtoAsync(id, ct);
     }
 
+    /// <summary>
+    /// Cambia el estado del viaje. Finalizar a mano un viaje en curso con carros pendientes de entrega exige un <c>motivo</c> (400 sin el); sin pendientes el motivo es opcional. El motivo, cuando llega, queda en la auditoria
+    /// junto con el estado de antes y el de despues.
+    /// </summary>
     public async Task<ViajeDto> CambiarEstadoAsync(Guid id, CambiarEstadoViajeRequest solicitud, CancellationToken ct = default)
     {
         await validadorEstado.ValidarOLanzarAsync(solicitud, ct);
         var viaje = await ObtenerViajeAsync(id, ct);
         var estadoAnterior = viaje.Estado;
+        var motivo = clsValidador.Opcional(solicitud.Motivo);
+        if (motivo is null && solicitud.Estado == clsEstadoViaje.FINALIZADO && estadoAnterior == clsEstadoViaje.EN_CURSO && await finalizador.PendientesAsync(viaje, ct) > 0)
+        {
+            throw clsErroresCampos.De("motivo", "El motivo es obligatorio para finalizar un viaje con carros pendientes");
+        }
+
         viaje.CambiarEstado(solicitud.Estado!, reloj.Ahora);
         await auditor.RegistrarDeViajeAsync(
-            $"viaje.estado.{viaje.Estado}", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(new { estado = estadoAnterior }, new { estado = viaje.Estado }), ct: ct);
+            $"viaje.estado.{viaje.Estado}", "viajes", viaje.Id, viaje.Id,
+            new DetalleAuditoria(new { estado = estadoAnterior }, motivo is null ? new { estado = viaje.Estado } : (object)new { estado = viaje.Estado, motivo }), ct: ct);
 
         // Un viaje cancelado o finalizado a mano ya no espera a ningun inspector: sus esperas abiertas quedan anuladas.
         if (viaje.Estado is clsEstadoViaje.CANCELADO or clsEstadoViaje.FINALIZADO)

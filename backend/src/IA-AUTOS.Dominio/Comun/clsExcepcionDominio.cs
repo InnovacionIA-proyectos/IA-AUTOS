@@ -113,6 +113,15 @@ public sealed class clsLlegadaYaCerradaException : clsExcepcionDominio
     }
 }
 
+/// <summary>El momento de la inspeccion no existe en esa etapa (la salida del Descargue): 409 MOMENTO_NO_ADMITIDO con el motivo en <c>details</c>.</summary>
+public sealed class clsMomentoNoAdmitidoException : clsExcepcionDominio
+{
+    public clsMomentoNoAdmitidoException(string mensaje, string motivo)
+        : base(clsCodigosError.MOMENTO_NO_ADMITIDO, mensaje, clsMotivosRechazo.Detalles(motivo))
+    {
+    }
+}
+
 /// <summary>La URL de una foto no tiene firma, la firma no coincide o ya vencio: 403 URL_FIRMADA_INVALIDA.</summary>
 public sealed class clsUrlFirmadaInvalidaException : clsExcepcionDominio
 {

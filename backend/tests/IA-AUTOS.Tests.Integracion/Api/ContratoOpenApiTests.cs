@@ -304,6 +304,8 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
 
     [Theory]
     [InlineData("/api/inspecciones", "post", "409", "ETAPA_PREVIA_SIN_CIERRE")]
+    [InlineData("/api/inspecciones", "post", "409", "MOMENTO_NO_ADMITIDO")]
+    [InlineData("/api/inspecciones/{id}/corregir", "post", "409", "MOMENTO_NO_ADMITIDO")]
     [InlineData("/api/viajes/{id}/vehiculos/{vin}/novedades", "post", "409", "UNIDAD_NO_SALE")]
     [InlineData("/api/viajes/{id}/vehiculos/{vin}/novedades", "post", "409", "ETAPA_PREVIA_SIN_CIERRE")]
     [InlineData("/api/viajes/{id}/vehiculos/{vin}/llegada", "post", "409", "LLEGADA_YA_CERRADA")]

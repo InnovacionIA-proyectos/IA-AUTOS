@@ -455,7 +455,11 @@ public sealed class ConductorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         Assert.Equal(e.Conductor.UsuarioId, inspeccion.GetProperty("usuario_id").GetGuid());
         Assert.Equal(1, await Sembrador.ContarAsync(
             "SELECT COUNT(*) FROM dbo.tblInspecciones WHERE EtapaId = @e AND Momento = 'llegada' AND Estado = 'cerrada' AND CerradaAt IS NOT NULL", ("@e", e.Etapas[1])));
-        Assert.Equal(0, await InspeccionesDeTransporteAsync(e, "salida"));
+        // Sin novedades tambien queda la salida de Transporte: cerrada «sin novedades», con la fecha y el GPS del «Llegue».
+        Assert.Equal(1, await InspeccionesDeTransporteAsync(e, "salida"));
+        Assert.Equal(1, await Sembrador.ContarAsync(
+            "SELECT COUNT(*) FROM dbo.tblInspecciones i WHERE i.EtapaId = @e AND i.Momento = 'salida' AND i.Estado = 'cerrada' AND i.Lat = 4.9 AND i.Lng = -74.4 AND i.UsuarioId = @u AND NOT EXISTS (SELECT 1 FROM dbo.tblHallazgos h WHERE h.InspeccionId = i.Id)",
+            ("@e", e.Etapas[1]), ("@u", e.Conductor.UsuarioId)));
         var unidad = await UnidadDelViajeAsync(e);
         Assert.Equal("sin_novedad", unidad.GetProperty("estado_transporte").GetString());
         Assert.Equal(0, unidad.GetProperty("novedades").GetInt32());
