@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using IAAutos.Aplicacion.Alertas;
+using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Tests.Integracion.Infraestructura;
 using Microsoft.Extensions.DependencyInjection;
@@ -80,11 +81,11 @@ public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         return id;
     }
 
-    private Task<HttpResponseMessage> ReclamarAsync(Sesion quien, Guid viaje, string proceso = "cargue") =>
-        Como(quien).PostAsync($"/api/viajes/{viaje}/reclamos", Cuerpo(new { proceso }));
+    private Task<HttpResponseMessage> ReclamarAsync(Sesion quien, Guid viaje, string proceso = "cargue", Guid? lugar = null) =>
+        Como(quien).PostAsync($"/api/viajes/{viaje}/reclamos", Cuerpo(lugar is null ? new { proceso } : new { proceso, lugar_id = lugar }));
 
-    private Task<HttpResponseMessage> LiberarAsync(Sesion quien, Guid viaje, string proceso = "cargue") =>
-        Como(quien).DeleteAsync($"/api/viajes/{viaje}/reclamos/{proceso}");
+    private Task<HttpResponseMessage> LiberarAsync(Sesion quien, Guid viaje, string proceso = "cargue", Guid? lugar = null) =>
+        Como(quien).DeleteAsync($"/api/viajes/{viaje}/reclamos/{proceso}" + (lugar is null ? string.Empty : $"?lugar_id={lugar}"));
 
     private Task<object?> InspectorDelViajeAsync(Guid viaje) => Sembrador.EscalarAsync("SELECT InspectorId FROM dbo.tblViajes WHERE Id = @v", ("@v", viaje));
 
@@ -100,7 +101,7 @@ public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
 
         Assert.Equal(HttpStatusCode.Created, r.StatusCode);
         var reclamo = await JsonAsync(r);
-        Assert.Equal(["id", "viaje_id", "proceso", "inspector_id", "inspector_nombre", "reclamado_at", "activo", "liberado_at", "liberado_por", "liberado_por_nombre"], reclamo.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.Equal(["id", "viaje_id", "proceso", "inspector_id", "inspector_nombre", "reclamado_at", "activo", "liberado_at", "liberado_por", "liberado_por_nombre", "lugar_id", "lugar"], reclamo.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal(viaje, reclamo.GetProperty("viaje_id").GetGuid());
         Assert.Equal("cargue", reclamo.GetProperty("proceso").GetString());
         Assert.Equal(e.Esleider.UsuarioId, reclamo.GetProperty("inspector_id").GetGuid());
@@ -311,9 +312,9 @@ public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         await PuntoAsync(otraDeCartagena, e.Cartagena);
         var viaje = await ViajeAsync(e, "MTK-2201", e.Envigado, FechaDeHoy(), destino: e.Cartagena, conductor: e.Conductor);
 
-        var deEnvigado = await ReclamarAsync(e.Esleider, viaje, "entrega");
-        var paula = await ReclamarAsync(e.Paula, viaje, "entrega");
-        var otra = await ReclamarAsync(otraDeCartagena, viaje, "entrega");
+        var deEnvigado = await ReclamarAsync(e.Esleider, viaje, "entrega", e.Cartagena);
+        var paula = await ReclamarAsync(e.Paula, viaje, "entrega", e.Cartagena);
+        var otra = await ReclamarAsync(otraDeCartagena, viaje, "entrega", e.Cartagena);
 
         Assert.Equal(HttpStatusCode.Forbidden, deEnvigado.StatusCode);
         Assert.Equal(HttpStatusCode.Created, paula.StatusCode);
@@ -327,9 +328,9 @@ public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         Assert.Equal(HttpStatusCode.Forbidden, (await Como(otraDeCartagena).GetAsync($"/api/viajes/{viaje}/entregas")).StatusCode);
 
         // La libera ella: otra del punto puede tomarla.
-        Assert.Equal(HttpStatusCode.OK, (await LiberarAsync(e.Paula, viaje, "entrega")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await LiberarAsync(e.Paula, viaje, "entrega", e.Cartagena)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Como(e.Paula).GetAsync($"/api/viajes/{viaje}/entregas")).StatusCode);
-        Assert.Equal(HttpStatusCode.Created, (await ReclamarAsync(otraDeCartagena, viaje, "entrega")).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await ReclamarAsync(otraDeCartagena, viaje, "entrega", e.Cartagena)).StatusCode);
     }
 
     [Fact]
@@ -339,7 +340,7 @@ public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         var viaje = await ViajeAsync(e, "MTK-2201", e.Envigado, FechaDeHoy(), destino: e.Cartagena);
 
         var cargue = await ReclamarAsync(e.Esleider, viaje, "cargue");
-        var entrega = await ReclamarAsync(e.Paula, viaje, "entrega");
+        var entrega = await ReclamarAsync(e.Paula, viaje, "entrega", e.Cartagena);
         var liberaCargue = await LiberarAsync(e.Esleider, viaje, "cargue");
 
         Assert.Equal(HttpStatusCode.Created, cargue.StatusCode);
@@ -362,5 +363,154 @@ public sealed class ReclamosApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
         Assert.StartsWith("Campo no admitido", (await JsonAsync(r)).GetProperty("details").GetProperty("fieldErrors").GetProperty("inspector_id")[0].GetString());
         Assert.Null(await InspectorDelViajeAsync(viaje));
+    }
+
+    // ------------------------------------------------------------------------------------------------- la ubicacion al tomar la entrega
+
+    private const double LAT = 10.3910;
+    private const double LNG = -75.4794;
+
+    private static double AlNorte(double metros) => LAT + (metros / clsConfirmacionSitio.RADIO_TIERRA_M * 180 / Math.PI);
+
+    /// <summary>La ubicacion confirmada del lugar con su radio (la carga manual del catalogo).</summary>
+    private async Task UbicarAsync(Escenario e, Guid lugar, int radio = 500)
+    {
+        var r = await Como(e.Coordinador).PatchAsync($"/api/catalogos/lugares/{lugar}", Cuerpo(new { latitud = LAT, longitud = LNG, radio_metros = radio }));
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+    }
+
+    /// <summary>Toma la entrega de la parada (o el cargue) con la posicion a esos metros al norte del lugar; sin metros no manda posicion.</summary>
+    private Task<HttpResponseMessage> TomarAsync(Sesion quien, Guid viaje, Guid lugar, double? metros, double? precision = 10, string proceso = "entrega")
+    {
+        var cuerpo = new Dictionary<string, object?> { ["proceso"] = proceso };
+        if (proceso == "entrega")
+        {
+            cuerpo["lugar_id"] = lugar;
+        }
+
+        if (metros is { } m)
+        {
+            cuerpo["lat"] = AlNorte(m);
+            cuerpo["lng"] = LNG;
+        }
+
+        if (precision is { } p && metros is not null)
+        {
+            cuerpo["precision"] = p;
+        }
+
+        return Como(quien).PostAsync($"/api/viajes/{viaje}/reclamos", Cuerpo(cuerpo));
+    }
+
+    private Task<int> AvisosFueraDeRangoAsync(Guid usuario, string canal = "bandeja") =>
+        Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'fuera_de_rango' AND Urgencia = 'alta' AND Canal = @c AND UsuarioId = @u AND Datos LIKE N'%reclamo_entrega%'", ("@c", canal), ("@u", usuario));
+
+    [Fact]
+    public async Task Tomar_la_entrega_a_2300_metros_del_lugar_crea_el_reclamo_y_avisa_al_coordinador_sin_bloquear()
+    {
+        var e = await EscenarioAsync();
+        await UbicarAsync(e, e.Cartagena);
+        var viaje = await ViajeAsync(e, "MTK-2301", e.Envigado, FechaDeHoy(), destino: e.Cartagena, conductor: e.Conductor);
+
+        var r = await TomarAsync(e.Paula, viaje, e.Cartagena, 2300);
+
+        // El reclamo queda creado y la entrega tomada por Paula.
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+        Assert.Equal(e.Paula.UsuarioId, (await JsonAsync(r)).GetProperty("inspector_id").GetGuid());
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblReclamos WHERE ViajeId = @v AND Proceso = 'entrega' AND LiberadoAt IS NULL", ("@v", viaje)));
+        // Le llega al coordinador (bandeja y push, urgencia alta) con el viaje, quien, la distancia y el rango; al administrador y a la inspectora no.
+        Assert.Equal(1, await AvisosFueraDeRangoAsync(e.Coordinador.UsuarioId));
+        Assert.Equal(1, await AvisosFueraDeRangoAsync(e.Coordinador.UsuarioId, "push"));
+        Assert.Equal(0, await AvisosFueraDeRangoAsync(e.Admin.UsuarioId));
+        Assert.Equal(0, await AvisosFueraDeRangoAsync(e.Paula.UsuarioId));
+        var titulo = (string)(await Sembrador.EscalarAsync("SELECT Titulo FROM dbo.tblNotificaciones WHERE Tipo = 'fuera_de_rango' AND Canal = 'bandeja' AND UsuarioId = @u", ("@u", e.Coordinador.UsuarioId)))!;
+        var mensaje = (string)(await Sembrador.EscalarAsync("SELECT Mensaje FROM dbo.tblNotificaciones WHERE Tipo = 'fuera_de_rango' AND Canal = 'bandeja' AND UsuarioId = @u", ("@u", e.Coordinador.UsuarioId)))!;
+        var json = (string)(await Sembrador.EscalarAsync("SELECT Datos FROM dbo.tblNotificaciones WHERE Tipo = 'fuera_de_rango' AND Canal = 'bandeja' AND UsuarioId = @u", ("@u", e.Coordinador.UsuarioId)))!;
+        Assert.Equal("Fuera del rango: Puerto Cartagena", titulo);
+        Assert.Contains("MTK-2301", mensaje);
+        Assert.Contains("Nombre paula@ejemplo.com", mensaje);
+        Assert.Contains("rango 500 m", mensaje);
+        var datos = JsonDocument.Parse(json).RootElement;
+        Assert.Equal("reclamo_entrega", datos.GetProperty("hecho").GetString());
+        Assert.Equal(viaje, datos.GetProperty("viaje_id").GetGuid());
+        Assert.Equal(e.Cartagena, datos.GetProperty("lugar_id").GetGuid());
+        Assert.Equal("Puerto Cartagena", datos.GetProperty("lugar").GetString());
+        Assert.Equal("Nombre paula@ejemplo.com", datos.GetProperty("usuario_nombre").GetString());
+        Assert.Equal(2300, datos.GetProperty("distancia_m").GetDouble(), 0);
+        Assert.Equal(500, datos.GetProperty("radio_m").GetDouble());
+        Assert.Equal(10, datos.GetProperty("precision_m").GetDouble());
+        // El resultado queda en la auditoria del reclamo.
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'viaje.reclamar' AND ViajeId = @v AND Detalle LIKE N'%fuera_de_rango%'", ("@v", viaje)));
+        // Volver a tomar lo que ya es suyo (200) no repite el aviso.
+        Assert.Equal(HttpStatusCode.OK, (await TomarAsync(e.Paula, viaje, e.Cartagena, 2300)).StatusCode);
+        Assert.Equal(1, await AvisosFueraDeRangoAsync(e.Coordinador.UsuarioId));
+    }
+
+    [Fact]
+    public async Task Tomar_la_entrega_dentro_del_rango_no_avisa_y_deja_el_resultado_en_la_auditoria()
+    {
+        var e = await EscenarioAsync();
+        await UbicarAsync(e, e.Cartagena);
+        var viaje = await ViajeAsync(e, "MTK-2302", e.Envigado, FechaDeHoy(), destino: e.Cartagena);
+
+        var r = await TomarAsync(e.Paula, viaje, e.Cartagena, 300);
+
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+        Assert.Equal(0, await AvisosFueraDeRangoAsync(e.Coordinador.UsuarioId));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'viaje.reclamar' AND ViajeId = @v AND Detalle LIKE N'%confirmado_en_sitio%'", ("@v", viaje)));
+    }
+
+    [Fact]
+    public async Task Sin_posicion_con_precision_de_la_valvula_o_sin_ubicacion_confirmada_del_lugar_el_reclamo_no_avisa()
+    {
+        var e = await EscenarioAsync();
+        await UbicarAsync(e, e.Cartagena);
+        var sinPosicion = await ViajeAsync(e, "MTK-2303", e.Envigado, FechaDeHoy(), destino: e.Cartagena);
+        var imprecisa = await ViajeAsync(e, "MTK-2304", e.Envigado, FechaDeHoy(), destino: e.Cartagena, vin: "VIN-REC-0002");
+        var sinUbicar = await ViajeAsync(e, "MTK-2305", e.Envigado, FechaDeHoy(), destino: e.Envigado, vin: "VIN-REC-0003");
+
+        // Sin posicion; con la precision en la valvula (500 m), que ni confirma ni acusa; y en un lugar sin ubicacion confirmada.
+        Assert.Equal(HttpStatusCode.Created, (await TomarAsync(e.Paula, sinPosicion, e.Cartagena, null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await TomarAsync(e.Paula, imprecisa, e.Cartagena, 2300, precision: 500)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await TomarAsync(e.Esleider, sinUbicar, e.Envigado, 9000)).StatusCode);
+
+        Assert.Equal(0, await AvisosFueraDeRangoAsync(e.Coordinador.UsuarioId));
+        Assert.Equal(3, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblReclamos WHERE Proceso = 'entrega' AND LiberadoAt IS NULL"));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'viaje.reclamar' AND (Detalle LIKE N'%fuera_de_rango%' OR Detalle LIKE N'%confirmado_en_sitio%')"));
+    }
+
+    [Fact]
+    public async Task La_posicion_del_reclamo_se_valida_y_un_dato_invalido_no_crea_el_reclamo()
+    {
+        var e = await EscenarioAsync();
+        await UbicarAsync(e, e.Cartagena);
+        var viaje = await ViajeAsync(e, "MTK-2306", e.Envigado, FechaDeHoy(), destino: e.Cartagena);
+
+        var soloLat = await Como(e.Paula).PostAsync($"/api/viajes/{viaje}/reclamos", Cuerpo(new { proceso = "entrega", lugar_id = e.Cartagena, lat = LAT }));
+        var latFuera = await Como(e.Paula).PostAsync($"/api/viajes/{viaje}/reclamos", Cuerpo(new { proceso = "entrega", lugar_id = e.Cartagena, lat = 95, lng = LNG }));
+        var precisionNegativa = await Como(e.Paula).PostAsync($"/api/viajes/{viaje}/reclamos", Cuerpo(new { proceso = "entrega", lugar_id = e.Cartagena, lat = LAT, lng = LNG, precision = -1 }));
+
+        Assert.Equal(HttpStatusCode.BadRequest, soloLat.StatusCode);
+        Assert.Contains("lng", (await JsonAsync(soloLat)).GetProperty("details").GetProperty("fieldErrors").EnumerateObject().Select(x => x.Name));
+        Assert.Equal(HttpStatusCode.BadRequest, latFuera.StatusCode);
+        Assert.Contains("lat", (await JsonAsync(latFuera)).GetProperty("details").GetProperty("fieldErrors").EnumerateObject().Select(x => x.Name));
+        Assert.Equal(HttpStatusCode.BadRequest, precisionNegativa.StatusCode);
+        Assert.Contains("precision", (await JsonAsync(precisionNegativa)).GetProperty("details").GetProperty("fieldErrors").EnumerateObject().Select(x => x.Name));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblReclamos WHERE ViajeId = @v", ("@v", viaje)));
+    }
+
+    [Fact]
+    public async Task El_reclamo_del_cargue_no_cambia_aunque_traiga_posicion()
+    {
+        var e = await EscenarioAsync();
+        await UbicarAsync(e, e.Envigado);
+        var viaje = await ViajeAsync(e, "MTK-2307", e.Envigado, FechaDeHoy());
+
+        var r = await TomarAsync(e.Esleider, viaje, e.Envigado, 9000, proceso: "cargue");
+
+        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
+        Assert.Equal(e.Esleider.UsuarioId, await InspectorDelViajeAsync(viaje));
+        Assert.Equal(0, await AvisosFueraDeRangoAsync(e.Coordinador.UsuarioId));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'viaje.reclamar' AND ViajeId = @v AND (Detalle LIKE N'%fuera_de_rango%' OR Detalle LIKE N'%confirmado_en_sitio%')", ("@v", viaje)));
     }
 }

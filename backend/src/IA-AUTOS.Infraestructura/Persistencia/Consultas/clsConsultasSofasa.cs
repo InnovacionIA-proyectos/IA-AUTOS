@@ -31,7 +31,9 @@ internal sealed class clsConsultasSofasa(clsAppDbContext contexto) : IConsultasS
 
         if (f.Estado is not null)
         {
-            consulta = consulta.Where(o => o.StatusCode == f.Estado);
+            // El estado busca por contenido sobre el codigo, sin distinguir mayusculas: «entreg» encuentra ENTREGADA y ENTREGA PARCIAL.
+            var estado = f.Estado.ToLower();
+            consulta = consulta.Where(o => o.StatusCode != null && o.StatusCode.ToLower().Contains(estado));
         }
 
         if (f.Ciudad is not null)

@@ -83,4 +83,34 @@ void main() {
       expect((cuerpo['es_preexistente'], cuerpo['hallazgo_origen_id']), (true, 'h-previo'));
     });
   });
+
+  /// S7-HU-03.2 CA-1: la lista del inspector, por viaje y con lo más viejo primero.
+  group('sinCalificarDelViaje', () {
+    test('pide las del conductor sin revisar de todo el viaje, de la más antigua a la más reciente', () async {
+      final adaptador = AdaptadorFalso((_) => json(200, {
+            'items': [
+              {'id': 'h-viejo', 'vin': 'VIN00000000000001', 'proceso': 'transporte', 'momento': 'llegada', 'tamano_dano': '1_5cm'},
+              {'id': 'h-nuevo', 'vin': 'VIN00000000000002', 'proceso': 'transporte', 'momento': 'llegada', 'tamano_dano': '1_5cm'},
+            ],
+            'total': 2,
+            'pagina': 1,
+            'tamano': 200,
+          }));
+
+      final novedades = await repositorio(adaptador).sinCalificarDelViaje('via-1');
+
+      final q = adaptador.peticiones.single.uri.queryParameters;
+      expect(adaptador.peticiones.single.uri.path, '/api/hallazgos');
+      expect((q['viaje_id'], q['origen'], q['revisado']), ('via-1', 'conductor', 'false'));
+      expect(q['orden'], 'antiguos', reason: 'lo que lleva más tiempo esperando va primero');
+      expect(q.containsKey('vin'), isFalse, reason: 'son todas las unidades del viaje, no una');
+      expect(novedades.map((n) => n.id), ['h-viejo', 'h-nuevo'], reason: 'se respeta el orden del servidor');
+    });
+
+    test('sin nada pendiente devuelve la lista vacía, no revienta', () async {
+      final adaptador = AdaptadorFalso((_) => json(200, {'items': [], 'total': 0, 'pagina': 1, 'tamano': 200}));
+
+      expect(await repositorio(adaptador).sinCalificarDelViaje('via-1'), isEmpty);
+    });
+  });
 }

@@ -17,11 +17,13 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
     /// trailer y el conductor salen del viaje de la etapa. La salida exige que la etapa anterior del VIN tenga cerrada su llegada (409
     /// ETAPA_PREVIA_SIN_CIERRE). Si el inspector previsto no esta en un Cargue con personal de apoyo, el conductor del viaje crea la salida con
     /// <c>motivo_sin_inspector</c> (codigo activo de <c>motivos-sin-inspector</c>) y, si el motivo lo requiere, <c>motivo_sin_inspector_texto</c> (1 a 300 caracteres): queda una novedad de proceso
-    /// y se avisa a los coordinadores de calidad y administradores del cliente. Sin motivo el conductor recibe 403; en cualquier otro caso el campo responde 400 «Campo no admitido».
+    /// y se avisa a los coordinadores de calidad y administradores del cliente. Sin motivo el conductor recibe 403; en cualquier otro caso el campo responde 400 «Campo no admitido». El Descargue tiene una sola
+    /// revision, la de llegada: su salida responde 409 MOMENTO_NO_ADMITIDO (details.motivo salida_descargue).
     /// </summary>
     [HttpPost]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
     [CodigoError("ETAPA_PREVIA_SIN_CIERRE", "La salida exige la llegada cerrada de la etapa anterior del VIN (details.etapa_previa dice cual)")]
+    [CodigoError("MOMENTO_NO_ADMITIDO", "La salida del Descargue ya no existe: el Descargue tiene una sola revision, la de llegada (details.motivo: salida_descargue)")]
     [ProducesResponseType<InspeccionDto>(StatusCodes.Status201Created)]
     [CuerpoSolicitud(typeof(IAAutos.Aplicacion.Inspecciones.DTOInspecciones.CrearInspeccionRequest))]
     public async Task<IActionResult> Crear(CancellationToken ct)
@@ -33,12 +35,13 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
     /// <summary>
     /// Corrige una inspeccion CERRADA: crea la version siguiente (en borrador, vacia: se vuelven a tomar las fotos) que referencia a la anterior;
     /// la anterior no cambia. Solo corrige quien hizo la inspeccion o un administrador (403 CORRECCION_SOLO_AUTOR) y solo mientras su transferencia no tenga una firma ni un cierre (409 INSPECCION_YA_FIRMADA);
-    /// 409 tambien si la inspeccion no esta cerrada o ya fue corregida. Cuerpo opcional.
+    /// 409 tambien si la inspeccion no esta cerrada o ya fue corregida, o si es una salida del Descargue de antes (409 MOMENTO_NO_ADMITIDO). Cuerpo opcional.
     /// </summary>
     [HttpPost("{id:guid}/corregir")]
     [RolesPermitidos(clsRol.INSPECTOR, clsRol.CONDUCTOR, clsRol.ADMIN)]
     [CodigoError("CORRECCION_SOLO_AUTOR", "La inspeccion la hizo otra persona y quien intenta no es administrador: la corrigen quien la hizo y los administradores")]
     [CodigoError("INSPECCION_YA_FIRMADA", "La transferencia de la inspeccion ya tiene una firma o un cierre: ya no se corrige (se aclara con una nota)")]
+    [CodigoError("MOMENTO_NO_ADMITIDO", "Una salida del Descargue (que ya no existe) no se corrige (details.motivo: salida_descargue)")]
     [ProducesResponseType<InspeccionDto>(StatusCodes.Status201Created)]
     [CuerpoSolicitud(typeof(IAAutos.Aplicacion.Inspecciones.DTOInspecciones.CorregirInspeccionRequest))]
     public async Task<IActionResult> Corregir(Guid id, CancellationToken ct)
@@ -46,6 +49,17 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
         var solicitud = Request.ContentLength is > 0 ? await LeerCuerpoAsync<CorregirInspeccionRequest>(ct) : new CorregirInspeccionRequest(null, null, null, null);
         return Creado(await servicio.CorregirAsync(id, solicitud, ct));
     }
+
+    /// <summary>
+    /// Descarta un informe en BORRADOR (por ejemplo, el que se abrio por error): pasa a <c>descartada</c>, se conserva con su autor y su momento queda libre para una inspeccion original nueva. Lo descartan quien lo creo y el coordinador
+    /// de calidad de su cliente; cualquier otra persona, incluidos el administrador y el super administrador, recibe 403 DESCARTE_SOLO_AUTOR_O_COORDINADOR. Un informe cerrado, o un borrador cuya transferencia ya tiene una firma, es evidencia:
+    /// 409 INFORME_CERRADO_NO_SE_DESCARTA. Un informe descartado no sale en ningun listado, en el detalle del viaje ni en el inventario; solo se abre por su id, con <c>estado</c> <c>descartada</c>. Sin cuerpo.
+    /// </summary>
+    [HttpPost("{id:guid}/descartar")]
+    [CodigoError("DESCARTE_SOLO_AUTOR_O_COORDINADOR", "El informe lo creo otra persona y quien intenta no es el coordinador de calidad: lo descartan quien lo creo y el coordinador (details.motivo = solo_autor_o_coordinador)")]
+    [CodigoError("INFORME_CERRADO_NO_SE_DESCARTA", "El informe esta cerrado o ya tiene una firma: es evidencia y no se descarta (details.motivo = informe_cerrado o informe_con_firmas)")]
+    [ProducesResponseType<InspeccionDto>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Descartar(Guid id, CancellationToken ct) => Ok(await servicio.DescartarAsync(id, ct));
 
     /// <summary>
     /// Una pagina de informes <c>{items, total, pagina, tamano}</c> (mas recientes primero por defecto). Filtros: <c>vin</c>, <c>viaje_id</c>, <c>usuario_id</c>, <c>momento</c>, <c>estado</c>, <c>proceso</c>, <c>operacion</c>,

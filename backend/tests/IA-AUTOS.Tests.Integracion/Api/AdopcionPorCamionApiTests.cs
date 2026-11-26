@@ -94,7 +94,7 @@ public sealed class AdopcionPorCamionApiTests(clsBaseDatosFixture bd) : clsPrueb
         var inspector = await SesionAsync(clsRol.INSPECTOR);
         var norte = await LugarRealAsync(Cliente(coordinador.Token), "Concesionario Norte", "concesionario", "Bogota");
         var sur = await LugarRealAsync(Cliente(coordinador.Token), "Concesionario Sur", "concesionario", "Cali");
-        var unidades = Enumerable.Range(1, 5).Select(i => ($"VIN-ADO-N{i}", norte)).Concat(Enumerable.Range(1, 3).Select(i => ($"VIN-ADO-S{i}", sur))).ToArray();
+        var unidades = Enumerable.Range(1, 5).Select(i => ($"VIN-ADO-N{i}", norte)).Concat(Enumerable.Range(1, 2).Select(i => ($"VIN-ADO-S{i}", sur))).ToArray();
         var viaje = await ViajeAsync(coordinador, "MT-2026-0418", unidades);
         foreach (var (vin, _) in unidades)
         {
@@ -103,11 +103,11 @@ public sealed class AdopcionPorCamionApiTests(clsBaseDatosFixture bd) : clsPrueb
 
         var r = await ConsultarAsync(coordinador, "/api/reportes/adopcion", CONSULTA);
 
-        // ESC-02: 5 carros en Norte y 3 en Sur, cada uno en su destino.
+        // ESC-02: 5 carros en Norte y 2 en Sur, cada uno en su destino.
         var carro = Medida(r, "por_carro");
-        Assert.Equal(8, carro.GetProperty("programados").GetInt32());
+        Assert.Equal(7, carro.GetProperty("programados").GetInt32());
         Assert.Equal(5, Destino(carro, "Concesionario Norte").GetProperty("programados").GetInt32());
-        Assert.Equal(3, Destino(carro, "Concesionario Sur").GetProperty("programados").GetInt32());
+        Assert.Equal(2, Destino(carro, "Concesionario Sur").GetProperty("programados").GetInt32());
         Assert.Equal(100m, Destino(carro, "Concesionario Sur").GetProperty("adopcion").GetDecimal());
         // Por camion el viaje cuenta una sola vez y, como va a dos destinos, sale sin destino unico.
         var camion = Medida(r, "por_camion");

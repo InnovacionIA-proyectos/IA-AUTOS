@@ -106,6 +106,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                           fechaMotivo: DateTime.tryParse(state.uri.queryParameters['fechaMotivo'] ?? ''),
                           latMotivo: double.tryParse(state.uri.queryParameters['latMotivo'] ?? ''),
                           lngMotivo: double.tryParse(state.uri.queryParameters['lngMotivo'] ?? ''),
+                          corrigeInspeccionId: state.uri.queryParameters['corrige'],
                         ),
                       ),
                     ),

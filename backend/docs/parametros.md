@@ -33,12 +33,21 @@ se aplica en un minuto o menos sin desplegar y cada cambio queda en la auditoria
 | `umbral_patron_ventana_dias` | numero | 30 | dias de la ventana en la que se cuentan los hallazgos de un patron |
 | `captura_incompleta_minutos` | numero | 30 | minutos que una inspeccion de Cargue o Descargue puede seguir en borrador sin todas las fotos antes de avisar a quien la inicio (la inspeccion FLASH AVES dura maximo 5 minutos) |
 | `transferencia_pendiente_minutos` | numero | 240 | minutos que una llegada cerrada puede seguir con la transferencia sin cierre antes de avisar al firmante que falta |
-| `acomodacion_fotos_minimas` | numero | 1 | fotos de la acomodacion de las unidades en la ninera que exige el cierre de la segunda inspeccion del cargue (el valor definitivo lo confirma el negocio; script `30-parametro-fotos-de-acomodacion.sql`) |
+| `firma_cargue_pendiente_minutos` | numero | 30 | minutos que la salida del cargue de un carro puede seguir cerrada sin la firma de una parte de la niñera antes de avisarle a esa parte (script `42-firma-del-cargue-por-ninera.sql`; el valor definitivo lo confirma el negocio) |
+| `acomodacion_fotos_minimas` | numero | 1 | fotos de la acomodacion de las unidades en la ninera que exige el cierre de la segunda inspeccion del cargue (valor confirmado por el negocio; script `30-parametro-fotos-de-acomodacion.sql`) |
 | `radio_lugar_cargue_m` | numero | 1000 | radio, en metros, alrededor de un lugar de cargue dentro del cual la primera foto sellada confirma que el inspector esta en sitio (el valor definitivo lo confirma el negocio; script `32-ubicacion-con-rango-y-confirmacion-en-sitio.sql`) |
 | `radio_destino_m` | numero | 500 | radio, en metros, alrededor de un destino dentro del cual la primera foto sellada confirma que se esta en sitio |
 | `valvula_precision_m` | numero | 500 | precision del GPS, en metros, a partir de la cual una foto no confirma ni acusa la ubicacion; es distinta de `gps_precision_minima_m` (30 m), que solo avisa de precision baja |
 | `cargue_sin_reclamar_minutos` | numero | 30 | minutos desde la hora programada de un cargue sin ningun reclamo antes de avisar al coordinador; el aviso no se repite |
 | `reclamo_sin_actividad_minutos` | numero | 30 | minutos que un camion reclamado puede seguir sin ninguna inspeccion iniciada o cerrada antes de avisar al coordinador; el reclamo no se libera solo (el valor definitivo lo confirma Calidad) |
+
+| `permiso_sin_inspector_minutos` | numero | 10 | minutos que espera el permiso de la excepcion No hay inspector del cargue, sin respuesta, antes de que el sistema lo conceda por tiempo; cada solicitud guarda el plazo con que nacio (script `48-parametros-de-avisos-y-tiempos.sql`) |
+| `espera_inspector_aviso_minutos` | numero | 15 | minutos desde que el conductor activa la excepcion No hay inspector en un destino, sin que nadie tome la entrega, antes de avisar al coordinador (X) |
+| `espera_inspector_plan_b_minutos` | numero | 30 | minutos adicionales, despues de la espera del aviso, para habilitar la entrega sin inspector del punto (Y): el plan B se habilita con X mas Y minutos cumplidos |
+| `viaje_sin_movimiento_horas` | numero | 24 | horas que un viaje en curso puede seguir sin movimiento antes de avisar al coordinador |
+| `propuesta_ubicacion_visitas` | numero | 3 | visitas distintas con fotos selladas a un lugar sin ubicacion confirmada que hacen falta para proponer su ubicacion |
+
+`GET /api/parametros/app` entrega a la app (inspector, conductor, coordinador, administrador y super administrador) solo `acomodacion_fotos_minimas` y `gps_precision_minima_m` con su valor vigente.
 
 No hay filas de linea base de rechazo ni de fotos minimas por vista (las vistas obligatorias estan en el catalogo `vistas-foto`). Una fila que ya existe **nunca se sobrescribe** al repetir los scripts.
 

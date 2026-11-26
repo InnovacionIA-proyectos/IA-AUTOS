@@ -34,6 +34,7 @@ public sealed class clsTransferenciasService(
     IAlmacenArchivos almacen,
     IGeneradorPdfConstancia generadorPdf,
     clsAccesoViajes acceso,
+    clsGuardaDeUnidad guardaDeUnidad,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -47,6 +48,8 @@ public sealed class clsTransferenciasService(
     public async Task<TransferenciaDto> FirmarAsync(Guid inspeccionId, FirmarTransferenciaRequest solicitud, ContextoCliente cliente, CancellationToken ct = default)
     {
         await validadorFirma.ValidarOLanzarAsync(solicitud, ct);
+        await guardaDeUnidad.AsegurarActivaDeInspeccionAsync(inspeccionId, ct);
+        await AsegurarQueNoEsElCargueAsync(inspeccionId, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
         var antes = clsInstantaneasAuditoria.De(transferencia);
         transferencia.Firmar(actual.IdObligatorio(), solicitud.Firma!, cliente.Ip, reloj.Ahora);
@@ -60,6 +63,8 @@ public sealed class clsTransferenciasService(
     public async Task<TransferenciaDto> RecibirConReservasAsync(Guid inspeccionId, RecibirConReservasRequest solicitud, ContextoCliente cliente, CancellationToken ct = default)
     {
         await validadorReservas.ValidarOLanzarAsync(solicitud, ct);
+        await guardaDeUnidad.AsegurarActivaDeInspeccionAsync(inspeccionId, ct);
+        await AsegurarQueNoEsElCargueAsync(inspeccionId, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
         var antes = clsInstantaneasAuditoria.De(transferencia);
         transferencia.FirmarConReservas(actual.IdObligatorio(), solicitud.Firma!, solicitud.Reservas, cliente.Ip, reloj.Ahora);
@@ -76,6 +81,8 @@ public sealed class clsTransferenciasService(
     public async Task<TransferenciaDto> RegistrarNoFirmaAsync(Guid inspeccionId, RegistrarNoFirmaRequest solicitud, ContextoCliente cliente, CancellationToken ct = default)
     {
         await validadorNoFirma.ValidarOLanzarAsync(solicitud, ct);
+        await guardaDeUnidad.AsegurarActivaDeInspeccionAsync(inspeccionId, ct);
+        await AsegurarQueNoEsElCargueAsync(inspeccionId, ct);
         var transferencia = await ObtenerOCrearAsync(inspeccionId, solicitud.EntregaUsuarioId, solicitud.RecibeUsuarioId, ct);
         var antes = clsInstantaneasAuditoria.De(transferencia);
         var actorId = actual.IdObligatorio();
@@ -191,13 +198,13 @@ public sealed class clsTransferenciasService(
             ?? throw new clsEntidadNoEncontradaException("La inspección no tiene transferencia de custodia", clsMotivosRechazo.INSPECCION_SIN_TRANSFERENCIA);
 
         var entrega = transferencia.EntregaUsuarioId is { } entregaId
-            ? await ArmarFirmaAsync(entregaId, transferencia.FirmaEntrega, transferencia.FirmaEntregaAt, transferencia.FirmaEntregaIp, ct)
+            ? await ArmarFirmaAsync(entregaId, transferencia.FirmaEntrega, transferencia.FirmaEntregaAt, transferencia.FirmaEntregaIp, ct, MomentoDeEntrega(transferencia))
             : new FirmaConstancia("Sin entrega", null, null, null, null);
         var recibe = transferencia.RecibeEsExterno
             ? await clsArmadorFirmas.ArmarAsync(
-                almacen, $"{transferencia.RecibeExternoNombre} (documento {transferencia.RecibeExternoCedula})", transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct)
+                almacen, $"{transferencia.RecibeExternoNombre} (documento {transferencia.RecibeExternoCedula})", transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct, MomentoDeRecibe(transferencia))
             : transferencia.RecibeUsuarioId is { } recibeId
-                ? await ArmarFirmaAsync(recibeId, transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct)
+                ? await ArmarFirmaAsync(recibeId, transferencia.FirmaRecibe, transferencia.FirmaRecibeAt, transferencia.FirmaRecibeIp, ct, MomentoDeRecibe(transferencia))
                 : new FirmaConstancia("Nadie recibió", null, null, null, null);
         string? testigo = null;
         var fotos = new List<FotoConstancia>();
@@ -255,6 +262,27 @@ public sealed class clsTransferenciasService(
     /// La transferencia existente, o una nueva si es la primera vez. Al crearla los dos ids son obligatorios, quien envia debe ser uno de los dos
     /// (403: nadie actua por otro) y los dos deben ser usuarios del viaje. Si ya existe, los ids que lleguen deben ser los mismos (409).
     /// </summary>
+    /// <summary>
+    /// En el cargue se firma POR NINERA (una sola firma de cada parte para todos los carros): la firma carro por carro, con reservas o con constancia de no firma, se rechaza para todos los roles (409 <c>firma_por_ninera</c>) y manda
+    /// a la firma de la ninera (<c>POST /api/viajes/{id}/cargue/firma</c>, con sus reservas y su constancia). El recibo sin entrega del conductor no cambia, y lo ya firmado carro por carro se sigue leyendo igual.
+    /// </summary>
+    private async Task AsegurarQueNoEsElCargueAsync(Guid inspeccionId, CancellationToken ct)
+    {
+        var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct)
+            ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada", clsMotivosRechazo.INSPECCION_NO_EXISTE);
+        var etapa = await etapas.ObtenerPorIdAsync(inspeccion.EtapaId, ct);
+        var codigo = etapa is null ? null : (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
+        if (codigo == clsCodigosEtapa.CARGUE)
+        {
+            throw new clsConflictoException("En el cargue se firma por niñera: firma desde la pantalla de la niñera", clsMotivosRechazo.FIRMA_POR_NINERA);
+        }
+
+        if (codigo == clsCodigosEtapa.DESCARGUE)
+        {
+            throw new clsConflictoException("En el destino la entrega se firma por parada: usa «Entregar en esta parada»", clsMotivosRechazo.ENTREGA_POR_PARADA);
+        }
+    }
+
     private async Task<clsTransferenciaCustodia> ObtenerOCrearAsync(Guid inspeccionId, Guid? entregaId, Guid? recibeId, CancellationToken ct)
     {
         var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct)
@@ -338,6 +366,12 @@ public sealed class clsTransferenciasService(
     }
 
     /// <summary>La firma de una parte para el PDF: si se guardo como archivo se incrusta la imagen; si no, se dibuja el trazo.</summary>
-    private async Task<FirmaConstancia> ArmarFirmaAsync(Guid usuarioId, string? firma, DateTimeOffset? fecha, string? ip, CancellationToken ct) =>
-        await clsArmadorFirmas.ArmarAsync(almacen, (await usuarios.ObtenerPorIdAsync(usuarioId, ct))?.Nombre ?? "—", firma, fecha, ip, ct);
+    private async Task<FirmaConstancia> ArmarFirmaAsync(Guid usuarioId, string? firma, DateTimeOffset? fecha, string? ip, CancellationToken ct, MomentoDeFirma? momento = null) =>
+        await clsArmadorFirmas.ArmarAsync(almacen, (await usuarios.ObtenerPorIdAsync(usuarioId, ct))?.Nombre ?? "—", firma, fecha, ip, ct, momento);
+
+    private static MomentoDeFirma? MomentoDeEntrega(clsTransferenciaCustodia t) =>
+        t.FirmaEntregaMomentoAt is { } momento ? new MomentoDeFirma(momento, t.FirmaEntregaLat, t.FirmaEntregaLng, t.FirmaEntregaPrecisionM) : null;
+
+    private static MomentoDeFirma? MomentoDeRecibe(clsTransferenciaCustodia t) =>
+        t.FirmaRecibeMomentoAt is { } momento ? new MomentoDeFirma(momento, t.FirmaRecibeLat, t.FirmaRecibeLng, t.FirmaRecibePrecisionM) : null;
 }

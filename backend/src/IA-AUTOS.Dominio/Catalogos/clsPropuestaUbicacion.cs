@@ -89,8 +89,8 @@ public interface IPropuestaUbicacionRepository
 {
     Task<clsPropuestaUbicacion?> ObtenerAsync(Guid id, CancellationToken ct = default);
 
-    /// <summary>Las propuestas (opcionalmente solo las de un estado), de la mas reciente a la mas antigua, con el nombre de su lugar.</summary>
-    Task<IReadOnlyList<(clsPropuestaUbicacion Propuesta, string LugarNombre)>> ListarAsync(string? estado, CancellationToken ct = default);
+    /// <summary>Las propuestas (opcionalmente solo las de un estado), de la mas reciente a la mas antigua, con el nombre de su lugar y la precision del GPS con que se fijo su ubicacion actual (nula si no se guardo).</summary>
+    Task<IReadOnlyList<(clsPropuestaUbicacion Propuesta, string LugarNombre, double? PrecisionM)>> ListarAsync(string? estado, CancellationToken ct = default);
 
     /// <summary>La propuesta mas reciente de cada lugar (sea cual sea su estado), para no volver a proponer lo mismo.</summary>
     Task<IReadOnlyDictionary<Guid, clsPropuestaUbicacion>> UltimaPorLugarAsync(IReadOnlyCollection<Guid> lugarIds, CancellationToken ct = default);

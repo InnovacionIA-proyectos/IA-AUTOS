@@ -63,6 +63,51 @@ void main() {
       expect(find.textContaining('poco precisa'), findsOneWidget, reason: 'las dos cosas, no una u otra');
     });
 
+    // Cuando el GPS no alcanza a dar una lectura nueva se usa la última conocida, y su precisión es la de
+    // entonces y de otro sitio. Antes se sellaba ese número y el aviso no salía nunca: la foto parecía
+    // comprobada. Ahora se dice que no se comprobó, que es lo que de verdad consta.
+    testWidgets('una foto con coordenadas pero sin precisión dice que no se comprobó', (tester) async {
+      await montar(
+        tester,
+        const FilaVista(
+          vista: vistaObligatoria,
+          foto: FotoLocal(
+            ruta: 'frontal.jpg',
+            selloFecha: '2026-01-02T10:00:00.000Z',
+            selloLat: 6.2,
+            selloLng: -75.5,
+            vistaId: 'v-frontal',
+          ),
+          alTomar: null,
+        ),
+      );
+
+      expect(find.text('Ubicación sin comprobar'), findsOneWidget);
+      expect(find.textContaining('poco precisa'), findsNothing, reason: 'no se sabe si es poca o mucha');
+      expect(find.textContaining('Sin ubicación'), findsNothing, reason: 'coordenadas sí hay');
+    });
+
+    testWidgets('con una lectura del momento y buena precisión no se avisa de nada', (tester) async {
+      await montar(
+        tester,
+        const FilaVista(
+          vista: vistaObligatoria,
+          foto: FotoLocal(
+            ruta: 'frontal.jpg',
+            selloFecha: '2026-01-02T10:00:00.000Z',
+            selloLat: 6.2,
+            selloLng: -75.5,
+            vistaId: 'v-frontal',
+            precision: 8,
+          ),
+          alTomar: null,
+        ),
+      );
+
+      expect(find.text('Ubicación sin comprobar'), findsNothing);
+      expect(find.textContaining('poco precisa'), findsNothing);
+    });
+
     testWidgets('una foto sin ubicación pide repetirla', (tester) async {
       await montar(
         tester,

@@ -146,10 +146,26 @@ public sealed class clsInformePdfService(
         foreach (var foto in informe.Evidencias.Where(e => e.HallazgoId is null && e.ExtraId is null && !e.EsConstancia && !e.EsSello).OrderBy(e => e.CreatedAt))
         {
             var deAcomodacion = esAcomodacion && foto.VistaId is null;
+            if (deAcomodacion)
+            {
+                continue;   // las fotos de la acomodacion son las del viaje: se agregan abajo, todas
+            }
+
             var titulo = foto.VistaId is { } vistaId ? $"Vista: {vistas.GetValueOrDefault(vistaId) ?? "sin nombre"}" : deAcomodacion ? "Foto de la acomodación" : "Foto adicional";
             if (await CargarAsync(foto, titulo, presupuesto, ct) is { } cargada)
             {
                 (deAcomodacion ? fotosDeAcomodacion : fotosDeVistas).Add(cargada);
+            }
+        }
+
+        if (esAcomodacion)
+        {
+            foreach (var foto in await consultas.FotosDeAcomodacionDelViajeAsync(informe.ViajeId, ct))
+            {
+                if (await CargarAsync(foto, "Foto de la acomodación", presupuesto, ct) is { } cargada)
+                {
+                    fotosDeAcomodacion.Add(cargada);
+                }
             }
         }
 
@@ -201,7 +217,7 @@ public sealed class clsInformePdfService(
     private async Task<IReadOnlyList<UnidadAcomodacionInforme>> UnidadesDeAcomodacionAsync(Guid viajeId, CancellationToken ct)
     {
         var unidades = new List<UnidadAcomodacionInforme>();
-        foreach (var enlace in await viajes.ObtenerVehiculosAsync(viajeId, ct))
+        foreach (var enlace in (await viajes.ObtenerVehiculosAsync(viajeId, ct)).Where(e => !e.Bajado))
         {
             var vin = (await vehiculos.ObtenerPorIdAsync(enlace.VehiculoId, ct))?.Vin ?? enlace.VehiculoId.ToString();
             unidades.Add(new UnidadAcomodacionInforme(vin, enlace.Posicion, enlace.NoSale));

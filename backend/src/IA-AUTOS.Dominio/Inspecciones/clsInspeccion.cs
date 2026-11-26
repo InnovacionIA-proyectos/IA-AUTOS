@@ -51,6 +51,12 @@ public sealed class clsInspeccion : clsEntidadBase
     /// <summary>1 en la original; 2, 3... en las correcciones.</summary>
     public int Version { get; private set; } = 1;
 
+    /// <summary>
+    /// 1 en la revision de siempre; 2, 3... cuando la etapa se revisa de nuevo porque el carro se rechazo en su destino y recibio otro (la revision del rechazo se conserva como evidencia). Las correcciones heredan el ciclo
+    /// de su original.
+    /// </summary>
+    public int Ciclo { get; private set; } = 1;
+
     /// <summary>La version que esta corrige. Nulo en la original.</summary>
     public Guid? CorrigeInspeccionId { get; private set; }
 
@@ -74,6 +80,9 @@ public sealed class clsInspeccion : clsEntidadBase
 
     public bool EstaCerrada => Estado == clsEstadoInspeccion.CERRADA;
 
+    /// <summary>True si el informe se descarto o lo supero otro: se conserva con su autor, pero ya no es el informe de su momento.</summary>
+    public bool EstaFueraDeJuego => clsEstadoInspeccion.FUERA_DE_JUEGO.Contains(Estado);
+
     public static clsInspeccion Crear(
         Guid etapaId,
         Guid viajeId,
@@ -86,8 +95,9 @@ public sealed class clsInspeccion : clsEntidadBase
         string? notas,
         DateTimeOffset ahora,
         string? motivoSinInspector = null,
-        string? motivoSinInspectorTexto = null) =>
-        Nueva(etapaId, viajeId, usuarioId, momento, fecha, lat, lng, estado, notas, version: 1, corrigeInspeccionId: null, ahora, motivoSinInspector, motivoSinInspectorTexto);
+        string? motivoSinInspectorTexto = null,
+        int ciclo = 1) =>
+        Nueva(etapaId, viajeId, usuarioId, momento, fecha, lat, lng, estado, notas, version: 1, corrigeInspeccionId: null, ahora, motivoSinInspector, motivoSinInspectorTexto, ciclo);
 
     /// <summary>
     /// Crea la version siguiente de una inspeccion CERRADA para corregirla: misma etapa, viaje y momento, en borrador y vacia (se vuelven a
@@ -101,7 +111,7 @@ public sealed class clsInspeccion : clsEntidadBase
         }
 
         // La correccion conserva el motivo: sigue siendo una salida hecha por el conductor porque el inspector no estaba.
-        return Nueva(EtapaId, ViajeId, usuarioId, Momento, fecha, lat, lng, null, notas, Version + 1, Id, ahora, MotivoSinInspector, MotivoSinInspectorTexto);
+        return Nueva(EtapaId, ViajeId, usuarioId, Momento, fecha, lat, lng, null, notas, Version + 1, Id, ahora, MotivoSinInspector, MotivoSinInspectorTexto, Ciclo);
     }
 
     private static clsInspeccion Nueva(
@@ -118,7 +128,8 @@ public sealed class clsInspeccion : clsEntidadBase
         Guid? corrigeInspeccionId,
         DateTimeOffset ahora,
         string? motivoSinInspector,
-        string? motivoSinInspectorTexto)
+        string? motivoSinInspectorTexto,
+        int ciclo)
     {
         clsValidador.EnCatalogo(momento, clsMomento.VALORES, "momento");
         var estadoFinal = estado ?? clsEstadoInspeccion.BORRADOR;
@@ -133,7 +144,7 @@ public sealed class clsInspeccion : clsEntidadBase
 
         var motivo = clsValidador.Opcional(motivoSinInspector);
         var motivoTexto = clsValidador.Opcional(motivoSinInspectorTexto);
-        if (motivo is not null && momento != clsMomento.SALIDA)
+        if (motivo is not null && momento is not (clsMomento.SALIDA or clsMomento.LLEGADA))
         {
             throw clsErroresCampos.De("motivo_sin_inspector", "Campo no admitido");
         }
@@ -162,6 +173,7 @@ public sealed class clsInspeccion : clsEntidadBase
             IniciadaAt = ahora,
             CerradaAt = estadoFinal == clsEstadoInspeccion.CERRADA ? ahora : null,
             Version = version,
+            Ciclo = ciclo,
             CorrigeInspeccionId = corrigeInspeccionId,
             MotivoSinInspector = motivo,
             MotivoSinInspectorTexto = motivoTexto,
@@ -194,6 +206,45 @@ public sealed class clsInspeccion : clsEntidadBase
         {
             throw new clsConflictoException("La inspección está cerrada y es inmutable; no admite cambios");
         }
+
+        AsegurarVigente();
+    }
+
+    /// <summary>Un informe descartado o superado se conserva como registro, pero ya no admite fotos, hallazgos, extras ni cierre.</summary>
+    private void AsegurarVigente()
+    {
+        if (EstaFueraDeJuego)
+        {
+            throw new clsConflictoException("La inspección fue descartada: ya no admite cambios", clsMotivosRechazo.INFORME_DESCARTADO);
+        }
+    }
+
+    /// <summary>
+    /// Descarta el borrador: pasa a <see cref="clsEstadoInspeccion.DESCARTADA"/> y su momento queda libre para una inspeccion original nueva. Una cerrada es evidencia y nunca se descarta (409); quien llama
+    /// comprueba antes quien puede hacerlo y que no tenga firmas.
+    /// </summary>
+    public void Descartar(DateTimeOffset ahora)
+    {
+        if (EstaCerrada)
+        {
+            throw new clsInformeCerradoNoSeDescartaException();
+        }
+
+        AsegurarVigente();
+        Estado = clsEstadoInspeccion.DESCARTADA;
+        Tocar(ahora);
+    }
+
+    /// <summary>El borrador de otra persona deja de ser el informe de su momento porque quien toma el carro lo captura de cero: pasa a <see cref="clsEstadoInspeccion.SUPERADA"/> y se conserva con su autor.</summary>
+    public void Superar(DateTimeOffset ahora)
+    {
+        if (Estado != clsEstadoInspeccion.BORRADOR)
+        {
+            throw new clsConflictoException("Solo un borrador puede quedar superado por un informe nuevo");
+        }
+
+        Estado = clsEstadoInspeccion.SUPERADA;
+        Tocar(ahora);
     }
 
     /// <summary>
@@ -209,6 +260,7 @@ public sealed class clsInspeccion : clsEntidadBase
             throw new clsConflictoException("La inspección ya está cerrada");
         }
 
+        AsegurarVigente();
         var errores = new List<string>();
         errores.AddRange(vistasFaltantes.Select(vista => $"Falta la foto de la vista «{vista}»"));
         if (otrosFaltantes is not null)

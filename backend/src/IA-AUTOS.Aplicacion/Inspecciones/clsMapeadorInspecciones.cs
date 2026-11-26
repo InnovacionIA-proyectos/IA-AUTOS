@@ -34,7 +34,7 @@ public static class clsMapeadorInspecciones
         h.TipoNovedad, h.NivelSeveridad, nivel?.Nombre, nivel?.Accion,
         h.Origen, h.Nota, h.EsPreexistente, h.HallazgoOrigenId, h.ConfirmadoPor, h.EstadoSeguimiento,
         evidenciaFaltante.Count == 0, evidenciaFaltante,
-        h.RevisadoPor, h.RevisadoAt, h.CreatedAt, h.UpdatedAt, h.NivelSeveridad is null, h.ExtraId);
+        h.RevisadoPor, h.RevisadoAt, h.CreatedAt, h.UpdatedAt, h.NivelSeveridad is null, h.ExtraId, h.NivelSeveridad is not null);
 
     public static HallazgoCreadoDto AHallazgoCreado(HallazgoDto hallazgo, clsEvidencia foto) => new(hallazgo, AEvidencia(foto));
 
@@ -68,5 +68,6 @@ public static class clsMapeadorInspecciones
 
     public static TransferenciaDto ATransferencia(clsTransferenciaCustodia t) => new(
         t.Id, t.InspeccionId, t.EntregaUsuarioId, t.RecibeUsuarioId, t.EstaCompleta, t.FirmadaAt, t.CreatedAt, t.UpdatedAt,
-        t.TipoCierre, t.FirmaEntregaAt, t.FirmaRecibeAt, t.ReservasTexto, t.NoFirmaParte, t.MotivoNoFirma, t.TestigoUsuarioId, t.EvidenciaConstanciaId, t.RecibeExternoNombre, t.RecibeExternoCedula);
+        t.TipoCierre, t.FirmaEntregaAt, t.FirmaRecibeAt, t.ReservasTexto, t.NoFirmaParte, t.MotivoNoFirma, t.TestigoUsuarioId, t.EvidenciaConstanciaId, t.RecibeExternoNombre, t.RecibeExternoCedula,
+        t.FirmaPorNinera, t.FirmaEntregaMomentoAt, t.FirmaEntregaLat, t.FirmaEntregaLng, t.FirmaEntregaPrecisionM, t.FirmaRecibeMomentoAt, t.FirmaRecibeLat, t.FirmaRecibeLng, t.FirmaRecibePrecisionM);
 }

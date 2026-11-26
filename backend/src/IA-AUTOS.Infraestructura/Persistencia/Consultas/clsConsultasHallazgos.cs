@@ -59,6 +59,14 @@ internal sealed class clsConsultasHallazgos(clsAppDbContext contexto) : IConsult
             consulta = consulta.Where(x => x.Hallazgo.NivelSeveridad == f.Nivel);
         }
 
+        // «Sin calificar»: los hallazgos sin nivel de cualquier origen, de la version vigente de su informe (el de una version que una correccion cerrada ya reemplazo no cuenta). Con false, los que ya tienen nivel.
+        if (f.SinCalificar is { } sinCalificar)
+        {
+            consulta = sinCalificar
+                ? consulta.Where(x => x.Hallazgo.NivelSeveridad == null && !contexto.Inspecciones.Any(c => c.CorrigeInspeccionId == x.Inspeccion.Id && c.Estado == clsEstadoInspeccion.CERRADA))
+                : consulta.Where(x => x.Hallazgo.NivelSeveridad != null);
+        }
+
         if (f.CuadranteNumero is { } numero)
         {
             consulta = consulta.Where(x => x.ZonaNumero == numero);

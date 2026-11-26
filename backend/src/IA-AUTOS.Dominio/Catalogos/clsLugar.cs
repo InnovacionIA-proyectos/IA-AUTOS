@@ -44,6 +44,15 @@ public sealed class clsLugar : clsCatalogoBase
 
     public DateTimeOffset? UbicacionFijadaAt { get; private set; }
 
+    /// <summary>La precision, en metros, del GPS con que se fijo la ubicacion «aqui». Nula en los lugares fijados antes de guardarla, en los de carga manual y mientras el lugar no tiene ubicacion; cambiar las coordenadas la borra.</summary>
+    public double? PrecisionM { get; private set; }
+
+    /// <summary>
+    /// Si el lugar admite que el cargue lo haga el conductor cuando no hay inspector (la excepcion «No hay inspector» y su permiso). Es falso en todos los lugares hasta que el coordinador de calidad lo activa; donde es falso
+    /// el cargue lo hace siempre el inspector.
+    /// </summary>
+    public bool AdmiteCargueSinInspector { get; private set; }
+
     public const int RADIO_MAXIMO_M = 100_000;
 
     /// <summary>True mientras el lugar no tiene coordenadas.</summary>
@@ -72,6 +81,13 @@ public sealed class clsLugar : clsCatalogoBase
         Tocar(ahora);
     }
 
+    /// <summary>Activa o desactiva el cargue sin inspector del lugar.</summary>
+    public void CambiarAdmiteCargueSinInspector(bool admite, DateTimeOffset ahora)
+    {
+        AdmiteCargueSinInspector = admite;
+        Tocar(ahora);
+    }
+
     /// <summary>
     /// Fija la ubicacion CONFIRMADA del lugar (la carga manual de quien administra el catalogo o la propuesta de autocalibracion que el coordinador confirma): las coordenadas van juntas o ninguna, el radio es
     /// mayor que cero y necesita coordenadas. Sin coordenadas ni radio quita la ubicacion (el lugar queda «sin ubicacion»).
@@ -96,6 +112,7 @@ public sealed class clsLugar : clsCatalogoBase
             EstadoUbicacion = clsEstadoUbicacion.SIN_UBICACION;
             UbicacionFijadaPor = null;
             UbicacionFijadaAt = null;
+            PrecisionM = null;
             Tocar(ahora);
             return;
         }
@@ -104,6 +121,11 @@ public sealed class clsLugar : clsCatalogoBase
         if (radioMetros is { } radio && (radio <= 0 || radio > RADIO_MAXIMO_M))
         {
             throw clsErroresCampos.De("radio_metros", $"El radio debe estar entre 1 y {RADIO_MAXIMO_M} metros");
+        }
+
+        if (Latitud != latitud || Longitud != longitud)
+        {
+            PrecisionM = null;
         }
 
         Latitud = latitud;
@@ -117,9 +139,9 @@ public sealed class clsLugar : clsCatalogoBase
 
     /// <summary>
     /// «Fijar ubicacion aqui»: quien esta en el lugar y el lugar no tiene ubicacion deja la suya, que queda PENDIENTE DE CONFIRMAR (todavia no genera marcas de «fuera del rango» para nadie). 409 si el lugar ya tiene
-    /// ubicacion (pendiente o confirmada): una ubicacion existente la cambia quien administra el catalogo.
+    /// ubicacion (pendiente o confirmada): una ubicacion existente la cambia quien administra el catalogo. <paramref name="precisionM"/> es la del GPS del dispositivo y queda guardada en el lugar (nula si no la reporto).
     /// </summary>
-    public void FijarUbicacionAqui(double latitud, double longitud, Guid usuarioId, DateTimeOffset ahora)
+    public void FijarUbicacionAqui(double latitud, double longitud, Guid usuarioId, DateTimeOffset ahora, double? precisionM = null)
     {
         if (EstadoUbicacion != clsEstadoUbicacion.SIN_UBICACION)
         {
@@ -129,9 +151,15 @@ public sealed class clsLugar : clsCatalogoBase
         }
 
         ValidarCoordenadas(latitud, longitud);
+        if (precisionM is { } precision && (precision < 0 || !double.IsFinite(precision)))
+        {
+            throw clsErroresCampos.De("precision", "La precisión debe ser un número en metros mayor o igual a 0");
+        }
+
         Latitud = latitud;
         Longitud = longitud;
         RadioMetros = null;
+        PrecisionM = precisionM;
         EstadoUbicacion = clsEstadoUbicacion.PENDIENTE_CONFIRMAR;
         UbicacionFijadaPor = usuarioId;
         UbicacionFijadaAt = ahora;

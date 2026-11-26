@@ -52,6 +52,15 @@ public sealed class clsVehiculosController(clsVehiculosService servicio, clsInve
     /// <c>cliente_id</c> (solo el super administrador elige otro), <c>estado_unidad</c>, <c>activo</c>, <c>desde</c> y <c>hasta</c> (alta del vehiculo); <c>pagina</c>, <c>tamano</c> (50, maximo 200) y <c>orden</c>
     /// (<c>campo:asc|desc</c>).
     /// </summary>
+    /// <summary>
+    /// Las marcas distintas de los vehiculos del cliente de quien pregunta, por orden alfabetico y sin repetir (una lista de textos): el portal las ofrece en el filtro de marca. <c>cliente_id</c> solo lo elige el super administrador
+    /// (los demas reciben el suyo y 403 si piden otro). Un cliente sin vehiculos recibe una lista vacia.
+    /// </summary>
+    [HttpGet("marcas")]
+    [RolesPermitidos(clsRol.ADMIN, clsRol.SUPER_ADMIN, clsRol.COORDINADOR_CALIDAD)]
+    [ProducesResponseType<IReadOnlyList<string>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Marcas([FromQuery(Name = "cliente_id")] string? clienteId, CancellationToken ct) => Ok(await servicio.MarcasAsync(clienteId, ct));
+
     [HttpGet("listado")]
     [ProducesResponseType<PaginaDto<ListadoVehiculoDto>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Listar(
@@ -80,4 +89,15 @@ public sealed class clsVehiculosController(clsVehiculosService servicio, clsInve
     [ProducesResponseType<InventarioDto>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Inventario(string vin, CancellationToken ct) =>
         Ok(await servicio.ObtenerInventarioAsync(vin, ct));
+
+    /// <summary>
+    /// Los hallazgos de las inspecciones cerradas anteriores del VIN, de cualquier viaje y del mas reciente al mas antiguo, con su viaje, proceso, momento, cierre y
+    /// fotos. Es la misma lista de <c>/api/inspecciones/{id}/hallazgos-previos</c> pero sin necesitar una inspeccion ya creada: el equipo en el patio arma el informe
+    /// entero antes de crear nada y la descarga de antemano para proponer el preexistente sin senal. No es para el conductor (403).
+    /// </summary>
+    [HttpGet("{vin}/hallazgos-previos")]
+    [RolesPermitidos(clsRol.INSPECTOR, clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN, clsRol.SUPER_ADMIN)]
+    [ProducesResponseType<IReadOnlyList<IAAutos.Aplicacion.Inspecciones.DTOInspecciones.HallazgoPrevioDto>>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> HallazgosPrevios(string vin, CancellationToken ct) =>
+        Ok(await servicio.ObtenerHallazgosPreviosAsync(vin, ct));
 }

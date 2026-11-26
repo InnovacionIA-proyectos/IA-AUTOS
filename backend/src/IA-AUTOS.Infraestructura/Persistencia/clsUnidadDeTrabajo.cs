@@ -1,5 +1,6 @@
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Viajes;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -43,6 +44,8 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         ("_Codigo", "Ya existe un valor con ese código en el catálogo"),
         ("UQ_tblCuadrantes_Tipo_Numero", "Ya existe un cuadrante con ese número para ese tipo de vehículo"),
         ("UQ_tblCuadranteVistas_Cuadrante_Vista", "El cuadrante ya tiene un polígono en esa vista"),
+        ("UX_tblHallazgos_Envio", "Esa novedad ya fue enviada"),
+        ("UX_tblNovedadesViaje_Envio", "Esa novedad ya fue enviada"),
         ("UQ_tblNotificaciones_ClaveDedupe", "Esa notificación ya existe"),
         ("UQ_tblDispositivos_TokenFcm", "Ese dispositivo ya está registrado"),
     ];
@@ -62,6 +65,7 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         "FK_tblVehiculos_Cliente",
         "FK_tblEvidencias_Vista",
         "FK_tblInspeccionExtras_Tipo",
+        "FK_tblNovedadesViaje_Tipo",
     ];
 
     private static readonly (string Restriccion, string Mensaje)[] REFERENCIAS_INVALIDAS =
@@ -93,6 +97,7 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         ("FK_tblHallazgos_ClaseDano", "La clase de daño no existe en el catálogo"),
         ("FK_tblHallazgos_TamanoDano", "El tamaño de daño no existe en el catálogo"),
         ("FK_tblHallazgos_", "La inspección indicada no existe"),
+        ("FK_tblNovedadesViaje_", "El viaje, quien reporta, la parada o el tipo de la novedad no existen"),
         ("FK_tblNotificaciones_", "El destinatario, el viaje, el vehículo, el hallazgo o la inspección de la notificación no existen"),
         ("FK_tblDispositivos_", "El usuario del dispositivo no existe"),
         ("FK_tblCuadranteVistas_Cuadrante", "El cuadrante no existe"),
@@ -108,6 +113,11 @@ internal sealed class clsUnidadDeTrabajo(clsAppDbContext contexto) : IUnidadDeTr
         catch (DbUpdateConcurrencyException ex) when (ex.Entries.Any(e => e.Entity is clsHallazgo { RevisadoAt: not null }))
         {
             throw new clsHallazgoYaRevisadoException();
+        }
+        catch (DbUpdateConcurrencyException ex) when (ex.Entries.Any(e => e.Entity is clsEsperaInspectorPunto))
+        {
+            // La espera de una parada cambio mientras se guardaba (un inspector tomo la entrega y el conductor cerro con el plan B a la vez): gana el primero y el otro responde conflicto.
+            throw new clsConflictoException("La espera del inspector del punto cambió mientras se guardaba: vuelva a consultar la parada");
         }
         catch (DbUpdateException ex) when (ex.InnerException is SqlException sql)
         {

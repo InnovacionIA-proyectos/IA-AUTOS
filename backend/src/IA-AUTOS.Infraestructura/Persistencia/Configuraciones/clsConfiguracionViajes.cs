@@ -66,6 +66,12 @@ internal sealed class clsConfiguracionViajeVehiculo : IEntityTypeConfiguration<c
             .Metadata.SetBeforeSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
         builder.Property(v => v.Completa).Metadata.SetAfterSaveBehavior(Microsoft.EntityFrameworkCore.Metadata.PropertySaveBehavior.Ignore);
         builder.Property(v => v.NoSaleMotivo).HasMaxLength(clsViajeVehiculo.NO_SALE_MOTIVO_MAX);
+        builder.Property(v => v.NoSaleMotivoCodigo).HasMaxLength(30);
+        builder.Property(v => v.LugarDestinoCambiadoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(v => v.BajadoMotivo).HasMaxLength(clsViajeVehiculo.MOTIVO_TEXTO_MAX);
+        builder.Property(v => v.BajadoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(v => v.BajadoPor)
+            .HasConstraintName("FK_tblViajeVehiculos_BajadoPor").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(v => v.NoSaleHallazgoId)
             .HasConstraintName("FK_tblViajeVehiculos_NoSaleHallazgo").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(v => v.NoSaleMarcadoPor)

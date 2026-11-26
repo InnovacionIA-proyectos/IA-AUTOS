@@ -46,6 +46,9 @@ public sealed class clsHallazgo : clsEntidadBase
 {
     public const int NOTA_MAX = 500;
 
+    /// <summary>La respuesta (400) cuando el conductor envia un nivel de severidad, en una zona o en un extra.</summary>
+    public const string MENSAJE_NIVEL_DEL_CONDUCTOR = "El conductor no asigna el nivel de severidad: lo asigna el inspector";
+
     private clsHallazgo()
     {
     }
@@ -76,6 +79,9 @@ public sealed class clsHallazgo : clsEntidadBase
 
     /// <summary><see cref="clsOrigenHallazgo"/>.</summary>
     public string Origen { get; private set; } = clsOrigenHallazgo.INSPECTOR;
+
+    /// <summary>El identificador del envio que el celular le puso a la novedad del conductor: un reenvio con el mismo identificador no crea otra. Nulo en los demas hallazgos y en los envios de la app anterior.</summary>
+    public Guid? IdEnvio { get; private set; }
 
     public string? Nota { get; private set; }
 
@@ -135,16 +141,7 @@ public sealed class clsHallazgo : clsEntidadBase
         claseDano = clsValidador.Requerido(claseDano, "clase_dano es requerida");
         tamanoDano = clsValidador.Requerido(tamanoDano, "tamano_dano es requerido");
 
-        var nivel = clsValidador.Opcional(nivelSeveridad);
-        if (origen == clsOrigenHallazgo.INSPECTOR && nivel is null)
-        {
-            throw clsErroresCampos.De("nivel_severidad", "El nivel de severidad es requerido");
-        }
-
-        if (origen == clsOrigenHallazgo.CONDUCTOR && nivel is not null)
-        {
-            throw clsErroresCampos.De("nivel_severidad", "El conductor no asigna el nivel de severidad: lo asigna el inspector");
-        }
+        var nivel = NivelSegunOrigen(origen, nivelSeveridad);
 
         var texto = clsValidador.Opcional(nota);
         if (texto is { Length: > NOTA_MAX })
@@ -170,11 +167,38 @@ public sealed class clsHallazgo : clsEntidadBase
     }
 
     /// <summary>
-    /// El hallazgo que nace de un extra marcado como danado: su clase, su tamano y su nivel de severidad (los tres obligatorios), sin zona del dibujo y de origen inspector. <paramref name="nombreDelExtra"/> es como se
-    /// muestra el extra («Platon») y queda como la parte del vehiculo, para que las pantallas no lean la ausencia de zona como un error. Cuenta como cualquier otro hallazgo.
+    /// La regla unica del nivel de severidad al crear un dano, en una zona o en un extra: el inspector (o administrador) siempre lo asigna y el conductor nunca (400 si lo envia): su dano nace sin nivel
+    /// y lo califica un inspector despues.
     /// </summary>
-    public static clsHallazgo CrearDeExtra(Guid inspeccionId, Guid extraId, string nombreDelExtra, string claseDano, string tamanoDano, string? nivelSeveridad, DateTimeOffset ahora)
+    private static string? NivelSegunOrigen(string origen, string? nivelSeveridad)
     {
+        var nivel = clsValidador.Opcional(nivelSeveridad);
+        if (origen == clsOrigenHallazgo.INSPECTOR && nivel is null)
+        {
+            throw clsErroresCampos.De("nivel_severidad", "El nivel de severidad es requerido");
+        }
+
+        if (origen == clsOrigenHallazgo.CONDUCTOR && nivel is not null)
+        {
+            throw clsErroresCampos.De("nivel_severidad", MENSAJE_NIVEL_DEL_CONDUCTOR);
+        }
+
+        return nivel;
+    }
+
+    /// <summary>
+    /// El hallazgo que nace de un extra marcado como danado: su clase, su tamano y su nivel de severidad, sin zona del dibujo. <paramref name="nombreDelExtra"/> es como se muestra el extra («Platon») y queda como la
+    /// parte del vehiculo, para que las pantallas no lean la ausencia de zona como un error. El inspector (o administrador) da los tres datos y el origen es inspector; el conductor da la clase y el tamano, el
+    /// hallazgo nace de origen conductor y sin nivel, y un inspector lo califica despues. Cuenta como cualquier otro hallazgo.
+    /// </summary>
+    public static clsHallazgo CrearDeExtra(
+        Guid inspeccionId, Guid extraId, string nombreDelExtra, string claseDano, string tamanoDano, string? nivelSeveridad, DateTimeOffset ahora, string origen = clsOrigenHallazgo.INSPECTOR)
+    {
+        if (!clsOrigenHallazgo.VALORES.Contains(origen))
+        {
+            throw clsErroresCampos.De("origen", "El origen debe ser inspector o conductor");
+        }
+
         var nombre = clsValidador.Requerido(nombreDelExtra, "El nombre del extra es requerido");
         var hallazgo = new clsHallazgo
         {
@@ -183,19 +207,20 @@ public sealed class clsHallazgo : clsEntidadBase
             ParteVehiculo = nombre.Length <= 200 ? nombre : nombre[..200],
             ClaseDano = clsValidador.Requerido(claseDano, "clase_dano es requerida"),
             TamanoDano = clsValidador.Requerido(tamanoDano, "tamano_dano es requerido"),
-            NivelSeveridad = clsValidador.Opcional(nivelSeveridad) ?? throw clsErroresCampos.De("nivel_severidad", "El nivel de severidad es requerido"),
-            Origen = clsOrigenHallazgo.INSPECTOR,
+            NivelSeveridad = NivelSegunOrigen(origen, nivelSeveridad),
+            Origen = origen,
         };
         hallazgo.Inicializar(ahora);
         return hallazgo;
     }
 
     /// <summary>
-    /// Un inspector revisa el hallazgo que registro el conductor: lo ubica en su zona, le da su clase y le asigna el nivel V (que el conductor nunca asigna) y, si hace falta, corrige el tamano que
-    /// eligio el conductor. Solo se revisa una vez: 409 si el hallazgo no es del conductor y 409 HALLAZGO_YA_REVISADO si ya se reviso.
+    /// Se califica un hallazgo sin nivel (de cualquier origen: dano de una zona del conductor, dano de un extra, novedad): se le asigna la clase y el nivel V (que el conductor nunca asigna) y, si hace
+    /// falta, se corrige el tamano que eligio el conductor. <paramref name="zonaId"/> ubica el dano en una zona; nulo conserva la que ya tiene y un extra nunca lleva zona. Solo se califica una vez: 409 si el
+    /// hallazgo ya tiene nivel y 409 HALLAZGO_YA_REVISADO si ya se califico.
     /// </summary>
     public void Revisar(
-        Guid zonaId,
+        Guid? zonaId,
         string claseDano,
         string nivelSeveridad,
         string? tamanoDano,
@@ -211,7 +236,12 @@ public sealed class clsHallazgo : clsEntidadBase
             throw clsErroresCampos.De("nota", $"La nota admite máximo {NOTA_MAX} caracteres");
         }
 
-        ZonaId = zonaId;
+        if (zonaId is not null && ExtraId is not null)
+        {
+            throw clsErroresCampos.De("cuadrante_numero", "El daño de un extra no lleva zona del dibujo");
+        }
+
+        ZonaId = zonaId ?? ZonaId;
         ClaseDano = clsValidador.Requerido(claseDano, "clase_dano es requerida");
         NivelSeveridad = clsValidador.Requerido(nivelSeveridad, "nivel_severidad es requerido");
         if (clsValidador.Opcional(tamanoDano) is { } tamano)
@@ -222,7 +252,7 @@ public sealed class clsHallazgo : clsEntidadBase
         Nota = texto;
         RevisadoPor = revisadoPor;
         RevisadoAt = ahora;
-        // Quien revisa puede confirmar que el dano ya estaba registrado: queda preexistente, unido al hallazgo previo del mismo VIN, y quien lo confirmo es quien reviso.
+        // Quien califica puede confirmar que el dano ya estaba registrado: queda preexistente, unido al hallazgo previo del mismo VIN, y quien lo confirmo es quien califico.
         if (hallazgoOrigenId is { } origen)
         {
             EsPreexistente = true;
@@ -233,17 +263,17 @@ public sealed class clsHallazgo : clsEntidadBase
         Tocar(ahora);
     }
 
-    /// <summary>Solo se revisa un hallazgo que registro el conductor y que nadie ha revisado: 409 si no es del conductor y 409 HALLAZGO_YA_REVISADO si ya se reviso.</summary>
+    /// <summary>Solo se califica un hallazgo sin nivel y que nadie ha calificado: 409 HALLAZGO_YA_REVISADO si ya se califico y 409 si ya tiene nivel (el del inspector nace con el).</summary>
     public void AsegurarRevisable()
     {
-        if (Origen != clsOrigenHallazgo.CONDUCTOR)
-        {
-            throw new clsConflictoException("Solo se revisa un hallazgo registrado por el conductor");
-        }
-
         if (RevisadoAt is not null)
         {
             throw new clsHallazgoYaRevisadoException();
+        }
+
+        if (NivelSeveridad is not null)
+        {
+            throw new clsConflictoException("El hallazgo ya tiene nivel");
         }
     }
 
@@ -251,7 +281,7 @@ public sealed class clsHallazgo : clsEntidadBase
     /// Crea la novedad que registra el conductor en ruta: un tipo de la lista y un tamano, sin zona, clase, nivel ni texto libre. Esos datos los completa el inspector al
     /// revisarla; mientras tanto la novedad no tiene nivel V.
     /// </summary>
-    public static clsHallazgo CrearNovedad(Guid inspeccionId, string tipoNovedad, string tamanoDano, DateTimeOffset ahora)
+    public static clsHallazgo CrearNovedad(Guid inspeccionId, string tipoNovedad, string tamanoDano, DateTimeOffset ahora, Guid? idEnvio = null)
     {
         clsValidador.EnCatalogo(tipoNovedad, clsTipoNovedad.VALORES, "tipo_novedad");
         var hallazgo = new clsHallazgo
@@ -260,6 +290,7 @@ public sealed class clsHallazgo : clsEntidadBase
             TipoNovedad = tipoNovedad,
             TamanoDano = clsValidador.Requerido(tamanoDano, "tamano_dano es requerido"),
             Origen = clsOrigenHallazgo.CONDUCTOR,
+            IdEnvio = idEnvio,
         };
         hallazgo.Inicializar(ahora);
         return hallazgo;

@@ -2,10 +2,14 @@ using System.Text.Json;
 using FluentValidation;
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
+using IAAutos.Aplicacion.Inspecciones;
+using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Inspecciones;
+using IAAutos.Dominio.Notificaciones;
 using IAAutos.Dominio.Comun;
+using IAAutos.Dominio.Custodia;
 using IAAutos.Dominio.Usuarios;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
@@ -25,8 +29,14 @@ public sealed class clsViajesService(
     ILugarRepository lugares,
     clsEnsamblajeViajes ensamblaje,
     clsAccesoViajes acceso,
-    IPermisoSinInspectorRepository permisos,
+    IReclamoRepository reclamos,
+    IEsperaInspectorPuntoRepository esperas,
+    clsEmisorNotificaciones emisor,
+    clsPermisosSinInspectorService permisos,
+    IInspeccionRepository inspecciones,
+    ITransferenciaCustodiaRepository transferencias,
     INovedadProcesoRepository novedadesProceso,
+    clsFinalizadorDelViaje finalizador,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -50,7 +60,7 @@ public sealed class clsViajesService(
     private async Task AsegurarCapacidadAsync(clsViaje viaje, int nueva, CancellationToken ct)
     {
         var enlaces = await viajes.ObtenerVehiculosAsync(viaje.Id, ct);
-        var unidades = enlaces.Count(e => !e.NoSale);
+        var unidades = enlaces.Count(e => e.EstaActiva);
         var masAlta = enlaces.Where(e => e.Posicion is not null).Select(e => (int)e.Posicion!.Value).DefaultIfEmpty(0).Max();
         var impide = new List<string>();
         if (nueva < unidades)
@@ -139,7 +149,23 @@ public sealed class clsViajesService(
         return new PaginaDto<ViajeResumenDto>(filas, total, pagina.Pagina, pagina.Tamano);
     }
 
-    /// <summary>Los viajes del usuario (como conductor o inspector). Sin estado: los programados y en curso.</summary>
+    /// <summary>
+    /// Los trailers distintos de los viajes del cliente, sin nulos ni vacios y por orden alfabetico: para que el portal ofrezca todos los valores del filtro de trailer. Mismas reglas de cliente que las marcas (quien se limita a su
+    /// cliente recibe los suyos y 403 si pide otro; el super administrador elige con <c>cliente_id</c>). No lleva ningun dato personal.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> TrailersAsync(string? clienteId, CancellationToken ct = default)
+    {
+        var errores = new Dictionary<string, string[]>();
+        var cliente = clsParseoFiltros.Uuid(clienteId, "cliente_id", errores);
+        if (errores.Count > 0)
+        {
+            throw clsErroresCampos.Varios(errores);
+        }
+
+        return await consultas.TrailersAsync(actual.ClienteDelFiltro(cliente), ct);
+    }
+
+    /// <summary>Los viajes del usuario (como conductor o inspector del viaje, o inspector con un reclamo activo de entrega), cada uno con su papel si es inspector. Sin estado: los programados y en curso.</summary>
     public async Task<IReadOnlyList<ViajeDto>> MiosAsync(string? estado, CancellationToken ct = default)
     {
         var errores = new Dictionary<string, string[]>();
@@ -150,7 +176,11 @@ public sealed class clsViajesService(
         }
 
         string[] estados = filtro is null ? clsEstadoViaje.ACTIVOS : [filtro];
-        return await consultas.MiosAsync(actual.IdObligatorio(), estados, ct);
+        // Un carro bajado del viaje no cuenta para quien trabaja el viaje: no sale en «mis viajes».
+        var viajes = (await consultas.MiosAsync(actual.IdObligatorio(), estados, ct))
+            .Select(v => (v with { Vehiculos = v.Vehiculos.Where(u => u.EstadoUnidad != clsEstadoUnidad.BAJADO).ToList() }).ParaConductor(actual))
+            .ToList();
+        return await ConPapelAsync(viajes, ct);
     }
 
     public async Task<ViajeDto> ObtenerAsync(Guid id, CancellationToken ct = default)
@@ -239,14 +269,38 @@ public sealed class clsViajesService(
         return await ObtenerDtoAsync(id, ct);
     }
 
+    /// <summary>
+    /// Cambia el estado del viaje. Finalizar a mano un viaje en curso con carros pendientes de entrega exige un <c>motivo</c> (400 sin el); sin pendientes el motivo es opcional. El motivo, cuando llega, queda en la auditoria
+    /// junto con el estado de antes y el de despues.
+    /// </summary>
     public async Task<ViajeDto> CambiarEstadoAsync(Guid id, CambiarEstadoViajeRequest solicitud, CancellationToken ct = default)
     {
         await validadorEstado.ValidarOLanzarAsync(solicitud, ct);
         var viaje = await ObtenerViajeAsync(id, ct);
         var estadoAnterior = viaje.Estado;
+        var motivo = clsValidador.Opcional(solicitud.Motivo);
+        if (motivo is null && solicitud.Estado == clsEstadoViaje.FINALIZADO && estadoAnterior == clsEstadoViaje.EN_CURSO && await finalizador.PendientesAsync(viaje, ct) > 0)
+        {
+            throw clsErroresCampos.De("motivo", "El motivo es obligatorio para finalizar un viaje con carros pendientes");
+        }
+
         viaje.CambiarEstado(solicitud.Estado!, reloj.Ahora);
         await auditor.RegistrarDeViajeAsync(
-            $"viaje.estado.{viaje.Estado}", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(new { estado = estadoAnterior }, new { estado = viaje.Estado }), ct: ct);
+            $"viaje.estado.{viaje.Estado}", "viajes", viaje.Id, viaje.Id,
+            new DetalleAuditoria(new { estado = estadoAnterior }, motivo is null ? new { estado = viaje.Estado } : (object)new { estado = viaje.Estado, motivo }), ct: ct);
+
+        // Un viaje cancelado o finalizado a mano ya no espera a ningun inspector: sus esperas abiertas quedan anuladas.
+        if (viaje.Estado is clsEstadoViaje.CANCELADO or clsEstadoViaje.FINALIZADO)
+        {
+            foreach (var espera in await esperas.ObtenerAbiertasDeViajeAsync(viaje.Id, ct))
+            {
+                var antes = clsInstantaneasAuditoria.De(espera);
+                espera.Anular(reloj.Ahora);
+                await auditor.RegistrarDeViajeAsync(
+                    "espera_inspector_punto.anular", "esperas_inspector_punto", espera.Id, viaje.Id, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(espera)), ct: ct);
+            }
+        }
+
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ObtenerDtoAsync(id, ct);
     }
@@ -276,7 +330,7 @@ public sealed class clsViajesService(
 
     /// <summary>
     /// Cambia el lugar de destino de UNA unidad de un viaje activo: solo se mueve su etapa de Descargue (las demas unidades no se tocan). 409 si la unidad no sale del viaje o si su Descargue ya tiene un
-    /// informe cerrado.
+    /// informe cerrado, salvo que el carro se haya rechazado en su parada: ese conserva su revision de llegada como evidencia del rechazo, queda pendiente en el destino nuevo y se revisa de nuevo ahi.
     /// </summary>
     public async Task<ViajeDto> CambiarDestinoDeUnidadAsync(Guid id, string vin, CambiarDestinoUnidadRequest solicitud, CancellationToken ct = default)
     {
@@ -291,7 +345,7 @@ public sealed class clsViajesService(
 
         var codigosPorEtapa = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).ToDictionary(v => v.Id, v => v.Codigo);
         var descargue = (await viajes.ObtenerEtapasAsync(id, vehiculo.Id, ct)).FirstOrDefault(e => codigosPorEtapa.TryGetValue(e.EtapaCatalogoId, out var codigo) && codigo == clsCodigosEtapa.DESCARGUE);
-        if (descargue is not null && (await viajes.EtapasConInformeCerradoAsync(id, ct)).Contains(descargue.Id))
+        if (descargue is not null && (await viajes.EtapasConInformeCerradoAsync(id, ct)).Contains(descargue.Id) && !await EstaRechazadaEnSuParadaAsync(enlace, descargue, ct))
         {
             throw new clsConflictoException("El descargue de la unidad ya tiene un informe cerrado: su destino no se cambia", clsMotivosRechazo.DESCARGUE_CON_INFORME_CERRADO);
         }
@@ -307,7 +361,62 @@ public sealed class clsViajesService(
             "viaje.cambiar_destino_unidad", "viajes", viaje.Id, viaje.Id,
             new DetalleAuditoria(new { vin = vehiculo.Vin, lugar_destino_id = antes }, new { vin = vehiculo.Vin, lugar_destino_id = enlace.LugarDestinoId }), vehiculo.ClienteId, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        await AvisarCambioDeDestinoAsync(viaje, vehiculo, antes, enlace.LugarDestinoId, ct);
         return await ObtenerDtoAsync(id, ct);
+    }
+
+    /// <summary>
+    /// El carro se rechazo en su parada por una novedad de su revision de llegada y todavia no se le cambio el destino: su revision cerrada es la evidencia del rechazo y el carro puede recibir otro destino. En cualquier otro
+    /// caso un descargue con informe cerrado no cambia de destino.
+    /// </summary>
+    private async Task<bool> EstaRechazadaEnSuParadaAsync(clsViajeVehiculo enlace, clsEtapa descargue, CancellationToken ct)
+    {
+        var llegada = await inspecciones.ObtenerUltimaDeEtapaAsync(descargue.Id, clsMomento.LLEGADA, ct);
+        var transferencia = llegada is null ? null : await transferencias.ObtenerPorInspeccionAsync(llegada.Id, ct);
+        return transferencia is { EstaRechazada: true, FirmadaAt: { } rechazadoAt } && !(enlace.LugarDestinoCambiadoAt is { } cambiadoAt && cambiadoAt > rechazadoAt);
+    }
+
+    /// <summary>
+    /// Avisa del cambio de destino de una unidad al conductor del viaje y a los inspectores asignados al lugar nuevo: «Cambio el destino del VIN …: ahora va a …» (urgencia media). Nunca lanza: el cambio ya quedo guardado.
+    /// </summary>
+    private async Task AvisarCambioDeDestinoAsync(clsViaje viaje, clsVehiculo vehiculo, Guid? lugarAnterior, Guid? lugarNuevo, CancellationToken ct)
+    {
+        if (lugarNuevo is not { } nuevo)
+        {
+            return;
+        }
+
+        try
+        {
+            var nombreNuevo = (await lugares.ObtenerAsync(nuevo, ct))?.Nombre ?? "el lugar nuevo";
+            var nombreAnterior = lugarAnterior is { } anterior ? (await lugares.ObtenerAsync(anterior, ct))?.Nombre : null;
+            var destinatarios = new List<Guid>();
+            if (viaje.ConductorId is { } conductor)
+            {
+                destinatarios.Add(conductor);
+            }
+
+            destinatarios.AddRange((await reclamos.InspectoresDelLugarAsync(nuevo, ct)).Where(i => !destinatarios.Contains(i)));
+            await emisor.EmitirAsync(
+                new clsAlerta(
+                    clsTipoNotificacion.CAMBIO_DESTINO_UNIDAD,
+                    clsUrgenciaNotificacion.MEDIA,
+                    destinatarios,
+                    vehiculo.ClienteId,
+                    viaje.Id,
+                    vehiculo.Id,
+                    null,
+                    null,
+                    "Cambió el destino de un carro",
+                    $"Cambió el destino del VIN {vehiculo.Vin}: ahora va a {nombreNuevo}",
+                    $"{clsTipoNotificacion.CAMBIO_DESTINO_UNIDAD}:{viaje.Id}:{vehiculo.Id}:{reloj.Ahora.UtcTicks}",
+                    new Dictionary<string, object?> { ["viaje_id"] = viaje.Id, ["vin"] = vehiculo.Vin, ["lugar_anterior"] = nombreAnterior, ["lugar_nuevo"] = nombreNuevo }),
+                ct);
+        }
+        catch (Exception)
+        {
+            // El aviso es un efecto aparte: el cambio de destino ya quedo guardado y no se deshace.
+        }
     }
 
     /// <summary>
@@ -324,9 +433,10 @@ public sealed class clsViajesService(
             throw new clsProhibidoException("El viaje no está asignado a su usuario", clsMotivosRechazo.VIAJE_NO_ASIGNADO);
         }
 
-        // El conductor solo acomoda las unidades cuando hace el cargue sin inspector: con el permiso concedido (donde el punto tiene inspectores) o con la excepcion ya activa (donde no los tiene).
+        // El conductor solo acomoda las unidades cuando hace el cargue sin inspector: con el permiso concedido (donde el punto tiene inspectores; uno pendiente con el plazo ya cumplido se concede por tiempo en esta misma
+        // peticion) o con la excepcion ya activa (donde no los tiene).
         if (actual.Rol == clsRol.CONDUCTOR
-            && !(await permisos.ObtenerDeViajeAsync(id, ct) is { EstaConcedido: true } || await novedadesProceso.ExisteCargueSinInspectorAsync(id, ct)))
+            && !(await permisos.ConcederSiVencidoAsync(id, ct) is { EstaConcedido: true } || await novedadesProceso.ExisteCargueSinInspectorAsync(id, ct)))
         {
             throw new clsProhibidoException("El conductor solo registra la posición de las unidades cuando hace el cargue sin inspector, con el permiso concedido", clsMotivosRechazo.CONDUCTOR_SIN_PERMISO_DE_EXCEPCION);
         }
@@ -353,6 +463,12 @@ public sealed class clsViajesService(
             {
                 throw new clsConflictoException($"La posición {posicion} ya está ocupada por otra unidad de este viaje", clsMotivosRechazo.POSICION_OCUPADA);
             }
+        }
+
+        if (solicitud.Posicion is null && enlace.Posicion is not null && await viajes.TieneAcomodacionCerradaAsync(id, ct))
+        {
+            // Con la acomodacion cerrada un puesto no se libera suelto: se libera desde «no sale» y desde «bajar del viaje». Con una correccion de la acomodacion en borrador si se puede.
+            throw new clsConflictoException("La acomodación ya está cerrada: el puesto se libera desde no sale y desde bajar del viaje", clsMotivosRechazo.ACOMODACION_CERRADA);
         }
 
         var antes = enlace.Posicion;
@@ -412,8 +528,23 @@ public sealed class clsViajesService(
     private async Task<clsViaje> ObtenerViajeAsync(Guid id, CancellationToken ct) =>
         await viajes.ObtenerPorIdAsync(id, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE);
 
-    private async Task<ViajeDto> ObtenerDtoAsync(Guid id, CancellationToken ct) =>
-        await consultas.ObtenerAsync(id, ClienteRestringido, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE);
+    private async Task<ViajeDto> ObtenerDtoAsync(Guid id, CancellationToken ct)
+    {
+        var viaje = (await consultas.ObtenerAsync(id, ClienteRestringido, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE)).ParaConductor(actual);
+        return (await ConPapelAsync([viaje], ct))[0];
+    }
+
+    /// <summary>Al inspector se le dice su papel en cada viaje (carga, recibe o las dos); al conductor y a los roles de oficina, nulo.</summary>
+    private async Task<IReadOnlyList<ViajeDto>> ConPapelAsync(IReadOnlyList<ViajeDto> viajes, CancellationToken ct)
+    {
+        if (actual.Rol != clsRol.INSPECTOR || viajes.Count == 0)
+        {
+            return viajes;
+        }
+
+        var papeles = await consultas.PapelesDelInspectorAsync(actual.IdObligatorio(), viajes.Select(v => v.Id).ToList(), ct);
+        return viajes.Select(v => papeles.TryGetValue(v.Id, out var papel) ? v with { Papel = papel } : v).ToList();
+    }
 
     /// <summary>
     /// El viaje no tiene un cliente propio: se toma de sus VIN. Quien administra viajes sin ser super administrador (coordinador, administrador,

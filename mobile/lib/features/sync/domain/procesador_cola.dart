@@ -1,4 +1,5 @@
 import '../../../core/errores/error_api.dart';
+import 'desenlace_envio.dart';
 import 'job.dart';
 import 'puertos.dart';
 
@@ -13,7 +14,7 @@ const mensajeSinPendientes = 'No hay unidades pendientes de entrega';
 
 /// Resultado de una pasada de sincronización.
 class ResultadoSync {
-  const ResultadoSync({required this.enviados, required this.pendientes, required this.fallidos});
+  const ResultadoSync({required this.enviados, required this.pendientes, required this.fallidos, this.pausa});
 
   final int enviados;
 
@@ -22,6 +23,9 @@ class ResultadoSync {
 
   /// Jobs que necesitan atención del usuario (reintento manual o descarte).
   final int fallidos;
+
+  /// Null si la pasada sí recorrió la cola. Con valor, no se intentó nada y por eso ningún job quedó con motivo.
+  final MotivoPausa? pausa;
 }
 
 /// Reproduce la cola contra la API respetando la semántica de la app original:
@@ -83,12 +87,13 @@ class ProcesadorCola {
     return huerfanos.length;
   }
 
-  Future<ResultadoSync> _resultado(int enviados, String usuarioId) async {
+  Future<ResultadoSync> _resultado(int enviados, String usuarioId, {MotivoPausa? pausa}) async {
     final jobs = await visibles(usuarioId);
     return ResultadoSync(
       enviados: enviados,
       pendientes: jobs.where((j) => !j.fallido).length,
       fallidos: jobs.where((j) => j.fallido).length,
+      pausa: pausa,
     );
   }
 
@@ -97,8 +102,11 @@ class ProcesadorCola {
     _procesando = true;
     var enviados = 0;
     try {
-      // No empezar a drenar si la señal no es estable o la API no responde.
-      if (!await red.redEstable() || !await red.apiAlcanzable()) return _resultado(0, usuarioId);
+      // No empezar a drenar si la señal no es estable o la API no responde. Se dice CUÁL de las dos: como no se
+      // intenta nada, ningún job queda con motivo, y quien envió algo se quedaba oyendo «se enviará cuando la
+      // señal sea estable» con el wifi perfecto y el servidor caído.
+      if (!await red.redEstable()) return await _resultado(0, usuarioId, pausa: MotivoPausa.sinSenal);
+      if (!await red.apiAlcanzable()) return await _resultado(0, usuarioId, pausa: MotivoPausa.apiCaida);
 
       final esperando = <String>{};
       while (true) {
@@ -182,18 +190,24 @@ class ProcesadorCola {
   Future<void> _ejecutarInforme(InformeJob inicial) async {
     var job = inicial;
 
-    // 1) Inspección (reanudable).
+    // 1) Inspección (reanudable). Una corrección no crea una inspección nueva en la etapa: pide la versión
+    //    siguiente de la que corrige, que nace vacía y en borrador. Se pide AQUÍ y no al pulsar «Corregir»
+    //    porque el servidor no deja descartar una versión vacía: una corrección abandonada dejaría la etapa con
+    //    un borrador que impide volver a corregirla.
     if (job.inspeccionId == null) {
-      final id = await gateway.crearInspeccion(
-        etapaId: job.etapaId,
-        momento: job.momento,
-        fecha: job.fecha,
-        lat: job.lat,
-        lng: job.lng,
-        notas: job.notas,
-        motivoSinInspector: job.motivoSinInspector,
-        motivoSinInspectorTexto: job.motivoSinInspectorTexto,
-      );
+      final corrige = job.corrigeInspeccionId;
+      final id = corrige != null
+          ? await gateway.corregirInspeccion(corrige, fecha: job.fecha, lat: job.lat, lng: job.lng, notas: job.notas)
+          : await gateway.crearInspeccion(
+              etapaId: job.etapaId,
+              momento: job.momento,
+              fecha: job.fecha,
+              lat: job.lat,
+              lng: job.lng,
+              notas: job.notas,
+              motivoSinInspector: job.motivoSinInspector,
+              motivoSinInspectorTexto: job.motivoSinInspectorTexto,
+            );
       job = job.conProgreso(inspeccionId: id);
       await cola.guardar(job);
     }
@@ -274,6 +288,7 @@ class ProcesadorCola {
           tipo: extra.tipo,
           texto: extra.textoOtro,
           observacion: extra.observacion,
+          dano: extra.dano,
         );
         extra = extra.conId(id);
         job = job.conProgreso(extras: _reemplazar(job.extras, i, extra));
@@ -436,7 +451,14 @@ class ProcesadorCola {
       if (job.motivo case final motivo?) {
         await gateway.cerrarEntregaConUnaFirma(job.viajeId, job.lugarId, motivo: motivo, firma: job.firma);
       } else {
-        await gateway.firmarEntregaPunto(job.viajeId, job.lugarId, firma: job.firma!);
+        await gateway.firmarEntregaPunto(
+          job.viajeId,
+          job.lugarId,
+          firma: job.firma!,
+          recibeNombre: job.recibeNombre,
+          recibeCedula: job.recibeCedula,
+          firmaRecibe: job.firmaRecibe,
+        );
       }
     } on ErrorApi catch (e) {
       if (e.status != 409 || !e.message.startsWith(mensajeSinPendientes)) rethrow;

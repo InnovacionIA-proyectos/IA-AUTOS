@@ -159,7 +159,7 @@ BEGIN TRY
     FROM #s s JOIN #h h ON h.k = s.hk JOIN #u u ON u.k = s.usuario;
 
     -- La unidad que no sale: datos del «no sale» en su fila del viaje 0007 (con el reemplazo).
-    UPDATE db_IA_AUTOS.tblViajeVehiculos SET EstadoUnidad = 'no_sale', NoSaleMotivo = N'Deformacion estructural en el capo (v1_plus)', NoSaleHallazgoId = (SELECT id FROM #h WHERE k = 'no_sale_v1plus'),
+    UPDATE db_IA_AUTOS.tblViajeVehiculos SET EstadoUnidad = 'no_sale', NoSaleMotivoCodigo = 'dano_v1_plus', NoSaleMotivo = N'Deformacion estructural en el capo (v1_plus)', NoSaleHallazgoId = (SELECT id FROM #h WHERE k = 'no_sale_v1plus'),
            NoSaleMarcadoPor = (SELECT id FROM #u WHERE k = 'sof_inspector'), NoSaleAt = DATEADD(HOUR, -14, @ahora), ReemplazoVehiculoId = @v03
     WHERE ViajeId = @j7 AND VehiculoId = @v10;
 

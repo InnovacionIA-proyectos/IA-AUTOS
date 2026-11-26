@@ -37,7 +37,7 @@ public sealed record InspeccionDto(
 /// («Izquierdo 7 · Puerta delantera», «54 · Parabrisas») con su codigo <c>AiagArea</c>. <c>NivelNombre</c> y <c>NivelAccion</c> salen del catalogo de niveles. <c>EvidenciaFaltante</c> dice que
 /// le falta para tener la evidencia completa (<c>foto_hallazgo</c>, <c>transferencia_sin_cierre</c> o <c>transferencia_no_firma</c>) y
 /// <c>EvidenciaCompleta</c> es verdadera cuando no falta nada. <c>ParteVehiculo</c> y <c>CoordsDiagrama</c> solo vienen en los hallazgos historicos. Al conductor solo se le muestra lo que ve en lectura (zona, clase, tamano, tipo de
-/// novedad, origen, si es preexistente, fecha y foto): <c>EstadoSeguimiento</c>, <c>EvidenciaCompleta</c> y <c>EvidenciaFaltante</c> llegan nulos, y tambien el nivel, la nota, la revision y el origen.
+/// novedad, origen, si es preexistente, fecha y foto): <c>EstadoSeguimiento</c>, <c>EvidenciaCompleta</c> y <c>EvidenciaFaltante</c> llegan nulos, y tambien el nivel, la nota y la revision. <c>Calificado</c> es verdadero cuando el hallazgo tiene nivel (lo ven todos los roles, el conductor tambien: es lo unico que sabe de la calificacion). <c>SinCalificar</c> es lo contrario para quien ve el nivel y llega falso al conductor.
 /// </summary>
 public record HallazgoDto(
     Guid Id,
@@ -68,7 +68,8 @@ public record HallazgoDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     bool SinCalificar = false,
-    Guid? ExtraId = null);
+    Guid? ExtraId = null,
+    bool Calificado = false);
 
 /// <summary>El hallazgo recien guardado junto con la foto propia que se guardo con el.</summary>
 public sealed record HallazgoCreadoDto : HallazgoDto
@@ -194,4 +195,13 @@ public sealed record TransferenciaDto(
     Guid? TestigoUsuarioId,
     Guid? EvidenciaConstanciaId,
     string? RecibeExternoNombre = null,
-    string? RecibeExternoCedula = null);
+    string? RecibeExternoCedula = null,
+    bool FirmaPorNinera = false,
+    DateTimeOffset? EntregaMomentoAt = null,
+    double? EntregaLat = null,
+    double? EntregaLng = null,
+    double? EntregaPrecisionM = null,
+    DateTimeOffset? RecibeMomentoAt = null,
+    double? RecibeLat = null,
+    double? RecibeLng = null,
+    double? RecibePrecisionM = null);

@@ -597,7 +597,7 @@ INSERT @casosZona VALUES
  (N'CHECK un hallazgo preexistente exige su hallazgo de origen', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ClaseDano,TamanoDano,EsPreexistente) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''golpe'',''1_5cm'',1)', 547),
  (N'FK nivel de severidad inexistente', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ClaseDano,TamanoDano,NivelSeveridad) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''golpe'',''1_5cm'',''v9'')', 547),
  (N'FK zona inexistente en el hallazgo', N'INSERT dbo.tblHallazgos (Id,InspeccionId,ClaseDano,TamanoDano,ZonaId) VALUES (NEWID(),''' + CAST(@bF AS nvarchar(36)) + N''',''golpe'',''1_5cm'',NEWID())', 547),
- (N'CHECK una unidad que no sale exige su motivo, hallazgo y responsable', N'UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = ''no_sale'' WHERE VehiculoId = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0006'')', 547),
+ (N'CHECK una unidad que no sale exige su motivo y responsable', N'UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = ''no_sale'' WHERE VehiculoId = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0006'')', 547),
  (N'CHECK una unidad activa no lleva datos de no sale', N'UPDATE dbo.tblViajeVehiculos SET NoSaleMotivo = N''x'' WHERE VehiculoId = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0006'')', 547),
  (N'CHECK estado de la unidad del viaje', N'UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = ''perdida'' WHERE VehiculoId = (SELECT Id FROM dbo.tblVehiculos WHERE Vin = ''ZZ_TEST_VIN_0006'')', 547);
 
@@ -690,7 +690,7 @@ INSERT #r SELECT N'Patrones: la novedad del conductor revisada cuenta en su zona
     CASE WHEN EXISTS (SELECT 1 FROM dbo.vwPatronesPorCuadrante WHERE CuadranteId = @cuad7 AND Lado = 'derecho' AND NivelSeveridad = 'v1' AND Total = 1) THEN 1 ELSE 0 END, NULL;
 
 -- Una unidad puede no salir del viaje: queda con su motivo, el hallazgo que lo causa y quien lo marco, y conserva su vinculo con el viaje.
-UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = 'no_sale', NoSaleMotivo = N'Hallazgo V1+', NoSaleHallazgoId = @hNuevo, NoSaleMarcadoPor = @u1, NoSaleAt = SYSDATETIMEOFFSET()
+UPDATE dbo.tblViajeVehiculos SET EstadoUnidad = 'no_sale', NoSaleMotivoCodigo = 'dano_v1_plus', NoSaleMotivo = N'Hallazgo V1+', NoSaleHallazgoId = @hNuevo, NoSaleMarcadoPor = @u1, NoSaleAt = SYSDATETIMEOFFSET()
 WHERE VehiculoId = @v5;
 INSERT #r SELECT N'Unidad del viaje: no sale con su motivo, hallazgo y responsable, sin borrar el vinculo',
     CASE WHEN EXISTS (SELECT 1 FROM dbo.tblViajeVehiculos WHERE VehiculoId = @v5 AND EstadoUnidad = 'no_sale' AND NoSaleHallazgoId = @hNuevo) THEN 1 ELSE 0 END, NULL;
@@ -958,10 +958,10 @@ INSERT @casosNov (Prueba, Sentencia, Esperado) VALUES
  (N'Trigger: la novedad de proceso no se borra', N'DELETE FROM dbo.tblNovedadesProceso WHERE InspeccionId = ''' + @i1Nov + N'''', 51003),
  (N'UNIQUE motivo sin inspector por codigo', N'INSERT dbo.tblMotivosSinInspector (Id, Codigo, Nombre) VALUES (NEWID(), ''otro'', N''Otro de nuevo'')', 2627),
  (N'CHECK motivo sin inspector: nombre vacio', N'INSERT dbo.tblMotivosSinInspector (Id, Codigo, Nombre) VALUES (NEWID(), ''zz_test_motivo'', N''  '')', 547),
- (N'CHECK inspeccion: el motivo sin inspector solo es de una salida', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector) VALUES (NEWID(), ''' + @e1Nov + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''llegada'', SYSDATETIMEOFFSET(), ''otro'')', 547),
  (N'CHECK inspeccion: el texto del motivo sin motivo', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspectorTexto) VALUES (NEWID(), ''' + @e1Nov + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''llegada'', SYSDATETIMEOFFSET(), N''zz texto'')', 547),
  (N'CHECK inspeccion: el texto del motivo en blanco', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector, MotivoSinInspectorTexto) VALUES (NEWID(), ''' + @e4Txt + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''salida'', SYSDATETIMEOFFSET(), ''otro'', N''  '')', 547),
  (N'FK inspeccion: motivo sin inspector inexistente', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector) VALUES (NEWID(), ''' + @e1Nov + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''llegada'', SYSDATETIMEOFFSET(), ''zz_no_existe'')', 547),
+ (N'CHECK inspeccion: el motivo sin inspector se admite en una llegada', N'INSERT dbo.tblInspecciones (Id, EtapaId, ViajeId, UsuarioId, Momento, Fecha, MotivoSinInspector) VALUES (NEWID(), ''' + @e1Nov + N''', ''' + @vjNov + N''', ''' + @uNov + N''', ''llegada'', SYSDATETIMEOFFSET(), ''otro'')', 0),
  (N'Notificacion: el tipo novedad_proceso se guarda', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''novedad_proceso'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-1'')', 0),
  (N'Notificacion: el tipo reclamo_sin_actividad se guarda', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''reclamo_sin_actividad'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-3'')', 0),
  (N'CHECK notificacion: un tipo que no existe', N'INSERT dbo.tblNotificaciones (Id, Tipo, Urgencia, UsuarioId, Titulo, Mensaje, Canal, ClaveDedupe) VALUES (NEWID(), ''zz_tipo'', ''alta'', ''' + @uNov + N''', N''zz'', N''zz'', ''bandeja'', ''zz-novedad-proceso-2'')', 547);
@@ -1197,7 +1197,9 @@ INSERT @casosRec (Prueba, Sentencia, Esperado) VALUES
  (N'FK reclamo: viaje inexistente', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), NEWID(), ''' + @u1Rec + N''', ''cargue'')', 547),
  (N'Reclamo: el cargue se reclama', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u1Rec + N''', ''cargue'')', 0),
  (N'UNIQUE filtrado reclamo: no hay dos reclamos activos del mismo viaje y proceso', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''cargue'')', 2601),
- (N'Reclamo: la entrega del mismo viaje se reclama aparte', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''entrega'')', 0),
+ (N'Reclamo: la entrega activa sin parada se rechaza', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''entrega'')', 547),
+ (N'Reclamo: la entrega del mismo viaje se reclama aparte, con su parada', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso, LugarId) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''entrega'', ''' + CONVERT(nvarchar(36), @lugarRec) + N''')', 0),
+ (N'UNIQUE filtrado reclamo: no hay dos reclamos activos de la misma parada', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso, LugarId) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u1Rec + N''', ''entrega'', ''' + CONVERT(nvarchar(36), @lugarRec) + N''')', 2601),
  (N'Reclamo: liberar guarda quien y cuando', N'UPDATE dbo.tblReclamos SET LiberadoAt = SYSDATETIMEOFFSET(), LiberadoPor = ''' + @u2Rec + N''' WHERE ViajeId = ''' + @vjRec + N''' AND Proceso = ''cargue'' AND LiberadoAt IS NULL', 0),
  (N'Reclamo: liberado el reclamo, el cargue se puede reclamar de nuevo', N'INSERT dbo.tblReclamos (Id, ViajeId, InspectorId, Proceso) VALUES (NEWID(), ''' + @vjRec + N''', ''' + @u2Rec + N''', ''cargue'')', 0),
  (N'Trigger: un reclamo es historial y no se borra', N'DELETE FROM dbo.tblReclamos WHERE ViajeId = ''' + @vjRec + N'''', 51003);
@@ -1433,6 +1435,135 @@ ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
 UPDATE dbo.tblInspecciones SET ConfirmacionSitio = NULL, ConfirmacionDistanciaM = NULL, ConfirmacionEvidenciaId = NULL WHERE Id = @iUbi;
 DELETE FROM dbo.tblLugares WHERE Id IN (@lugUbi, @lugUbi2);
 EXEC #zz_borrar_vehiculo 'ZZ_TEST_VIN_UBI';
+
+-- 7b) Firma del cargue por ninera: el momento y el GPS de cada firma, el tipo de aviso y el parametro
+INSERT #r SELECT N'Cargue por ninera: la transferencia guarda el momento y el GPS de cada firma y la marca de ninera',
+    CASE WHEN (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND name IN (N'FirmaEntregaMomentoAt', N'FirmaEntregaLat', N'FirmaEntregaLng', N'FirmaEntregaPrecisionM', N'FirmaRecibeMomentoAt', N'FirmaRecibeLat', N'FirmaRecibeLng', N'FirmaRecibePrecisionM', N'FirmaPorNinera')) = 9 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Cargue por ninera: la latitud y la longitud de cada firma van juntas y dentro de rango',
+    CASE WHEN (SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblTransferencias_GpsEntrega', N'CK_tblTransferencias_GpsRecibe') AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia')) = 2 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Cargue por ninera: la notificacion admite el tipo firma_cargue_pendiente',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%firma_cargue_pendiente%') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Cargue por ninera: el parametro firma_cargue_pendiente_minutos existe',
+    CASE WHEN EXISTS (SELECT 1 FROM dbo.tblParametros WHERE Clave = 'firma_cargue_pendiente_minutos') THEN 1 ELSE 0 END, NULL;
+
+-- 7c) «No sale» con motivo de catalogo y «bajar del viaje»: el catalogo, las columnas, el estado y las vistas
+INSERT #r SELECT N'No sale: el catalogo trae los seis motivos con sus marcas',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblMotivosNoSale WHERE Codigo IN ('dano_v1_plus', 'dano_reportado_conductor', 'no_llego_al_patio', 'faltan_documentos', 'no_esta_listo', 'otro')) = 6
+          AND EXISTS (SELECT 1 FROM dbo.tblMotivosNoSale WHERE Codigo = 'otro' AND ExigeTexto = 1 AND ExigeHallazgo = 0)
+          AND EXISTS (SELECT 1 FROM dbo.tblMotivosNoSale WHERE Codigo = 'dano_reportado_conductor' AND ExigeHallazgo = 1 AND SoloSinInspector = 1) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'No sale: la unidad guarda el codigo del motivo y, bajada, cuando, quien y por que',
+    CASE WHEN (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND name IN (N'NoSaleMotivoCodigo', N'BajadoAt', N'BajadoPor', N'BajadoMotivo')) = 4 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'No sale: el estado bajado y lo que lleva cada estado estan en las restricciones',
+    CASE WHEN (SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblViajeVehiculos_EstadoUnidad', N'CK_tblViajeVehiculos_NoSale') AND parent_object_id = OBJECT_ID(N'dbo.tblViajeVehiculos') AND definition LIKE N'%bajado%') = 2 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'No sale: las vistas de completos y de cobertura no cuentan a la unidad bajada',
+    CASE WHEN (SELECT COUNT(*) FROM sys.sql_modules WHERE object_id IN (OBJECT_ID(N'dbo.vwViajesCompletos'), OBJECT_ID(N'dbo.vwCobertura')) AND definition LIKE N'%bajado%') = 2 THEN 1 ELSE 0 END, NULL;
+
+-- 7d) Muelles, destino cambiado y avisos del patio
+INSERT #r SELECT N'Muelles: la tabla, el muelle del viaje y la marca del cambio de destino existen',
+    CASE WHEN OBJECT_ID(N'dbo.tblMuelles', N'U') IS NOT NULL
+          AND COL_LENGTH(N'dbo.tblViajes', N'MuelleId') IS NOT NULL
+          AND COL_LENGTH(N'dbo.tblViajeVehiculos', N'LugarDestinoCambiadoAt') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblViajes_Muelle') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Muelles: el codigo es unico dentro del lugar',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblMuelles_Lugar_Codigo' AND parent_object_id = OBJECT_ID(N'dbo.tblMuelles')) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Muelles: la notificacion admite los tipos cambio_cargue_inspector y cambio_destino_unidad',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%cambio_cargue_inspector%' AND definition LIKE N'%cambio_destino_unidad%') THEN 1 ELSE 0 END, NULL;
+
+-- 7e) El mapeo de columnas de la carga de viajes
+INSERT #r SELECT N'Mapeo de carga: la tabla existe y es unica por cliente y forma del archivo',
+    CASE WHEN OBJECT_ID(N'dbo.tblMapeosCargaViajes', N'U') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = N'UQ_tblMapeosCargaViajes_Cliente_Huella' AND parent_object_id = OBJECT_ID(N'dbo.tblMapeosCargaViajes')) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Mapeo de carga: columnas y campos solo admiten JSON',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblMapeosCargaViajes_Json' AND parent_object_id = OBJECT_ID(N'dbo.tblMapeosCargaViajes')) THEN 1 ELSE 0 END, NULL;
+
+-- 7f) La entrega por parada, el rechazo por novedad y los motivos del cierre con una sola firma
+INSERT #r SELECT N'Entrega por parada: el reclamo lleva su parada y el indice unico es por viaje, proceso y parada',
+    CASE WHEN COL_LENGTH(N'dbo.tblReclamos', N'LugarId') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_tblReclamos_Lugar')
+          AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblReclamos_Parada' AND parent_object_id = OBJECT_ID(N'dbo.tblReclamos'))
+          AND EXISTS (SELECT 1 FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id WHERE i.name = N'UX_tblReclamos_Activo' AND i.object_id = OBJECT_ID(N'dbo.tblReclamos') AND COL_NAME(ic.object_id, ic.column_id) = N'LugarId') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Rechazo por novedad: una etapa admite otra revision original por ciclo y el cierre admite rechazado',
+    CASE WHEN COL_LENGTH(N'dbo.tblInspecciones', N'Ciclo') IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id WHERE i.name = N'UX_tblInspecciones_Etapa_Momento_Original' AND i.object_id = OBJECT_ID(N'dbo.tblInspecciones') AND COL_NAME(ic.object_id, ic.column_id) = N'Ciclo')
+          AND (SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblTransferencias_TipoCierre', N'CK_tblTransferencias_Cierre') AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND definition LIKE N'%rechazado%') = 2 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Cierre con una sola firma: el motivo codificado, el testigo sin usuario y el rechazo existen',
+    CASE WHEN (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND name IN (N'MotivoCodigo', N'TestigoNombre', N'TestigoCedula', N'RechazoHallazgoId', N'RechazoMarcadoPor')) = 5
+          AND (SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblTransferencias_MotivoCodigo', N'CK_tblTransferencias_TestigoExterno', N'CK_tblTransferencias_Rechazo') AND parent_object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia')) = 3
+          AND (SELECT COUNT(*) FROM dbo.tblMotivosSinInspector WHERE Codigo IN (N'se_nego_a_firmar', N'no_habia_nadie', N'sin_inspector_del_punto') AND Activo = 0) = 3 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Rechazo por novedad: la notificacion admite el tipo carro_rechazado_en_destino',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%carro_rechazado_en_destino%') THEN 1 ELSE 0 END, NULL;
+
+-- 7f) El dano de un extra del conductor y el conteo de lo sin calificar con la version vigente
+INSERT #r SELECT N'Dano de un extra: la restriccion solo exige que no tenga zona (el conductor tambien lo registra)',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_Extra' AND parent_object_id = OBJECT_ID(N'dbo.tblHallazgos') AND definition LIKE N'%ZonaId%' AND definition NOT LIKE N'%Origen%') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Indicador diario: SinCalificar cuenta solo la version vigente de cada informe',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'dbo.vwIndicadorDiario') AND definition LIKE N'%CorrigeInspeccionId%') THEN 1 ELSE 0 END, NULL;
+
+-- 7g) Los parametros de los tiempos y los avisos, el plazo de cada permiso, la precision del lugar y el aviso de la ubicacion fijada
+INSERT #r SELECT N'Parametros de tiempos y avisos: las seis filas existen con su valor inicial',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblParametros WHERE Tipo = 'numero' AND ((Clave = 'permiso_sin_inspector_minutos' AND Valor = N'10') OR (Clave = 'espera_inspector_aviso_minutos' AND Valor = N'15')
+        OR (Clave = 'espera_inspector_plan_b_minutos' AND Valor = N'30') OR (Clave = 'viaje_sin_movimiento_horas' AND Valor = N'24') OR (Clave = 'firma_cargue_pendiente_minutos' AND Valor = N'30')
+        OR (Clave = 'propuesta_ubicacion_visitas' AND Valor = N'3'))) = 6 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Permiso sin inspector: el plazo de cada solicitud es obligatorio',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblPermisosSinInspector') AND name = N'VenceAt' AND is_nullable = 0) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Permiso sin inspector: el reloj no concede antes del plazo guardado en la solicitud',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblPermisosSinInspector_Reloj' AND parent_object_id = OBJECT_ID(N'dbo.tblPermisosSinInspector') AND definition LIKE N'%VenceAt%')
+         AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblPermisosSinInspector_Plazo' AND parent_object_id = OBJECT_ID(N'dbo.tblPermisosSinInspector')) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Lugares: la precision del GPS con que se fijo la ubicacion (nula o no negativa)',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblLugares') AND name = N'PrecisionM' AND is_nullable = 1)
+         AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblLugares_Precision' AND parent_object_id = OBJECT_ID(N'dbo.tblLugares')) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Ubicacion fijada: la notificacion admite el tipo ubicacion_fijada',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%ubicacion_fijada%') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Cobertura: vwCobertura cuenta cinco registros (el Descargue ya no tiene salida) y Completa con los cinco',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'dbo.vwCobertura') AND definition LIKE N'%RegistrosCerrados >= 5%')
+         AND EXISTS (SELECT 1 FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'dbo.vwCobertura') AND definition LIKE N'%NOT (ec.Codigo = ''descargue'' AND i.Momento = ''salida'')%') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Viaje sin movimiento: la notificacion admite el tipo viaje_sin_movimiento',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%viaje_sin_movimiento%') THEN 1 ELSE 0 END, NULL;
+
+-- 7h) La espera del inspector del punto: la tabla con sus restricciones, la unica espera abierta por parada, la marca de la entrega y el tipo de aviso
+INSERT #r SELECT N'Espera del inspector del punto: la tabla existe con sus ocho restricciones y sus llaves',
+    CASE WHEN OBJECT_ID(N'dbo.tblEsperasInspectorPunto', N'U') IS NOT NULL
+          AND (SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.tblEsperasInspectorPunto') AND name LIKE N'CK[_]tblEsperasInspectorPunto[_]%') = 8
+          AND (SELECT COUNT(*) FROM sys.foreign_keys WHERE parent_object_id = OBJECT_ID(N'dbo.tblEsperasInspectorPunto')) = 6 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Espera del inspector del punto: una sola espera abierta por viaje y parada',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblEsperasInspectorPunto_Abierta' AND object_id = OBJECT_ID(N'dbo.tblEsperasInspectorPunto') AND is_unique = 1 AND has_filter = 1) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Entrega sin inspector del punto: la transferencia lleva su marca (falsa por defecto)',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblTransferenciasCustodia') AND name = N'SinInspectorDelPunto' AND is_nullable = 0) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Espera del inspector del punto: la notificacion admite el tipo espera_inspector_punto',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%espera_inspector_punto%') THEN 1 ELSE 0 END, NULL;
+
+-- 7h) Descartar un informe en borrador: los estados nuevos y los indices unicos que no cuentan los descartados ni los superados
+INSERT #r SELECT N'Informe descartado: el estado admite descartada y superada y no tienen fecha de cierre',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_Estado' AND parent_object_id = OBJECT_ID(N'dbo.tblInspecciones') AND definition LIKE N'%descartada%' AND definition LIKE N'%superada%')
+         AND EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_Cierre' AND parent_object_id = OBJECT_ID(N'dbo.tblInspecciones') AND definition LIKE N'%descartada%') THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Informe descartado: la original y la correccion unicas no cuentan las descartadas ni las superadas',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblInspecciones_Etapa_Momento_Original' AND object_id = OBJECT_ID(N'dbo.tblInspecciones') AND is_unique = 1 AND filter_definition LIKE N'%descartada%' AND filter_definition LIKE N'%superada%')
+         AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblInspecciones_Corrige' AND object_id = OBJECT_ID(N'dbo.tblInspecciones') AND is_unique = 1 AND filter_definition LIKE N'%descartada%' AND filter_definition LIKE N'%superada%') THEN 1 ELSE 0 END, NULL;
+-- 7i) La novedad del viaje: el catalogo de tipos, la tabla append-only con sus restricciones, el envio unico por viaje y por inspeccion y el tipo de aviso
+INSERT #r SELECT N'Novedad del viaje: el catalogo trae sus diez tipos con rol y urgencia validos',
+    CASE WHEN (SELECT COUNT(*) FROM dbo.tblTiposNovedadViaje WHERE Codigo IN ('falla_camion', 'dano_ninera', 'bloqueo_via', 'intento_robo', 'accidente', 'carro_no_llego_patio', 'puesto_ninera_danado', 'faltan_documentos', 'camion_llego_tarde', 'otro')) = 10
+          AND (SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.tblTiposNovedadViaje') AND name IN (N'CK_tblTiposNovedadViaje_Rol', N'CK_tblTiposNovedadViaje_Urgencia')) = 2 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Novedad del viaje: la tabla existe con sus siete restricciones y sus cuatro llaves',
+    CASE WHEN OBJECT_ID(N'dbo.tblNovedadesViaje', N'U') IS NOT NULL
+          AND (SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id = OBJECT_ID(N'dbo.tblNovedadesViaje') AND name LIKE N'CK[_]tblNovedadesViaje[_]%') = 7
+          AND (SELECT COUNT(*) FROM sys.foreign_keys WHERE parent_object_id = OBJECT_ID(N'dbo.tblNovedadesViaje')) = 4 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Novedad del viaje: no se modifica ni se borra (triggers de solo agregar)',
+    CASE WHEN (SELECT COUNT(*) FROM sys.triggers WHERE parent_id = OBJECT_ID(N'dbo.tblNovedadesViaje') AND name IN (N'TR_tblNovedadesViaje_NoModificar', N'TR_tblNovedadesViaje_NoBorrar')) = 2 THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Novedad del viaje: un identificador de envio por viaje',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblNovedadesViaje_Envio' AND object_id = OBJECT_ID(N'dbo.tblNovedadesViaje') AND is_unique = 1 AND has_filter = 1) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Novedad de un carro: el identificador del envio es nulo y unico por inspeccion cuando existe',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblHallazgos') AND name = N'IdEnvio' AND is_nullable = 1)
+         AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'UX_tblHallazgos_Envio' AND object_id = OBJECT_ID(N'dbo.tblHallazgos') AND is_unique = 1 AND has_filter = 1) THEN 1 ELSE 0 END, NULL;
+INSERT #r SELECT N'Novedad del viaje: la notificacion admite el tipo novedad_viaje',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'dbo.tblNotificaciones') AND definition LIKE N'%novedad_viaje%') THEN 1 ELSE 0 END, NULL;
+
+-- 7j) El dato del lugar "admite cargue sin inspector": la columna obligatoria y en falso para los lugares que ya existian
+INSERT #r SELECT N'Lugar: admite cargue sin inspector es obligatorio, en falso por defecto',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'dbo.tblLugares') AND name = N'AdmiteCargueSinInspector' AND is_nullable = 0)
+         AND EXISTS (SELECT 1 FROM sys.default_constraints WHERE name = N'DF_tblLugares_AdmiteCargueSinInspector' AND parent_object_id = OBJECT_ID(N'dbo.tblLugares') AND definition LIKE N'%0%') THEN 1 ELSE 0 END, NULL;
+
+INSERT #r SELECT N'Inspeccion: el motivo de la excepcion No hay inspector se admite en la salida y en la llegada',
+    CASE WHEN EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_MotivoSinInspector' AND parent_object_id = OBJECT_ID(N'dbo.tblInspecciones') AND definition LIKE N'%llegada%') THEN 1 ELSE 0 END, NULL;
 
 -- 8) Limpieza final: el vehiculo base y lo que cuelga de el
 DELETE FROM dbo.tblOrdenesSofasa WHERE SourceId = -424242;

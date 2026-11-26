@@ -52,6 +52,6 @@ public sealed class clsAccesoViajes(IReclamoRepository reclamos, IViajeRepositor
             return true;
         }
 
-        return viaje.Estado == clsEstadoViaje.EN_CURSO && (await viajes.ObtenerVehiculosAsync(viaje.Id, ct)).Any(v => !v.NoSale && v.LugarDestinoId is { } d && puntos.Contains(d));
+        return viaje.Estado == clsEstadoViaje.EN_CURSO && (await viajes.ObtenerVehiculosAsync(viaje.Id, ct)).Any(v => v.EstaActiva && v.LugarDestinoId is { } d && puntos.Contains(d));
     }
 }

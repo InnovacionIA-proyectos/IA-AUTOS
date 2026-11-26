@@ -5,7 +5,8 @@ namespace IAAutos.Aplicacion.Conductor.DTOConductor;
 /// <summary>
 /// La novedad que el conductor registra en ruta, con la fecha, hora y GPS del momento en el celular (se conservan aunque llegue despues, sin senal). Elige el tipo
 /// (<c>golpe</c>, <c>piedra</c>, <c>granizo</c> o <c>incidente_vial</c>) y el tamano de las listas y adjunta su foto sellada: no hay texto libre ni se indica cuadrante, clase o nivel,
-/// que completa el inspector al revisarla.
+/// que completa el inspector al revisarla. <c>IdEnvio</c> es el UUID que el celular le pone al envio: un reenvio con el mismo identificador no crea otra novedad, otra foto ni otro aviso (opcional: sin el todo se
+/// comporta como siempre).
 /// </summary>
 public sealed record RegistrarNovedadRequest(
     DateTimeOffset? Fecha,
@@ -13,7 +14,8 @@ public sealed record RegistrarNovedadRequest(
     double? Lng,
     string? TipoNovedad,
     string? TamanoDano,
-    FotoEvidenciaRequest? Evidencia);
+    FotoEvidenciaRequest? Evidencia,
+    Guid? IdEnvio = null);
 
 /// <summary>La llegada de una unidad a su destino, con la fecha, hora y GPS del momento en el celular.</summary>
 public sealed record RegistrarLlegadaRequest(DateTimeOffset? Fecha, double? Lat, double? Lng);

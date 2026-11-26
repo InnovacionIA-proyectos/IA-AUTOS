@@ -54,7 +54,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var e = await UnidadConV1PlusAsync();
         await Sembrador.VehiculoAsync("VIN-NS-R");
 
-        var r = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "  Golpe estructural en el frente  ", hallazgo_id = e.Hallazgo, vin_reemplazo = "vin-ns-r" });
+        var r = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "  Golpe estructural en el frente  ", hallazgo_id = e.Hallazgo, vin_reemplazo = "vin-ns-r" });
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var viaje = await ComoJsonAsync(r);
@@ -63,7 +63,9 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var unidad = Unidad(viaje, "VIN-NS-A");
         Assert.Equal("no_sale", unidad.GetProperty("estado_unidad").GetString());
         var noSale = unidad.GetProperty("no_sale");
-        Assert.Equal("Golpe estructural en el frente", noSale.GetProperty("motivo").GetString());
+        Assert.Equal("dano_v1_plus", noSale.GetProperty("motivo_codigo").GetString());
+        Assert.Equal("Daño V1+", noSale.GetProperty("motivo").GetString());
+        Assert.Equal("Golpe estructural en el frente", noSale.GetProperty("motivo_texto").GetString());
         Assert.Equal(e.Hallazgo, noSale.GetProperty("hallazgo_id").GetGuid());
         Assert.Equal(e.Inspector.UsuarioId, noSale.GetProperty("marcado_por").GetGuid());
         Assert.Equal("Nombre inspector@ejemplo.com", noSale.GetProperty("marcado_por_nombre").GetString());
@@ -90,7 +92,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var e = await UnidadConV1PlusAsync();
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
 
-        var r = await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo = "Se cambia por otra", hallazgo_id = e.Hallazgo });
+        var r = await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Se cambia por otra", hallazgo_id = e.Hallazgo });
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var noSale = Unidad(await ComoJsonAsync(r), "VIN-NS-A").GetProperty("no_sale");
@@ -111,7 +113,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
 
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
         var antes = (Items(await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes")))).EnumerateArray().Single();
-        var marcada = await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
+        var marcada = await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo });
         var despues = (Items(await ComoJsonAsync(await Cliente(coordinador.Token).GetAsync("/api/viajes")))).EnumerateArray().Single();
 
         Assert.Equal(HttpStatusCode.OK, marcada.StatusCode);
@@ -133,7 +135,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var e = await UnidadConV1PlusAsync();
         var quien = await SesionAsync("otro@ejemplo.com", rol);
 
-        var r = await MarcarAsync(quien, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
+        var r = await MarcarAsync(quien, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo });
 
         Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajeVehiculos WHERE EstadoUnidad = 'no_sale'"));
@@ -146,8 +148,8 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var e = await UnidadConV1PlusAsync();
         var otroInspector = await SesionAsync("otro-inspector@ejemplo.com", clsRol.INSPECTOR);
 
-        var ajeno = await MarcarAsync(otroInspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
-        var anonimo = await Cliente().PostAsJsonAsync($"/api/viajes/{e.Viaje}/vehiculos/VIN-NS-A/no-sale", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
+        var ajeno = await MarcarAsync(otroInspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo });
+        var anonimo = await Cliente().PostAsJsonAsync($"/api/viajes/{e.Viaje}/vehiculos/VIN-NS-A/no-sale", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo });
 
         Assert.Equal(HttpStatusCode.Forbidden, ajeno.StatusCode);
         Assert.Contains("inspector del viaje", Mensaje(await ComoJsonAsync(ajeno)));
@@ -162,7 +164,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         await Sembrador.EjecutarAsync("INSERT dbo.tblClientes (Id, Codigo, Nombre, Orden) VALUES (@id, 'otro', N'Otro cliente', 2)", ("@id", otro));
         var delOtro = await SesionAsync("coord-otro@ejemplo.com", clsRol.COORDINADOR_CALIDAD, otro);
 
-        var r = await MarcarAsync(delOtro, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
+        var r = await MarcarAsync(delOtro, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo });
 
         Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
     }
@@ -174,7 +176,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     {
         var e = await UnidadConV1PlusAsync(nivel: "v2");
 
-        var r = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
+        var r = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo });
 
         Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
         Assert.Contains("V1+", Mensaje(await ComoJsonAsync(r)));
@@ -189,9 +191,9 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var (_, etapasOtroViaje) = await Sembrador.VehiculoConRutaAsync("VIN-NS-C");
         var (_, hallazgoDeOtroViaje) = await Sembrador.InformeCerradoConHallazgoAsync(etapasOtroViaje[0], e.Inspector.UsuarioId, e.Zona, nivel: "v1_plus");
 
-        var otroVin = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = hallazgoDeB });
-        var otroViaje = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = hallazgoDeOtroViaje });
-        var inexistente = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = Guid.NewGuid() });
+        var otroVin = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = hallazgoDeB });
+        var otroViaje = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = hallazgoDeOtroViaje });
+        var inexistente = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = Guid.NewGuid() });
 
         Assert.All(new[] { otroVin, otroViaje, inexistente }, r => Assert.Equal(HttpStatusCode.Conflict, r.StatusCode));
         Assert.Contains("no es de ese VIN en ese viaje", Mensaje(await ComoJsonAsync(otroVin)));
@@ -203,7 +205,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     {
         var e = await UnidadConV1PlusAsync(cerrada: false);
 
-        var r = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
+        var r = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo });
 
         Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
         Assert.Contains("borrador", Mensaje(await ComoJsonAsync(r)));
@@ -234,7 +236,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var e = await UnidadConV1PlusAsync();
         var delaVigente = await CorreccionCerradaConHallazgoAsync(e);
 
-        var r = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe estructural", hallazgo_id = e.Hallazgo });
+        var r = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe estructural", hallazgo_id = e.Hallazgo });
 
         Assert.Equal(HttpStatusCode.Conflict, r.StatusCode);
         var error = await ComoJsonAsync(r);
@@ -246,7 +248,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgoSeguimiento WHERE Accion = 'no_sale'"));
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'viaje.no_sale'"));
         // CA-3: el hallazgo de la version vigente si la saca del viaje.
-        var vigente = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe estructural", hallazgo_id = delaVigente });
+        var vigente = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe estructural", hallazgo_id = delaVigente });
         Assert.Equal(HttpStatusCode.OK, vigente.StatusCode);
     }
 
@@ -258,7 +260,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var correccion = await Cliente(e.Inspector.Token).PostAsync($"/api/inspecciones/{e.Inspeccion}/corregir", null);
         Assert.Equal(HttpStatusCode.Created, correccion.StatusCode);
 
-        var r = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe estructural", hallazgo_id = e.Hallazgo });
+        var r = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe estructural", hallazgo_id = e.Hallazgo });
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         Assert.Equal("no_sale", Unidad(await ComoJsonAsync(r), "VIN-NS-A").GetProperty("estado_unidad").GetString());
@@ -268,9 +270,9 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     public async Task Una_unidad_que_ya_no_sale_no_se_marca_otra_vez()
     {
         var e = await UnidadConV1PlusAsync();
-        var primera = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
+        var primera = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo });
 
-        var repetida = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Otra vez", hallazgo_id = e.Hallazgo });
+        var repetida = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Otra vez", hallazgo_id = e.Hallazgo });
 
         Assert.Equal(HttpStatusCode.OK, primera.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, repetida.StatusCode);
@@ -285,8 +287,8 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         await Sembrador.VehiculoConRutaAsync("VIN-NS-ACTIVO");
         await Sembrador.VehiculoConRutaAsync("VIN-NS-MISMO", viajeId: e.Viaje);
 
-        var enActivo = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo, vin_reemplazo = "VIN-NS-ACTIVO" });
-        var enEsteViaje = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo, vin_reemplazo = "VIN-NS-MISMO" });
+        var enActivo = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo, vin_reemplazo = "VIN-NS-ACTIVO" });
+        var enEsteViaje = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo, vin_reemplazo = "VIN-NS-MISMO" });
 
         Assert.Equal(HttpStatusCode.Conflict, enActivo.StatusCode);
         Assert.Contains("otro viaje activo", Mensaje(await ComoJsonAsync(enActivo)));
@@ -306,9 +308,9 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET Estado = 'finalizado' WHERE Id = @v", ("@v", viajePrevio));
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
 
-        var sinRecuperar = await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo, vin_reemplazo = "VIN-NS-P" });
+        var sinRecuperar = await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo, vin_reemplazo = "VIN-NS-P" });
         var recuperar = await Cliente(coordinador.Token).PostAsJsonAsync($"/api/hallazgos/{hallazgoPrevio}/seguimiento", new { estado = "recuperado" });
-        var recuperado = await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo, vin_reemplazo = "VIN-NS-P" });
+        var recuperado = await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo, vin_reemplazo = "VIN-NS-P" });
 
         Assert.Equal(HttpStatusCode.Conflict, sinRecuperar.StatusCode);
         Assert.Contains("no está recuperado", Mensaje(await ComoJsonAsync(sinRecuperar)));
@@ -324,16 +326,16 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     {
         var e = await UnidadConV1PlusAsync();
 
-        var sinMotivo = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = " ", hallazgo_id = e.Hallazgo });
-        var motivoLargo = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = new string('m', 501), hallazgo_id = e.Hallazgo });
-        var sinHallazgo = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe" });
-        var reemplazoInexistente = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo, vin_reemplazo = "NO-EXISTE" });
-        var reemplazoIgual = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo, vin_reemplazo = "VIN-NS-A" });
+        var sinMotivo = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = " ", hallazgo_id = e.Hallazgo });
+        var motivoLargo = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = new string('m', 301), hallazgo_id = e.Hallazgo });
+        var sinHallazgo = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe" });
+        var reemplazoInexistente = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo, vin_reemplazo = "NO-EXISTE" });
+        var reemplazoIgual = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo, vin_reemplazo = "VIN-NS-A" });
 
         async Task<bool> TieneCampo(HttpResponseMessage r, string campo) =>
             r.StatusCode == HttpStatusCode.BadRequest && (await ComoJsonAsync(r)).GetProperty("details").GetProperty("fieldErrors").TryGetProperty(campo, out _);
-        Assert.True(await TieneCampo(sinMotivo, "motivo"));
-        Assert.True(await TieneCampo(motivoLargo, "motivo"));
+        Assert.True(await TieneCampo(sinMotivo, "motivo_codigo"));
+        Assert.True(await TieneCampo(motivoLargo, "motivo_texto"));
         Assert.True(await TieneCampo(sinHallazgo, "hallazgo_id"));
         Assert.True(await TieneCampo(reemplazoInexistente, "vin_reemplazo"));
         Assert.True(await TieneCampo(reemplazoIgual, "vin_reemplazo"));
@@ -346,9 +348,9 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var e = await UnidadConV1PlusAsync();
         await Sembrador.VehiculoAsync("VIN-NS-SUELTO");
 
-        var vinAjeno = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-SUELTO", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
-        var vinInexistente = await MarcarAsync(e.Inspector, e.Viaje, "NO-EXISTE", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
-        var viajeInexistente = await MarcarAsync(e.Inspector, Guid.NewGuid(), "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
+        var vinAjeno = await MarcarAsync(e.Inspector, e.Viaje, "VIN-NS-SUELTO", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo });
+        var vinInexistente = await MarcarAsync(e.Inspector, e.Viaje, "NO-EXISTE", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo });
+        var viajeInexistente = await MarcarAsync(e.Inspector, Guid.NewGuid(), "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo });
 
         Assert.Equal(HttpStatusCode.NotFound, vinAjeno.StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, vinInexistente.StatusCode);
@@ -362,7 +364,7 @@ public sealed class NoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
     {
         var e = await UnidadConV1PlusAsync();
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
-        await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo = "Golpe", hallazgo_id = e.Hallazgo });
+        await MarcarAsync(coordinador, e.Viaje, "VIN-NS-A", new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe", hallazgo_id = e.Hallazgo });
         var otroViaje = await Sembrador.ViajeAsync();
 
         var destino = await LugarRealAsync(Cliente(coordinador.Token), "Destino de la unidad");

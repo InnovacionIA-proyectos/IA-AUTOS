@@ -30,6 +30,7 @@ public sealed class RegistrarNovedadRequestValidator : AbstractValidator<Registr
         RuleFor(x => x.TipoNovedad).Must(t => t is not null && clsTipoNovedad.VALORES.Contains(t))
             .WithMessage($"Tipo de novedad inválido: use {string.Join(", ", clsTipoNovedad.VALORES.Order())}");
         RuleFor(x => x.TamanoDano).Must(t => !string.IsNullOrWhiteSpace(t)).WithMessage("Tamaño de daño inválido");
+        RuleFor(x => x.IdEnvio).Must(v => v is null || v != Guid.Empty).WithMessage("Debe ser un UUID válido");
         // La foto es de la novedad: sin ella no se guarda. Va sellada con la ubicacion (si no, el registro no se podria cerrar al confirmar la llegada) y sin texto libre.
         RuleFor(x => x.Evidencia).NotNull().WithMessage("Una novedad exige su foto: envíe la evidencia junto con la novedad");
         When(x => x.Evidencia is not null, () =>

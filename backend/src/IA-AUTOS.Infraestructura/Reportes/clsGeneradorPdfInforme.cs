@@ -45,7 +45,7 @@ internal sealed class clsGeneradorPdfInforme : IGeneradorPdfInforme
     {
         doc.Escribir("Traza Autos 360° — Botero Soto", 11);
         doc.Escribir($"Informe de inspección — {d.MomentoNombre}", 16, true);
-        doc.Escribir($"{d.Proceso} · versión {d.Version} · {(d.Estado == "cerrada" ? "cerrada" : "en borrador")}", 11);
+        doc.Escribir($"{d.Proceso} · versión {d.Version} · {(d.Estado switch { "cerrada" => "cerrada", "descartada" => "descartada", "superada" => "superada", _ => "en borrador" })}", 11);
         doc.Espaciar(6);
     }
 

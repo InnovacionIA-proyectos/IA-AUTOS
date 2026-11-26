@@ -1,3 +1,4 @@
+import '../../inspecciones/domain/extra_local.dart';
 import '../../inspecciones/domain/foto_local.dart';
 import '../../inspecciones/domain/hallazgo_local.dart';
 import 'job.dart';
@@ -55,6 +56,18 @@ abstract interface class GatewayInformes {
     String? motivoSinInspectorTexto,
   });
 
+  /// Crea la **versión siguiente** de una inspección cerrada y devuelve su id. La anterior no cambia.
+  ///
+  /// Se llama al enviar, no al pulsar «Corregir»: el servidor no deja descartar una versión vacía, así que una
+  /// corrección que alguien empieza y abandona dejaría la etapa con un borrador que impide volver a corregir.
+  Future<String> corregirInspeccion(
+    String inspeccionId, {
+    required String fecha,
+    required double lat,
+    required double lng,
+    String? notas,
+  });
+
   /// Sube la imagen como multipart y devuelve dónde quedó y su huella.
   Future<ArchivoSubido> subirImagen(List<int> bytes, {String nombre = 'foto.jpg'});
 
@@ -77,7 +90,15 @@ abstract interface class GatewayInformes {
 
   /// Crea un extra de la inspección (barras de techo, volco, platón u otro) y devuelve su id: con él se mandan sus
   /// fotos.
-  Future<String> crearExtra(String inspeccionId, {required String tipo, String? texto, String? observacion});
+  /// Crea el extra y devuelve su id. [dano] va cuando se marco como danado: el servidor lo guarda como un
+  /// hallazgo ligado a el, sin zona, que cuenta en las estadisticas como cualquier otro.
+  Future<String> crearExtra(
+    String inspeccionId, {
+    required String tipo,
+    String? texto,
+    String? observacion,
+    DanoExtra? dano,
+  });
 
   Future<void> agregarHallazgo(String inspeccionId, HallazgoLocal hallazgo);
 
@@ -108,7 +129,18 @@ abstract interface class GatewayInformes {
 
   /// La firma de quien tiene la sesión sobre la entrega de un punto: el servidor la guarda en cada unidad pendiente.
   /// Quién entrega y quién recibe salen del viaje (su conductor y su inspector).
-  Future<void> firmarEntregaPunto(String viajeId, String lugarId, {required String firma});
+  ///
+  /// En un punto sin inspector recibe alguien que no es usuario: [recibeNombre], [recibeCedula] y [firmaRecibe]
+  /// viajan juntos y entonces la entrega queda cerrada de una vez, porque las dos firmas llegan a la vez. En un
+  /// punto con inspector el servidor rechaza esos tres campos con 400: allí firma él desde su sesión.
+  Future<void> firmarEntregaPunto(
+    String viajeId,
+    String lugarId, {
+    required String firma,
+    String? recibeNombre,
+    String? recibeCedula,
+    String? firmaRecibe,
+  });
 
   /// Cierra la entrega de un punto con una sola firma y el motivo de la otra parte. [firma] solo hace falta si quien
   /// cierra todavía no había firmado.

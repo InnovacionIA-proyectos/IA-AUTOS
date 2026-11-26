@@ -28,6 +28,7 @@ class SelectorZonaDano extends ConsumerStatefulWidget {
     this.alRegistrar,
     this.alAbrirDano,
     this.alturaMaxima = 420,
+    this.anteriores = const {},
   });
 
   /// Separa esta selección de las demás que haya en pantalla (ver [seleccionZonaProvider]).
@@ -36,6 +37,10 @@ class SelectorZonaDano extends ConsumerStatefulWidget {
   /// Las zonas que ya tienen daño («26D», «54») con el nivel de severidad de cada una, que es el color con el que
   /// se pintan. El nivel va nulo cuando nadie lo ha clasificado todavía.
   final Map<String, String?> danos;
+
+  /// Las zonas que ya traían un daño de una inspección **anterior** del vehículo. Se pintan rayadas y con el borde
+  /// discontinuo, y no se pueden abrir ni editar: son de otro informe, ya cerrado.
+  final Set<String> anteriores;
 
   /// Se llama con la zona elegida cuando se pulsa «Registrar daño».
   final void Function(ZonaDano zona)? alRegistrar;
@@ -126,6 +131,7 @@ class _EstadoSelectorZonaDano extends ConsumerState<SelectorZonaDano> {
           panel: panel,
           regiones: regiones,
           danos: widget.danos,
+          anteriores: widget.anteriores,
           seleccionada: estado.seleccionada,
           controlador: controlador,
           alturaMaxima: widget.alturaMaxima,
@@ -151,6 +157,7 @@ class _EstadoSelectorZonaDano extends ConsumerState<SelectorZonaDano> {
             zona: elegida,
             seVeEn: [for (final p in dibujo.panelesDondeSeVe(elegida.clave)) p.nombre],
             tieneDano: widget.danos.containsKey(elegida.clave),
+            tieneDanoAnterior: widget.anteriores.contains(elegida.clave),
             alRegistrar: widget.alRegistrar,
             alAbrirDano: widget.alAbrirDano,
             alSoltar: _seleccion.deseleccionar,
@@ -283,11 +290,13 @@ class _FichaZona extends StatelessWidget {
     required this.alRegistrar,
     required this.alAbrirDano,
     required this.alSoltar,
+    this.tieneDanoAnterior = false,
   });
 
   final ZonaDano zona;
   final List<String> seVeEn;
   final bool tieneDano;
+  final bool tieneDanoAnterior;
   final void Function(ZonaDano zona)? alRegistrar;
   final void Function(ZonaDano zona)? alAbrirDano;
   final VoidCallback alSoltar;
@@ -311,6 +320,36 @@ class _FichaZona extends StatelessWidget {
       children: [
         Text(zona.nombreCompleto, style: tema.titleMedium),
         Text('$detalle.', style: tema.bodySmall),
+        // Al tocar una zona rayada, quien inspecciona espera abrir ese daño, como con los de este informe. Hay que
+        // decirle por qué no se abre: es de un informe anterior y ya está cerrado. Registrar uno nuevo aquí sí se
+        // puede, y si resulta ser el mismo, el aviso de «ya estaba registrado» lo enlaza.
+        if (tieneDanoAnterior && !tieneDano) ...[
+          const SizedBox(height: Espacio.sm),
+          // En gris de texto secundario se leía como una nota al pie y la gente seguía tocando la zona esperando
+          // que abriera. Va en ámbar, con icono y fondo tenue: es la explicación de por qué no abre, no un adorno.
+          Container(
+            padding: const EdgeInsets.all(Espacio.sm),
+            decoration: BoxDecoration(
+              color: Colores.advertencia.withValues(alpha: 0.10),
+              border: Border.all(color: Colores.advertencia.withValues(alpha: 0.45)),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.history, size: 18, color: Colores.advertencia),
+                const SizedBox(width: Espacio.sm),
+                Expanded(
+                  child: Text(
+                    'Esta zona ya traía un daño de una inspección anterior. No se puede cambiar desde aquí: es de un '
+                    'informe ya cerrado. Si el daño sigue ahí, regístralo y marca que ya estaba.',
+                    style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: Espacio.md),
         Row(
           children: [

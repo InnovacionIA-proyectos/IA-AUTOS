@@ -345,7 +345,7 @@ public sealed partial class AcomodacionApiTests(clsBaseDatosFixture bd) : clsPru
         Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[2], 6)).StatusCode);
         var (_, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[2][2], e.Inspector.UsuarioId, (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblZonasDano WHERE Numero = 50"))!, nivel: "v1_plus");
 
-        var r = await Como(e.Coordinador).PostAsync($"/api/viajes/{e.Viaje}/vehiculos/{VINES[2]}/no-sale", Cuerpo(new { motivo = "Golpe en el capó", hallazgo_id = hallazgo }));
+        var r = await Como(e.Coordinador).PostAsync($"/api/viajes/{e.Viaje}/vehiculos/{VINES[2]}/no-sale", Cuerpo(new { motivo_codigo = "dano_v1_plus", motivo_texto = "Golpe en el capó", hallazgo_id = hallazgo }));
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         Assert.Null(await PosicionDeAsync(e.Viaje, VINES[2]));
@@ -550,5 +550,53 @@ public sealed partial class AcomodacionApiTests(clsBaseDatosFixture bd) : clsPru
         Assert.Equal(0, (await ViajeAsync(e.Coordinador, otro)).GetProperty("fotos_acomodacion").GetArrayLength());
         var informe = await JsonAsync(await Como(e.Inspector).GetAsync($"/api/inspecciones/{e.Inspeccion}"));
         Assert.True(Assert.Single(informe.GetProperty("evidencias").EnumerateArray()).GetProperty("es_acomodacion").GetBoolean());
+    }
+
+    // ------------------------------------------------------------------ las fotos y los puestos por viaje
+
+    [Fact]
+    public async Task Una_foto_de_la_acomodacion_sirve_para_todos_los_carros_y_el_cierre_las_cuenta_por_viaje()
+    {
+        var e = await EscenarioAsync();
+        for (var i = 0; i < VINES.Length; i++)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[i], i + 1)).StatusCode);
+        }
+
+        // Las fotos de otro viaje no cuentan.
+        var otro = await Sembrador.ViajeAsync(e.Conductor.UsuarioId, e.Inspector.UsuarioId, codigoMtrack: "M-AJENO");
+        var (_, rutaOtro) = await Sembrador.VehiculoConRutaAsync("9FB45RFL8NM208888", viajeId: otro);
+        await Sembrador.InformeAsync(rutaOtro[0], e.Inspector.UsuarioId, cerrada: false, evidencias: 3, momento: "salida");
+        // Sin ninguna foto en el viaje no cierra; con la foto de la acomodacion de OTRO carro del mismo viaje si: la foto de la niñera no se repite por carro.
+        var sinFotos = await CerrarAsync(e.Inspector, e.Inspeccion);
+        Assert.Equal(HttpStatusCode.BadRequest, sinFotos.StatusCode);
+        Assert.Equal(["Faltan fotos de la acomodación: se exige al menos 1 y hay 0"], Detalles(await JsonAsync(sinFotos)));
+        await Sembrador.InformeAsync(e.Etapas[1][0], e.Inspector.UsuarioId, cerrada: false, evidencias: 1, momento: "salida");
+
+        Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(e.Inspector, e.Inspeccion)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Con_la_acomodacion_cerrada_un_puesto_no_se_libera_suelto_pero_si_se_puede_cambiar()
+    {
+        var e = await EscenarioAsync();
+        for (var i = 0; i < VINES.Length; i++)
+        {
+            Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[i], i + 1)).StatusCode);
+        }
+
+        Assert.Equal(HttpStatusCode.Created, (await FotoDeAcomodacionAsync(e.Inspector, e.Inspeccion)).StatusCode);
+        // En borrador el puesto aun se libera y se vuelve a asignar.
+        Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[0], null)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await PosicionAsync(e.Inspector, e.Viaje, VINES[0], 1)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(e.Inspector, e.Inspeccion)).StatusCode);
+
+        var liberar = await PosicionAsync(e.Inspector, e.Viaje, VINES[0], null);
+
+        Assert.Equal(HttpStatusCode.Conflict, liberar.StatusCode);
+        var error = await JsonAsync(liberar);
+        Assert.Equal("acomodacion_cerrada", error.GetProperty("details").GetProperty("motivo").GetString());
+        Assert.Contains("La acomodación ya está cerrada", error.GetProperty("message").GetString());
+        Assert.Equal(1, Convert.ToInt32(await PosicionDeAsync(e.Viaje, VINES[0])));
     }
 }

@@ -23,6 +23,9 @@ public static class clsCodigosError
     /// <summary>La llegada de Transporte de esa unidad ya estaba cerrada (409): un reintento del conductor es un exito, el servidor no la repite.</summary>
     public const string LLEGADA_YA_CERRADA = "LLEGADA_YA_CERRADA";
 
+    /// <summary>El momento de la inspeccion no existe en esa etapa (409): el Descargue solo tiene la revision de llegada; <c>details.motivo</c> dice cual (<c>salida_descargue</c>).</summary>
+    public const string MOMENTO_NO_ADMITIDO = "MOMENTO_NO_ADMITIDO";
+
     /// <summary>La URL de la foto no tiene firma, la firma no coincide o ya vencio (403): hay que pedir una URL nueva al sistema.</summary>
     public const string URL_FIRMADA_INVALIDA = "URL_FIRMADA_INVALIDA";
 
@@ -37,6 +40,12 @@ public static class clsCodigosError
 
     /// <summary>La transferencia de la inspeccion ya tiene una firma o un cierre (409): una inspeccion firmada ya no se corrige, sea quien sea quien lo intente; se aclara con una nota.</summary>
     public const string INSPECCION_YA_FIRMADA = "INSPECCION_YA_FIRMADA";
+
+    /// <summary>Descartar un borrador que hizo otra persona sin ser el coordinador de calidad (403): lo descartan quien lo hizo y el coordinador de calidad; el administrador y el super administrador no.</summary>
+    public const string DESCARTE_SOLO_AUTOR_O_COORDINADOR = "DESCARTE_SOLO_AUTOR_O_COORDINADOR";
+
+    /// <summary>Descartar un informe cerrado (409): es evidencia inmutable y nunca se descarta; details.motivo dice si esta cerrado o si ya tiene firmas.</summary>
+    public const string INFORME_CERRADO_NO_SE_DESCARTA = "INFORME_CERRADO_NO_SE_DESCARTA";
 
     /// <summary>El PIN fue asignado o reiniciado y hay que cambiarlo antes de usar el resto de la API (403).</summary>
     public const string PIN_CHANGE_REQUIRED = "PIN_CHANGE_REQUIRED";

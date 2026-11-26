@@ -25,7 +25,7 @@ public sealed record FiltrosReporteRequest(
     string? Nivel,
     string? Fecha = null);
 
-/// <summary>Unidades despachadas de un cliente, operacion, origen y destino, y cuantas tienen sus seis registros cerrados.</summary>
+/// <summary>Unidades despachadas de un cliente, operacion, origen y destino, y cuantas tienen sus cinco registros cerrados.</summary>
 public sealed record FilaCobertura(Guid ClienteId, string Operacion, Guid? OrigenId, Guid? DestinoId, int Despachadas, int Completas);
 
 /// <summary>Una fila de adopcion: el dia, el cliente, la operacion y el destino (lugar) de las unidades o del viaje, con cuantas estaban programadas y cuantas tienen su salida cerrada.</summary>

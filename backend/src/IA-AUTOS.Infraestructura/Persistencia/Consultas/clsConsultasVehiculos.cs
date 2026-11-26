@@ -15,6 +15,11 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
 {
     private const int MAXIMO_BUSQUEDA = 8;
 
+    public async Task<IReadOnlyList<string>> MarcasAsync(Guid? clienteId, CancellationToken ct = default) =>
+        await contexto.Vehiculos.AsNoTracking()
+            .Where(v => (clienteId == null || v.ClienteId == clienteId) && v.Marca != string.Empty)
+            .Select(v => v.Marca).Distinct().OrderBy(m => m).ToListAsync(ct);
+
     public async Task<IReadOnlyList<VehiculoBusquedaDto>> BuscarAsync(string termino, Guid? soloDeUsuario, Guid? soloDeCliente, CancellationToken ct = default)
     {
         // Un vehiculo dado de baja ya no se ofrece al buscar (sigue en los listados, el inventario y los reportes).
@@ -74,7 +79,9 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
 
         if (f.Marca is not null)
         {
-            consulta = consulta.Where(v => v.Marca == f.Marca);
+            // La marca busca por contenido, sin distinguir mayusculas (el servicio ya recorto los espacios de los bordes).
+            var marca = f.Marca.ToLower();
+            consulta = consulta.Where(v => v.Marca.ToLower().Contains(marca));
         }
 
         if (f.ClienteId is { } clienteFiltro)
@@ -138,19 +145,22 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                                        join i in contexto.Inspecciones on e.Id equals i.EtapaId
                                        where ids.Contains(e.VehiculoId) && i.Estado == clsEstadoInspeccion.CERRADA
                                        select new { e.VehiculoId, EtapaId = e.Id }).Distinct().ToListAsync(ct);
+        // Solo la version vigente de cada informe: una version que una correccion cerrada ya reemplazo no cuenta. Con nivel son novedades; sin nivel, «sin calificar», aparte.
         var novedades = await (from e in contexto.Etapas
                                join i in contexto.Inspecciones on e.Id equals i.EtapaId
                                join h in contexto.Hallazgos on i.Id equals h.InspeccionId
                                where ids.Contains(e.VehiculoId)
+                                  && !contexto.Inspecciones.Any(c => c.CorrigeInspeccionId == i.Id && c.Estado == clsEstadoInspeccion.CERRADA)
                                group h by e.VehiculoId into g
-                               select new { VehiculoId = g.Key, Total = g.Count() }).ToListAsync(ct);
+                               select new { VehiculoId = g.Key, Total = g.Count(h => h.NivelSeveridad != null), SinCalificar = g.Count(h => h.NivelSeveridad == null) }).ToListAsync(ct);
         var porEtapas = etapas.ToDictionary(x => x.VehiculoId, x => x.Total);
         var porCompletas = conInformeCerrado.GroupBy(x => x.VehiculoId).ToDictionary(g => g.Key, g => g.Count());
         var porNovedades = novedades.ToDictionary(x => x.VehiculoId, x => x.Total);
+        var porSinCalificar = novedades.ToDictionary(x => x.VehiculoId, x => x.SinCalificar);
         var filas = filasPagina
             .Select(v => new ListadoVehiculoDto(
                 v.Id, v.Vin, v.Marca, v.Modelo, v.Color, v.Operacion, v.Activo,
-                porEtapas.GetValueOrDefault(v.Id), porCompletas.GetValueOrDefault(v.Id), porNovedades.GetValueOrDefault(v.Id)))
+                porEtapas.GetValueOrDefault(v.Id), porCompletas.GetValueOrDefault(v.Id), porNovedades.GetValueOrDefault(v.Id), porSinCalificar.GetValueOrDefault(v.Id)))
             .ToList();
         return (filas, total);
     }
@@ -184,6 +194,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                                  ViajeCreado = vj.CreatedAt,
                                  EstadoUnidad = vv.EstadoUnidad ?? clsEstadoUnidad.ACTIVA,
                                  vv.NoSaleMotivo,
+                                 vv.NoSaleMotivoCodigo,
                                  vv.NoSaleHallazgoId,
                                  vv.NoSaleMarcadoPor,
                                  MarcadoPorNombre = (string?)um.Nombre,
@@ -234,6 +245,7 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                 extras.GetValueOrDefault(i.Id) ?? []);
         }
 
+        var motivosNoSale = await contexto.MotivosNoSale.AsNoTracking().ToDictionaryAsync(m => m.Codigo, m => m.Nombre, ct);
         var etapasDto = etapas.Select(e => new InventarioEtapaDto(
             e.Etapa.Id,
             e.Etapa.Orden,
@@ -243,13 +255,19 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
             e.Etapa.ViajeId,
             e.CodigoMtrack,
             e.EstadoUnidad,
-            clsMapeadorViajes.ANoSale(e.EstadoUnidad, e.NoSaleMotivo, e.NoSaleHallazgoId, e.NoSaleMarcadoPor, e.MarcadoPorNombre, e.NoSaleAt, e.VinReemplazo),
+            clsMapeadorViajes.ANoSale(e.EstadoUnidad, e.NoSaleMotivoCodigo, e.NoSaleMotivo, e.NoSaleHallazgoId, e.NoSaleMarcadoPor, e.MarcadoPorNombre, e.NoSaleAt, e.VinReemplazo, motivosNoSale),
             inspecciones.Where(i => i.EtapaId == e.Etapa.Id).Select(AInspeccion).ToList(),
             e.Posicion))
             .ToList();
 
+        // Las mismas dos cifras del listado: solo la version vigente de cada informe (la que una correccion cerrada no reemplazo).
+        var reemplazadas = inspecciones.Where(i => i.CorrigeInspeccionId is not null && i.Estado == clsEstadoInspeccion.CERRADA).Select(i => i.CorrigeInspeccionId!.Value).ToHashSet();
+        var vigentes = inspecciones.Where(i => !reemplazadas.Contains(i.Id)).Select(i => i.Id).ToHashSet();
+        var deLaVersionVigente = hallazgos.Where(h => vigentes.Contains(h.InspeccionId)).ToList();
+
         return new InventarioDto(
             vehiculo.Id, vehiculo.Vin, vehiculo.Marca, vehiculo.TipoVehiculo, vehiculo.Modelo, vehiculo.Chasis,
-            vehiculo.Color, vehiculo.Operacion, vehiculo.Activo, vehiculo.CreatedAt, vehiculo.UpdatedAt, etapasDto);
+            vehiculo.Color, vehiculo.Operacion, vehiculo.Activo, vehiculo.CreatedAt, vehiculo.UpdatedAt, etapasDto,
+            deLaVersionVigente.Count(h => h.NivelSeveridad is not null), deLaVersionVigente.Count(h => h.NivelSeveridad is null));
     }
 }

@@ -48,9 +48,9 @@ public sealed partial class ExtrasApiTests(clsBaseDatosFixture bd) : clsPruebaAp
         var coordinador = await SesionAsync("calidad@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync(VIN, inspectorId: inspector.UsuarioId);
         await Sembrador.InformeAsync(etapas[0], inspector.UsuarioId, cerrada: true, momento: "llegada");
-        var r = await Como(inspector).PostAsync("/api/inspecciones", Cuerpo(new { etapa_id = etapas[1], momento = "salida", fecha = FECHA, lat = 6.2, lng = -75.5 }));
-        Assert.Equal(HttpStatusCode.Created, r.StatusCode);
-        return new Escenario(await Sembrador.ViajeDeEtapaAsync(etapas[0]), etapas, inspector, coordinador, (await JsonAsync(r)).GetProperty("id").GetGuid());
+        // El informe de transporte lo arma el sistema (nadie lo crea por la API): se siembra el borrador de la salida.
+        var borrador = await Sembrador.InformeAsync(etapas[1], inspector.UsuarioId, cerrada: false, momento: "salida");
+        return new Escenario(await Sembrador.ViajeDeEtapaAsync(etapas[0]), etapas, inspector, coordinador, borrador);
     }
 
     private Task<HttpResponseMessage> AgregarExtraAsync(Sesion quien, Guid inspeccion, string? tipo, string? texto = null, string? observacion = null) =>
@@ -361,7 +361,8 @@ public sealed partial class ExtrasApiTests(clsBaseDatosFixture bd) : clsPruebaAp
         var (titulos, filas) = LeerHoja(await excel.Content.ReadAsByteArrayAsync());
         var columna = titulos.IndexOf("Extras");
         Assert.True(columna >= 0, "Falta la columna Extras");
-        Assert.Equal(titulos.Count - 1, columna);
+        // Despues de «Extras» van las cuatro columnas del momento y la ubicacion de cada firma.
+        Assert.Equal(titulos.Count - 5, columna);
         Assert.Equal(2, filas.Sum(f => f.TryGetValue(columna, out var cantidad) && int.TryParse(cantidad, out var n) ? n : 0));
     }
 

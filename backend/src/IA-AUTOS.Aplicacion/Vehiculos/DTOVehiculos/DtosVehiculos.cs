@@ -20,6 +20,10 @@ public sealed record BajaVehiculoResponse(string Modo);
 /// <summary>Resultado de reactivar un vehiculo: siempre "reactivado".</summary>
 public sealed record ReactivarVehiculoResponse(string Modo);
 
+/// <summary>
+/// Una fila del listado de vehiculos. <c>Novedades</c> cuenta los hallazgos con nivel de la version vigente de cada informe del carro (los de una version que una correccion cerrada ya reemplazo no cuentan) y
+/// <c>SinCalificar</c>, aparte, los de la version vigente que aun no tienen nivel; el dano sin calificar pasa a <c>Novedades</c> cuando se califica.
+/// </summary>
 public sealed record ListadoVehiculoDto(
     Guid Id,
     string Vin,
@@ -30,7 +34,8 @@ public sealed record ListadoVehiculoDto(
     bool Activo,
     int Etapas,
     int Completas,
-    int Novedades);
+    int Novedades,
+    int SinCalificar = 0);
 
 /// <summary>
 /// Filtros del listado de vehiculos tal como llegan en la consulta (texto) y su pagina y orden: el servicio los valida juntos. <c>Tipo</c> es <c>movilizados</c> (por defecto), <c>pendientes</c> o
@@ -104,6 +109,7 @@ public sealed record InventarioEtapaDto(
     IReadOnlyList<InventarioInspeccionDto> Inspecciones,
     int? Posicion = null);
 
+/// <summary>El informe del carro: sus etapas con sus inspecciones. <c>Novedades</c> y <c>SinCalificar</c> son las mismas dos cifras del listado de vehiculos, sobre las etapas que se devuelven.</summary>
 public sealed record InventarioDto(
     Guid Id,
     string Vin,
@@ -116,4 +122,6 @@ public sealed record InventarioDto(
     bool Activo,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<InventarioEtapaDto> Etapas);
+    IReadOnlyList<InventarioEtapaDto> Etapas,
+    int Novedades = 0,
+    int SinCalificar = 0);

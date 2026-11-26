@@ -123,6 +123,27 @@ public static class clsInstantaneasAuditoria
         t.MotivoNoFirma,
         t.TestigoUsuarioId,
         t.EvidenciaConstanciaId,
+        sin_inspector_del_punto = t.SinInspectorDelPunto,
+    };
+
+    public static object De(clsEsperaInspectorPunto e) => new
+    {
+        e.ViajeId,
+        e.LugarId,
+        e.ConductorId,
+        e.MotivoCodigo,
+        e.MotivoTexto,
+        activada_at = e.ActivadaAt,
+        recibida_at = e.CreatedAt,
+        e.Lat,
+        e.Lng,
+        e.PrecisionM,
+        e.Estado,
+        aviso_at = e.AvisoAt,
+        e.InspectorId,
+        inspector_llego_at = e.InspectorLlegoAt,
+        cerrada_at = e.CerradaAt,
+        e.CerradaPor,
     };
 
     public static object De(clsViaje v) => new

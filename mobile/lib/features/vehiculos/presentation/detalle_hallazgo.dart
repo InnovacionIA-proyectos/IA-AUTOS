@@ -14,6 +14,7 @@ Future<void> mostrarDetalleHallazgo(
   required HallazgoVista hallazgo,
   required Catalogos catalogos,
   String? urlFoto,
+  Map<String, String> encabezadosFoto = const {},
   DateTime? venceFoto,
   VoidCallback? alVencerFoto,
   bool sinSenal = false,
@@ -26,6 +27,7 @@ Future<void> mostrarDetalleHallazgo(
       hallazgo: hallazgo,
       catalogos: catalogos,
       urlFoto: urlFoto,
+      encabezadosFoto: encabezadosFoto,
       venceFoto: venceFoto,
       alVencerFoto: alVencerFoto,
       sinSenal: sinSenal,
@@ -38,6 +40,7 @@ class _DetalleHallazgo extends StatelessWidget {
     required this.hallazgo,
     required this.catalogos,
     required this.urlFoto,
+    required this.encabezadosFoto,
     required this.venceFoto,
     required this.alVencerFoto,
     required this.sinSenal,
@@ -46,6 +49,9 @@ class _DetalleHallazgo extends StatelessWidget {
   final HallazgoVista hallazgo;
   final Catalogos catalogos;
   final String? urlFoto;
+
+  /// Encabezados de enrutamiento de la pasarela para pedir la foto. Vacíos si no hay pasarela.
+  final Map<String, String> encabezadosFoto;
   final DateTime? venceFoto;
   final VoidCallback? alVencerFoto;
   final bool sinSenal;
@@ -91,11 +97,12 @@ class _DetalleHallazgo extends StatelessWidget {
                         // El enlace va firmado: el visor lo abre igual, sin encabezados.
                         onTap: () => mostrarVisorImagen(
                           context,
-                          imagen: NetworkImage(urlFoto!),
+                          imagen: NetworkImage(urlFoto!, headers: encabezadosFoto.isEmpty ? null : encabezadosFoto),
                           titulo: hallazgo.zona,
                         ),
                         child: FotoEvidencia(
                           url: urlFoto,
+                          encabezados: encabezadosFoto,
                           alto: 200,
                           venceEn: venceFoto,
                           alVencer: alVencerFoto,

@@ -96,7 +96,8 @@ public sealed record FiltrosHallazgosRequest(
     string? Hasta,
     string? Orden,
     int? Pagina,
-    int? Tamano);
+    int? Tamano,
+    string? SinCalificar = null);
 
 /// <summary>Los filtros ya validados (el alcance de quien consulta, por viaje o por cliente, va aparte).</summary>
 public sealed record FiltrosHallazgos(
@@ -112,7 +113,8 @@ public sealed record FiltrosHallazgos(
     string? Proceso,
     DateTimeOffset? Desde,
     DateTimeOffset? Hasta,
-    string Orden);
+    string Orden,
+    bool? SinCalificar = null);
 
 /// <summary>Como se ordenan los hallazgos del listado.</summary>
 public static class clsOrdenHallazgos
@@ -211,6 +213,13 @@ public sealed class clsHallazgosService(
             }
         }
 
+        var sinCalificar = clsParseoFiltros.Booleano(s.SinCalificar, "sin_calificar", errores);
+
+        if (sinCalificar == true && nivel is not null)
+        {
+            errores["sin_calificar"] = ["sin_calificar=true no se combina con nivel: lo sin calificar no tiene nivel"];
+        }
+
         int? cuadrante = null;
         if (!string.IsNullOrWhiteSpace(s.CuadranteNumero))
         {
@@ -231,7 +240,7 @@ public sealed class clsHallazgosService(
 
         var filtros = new FiltrosHallazgos(
             estado, origen, revisado, viajeId, clsValidador.Opcional(s.Vin) is { } vin ? clsVin.Normalizar(vin) : null, inspeccionId, nivel, cuadrante, lado,
-            clsValidador.Opcional(s.Proceso), desde, hasta, orden);
+            clsValidador.Opcional(s.Proceso), desde, hasta, orden, sinCalificar);
         return (filtros, clienteId);
     }
 

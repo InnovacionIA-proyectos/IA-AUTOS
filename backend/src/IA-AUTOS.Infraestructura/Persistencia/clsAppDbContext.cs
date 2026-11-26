@@ -38,6 +38,9 @@ public sealed class clsAppDbContext : DbContext
     public DbSet<clsNivelSeveridad> NivelesSeveridad => Set<clsNivelSeveridad>();
     public DbSet<clsEstadoSofasa> EstadosSofasa => Set<clsEstadoSofasa>();
     public DbSet<clsMotivoSinInspector> MotivosSinInspector => Set<clsMotivoSinInspector>();
+    public DbSet<clsMotivoNoSale> MotivosNoSale => Set<clsMotivoNoSale>();
+    public DbSet<clsTipoNovedadViaje> TiposNovedadViaje => Set<clsTipoNovedadViaje>();
+    public DbSet<clsMuelle> Muelles => Set<clsMuelle>();
     public DbSet<clsLugar> Lugares => Set<clsLugar>();
     public DbSet<clsVistaFoto> VistasFoto => Set<clsVistaFoto>();
     public DbSet<clsCuadrante> Cuadrantes => Set<clsCuadrante>();
@@ -60,12 +63,17 @@ public sealed class clsAppDbContext : DbContext
     public DbSet<clsNotaAclaratoria> NotasAclaratorias => Set<clsNotaAclaratoria>();
 
     public DbSet<clsNovedadProceso> NovedadesProceso => Set<clsNovedadProceso>();
+    public DbSet<clsNovedadViaje> NovedadesViaje => Set<clsNovedadViaje>();
 
     public DbSet<clsReclamo> Reclamos => Set<clsReclamo>();
 
     public DbSet<clsInspectorLugar> InspectorLugares => Set<clsInspectorLugar>();
 
     public DbSet<clsPermisoSinInspector> PermisosSinInspector => Set<clsPermisoSinInspector>();
+
+    public DbSet<clsEsperaInspectorPunto> EsperasInspectorPunto => Set<clsEsperaInspectorPunto>();
+
+    public DbSet<clsMapeoCargaViajes> MapeosCargaViajes => Set<clsMapeoCargaViajes>();
 
     public DbSet<clsEvidencia> Evidencias => Set<clsEvidencia>();
 

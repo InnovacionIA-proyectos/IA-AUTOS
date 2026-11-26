@@ -61,7 +61,7 @@ public sealed class RevisionHallazgosApiTests(clsBaseDatosFixture bd) : clsPrueb
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
         var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync(vin, conductorId: conductor.UsuarioId, inspectorId: inspector.UsuarioId);
-        await Sembrador.InformeAsync(etapas[0], conductor.UsuarioId, cerrada: true, momento: "llegada");
+        await Sembrador.EntregaDelCargueCerradaAsync(etapas[0], conductor.UsuarioId, coordinador.UsuarioId);
         var viaje = await Sembrador.ViajeDeEtapaAsync(etapas[0]);
         var (ruta, hash) = await SubirAsync(conductor);
         var r = await Como(conductor).PostAsJsonAsync($"/api/viajes/{viaje}/vehiculos/{vin}/novedades", new

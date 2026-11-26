@@ -27,6 +27,56 @@ public static class clsMotivosRechazo
 
     public const string HALLAZGO_DE_VERSION_REEMPLAZADA = "hallazgo_de_version_reemplazada";
 
+    // ---- El cargue por ninera
+    public const string CARGUE_INCOMPLETO = "cargue_incompleto";
+    public const string FIRMA_POR_NINERA = "firma_por_ninera";
+    public const string ACOMODACION_CERRADA = "acomodacion_cerrada";
+
+    // ---- La entrega por parada
+    public const string SIN_RECEPTOR = "sin_receptor";
+    public const string ENTREGA_TOMADA = "entrega_tomada";
+    public const string CONDUCTOR_SIN_LLEGADA = "conductor_sin_llegada";
+    public const string SIN_NOVEDAD_PARA_RECHAZAR = "sin_novedad_para_rechazar";
+    public const string LLEGADA_ABIERTA = "llegada_abierta";
+    public const string SIN_LLEGUE = "sin_llegue";
+    public const string ENTREGA_POR_PARADA = "entrega_por_parada";
+    public const string NO_ES_SU_PUNTO = "no_es_su_punto";
+
+    // ---- La espera del inspector del punto
+    public const string PARADA_SIN_INSPECTORES = "parada_sin_inspectores";
+    public const string SIN_LLEGUE_EN_PARADA = "sin_llegue_en_parada";
+    public const string ENTREGA_CERRADA = "entrega_cerrada";
+    public const string PLAN_B_NO_HABILITADO = "plan_b_no_habilitado";
+    public const string ENTREGA_CERRADA_SIN_INSPECTOR = "entrega_cerrada_sin_inspector";
+    public const string LLEGADA_DEL_INSPECTOR_DEL_PUNTO = "llegada_del_inspector_del_punto";
+    public const string DANOS_SIN_CALIFICAR = "danos_sin_calificar";
+
+    // ---- Una sola revision en el descargue
+    public const string SALIDA_DESCARGUE = "salida_descargue";
+
+    // ---- No sale, vuelve a salir y bajar del viaje
+    public const string CARGUE_FIRMADO = "cargue_firmado";
+    public const string SIN_CUPO = "sin_cupo";
+    public const string TIENE_REEMPLAZO = "tiene_reemplazo";
+    public const string UNIDAD_NO_SALE = "unidad_no_sale";
+    public const string UNIDAD_BAJADA = "unidad_bajada";
+    public const string MOTIVO_NO_APLICA = "motivo_no_aplica";
+    public const string FIRMANTES_DE_LA_TRANSFERENCIA = "firmantes_de_la_transferencia";
+
+    // ---- Descartar un informe en borrador
+    public const string SOLO_AUTOR_O_COORDINADOR = "solo_autor_o_coordinador";
+    public const string INFORME_CERRADO = "informe_cerrado";
+    public const string INFORME_CON_FIRMAS = "informe_con_firmas";
+    public const string INFORME_DESCARTADO = "informe_descartado";
+    // ---- La novedad del viaje y el reenvio de las novedades
+    public const string INSPECTOR_SIN_ESE_PROCESO = "inspector_sin_ese_proceso";
+    public const string ENVIO_REPETIDO_DISTINTO = "envio_repetido_distinto";
+
+    // ---- Cuando se puede: el cargue sin inspector, la ruta de la unidad y el transporte
+    public const string LUGAR_NO_ADMITE_CARGUE_SIN_INSPECTOR = "lugar_no_admite_cargue_sin_inspector";
+    public const string ENTREGA_DEL_CARGUE_SIN_CERRAR = "entrega_del_cargue_sin_cerrar";
+    public const string TRANSPORTE_LO_ARMA_EL_SISTEMA = "transporte_lo_arma_el_sistema";
+
     // ---- Vehiculos
     public const string VEHICULO_EN_VIAJE_ACTIVO = "vehiculo_en_viaje_activo";
 

@@ -163,6 +163,8 @@ public sealed class ViajeNaceCompletoApiTests(clsBaseDatosFixture bd) : clsPrueb
         var cedi = await LugarAsync(coordinador, "CEDI Envigado", "cedi_1");
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-OLD-01");
         var viejo = await Sembrador.ViajeDeEtapaAsync(etapas[0]);
+        // Un viaje anterior a la programacion no tiene fecha ni lugar de cargue.
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET LugarCargueId = NULL WHERE Id = @v", ("@v", viejo));
 
         var leido = await Cliente(coordinador.Token).GetAsync($"/api/viajes/{viejo}");
         var corregido = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{viejo}", Cuerpo(new { placa = "XYZ789" }));
@@ -207,7 +209,7 @@ public sealed class ViajeNaceCompletoApiTests(clsBaseDatosFixture bd) : clsPrueb
         var norte = await LugarAsync(coordinador, "Concesionario Norte", "concesionario");
         var sur = await LugarAsync(coordinador, "Concesionario Sur", "concesionario");
         var unidades = new List<object>();
-        for (var i = 1; i <= 8; i++)
+        for (var i = 1; i <= 7; i++)
         {
             var vin = $"VIN-L-{i:00}";
             await Sembrador.VehiculoAsync(vin);
@@ -226,13 +228,13 @@ public sealed class ViajeNaceCompletoApiTests(clsBaseDatosFixture bd) : clsPrueb
         var invalido = await Cliente(coordinador.Token).GetAsync("/api/viajes?destino_unidad_id=no-es-uuid");
 
         Assert.Equal(
-            [("Concesionario Norte", 5), ("Concesionario Sur", 3)],
+            [("Concesionario Norte", 5), ("Concesionario Sur", 2)],
             fila.GetProperty("destinos").EnumerateArray().Select(d => (d.GetProperty("lugar").GetString()!, d.GetProperty("unidades").GetInt32())).ToList());
         Assert.Equal(norte, fila.GetProperty("destinos")[0].GetProperty("lugar_id").GetGuid());
         Assert.Equal("CEDI Envigado", fila.GetProperty("lugar_cargue").GetString());
-        Assert.Equal(8, fila.GetProperty("total_vehiculos").GetInt32());
+        Assert.Equal(7, fila.GetProperty("total_vehiculos").GetInt32());
         Assert.Equal(0, lista.GetProperty("items").EnumerateArray().Single(v => v.GetProperty("codigo_mtrack").GetString() == "MT-2026-0418").GetProperty("destinos").GetArrayLength());
-        // El viaje con 3 unidades a «Concesionario Sur» sale una sola vez, y el lugar de cargue no es un destino de unidad.
+        // El viaje con 2 unidades a «Concesionario Sur» sale una sola vez, y el lugar de cargue no es un destino de unidad.
         Assert.Equal(1, porSur.GetProperty("total").GetInt32());
         Assert.Equal("MT-2026-0417", porSur.GetProperty("items")[0].GetProperty("codigo_mtrack").GetString());
         Assert.Equal(0, porCedi.GetProperty("total").GetInt32());

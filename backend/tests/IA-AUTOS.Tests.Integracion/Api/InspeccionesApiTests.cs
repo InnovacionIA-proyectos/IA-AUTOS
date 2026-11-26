@@ -33,6 +33,18 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     /// <summary>Crea la inspeccion. La salida del cargue que hace el conductor lleva el motivo de la excepcion «No hay inspector» (<paramref name="motivo"/>).</summary>
     private async Task<Guid> CrearInspeccionAsync(Sesion sesion, Guid etapaId, string momento = "salida", bool conGps = true, string? motivo = null)
     {
+        // El informe de transporte lo arma el sistema con «Reportar novedad» y «Llegué»: nadie lo crea por la API, asi que se siembra el borrador.
+        if (await Sembrador.EscalarAsync("SELECT c.Codigo FROM dbo.tblEtapas e JOIN dbo.tblEtapasCatalogo c ON c.Id = e.EtapaCatalogoId WHERE e.Id = @e", ("@e", etapaId)) is "transporte")
+        {
+            var borrador = await Sembrador.InformeAsync(etapaId, sesion.UsuarioId, cerrada: false, momento: momento);
+            if (!conGps)
+            {
+                await Sembrador.EjecutarAsync("UPDATE dbo.tblInspecciones SET Lat = NULL, Lng = NULL WHERE Id = @i", ("@i", borrador));
+            }
+
+            return borrador;
+        }
+
         var r = await Cliente(sesion.Token).PostAsJsonAsync(
             "/api/inspecciones",
             new Dictionary<string, object?>
@@ -86,6 +98,19 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var admin = await SesionAsync($"admin-{Guid.NewGuid():N}@ejemplo.com", clsRol.ADMIN);
         var r = await Cliente(admin.Token).PatchAsync($"/api/catalogos/vistas-foto/{vistaId}", JsonContent.Create(cambios));
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+    }
+
+    /// <summary>
+    /// Una inspeccion en borrador de la etapa de Transporte sobre la que se firma la transferencia (el cargue se firma por niñera, no carro por carro): para poder crearla por la API la etapa anterior se deja con su
+    /// transferencia firmada y, ya creada la inspeccion, esa transferencia se quita para que las pruebas vean solo la suya.
+    /// </summary>
+    private async Task<Guid> CrearInspeccionFirmableAsync(Sesion inspector, Guid recibeUsuarioId, Guid[] etapas, string momento = "salida")
+    {
+        var previa = await Sembrador.InformeAsync(etapas[0], inspector.UsuarioId, cerrada: true, momento: "llegada");
+        await Sembrador.TransferenciaAsync(previa, inspector.UsuarioId, recibeUsuarioId, "firmada");
+        var id = await CrearInspeccionAsync(inspector, etapas[1], momento);
+        await Sembrador.EjecutarAsync("ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL; DELETE FROM dbo.tblTransferenciasCustodia; ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL");
+        return id;
     }
 
     private Task<Guid> LlegadaCerradaAsync(Guid etapaId, Guid usuarioId) => Sembrador.InformeAsync(etapaId, usuarioId, cerrada: true, momento: "llegada");
@@ -212,36 +237,34 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     // ---------------------------------------------------------------- etapa anterior
 
     [Fact]
-    public async Task La_salida_exige_que_la_llegada_de_la_etapa_anterior_este_cerrada()
+    public async Task La_salida_de_transporte_no_se_crea_a_mano_tenga_o_no_cerrada_la_llegada_de_la_etapa_anterior()
     {
         var (sesion, etapas) = await EscenarioAsync();
 
         // La primera etapa no tiene anterior.
         await CrearInspeccionAsync(sesion, etapas[0]);
-        // Con la etapa anterior sin llegada (solo hay una salida en borrador), no se puede crear la salida de la siguiente.
-        var bloqueada = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA });
+        // El informe de transporte lo arma el sistema con «Reportar novedad» y «Llegué» (que si exigen la etapa anterior cerrada): por la API nadie lo crea.
+        var sinLlegada = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA });
 
-        Assert.Equal(HttpStatusCode.Conflict, bloqueada.StatusCode);
-        var error = await ClonarAsync(bloqueada);
-        Assert.Equal("ETAPA_PREVIA_SIN_CIERRE", error.GetProperty("code").GetString());
-        Assert.Equal("etapa_previa_sin_cierre", error.GetProperty("details").GetProperty("motivo").GetString());
-        Assert.Equal(etapas[0], error.GetProperty("details").GetProperty("etapa_previa_id").GetGuid());
-        Assert.Equal("Cargue", error.GetProperty("details").GetProperty("etapa_previa").GetString());
+        Assert.Equal(HttpStatusCode.Conflict, sinLlegada.StatusCode);
+        var error = await ClonarAsync(sinLlegada);
+        Assert.Equal("CONFLICT", error.GetProperty("code").GetString());
+        Assert.Equal("transporte_lo_arma_el_sistema", error.GetProperty("details").GetProperty("motivo").GetString());
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblInspecciones"));
 
-        // Una llegada en borrador tampoco alcanza; cerrada, si.
-        await Sembrador.InformeAsync(etapas[0], sesion.UsuarioId, cerrada: false, momento: "llegada");
-        Assert.Equal(HttpStatusCode.Conflict, (await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA })).StatusCode);
-        await Sembrador.EjecutarAsync("UPDATE dbo.tblInspecciones SET Estado = 'cerrada', CerradaAt = SYSDATETIMEOFFSET() WHERE EtapaId = @e AND Momento = 'llegada'", ("@e", etapas[0]));
+        await Sembrador.InformeAsync(etapas[0], sesion.UsuarioId, cerrada: true, momento: "llegada");
+        var conLlegada = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA });
 
-        var permitida = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA });
-        Assert.Equal(HttpStatusCode.Created, permitida.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, conLlegada.StatusCode);
+        Assert.Equal("transporte_lo_arma_el_sistema", (await ClonarAsync(conLlegada)).GetProperty("details").GetProperty("motivo").GetString());
     }
 
     [Fact]
     public async Task El_bloqueo_por_etapa_previa_solo_aplica_a_la_salida_no_a_la_llegada()
     {
         var (sesion, etapas) = await EscenarioAsync();
+        // La revision de llegada del descargue exige el «Llegue» del conductor: la llegada de Transporte ya confirmada.
+        await LlegadaCerradaAsync(etapas[1], sesion.UsuarioId);
 
         var llegada = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "llegada", fecha = FECHA });
 
@@ -1191,8 +1214,8 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var conGps = await CrearInspeccionAsync(sesion, etapas[1], "llegada");
 
         var rechazada = await CerrarAsync(sesion, sinGps);
-        var salida = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "llegada", fecha = FECHA, lat = 4.6, lng = -74.1 });
         var cerrada = await CerrarAsync(sesion, conGps);
+        var salida = await Cliente(sesion.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "llegada", fecha = FECHA, lat = 4.6, lng = -74.1 });
 
         Assert.Equal(HttpStatusCode.BadRequest, rechazada.StatusCode);
         Assert.Contains("ubicación", (await ClonarAsync(rechazada)).GetProperty("details")[0].GetString());
@@ -1247,7 +1270,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
-    public async Task El_conductor_crea_la_salida_de_transporte_y_de_descargue_aunque_el_cargue_tenga_personal_de_apoyo()
+    public async Task El_conductor_no_crea_a_mano_la_salida_de_transporte_pero_si_la_llegada_de_descargue_aunque_el_cargue_tenga_personal_de_apoyo_y_la_salida_de_descargue_ya_no_existe()
     {
         var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-COND-0003", conductorId: conductor.UsuarioId);
@@ -1255,13 +1278,19 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var transporte = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
         await LlegadaCerradaAsync(etapas[1], conductor.UsuarioId);
 
-        var descargue = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
+        var descargue = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "llegada", fecha = FECHA, lat = 4.6, lng = -74.1 });
+        var salidaDelDescargue = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
         var llegadaDelCargue = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[0], momento = "llegada", fecha = FECHA, lat = 4.6, lng = -74.1 });
 
-        Assert.Equal(HttpStatusCode.Created, transporte.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, transporte.StatusCode);
+        Assert.Equal("transporte_lo_arma_el_sistema", (await ClonarAsync(transporte)).GetProperty("details").GetProperty("motivo").GetString());
         Assert.Equal(HttpStatusCode.Created, descargue.StatusCode);
-        // El bloqueo es de la salida del Cargue: lo demas del Cargue (por ejemplo la llegada) no cambia.
-        Assert.NotEqual(HttpStatusCode.Forbidden, llegadaDelCargue.StatusCode);
+        // El Descargue tiene una sola revision: su salida ya no se crea.
+        Assert.Equal(HttpStatusCode.Conflict, salidaDelDescargue.StatusCode);
+        Assert.Equal("MOMENTO_NO_ADMITIDO", (await ClonarAsync(salidaDelDescargue)).GetProperty("code").GetString());
+        // La llegada del Cargue del conductor tambien exige la excepcion «No hay inspector» (aqui no la activo): 403 con su motivo.
+        Assert.Equal(HttpStatusCode.Forbidden, llegadaDelCargue.StatusCode);
+        Assert.Equal("conductor_sin_permiso_de_excepcion", (await ClonarAsync(llegadaDelCargue)).GetProperty("details").GetProperty("motivo").GetString());
     }
 
     [Fact]
@@ -1463,7 +1492,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Cada_firma_la_envia_su_titular_y_guarda_su_propia_fecha_y_el_cierre_se_fija_con_la_segunda()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
 
         var primera = await FirmarAsync(inspector, id, inspector, conductor, "M0 0 L10 10");
         var t1 = await ClonarAsync(primera);
@@ -1476,6 +1505,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
             [
                 "id", "inspeccion_id", "entrega_usuario_id", "recibe_usuario_id", "firmada", "firmada_at", "created_at", "updated_at", "tipo_cierre",
                 "entrega_firmada_at", "recibe_firmada_at", "reservas_texto", "no_firma_parte", "motivo_no_firma", "testigo_usuario_id", "evidencia_constancia_id", "recibe_externo_nombre", "recibe_externo_cedula",
+                "firma_por_ninera", "entrega_momento_at", "entrega_lat", "entrega_lng", "entrega_precision_m", "recibe_momento_at", "recibe_lat", "recibe_lng", "recibe_precision_m",
             ],
             t1.EnumerateObject().Select(p => p.Name).ToList());
         Assert.False(t1.GetProperty("firmada").GetBoolean());
@@ -1500,7 +1530,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
         var intruso = await SesionAsync("intruso@ejemplo.com");
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
 
         var creaAjena = await FirmarAsync(intruso, id, inspector, conductor, "FIRMA-FALSA");
         Assert.Equal(HttpStatusCode.Forbidden, creaAjena.StatusCode);
@@ -1520,7 +1550,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Cada_uno_firma_su_parte_aunque_envie_los_dos_ids_y_los_firmantes_no_se_pueden_cambiar()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
         await FirmarAsync(inspector, id, inspector, conductor, "A");
 
         // El conductor envia los dos ids y su firma: se guarda como el recibo, nunca como la entrega.
@@ -1538,7 +1568,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Una_transferencia_firmada_es_inmutable_pero_acepta_el_reintento_identico()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        var id = await CrearInspeccionAsync(inspector, etapas[0], "llegada");
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas, "llegada");
         await TomarVistasObligatoriasAsync(inspector, id);
         Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(inspector, id)).StatusCode);
 
@@ -1560,7 +1590,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
         var ajeno = await SesionAsync("ajeno@ejemplo.com", clsRol.CONDUCTOR);
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
 
         var mismo = await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { entrega_usuario_id = inspector.UsuarioId, recibe_usuario_id = inspector.UsuarioId, firma = "A" });
         var inexistente = await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia", new { entrega_usuario_id = inspector.UsuarioId, recibe_usuario_id = Guid.NewGuid(), firma = "A" });
@@ -1592,7 +1622,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     public async Task Recibir_con_reservas_exige_las_observaciones_y_solo_lo_hace_quien_recibe()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
         await FirmarAsync(inspector, id, inspector, conductor, "A");
 
         var sinTexto = await Cliente(conductor.Token).PostAsJsonAsync($"/api/inspecciones/{id}/transferencia/reservas", new { firma = "B", reservas = "   " });
@@ -1618,7 +1648,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
         var testigo = await SesionAsync("testigo@ejemplo.com");
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
         await FirmarAsync(inspector, id, inspector, conductor, "A");
         var foto = await FotoConstanciaAsync(inspector);
         var ruta = $"/api/inspecciones/{id}/transferencia/no-firma";
@@ -1662,7 +1692,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
         var testigo = await SesionAsync("testigo@ejemplo.com");
-        var id = await CrearInspeccionAsync(inspector, etapas[0], "llegada");
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas, "llegada");
         await TomarVistasObligatoriasAsync(inspector, id);
         Assert.Equal(HttpStatusCode.OK, (await CerrarAsync(inspector, id)).StatusCode);
 
@@ -1682,31 +1712,33 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     }
 
     [Fact]
-    public async Task Una_transferencia_sin_cierre_bloquea_la_salida_de_la_etapa_siguiente_hasta_que_se_cierra()
+    public async Task El_descargue_ya_no_tiene_salida_ni_con_la_transferencia_de_la_llegada_de_transporte_sin_cierre_ni_despues_de_cerrarla_y_su_llegada_se_crea_igual()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        await LlegadaCerradaAsync(etapas[0], inspector.UsuarioId);
-        var llegada = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblInspecciones WHERE EtapaId = @e", ("@e", etapas[0])))!;
+        // El cargue se firma por niñera: la transferencia por carro se prueba con la llegada del Transporte, cuya etapa siguiente es el Descargue.
+        await Sembrador.TransferenciaAsync(await LlegadaCerradaAsync(etapas[0], inspector.UsuarioId), inspector.UsuarioId, conductor.UsuarioId, "firmada");
+        var llegada = await LlegadaCerradaAsync(etapas[1], inspector.UsuarioId);
         await FirmarAsync(inspector, llegada, inspector, conductor, "A");
-        var salida = new { etapa_id = etapas[1], momento = "salida", fecha = FECHA };
+        var salida = new { etapa_id = etapas[2], momento = "salida", fecha = FECHA };
 
-        var bloqueada = await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", salida);
-        var error = await ClonarAsync(bloqueada);
-        Assert.Equal(HttpStatusCode.Conflict, bloqueada.StatusCode);
-        Assert.Equal("ETAPA_PREVIA_SIN_CIERRE", error.GetProperty("code").GetString());
-        Assert.Equal("transferencia_sin_cierre", error.GetProperty("details").GetProperty("motivo").GetString());
-        Assert.Equal(etapas[0], error.GetProperty("details").GetProperty("etapa_previa_id").GetGuid());
+        // El Descargue tiene una sola revision, la de llegada: su salida se rechaza siempre (ya no hay bloqueo por transferencia porque ya no hay salida).
+        var rechazada = await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", salida);
+        var error = await ClonarAsync(rechazada);
+        Assert.Equal(HttpStatusCode.Conflict, rechazada.StatusCode);
+        Assert.Equal("MOMENTO_NO_ADMITIDO", error.GetProperty("code").GetString());
+        Assert.Equal("salida_descargue", error.GetProperty("details").GetProperty("motivo").GetString());
 
         Assert.Equal(HttpStatusCode.Created, (await Cliente(conductor.Token).PostAsJsonAsync($"/api/inspecciones/{llegada}/transferencia/reservas", new { firma = "B", reservas = "Rayón" })).StatusCode);
 
-        Assert.Equal(HttpStatusCode.Created, (await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", salida)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", salida)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await Cliente(inspector.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[2], momento = "llegada", fecha = FECHA })).StatusCode);
     }
 
     [Fact]
     public async Task El_conductor_recibe_en_el_cargue_sin_que_la_respuesta_le_muestre_los_hallazgos()
     {
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
         var (ruta, _) = await SubirAsync(inspector);
         Assert.Equal(HttpStatusCode.Created, (await Cliente(inspector.Token).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new
         {
@@ -1732,7 +1764,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var (inspector, conductor, etapas) = await EscenarioConConductorAsync();
         var ajeno = await SesionAsync("ajeno@ejemplo.com");
         var testigo = await SesionAsync("testigo@ejemplo.com");
-        var id = await CrearInspeccionAsync(inspector, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(inspector, conductor.UsuarioId, etapas);
         var ruta = $"/api/inspecciones/{id}/transferencia/constancia/pdf";
         Assert.Equal(HttpStatusCode.NotFound, (await Cliente(inspector.Token).GetAsync(ruta)).StatusCode);
         await FirmarAsync(inspector, id, inspector, conductor, "M0 0 L10 10 L20 0");
@@ -1792,7 +1824,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var receptor = await SesionAsync("recibe@ejemplo.com", clsRol.CONDUCTOR);
         // El receptor es el conductor del viaje: solo ve los informes de sus viajes.
         await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET ConductorId = @c WHERE Id = @v", ("@c", receptor.UsuarioId), ("@v", await Sembrador.ViajeDeEtapaAsync(etapas[0])));
-        var id = await CrearInspeccionAsync(sesion, etapas[0]);
+        var id = await CrearInspeccionFirmableAsync(sesion, receptor.UsuarioId, etapas);
         var (ruta, _) = await SubirAsync(sesion);
         await Cliente(sesion.Token).PostAsJsonAsync($"/api/inspecciones/{id}/hallazgos", new
         {
@@ -1812,7 +1844,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var inf = await ClonarAsync(r);
         Assert.Equal("VIN-INSP-0001", inf.GetProperty("vin").GetString());
         Assert.Equal("Renault", inf.GetProperty("marca").GetString());
-        Assert.Equal("cargue", inf.GetProperty("proceso").GetString());
+        Assert.Equal("transporte", inf.GetProperty("proceso").GetString());
         Assert.True(inf.GetProperty("requiere_inspeccion").GetBoolean());
         Assert.Equal("Nombre insp@ejemplo.com", inf.GetProperty("inspector_nombre").GetString());
         Assert.Equal(1, inf.GetProperty("hallazgos").GetArrayLength());
@@ -1894,7 +1926,10 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var porFecha = Items(await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?desde=2026-07-01T00:00:00Z&hasta=2026-07-31T00:00:00Z")));
 
         Assert.Equal(3, todas.GetArrayLength());
-        Assert.Equal(["iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre", "lugar", "codigo_mtrack", "unidad"], todas[0].EnumerateObject().Select(p => p.Name).TakeLast(8).ToList());
+        Assert.Equal(["iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre", "lugar", "codigo_mtrack", "unidad", "usuario_nombre"], todas[0].EnumerateObject().Select(p => p.Name).TakeLast(9).ToList());
+        // El nombre de quien hizo cada informe sale en la fila, con el mismo patron del nombre del conductor.
+        Assert.Equal("Nombre uno@ejemplo.com", todas.EnumerateArray().Single(i => i.GetProperty("id").GetGuid() == a).GetProperty("usuario_nombre").GetString());
+        Assert.Equal("Nombre dos@ejemplo.com", todas.EnumerateArray().Single(i => i.GetProperty("id").GetGuid() == b).GetProperty("usuario_nombre").GetString());
         Assert.Equal(["vin", "proceso"], todas[0].EnumerateObject().Select(p => p.Name).Skip(15).Take(2).ToList());
         Assert.Equal(2, porUsuario.GetArrayLength());
         Assert.Contains(porUsuario.EnumerateArray(), i => i.GetProperty("id").GetGuid() == b);
@@ -1902,8 +1937,24 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(2, porMomento.EnumerateArray().Count(i => i.GetProperty("momento_nombre").GetString() == "Inspección de llegada"));
         Assert.Equal("transporte", porProceso[0].GetProperty("proceso").GetString());
         Assert.Equal("9FBHSR4E8PM000999", porVin[0].GetProperty("vin").GetString());
-        // Solo las dos creadas por la API llevan la fecha del dispositivo (julio de 2026); la llegada sembrada lleva la de hoy.
-        Assert.Equal(2, porFecha.GetArrayLength());
+        // Solo la creada por la API lleva la fecha del dispositivo (julio de 2026); las sembradas llevan la de hoy.
+        Assert.Equal(1, porFecha.GetArrayLength());
+    }
+
+    [Fact]
+    public async Task El_nombre_de_quien_hizo_el_informe_no_sale_a_un_coordinador_de_otro_cliente()
+    {
+        var (sesion, etapas) = await EscenarioAsync("uno@ejemplo.com");
+        await CrearInspeccionAsync(sesion, etapas[0]);
+        var otroCliente = Guid.NewGuid();
+        await Sembrador.EjecutarAsync("INSERT dbo.tblClientes (Id, Codigo, Nombre, Orden) VALUES (@id, 'otro', N'Otro cliente', 2)", ("@id", otroCliente));
+        var usuarioOtro = await Fabrica.SembrarUsuarioAsync("coord-otro@ejemplo.com", "Clave-Segura-1", clsRol.COORDINADOR_CALIDAD, nombre: "Coordinador otro", clienteId: otroCliente);
+        var tokenOtro = await LoginAsync("coord-otro@ejemplo.com", "Clave-Segura-1");
+        Assert.NotEqual(Guid.Empty, usuarioOtro.Id);
+
+        var delOtro = Items(await ClonarAsync(await Cliente(tokenOtro).GetAsync("/api/inspecciones")));
+
+        Assert.Equal(0, delOtro.GetArrayLength());
     }
 
     [Fact]

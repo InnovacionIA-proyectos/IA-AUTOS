@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../vehiculos/domain/consulta.dart';
+import '../../inspecciones/presentation/sin_calificar_page.dart';
+import '../../inspecciones/providers.dart';
 import '../../sync/presentation/barra_sync.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../vehiculos/domain/etiquetas.dart';
@@ -68,6 +71,7 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
     final tema = Theme.of(context).textTheme;
     final estado = ref.watch(misViajesControllerProvider);
     final nombre = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.nombre)) ?? 'Usuario';
+    final rol = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol));
 
     return Scaffold(
       body: SafeArea(
@@ -108,7 +112,9 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
           ],
         ),
       ),
-      floatingActionButton: estado.viajes.isEmpty
+      // Quien consulta los carros de su cliente puede no tener ningún viaje: esconderle la búsqueda lo dejaría sin
+      // ninguna entrada a la ficha, que es justo el caso del coordinador de calidad.
+      floatingActionButton: estado.viajes.isEmpty && !buscaEnElServidor(rol)
           ? null
           : FloatingActionButton(
               tooltip: 'Buscar VIN',
@@ -206,13 +212,13 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
   }
 }
 
-class _TarjetaViaje extends StatelessWidget {
+class _TarjetaViaje extends ConsumerWidget {
   const _TarjetaViaje(this.viaje);
 
   final Viaje viaje;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
     final ruta = [viaje.origen, viaje.destino].whereType<String>().where((l) => l.isNotEmpty).join(' → ');
 
@@ -248,12 +254,29 @@ class _TarjetaViaje extends StatelessWidget {
             Text('Este viaje todavía no tiene unidades.', style: tema.bodySmall)
           else
             for (final vehiculo in viaje.vehiculos) _FilaVehiculo(vehiculo, viaje: viaje),
+          // Los daños que el conductor registró y nadie ha calificado. Solo al inspector del viaje: es el único
+          // que puede ponerles clase y nivel —a otro, el listado le responde 200 con la lista vacía y la
+          // revisión le responde 403—. El botón aparece cuando hay algo que hacer; con cero no se ofrece una
+          // pantalla vacía.
+          if (_sinCalificar(ref) case final cuantos? when cuantos > 0) ...[
+            const SizedBox(height: Espacio.sm),
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute(
+                  builder: (_) => SinCalificarPage(viajeId: viaje.id, codigoMtrack: viaje.codigoMtrack),
+                ),
+              ),
+              child: Text(cuantos == 1 ? 'Sin calificar (1)' : 'Sin calificar ($cuantos)'),
+            ),
+          ],
           // Entregar es lo que se hace con un viaje en ruta: en cada punto se firma una vez para todas sus unidades.
           if (viaje.estado == 'en_curso' && viaje.vehiculos.isNotEmpty) ...[
             const SizedBox(height: Espacio.sm),
             OutlinedButton(
               onPressed: () => Navigator.of(context).push<void>(
-                MaterialPageRoute(builder: (_) => EntregasViajePage(viajeId: viaje.id)),
+                MaterialPageRoute(
+                  builder: (_) => EntregasViajePage(viajeId: viaje.id),
+                ),
               ),
               child: const Text('Entrega por punto'),
             ),
@@ -261,6 +284,18 @@ class _TarjetaViaje extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Cuántos daños sin calificar tiene este viaje, o null si no hay que ofrecerlo.
+///
+/// Null cuando quien mira no es el inspector del viaje (CA-4: a los demás ni se les muestra la lista) y mientras
+/// la consulta no haya llegado: un botón que aparece y desaparece distrae más de lo que ayuda.
+extension _SinCalificarDelViaje on _TarjetaViaje {
+  int? _sinCalificar(WidgetRef ref) {
+    final yo = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.id));
+    if (yo == null || viaje.inspectorId != yo) return null;
+    return ref.watch(sinCalificarDelViajeProvider(viaje.id)).value?.length;
   }
 }
 

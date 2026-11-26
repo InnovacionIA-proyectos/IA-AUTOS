@@ -110,7 +110,7 @@ public class EntregaPorPuntoTests
         var unidad = clsViajeVehiculo.Crear(viaje, Guid.NewGuid(), AHORA, uno);
         var otra = clsViajeVehiculo.Crear(viaje, Guid.NewGuid(), AHORA, uno);
         var noSale = clsViajeVehiculo.Crear(viaje, Guid.NewGuid(), AHORA, uno);
-        noSale.MarcarNoSale("Golpe", Guid.NewGuid(), Guid.NewGuid(), null, AHORA);
+        noSale.MarcarNoSale("dano_v1_plus", "Golpe", Guid.NewGuid(), Guid.NewGuid(), null, AHORA);
 
         unidad.CambiarLugarDestino(dos, AHORA.AddHours(1));
 

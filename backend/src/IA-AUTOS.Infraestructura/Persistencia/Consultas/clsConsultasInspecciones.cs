@@ -33,7 +33,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
     }
 
     public Task<bool> EsDeClienteAsync(Guid inspeccionId, Guid clienteId, CancellationToken ct = default) =>
-        (from i in contexto.Inspecciones.AsNoTracking()
+        (from i in contexto.Inspecciones.IgnoreQueryFilters().AsNoTracking()
          join e in contexto.Etapas on i.EtapaId equals e.Id
          join v in contexto.Vehiculos on e.VehiculoId equals v.Id
          where i.Id == inspeccionId && v.ClienteId == clienteId
@@ -43,6 +43,8 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
         FiltrosInspecciones f, Guid? soloDeUsuario, Guid? soloDeCliente, PaginaSolicitada pagina, OrdenSolicitado? orden, CancellationToken ct = default)
     {
         var vinExacto = f.Vin?.Length == clsVin.LONGITUD_ISO;
+        // La marca busca por contenido, sin distinguir mayusculas.
+        var marca = f.Marca?.ToLower();
         var consulta = from i in contexto.Inspecciones.AsNoTracking()
                        join e in contexto.Etapas on i.EtapaId equals e.Id
                        join v in contexto.Vehiculos on e.VehiculoId equals v.Id
@@ -50,6 +52,8 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                        join vj in contexto.Viajes on i.ViajeId equals vj.Id
                        join c in contexto.Usuarios on vj.ConductorId equals c.Id into conductores
                        from c in conductores.DefaultIfEmpty()
+                       join au in contexto.Usuarios on i.UsuarioId equals au.Id into autores
+                       from au in autores.DefaultIfEmpty()
                        join lg in contexto.PuntosCustodia on e.PuntoCustodiaId equals lg.Id into lugares
                        from lg in lugares.DefaultIfEmpty()
                        join tu in contexto.TiposUnidad on vj.TipoUnidadId equals tu.Id into unidades
@@ -57,7 +61,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                        where (f.Vin == null || (vinExacto ? v.Vin == f.Vin : v.Vin.Contains(f.Vin)))
                           && (soloDeCliente == null || v.ClienteId == soloDeCliente)
                           && (f.Operacion == null || v.Operacion == f.Operacion)
-                          && (f.Marca == null || v.Marca == f.Marca)
+                          && (marca == null || v.Marca.ToLower().Contains(marca))
                           && (f.OrigenId == null || vj.OrigenId == f.OrigenId)
                           && (f.DestinoId == null || vj.DestinoId == f.DestinoId)
                           && (f.UsuarioId == null || i.UsuarioId == f.UsuarioId)
@@ -67,7 +71,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                           && (f.Proceso == null || p.Codigo == f.Proceso)
                           && (f.Desde == null || i.Fecha >= f.Desde)
                           && (f.Hasta == null || i.Fecha <= f.Hasta)
-                       select new { Inspeccion = i, v.Vin, Proceso = p.Codigo, vj.Placa, vj.Trailer, Conductor = (string?)c.Nombre, Lugar = (string?)lg.Nombre, vj.CodigoMtrack, Unidad = (string?)tu.Nombre };
+                       select new { Inspeccion = i, v.Vin, Proceso = p.Codigo, vj.Placa, vj.Trailer, Conductor = (string?)c.Nombre, Lugar = (string?)lg.Nombre, vj.CodigoMtrack, Unidad = (string?)tu.Nombre, Autor = (string?)au.Nombre };
         if (soloDeUsuario is { } usuarioId)
         {
             var viajesPropios = clsAlcanceViajes.Viajes(contexto, usuarioId);
@@ -97,10 +101,20 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                 x.Inspeccion.CreatedAt, x.Inspeccion.UpdatedAt, x.Vin, x.Proceso,
                 x.Inspeccion.IniciadaAt, x.Inspeccion.CerradaAt, x.Inspeccion.Version, x.Inspeccion.CorrigeInspeccionId,
                 x.Inspeccion.Momento == clsMomento.SALIDA ? "Inspección de salida" : x.Inspeccion.Momento == clsMomento.LLEGADA ? "Inspección de llegada" : x.Inspeccion.Momento,
-                x.Lugar, x.CodigoMtrack, x.Unidad))
+                x.Lugar, x.CodigoMtrack, x.Unidad, x.Autor))
             .ToListAsync(ct);
         return (filas, total);
     }
+
+    public async Task<IReadOnlyList<EvidenciaDto>> FotosDeAcomodacionDelViajeAsync(Guid viajeId, CancellationToken ct = default) =>
+        (await (from e in contexto.Evidencias.AsNoTracking()
+                join i in contexto.Inspecciones.AsNoTracking() on e.InspeccionId equals i.Id
+                join et in contexto.Etapas.AsNoTracking() on i.EtapaId equals et.Id
+                join c in contexto.EtapasCatalogo.AsNoTracking() on et.EtapaCatalogoId equals c.Id
+                where i.ViajeId == viajeId && i.Momento == clsMomento.SALIDA && c.Codigo == clsCodigosEtapa.CARGUE
+                   && e.VistaId == null && e.HallazgoId == null && e.ExtraId == null && !e.EsConstancia && !e.EsSello
+                orderby e.CreatedAt
+                select e).ToListAsync(ct)).Select(clsMapeadorInspecciones.AEvidencia).ToList();
 
     public async Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosAsync(Guid inspeccionId, CancellationToken ct = default)
     {
@@ -113,16 +127,29 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
             return [];
         }
 
-        // Cerradas antes de que empezara esta, del mismo vehiculo; sin la version que esta corrige ni las que ya reemplazo una correccion cerrada.
+        return await PreviasAsync(actual.VehiculoId, inspeccionId, actual.CorrigeInspeccionId, actual.IniciadaAt, ct);
+    }
+
+    public Task<IReadOnlyList<HallazgoPrevioDto>> ObtenerHallazgosPreviosDeVehiculoAsync(Guid vehiculoId, CancellationToken ct = default) =>
+        PreviasAsync(vehiculoId, null, null, null, ct);
+
+    /// <summary>
+    /// Los hallazgos de las inspecciones cerradas del vehiculo, del cierre mas reciente al mas antiguo. Con <paramref name="antesDe"/> solo las cerradas antes de ese
+    /// instante, y con <paramref name="excluir"/> y <paramref name="corrige"/> se dejan fuera la inspeccion que pregunta y la version que corrige. Nunca entran las que
+    /// ya reemplazo una correccion cerrada.
+    /// </summary>
+    private async Task<IReadOnlyList<HallazgoPrevioDto>> PreviasAsync(
+        Guid vehiculoId, Guid? excluir, Guid? corrige, DateTimeOffset? antesDe, CancellationToken ct)
+    {
         var previas = await (from i in contexto.Inspecciones.AsNoTracking()
                              join e in contexto.Etapas on i.EtapaId equals e.Id
                              join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id
                              join vj in contexto.Viajes on i.ViajeId equals vj.Id
-                             where e.VehiculoId == actual.VehiculoId
-                                && i.Id != inspeccionId
-                                && i.Id != actual.CorrigeInspeccionId
+                             where e.VehiculoId == vehiculoId
+                                && (excluir == null || i.Id != excluir)
+                                && (corrige == null || i.Id != corrige)
                                 && i.Estado == clsEstadoInspeccion.CERRADA
-                                && i.CerradaAt < actual.IniciadaAt
+                                && (antesDe == null || i.CerradaAt < antesDe)
                                 && !contexto.Inspecciones.Any(c => c.CorrigeInspeccionId == i.Id && c.Estado == clsEstadoInspeccion.CERRADA)
                              select new { i.Id, i.Momento, CerradaAt = i.CerradaAt!.Value, i.ViajeId, vj.CodigoMtrack, Proceso = p.Codigo }).ToListAsync(ct);
         if (previas.Count == 0)
@@ -152,7 +179,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
 
     public async Task<InformeDetalleDto?> ObtenerInformeAsync(Guid id, CancellationToken ct = default)
     {
-        var fila = await (from i in contexto.Inspecciones.AsNoTracking()
+        var fila = await (from i in contexto.Inspecciones.IgnoreQueryFilters().AsNoTracking()
                           join e in contexto.Etapas on i.EtapaId equals e.Id
                           join v in contexto.Vehiculos on e.VehiculoId equals v.Id
                           join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id

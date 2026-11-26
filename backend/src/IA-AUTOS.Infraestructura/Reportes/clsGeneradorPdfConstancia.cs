@@ -39,7 +39,8 @@ internal sealed class clsGeneradorPdfConstancia : IGeneradorPdfConstancia
         }
 
         doc.Espaciar(8);
-        if (d.TipoCierre == clsTipoCierre.RECIBO_SIN_ENTREGA)
+        // El recibo sin entrega es del cargue (nadie de Botero Soto entrega); el cierre con una sola firma del destino muestra a las dos partes y su motivo.
+        if (d.TipoCierre == clsTipoCierre.RECIBO_SIN_ENTREGA && d.Proceso == "cargue")
         {
             doc.Escribir("Entrega: no hubo entrega", 12, true);
             doc.Escribir("El conductor hizo la salida del cargue: nadie de Botero Soto firma la entrega.", 11);
@@ -67,6 +68,13 @@ internal sealed class clsGeneradorPdfConstancia : IGeneradorPdfConstancia
             doc.Escribir($"Testigo: {d.TestigoNombre ?? "—"}", 11);
         }
 
+        if (d.TipoCierre == clsTipoCierre.RECIBO_SIN_ENTREGA && d.NoFirmaParte == clsParteFirmante.RECIBE && d.MotivoNoFirma is not null)
+        {
+            doc.Espaciar(8);
+            doc.Escribir("Cierre con una sola firma", 13, true);
+            doc.Escribir($"Motivo: {d.MotivoNoFirma}", 11);
+        }
+
         foreach (var foto in d.Fotos)
         {
             doc.Espaciar(6);
@@ -89,6 +97,13 @@ internal sealed class clsGeneradorPdfConstancia : IGeneradorPdfConstancia
 
         var ip = firma.Ip is null ? string.Empty : $" · IP {firma.Ip}";
         doc.Escribir($"Firmó el {(firma.Fecha is { } f ? Fecha(f) : "—")}{ip}", 11);
+        if (firma.Momento is { } momento)
+        {
+            // La hora y el lugar del momento en que se firmo; la hora de arriba es cuando llego la firma al servidor.
+            var donde = momento.Lat is { } lat && momento.Lng is { } lng ? string.Create(CultureInfo.InvariantCulture, $"ubicación {lat:0.#####}, {lng:0.#####}") : "sin ubicación";
+            doc.Escribir($"Momento de la firma: {Fecha(momento.Momento)} · {donde}", 10);
+        }
+
         if (firma.Imagen is not null)
         {
             doc.Imagen(firma.Imagen, FIRMA_ANCHO, FIRMA_ALTO);
@@ -105,6 +120,7 @@ internal sealed class clsGeneradorPdfConstancia : IGeneradorPdfConstancia
         clsTipoCierre.CON_RESERVAS => "firmada con reservas",
         clsTipoCierre.NO_FIRMA => "no firma",
         clsTipoCierre.RECIBO_SIN_ENTREGA => "recibo sin entrega",
+        clsTipoCierre.RECHAZADO => "carro rechazado en su parada",
         _ => "abierta (sin tipo de cierre)",
     };
 

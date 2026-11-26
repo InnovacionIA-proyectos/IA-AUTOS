@@ -140,6 +140,10 @@ BloqueoCierre? bloqueoDeCierre({
     if (acomodacion.unidades == null) return const SinUnidadesDelViaje();
     final sin = vinesSinPosicion(acomodacion.unidades!, acomodacion.posiciones);
     if (sin.isNotEmpty) return FaltaPosicion(sin.first);
+    // Solo las de ESTE informe. El viaje ya tenga o no fotos de la acomodación, el servidor las cuenta por
+    // inspección (`ContarFotosLibresAsync(inspeccion.Id)`), así que contarlas por viaje dejaría cerrar aquí lo
+    // que allá vuelve con un 400 y deja el informe a medias. Que la niñera se fotografíe una sola vez por viaje
+    // (S7-HU-05 CA-2) necesita primero ese cambio en el servidor.
     final hay = fotosDeAcomodacion(fotos).length;
     if (hay < acomodacion.fotosMinimas) return FaltanFotosDeAcomodacion(minimas: acomodacion.fotosMinimas, hay: hay);
   }
@@ -195,11 +199,13 @@ InformeJob construirInformeJob({
   Map<String, int> posicionesPrevias = const {},
   String? motivoSinInspector,
   String? motivoSinInspectorTexto,
+  String? corrigeInspeccionId,
 }) {
   String? opcional(String valor) => valor.trim().isEmpty ? null : valor.trim();
   return InformeJob(
     id: id,
-    etiqueta: 'Informe $vin · $proceso',
+    // La etiqueta es lo que se lee en la cola: una corrección y el informe que corrige se distinguen ahí.
+    etiqueta: corrigeInspeccionId == null ? 'Informe $vin · $proceso' : 'Corrección $vin · $proceso',
     creadoEn: creadoEn,
     usuarioId: usuarioId,
     etapaId: etapaId,
@@ -216,6 +222,7 @@ InformeJob construirInformeJob({
     posicionesPrevias: posicionesPrevias,
     motivoSinInspector: motivoSinInspector,
     motivoSinInspectorTexto: motivoSinInspectorTexto,
+    corrigeInspeccionId: corrigeInspeccionId,
   );
 }
 

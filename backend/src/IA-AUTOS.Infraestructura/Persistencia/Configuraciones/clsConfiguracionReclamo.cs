@@ -19,10 +19,11 @@ internal sealed class clsConfiguracionReclamo : IEntityTypeConfiguration<clsRecl
         builder.Property(r => r.LiberadoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
         builder.HasOne<clsViaje>().WithMany().HasForeignKey(r => r.ViajeId).HasConstraintName("FK_tblReclamos_Viaje").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(r => r.InspectorId).HasConstraintName("FK_tblReclamos_Inspector").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsLugar>().WithMany().HasForeignKey(r => r.LugarId).HasConstraintName("FK_tblReclamos_Lugar").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(r => r.LiberadoPor).HasConstraintName("FK_tblReclamos_LiberadoPor").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(r => r.ViajeId).HasDatabaseName("IX_tblReclamos_Viaje");
         builder.HasIndex(r => r.InspectorId).HasDatabaseName("IX_tblReclamos_Inspector");
-        builder.HasIndex(r => new { r.ViajeId, r.Proceso }).IsUnique().HasFilter("[LiberadoAt] IS NULL").HasDatabaseName("UX_tblReclamos_Activo");
+        builder.HasIndex(r => new { r.ViajeId, r.Proceso, r.LugarId }).IsUnique().HasFilter("[LiberadoAt] IS NULL").HasDatabaseName("UX_tblReclamos_Activo");
     }
 }
 

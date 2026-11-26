@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/errores/error_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
+import '../../inspecciones/domain/estado_informe_unidad.dart';
+import '../../inspecciones/providers.dart';
 import '../domain/pendiente.dart';
 import '../domain/viaje.dart';
 import '../providers.dart';
@@ -100,7 +102,7 @@ class _EstadoDetallePendiente extends ConsumerState<DetallePendientePage> {
                   ],
                 ),
               ),
-              data: (datos) => _Unidades(viaje: datos),
+              data: (datos) => _Unidades(viaje: datos, proceso: _pendiente.proceso),
             ),
             const SizedBox(height: Espacio.xl),
             OutlinedButton(
@@ -116,15 +118,21 @@ class _EstadoDetallePendiente extends ConsumerState<DetallePendientePage> {
   }
 }
 
-class _Unidades extends StatelessWidget {
-  const _Unidades({required this.viaje});
+class _Unidades extends ConsumerWidget {
+  const _Unidades({required this.viaje, required this.proceso});
 
   final Viaje viaje;
 
+  /// El proceso del pendiente (cargue o entrega): decide de qué informes se lee el estado de cada unidad.
+  final String proceso;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
     if (viaje.vehiculos.isEmpty) return Tarjeta(child: Text('Este viaje todavía no tiene unidades.', style: tema.bodySmall));
+    // Sin los informes todavía (o sin señal) no se inventa un estado: la insignia simplemente no sale, en vez de
+    // decir «sin informe» de una unidad que puede estar cerrada.
+    final informes = ref.watch(informesDelViajeProvider((viajeId: viaje.id, proceso: proceso))).value;
     return Tarjeta(
       child: Column(
         children: [
@@ -146,6 +154,19 @@ class _Unidades extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (informes != null) ...[
+                      switch (estadoDeUnidad(unidad.vin, informes)) {
+                        final estado => Insignia(
+                            estado.etiqueta,
+                            tono: switch (estado) {
+                              EstadoInformeUnidad.cerrada => TonoInsignia.exito,
+                              EstadoInformeUnidad.borrador => TonoInsignia.advertencia,
+                              EstadoInformeUnidad.sinInforme => TonoInsignia.neutro,
+                            },
+                          ),
+                      },
+                      const SizedBox(width: Espacio.sm),
+                    ],
                     const Icon(Icons.chevron_right, color: Colores.textoSecundario),
                   ],
                 ),

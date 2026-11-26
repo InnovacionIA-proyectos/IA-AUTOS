@@ -173,7 +173,13 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Contains("EntregaPuntoDto", rutas["/api/viajes/{id}/entregas/{lugar}"]!["get"]!["responses"]!["200"]!.ToJsonString());
         Assert.Contains("FirmarEntregaRequest", rutas["/api/viajes/{id}/entregas/{lugar}/firma"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
         Assert.Contains("CerrarEntregaUnaFirmaRequest", rutas["/api/viajes/{id}/entregas/{lugar}/una-firma"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
-        Assert.Equal(["vehiculo_id", "vin", "estado", "inspeccion_id", "tipo_cierre", "entrega_firmada_at", "recibe_firmada_at", "no_firma_parte", "motivo_cierre", "recibe_externo_nombre", "recibe_externo_cedula"], Propiedades(esquemas["EntregaUnidadDto"]!));
+        Assert.Equal(["vehiculo_id", "vin", "estado", "inspeccion_id", "tipo_cierre", "entrega_firmada_at", "recibe_firmada_at", "no_firma_parte", "motivo_cierre", "recibe_externo_nombre", "recibe_externo_cedula", "motivo_codigo", "reservas", "fotos_de_cierre", "testigo_nombre", "entrega_momento", "recibe_momento", "danos_nuevos", "rechazo", "entregada_sin_inspector_del_punto"], Propiedades(esquemas["EntregaUnidadDto"]!));
+        // La entrega por parada: quien recibe, el estado de la parada, el llegue del conductor, los rechazos y el cierre con motivo codificado.
+        Assert.Equal(["lugar_tiene_inspector", "estado_parada", "receptor", "receptor_nombre", "conductor_llego", "espera", "espera_aviso_minutos", "espera_plan_b_minutos", "danos_por_calificar"], Propiedades(esquemas["EntregaPuntoDto"]!).TakeLast(9));
+        Assert.Equal(["firma", "recibe_nombre", "recibe_cedula", "firma_recibe", "reservas", "rechazos", "fecha_momento", "lat", "lng", "precision_m"], Propiedades(esquemas["FirmarEntregaRequest"]!));
+        Assert.Equal(["firma", "motivo_codigo", "motivo_texto", "fotos", "testigo_nombre", "testigo_cedula", "fecha_momento", "lat", "lng", "precision_m"], Propiedades(esquemas["CerrarEntregaUnaFirmaRequest"]!));
+        Assert.Equal(["vin", "hallazgo_id"], Propiedades(esquemas["FirmarEntregaRequest"]!["properties"]!["rechazos"]!["items"]!));
+        Assert.Equal(["hallazgo_id", "evidencia_id", "marcado_por", "marcado_por_nombre", "motivo"], Propiedades(esquemas["RechazoDeEntregaDto"]!));
     }
 
     [Fact]
@@ -183,12 +189,15 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var esquemas = contrato["components"]!["schemas"]!.AsObject();
         var rutas = contrato["paths"]!.AsObject();
 
+        Assert.Equal(["proceso", "lugar_id", "lat", "lng", "precision"], esquemas["ReclamarViajeRequest"]!["properties"]!.AsObject().Select(p => p.Key).ToList());
+        // La entrega se libera por parada: lugar_id viaja en la consulta.
+        Assert.Contains("lugar_id", rutas["/api/viajes/{id}/reclamos/{proceso}"]!["delete"]!["parameters"]!.ToJsonString());
         Assert.Contains("ReclamarViajeRequest", rutas["/api/viajes/{id}/reclamos"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
         Assert.Contains("ReclamoDto", rutas["/api/viajes/{id}/reclamos"]!["post"]!["responses"]!["201"]!.ToJsonString());
         Assert.Contains("ReclamoDto", rutas["/api/viajes/{id}/reclamos"]!["get"]!["responses"]!["200"]!.ToJsonString());
         Assert.Contains("ReclamoDto", rutas["/api/viajes/{id}/reclamos/{proceso}"]!["delete"]!["responses"]!["200"]!.ToJsonString());
         Assert.Equal(
-            ["id", "viaje_id", "proceso", "inspector_id", "inspector_nombre", "reclamado_at", "activo", "liberado_at", "liberado_por", "liberado_por_nombre"],
+            ["id", "viaje_id", "proceso", "inspector_id", "inspector_nombre", "reclamado_at", "activo", "liberado_at", "liberado_por", "liberado_por_nombre", "lugar_id", "lugar"],
             esquemas["ReclamoDto"]!["properties"]!.AsObject().Select(p => p.Key).ToList());
         // El 409 «Ya fue tomado por otro inspector» y el 403 de otro punto estan documentados en reclamar.
         var respuestas = rutas["/api/viajes/{id}/reclamos"]!["post"]!["responses"]!.AsObject().Select(r => r.Key).ToList();
@@ -295,12 +304,16 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
 
     [Theory]
     [InlineData("/api/inspecciones", "post", "409", "ETAPA_PREVIA_SIN_CIERRE")]
+    [InlineData("/api/inspecciones", "post", "409", "MOMENTO_NO_ADMITIDO")]
+    [InlineData("/api/inspecciones/{id}/corregir", "post", "409", "MOMENTO_NO_ADMITIDO")]
     [InlineData("/api/viajes/{id}/vehiculos/{vin}/novedades", "post", "409", "UNIDAD_NO_SALE")]
     [InlineData("/api/viajes/{id}/vehiculos/{vin}/novedades", "post", "409", "ETAPA_PREVIA_SIN_CIERRE")]
     [InlineData("/api/viajes/{id}/vehiculos/{vin}/llegada", "post", "409", "LLEGADA_YA_CERRADA")]
     [InlineData("/api/hallazgos/{id}/revision", "post", "409", "HALLAZGO_YA_REVISADO")]
     [InlineData("/api/inspecciones/{id}/corregir", "post", "403", "CORRECCION_SOLO_AUTOR")]
     [InlineData("/api/inspecciones/{id}/corregir", "post", "409", "INSPECCION_YA_FIRMADA")]
+    [InlineData("/api/inspecciones/{id}/descartar", "post", "403", "DESCARTE_SOLO_AUTOR_O_COORDINADOR")]
+    [InlineData("/api/inspecciones/{id}/descartar", "post", "409", "INFORME_CERRADO_NO_SE_DESCARTA")]
     [InlineData("/api/uploads/{archivo}", "get", "403", "URL_FIRMADA_INVALIDA")]
     [InlineData("/api/auth/login-conductor", "post", "423", "ACCOUNT_LOCKED")]
     [InlineData("/api/auth/login-portal", "post", "403", "PORTAL_USER_NOT_LINKED")]

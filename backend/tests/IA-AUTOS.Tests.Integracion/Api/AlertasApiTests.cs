@@ -85,8 +85,8 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
     private async Task<HttpResponseMessage> CerrarTransporteConHallazgosAsync(Escenario e, params string[] niveles)
     {
         await Sembrador.InformeAsync(e.Etapas[0], e.Inspector.UsuarioId, cerrada: true, momento: "llegada");
-        var inspeccion = await ComoJsonAsync(await Como(e.Inspector).PostAsJsonAsync("/api/inspecciones", new { etapa_id = e.Etapas[1], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 }));
-        var id = inspeccion.GetProperty("id").GetGuid();
+        // El informe de transporte lo arma el sistema (nadie lo crea por la API): se siembra el borrador de la salida.
+        var id = await Sembrador.InformeAsync(e.Etapas[1], e.Inspector.UsuarioId, cerrada: false, momento: "salida");
         foreach (var nivel in niveles)
         {
             var subida = await ComoJsonAsync(await Como(e.Inspector).PostAsJsonAsync("/api/uploads", new { data = Convert.ToBase64String(FIRMA_PNG.Concat(Guid.NewGuid().ToByteArray()).ToArray()), ext = "png" }));
@@ -206,7 +206,8 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
         foreach (var destinatario in new[] { e.Coordinador, e.Admin })
         {
             Assert.Equal(2, await NotificacionesAsync("umbral_patron", destinatario.UsuarioId));
-            Assert.Equal(2, await NotificacionesAsync("umbral_patron", destinatario.UsuarioId, "push"));
+            // Son de urgencia media: quedan solo en la bandeja y no salen al celular.
+            Assert.Equal(0, await NotificacionesAsync("umbral_patron", destinatario.UsuarioId, "push"));
         }
 
         var mensajes = (await ComoJsonAsync(await Como(e.Coordinador).GetAsync("/api/notificaciones?tipo=umbral_patron"))).GetProperty("items").EnumerateArray()
@@ -295,7 +296,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
 
     // ------------------------------------------------------------------------------ captura incompleta
 
-    private Task<Guid> BorradorAsync(Guid etapa, Guid usuario, string momento = "salida", int minutosAbierta = 40) =>
+    private Task<Guid> BorradorAsync(Guid etapa, Guid usuario, string momento = "llegada", int minutosAbierta = 40) =>
         Sembrador.InformeAsync(etapa, usuario, cerrada: false, momento: momento).ContinueWith(async t =>
         {
             await EnvejecerAsync(t.Result, "IniciadaAt", minutosAbierta);
@@ -314,7 +315,8 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
         Assert.Equal(1, primera);
         Assert.Equal(1, segunda);
         Assert.Equal(1, await NotificacionesAsync("captura_incompleta", e.Inspector.UsuarioId));
-        Assert.Equal(1, await NotificacionesAsync("captura_incompleta", e.Inspector.UsuarioId, "push"));
+        // Es de urgencia media: queda solo en la bandeja y no sale al celular.
+        Assert.Equal(0, await NotificacionesAsync("captura_incompleta", e.Inspector.UsuarioId, "push"));
         var aviso = (await ComoJsonAsync(await Como(e.Inspector).GetAsync("/api/notificaciones?tipo=captura_incompleta"))).GetProperty("items").EnumerateArray().Single();
         Assert.Equal("media", aviso.GetProperty("urgencia").GetString());
         Assert.Equal(inspeccion, aviso.GetProperty("inspeccion_id").GetGuid());
@@ -349,7 +351,7 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
     }
 
     [Fact]
-    public async Task El_conductor_solo_recibe_el_aviso_de_la_salida_del_cargue_que_el_inicio()
+    public async Task El_conductor_solo_recibe_el_aviso_de_la_captura_del_cargue_que_el_inicio()
     {
         var e = await EscenarioAsync();
         var delCargue = await BorradorAsync(e.Etapas[0], e.Conductor.UsuarioId);
@@ -392,6 +394,112 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
         Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));
     }
 
+    [Fact]
+    public async Task La_acomodacion_abierta_no_avisa_por_vistas_pero_la_llegada_del_cargue_y_la_del_descargue_si()
+    {
+        var e = await EscenarioAsync();
+        // La acomodacion (la salida del cargue) se documenta con las fotos de la ninera: no reclama las vistas aunque lleve mas del tiempo abierta.
+        await BorradorAsync(e.Etapas[0], e.Inspector.UsuarioId, "salida");
+        Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));
+        Assert.Equal(0, await NotificacionesAsync("captura_incompleta"));
+
+        // Una salida del descargue que quedo abierta de antes tampoco: el descargue ya no tiene salida.
+        await BorradorAsync(e.Etapas[2], e.Inspector.UsuarioId, "salida");
+        Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));
+
+        // La llegada del cargue y la del descargue con vistas sin foto si avisan, una vez.
+        await BorradorAsync(e.Etapas[0], e.Inspector.UsuarioId, "llegada");
+        await BorradorAsync(e.Etapas[2], e.Inspector.UsuarioId, "llegada");
+        Assert.Equal(2, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));
+        Assert.Equal(2, await NotificacionesAsync("captura_incompleta", e.Inspector.UsuarioId));
+        Assert.Equal(2, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));
+        Assert.Equal(2, await NotificacionesAsync("captura_incompleta", e.Inspector.UsuarioId));
+    }
+
+    // ------------------------------------------------------------------------------ viaje sin movimiento
+
+    /// <summary>Pone el viaje en curso y deja su unica inspeccion (la llegada de Transporte, cerrada) con ese ultimo movimiento hace <paramref name="horas"/> horas.</summary>
+    private async Task<Guid> ViajeConUltimoMovimientoAsync(Escenario e, int horas)
+    {
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET Estado = 'en_curso' WHERE Id = @v", ("@v", e.Viaje));
+        var llegada = await Sembrador.InformeAsync(e.Etapas[1], e.Conductor.UsuarioId, cerrada: true, momento: "llegada");
+        await EnvejecerAsync(llegada, "IniciadaAt", horas * 60);
+        await EnvejecerAsync(llegada, "CerradaAt", horas * 60);
+        return llegada;
+    }
+
+    [Fact]
+    public async Task Un_viaje_en_curso_sin_movimiento_mas_de_24_horas_avisa_a_los_coordinadores_una_sola_vez_con_sus_datos()
+    {
+        var e = await EscenarioAsync();
+        await ViajeConUltimoMovimientoAsync(e, 25);
+
+        var primera = await ConProcesosAsync(p => p.EjecutarViajesSinMovimientoAsync());
+        var segunda = await ConProcesosAsync(p => p.EjecutarViajesSinMovimientoAsync());
+
+        // El proceso cuenta lo que intento avisar; la clave de deduplicacion hace que la segunda corrida no deje otra fila.
+        Assert.Equal(1, primera);
+        Assert.Equal(1, segunda);
+        Assert.Equal(1, await NotificacionesAsync("viaje_sin_movimiento", e.Coordinador.UsuarioId));
+        // Es de urgencia media: solo bandeja, y no llega al inspector, al conductor ni al administrador.
+        Assert.Equal(0, await NotificacionesAsync("viaje_sin_movimiento", e.Coordinador.UsuarioId, "push"));
+        Assert.Equal(0, await NotificacionesAsync("viaje_sin_movimiento", e.Inspector.UsuarioId) + await NotificacionesAsync("viaje_sin_movimiento", e.Conductor.UsuarioId) + await NotificacionesAsync("viaje_sin_movimiento", e.Admin.UsuarioId));
+        var aviso = (await ComoJsonAsync(await Como(e.Coordinador).GetAsync("/api/notificaciones?tipo=viaje_sin_movimiento"))).GetProperty("items").EnumerateArray().Single();
+        Assert.Equal("media", aviso.GetProperty("urgencia").GetString());
+        Assert.StartsWith("Viaje sin movimiento: ", aviso.GetProperty("titulo").GetString());
+        Assert.Contains("25 horas", aviso.GetProperty("mensaje").GetString());
+        var datos = aviso.GetProperty("datos");
+        Assert.Equal(e.Viaje, datos.GetProperty("viaje_id").GetGuid());
+        Assert.Equal(25, datos.GetProperty("horas_sin_movimiento").GetInt32());
+        Assert.True(datos.TryGetProperty("codigo_mtrack", out _));
+        Assert.True(datos.TryGetProperty("ultimo_movimiento_at", out _));
+    }
+
+    [Fact]
+    public async Task Cualquier_movimiento_cuenta_y_un_viaje_con_movimiento_reciente_no_avisa()
+    {
+        var e = await EscenarioAsync();
+        await ViajeConUltimoMovimientoAsync(e, 30);
+        // Una inspeccion nueva (aunque este en borrador) es un movimiento.
+        await Sembrador.InformeAsync(e.Etapas[0], e.Inspector.UsuarioId, cerrada: false, momento: "llegada");
+        Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarViajesSinMovimientoAsync()));
+        Assert.Equal(0, await NotificacionesAsync("viaje_sin_movimiento"));
+    }
+
+    [Fact]
+    public async Task Una_firma_reciente_de_una_transferencia_es_un_movimiento()
+    {
+        var e = await EscenarioAsync();
+        var llegada = await ViajeConUltimoMovimientoAsync(e, 30);
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblTransferenciasCustodia (Id, InspeccionId, EntregaUsuarioId, RecibeUsuarioId, FirmaEntrega, FirmaEntregaAt) VALUES (NEWID(), @i, @a, @b, N'f1', SYSDATETIMEOFFSET())",
+            ("@i", llegada), ("@a", e.Inspector.UsuarioId), ("@b", e.Conductor.UsuarioId));
+
+        Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarViajesSinMovimientoAsync()));
+    }
+
+    [Fact]
+    public async Task No_avisa_de_un_viaje_programado_finalizado_o_cancelado_y_las_horas_son_un_parametro()
+    {
+        var e = await EscenarioAsync();
+        await ViajeConUltimoMovimientoAsync(e, 25);
+        foreach (var estado in new[] { "programado", "finalizado", "cancelado" })
+        {
+            await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET Estado = @e WHERE Id = @v", ("@e", estado), ("@v", e.Viaje));
+            Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarViajesSinMovimientoAsync()));
+        }
+
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET Estado = 'en_curso' WHERE Id = @v", ("@v", e.Viaje));
+        await CambiarParametroAsync("viaje_sin_movimiento_horas", "48", _api);
+        _api = CrearFabrica(servicios: s => s.AddSingleton<IEnviadorPush>(_push));
+        Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarViajesSinMovimientoAsync()));
+
+        await CambiarParametroAsync("viaje_sin_movimiento_horas", "12", _api);
+        _api = CrearFabrica(servicios: s => s.AddSingleton<IEnviadorPush>(_push));
+        Assert.Equal(1, await ConProcesosAsync(p => p.EjecutarViajesSinMovimientoAsync()));
+        Assert.Equal(1, await NotificacionesAsync("viaje_sin_movimiento", e.Coordinador.UsuarioId));
+    }
+
     // ------------------------------------------------------------------------- transferencia pendiente
 
     private async Task<Guid> LlegadaCerradaAsync(Guid etapa, Guid usuario, int minutosDesdeElCierre = 300)
@@ -405,7 +513,10 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
     public async Task Sin_transferencia_el_aviso_va_al_conductor_si_sigue_el_transporte_y_al_inspector_si_sigue_el_descargue()
     {
         var e = await EscenarioAsync();
+        // La llegada del Cargue ya tiene su transferencia abierta (se firma por niñera): sigue avisando al conductor, que es quien recibe. Sin transferencia propia no avisa (ver el siguiente caso).
         var cargue = await LlegadaCerradaAsync(e.Etapas[0], e.Inspector.UsuarioId);
+        await Sembrador.TransferenciaAsync(cargue, e.Inspector.UsuarioId, e.Conductor.UsuarioId, tipoCierre: null);
+        await Sembrador.EjecutarAsync("ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL; UPDATE dbo.tblTransferenciasCustodia SET FirmaRecibe = NULL, FirmaRecibeAt = NULL; ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL");
         var transporte = await LlegadaCerradaAsync(e.Etapas[1], e.Conductor.UsuarioId);
 
         var primera = await ConProcesosAsync(p => p.EjecutarAvisosAsync());
@@ -478,7 +589,9 @@ public sealed class AlertasApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(b
     public async Task No_avisa_de_una_llegada_reciente_de_una_unidad_que_no_sale_ni_de_la_ultima_etapa_y_los_minutos_son_un_parametro()
     {
         var e = await EscenarioAsync();
-        await LlegadaCerradaAsync(e.Etapas[0], e.Inspector.UsuarioId, minutosDesdeElCierre: 60);
+        var cargue = await LlegadaCerradaAsync(e.Etapas[0], e.Inspector.UsuarioId, minutosDesdeElCierre: 60);
+        await Sembrador.TransferenciaAsync(cargue, e.Inspector.UsuarioId, e.Conductor.UsuarioId, tipoCierre: null);
+        await Sembrador.EjecutarAsync("ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL; UPDATE dbo.tblTransferenciasCustodia SET FirmaRecibe = NULL, FirmaRecibeAt = NULL; ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL");
         // La llegada del Descargue no tiene etapa siguiente: no hay a quien avisar.
         await LlegadaCerradaAsync(e.Etapas[2], e.Inspector.UsuarioId);
         Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));

@@ -35,9 +35,33 @@ public static class clsTipoNotificacion
     /// <summary>El conductor pide el permiso para activar la excepcion «No hay inspector» en un punto con inspectores (al inspector y al coordinador del cliente), o se le avisa que se concedio (a el).</summary>
     public const string PERMISO_SIN_INSPECTOR = "permiso_sin_inspector";
 
+    /// <summary>A una parte de la niñera: la salida del cargue de sus carros lleva cerrada el tiempo del parametro sin su firma.</summary>
+    public const string FIRMA_CARGUE_PENDIENTE = "firma_cargue_pendiente";
+
+    /// <summary>Al coordinador: el inspector del viaje asigno o cambio el muelle o cambio el trailer durante el cargue (solo bandeja).</summary>
+    public const string CAMBIO_CARGUE_INSPECTOR = "cambio_cargue_inspector";
+
+    /// <summary>Al conductor del viaje y a los inspectores del lugar nuevo: se cambio el destino de una unidad.</summary>
+    public const string CAMBIO_DESTINO_UNIDAD = "cambio_destino_unidad";
+
+    /// <summary>A los coordinadores de calidad del cliente: un carro se rechazo en su destino por una novedad de su revision de llegada (urgencia alta).</summary>
+    public const string CARRO_RECHAZADO_EN_DESTINO = "carro_rechazado_en_destino";
+
+    /// <summary>A los coordinadores de calidad y administradores del cliente de quien la fijo: alguien fijo la ubicacion de un lugar «aqui» y queda pendiente de confirmar (urgencia media, solo bandeja).</summary>
+    public const string UBICACION_FIJADA = "ubicacion_fijada";
+
+    /// <summary>A los coordinadores de calidad del cliente: el conductor activo «No hay inspector» en una parada con inspectores y pasaron los minutos del parametro sin que nadie tomara la entrega (urgencia alta).</summary>
+    public const string ESPERA_INSPECTOR_PUNTO = "espera_inspector_punto";
+
+    /// <summary>A los coordinadores de calidad del cliente: un viaje en curso lleva mas horas que el parametro sin ningun movimiento (inspeccion, novedad, llegada o firma); urgencia media, solo bandeja.</summary>
+    public const string VIAJE_SIN_MOVIMIENTO = "viaje_sin_movimiento";
+
+    /// <summary>A los coordinadores de calidad y administradores de cada cliente con carros en el viaje: el conductor o un inspector reporto una novedad del viaje (no de un carro), con la urgencia de su tipo.</summary>
+    public const string NOVEDAD_VIAJE = "novedad_viaje";
+
     public static readonly IReadOnlySet<string> VALORES = new HashSet<string>
     {
-        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD, FUERA_DE_RANGO, CARGUE_SIN_RECLAMAR, PROPUESTA_UBICACION, PERMISO_SIN_INSPECTOR,
+        NOVEDAD_CONDUCTOR, RESPUESTA_CONDUCTOR, HALLAZGO_CRITICO, UMBRAL_PATRON, CAPTURA_INCOMPLETA, TRANSFERENCIA_PENDIENTE, REPORTE_DIARIO, NOVEDAD_PROCESO, RECLAMO_SIN_ACTIVIDAD, FUERA_DE_RANGO, CARGUE_SIN_RECLAMAR, PROPUESTA_UBICACION, PERMISO_SIN_INSPECTOR, FIRMA_CARGUE_PENDIENTE, CAMBIO_CARGUE_INSPECTOR, CAMBIO_DESTINO_UNIDAD, CARRO_RECHAZADO_EN_DESTINO, UBICACION_FIJADA, ESPERA_INSPECTOR_PUNTO, VIAJE_SIN_MOVIMIENTO, NOVEDAD_VIAJE,
     };
 }
 

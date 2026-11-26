@@ -335,19 +335,21 @@ public sealed class SeguimientoHallazgosApiTests(clsBaseDatosFixture bd) : clsPr
     public async Task Al_cerrarse_la_transferencia_se_recalcula_la_evidencia_de_los_hallazgos_de_la_inspeccion()
     {
         var e = await HallazgoAsync(nivel: "v1");
-        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos WHERE Id = @h AND EvidenciaCompleta = 1", ("@h", e.Hallazgo)));
+        // El cargue se firma por niñera: la transferencia por carro se prueba con la llegada del Transporte.
+        var (inspeccion, hallazgo) = await Sembrador.InformeCerradoConHallazgoAsync(e.Etapas[1], e.Inspector.UsuarioId, e.Zona, nivel: "v1", conFoto: true, momento: "llegada");
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos WHERE Id = @h AND EvidenciaCompleta = 1", ("@h", hallazgo)));
 
         var primera = await Cliente(e.Inspector.Token).PostAsJsonAsync(
-            $"/api/inspecciones/{e.Inspeccion}/transferencia",
+            $"/api/inspecciones/{inspeccion}/transferencia",
             new { entrega_usuario_id = e.Inspector.UsuarioId, recibe_usuario_id = e.Conductor.UsuarioId, firma = "M0 0 L10 10" });
         Assert.Equal(HttpStatusCode.Created, primera.StatusCode);
-        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos WHERE Id = @h AND EvidenciaCompleta = 1", ("@h", e.Hallazgo)));
-        var segunda = await Cliente(e.Conductor.Token).PostAsJsonAsync($"/api/inspecciones/{e.Inspeccion}/transferencia", new { firma = "M5 5 L20 20" });
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos WHERE Id = @h AND EvidenciaCompleta = 1", ("@h", hallazgo)));
+        var segunda = await Cliente(e.Conductor.Token).PostAsJsonAsync($"/api/inspecciones/{inspeccion}/transferencia", new { firma = "M5 5 L20 20" });
 
         Assert.Equal(HttpStatusCode.Created, segunda.StatusCode);
-        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos WHERE Id = @h AND EvidenciaCompleta = 1", ("@h", e.Hallazgo)));
+        Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblHallazgos WHERE Id = @h AND EvidenciaCompleta = 1", ("@h", hallazgo)));
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
-        var h = await ComoJsonAsync(await CambiarAsync(coordinador, e.Hallazgo, new { estado = "rechazado" }));
+        var h = await ComoJsonAsync(await CambiarAsync(coordinador, hallazgo, new { estado = "rechazado" }));
         Assert.True(h.GetProperty("evidencia_completa").GetBoolean());
         Assert.Equal(0, h.GetProperty("evidencia_faltante").GetArrayLength());
     }

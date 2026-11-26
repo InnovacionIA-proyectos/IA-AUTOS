@@ -5,11 +5,11 @@ los endpoints que lo usan estan en [CONTRATO.md](../CONTRATO.md) («Conductor en
 
 ## Notificaciones
 
-`tblNotificaciones` guarda **una fila por destinatario y por canal**: una misma alerta para un coordinador son dos filas, una en la bandeja del portal y otra por push.
+`tblNotificaciones` guarda **una fila por destinatario y por canal**: una misma alerta **urgente** (`alta`) para un coordinador son dos filas, una en la bandeja del portal y otra por push; una de urgencia `media` es **solo la fila de la bandeja** (no deja fila de push).
 
 | Columna | Contenido |
 |---|---|
-| `Tipo` | `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso` (el conductor hizo el cargue sin inspector o se cerró una entrega con una sola firma) `permiso_sin_inspector` (el conductor pide el permiso de la excepción «No hay inspector» en un punto con inspectores, o se le avisa que se concedió; con `Datos`) o `reclamo_sin_actividad` (un camión reclamado sin ninguna inspección en `reclamo_sin_actividad_minutos`; al coordinador de calidad) |
+| `Tipo` | `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso` (el conductor hizo el cargue sin inspector o se cerró una entrega con una sola firma) `permiso_sin_inspector` (el conductor pide el permiso de la excepción «No hay inspector» en un punto con inspectores, o se le avisa que se concedió; con `Datos`) `cambio_cargue_inspector` (el inspector asignó o cambió el muelle o el tráiler del viaje; al coordinador, solo bandeja), `cambio_destino_unidad` (se cambió el destino de una unidad; al conductor y a los inspectores del lugar nuevo), `viaje_sin_movimiento` (un viaje en curso lleva `viaje_sin_movimiento_horas` sin ningun movimiento; a los coordinadores de calidad del cliente, solo bandeja), `firma_cargue_pendiente` (la salida del cargue de un carro lleva `firma_cargue_pendiente_minutos` cerrada sin la firma de una parte de la niñera; a esa parte, con los VIN que faltan) o `reclamo_sin_actividad` (un camión reclamado sin ninguna inspección en `reclamo_sin_actividad_minutos`; al coordinador de calidad) |
 | `Urgencia` | `alta` o `media` |
 | `UsuarioId` | el destinatario; nulo solo en `reporte_diario` (el reporte diario no tiene un destinatario propio) |
 | `ClienteId`, `ViajeId`, `VehiculoId`, `HallazgoId`, `InspeccionId` | a que se refiere la notificacion (todos opcionales) |
@@ -49,7 +49,7 @@ Que haya foto, que el tamano sea un codigo activo y que existan el GPS y la fech
 
 Las alertas preventivas y los avisos operativos que crean los procesos periodicos estan en [alertas.md](alertas.md).
 
-`clsEmisorNotificaciones` crea las notificaciones de una alerta: una fila de **bandeja** y una de **push** por destinatario. El push va por Firebase Cloud Messaging a cada dispositivo activo del destinatario (`IEnviadorPush`, implementado por `clsEnviadorFcm`):
+`clsEmisorNotificaciones` crea las notificaciones de una alerta: una fila de **bandeja** por destinatario y, solo si la urgencia es `alta`, una de **push**. El push va por Firebase Cloud Messaging a cada dispositivo activo del destinatario (`IEnviadorPush`, implementado por `clsEnviadorFcm`):
 
 - El envio nunca rompe la peticion que lo origino. Como `EnviadaAt` y `ErrorEnvio` solo se fijan al crear la fila, el push se intenta **antes** de guardarla: si llego a algun dispositivo queda `EnviadaAt`; si no, queda `ErrorEnvio`
   (FCM respondio con error, FCM no esta configurado o el usuario no tiene dispositivos activos). Un token que FCM ya no reconoce (`UNREGISTERED`) deja el dispositivo inactivo.

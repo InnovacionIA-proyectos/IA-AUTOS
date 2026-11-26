@@ -18,7 +18,8 @@ internal sealed class clsConfiguracionPermisoSinInspector : IEntityTypeConfigura
         builder.Property(p => p.Estado).HasColumnType("varchar(10)").IsRequired();
         builder.Property(p => p.ConcedidoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
         builder.Ignore(p => p.EstaConcedido);
-        builder.Ignore(p => p.VenceAt);
+        builder.Property(p => p.VenceAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Ignore(p => p.EsperaMinutos);
         builder.HasOne<clsViaje>().WithMany().HasForeignKey(p => p.ViajeId).HasConstraintName("FK_tblPermisosSinInspector_Viaje").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(p => p.ConductorId).HasConstraintName("FK_tblPermisosSinInspector_Conductor").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsLugar>().WithMany().HasForeignKey(p => p.LugarId).HasConstraintName("FK_tblPermisosSinInspector_Lugar").OnDelete(DeleteBehavior.NoAction);

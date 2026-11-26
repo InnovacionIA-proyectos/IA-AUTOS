@@ -1,4 +1,5 @@
 import 'package:traza_autos/core/errores/error_api.dart';
+import 'package:traza_autos/features/inspecciones/domain/extra_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/foto_local.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_local.dart';
 import 'package:traza_autos/features/sync/domain/job.dart';
@@ -68,6 +69,9 @@ class ArchivosFalsos implements ArchivosLocales {
 /// Registra cada llamada y permite programar errores por operación.
 class GatewayFalso implements GatewayInformes {
   final List<String> llamadas = [];
+
+  /// Cada extra que salio, con su dano si lo llevaba.
+  final List<({String tipo, DanoExtra? dano})> extrasEnviados = [];
   final Map<String, List<Object>> errores = {};
   final List<Map<String, Object?>> evidencias = [];
   int _inspecciones = 0;
@@ -104,6 +108,22 @@ class GatewayFalso implements GatewayInformes {
   }) async {
     motivosEnviados.add((motivoSinInspector, motivoSinInspectorTexto));
     await _paso('crearInspeccion');
+    return 'insp-${++_inspecciones}';
+  }
+
+  /// Las inspecciones que se mandaron a corregir, en orden.
+  final corregidas = <String>[];
+
+  @override
+  Future<String> corregirInspeccion(
+    String inspeccionId, {
+    required String fecha,
+    required double lat,
+    required double lng,
+    String? notas,
+  }) async {
+    corregidas.add(inspeccionId);
+    await _paso('corregirInspeccion');
     return 'insp-${++_inspecciones}';
   }
 
@@ -150,7 +170,14 @@ class GatewayFalso implements GatewayInformes {
   final List<(String, String, String?, String?)> extrasCreados = [];
 
   @override
-  Future<String> crearExtra(String inspeccionId, {required String tipo, String? texto, String? observacion}) async {
+  Future<String> crearExtra(
+    String inspeccionId, {
+    required String tipo,
+    String? texto,
+    String? observacion,
+    DanoExtra? dano,
+  }) async {
+    extrasEnviados.add((tipo: tipo, dano: dano));
     await _paso('crearExtra');
     extrasCreados.add((inspeccionId, tipo, texto, observacion));
     return 'extra-${extrasCreados.length}';
@@ -210,9 +237,20 @@ class GatewayFalso implements GatewayInformes {
   /// Cada firma de una entrega por punto que salió: (viaje, lugar, motivo si es una sola firma, firma).
   final List<(String, String, String?, String?)> entregasEnviadas = [];
 
+  /// Quién recibió de fuera en cada entrega que salió: (nombre, cédula, su firma). Vacía si recibió un usuario.
+  final List<(String?, String?, String?)> externosEnviados = [];
+
   @override
-  Future<void> firmarEntregaPunto(String viajeId, String lugarId, {required String firma}) {
+  Future<void> firmarEntregaPunto(
+    String viajeId,
+    String lugarId, {
+    required String firma,
+    String? recibeNombre,
+    String? recibeCedula,
+    String? firmaRecibe,
+  }) {
     entregasEnviadas.add((viajeId, lugarId, null, firma));
+    externosEnviados.add((recibeNombre, recibeCedula, firmaRecibe));
     return _paso('firmarEntregaPunto');
   }
 
@@ -304,6 +342,7 @@ InformeJob informe({
   bool posicionesEnviadas = false,
   String? motivoSinInspector,
   String? motivoSinInspectorTexto,
+  String? corrigeInspeccionId,
 }) => InformeJob(
   id: id,
   etiqueta: 'Informe $id',
@@ -327,6 +366,7 @@ InformeJob informe({
   posicionesEnviadas: posicionesEnviadas,
   motivoSinInspector: motivoSinInspector,
   motivoSinInspectorTexto: motivoSinInspectorTexto,
+  corrigeInspeccionId: corrigeInspeccionId,
 );
 
 FotoLocal foto(String ruta, {String fecha = '2026-01-02T10:01:00.000Z', double? lat = 6.21, double? lng = -75.51, String? storagePath, bool enviada = false}) =>

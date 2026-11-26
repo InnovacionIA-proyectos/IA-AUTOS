@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/features/auth/presentation/auth_controller.dart';
 import 'package:traza_autos/features/custodia/presentation/lienzo_firma.dart';
@@ -20,8 +21,13 @@ Future<void> avanzar(WidgetTester tester) async {
   }
 }
 
-Future<Arnes> abrir(WidgetTester tester, EntregasRepositorioFalso entregas, {Arnes? arnes}) async {
-  await tester.binding.setSurfaceSize(const Size(600, 2400));
+Future<Arnes> abrir(
+  WidgetTester tester,
+  EntregasRepositorioFalso entregas, {
+  Arnes? arnes,
+  Size tamano = const Size(600, 2400),
+}) async {
+  await tester.binding.setSurfaceSize(tamano);
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final usado = arnes ?? Arnes();
   await tester.pumpWidget(
@@ -40,11 +46,16 @@ class _Arranque extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) =>
-      ref.watch(authControllerProvider.select((e) => e.fase)) == FaseAuth.autenticado ? const EntregasViajePage(viajeId: 'v1') : const SizedBox();
+      ref.watch(authControllerProvider.select((e) => e.fase)) == FaseAuth.autenticado
+          ? const EntregasViajePage(viajeId: 'v1')
+          : const SizedBox();
 }
 
-Future<void> firmar(WidgetTester tester) async {
-  final lienzo = tester.getBottomLeft(find.byType(LienzoFirma)) + const Offset(60, -80);
+Future<void> firmar(WidgetTester tester) => firmarEn(tester, 0);
+
+/// Dibuja en el lienzo n: el 0 es el de quien entrega y el 1, cuando lo hay, el de quien recibe en el punto.
+Future<void> firmarEn(WidgetTester tester, int indice) async {
+  final lienzo = tester.getBottomLeft(find.byType(LienzoFirma).at(indice)) + const Offset(60, -80);
   await tester.dragFrom(lienzo, const Offset(40, 30));
   await tester.pump();
 }
@@ -136,6 +147,7 @@ void main() {
               lugar: 'Autonorte',
               pendientes: 2,
               entregada: false,
+              tieneInspector: true,
               unidades: const [
                 UnidadEntrega(vin: 'VINAAAAAAAAAAAAA1', estado: EstadoEntrega.pendiente),
                 UnidadEntrega(vin: 'VINBBBBBBBBBBBBB2', estado: EstadoEntrega.sinInspeccion),
@@ -148,9 +160,51 @@ void main() {
       await avanzar(tester);
       await firmar(tester);
 
-      expect(find.textContaining('Aún no tienen la inspección de llegada del descargue: VINBBBBBBBBBBBBB2'), findsOneWidget);
+      expect(find.textContaining('Aún no tienen la inspección de llegada: VINBBBBBBBBBBBBB2'), findsOneWidget);
       final boton = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Registrar mi firma'));
       expect(boton.onPressed, isNull);
+    });
+
+    // Un botón gris sin motivo deja adivinando a quien está en el punto, y el aviso del principio de la
+    // pantalla ya no se ve cuando se ha bajado hasta la firma.
+    testWidgets('el botón gris dice cuántas faltan, ahí mismo', (tester) async {
+      await abrir(
+        tester,
+        EntregasRepositorioFalso()
+          ..puntos = [
+            EntregaPunto(
+              viajeId: 'v1',
+              lugarId: 'l1',
+              lugar: 'Autonorte',
+              pendientes: 3,
+              entregada: false,
+              tieneInspector: true,
+              unidades: const [
+                UnidadEntrega(vin: 'VINAAAAAAAAAAAAA1', estado: EstadoEntrega.pendiente),
+                UnidadEntrega(vin: 'VINBBBBBBBBBBBBB2', estado: EstadoEntrega.sinInspeccion),
+                UnidadEntrega(vin: 'VINCCCCCCCCCCCCC3', estado: EstadoEntrega.sinInspeccion),
+              ],
+            ),
+          ],
+      );
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Firmar la entrega'));
+      await avanzar(tester);
+      await firmar(tester);
+
+      expect(find.textContaining('Faltan 2 unidades por descargar'), findsWidgets);
+    });
+
+    // Con todas descargadas, lo que falta es la firma: el motivo tiene que decir eso y no quedarse en el
+    // anterior, que ya no aplica.
+    testWidgets('sin unidades pendientes el motivo pasa a ser la firma que falta', (tester) async {
+      await abrir(tester, EntregasRepositorioFalso()..puntos = [puntoDe('Autonorte')]);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Firmar la entrega'));
+      await avanzar(tester);
+
+      expect(find.text('Dibuja tu firma arriba.'), findsOneWidget);
+      expect(find.textContaining('por descargar'), findsNothing);
     });
   });
 
@@ -194,6 +248,352 @@ void main() {
 
       expect(find.widgetWithText(FilledButton, 'Registrar mi firma'), findsOneWidget);
       expect(find.text('Quedará registrado como novedad para el coordinador.'), findsNothing);
+    });
+  });
+
+  /// S7-HU-02.2: en un punto sin inspector recibe alguien que no es usuario de la app. Firma ahí mismo, con su
+  /// nombre y su cédula, y con eso la entrega queda cerrada: no falta nadie por firmar después.
+  group('recibe una persona del punto', () {
+    Future<Arnes> abrirFirma(WidgetTester tester, {required bool sinInspector, Arnes? arnes}) async {
+      final usado = await abrir(
+        tester,
+        // Lo que decide quién firma es el punto, no el viaje: así lo manda el servidor en `lugar_tiene_inspector`.
+        EntregasRepositorioFalso()..puntos = [puntoDe('Autonorte', tieneInspector: !sinInspector)],
+        arnes: arnes,
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Firmar la entrega'));
+      await avanzar(tester);
+      return usado;
+    }
+
+    Future<void> escribirDatos(WidgetTester tester) async {
+      await tester.enterText(find.widgetWithText(TextField, 'Nombre de quien recibe'), 'Ana Restrepo');
+      await tester.pump();
+      await tester.enterText(find.widgetWithText(TextField, 'Cédula de quien recibe'), '1 020 304 050');
+      await tester.pump();
+    }
+
+    testWidgets('el punto sin inspector pide los tres datos y no deja registrar sin ellos', (tester) async {
+      await abrirFirma(tester, sinInspector: true);
+
+      expect(find.widgetWithText(TextField, 'Nombre de quien recibe'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Cédula de quien recibe'), findsOneWidget);
+      expect(find.byType(LienzoFirma), findsNWidgets(2), reason: 'la suya y la de quien recibe');
+      // Encendido de entrada, pero se puede apagar: el punto puede tener inspectores de planta aunque el viaje
+      // no tenga inspector, y entonces el servidor rechaza los datos del externo.
+      expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isTrue);
+
+      await firmarEn(tester, 0);
+
+      expect(find.text('Escribe el nombre de quien recibe.'), findsOneWidget);
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Registrar la entrega')).onPressed, isNull);
+    });
+
+    // Un viaje sin inspector que entrega en un punto que sí tiene inspectores de planta: ahí el servidor
+    // rechaza los datos del externo, y sin poder apagarlo el conductor se quedaba sin forma de cerrar.
+    testWidgets('aunque el viaje no tenga inspector, se puede apagar', (tester) async {
+      await abrirFirma(tester, sinInspector: true);
+
+      await tester.tap(find.byType(SwitchListTile));
+      await tester.pump();
+
+      expect(find.widgetWithText(TextField, 'Nombre de quien recibe'), findsNothing);
+      expect(find.byType(LienzoFirma), findsOneWidget);
+    });
+
+    // ESC-03: escribir solo el nombre no es firmar. Se reclama lo que falta, de uno en uno.
+    testWidgets('con solo el nombre sigue faltando la cédula, y luego el trazo', (tester) async {
+      await abrirFirma(tester, sinInspector: true);
+      await firmarEn(tester, 0);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Nombre de quien recibe'), 'Ana Restrepo');
+      await tester.pump();
+      expect(find.text('Escribe la cédula de quien recibe.'), findsOneWidget);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Cédula de quien recibe'), '1 020 304 050');
+      await tester.pump();
+      expect(find.text('Falta la firma de quien recibe.'), findsOneWidget);
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Registrar la entrega')).onPressed, isNull);
+    });
+
+    // Lo mismo que exige el servidor, comprobado antes de firmar: si no, se encola y vuelve un 400 con el carro
+    // ya entregado.
+    testWidgets('un nombre de dos letras o una cédula sin números no pasan de aquí', (tester) async {
+      final arnes = Arnes();
+      await abrirFirma(tester, sinInspector: true, arnes: arnes);
+      await firmarEn(tester, 0);
+      await firmarEn(tester, 1);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Nombre de quien recibe'), 'An');
+      await tester.pump();
+      expect(find.textContaining('muy corto'), findsOneWidget);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Nombre de quien recibe'), 'Ana Restrepo');
+      await tester.enterText(find.widgetWithText(TextField, 'Cédula de quien recibe'), 'sin numeros');
+      await tester.pump();
+      expect(find.textContaining('tiene que llevar números'), findsOneWidget);
+      expect(arnes.cola.jobs, isEmpty, reason: 'nada se encoló: la entrega sigue sin cerrarse');
+    });
+
+    testWidgets('con los tres la entrega sale cerrada y dice quién recibió', (tester) async {
+      final arnes = Arnes();
+      await abrirFirma(tester, sinInspector: true, arnes: arnes);
+
+      await firmarEn(tester, 0);
+      await escribirDatos(tester);
+      await firmarEn(tester, 1);
+      await tester.tap(find.widgetWithText(FilledButton, 'Registrar la entrega'));
+      await avanzar(tester);
+
+      expect(arnes.gateway.externosEnviados.single.$1, 'Ana Restrepo');
+      expect(arnes.gateway.externosEnviados.single.$2, '1 020 304 050');
+      expect(arnes.gateway.externosEnviados.single.$3, isNotEmpty, reason: 'su trazo viaja con la entrega');
+      expect(find.text('Entrega cerrada'), findsOneWidget);
+      expect(find.textContaining('Recibió Ana Restrepo'), findsOneWidget);
+    });
+
+    testWidgets('sin señal los tres datos quedan en la cola con la entrega', (tester) async {
+      final arnes = Arnes()..red.estable = false;
+      await abrirFirma(tester, sinInspector: true, arnes: arnes);
+
+      await firmarEn(tester, 0);
+      await escribirDatos(tester);
+      await firmarEn(tester, 1);
+      await tester.tap(find.widgetWithText(FilledButton, 'Registrar la entrega'));
+      await avanzar(tester);
+
+      final job = arnes.cola.jobs.single as EntregaPuntoJob;
+      expect((job.recibeNombre, job.recibeCedula, job.recibeExterno), ('Ana Restrepo', '1 020 304 050', true));
+      expect(job.firmaRecibe, isNotEmpty);
+    });
+
+    // CA-2: el punto que sí tiene inspector firma como siempre. Que el servidor rechace los datos del externo
+    // en ese caso es justo la razón de no mandarlos por si acaso.
+    testWidgets('el punto con inspector no pide nada de nadie más', (tester) async {
+      final arnes = Arnes();
+      await abrirFirma(tester, sinInspector: false, arnes: arnes);
+
+      expect(find.widgetWithText(TextField, 'Nombre de quien recibe'), findsNothing);
+      expect(find.byType(LienzoFirma), findsOneWidget);
+
+      await firmarEn(tester, 0);
+      await tester.tap(find.widgetWithText(FilledButton, 'Registrar mi firma'));
+      await avanzar(tester);
+
+      expect(arnes.gateway.externosEnviados.single, (null, null, null));
+      expect(find.text('Entrega registrada'), findsOneWidget);
+    });
+
+    // El dato del punto pudo cambiar desde que se abrió la pantalla: el interruptor viene puesto, no clavado.
+    testWidgets('aun en un punto con inspector se puede decir que recibe alguien de allí', (tester) async {
+      await abrirFirma(tester, sinInspector: false);
+
+      expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse);
+      await tester.tap(find.byType(SwitchListTile));
+      await tester.pump();
+
+      expect(find.widgetWithText(TextField, 'Nombre de quien recibe'), findsOneWidget);
+      expect(find.byType(LienzoFirma), findsNWidgets(2));
+    });
+
+    // CA-6: el servidor decide por punto, y ese dato pudo cambiar desde que se abrió la pantalla. El rechazo no
+    // es transitorio, así que no sirve dejarlo en la cola: se descarta, se corrige el camino y se firma aquí.
+    group('cuando el punto resulta no ser el que se creía', () {
+      // Los tres rechazos de `clsEntregasService.FirmantesAsync` con la forma que tienen de verdad: «Datos
+      // inválidos» y una línea por campo en `details.fieldErrors`, que es de donde la app saca el texto. Con todo
+      // metido en `message` las pruebas pasaban igual, pero no probaban el camino real.
+      ErrorApi rechazo(Map<String, List<String>> porCampo) => ErrorApi(
+            message: 'Datos inválidos',
+            code: 'VALIDATION_ERROR',
+            status: 400,
+            details: {'formErrors': <String>[], 'fieldErrors': porCampo},
+          );
+      const textoConInspector = 'El punto de entrega tiene inspector asignado: la entrega la firma él, no una persona externa';
+      final conInspector = rechazo({
+        'recibe_nombre': [textoConInspector],
+        'recibe_cedula': [textoConInspector],
+        'firma_recibe': [textoConInspector],
+      });
+      final sinQuienReciba = rechazo({
+        'recibe_usuario_id': ['Indique quién recibe: el viaje no tiene inspector'],
+      });
+      final faltanDatos = rechazo({
+        'recibe_nombre': ['El nombre de quien recibe es obligatorio'],
+        'recibe_cedula': ['La cédula de quien recibe es obligatoria'],
+      });
+
+      testWidgets('rechazado por tener inspector, se apaga el interruptor y no se pierde lo escrito', (tester) async {
+        final arnes = Arnes();
+        arnes.gateway.errores['firmarEntregaPunto'] = [conInspector];
+        await abrirFirma(tester, sinInspector: true, arnes: arnes);
+
+        await firmarEn(tester, 0);
+        await escribirDatos(tester);
+        await firmarEn(tester, 1);
+        await tester.tap(find.widgetWithText(FilledButton, 'Registrar la entrega'));
+        await avanzar(tester);
+
+        expect(find.text('Aquí firma el inspector del punto'), findsOneWidget);
+        expect(find.textContaining('sí tiene inspector'), findsOneWidget);
+        expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse, reason: 'corregido');
+        expect(arnes.cola.jobs, isEmpty, reason: 'reintentarlo mandaría exactamente lo mismo');
+      });
+
+      // El punto dejó de tener inspector después de abrir la pantalla: el servidor pide los datos de quien recibe.
+      testWidgets('rechazado por faltar los datos de quien recibe, se encienden los del externo', (tester) async {
+        final arnes = Arnes();
+        arnes.gateway.errores['firmarEntregaPunto'] = [faltanDatos];
+        await abrirFirma(tester, sinInspector: false, arnes: arnes);
+
+        await firmarEn(tester, 0);
+        await tester.tap(find.widgetWithText(FilledButton, 'Registrar mi firma'));
+        await avanzar(tester);
+
+        expect(find.text('Aquí recibe alguien del punto'), findsOneWidget);
+        expect(find.textContaining('El servidor dice que este punto no tiene inspector'), findsOneWidget);
+        await tester.tap(find.widgetWithText(TextButton, 'Entendido'));
+        await avanzar(tester);
+
+        expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isTrue);
+        // El subtítulo sigue a lo que dijo el servidor, no al dato con que se abrió la pantalla: antes se quedaba
+        // diciendo que el punto tenía inspector justo debajo de un aviso que decía lo contrario.
+        expect(find.text('Este punto no tiene inspector asignado, así que recibe quien esté allí.'), findsOneWidget);
+        expect(find.widgetWithText(TextField, 'Nombre de quien recibe'), findsOneWidget);
+        expect(arnes.cola.jobs, isEmpty);
+      });
+
+      // El hallazgo de QA en el PR #404: «Indique quién recibe» sale cuando el punto SÍ tiene inspector y nadie
+      // reclamó la entrega. Antes se leía al revés, como «el punto no tiene inspector», y se le pedían al
+      // conductor los datos de alguien del punto que el servidor rechazaba en el envío siguiente.
+      testWidgets('sin quien reciba, se dice de una vez que lo reclame el inspector del punto', (tester) async {
+        final arnes = Arnes();
+        arnes.gateway.errores['firmarEntregaPunto'] = [sinQuienReciba];
+        await abrirFirma(tester, sinInspector: false, arnes: arnes);
+
+        await firmarEn(tester, 0);
+        await tester.tap(find.widgetWithText(FilledButton, 'Registrar mi firma'));
+        await avanzar(tester);
+
+        expect(find.text('Esta entrega no la puedes cerrar'), findsOneWidget);
+        expect(find.textContaining('reclamarla'), findsOneWidget);
+        expect(find.textContaining('no tiene inspector:'), findsNothing, reason: 'el punto sí lo tiene');
+        await tester.tap(find.widgetWithText(TextButton, 'Entendido'));
+        await avanzar(tester);
+
+        expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse, reason: 'no es el interruptor');
+        expect(find.widgetWithText(TextField, 'Nombre de quien recibe'), findsNothing);
+        expect(arnes.cola.jobs, isEmpty, reason: 'reintentarlo mandaría exactamente lo mismo');
+      });
+
+      // El ciclo de QA empujado a mano: el conductor enciende el interruptor una y otra vez en un punto con
+      // inspector que nadie reclamó. El servidor responde siempre lo mismo, así que la app no puede acusarlo de
+      // contradecirse; y cada vez que se mandan los datos del externo, el interruptor vuelve a apagarse.
+      testWidgets('moviendo el interruptor a mano, no dice que el servidor se contradijo', (tester) async {
+        final arnes = Arnes();
+        arnes.gateway.errores['firmarEntregaPunto'] = [sinQuienReciba, conInspector, sinQuienReciba, conInspector];
+        await abrirFirma(tester, sinInspector: false, arnes: arnes);
+        Future<void> entendido() async {
+          await tester.tap(find.widgetWithText(TextButton, 'Entendido'));
+          await avanzar(tester);
+        }
+
+        await firmarEn(tester, 0);
+        for (var vuelta = 1; vuelta <= 2; vuelta++) {
+          await tester.tap(find.widgetWithText(FilledButton, 'Registrar mi firma'));
+          await avanzar(tester);
+          expect(find.textContaining('reclamarla'), findsOneWidget, reason: 'vuelta $vuelta: no hay quien reciba');
+          await entendido();
+
+          await tester.tap(find.byType(SwitchListTile));
+          await tester.pump();
+          await escribirDatos(tester);
+          await firmarEn(tester, 1);
+          await tester.tap(find.widgetWithText(FilledButton, 'Registrar la entrega'));
+          await avanzar(tester);
+
+          expect(find.textContaining('la contraria'), findsNothing, reason: 'vuelta $vuelta: el servidor no cambió');
+          expect(find.text('Aquí firma el inspector del punto'), findsOneWidget, reason: 'vuelta $vuelta');
+          await entendido();
+          expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isFalse, reason: 'vuelta $vuelta');
+        }
+      });
+
+      // El dato del punto cambió entre un envío y el siguiente: las dos correcciones se pisan, así que girar otra
+      // vez sería dejar al conductor dando vueltas.
+      testWidgets('corregido dos veces al revés, se dice que esta entrega no se puede cerrar', (tester) async {
+        final arnes = Arnes();
+        arnes.gateway.errores['firmarEntregaPunto'] = [faltanDatos, conInspector];
+        await abrirFirma(tester, sinInspector: false, arnes: arnes);
+
+        await firmarEn(tester, 0);
+        await tester.tap(find.widgetWithText(FilledButton, 'Registrar mi firma'));
+        await avanzar(tester);
+        await tester.tap(find.widgetWithText(TextButton, 'Entendido'));
+        await avanzar(tester);
+
+        await escribirDatos(tester);
+        await firmarEn(tester, 1);
+        await tester.tap(find.widgetWithText(FilledButton, 'Registrar la entrega'));
+        await avanzar(tester);
+
+        expect(find.text('Esta entrega no la puedes cerrar'), findsOneWidget);
+        expect(find.textContaining('una cosa y después la contraria'), findsOneWidget);
+        expect(tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value, isTrue, reason: 'ya no gira más');
+      });
+    });
+
+    testWidgets('una entrega ya cerrada por alguien del punto dice quién recibió', (tester) async {
+      await abrir(
+        tester,
+        EntregasRepositorioFalso()
+          ..puntos = [
+            const EntregaPunto(
+              viajeId: 'v1',
+              lugarId: 'l1',
+              lugar: 'Autonorte',
+              pendientes: 0,
+              entregada: true,
+              unidades: [
+                UnidadEntrega(vin: 'VINAAAAAAAAAAAAA1', estado: EstadoEntrega.cerrada, recibioExterno: 'Ana Restrepo'),
+              ],
+            ),
+          ],
+      );
+
+      expect(find.text('Recibió: Ana Restrepo'), findsOneWidget);
+    });
+
+    // CA-5. Lo que una prueba puede ver es el ancho, que es donde se corta: a lo alto la pantalla se desplaza y
+    // nunca recorta. `setSurfaceSize` va en píxeles lógicos, así que 320 son los 320 de un teléfono pequeño; el
+    // alto es generoso para que se construya el formulario entero. Así se destapó que «Firma de quien recibe» y
+    // «Limpiar» no cabían en la misma fila. Que el área de firma se use cómoda solo lo dice el celular.
+    testWidgets('a lo ancho de un teléfono pequeño no se corta nada', (tester) async {
+      await abrir(
+        tester,
+        EntregasRepositorioFalso()
+          ..puntos = [
+            // El caso más apretado de la fila: la insignia más larga de la app junto a un VIN de diecisiete, y
+            // otra unidad con el nombre de quien recibió debajo.
+            const EntregaPunto(
+              viajeId: 'v1',
+              lugarId: 'l1',
+              lugar: 'Concesionario Autonorte de la Avenida',
+              pendientes: 2,
+              entregada: false,
+              unidades: [
+                UnidadEntrega(vin: 'VINAAAAAAAAAAAAA1', estado: EstadoEntrega.sinInspeccion),
+                UnidadEntrega(vin: 'VINBBBBBBBBBBBBB2', estado: EstadoEntrega.cerrada, recibioExterno: 'Ana Restrepo'),
+              ],
+            ),
+          ],
+        tamano: const Size(320, 6000),
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Firmar la entrega'));
+      await avanzar(tester);
+
+      expect(tester.takeException(), isNull);
+      expect(find.widgetWithText(TextField, 'Nombre de quien recibe'), findsOneWidget);
+      expect(find.byType(LienzoFirma), findsNWidgets(2));
     });
   });
 }

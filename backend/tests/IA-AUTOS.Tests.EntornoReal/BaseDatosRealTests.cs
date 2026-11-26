@@ -604,8 +604,8 @@ public sealed class BaseDatosRealTests
         var vistas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE schema_id = SCHEMA_ID() AND name IN (N'vwCobertura', N'vwAdopcion', N'vwTiempoCaptura', N'vwAveriasPorConfiguracion', N'vwIndicadorDiario')");
         Assert.True(vistas == 5, $"Faltan vistas de indicadores (hay {vistas} de 5). Ejecute database/cambios-esquema/20-vistas-de-indicadores.sql.");
 
-        var cobertura = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura WHERE RegistrosCerrados BETWEEN 1 AND 6 AND Fecha IS NOT NULL AND ClienteId IS NOT NULL");
-        var completasMalContadas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura WHERE (Completa = 1 AND RegistrosCerrados <> 6) OR (Completa = 0 AND RegistrosCerrados = 6)");
+        var cobertura = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura WHERE RegistrosCerrados BETWEEN 1 AND 5 AND Fecha IS NOT NULL AND ClienteId IS NOT NULL");
+        var completasMalContadas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura WHERE (Completa = 1 AND RegistrosCerrados <> 5) OR (Completa = 0 AND RegistrosCerrados = 5)");
         var sinNoSale = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwCobertura c JOIN tblViajeVehiculos vv ON vv.ViajeId = c.ViajeId AND vv.VehiculoId = c.VehiculoId WHERE vv.EstadoUnidad = 'no_sale'");
         var tiempos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwTiempoCaptura WHERE Proceso NOT IN ('cargue', 'descargue') OR Minutos < 0");
         var adopcion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM vwAdopcion WHERE ConSalidaDigital > Programados");
@@ -737,7 +737,7 @@ public sealed class BaseDatosRealTests
 
         var indice = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblReclamos_Activo' AND object_id = OBJECT_ID(N'tblReclamos') AND is_unique = 1 AND has_filter = 1");
         var parametro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave = N'reclamo_sin_actividad_minutos' AND Tipo = N'numero'");
-        var reclamosActivosRepetidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM (SELECT ViajeId, Proceso FROM tblReclamos WHERE LiberadoAt IS NULL GROUP BY ViajeId, Proceso HAVING COUNT(*) > 1) AS x");
+        var reclamosActivosRepetidos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM (SELECT ViajeId, Proceso, LugarId FROM tblReclamos WHERE LiberadoAt IS NULL GROUP BY ViajeId, Proceso, LugarId HAVING COUNT(*) > 1) AS x");
 
         Assert.True(indice == 1, "Falta el indice unico de reclamos activos. Ejecute database/cambios-esquema/26-reclamo-inspector.sql.");
         Assert.True(parametro == 1, "Falta el parametro reclamo_sin_actividad_minutos. Ejecute database/cambios-esquema/26-reclamo-inspector.sql.");
@@ -965,6 +965,175 @@ public sealed class BaseDatosRealTests
         var porCamion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.views WHERE name = N'vwAdopcionPorCamion' AND schema_id = SCHEMA_ID()");
 
         Assert.True(destino == 1 && soloCerradas == 1 && porCamion == 1, "Falta la adopcion por camion y por carro. Ejecute database/cambios-esquema/40-adopcion-por-carro-y-por-camion.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task La_transferencia_guarda_el_momento_y_el_gps_de_la_firma_y_hay_aviso_y_parametro_del_cargue()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/42-firma-del-cargue-por-ninera.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columnas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND name IN (N'FirmaEntregaMomentoAt', N'FirmaEntregaLat', N'FirmaEntregaLng', N'FirmaEntregaPrecisionM', N'FirmaRecibeMomentoAt', N'FirmaRecibeLat', N'FirmaRecibeLng', N'FirmaRecibePrecisionM', N'FirmaPorNinera')");
+        var restricciones = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblTransferencias_GpsEntrega', N'CK_tblTransferencias_GpsRecibe') AND parent_object_id = OBJECT_ID(N'tblTransferenciasCustodia')");
+        var aviso = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%firma_cargue_pendiente%'");
+        var parametro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Clave = N'firma_cargue_pendiente_minutos'");
+
+        Assert.True(columnas == 9 && restricciones == 2 && aviso == 1 && parametro == 1, "Falta la firma del cargue por niñera. Ejecute database/cambios-esquema/42-firma-del-cargue-por-ninera.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task Los_motivos_de_no_sale_y_el_estado_bajado_de_la_unidad_existen()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/43-no-sale-con-motivo-y-bajar-del-viaje.sql.
+        await using var conexion = await AbrirAsync();
+
+        var motivos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblMotivosNoSale WHERE Codigo IN (N'dano_v1_plus', N'dano_reportado_conductor', N'no_llego_al_patio', N'faltan_documentos', N'no_esta_listo', N'otro')");
+        var columnas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajeVehiculos') AND name IN (N'NoSaleMotivoCodigo', N'BajadoAt', N'BajadoPor', N'BajadoMotivo')");
+        var restricciones = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblViajeVehiculos_EstadoUnidad', N'CK_tblViajeVehiculos_NoSale') AND parent_object_id = OBJECT_ID(N'tblViajeVehiculos') AND definition LIKE N'%bajado%'");
+        var sinCodigo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblViajeVehiculos WHERE EstadoUnidad = N'no_sale' AND NoSaleMotivoCodigo IS NULL");
+
+        Assert.True(motivos == 6 && columnas == 4 && restricciones == 2 && sinCodigo == 0, "Faltan los motivos de no sale y el estado bajado. Ejecute database/cambios-esquema/43-no-sale-con-motivo-y-bajar-del-viaje.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task Los_muelles_el_destino_cambiado_y_los_avisos_del_patio_existen()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/44-muelles-destino-cambiado-y-avisos-del-patio.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'tblMuelles')");
+        var muelleDelViaje = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajes') AND name = N'MuelleId'");
+        var destinoCambiado = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblViajeVehiculos') AND name = N'LugarDestinoCambiadoAt'");
+        var avisos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%cambio_cargue_inspector%' AND definition LIKE N'%cambio_destino_unidad%'");
+
+        Assert.True(tabla == 1 && muelleDelViaje == 1 && destinoCambiado == 1 && avisos == 1, "Faltan los muelles y los avisos del patio. Ejecute database/cambios-esquema/44-muelles-destino-cambiado-y-avisos-del-patio.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task El_mapeo_de_columnas_de_la_carga_de_viajes_existe()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/45-mapeo-de-columnas-de-la-carga-de-viajes.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE object_id = OBJECT_ID(N'tblMapeosCargaViajes')");
+        var unico = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.key_constraints WHERE name = N'UQ_tblMapeosCargaViajes_Cliente_Huella'");
+        var soloJson = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblMapeosCargaViajes_Json'");
+
+        Assert.True(tabla == 1 && unico == 1 && soloJson == 1, "Falta el mapeo de columnas de la carga de viajes. Ejecute database/cambios-esquema/45-mapeo-de-columnas-de-la-carga-de-viajes.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task La_entrega_por_parada_el_rechazo_y_los_motivos_del_cierre_existen()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/46-entrega-por-parada-rechazo-y-motivos-del-cierre.sql.
+        await using var conexion = await AbrirAsync();
+
+        var entregasSinParada = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblReclamos WHERE Proceso = N'entrega' AND LiberadoAt IS NULL AND LugarId IS NULL");
+        var indiceUnicoPorParada = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id WHERE i.name = N'UX_tblReclamos_Activo' AND i.object_id = OBJECT_ID(N'tblReclamos') AND COL_NAME(ic.object_id, ic.column_id) = N'LugarId'");
+        var ciclo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.index_columns ic JOIN sys.indexes i ON i.object_id = ic.object_id AND i.index_id = ic.index_id WHERE i.name = N'UX_tblInspecciones_Etapa_Momento_Original' AND i.object_id = OBJECT_ID(N'tblInspecciones') AND COL_NAME(ic.object_id, ic.column_id) = N'Ciclo'");
+        var columnas = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND name IN (N'MotivoCodigo', N'TestigoNombre', N'TestigoCedula', N'RechazoHallazgoId', N'RechazoMarcadoPor')");
+        var cierre = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name IN (N'CK_tblTransferencias_TipoCierre', N'CK_tblTransferencias_Cierre') AND parent_object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND definition LIKE N'%rechazado%'");
+        var motivos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblMotivosSinInspector WHERE Codigo IN (N'se_nego_a_firmar', N'no_habia_nadie', N'sin_inspector_del_punto')");
+        var aviso = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%carro_rechazado_en_destino%'");
+
+        Assert.True(
+            entregasSinParada == 0 && indiceUnicoPorParada == 1 && ciclo == 1 && columnas == 5 && cierre == 2 && motivos == 3 && aviso == 1,
+            "Falta la entrega por parada. Ejecute database/cambios-esquema/46-entrega-por-parada-rechazo-y-motivos-del-cierre.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task El_dano_de_un_extra_del_conductor_tiene_donde_guardarse()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/47-dano-del-conductor-en-extras-y-conteo-vigente.sql.
+        await using var conexion = await AbrirAsync();
+
+        var sinOrigen = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblHallazgos_Extra' AND parent_object_id = OBJECT_ID(N'tblHallazgos') AND definition NOT LIKE N'%Origen%'");
+        var indicador = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'vwIndicadorDiario') AND definition LIKE N'%CorrigeInspeccionId%'");
+
+        Assert.True(sinOrigen == 1 && indicador == 1, "Falta el dano de los extras del conductor. Ejecute database/cambios-esquema/47-dano-del-conductor-en-extras-y-conteo-vigente.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task Los_parametros_de_tiempos_y_avisos_el_plazo_del_permiso_y_la_precision_del_lugar_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/48-parametros-de-avisos-y-tiempos.sql.
+        await using var conexion = await AbrirAsync();
+
+        var parametros = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM tblParametros WHERE Tipo = N'numero' AND Clave IN (N'permiso_sin_inspector_minutos', N'espera_inspector_aviso_minutos', N'espera_inspector_plan_b_minutos', N'viaje_sin_movimiento_horas', N'firma_cargue_pendiente_minutos', N'propuesta_ubicacion_visitas')");
+        var plazo = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblPermisosSinInspector') AND name = N'VenceAt' AND is_nullable = 0");
+        var reloj = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblPermisosSinInspector_Reloj' AND parent_object_id = OBJECT_ID(N'tblPermisosSinInspector') AND definition LIKE N'%VenceAt%'");
+        var precision = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblLugares') AND name = N'PrecisionM'");
+        var aviso = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%ubicacion_fijada%'");
+
+        Assert.True(parametros == 6 && plazo == 1 && reloj == 1 && precision == 1 && aviso == 1, "Faltan los parametros de tiempos y avisos, el plazo del permiso o la precision del lugar. Ejecute database/cambios-esquema/48-parametros-de-avisos-y-tiempos.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task La_espera_del_inspector_del_punto_y_la_marca_de_la_entrega_estan_migradas()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/49-espera-del-inspector-del-punto.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblEsperasInspectorPunto' AND schema_id = SCHEMA_ID()");
+        var unica = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblEsperasInspectorPunto_Abierta' AND is_unique = 1 AND has_filter = 1");
+        var marca = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblTransferenciasCustodia') AND name = N'SinInspectorDelPunto' AND is_nullable = 0");
+        var aviso = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%espera_inspector_punto%'");
+
+        Assert.True(tabla == 1 && unica == 1 && marca == 1 && aviso == 1, "Falta la espera del inspector del punto, la marca de la entrega sin inspector del punto o el tipo de aviso. Ejecute database/cambios-esquema/49-espera-del-inspector-del-punto.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task Un_informe_en_borrador_se_puede_descartar_y_su_momento_queda_libre()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/50-descartar-informe-en-borrador.sql.
+        await using var conexion = await AbrirAsync();
+
+        var estados = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_Estado' AND parent_object_id = OBJECT_ID(N'tblInspecciones') AND definition LIKE N'%descartada%' AND definition LIKE N'%superada%'");
+        var cierre = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_Cierre' AND parent_object_id = OBJECT_ID(N'tblInspecciones') AND definition LIKE N'%descartada%'");
+        var original = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblInspecciones_Etapa_Momento_Original' AND object_id = OBJECT_ID(N'tblInspecciones') AND is_unique = 1 AND filter_definition LIKE N'%descartada%' AND filter_definition LIKE N'%superada%'");
+        var correccion = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblInspecciones_Corrige' AND object_id = OBJECT_ID(N'tblInspecciones') AND is_unique = 1 AND filter_definition LIKE N'%descartada%' AND filter_definition LIKE N'%superada%'");
+
+        Assert.True(estados == 1 && cierre == 1 && original == 1 && correccion == 1, "tblInspecciones no admite los estados descartada y superada o sus indices unicos las cuentan. Ejecute database/cambios-esquema/50-descartar-informe-en-borrador.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task La_cobertura_cuenta_cinco_registros_y_el_aviso_de_viaje_sin_movimiento_esta_migrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/51-cobertura-con-cinco-registros-y-aviso-de-viaje-sin-movimiento.sql.
+        await using var conexion = await AbrirAsync();
+
+        var cinco = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'vwCobertura') AND definition LIKE N'%RegistrosCerrados >= 5%'");
+        var sinSalidaDelDescargue = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.sql_modules WHERE object_id = OBJECT_ID(N'vwCobertura') AND definition LIKE N'%NOT (ec.Codigo = ''descargue'' AND i.Momento = ''salida'')%'");
+        var aviso = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%viaje_sin_movimiento%'");
+
+        Assert.True(cinco == 1 && sinSalidaDelDescargue == 1 && aviso == 1, "Falta la cobertura con cinco registros o el tipo de aviso viaje_sin_movimiento. Ejecute database/cambios-esquema/51-cobertura-con-cinco-registros-y-aviso-de-viaje-sin-movimiento.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task La_novedad_del_viaje_y_el_envio_sin_duplicar_estan_migrados()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/52-novedad-del-viaje-y-reenvio-sin-duplicar.sql.
+        await using var conexion = await AbrirAsync();
+
+        var tipos = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblTiposNovedadViaje' AND schema_id = SCHEMA_ID()");
+        var tabla = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.tables WHERE name = N'tblNovedadesViaje' AND schema_id = SCHEMA_ID()");
+        var envioDelViaje = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblNovedadesViaje_Envio' AND is_unique = 1 AND has_filter = 1");
+        var envioDelCarro = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.indexes WHERE name = N'UX_tblHallazgos_Envio' AND is_unique = 1 AND has_filter = 1");
+        var aviso = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblNotificaciones_Tipo' AND parent_object_id = OBJECT_ID(N'tblNotificaciones') AND definition LIKE N'%novedad_viaje%'");
+
+        Assert.True(tipos == 1 && tabla == 1 && envioDelViaje == 1 && envioDelCarro == 1 && aviso == 1, "Falta el catalogo de tipos o la tabla de la novedad del viaje, el identificador de envio o el tipo de aviso. Ejecute database/cambios-esquema/52-novedad-del-viaje-y-reenvio-sin-duplicar.sql.");
+    }
+
+    [FactEntornoReal]
+    public async Task El_dato_del_lugar_admite_cargue_sin_inspector_esta_migrado()
+    {
+        // Solo lectura: avisa si falta ejecutar database/cambios-esquema/53-lugar-admite-cargue-sin-inspector.sql.
+        await using var conexion = await AbrirAsync();
+
+        var columna = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'tblLugares') AND name = N'AdmiteCargueSinInspector' AND is_nullable = 0");
+        var motivoEnLaLlegada = await EscalarAsync<int>(conexion, "SELECT COUNT(*) FROM sys.check_constraints WHERE name = N'CK_tblInspecciones_MotivoSinInspector' AND parent_object_id = OBJECT_ID(N'tblInspecciones') AND definition LIKE N'%llegada%'");
+
+        Assert.True(columna == 1 && motivoEnLaLlegada == 1, "Falta tblLugares.AdmiteCargueSinInspector o el motivo de la excepcion no se admite en la llegada. Ejecute database/cambios-esquema/53-lugar-admite-cargue-sin-inspector.sql.");
     }
 
     [FactEntornoReal]

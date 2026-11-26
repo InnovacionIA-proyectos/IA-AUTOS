@@ -55,12 +55,15 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblNotificaciones DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNotasAclaratorias DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNovedadesProceso DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNovedadesViaje DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblReclamos DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblInspeccionExtras DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblPropuestasUbicacion DISABLE TRIGGER ALL;
             DELETE FROM dbo.tblPropuestasUbicacion;
             UPDATE dbo.tblLugares SET UbicacionFijadaPor = NULL;
             DELETE FROM dbo.tblNovedadesProceso;
+            DELETE FROM dbo.tblNovedadesViaje;
+            DELETE FROM dbo.tblEsperasInspectorPunto;
             DELETE FROM dbo.tblPermisosSinInspector;
             DELETE FROM dbo.tblReclamos;
             DELETE FROM dbo.tblInspectorLugares;
@@ -82,6 +85,7 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             DELETE FROM dbo.tblEtapas;
             DELETE FROM dbo.tblViajes;
             DELETE FROM dbo.tblVehiculos;
+            DELETE FROM dbo.tblMapeosCargaViajes;
             UPDATE dbo.tblParametros SET ActualizadoPor = NULL;
             DELETE FROM dbo.tblUsuarios;
             ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL;
@@ -93,6 +97,7 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNotasAclaratorias ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNovedadesViaje ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblReclamos ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblInspeccionExtras ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblPropuestasUbicacion ENABLE TRIGGER ALL;
@@ -107,6 +112,7 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNotasAclaratorias ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNovedadesViaje ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblReclamos ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblInspeccionExtras ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblPropuestasUbicacion ENABLE TRIGGER ALL;
@@ -115,10 +121,11 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
 
             -- Catalogos: vuelven a su estado inicial (sin valores creados por las pruebas, todos activos y sin cambios de forma).
             DELETE FROM dbo.tblCuadrantes;
+            DELETE FROM dbo.tblMuelles;
             DELETE FROM dbo.tblLugares;
             DELETE FROM dbo.tblEstadosSofasa;
             DELETE FROM dbo.tblTiposExtra WHERE Codigo NOT IN ('barras_techo', 'volco', 'platon', 'otro');
-            DELETE FROM dbo.tblMotivosSinInspector WHERE Codigo NOT IN ('inspector_no_llego', 'inspector_no_disponible', 'otro');
+            DELETE FROM dbo.tblMotivosSinInspector WHERE Codigo NOT IN ('inspector_no_llego', 'inspector_no_disponible', 'otro', 'se_nego_a_firmar', 'no_habia_nadie', 'sin_inspector_del_punto');
             DELETE FROM dbo.tblEtapasCatalogo WHERE Codigo NOT IN ('cargue', 'transporte', 'descargue');
             DELETE FROM dbo.tblPuntosCustodia WHERE Codigo NOT IN ('cedi_1', 'origen', 'certificadora', 'destino', 'cedi_2', 'concesionario');
             DELETE FROM dbo.tblClientes WHERE Codigo <> 'sofasa';
@@ -131,7 +138,7 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             UPDATE dbo.tblPuntosCustodia SET Activo = 1;
             UPDATE dbo.tblTiposUnidadTransportadora SET Activo = 1;
             UPDATE dbo.tblClientes SET Activo = 1, Orden = 1;
-            UPDATE dbo.tblMotivosSinInspector SET Activo = 1;
+            UPDATE dbo.tblMotivosSinInspector SET Activo = CASE WHEN Codigo IN ('se_nego_a_firmar', 'no_habia_nadie', 'sin_inspector_del_punto') THEN 0 ELSE 1 END;
             UPDATE dbo.tblTiposExtra SET Activo = 1;
             UPDATE dbo.tblClasesDano SET Activo = 1;
             UPDATE dbo.tblTamanosDano SET Activo = 1;
@@ -144,7 +151,9 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             UPDATE dbo.tblParametros SET Valor = CASE Clave
                 WHEN 'objetivo_diario_novedad' THEN N'1.2' WHEN 'reporte_diario_hora' THEN N'06:00' WHEN 'horario_operacion_inicio' THEN N'08:00' WHEN 'horario_operacion_fin' THEN N'21:00'
                 WHEN 'gps_precision_minima_m' THEN N'30' WHEN 'url_firmada_minutos' THEN N'15' WHEN 'niveles_criticos' THEN N'v1_plus,v1' WHEN 'umbral_patron_cantidad' THEN N'10'
-                WHEN 'umbral_patron_ventana_dias' THEN N'30' WHEN 'captura_incompleta_minutos' THEN N'30' WHEN 'transferencia_pendiente_minutos' THEN N'240' WHEN 'reclamo_sin_actividad_minutos' THEN N'30' WHEN 'acomodacion_fotos_minimas' THEN N'1' WHEN 'radio_lugar_cargue_m' THEN N'1000' WHEN 'radio_destino_m' THEN N'500' WHEN 'valvula_precision_m' THEN N'500' WHEN 'cargue_sin_reclamar_minutos' THEN N'30' ELSE NULL END,
+                WHEN 'umbral_patron_ventana_dias' THEN N'30' WHEN 'captura_incompleta_minutos' THEN N'30' WHEN 'transferencia_pendiente_minutos' THEN N'240' WHEN 'reclamo_sin_actividad_minutos' THEN N'30' WHEN 'acomodacion_fotos_minimas' THEN N'1' WHEN 'radio_lugar_cargue_m' THEN N'1000' WHEN 'radio_destino_m' THEN N'500' WHEN 'valvula_precision_m' THEN N'500' WHEN 'cargue_sin_reclamar_minutos' THEN N'30'
+                WHEN 'permiso_sin_inspector_minutos' THEN N'10' WHEN 'espera_inspector_aviso_minutos' THEN N'15' WHEN 'espera_inspector_plan_b_minutos' THEN N'30' WHEN 'viaje_sin_movimiento_horas' THEN N'24'
+                WHEN 'firma_cargue_pendiente_minutos' THEN N'30' WHEN 'propuesta_ubicacion_visitas' THEN N'3' ELSE NULL END,
                 ActualizadoPor = NULL;
             DELETE FROM dbo.tblPanelesDano WHERE Codigo NOT IN ('superior', 'perfil_posterior_izquierdo', 'perfil_posterior_derecho', 'costado_izquierdo', 'costado_derecho');
             UPDATE dbo.tblPanelesDano SET Activo = 1, ImagenPath = NULL;

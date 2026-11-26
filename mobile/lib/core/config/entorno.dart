@@ -12,15 +12,18 @@ class Entorno {
   const Entorno({
     required this.flavor,
     required this.apiUrl,
+    this.hostDestino = '',
     this.extrasHabilitados = false,
     this.precisionBajaMetros,
     this.acomodacionFotosMinimas,
   });
 
-  /// Lee la configuración de compilación: `FLAVOR` (dev, qa, prod) y `API_URL` (sin barra final).
+  /// Lee la configuración de compilación: `FLAVOR` (dev, qa, prod), `API_URL` (sin barra final) y `API_HOST_DESTINO`
+  /// (opcional: el servicio interno al que la pasarela de IIS debe reenviar, ver docs/configuracion.md).
   factory Entorno.desdeCompilacion() => Entorno(
         flavor: Flavor.desde(const String.fromEnvironment('FLAVOR', defaultValue: 'dev')),
         apiUrl: _sinBarraFinal(const String.fromEnvironment('API_URL')),
+        hostDestino: const String.fromEnvironment('API_HOST_DESTINO').trim(),
         extrasHabilitados: const bool.fromEnvironment('EXTRAS_HABILITADOS'),
         // 0 quiere decir «no se fijó»: entonces manda el valor inicial de la regla, que vive en el dominio.
         precisionBajaMetros: switch (const int.fromEnvironment('GPS_PRECISION_MINIMA_M')) {
@@ -35,6 +38,10 @@ class Entorno {
 
   final Flavor flavor;
   final String apiUrl;
+
+  /// Host interno del backend cuando la API se consume a través de la pasarela `/contenedores` de IIS
+  /// (`https://servicios.boterosoto.com/contenedores`). Vacío = se llama a la API directo, sin pasarela.
+  final String hostDestino;
 
   /// Muestra la sección de extras en la captura. Los extras ya se envían con el informe (contrato 2.14.0); queda
   /// apagado por defecto hasta que el backend con esa ruta esté desplegado en el entorno: contra uno que no la tiene,
@@ -55,6 +62,10 @@ class Entorno {
   bool get configurado => apiUrl.isNotEmpty;
 
   bool get esProduccion => flavor == Flavor.prod;
+
+  /// Encabezados que toda petición a la API debe llevar para que la pasarela sepa a qué servicio reenviarla. Sin
+  /// ellos IIS responde 404 (página HTML) y la petición nunca llega al backend.
+  Map<String, String> get encabezadosEnrutamiento => hostDestino.isEmpty ? const {} : {'X-Forwarded-Host': hostDestino};
 
   static String _sinBarraFinal(String url) => url.trim().replaceAll(RegExp(r'/+$'), '');
 }

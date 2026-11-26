@@ -11,6 +11,15 @@ import 'cambiar_pin_page.dart' show largoMaximoPin, largoMinimoPin;
 /// cédula y PIN; quien administra entra con correo y contraseña.
 enum ModoIngreso { pin, correo }
 
+/// El correo se escribe en minúsculas aunque el teclado del equipo insista en mayúsculas.
+///
+/// El campo de la cédula las pide y el teclado se queda con el bloqueo puesto al cambiar de pestaña, así que
+/// escribir el correo se volvía una pelea con la tecla de mayúsculas. Al servidor le da igual —no distingue—,
+/// pero lo que se ve en el campo tiene que ser lo que la persona reconoce como su correo.
+final formateadorCorreo = TextInputFormatter.withFunction(
+  (_, nuevo) => nuevo.copyWith(text: nuevo.text.toLowerCase()),
+);
+
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
 
@@ -163,6 +172,9 @@ class _EstadoLoginPage extends ConsumerState<LoginPage> {
           controller: _correo,
           keyboardType: TextInputType.emailAddress,
           autocorrect: false,
+          enableSuggestions: false,
+          textCapitalization: TextCapitalization.none,
+          inputFormatters: [formateadorCorreo],
           textInputAction: TextInputAction.next,
           autofillHints: const [AutofillHints.username],
           decoration: const InputDecoration(labelText: 'Correo', hintText: 'nombre@boterosoto.com.co'),

@@ -44,11 +44,15 @@ internal sealed class clsConfiguracionInspeccion : IEntityTypeConfiguration<clsI
             .HasConstraintName("FK_tblInspecciones_Viaje").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(i => i.UsuarioId)
             .HasConstraintName("FK_tblInspecciones_Usuario").OnDelete(DeleteBehavior.NoAction);
-        // Una sola inspeccion original por etapa y momento; las correcciones (versiones siguientes) no cuentan, y cada version se corrige una vez.
-        builder.HasIndex(i => new { i.EtapaId, i.Momento }).IsUnique().HasFilter("[CorrigeInspeccionId] IS NULL")
+        // Una sola inspeccion original por etapa, momento y ciclo; las correcciones (versiones siguientes) no cuentan, y cada version se corrige una vez.
+        builder.Property(i => i.Ciclo).HasDefaultValue(1);
+        // Un borrador descartado o superado se conserva, pero ya no es el informe de su momento: no cuenta para la unicidad.
+        builder.HasIndex(i => new { i.EtapaId, i.Momento, i.Ciclo }).IsUnique().HasFilter("[CorrigeInspeccionId] IS NULL AND [Estado] <> 'descartada' AND [Estado] <> 'superada'")
             .HasDatabaseName("UX_tblInspecciones_Etapa_Momento_Original");
-        builder.HasIndex(i => i.CorrigeInspeccionId).IsUnique().HasFilter("[CorrigeInspeccionId] IS NOT NULL")
+        builder.HasIndex(i => i.CorrigeInspeccionId).IsUnique().HasFilter("[CorrigeInspeccionId] IS NOT NULL AND [Estado] <> 'descartada' AND [Estado] <> 'superada'")
             .HasDatabaseName("UX_tblInspecciones_Corrige");
+        // Los informes descartados o superados no salen en ninguna consulta: solo se abren por su id (ObtenerPorIdAsync y el informe detallado).
+        builder.HasQueryFilter(i => i.Estado != clsEstadoInspeccion.DESCARTADA && i.Estado != clsEstadoInspeccion.SUPERADA);
     }
 }
 
@@ -84,6 +88,7 @@ internal sealed class clsConfiguracionHallazgo : IEntityTypeConfiguration<clsHal
         builder.HasOne<clsInspeccionExtra>().WithMany().HasForeignKey(h => h.ExtraId)
             .HasConstraintName("FK_tblHallazgos_Extra").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(h => h.ExtraId).IsUnique().HasFilter("[ExtraId] IS NOT NULL").HasDatabaseName("UQ_tblHallazgos_Extra");
+        builder.HasIndex(h => new { h.InspeccionId, h.IdEnvio }).IsUnique().HasFilter("[IdEnvio] IS NOT NULL").HasDatabaseName("UX_tblHallazgos_Envio");
         builder.HasOne<clsZonaDano>().WithMany().HasForeignKey(h => h.ZonaId)
             .HasConstraintName("FK_tblHallazgos_Zona").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsNivelSeveridad>().WithMany().HasForeignKey(h => h.NivelSeveridad).HasPrincipalKey(n => n.Codigo)
@@ -194,6 +199,10 @@ internal sealed class clsConfiguracionTransferencia : IEntityTypeConfiguration<c
         builder.Property(t => t.FirmadaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
         builder.Property(t => t.FirmaEntregaAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
         builder.Property(t => t.FirmaRecibeAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(t => t.FirmaEntregaMomentoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(t => t.FirmaRecibeMomentoAt).HasColumnType(clsConfiguracionBase.TIPO_FECHA);
+        builder.Property(t => t.FirmaPorNinera).HasDefaultValue(false);
+        builder.Property(t => t.SinInspectorDelPunto).HasDefaultValue(false);
         builder.Property(t => t.FirmaEntregaIp).HasColumnType("varchar(45)");
         builder.Property(t => t.FirmaRecibeIp).HasColumnType("varchar(45)");
         builder.Property(t => t.TipoCierre).HasColumnType("varchar(20)");
@@ -202,7 +211,11 @@ internal sealed class clsConfiguracionTransferencia : IEntityTypeConfiguration<c
         builder.Property(t => t.MotivoNoFirma).HasMaxLength(clsTransferenciaCustodia.MOTIVO_MAX);
         builder.Property(t => t.RecibeExternoNombre).HasMaxLength(clsTransferenciaCustodia.NOMBRE_EXTERNO_MAX);
         builder.Property(t => t.RecibeExternoCedula).HasColumnType("varchar(30)");
+        builder.Property(t => t.MotivoCodigo).HasColumnType("varchar(30)");
+        builder.Property(t => t.TestigoNombre).HasMaxLength(clsTransferenciaCustodia.NOMBRE_EXTERNO_MAX);
+        builder.Property(t => t.TestigoCedula).HasColumnType("varchar(30)");
         builder.Ignore(t => t.RecibeEsExterno);
+        builder.Ignore(t => t.EstaRechazada);
         // El testigo y la foto de la constancia: ningun borrado en cascada (la inspeccion arrastra la transferencia y la foto a la vez).
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.TestigoUsuarioId)
             .HasConstraintName("FK_tblTransferencias_Testigo").OnDelete(DeleteBehavior.NoAction);
@@ -214,6 +227,10 @@ internal sealed class clsConfiguracionTransferencia : IEntityTypeConfiguration<c
             .HasConstraintName("FK_tblTransferencias_Entrega").OnDelete(DeleteBehavior.NoAction);
         builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.RecibeUsuarioId)
             .HasConstraintName("FK_tblTransferencias_Recibe").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsHallazgo>().WithMany().HasForeignKey(t => t.RechazoHallazgoId)
+            .HasConstraintName("FK_tblTransferencias_RechazoHallazgo").OnDelete(DeleteBehavior.NoAction);
+        builder.HasOne<clsUsuario>().WithMany().HasForeignKey(t => t.RechazoMarcadoPor)
+            .HasConstraintName("FK_tblTransferencias_RechazoMarcadoPor").OnDelete(DeleteBehavior.NoAction);
         builder.HasIndex(t => t.InspeccionId).IsUnique().HasDatabaseName("UQ_tblTransferencias_Inspeccion");
     }
 }

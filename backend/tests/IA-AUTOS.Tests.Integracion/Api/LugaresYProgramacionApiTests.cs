@@ -69,7 +69,7 @@ public sealed class LugaresYProgramacionApiTests(clsBaseDatosFixture bd) : clsPr
         Assert.Equal(HttpStatusCode.Created, creado.StatusCode);
         var lugar = await LeerJsonAsync(creado);
         Assert.Equal(
-            ["id", "nombre", "tipo", "tipo_nombre", "ciudad", "orden", "activo", "latitud", "longitud", "radio_metros", "sin_ubicacion", "estado_ubicacion", "ubicacion_fijada_por", "ubicacion_fijada_por_nombre", "ubicacion_fijada_at"], lugar.EnumerateObject().Select(p => p.Name).ToList());
+            ["id", "nombre", "tipo", "tipo_nombre", "ciudad", "orden", "activo", "latitud", "longitud", "radio_metros", "precision_m", "sin_ubicacion", "admite_cargue_sin_inspector", "estado_ubicacion", "ubicacion_fijada_por", "ubicacion_fijada_por_nombre", "ubicacion_fijada_at"], lugar.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("CEDI Envigado", lugar.GetProperty("nombre").GetString());
         Assert.Equal("cedi_1", lugar.GetProperty("tipo").GetString());
         Assert.Equal("CEDI 1", lugar.GetProperty("tipo_nombre").GetString());
@@ -315,5 +315,37 @@ public sealed class LugaresYProgramacionApiTests(clsBaseDatosFixture bd) : clsPr
         var otroCampo = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{viajeId}", Cuerpo(new { trailer = "T-77" }));
         Assert.Equal(HttpStatusCode.Conflict, enCurso.StatusCode);
         Assert.Equal(HttpStatusCode.OK, otroCampo.StatusCode);
+    }
+
+    // ----------------------------------------------------------------------------------------------- no hay mas carros que puestos
+
+    [Fact]
+    public async Task Un_viaje_del_archivo_con_mas_carros_que_puestos_no_se_crea_y_sus_filas_lo_dicen()
+    {
+        var coordinador = await CoordinadorAsync();
+        await PrepararAsync(coordinador, "VIN-L-01", "VIN-L-02", "VIN-L-03");
+        var niniera = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblTiposUnidadTransportadora WHERE Codigo = 'ninera'"))!;
+        var original = await Sembrador.EscalarAsync("SELECT Puestos FROM dbo.tblTiposUnidadTransportadora WHERE Id = @i", ("@i", niniera));
+        Assert.Equal(HttpStatusCode.OK, (await Cliente(coordinador.Token).PatchAsync($"/api/catalogos/tipos-unidad/{niniera}", Cuerpo(new { puestos = 2 }))).StatusCode);
+        object[] filas = [Fila(1, "VIN-L-01", "M-CUPO"), Fila(2, "VIN-L-02", "M-CUPO"), Fila(3, "VIN-L-03", "M-CUPO")];
+
+        JsonElement vista;
+        HttpResponseMessage confirmada;
+        try
+        {
+            vista = await PrevisualizarAsync(coordinador, filas);
+            confirmada = await Cliente(coordinador.Token).PostAsync("/api/viajes/cargar", Cuerpo(new { filas }));
+        }
+        finally
+        {
+            // El tipo de unidad vuelve a sus puestos de antes: otras pruebas arman sus viajes con ellos.
+            await Cliente(coordinador.Token).PatchAsync($"/api/catalogos/tipos-unidad/{niniera}", Cuerpo(new { puestos = original is DBNull or null ? (int?)null : Convert.ToInt32(original) }));
+        }
+
+        var errores = Errores(vista);
+        Assert.All(new[] { 1, 2, 3 }, n => Assert.Contains("3 carros para 2 puestos", errores[n]));
+        Assert.Equal(0, vista.GetProperty("validas").GetInt32());
+        Assert.Equal(0, (await LeerJsonAsync(confirmada)).GetProperty("viajes").GetInt32());
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes"));
     }
 }

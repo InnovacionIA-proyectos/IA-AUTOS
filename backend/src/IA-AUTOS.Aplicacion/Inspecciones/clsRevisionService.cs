@@ -16,8 +16,8 @@ using IAAutos.Dominio.Viajes;
 namespace IAAutos.Aplicacion.Inspecciones;
 
 /// <summary>
-/// La revision de un hallazgo que registro el conductor: la zona (<c>cuadrante_numero</c> y, si el cuadrante lleva lado, <c>lado</c>), la clase, el nivel V (los tres obligatorios), el tamano si hay
-/// que corregir el que eligio el conductor y una nota. Si el dano ya estaba registrado, <c>EsPreexistente</c> y <c>HallazgoOrigenId</c> (opcionales) lo unen al hallazgo previo del mismo VIN, con la misma
+/// La calificacion de un hallazgo sin nivel (el del conductor, el de un extra, cualquier otro): la zona (<c>cuadrante_numero</c> y, si el cuadrante lleva lado, <c>lado</c>), la clase y el nivel V; la zona es
+/// obligatoria salvo que el hallazgo ya la tenga (la conserva) o sea el dano de un extra (no lleva zona), el tamano si hay que corregir el que eligio el conductor y una nota. Si el dano ya estaba registrado, <c>EsPreexistente</c> y <c>HallazgoOrigenId</c> (opcionales) lo unen al hallazgo previo del mismo VIN, con la misma
 /// validacion de cuando se crea un hallazgo.
 /// </summary>
 public sealed record RevisarHallazgoRequest(
@@ -34,7 +34,11 @@ public sealed class RevisarHallazgoRequestValidator : AbstractValidator<RevisarH
 {
     public RevisarHallazgoRequestValidator()
     {
-        clsReglasZona.Aplicar(this, x => x.CuadranteNumero, x => x.Lado);
+        // La zona la pide el servicio solo cuando el hallazgo no la tiene (la conserva) ni es el dano de un extra: aqui solo se revisa su forma.
+        RuleFor(x => x.CuadranteNumero).GreaterThanOrEqualTo(1).When(x => x.CuadranteNumero is not null)
+            .WithMessage("El número del cuadrante debe ser un entero >= 1");
+        RuleFor(x => x.Lado).Must(l => l is not null && clsLado.VALORES.Contains(l)).When(x => x.Lado is not null)
+            .WithMessage("El lado debe ser izquierdo o derecho");
         RuleFor(x => x.ClaseDano).Must(c => !string.IsNullOrWhiteSpace(c)).WithMessage("Clase de daño inválida");
         RuleFor(x => x.NivelSeveridad).Must(n => !string.IsNullOrWhiteSpace(n)).WithMessage("El nivel de severidad es requerido");
         RuleFor(x => x.Nota).Must(n => n is null || n.Trim().Length <= clsHallazgo.NOTA_MAX)
@@ -50,8 +54,8 @@ public sealed class RevisarHallazgoRequestValidator : AbstractValidator<RevisarH
 }
 
 /// <summary>
-/// Un inspector (de un viaje de la unidad) o un administrador revisa el hallazgo que registro el conductor: lo ubica en su zona, le da su clase y le asigna el nivel V, que el conductor nunca
-/// asigna, y desde ahi el hallazgo entra al seguimiento y a los patrones. El coordinador de calidad tambien revisa, a distancia, los que el conductor registra en la salida de un Cargue sin personal
+/// Un inspector (de un viaje de la unidad) o un administrador califica el hallazgo sin nivel (el que registro el conductor en una zona o en un extra, o cualquier otro): lo ubica en su zona si la tiene, le da su
+/// clase y le asigna el nivel V, que el conductor nunca asigna, y desde ahi el hallazgo entra al seguimiento y a los patrones. El coordinador de calidad tambien revisa, a distancia, los que el conductor registra en la salida de un Cargue sin personal
 /// de apoyo o con la excepcion «No hay inspector» y en la llegada del Descargue que el conductor hace sin inspector en destino. Al revisar se puede confirmar que el dano ya estaba registrado
 /// (preexistente, unido al hallazgo previo del mismo VIN). La revision queda en el historial del hallazgo y, si el nivel es critico, alerta al coordinador y al administrador del cliente.
 /// </summary>
@@ -61,6 +65,7 @@ public sealed class clsRevisionService(
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
     IConsultasViajes consultasViajes,
+    IReclamoRepository reclamos,
     IConsultasInspecciones consultas,
     ICatalogosLectura catalogos,
     clsResolutorZona resolutorZona,
@@ -85,22 +90,50 @@ public sealed class clsRevisionService(
         var etapa = await etapas.ObtenerPorIdAsync(inspeccion.EtapaId, ct) ?? throw new clsEntidadNoEncontradaException("La etapa de la inspección no existe");
         var viaje = await viajes.ObtenerPorIdAsync(inspeccion.ViajeId, ct) ?? throw new clsEntidadNoEncontradaException("El viaje de la inspección no existe");
         var vehiculo = await vehiculos.ObtenerPorIdAsync(etapa.VehiculoId, ct) ?? throw new clsEntidadNoEncontradaException("El vehículo de la etapa no existe");
-        await AsegurarPermisoAsync(vehiculo, inspeccion, etapa, viaje, ct);
+        await AsegurarPermisoAsync(vehiculo, hallazgo, inspeccion, etapa, viaje, ct);
         hallazgo.AsegurarRevisable();
 
-        var zona = await resolutorZona.ResolverAsync(inspeccion.Id, solicitud.CuadranteNumero!.Value, solicitud.Lado, ct);
+        // Un dano con zona conserva la suya si la peticion no manda otra; el de un extra no lleva zona; los demas la piden.
+        clsZonaDano? zona = null;
+        if (solicitud.CuadranteNumero is { } cuadrante)
+        {
+            if (hallazgo.ExtraId is not null)
+            {
+                throw clsErroresCampos.De("cuadrante_numero", "El daño de un extra no lleva zona del dibujo");
+            }
+
+            zona = await resolutorZona.ResolverAsync(inspeccion.Id, cuadrante, solicitud.Lado, ct);
+        }
+        else if (hallazgo.ZonaId is null && hallazgo.ExtraId is null)
+        {
+            throw clsErroresCampos.De("cuadrante_numero", "La zona indicada no existe");
+        }
+        else if (solicitud.Lado is not null)
+        {
+            throw clsErroresCampos.De("lado", "El lado se envía junto con cuadrante_numero");
+        }
+
+        var zonaId = zona?.Id ?? hallazgo.ZonaId;
         var clase = solicitud.ClaseDano!.Trim();
         // El origen debe ser un hallazgo de una inspeccion cerrada anterior del mismo VIN con la misma zona y la misma clase que se asignan aqui.
-        if (solicitud.HallazgoOrigenId is { } origenId && !await inspecciones.EsHallazgoPrevioDelVehiculoAsync(origenId, inspeccion.Id, zona.Id, clase, ct))
+        if (solicitud.HallazgoOrigenId is { } origenId)
         {
-            throw clsErroresCampos.De(
-                "hallazgo_origen_id", "El hallazgo de origen debe ser de una inspección cerrada anterior del mismo vehículo, con la misma zona y la misma clase de daño");
+            if (zonaId is null)
+            {
+                throw clsErroresCampos.De("hallazgo_origen_id", "El daño de un extra no se une a un hallazgo previo: no tiene zona");
+            }
+
+            if (!await inspecciones.EsHallazgoPrevioDelVehiculoAsync(origenId, inspeccion.Id, zonaId.Value, clase, ct))
+            {
+                throw clsErroresCampos.De(
+                    "hallazgo_origen_id", "El hallazgo de origen debe ser de una inspección cerrada anterior del mismo vehículo, con la misma zona y la misma clase de daño");
+            }
         }
 
         var tamanoAnterior = hallazgo.TamanoDano;
         var antes = clsInstantaneasAuditoria.De(hallazgo);
         var tamano = clsValidador.Opcional(solicitud.TamanoDano);
-        hallazgo.Revisar(zona.Id, clase, solicitud.NivelSeveridad!.Trim(), tamano, solicitud.Nota, actual.IdObligatorio(), reloj.Ahora, solicitud.HallazgoOrigenId);
+        hallazgo.Revisar(zona?.Id, clase, solicitud.NivelSeveridad!.Trim(), tamano, solicitud.Nota, actual.IdObligatorio(), reloj.Ahora, solicitud.HallazgoOrigenId);
 
         inspecciones.Agregar(clsHallazgoSeguimiento.CrearRevision(hallazgo.Id, actual.IdObligatorio(), solicitud.Nota, Detalle(solicitud, zona, hallazgo, tamanoAnterior), reloj.Ahora));
         await auditor.RegistrarDeViajeAsync(
@@ -113,10 +146,10 @@ public sealed class clsRevisionService(
     }
 
     /// <summary>
-    /// El inspector revisa los de un VIN de sus viajes; el administrador, los de su cliente; el coordinador de calidad, solo los de la salida de un Cargue sin personal de apoyo. Quien se limita a su
+    /// El inspector califica los de un VIN de sus viajes; el administrador, los de su cliente; el coordinador de calidad, solo los daños del conductor de la salida de un Cargue sin personal de apoyo y de la llegada del Descargue. Quien se limita a su
     /// cliente no revisa los de otro.
     /// </summary>
-    private async Task AsegurarPermisoAsync(clsVehiculo vehiculo, clsInspeccion inspeccion, clsEtapa etapa, clsViaje viaje, CancellationToken ct)
+    private async Task AsegurarPermisoAsync(clsVehiculo vehiculo, clsHallazgo hallazgo, clsInspeccion inspeccion, clsEtapa etapa, clsViaje viaje, CancellationToken ct)
     {
         if (actual.ClienteRestringido() is { } cliente && vehiculo.ClienteId != cliente)
         {
@@ -125,9 +158,9 @@ public sealed class clsRevisionService(
 
         switch (actual.Rol)
         {
-            case clsRol.INSPECTOR when !await consultasViajes.UsuarioVeVinAsync(vehiculo.Vin, actual.IdObligatorio(), ct):
+            case clsRol.INSPECTOR when !await consultasViajes.UsuarioVeVinAsync(vehiculo.Vin, actual.IdObligatorio(), ct) && !await TieneLaParadaDelDanoAsync(vehiculo, hallazgo, inspeccion, etapa, viaje, ct):
                 throw new clsProhibidoException("El VIN del hallazgo no pertenece a ninguno de sus viajes");
-            case clsRol.COORDINADOR_CALIDAD when !await EsInspeccionSinInspectorAsync(inspeccion, etapa, viaje, ct):
+            case clsRol.COORDINADOR_CALIDAD when hallazgo.Origen != clsOrigenHallazgo.CONDUCTOR || !await EsInspeccionSinInspectorAsync(inspeccion, etapa, viaje, ct):
                 throw new clsProhibidoException(
                     "El coordinador de calidad solo revisa los hallazgos del conductor en la salida de un Cargue sin personal de apoyo o con la excepción «No hay inspector», y en la llegada del Descargue que el conductor hace");
             case clsRol.INSPECTOR or clsRol.COORDINADOR_CALIDAD or clsRol.ADMIN or clsRol.SUPER_ADMIN:
@@ -135,6 +168,26 @@ public sealed class clsRevisionService(
             default:
                 throw new clsProhibidoException("No tiene permisos para revisar hallazgos");
         }
+    }
+
+    /// <summary>
+    /// El inspector que tiene el reclamo de la entrega de la parada donde esta el carro califica los danos que el conductor marco en su revision de llegada del Descargue (la que hizo con el plan B antes de que el inspector
+    /// llegara), aunque no sea el inspector del viaje. Los demas danos del viaje siguen la regla de siempre.
+    /// </summary>
+    private async Task<bool> TieneLaParadaDelDanoAsync(clsVehiculo vehiculo, clsHallazgo hallazgo, clsInspeccion inspeccion, clsEtapa etapa, clsViaje viaje, CancellationToken ct)
+    {
+        if (hallazgo.Origen != clsOrigenHallazgo.CONDUCTOR || inspeccion.Momento != clsMomento.LLEGADA || inspeccion.UsuarioId != viaje.ConductorId)
+        {
+            return false;
+        }
+
+        var proceso = (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
+        if (proceso != clsCodigosEtapa.DESCARGUE || (await viajes.ObtenerVehiculoAsync(viaje.Id, vehiculo.Id, ct))?.LugarDestinoId is not { } parada)
+        {
+            return false;
+        }
+
+        return await reclamos.ObtenerActivoAsync(viaje.Id, clsProcesoReclamo.ENTREGA, parada, ct) is { } reclamo && reclamo.InspectorId == actual.IdObligatorio();
     }
 
     /// <summary>
@@ -192,13 +245,13 @@ public sealed class clsRevisionService(
     }
 
     /// <summary>Lo asignado en la revision, como JSON para el historial: la zona, la clase, el nivel y, si se corrigio, el tamano que habia y el nuevo.</summary>
-    private static string Detalle(RevisarHallazgoRequest solicitud, clsZonaDano zona, clsHallazgo hallazgo, string tamanoAnterior) =>
+    private static string Detalle(RevisarHallazgoRequest solicitud, clsZonaDano? zona, clsHallazgo hallazgo, string tamanoAnterior) =>
         JsonSerializer.Serialize(
             new Dictionary<string, object?>
             {
-                ["zona_id"] = zona.Id,
-                ["cuadrante_numero"] = zona.Numero,
-                ["lado"] = zona.Lado,
+                ["zona_id"] = zona?.Id ?? hallazgo.ZonaId,
+                ["cuadrante_numero"] = zona?.Numero,
+                ["lado"] = zona?.Lado,
                 ["clase_dano"] = hallazgo.ClaseDano,
                 ["nivel_severidad"] = hallazgo.NivelSeveridad,
                 ["tamano_dano"] = hallazgo.TamanoDano,

@@ -1,6 +1,8 @@
 using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Vehiculos.DTOVehiculos;
+using IAAutos.Aplicacion.Viajes.DTOViajes;
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Usuarios;
 
 namespace IAAutos.Aplicacion.Inspecciones;
@@ -29,9 +31,29 @@ public static class clsVisibilidadConductor
             EvidenciaFaltante = null,
             RevisadoPor = null,
             RevisadoAt = null,
-            // Lo que es de la calidad (el nivel) no se ve, y con ello tampoco si esta sin calificar.
+            // Lo que es de la calidad (el nivel) no se ve; solo se ve si ya esta calificado (Calificado, que no se toca aqui) y no el 'sin calificar' del lado de la calidad.
             SinCalificar = false,
         };
+
+    /// <summary>
+    /// El «no sale» que ve el conductor: sin el hallazgo ni ningun dato del nivel, y con una etiqueta que no revela el nivel («Daño que impide viajar» en lugar de «Daño V1+»; el daño que el reporto sigue diciendolo).
+    /// </summary>
+    public static NoSaleDto ParaConductor(this NoSaleDto noSale) =>
+        noSale with
+        {
+            HallazgoId = null,
+            Motivo = noSale.MotivoCodigo switch
+            {
+                clsCodigosMotivoNoSale.DANO_V1_PLUS => "Daño que impide viajar",
+                clsCodigosMotivoNoSale.DANO_REPORTADO_CONDUCTOR => "Daño reportado por el conductor",
+                _ => noSale.Motivo,
+            },
+        };
+
+    public static ViajeDto ParaConductor(this ViajeDto viaje, IUsuarioActual actual) =>
+        actual.EsConductor()
+            ? viaje with { Vehiculos = viaje.Vehiculos.Select(v => v.NoSale is null ? v : v with { NoSale = v.NoSale.ParaConductor() }).ToList() }
+            : viaje;
 
     public static InformeDetalleDto ParaConductor(this InformeDetalleDto informe, IUsuarioActual actual) =>
         actual.EsConductor()
@@ -46,6 +68,7 @@ public static class clsVisibilidadConductor
                 Etapas = inventario.Etapas
                     .Select(e => e with
                     {
+                        NoSale = e.NoSale?.ParaConductor(),
                         Inspecciones = e.Inspecciones
                             .Select(i => i with { Hallazgos = i.Hallazgos.Select(h => h.ParaConductor()).ToList(), Evidencias = SinSello(i.Evidencias) })
                             .ToList(),

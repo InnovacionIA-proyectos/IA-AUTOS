@@ -47,6 +47,8 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
 
         public required string Etapa { get; init; }
 
+        public string? EtapaCodigo { get; init; }
+
         public string? Lugar { get; init; }
 
         public required string EstadoViaje { get; init; }
@@ -106,6 +108,7 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                            ConductorNombre = c.Nombre,
                            ConductorCedula = c.Cedula,
                            Etapa = ec.Nombre,
+                           EtapaCodigo = ec.Codigo,
                            Lugar = pl.Nombre,
                            EstadoViaje = vj.Estado,
                            EstadoUnidad = vv.EstadoUnidad,
@@ -113,8 +116,8 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                            Destino = d.Nombre,
                        };
 
-        // Cada etapa da dos filas (salida y llegada): se piden las etapas necesarias para pasar del maximo.
-        var etapas = await consulta.Take((maximo / 2) + 1).ToListAsync(ct);
+        // Cada etapa da una o dos filas (el descargue solo la llegada): se piden tantas etapas como filas maximas mas una, para saber si el resultado se corto.
+        var etapas = await consulta.Take(maximo + 1).ToListAsync(ct);
         var ultimas = new Dictionary<(Guid Etapa, string Momento), (int Version, string Estado, DateTimeOffset Inicio, DateTimeOffset? Cierre)>();
         foreach (var lote in etapas.Select(e => e.EtapaId).Chunk(1000))
         {
@@ -135,6 +138,12 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                 e.Vin, e.Marca, e.TipoVehiculo, e.Operacion, e.ClienteId, e.CodigoMtrack, e.Placa, e.Trailer, e.Unidad, e.ConductorNombre, e.ConductorCedula, e.Etapa, e.Lugar);
             foreach (var momento in new[] { clsMomento.SALIDA, clsMomento.LLEGADA })
             {
+                // El descargue tiene una sola revision, la llegada: su salida solo se exporta si existe de antes (una salida cerrada historica), nunca como fila «sin_inspeccion».
+                if (momento == clsMomento.SALIDA && e.EtapaCodigo == clsCodigosEtapa.DESCARGUE && !ultimas.ContainsKey((e.EtapaId, momento)))
+                {
+                    continue;
+                }
+
                 filas.Add(ultimas.TryGetValue((e.EtapaId, momento), out var i)
                     ? new FilaExportViaje(contextoFila, e.EstadoViaje, e.EstadoUnidad, e.Origen, e.Destino, momento, i.Version, i.Estado, i.Inicio, i.Cierre)
                     : new FilaExportViaje(contextoFila, e.EstadoViaje, e.EstadoUnidad, e.Origen, e.Destino, momento, null, "sin_inspeccion", null, null));
@@ -169,11 +178,25 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
         public string? RecibeIp { get; init; }
 
         public int Extras { get; init; }
+
+        public DateTimeOffset? EntregaMomento { get; init; }
+
+        public double? EntregaLat { get; init; }
+
+        public double? EntregaLng { get; init; }
+
+        public DateTimeOffset? RecibeMomento { get; init; }
+
+        public double? RecibeLat { get; init; }
+
+        public double? RecibeLng { get; init; }
     }
 
     public async Task<ResultadoExportacion<FilaExportInspeccion>> InspeccionesAsync(FiltrosInspecciones f, Guid? clienteId, int maximo, CancellationToken ct = default)
     {
         var vinExacto = f.Vin?.Length == clsVin.LONGITUD_ISO;
+        // La marca busca por contenido, sin distinguir mayusculas.
+        var marca = f.Marca?.ToLower();
         var consulta = from i in contexto.Inspecciones.AsNoTracking()
                        join e in contexto.Etapas on i.EtapaId equals e.Id
                        join v in contexto.Vehiculos on e.VehiculoId equals v.Id
@@ -201,7 +224,7 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                           && (f.Estado == null || i.Estado == f.Estado)
                           && (f.Proceso == null || ec.Codigo == f.Proceso)
                           && (f.Operacion == null || v.Operacion == f.Operacion)
-                          && (f.Marca == null || v.Marca == f.Marca)
+                          && (marca == null || v.Marca.ToLower().Contains(marca))
                           && (f.OrigenId == null || vj.OrigenId == f.OrigenId)
                           && (f.DestinoId == null || vj.DestinoId == f.DestinoId)
                           && (f.Desde == null || i.Fecha >= f.Desde)
@@ -239,11 +262,21 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                            RecibeFecha = tr.FirmaRecibeAt,
                            RecibeIp = tr.FirmaRecibeIp,
                            Extras = contexto.InspeccionExtras.Count(x => x.InspeccionId == i.Id),
+                           EntregaMomento = tr.FirmaEntregaMomentoAt,
+                           EntregaLat = tr.FirmaEntregaLat,
+                           EntregaLng = tr.FirmaEntregaLng,
+                           RecibeMomento = tr.FirmaRecibeMomentoAt,
+                           RecibeLat = tr.FirmaRecibeLat,
+                           RecibeLng = tr.FirmaRecibeLng,
                        };
 
+        // La ubicacion del momento en que se firmo: las coordenadas o «sin ubicacion» si la firma no trajo GPS (vacia si la firma no guardo su momento).
+        static string? Ubicacion(DateTimeOffset? momento, double? lat, double? lng) =>
+            momento is null ? null : lat is { } la && lng is { } lo ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{la:0.#####}, {lo:0.#####}") : "sin ubicación";
         var filas = (await consulta.Take(maximo + 1).ToListAsync(ct)).Select(x => new FilaExportInspeccion(
             Contexto(x.Contexto), x.Inspeccion.Momento, x.Inspeccion.Version, x.Inspeccion.Estado, x.Inspeccion.IniciadaAt, x.Inspeccion.CerradaAt, x.Inspector,
-            x.TipoCierre, x.EntregaNombre, x.EntregaFecha, x.EntregaIp, x.RecibeNombre, x.RecibeFecha, x.RecibeIp, x.Extras)).ToList();
+            x.TipoCierre, x.EntregaNombre, x.EntregaFecha, x.EntregaIp, x.RecibeNombre, x.RecibeFecha, x.RecibeIp, x.Extras,
+            x.EntregaMomento, Ubicacion(x.EntregaMomento, x.EntregaLat, x.EntregaLng), x.RecibeMomento, Ubicacion(x.RecibeMomento, x.RecibeLat, x.RecibeLng))).ToList();
         return Limitar(filas, maximo);
     }
 
@@ -292,6 +325,10 @@ internal sealed class clsConsultasExportaciones(clsAppDbContext contexto) : ICon
                           && (f.Vin == null || v.Vin == f.Vin)
                           && (f.InspeccionId == null || h.InspeccionId == f.InspeccionId)
                           && (f.Nivel == null || h.NivelSeveridad == f.Nivel)
+                          && (f.SinCalificar == null
+                              || (f.SinCalificar == true
+                                  ? h.NivelSeveridad == null && !contexto.Inspecciones.Any(co => co.CorrigeInspeccionId == i.Id && co.Estado == clsEstadoInspeccion.CERRADA)
+                                  : h.NivelSeveridad != null))
                           && (f.CuadranteNumero == null || z.Numero == f.CuadranteNumero)
                           && (f.Lado == null || z.Lado == f.Lado)
                           && (f.Proceso == null || ec.Codigo == f.Proceso)

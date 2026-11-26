@@ -17,7 +17,7 @@ public sealed class clsHallazgosController(clsSeguimientoService seguimiento, cl
 {
     /// <summary>
     /// Una pagina de hallazgos (<c>items</c>, <c>total</c>, <c>pagina</c>, <c>tamano</c> hasta 200) con filtros <c>estado_seguimiento</c>, <c>origen</c>, <c>revisado</c> (solo novedades del
-    /// conductor), <c>cliente_id</c> (solo el super administrador), <c>viaje_id</c>, <c>vin</c>, <c>inspeccion_id</c>, <c>nivel</c>, <c>cuadrante_numero</c>, <c>lado</c>, <c>proceso</c>, <c>desde</c> y
+    /// conductor), <c>cliente_id</c> (solo el super administrador), <c>viaje_id</c>, <c>vin</c>, <c>inspeccion_id</c>, <c>nivel</c>, <c>sin_calificar</c> (true: los de nivel nulo de la version vigente, de cualquier origen; false: los que ya tienen nivel; true no se combina con <c>nivel</c>), <c>cuadrante_numero</c>, <c>lado</c>, <c>proceso</c>, <c>desde</c> y
     /// <c>hasta</c> (cierre de la inspeccion) y <c>orden</c> (recientes, antiguos o severidad). Cada fila es el hallazgo con su VIN, viaje, proceso, momento, inspeccion y foto propia.
     /// </summary>
     [HttpGet]
@@ -40,9 +40,10 @@ public sealed class clsHallazgosController(clsSeguimientoService seguimiento, cl
         [FromQuery] string? orden,
         [FromQuery] int? pagina,
         [FromQuery] int? tamano,
+        [FromQuery(Name = "sin_calificar")] string? sinCalificar,
         CancellationToken ct) =>
         Ok(await hallazgos.ListarAsync(
-            new FiltrosHallazgosRequest(estadoSeguimiento, origen, revisado, clienteId, viajeId, vin, inspeccionId, nivel, cuadranteNumero, lado, proceso, desde, hasta, orden, pagina, tamano), ct));
+            new FiltrosHallazgosRequest(estadoSeguimiento, origen, revisado, clienteId, viajeId, vin, inspeccionId, nivel, cuadranteNumero, lado, proceso, desde, hasta, orden, pagina, tamano, sinCalificar), ct));
 
     /// <summary>El hallazgo como una fila del listado, con su historial de seguimiento (<c>seguimiento</c>) y sus notas aclaratorias (<c>notas_aclaratorias</c>).</summary>
     [HttpGet("{id:guid}")]

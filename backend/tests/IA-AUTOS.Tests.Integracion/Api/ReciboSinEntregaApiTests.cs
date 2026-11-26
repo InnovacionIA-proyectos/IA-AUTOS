@@ -70,6 +70,19 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
     private Task<HttpResponseMessage> SinEntregaAsync(Sesion quien, Guid inspeccion, string? firma = "M10,10 L50,50") =>
         Como(quien).PostAsJsonAsync($"/api/inspecciones/{inspeccion}/transferencia/sin-entrega", new { firma });
 
+    /// <summary>
+    /// La transferencia del cargue ya abierta: en el cargue se firma por niñera, asi que la firma carro por carro se rechaza y el estado «abierta» se deja como lo dejaria la firma de una parte de la niñera.
+    /// <paramref name="firmoEntrega"/>: quien entrega ya firmo (si no, solo firmo quien recibe).
+    /// </summary>
+    private async Task TransferenciaAbiertaAsync(Escenario e, Guid inspeccion, bool firmoEntrega)
+    {
+        await Sembrador.TransferenciaAsync(inspeccion, e.Inspector.UsuarioId, e.Conductor.UsuarioId, tipoCierre: null);
+        if (!firmoEntrega)
+        {
+            await Sembrador.EjecutarAsync("ALTER TABLE dbo.tblTransferenciasCustodia DISABLE TRIGGER ALL; UPDATE dbo.tblTransferenciasCustodia SET FirmaEntrega = NULL, FirmaEntregaAt = NULL, FirmaRecibe = N'abierta', FirmaRecibeAt = SYSDATETIMEOFFSET(); ALTER TABLE dbo.tblTransferenciasCustodia ENABLE TRIGGER ALL");
+        }
+    }
+
     private Task<int> NovedadesAsync(string tipo) => Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNovedadesProceso WHERE Tipo = @t", ("@t", tipo));
 
     // ----------------------------------------------------------------------------------------------- el cierre
@@ -138,10 +151,7 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
         var e = await EscenarioAsync();
         var inspeccion = await SalidaDelCargueAsync(e.Conductor, e.Etapas[0]);
         // El conductor firmo su parte (recibe) con el inspector como quien entrega, que aun no firma: la transferencia sigue abierta.
-        var abierta = await Como(e.Conductor).PostAsJsonAsync(
-            $"/api/inspecciones/{inspeccion}/transferencia", new { entrega_usuario_id = e.Inspector.UsuarioId, recibe_usuario_id = e.Conductor.UsuarioId, firma = "abierta" });
-        Assert.Equal(HttpStatusCode.Created, abierta.StatusCode);
-        Assert.Equal(JsonValueKind.Null, (await ComoJsonAsync(abierta)).GetProperty("tipo_cierre").ValueKind);
+        await TransferenciaAbiertaAsync(e, inspeccion, firmoEntrega: false);
 
         var cierre = await SinEntregaAsync(e.Conductor, inspeccion, "cerrada sin entrega");
 
@@ -160,8 +170,7 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
     {
         var e = await EscenarioAsync();
         var inspeccion = await SalidaDelCargueAsync(e.Conductor, e.Etapas[0]);
-        Assert.Equal(HttpStatusCode.Created, (await Como(e.Inspector).PostAsJsonAsync(
-            $"/api/inspecciones/{inspeccion}/transferencia", new { entrega_usuario_id = e.Inspector.UsuarioId, recibe_usuario_id = e.Conductor.UsuarioId, firma = "entrega" })).StatusCode);
+        await TransferenciaAbiertaAsync(e, inspeccion, firmoEntrega: true);
 
         var r = await SinEntregaAsync(e.Conductor, inspeccion);
 
@@ -202,7 +211,8 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
         var e = await EscenarioAsync();
         var delInspector = await SalidaDelCargueAsync(e.Inspector, e.Etapas[0]);
         await Sembrador.InformeAsync(e.Etapas[0], e.Conductor.UsuarioId, cerrada: true, momento: "llegada");
-        var transporte = await SalidaDelCargueAsync(e.Conductor, e.Etapas[1], motivo: null);
+        // El informe de transporte lo arma el sistema (nadie lo crea por la API): se siembra el borrador de la salida.
+        var transporte = await Sembrador.InformeAsync(e.Etapas[1], e.Conductor.UsuarioId, cerrada: false, momento: "salida");
 
         var salidaDelInspector = await SinEntregaAsync(e.Conductor, delInspector);
         var deTransporte = await SinEntregaAsync(e.Conductor, transporte);
@@ -221,18 +231,17 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
         var inspeccion = await SalidaDelCargueAsync(e.Conductor, e.Etapas[0]);
         await Sembrador.InformeAsync(e.Etapas[0], e.Conductor.UsuarioId, cerrada: true, momento: "llegada");
         // La transferencia sigue abierta (quien recibe firmo su parte y quien entrega no): la etapa siguiente espera.
-        Assert.Equal(HttpStatusCode.Created, (await Como(e.Conductor).PostAsJsonAsync(
-            $"/api/inspecciones/{inspeccion}/transferencia", new { entrega_usuario_id = e.Inspector.UsuarioId, recibe_usuario_id = e.Conductor.UsuarioId, firma = "abierta" })).StatusCode);
-        var antes = await Como(e.Conductor).PostAsJsonAsync("/api/inspecciones", new { etapa_id = e.Etapas[1], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
+        await TransferenciaAbiertaAsync(e, inspeccion, firmoEntrega: false);
+        var antes = await Como(e.Conductor).PostAsJsonAsync($"/api/viajes/{e.Viaje}/vehiculos/{e.Vin}/llegada", new { fecha = FECHA, lat = 4.9, lng = -74.4 });
 
         Assert.Equal(HttpStatusCode.Created, (await SinEntregaAsync(e.Conductor, inspeccion)).StatusCode);
-        var despues = await Como(e.Conductor).PostAsJsonAsync("/api/inspecciones", new { etapa_id = e.Etapas[1], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
+        var despues = await Como(e.Conductor).PostAsJsonAsync($"/api/viajes/{e.Viaje}/vehiculos/{e.Vin}/llegada", new { fecha = FECHA, lat = 4.9, lng = -74.4 });
 
         Assert.Equal(HttpStatusCode.Conflict, antes.StatusCode);
         var cuerpo = await ComoJsonAsync(antes);
         Assert.Equal("ETAPA_PREVIA_SIN_CIERRE", cuerpo.GetProperty("code").GetString());
         Assert.Equal("transferencia_sin_cierre", cuerpo.GetProperty("details").GetProperty("motivo").GetString());
-        Assert.Equal(HttpStatusCode.Created, despues.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, despues.StatusCode);
     }
 
     [Fact]
@@ -321,8 +330,8 @@ public sealed class ReciboSinEntregaApiTests(clsBaseDatosFixture bd) : clsPrueba
         var coordinadorOtro = await SesionAsync("coord-otro@ejemplo.com", clsRol.COORDINADOR_CALIDAD, otroCliente);
         var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
 
-        var delOtro = await ComoJsonAsync(await Como(coordinadorOtro).GetAsync("/api/reportes/novedades-proceso"));
-        var delSuper = await ComoJsonAsync(await Como(superAdmin).GetAsync("/api/reportes/novedades-proceso"));
+        var delOtro = await ComoJsonAsync(await Como(coordinadorOtro).GetAsync("/api/reportes/novedades-proceso?desde=2026-10-01"));
+        var delSuper = await ComoJsonAsync(await Como(superAdmin).GetAsync("/api/reportes/novedades-proceso?desde=2026-10-01"));
         var pidiendoElDeOtro = await Como(coordinadorOtro).GetAsync($"/api/reportes/novedades-proceso?cliente_id={e.Vehiculo}");
 
         Assert.Equal(0, delOtro.GetProperty("total").GetInt32());

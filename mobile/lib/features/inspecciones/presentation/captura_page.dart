@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -31,11 +33,12 @@ import '../providers.dart';
 import 'aviso_preexistente.dart';
 import 'camara_page.dart';
 import 'filas_captura.dart';
+import 'lista_hallazgos_previos.dart';
 import 'nota_foto.dart';
 import 'seccion_acomodacion.dart';
 import 'seccion_extras.dart';
 import 'sellado.dart';
-import 'selector_dano.dart';
+import 'hoja_dano.dart';
 
 /// La selección del dibujo de daños de esta pantalla (ver [seleccionZonaProvider]).
 const _contextoDibujo = 'captura';
@@ -60,6 +63,7 @@ class CapturaPage extends ConsumerStatefulWidget {
     this.fechaMotivo,
     this.latMotivo,
     this.lngMotivo,
+    this.corrigeInspeccionId,
   });
 
   final String vin;
@@ -81,6 +85,10 @@ class CapturaPage extends ConsumerStatefulWidget {
   final double? latMotivo;
   final double? lngMotivo;
 
+  /// La inspección cerrada que esta captura viene a corregir. Es la misma pantalla de siempre: lo que cambia es
+  /// que al cerrar se pide al servidor la versión siguiente de esa, en vez de una inspección nueva de la etapa.
+  final String? corrigeInspeccionId;
+
   @override
   ConsumerState<CapturaPage> createState() => _EstadoCapturaPage();
 }
@@ -96,6 +104,10 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   /// Los daños que ya traía el vehículo, para proponer un daño nuevo como «ya estaba registrado». Vacía mientras
   /// se cargan, y también cuando no hay copia guardada y no hay señal: entonces no se propone nada.
   var _previos = const <HallazgoPrevio>[];
+
+  /// Mientras se traen. Separa «todavía no sé» de «no hay»: la lista no puede decir «sin daños anteriores» antes
+  /// de haber preguntado.
+  var _cargandoPrevios = true;
   final _extras = <ExtraLocal>[];
 
   /// Solo en la segunda inspección del cargue: las unidades del viaje (null mientras no se conozcan), el lugar que
@@ -107,11 +119,13 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   bool _cerrando = false;
 
   final _notas = TextEditingController();
+  StreamSubscription<bool>? _gpsEncendido;
 
   @override
   void initState() {
     super.initState();
     _buscarUbicacion();
+    _escucharElGps();
     _cargarPrevios();
     final viajeId = widget.viajeId;
     if (_esAcomodacion && viajeId != null) {
@@ -122,7 +136,12 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   /// Trae los hallazgos previos del VIN. No bloquea la captura: si fallan, simplemente no se propone nada.
   Future<void> _cargarPrevios() async {
     final previos = await ref.read(hallazgosPreviosRepositorioProvider).de(widget.vin);
-    if (mounted) setState(() => _previos = previos);
+    if (mounted) {
+      setState(() {
+        _previos = previos;
+        _cargandoPrevios = false;
+      });
+    }
   }
 
   bool get _esAcomodacion => esSegundaInspeccionDelCargue(proceso: widget.proceso, momento: widget.momento);
@@ -130,17 +149,36 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   /// Las unidades del viaje y los lugares que ya tienen, la primera vez que el viaje llega. Si no se pueden
   /// traer, la sección lo dice y el cierre queda bloqueado: sin saber cuáles son no se puede comprobar que cada
   /// una tenga su lugar. Lo que ya se eligió no se pisa si el viaje vuelve a llegar.
+  /// El viaje de la etapa, tal como lo manda el servidor. Null hasta que llega.
+  Viaje? _viaje;
+
   void _alLlegarElViaje(Viaje? viaje) {
     if (viaje == null || _unidades != null) return;
     setState(() {
+      // El viaje entero, no solo sus unidades: de él salen los puestos que se dibujan, cuántos hay y cuántas
+      // fotos de la acomodación ya tiene.
+      _viaje = viaje;
       _unidades = viaje.vehiculos;
       _posicionesPrevias = posicionesDelViaje(viaje);
       _posiciones.addAll(_posicionesPrevias);
     });
   }
 
+  /// Vuelve a buscar sola en cuanto el GPS se enciende.
+  ///
+  /// Quien está en el patio con el vehículo delante enciende el GPS y espera que la pantalla reaccione; hasta
+  /// ahora el bloqueo «Esperando ubicación…» seguía puesto hasta que alguien tocara «Reintentar», y nada en la
+  /// pantalla decía que hiciera falta tocarlo. Solo se busca si todavía no hay posición: con una ya tomada, no
+  /// se gasta GPS por un interruptor que alguien movió.
+  void _escucharElGps() {
+    _gpsEncendido = ref.read(servicioUbicacionProvider).servicioActivo.listen((encendido) {
+      if (encendido && mounted && _gps == null && !_buscandoGps) _buscarUbicacion();
+    });
+  }
+
   @override
   void dispose() {
+    unawaited(_gpsEncendido?.cancel());
     _notas.dispose();
     super.dispose();
   }
@@ -165,17 +203,20 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
   /// Cada foto lleva su PROPIO sello de fecha y ubicación (el de cuando se tomó), no el del cierre del informe.
   /// Repetir una vista no borra lo anterior: se agrega otra foto de la misma vista y la última es la que cuenta.
   Future<void> _tomarFoto(VistaChecklist vista) async {
-    final temporal = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => CamaraPage(titulo: vista.nombre, guia: guiaDe(vista.codigo))),
-    );
-    if (temporal == null || !mounted) return;
-
-    // Las adicionales exigen nota: sin ella el servidor responde 400 y el informe moriría al enviarse.
+    // Las adicionales exigen nota: sin ella el servidor responde 400 y el informe moriría al enviarse. Se pide
+    // ANTES de abrir la cámara: pedirla después dejaba la foto ya tomada en el aire si se cancelaba —se perdía
+    // sin decir nada— y obligaba a repetirla con el carro ya cerrado. Primero se dice qué se va a fotografiar
+    // y por qué; la foto viene después.
     String? nota;
     if (!vista.obligatoria) {
       nota = await pedirNotaDeFoto(context, vista: vista.nombre);
       if (nota == null || !mounted) return;
     }
+
+    final temporal = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => CamaraPage(titulo: vista.nombre, guia: guiaDe(vista.codigo))),
+    );
+    if (temporal == null || !mounted) return;
 
     final foto = await _sellar(temporal, vistaId: vista.id, nota: nota);
     if (foto != null && mounted) setState(() => _fotos.add(foto));
@@ -305,6 +346,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       previo: previo,
       catalogos: ref.read(catalogosProvider),
       urlFoto: resolverUrlImagen(ref.read(entornoProvider).apiUrl, previo.fotoUrl),
+      encabezadosFoto: ref.read(entornoProvider).encabezadosEnrutamiento,
       // Guardados para el patio, sus enlaces casi siempre llegan vencidos: se vuelven a pedir.
       alVencerFoto: _cargarPrevios,
       sinSenal: !ref.read(syncControllerProvider).online,
@@ -379,15 +421,36 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     if (mounted) _soltarZona();
   }
 
-  /// Agrega un extra (tipo y observación) y pide de una vez su primera foto: sin foto no se puede cerrar.
+  /// Agrega un extra (tipo, observación y su daño si lo tiene) y pide de una vez su primera foto: sin foto no
+  /// se puede cerrar.
   Future<void> _agregarExtra() async {
-    final datos = await pedirExtra(context, tipos: ref.read(catalogosProvider).seleccionables(Catalogo.tiposExtra));
+    final catalogos = ref.read(catalogosProvider);
+    if (!_catalogosListos) {
+      // Lo mismo que en el daño de una zona: sin catálogos la hoja se abre sin fichas que elegir y marcar el
+      // extra como dañado se vuelve un callejón.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Los catálogos de daño aún no se han descargado. Conéctate e inténtalo de nuevo.')),
+      );
+      return;
+    }
+    final datos = await pedirExtra(
+      context,
+      tipos: catalogos.seleccionables(Catalogo.tiposExtra),
+      clases: catalogos.seleccionables(Catalogo.clasesDano),
+      tamanos: catalogos.seleccionables(Catalogo.tamanosDano),
+      // Los niveles completos, no los del rol: en el daño de un **extra** el servidor los exige a todo el
+      // mundo. A quien no asigna niveles no se le ofrece marcarlo como dañado, que es lo que decide
+      // `puedeMarcarDano`.
+      niveles: catalogos.seleccionables(Catalogo.nivelesSeveridad),
+      puedeMarcarDano: !_esConductor,
+    );
     if (datos == null || !mounted) return;
     setState(() => _extras.add(ExtraLocal(
           tipo: datos.tipo,
           nombre: datos.nombre,
           textoOtro: datos.textoOtro,
           observacion: datos.observacion,
+          dano: datos.dano,
         )));
     await _tomarFotoExtra(_extras.length - 1);
   }
@@ -451,6 +514,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
         viajeId: _esAcomodacion ? widget.viajeId : null,
         posiciones: _esAcomodacion ? {..._posiciones} : const {},
         posicionesPrevias: _esAcomodacion ? _posicionesPrevias : const {},
+        corrigeInspeccionId: widget.corrigeInspeccionId,
       );
       await ref.read(colaRepositorioProvider).agregar(job);
       final sync = ref.read(syncControllerProvider.notifier);
@@ -462,19 +526,33 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
       if (!mounted) return;
       // El color dice el desenlace de un vistazo, que es como se lee algo en el patio: verde si quedó hecho,
       // ámbar si falta que salga, rojo si lo rechazaron.
+      final esCorreccion = widget.corrigeInspeccionId != null;
+      final que = esCorreccion ? 'la corrección' : 'el informe';
       final (titulo, mensaje, icono, color) = switch (enCola) {
-        null => ('Informe enviado', 'Quedó cerrado en el servidor.', Icons.check_circle, Colores.exito),
+        null => (
+            esCorreccion ? 'Corrección enviada' : 'Informe enviado',
+            esCorreccion
+                ? 'Quedó cerrada como la versión siguiente. La versión anterior no cambió.'
+                : 'Quedó cerrado en el servidor.',
+            Icons.check_circle,
+            Colores.exito,
+          ),
         // No se arregla reintentando: quien está en el patio tiene que saberlo ahora, no descubrirlo después.
         final j when j.fallido => (
             'No se pudo enviar',
-            'El servidor rechazó el informe${j.error == null ? '' : ': ${j.error}'}. Nada se perdió: quedó '
+            'El servidor rechazó $que${j.error == null ? '' : ': ${j.error}'}. Nada se perdió: quedó '
                 'guardado en Inspecciones › Cola, para reintentarlo o descartarlo.',
             Icons.error_outline,
             Colores.peligro,
           ),
+        // Sin señal nada de esto llegó al servidor todavía. Importa decirlo en una corrección: hasta que salga,
+        // la versión anterior sigue siendo la vigente y no hay ninguna versión a medias esperando allá.
         _ => (
-            'Informe guardado',
-            'Quedó en cola; se enviará automáticamente cuando la señal sea estable.',
+            esCorreccion ? 'Corrección guardada' : 'Informe guardado',
+            esCorreccion
+                ? 'Quedó en cola y se enviará cuando la señal sea estable. Hasta entonces sigue valiendo la '
+                    'versión anterior: en el servidor no queda ninguna versión a medias.'
+                : 'Quedó en cola; se enviará automáticamente cuando la señal sea estable.',
             Icons.schedule,
             Colores.advertencia,
           ),
@@ -551,6 +629,9 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                 SelectorZonaDano(
                   contexto: _contextoDibujo,
                   danos: {for (final h in _hallazgos) ?h.clave: h.nivel},
+                  // Lo que el vehículo ya traía, rayado y con borde discontinuo. Al conductor no se le muestra:
+                  // la API le responde 403 a los previos y no es él quien decide si un daño ya venía de antes.
+                  anteriores: _esConductor ? const {} : {for (final p in _previos) ?p.clave},
                   alRegistrar: _registrarDano,
                   alAbrirDano: _abrirDano,
                 ),
@@ -568,9 +649,21 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                       alQuitar: () => setState(() => _hallazgos.removeAt(i)),
                     ),
                 ],
+                // Con qué venía el vehículo. Va debajo de lo que se está capturando: primero lo que se hace ahora,
+                // después aquello contra lo que se compara. Al conductor no: la API le responde 403.
+                if (!_esConductor) ...[
+                  const SizedBox(height: Espacio.lg),
+                  ListaHallazgosPrevios(
+                    previos: _previos,
+                    cargando: _cargandoPrevios,
+                    // Los enlaces de las fotos vencen; al vencer se vuelven a pedir, que es lo que trae unos nuevos.
+                    alVencerFoto: _cargarPrevios,
+                  ),
+                ],
                 if (ref.watch(entornoProvider).extrasHabilitados) ...[
                   const SizedBox(height: Espacio.lg),
                   SeccionExtras(
+                    catalogos: catalogos,
                     extras: _extras,
                     alAgregar: _guardandoFoto ? null : _agregarExtra,
                     alTomarFoto: _guardandoFoto ? null : _tomarFotoExtra,
@@ -580,6 +673,7 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
                 const SizedBox(height: Espacio.lg),
                 if (_esAcomodacion)
                   SeccionAcomodacion(
+                    viaje: _viaje,
                     unidades: _unidades,
                     posiciones: _posiciones,
                     fotos: _fotos,

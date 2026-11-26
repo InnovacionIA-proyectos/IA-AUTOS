@@ -176,6 +176,31 @@ public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsP
         Assert.Equal(e.Dias.Dia, DiaDeSerie(v1[0]["Cierre"]));
     }
 
+    [Fact]
+    public async Task Los_viajes_no_traen_la_fila_de_salida_del_descargue_que_no_existe_pero_si_la_de_una_salida_cerrada_de_antes()
+    {
+        await EscenarioAsync();
+        // V2 gana su etapa de Descargue sin ninguna inspeccion: solo la llegada es un registro por hacer.
+        await Sembrador.EjecutarAsync(
+            "INSERT dbo.tblEtapas (Id, VehiculoId, ViajeId, EtapaCatalogoId, Orden) SELECT NEWID(), v.Id, vv.ViajeId, c.Id, 3 FROM dbo.tblVehiculos v JOIN dbo.tblViajeVehiculos vv ON vv.VehiculoId = v.Id CROSS JOIN dbo.tblEtapasCatalogo c WHERE v.Vin = 'VIN-IND-0002' AND c.Codigo = 'descargue'");
+        var coordinador = await SesionAsync(clsRol.COORDINADOR_CALIDAD);
+
+        var (_, hoja) = await DescargarAsync(coordinador, RUTAS[0]);
+
+        var v2 = hoja.De("VIN", "VIN-IND-0002");
+        Assert.Equal(5, v2.Count);
+        var descargue = v2.Where(f => f["Etapa"] == "Descargue").ToList();
+        var registro = Assert.Single(descargue);
+        Assert.Equal("llegada", registro["Momento"]);
+        Assert.Equal("sin_inspeccion", registro["Estado"]);
+        Assert.DoesNotContain(v2, f => f["Etapa"] == "Descargue" && f["Momento"] == "salida");
+        // V1 tiene una salida del Descargue cerrada de antes: se sigue exportando.
+        var v1 = hoja.De("VIN", "VIN-IND-0001");
+        Assert.Equal(6, v1.Count);
+        Assert.Contains(v1, f => f["Etapa"] == "Descargue" && f["Momento"] == "salida" && f["Estado"] == "cerrada");
+        Assert.Equal(17, hoja.Filas.Count);
+    }
+
     /// <summary>El dia (hora de Colombia) de un numero de serie de fecha de Excel.</summary>
     private static string DiaDeSerie(string serie) =>
         new DateTime(1899, 12, 30).AddDays(double.Parse(serie, CultureInfo.InvariantCulture)).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -217,7 +242,7 @@ public sealed partial class ExportacionesApiTests(clsBaseDatosFixture bd) : clsP
             [
                 "VIN", "Marca", "Tipo de vehículo", "Operación", "Cliente", "Código MTrack", "Placa", "Tráiler", "Unidad", "Conductor", "Cédula del conductor", "Etapa", "Lugar",
                 "Momento", "Versión", "Estado", "Inicio", "Cierre", "Inspector", "Tipo de cierre",
-                "Entrega: quién", "Entrega: fecha", "Entrega: IP", "Recibe: quién", "Recibe: fecha", "Recibe: IP", "Extras",
+                "Entrega: quién", "Entrega: fecha", "Entrega: IP", "Recibe: quién", "Recibe: fecha", "Recibe: IP", "Extras", "Entrega: momento", "Entrega: ubicación", "Recibe: momento", "Recibe: ubicación",
             ],
             hoja.Titulos);
         // V1: 6, V2: 1, V3: 2 y V5: 1 (V4 es de otro cliente).

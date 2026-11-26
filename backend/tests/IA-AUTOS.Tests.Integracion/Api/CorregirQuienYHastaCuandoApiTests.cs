@@ -46,6 +46,19 @@ public sealed class CorregirQuienYHastaCuandoApiTests(clsBaseDatosFixture bd) : 
     // ------------------------------------------------------------------------------------- quien corrige
 
     [Fact]
+    public async Task El_super_administrador_no_corrige_y_no_se_crea_ninguna_version()
+    {
+        var e = await EscenarioAsync();
+        var superAdmin = await SesionAsync("super@ejemplo.com", clsRol.SUPER_ADMIN);
+
+        var r = await CorregirAsync(superAdmin, e.Inspeccion);
+
+        Assert.Equal(HttpStatusCode.Forbidden, r.StatusCode);
+        Assert.Equal(1, await VersionesAsync(e.Inspeccion));
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'inspeccion.corregir'"));
+    }
+
+    [Fact]
     public async Task El_conductor_no_corrige_lo_que_hizo_el_inspector_y_no_se_crea_ninguna_version()
     {
         var e = await EscenarioAsync();
@@ -132,10 +145,10 @@ public sealed class CorregirQuienYHastaCuandoApiTests(clsBaseDatosFixture bd) : 
     }
 
     [Fact]
-    public async Task Despues_de_firmar_la_nota_aclaratoria_y_la_firma_con_reservas_siguen_funcionando_y_la_inspeccion_no_cambia()
+    public async Task Despues_de_firmar_la_nota_aclaratoria_sigue_funcionando_las_reservas_del_cargue_van_por_la_ninera_y_la_inspeccion_no_cambia()
     {
         var e = await EscenarioAsync();
-        // Firmo solo quien entrega (el inspector): ya no se corrige, pero quien recibe aun puede firmar con reservas y se puede aclarar con una nota.
+        // Firmo solo quien entrega (el inspector): ya no se corrige, pero se puede aclarar con una nota. Las reservas del cargue ya no van carro por carro: se dejan al firmar por niñera.
         await Sembrador.TransferenciaAsync(e.Inspeccion, e.Inspector.UsuarioId, e.Conductor.UsuarioId, tipoCierre: null);
         var antes = await Sembrador.EscalarAsync("SELECT CONCAT(Estado, '|', UpdatedAt, '|', Version) FROM dbo.tblInspecciones WHERE Id = @i", ("@i", e.Inspeccion));
 
@@ -145,8 +158,8 @@ public sealed class CorregirQuienYHastaCuandoApiTests(clsBaseDatosFixture bd) : 
 
         Assert.Equal(HttpStatusCode.Created, nota.StatusCode);
         Assert.Equal("Se aclara el estado del carro al entregar", (await JsonAsync(nota)).GetProperty("texto").GetString());
-        Assert.Equal(HttpStatusCode.Created, reservas.StatusCode);
-        Assert.Equal("con_reservas", (await JsonAsync(reservas)).GetProperty("tipo_cierre").GetString());
+        Assert.Equal(HttpStatusCode.Conflict, reservas.StatusCode);
+        Assert.Equal("firma_por_ninera", (await JsonAsync(reservas)).GetProperty("details").GetProperty("motivo").GetString());
         Assert.Equal(antes, await Sembrador.EscalarAsync("SELECT CONCAT(Estado, '|', UpdatedAt, '|', Version) FROM dbo.tblInspecciones WHERE Id = @i", ("@i", e.Inspeccion)));
         Assert.Equal(1, await VersionesAsync(e.Inspeccion));
     }

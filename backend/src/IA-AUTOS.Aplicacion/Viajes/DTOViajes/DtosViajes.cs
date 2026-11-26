@@ -42,10 +42,17 @@ public sealed record AgregarUnidadesRequest(IReadOnlyList<UnidadDelViajeRequest>
 /// <summary>La posicion de una unidad en la ninera, de 1 a 7 (<c>null</c> la libera). La registra el inspector durante la segunda inspeccion del cargue.</summary>
 public sealed record AsignarPosicionRequest(int? Posicion);
 
+/// <summary>El muelle (<c>MuelleId</c>, uno activo del lugar de cargue del viaje; nulo lo quita) y el <c>Trailer</c> que cambia el inspector o el coordinador durante el cargue. Cada uno se cambia solo si se envia.</summary>
+public sealed record CambiarCargueDelViajeRequest(Guid? MuelleId, string? Trailer);
+
 /// <summary>Cambia el lugar de destino de una unidad del viaje (un lugar activo del catalogo <c>lugares</c>).</summary>
 public sealed record CambiarDestinoUnidadRequest(Guid? LugarDestinoId);
 
-public sealed record CambiarEstadoViajeRequest(string? Estado);
+/// <summary>
+/// El estado nuevo del viaje. <c>Motivo</c> (1 a 300 caracteres) es obligatorio para finalizar a mano un viaje en curso con carros pendientes de entrega y opcional en cualquier otro cambio; queda en la auditoria junto con el
+/// estado de antes y el de despues.
+/// </summary>
+public sealed record CambiarEstadoViajeRequest(string? Estado, string? Motivo = null);
 
 /// <summary>
 /// El conductor pide el permiso de la excepcion «No hay inspector» (el punto de cargue tiene inspectores): su <c>MotivoSinInspector</c> (codigo activo del catalogo <c>motivos-sin-inspector</c>), el
@@ -79,16 +86,21 @@ public sealed record PermisoSinInspectorDto(
     bool AutorizadoPorTiempo);
 
 /// <summary>
-/// Una unidad que no sale del viaje: el motivo, el hallazgo que la causo, quien la marco (y su nombre), cuando y el VIN que la reemplaza (si ya se
-/// asigno).
+/// Una unidad que no sale del viaje: el codigo del motivo (<c>MotivoCodigo</c>, del catalogo <c>motivos-no-sale</c>), su etiqueta legible (<c>Motivo</c>), el texto que escribio quien la marco (<c>MotivoTexto</c>, obligatorio solo
+/// con «otro»), el hallazgo que la causo (nulo en los motivos que no lo exigen y para el conductor), quien la marco (y su nombre), cuando y el VIN que la reemplaza (si ya se asigno).
 /// </summary>
 public sealed record NoSaleDto(
+    string MotivoCodigo,
     string Motivo,
-    Guid HallazgoId,
+    string? MotivoTexto,
+    Guid? HallazgoId,
     Guid MarcadoPor,
     string? MarcadoPorNombre,
     DateTimeOffset Fecha,
     string? VinReemplazo);
+
+/// <summary>Una unidad bajada del viaje: por que, quien la bajo (y su nombre) y cuando. La unidad conserva su historia (etapas, inspecciones, fotos y firmas).</summary>
+public sealed record BajadoDto(string Motivo, Guid BajadoPor, string? BajadoPorNombre, DateTimeOffset Fecha);
 
 /// <summary>
 /// Un VIN del viaje con el avance de sus etapas dentro de el. <c>EstadoUnidad</c> es <c>activa</c> o <c>no_sale</c>; en ese caso <c>NoSale</c> trae
@@ -110,7 +122,11 @@ public sealed record ViajeVehiculoDto(
     int Novedades,
     Guid? LugarDestinoId = null,
     string? LugarDestino = null,
-    int? Posicion = null);
+    int? Posicion = null,
+    BajadoDto? Bajado = null,
+    DateTimeOffset? LugarDestinoCambiadoAt = null,
+    bool PuedeRegistrarRuta = false,
+    string? MotivoSinRuta = null);
 
 /// <summary>
 /// Algo que paso en el proceso del viaje y no es un dano (una novedad de proceso): <c>Tipo</c> es <c>cargue_sin_inspector</c> (la excepcion «No hay inspector» que el conductor activo en el momento) o
@@ -129,9 +145,10 @@ public sealed record NovedadDelViajeDto(
     IAAutos.Aplicacion.Inspecciones.DTOInspecciones.PermisoDeLaNovedadDto? Permiso = null);
 
 /// <summary>
-/// Viaje completo con sus VIN. <c>NovedadesProceso</c> son las novedades de proceso de sus unidades (la excepcion «No hay inspector» y el recibo sin entrega), de la mas antigua a la mas reciente. El viaje no tiene un cliente propio: <c>Clientes</c>
+/// Viaje completo con sus VIN. <c>NovedadesViaje</c> son las novedades que el conductor y los inspectores reportaron sobre el viaje (no sobre un carro), de la mas antigua a la mas reciente; la ve quien puede ver el viaje. <c>NovedadesProceso</c> son las novedades de proceso de sus unidades (la excepcion «No hay inspector» y el recibo sin entrega), de la mas antigua a la mas reciente. El viaje no tiene un cliente propio: <c>Clientes</c>
 /// son los de los VIN que quien consulta puede ver (todos para el conductor, el inspector y el super administrador; solo los de su cliente
-/// para el resto) y <c>Vehiculos</c> trae esos mismos VIN.
+/// para el resto) y <c>Vehiculos</c> trae esos mismos VIN. <c>Papel</c> dice, para un inspector, si en este viaje carga, recibe o ambas cosas (<see cref="IAAutos.Dominio.Viajes.clsPapelEnElViaje"/>); es nulo para el
+/// conductor y para los roles de oficina.
 /// </summary>
 public sealed record ViajeDto(
     Guid Id,
@@ -160,7 +177,16 @@ public sealed record ViajeDto(
     int Capacidad = 7,
     DisposicionDeNiniera? Disposicion = null,
     IReadOnlyList<IAAutos.Aplicacion.Inspecciones.DTOInspecciones.EvidenciaDto>? FotosAcomodacion = null,
-    bool LugarCargueTieneInspector = false);
+    bool LugarCargueTieneInspector = false,
+    DateTimeOffset? CargueFirmadoPorNineraAt = null,
+    DateTimeOffset? CargueNoFirmadoAt = null,
+    string? CargueNoFirmaParte = null,
+    Guid? MuelleId = null,
+    string? Muelle = null,
+    bool Eliminable = false,
+    string? Papel = null,
+    IReadOnlyList<NovedadViajeDto>? NovedadesViaje = null,
+    bool LugarCargueAdmiteSinInspector = false);
 
 /// <summary>Un puesto de la ninera: su <c>Numero</c> (el que se envia como posicion de una unidad), la <c>Etiqueta</c> con que se muestra (hoy el mismo numero) y el <c>Vin</c> de la unidad que lo ocupa (nulo si esta libre).</summary>
 public sealed record PuestoDeNiniera(int Numero, string Etiqueta, string? Vin);
@@ -203,7 +229,11 @@ public sealed record ViajeResumenDto(
     Guid? LugarCargueId = null,
     string? LugarCargue = null,
     IReadOnlyList<DestinoDeUnidadesDto>? Destinos = null,
-    bool LugarCargueTieneInspector = false);
+    bool LugarCargueTieneInspector = false,
+    Guid? MuelleId = null,
+    string? Muelle = null,
+    bool Eliminable = false,
+    bool LugarCargueAdmiteSinInspector = false);
 
 /// <summary>
 /// Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio. <c>Pagina</c>, <c>Tamano</c> y <c>Orden</c> son el formato comun de los listados; la exportacion a Excel los

@@ -1,5 +1,6 @@
 using IAAutos.Aplicacion.Catalogos;
 using IAAutos.Aplicacion.Comun;
+using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Sofasa;
 using IAAutos.Dominio.Vehiculos;
 using IAAutos.Dominio.Viajes;
@@ -24,6 +25,7 @@ public sealed class clsEnsamblajeViajes(IViajeRepository viajes, IEtapaRepositor
         CancellationToken ct,
         IReadOnlyDictionary<Guid, Guid?>? lugarDestinoPorVehiculo = null)
     {
+        await AsegurarCupoAsync(viaje, vehiculos, ct);
         var puntoDeLosLugares = lugarDestinoPorVehiculo is { Count: > 0 } ? await PuntoDeLosLugaresAsync(ct) : new Dictionary<Guid, Guid>();
         foreach (var vehiculo in vehiculos)
         {
@@ -37,6 +39,21 @@ public sealed class clsEnsamblajeViajes(IViajeRepository viajes, IEtapaRepositor
         }
 
         await VincularOrdenesAsync(viaje, vehiculos.Select(v => v.Vin).ToList(), ct);
+    }
+
+    /// <summary>
+    /// No hay mas carros que puestos: las unidades activas del viaje mas las que entran no pueden pasar de la capacidad de la niñera (409 <c>sin_cupo</c>, sin agregar ninguna). Una unidad que no sale y una bajada no cuentan.
+    /// El mensaje nombra el primer VIN que no cabe.
+    /// </summary>
+    private async Task AsegurarCupoAsync(clsViaje viaje, IReadOnlyCollection<clsVehiculo> entran, CancellationToken ct)
+    {
+        var activas = (await viajes.ObtenerVehiculosAsync(viaje.Id, ct)).Count(e => e.EstaActiva);
+        var capacidad = viaje.CapacidadEfectiva;
+        if (activas + entran.Count > capacidad)
+        {
+            var queNoCabe = entran.ElementAt(Math.Max(capacidad - activas, 0));
+            throw new clsConflictoException($"La niñera tiene {capacidad} puestos y ya hay {activas} unidades: no cabe el VIN {queNoCabe.Vin}", clsMotivosRechazo.SIN_CUPO);
+        }
     }
 
     /// <summary>

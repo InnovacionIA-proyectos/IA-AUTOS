@@ -150,7 +150,7 @@ public sealed partial class MigracionNovedadProcesoTests : IAsyncLifetime
         // Repetir el script no cambia nada (ya esta aplicado), ni siquiera una etiqueta de motivo editada.
         await EjecutarAsync(_cadena, "UPDATE dbo.tblMotivosSinInspector SET Nombre = N'Otro motivo' WHERE Codigo = 'otro'");
         await EjecutarAsync(_cadena, await ScriptMigracionAsync());
-        Assert.Equal(3, await ContarAsync("SELECT COUNT(*) FROM dbo.tblMotivosSinInspector"));
+        Assert.Equal(3, await ContarAsync("SELECT COUNT(*) FROM dbo.tblMotivosSinInspector WHERE Codigo IN ('inspector_no_llego', 'inspector_no_disponible', 'otro')"));
         Assert.Equal("Otro motivo", await TextoAsync("SELECT Nombre FROM dbo.tblMotivosSinInspector WHERE Codigo = 'otro'"));
         Assert.Equal(transferencia, await TextoAsync(TRANSFERENCIA_FIRMADA));
     }
@@ -163,7 +163,7 @@ public sealed partial class MigracionNovedadProcesoTests : IAsyncLifetime
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "database", "ddl.sql"));
 
         Assert.Equal(2, await ContarAsync("SELECT COUNT(*) FROM sys.tables WHERE name IN ('tblMotivosSinInspector', 'tblNovedadesProceso')"));
-        Assert.Equal(3, await ContarAsync("SELECT COUNT(*) FROM dbo.tblMotivosSinInspector"));
+        Assert.Equal(3, await ContarAsync("SELECT COUNT(*) FROM dbo.tblMotivosSinInspector WHERE Codigo IN ('inspector_no_llego', 'inspector_no_disponible', 'otro')"));
         Assert.Equal(3, await ContarAsync(
             "SELECT COUNT(*) FROM sys.triggers WHERE name IN ('TR_tblNovedadesProceso_NoModificar', 'TR_tblNovedadesProceso_NoBorrar', 'TR_tblNovedadesProceso_TextoDelMotivo')"));
         Assert.Equal(2, await ContarAsync("SELECT COUNT(*) FROM sys.check_constraints WHERE parent_object_id = OBJECT_ID('dbo.tblInspecciones') AND name IN ('CK_tblInspecciones_MotivoSinInspector', 'CK_tblInspecciones_MotivoTexto')"));
@@ -176,7 +176,7 @@ public sealed partial class MigracionNovedadProcesoTests : IAsyncLifetime
         await EjecutarScriptConGoAsync(_cadena, Path.Combine(AppContext.BaseDirectory, "database", "ddl.sql"));
 
         Assert.Equal(2, await ContarAsync("SELECT COUNT(*) FROM sys.tables WHERE name IN ('tblMotivosSinInspector', 'tblNovedadesProceso')"));
-        Assert.Equal(3, await ContarAsync("SELECT COUNT(*) FROM dbo.tblMotivosSinInspector"));
+        Assert.Equal(3, await ContarAsync("SELECT COUNT(*) FROM dbo.tblMotivosSinInspector WHERE Codigo IN ('inspector_no_llego', 'inspector_no_disponible', 'otro')"));
     }
 
     // ------------------------------------------------------------------------------------------------ lo nuevo funciona

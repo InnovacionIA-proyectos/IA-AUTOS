@@ -104,9 +104,9 @@ public class NovedadProcesoTests
     }
 
     [Fact]
-    public void El_motivo_solo_es_de_una_salida_y_el_texto_exige_motivo_y_cabe_en_300()
+    public void El_motivo_es_de_una_salida_o_de_una_llegada_y_el_texto_exige_motivo_y_cabe_en_300()
     {
-        Assert.Throws<clsValidacionException>(() => Salida("otro", momento: clsMomento.LLEGADA));
+        Assert.NotNull(Salida("otro", momento: clsMomento.LLEGADA));
         Assert.Throws<clsValidacionException>(() => Salida(null, "texto"));
         Assert.NotNull(Salida("otro", new string('x', 300)));
         Assert.Throws<clsValidacionException>(() => Salida("otro", new string('x', 301)));
