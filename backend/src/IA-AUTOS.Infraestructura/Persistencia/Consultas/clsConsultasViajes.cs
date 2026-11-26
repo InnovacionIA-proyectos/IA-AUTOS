@@ -73,7 +73,8 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         DateTimeOffset? CargueNoFirmadoAt = null,
         string? CargueNoFirmaParte = null,
         string? Muelle = null,
-        bool Eliminable = false);
+        bool Eliminable = false,
+        bool LugarCargueAdmiteSinInspector = false);
 
     /// <summary>El viaje tiene al menos un VIN de ese cliente.</summary>
     private Expression<Func<clsViaje, bool>> ConVehiculoDeCliente(Guid clienteId) =>
@@ -200,9 +201,39 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
     public async Task<IReadOnlyList<ViajeDto>> MiosAsync(Guid usuarioId, IReadOnlyCollection<string> estados, CancellationToken ct = default)
     {
         var consulta = contexto.Viajes.AsNoTracking()
-            .Where(v => (v.ConductorId == usuarioId || v.InspectorId == usuarioId) && estados.Contains(v.Estado))
+            .Where(v => estados.Contains(v.Estado)
+                        && (v.ConductorId == usuarioId
+                            || v.InspectorId == usuarioId
+                            // Un inspector que tomo la entrega de una parada ve el viaje aunque no sea el suyo: una sola vez, sin importar cuantas paradas reclamo.
+                            || contexto.Reclamos.Any(r => r.ViajeId == v.Id && r.InspectorId == usuarioId && r.Proceso == clsProcesoReclamo.ENTREGA && r.LiberadoAt == null)))
             .OrderByDescending(v => v.CreatedAt);
         return await ConVehiculosAsync((await ProyectarAsync(consulta, null, ct)).OrderByDescending(f => f.Viaje.CreatedAt).ToList(), null, ct);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, string>> PapelesDelInspectorAsync(Guid inspectorId, IReadOnlyCollection<Guid> viajeIds, CancellationToken ct = default)
+    {
+        if (viajeIds.Count == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        var delViaje = (await contexto.Viajes.AsNoTracking().Where(v => viajeIds.Contains(v.Id) && v.InspectorId == inspectorId).Select(v => v.Id).ToListAsync(ct)).ToHashSet();
+        var reclamos = await contexto.Reclamos.AsNoTracking()
+            .Where(r => viajeIds.Contains(r.ViajeId) && r.InspectorId == inspectorId && r.LiberadoAt == null)
+            .Select(r => new { r.ViajeId, r.Proceso })
+            .ToListAsync(ct);
+        var papeles = new Dictionary<Guid, string>();
+        foreach (var viajeId in viajeIds)
+        {
+            var carga = delViaje.Contains(viajeId) || reclamos.Any(r => r.ViajeId == viajeId && r.Proceso == clsProcesoReclamo.CARGUE);
+            var recibe = reclamos.Any(r => r.ViajeId == viajeId && r.Proceso == clsProcesoReclamo.ENTREGA);
+            if (clsPapelEnElViaje.De(carga, recibe) is { } papel)
+            {
+                papeles[viajeId] = papel;
+            }
+        }
+
+        return papeles;
     }
 
     public async Task<ViajeDto?> ObtenerAsync(Guid id, Guid? soloDeCliente = null, CancellationToken ct = default) =>
@@ -242,6 +273,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                     Origen = (string?)o.Nombre,
                     Destino = (string?)d.Nombre,
                     LugarCargue = (string?)lc.Nombre,
+                    LugarCargueAdmite = lc != null && lc.AdmiteCargueSinInspector,
                 }).ToListAsync(ct);
 
         // Los conteos de los viajes se piden aparte, una consulta por tabla agrupada por viaje (y no una subconsulta por cada fila). Completa es la regla de vwViajesCompletos guardada en cada VIN.
@@ -267,7 +299,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
         // El nombre del muelle de cada viaje y si es eliminable: ninguna inspeccion, en borrador o cerrada.
         var muelleIds = filas.Where(f => f.Viaje.MuelleId is not null).Select(f => f.Viaje.MuelleId!.Value).Distinct().ToList();
         var muelles = muelleIds.Count == 0 ? [] : await contexto.Muelles.AsNoTracking().Where(m => muelleIds.Contains(m.Id)).ToDictionaryAsync(m => m.Id, m => m.Nombre, ct);
-        var conInspecciones = (await contexto.Inspecciones.AsNoTracking().Where(i => ids.Contains(i.ViajeId)).Select(i => i.ViajeId).Distinct().ToListAsync(ct)).ToHashSet();
+        var conInspecciones = (await contexto.Inspecciones.IgnoreQueryFilters().AsNoTracking().Where(i => ids.Contains(i.ViajeId)).Select(i => i.ViajeId).Distinct().ToListAsync(ct)).ToHashSet();
         return filas
             .Select(f =>
             {
@@ -281,7 +313,7 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                     conteos.GetValueOrDefault(f.Viaje.Id)?.Total ?? 0, conteos.GetValueOrDefault(f.Viaje.Id)?.Completos ?? 0,
                     f.Viaje.LugarCargueId is { } cargue && conInspector.Contains(cargue),
                     firmadoAt, noFirma.Count > 0 ? noFirma.Max(x => x.Momento) : null, noFirma.FirstOrDefault()?.NoFirmaParte,
-                    f.Viaje.MuelleId is { } muelle ? muelles.GetValueOrDefault(muelle) : null, !conInspecciones.Contains(f.Viaje.Id));
+                    f.Viaje.MuelleId is { } muelle ? muelles.GetValueOrDefault(muelle) : null, !conInspecciones.Contains(f.Viaje.Id), f.LugarCargueAdmite);
             })
             .ToList();
     }
@@ -361,6 +393,18 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                    Novedades = contexto.Hallazgos.Count(x => x.TipoNovedad != null
                                        && contexto.Inspecciones.Any(i => i.Id == x.InspeccionId
                                            && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id))),
+                                   EntregaDelCargueCerrada =
+                                       contexto.Inspecciones.Any(i => i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA
+                                           && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
+                                               && contexto.EtapasCatalogo.Any(p => p.Id == e.EtapaCatalogoId && p.Codigo == clsCodigosEtapa.CARGUE)))
+                                       && contexto.Transferencias.Any(t => t.TipoCierre != null
+                                           && contexto.Inspecciones.Any(i => i.Id == t.InspeccionId
+                                               && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
+                                                   && contexto.EtapasCatalogo.Any(p => p.Id == e.EtapaCatalogoId && p.Codigo == clsCodigosEtapa.CARGUE))))
+                                       && !contexto.Transferencias.Any(t => t.TipoCierre == null
+                                           && contexto.Inspecciones.Any(i => i.Id == t.InspeccionId
+                                               && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
+                                                   && contexto.EtapasCatalogo.Any(p => p.Id == e.EtapaCatalogoId && p.Codigo == clsCodigosEtapa.CARGUE)))),
                                    LlegadaCerrada = contexto.Inspecciones.Any(i => i.Momento == clsMomento.LLEGADA && i.Estado == clsEstadoInspeccion.CERRADA
                                        && contexto.Etapas.Any(e => e.Id == i.EtapaId && e.ViajeId == vv.ViajeId && e.VehiculoId == h.Id
                                            && contexto.EtapasCatalogo.Any(p => p.Id == e.EtapaCatalogoId && p.Codigo == clsCodigosEtapa.TRANSPORTE))),
@@ -373,7 +417,9 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                 v.EstadoUnidad,
                 clsMapeadorViajes.ANoSale(v.EstadoUnidad, v.NoSaleMotivoCodigo, v.NoSaleMotivo, v.NoSaleHallazgoId, v.NoSaleMarcadoPor, v.MarcadoPorNombre, v.NoSaleAt, v.VinReemplazo, motivosNoSale),
                 clsEstadoTransporte.De(v.LlegadaCerrada, v.Novedades), v.Novedades, v.LugarDestinoId, v.LugarDestino, v.Posicion,
-                clsMapeadorViajes.ABajado(v.EstadoUnidad, v.BajadoMotivo, v.BajadoPor, v.BajadoPorNombre, v.BajadoAt), v.LugarDestinoCambiadoAt));
+                clsMapeadorViajes.ABajado(v.EstadoUnidad, v.BajadoMotivo, v.BajadoPor, v.BajadoPorNombre, v.BajadoAt), v.LugarDestinoCambiadoAt,
+                v.EstadoUnidad == clsEstadoUnidad.ACTIVA && v.EntregaDelCargueCerrada,
+                clsMotivoSinRuta.De(v.EstadoUnidad, v.EntregaDelCargueCerrada)));
         var clientes = await ClientesPorViajeAsync(ids, soloDeCliente, ct);
 
         // Las novedades de proceso de las unidades del viaje (las que quien consulta puede ver), de la mas antigua a la mas reciente.
@@ -410,23 +456,26 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                             orderby e.CreatedAt
                             select new { i.ViajeId, Foto = e }).ToListAsync(ct))
             .ToLookup(x => x.ViajeId, x => clsMapeadorInspecciones.AEvidencia(x.Foto));
-        return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id], novedadesPorViaje[f.Viaje.Id].ToList(), fotos[f.Viaje.Id].ToList())).ToList();
+        // Las novedades del viaje no son de un carro: las ve quien puede ver el viaje.
+        var novedadesDelViaje = await new clsConsultasNovedadesViaje(contexto).DeViajesAsync(ids, ct);
+        return filas.Select(f => ADto(f, porViaje[f.Viaje.Id].ToList(), clientes[f.Viaje.Id], novedadesPorViaje[f.Viaje.Id].ToList(), fotos[f.Viaje.Id].ToList(), novedadesDelViaje.GetValueOrDefault(f.Viaje.Id) ?? [])).ToList();
     }
 
     private static ViajeResumenDto AResumen(FilaViaje f, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<DestinoDeUnidadesDto> destinos) => new(
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
         f.Viaje.Estado, f.TotalVehiculos, f.VehiculosCompletos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt,
-        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue, destinos, f.LugarCargueConInspector, f.Viaje.MuelleId, f.Muelle, f.Eliminable);
+        f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue, destinos, f.LugarCargueConInspector, f.Viaje.MuelleId, f.Muelle, f.Eliminable, LugarCargueAdmiteSinInspector: f.LugarCargueAdmiteSinInspector);
 
     private static ViajeDto ADto(
-        FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<NovedadDelViajeDto> novedades, IReadOnlyList<EvidenciaDto> fotosAcomodacion) => new(
+        FilaViaje f, IReadOnlyList<ViajeVehiculoDto> vehiculos, IReadOnlyList<ClienteDto> clientes, IReadOnlyList<NovedadDelViajeDto> novedades, IReadOnlyList<EvidenciaDto> fotosAcomodacion,
+        IReadOnlyList<NovedadViajeDto> novedadesViaje) => new(
         f.Viaje.Id, f.Viaje.CodigoMtrack, f.Viaje.TipoUnidadId, f.Unidad, f.Viaje.Placa, f.Viaje.Trailer,
         f.Viaje.ConductorId, f.Conductor, f.Viaje.InspectorId, f.Inspector, f.Viaje.OrigenId, f.Origen, f.Viaje.DestinoId, f.Destino,
         f.Viaje.Estado, vehiculos, clientes, f.Viaje.CreatedAt, f.Viaje.UpdatedAt, novedades,
         f.Viaje.FechaProgramada, f.Viaje.LugarCargueId, f.LugarCargue,
         f.Viaje.CapacidadEfectiva, Disposicion(f.Viaje.CapacidadEfectiva, vehiculos), fotosAcomodacion, f.LugarCargueConInspector,
-        f.CargueFirmadoPorNineraAt, f.CargueNoFirmadoAt, f.CargueNoFirmaParte, f.Viaje.MuelleId, f.Muelle, f.Eliminable);
+        f.CargueFirmadoPorNineraAt, f.CargueNoFirmadoAt, f.CargueNoFirmaParte, f.Viaje.MuelleId, f.Muelle, f.Eliminable, NovedadesViaje: novedadesViaje, LugarCargueAdmiteSinInspector: f.LugarCargueAdmiteSinInspector);
 
     /// <summary>Los puestos de la ninera, del 1 a la capacidad, cada uno con el VIN que lo ocupa (los de las unidades que quien consulta puede ver).</summary>
     private static DisposicionDeNiniera Disposicion(int capacidad, IReadOnlyList<ViajeVehiculoDto> vehiculos)

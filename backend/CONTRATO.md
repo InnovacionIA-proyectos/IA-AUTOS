@@ -76,11 +76,14 @@ Todos los errores son JSON con la misma forma:
 | `UNAUTHORIZED` | 401 | sin token, token inválido o vencido, usuario retirado, credenciales incorrectas |
 | `FORBIDDEN` | 403 | rol insuficiente, inspección ajena, o VIN, viaje o informe fuera de los viajes del usuario |
 | `PORTAL_USER_NOT_LINKED` | 403 | la persona del portal no tiene acceso a IA Autos (solo en `login-portal`) |
-| `ETAPA_PREVIA_SIN_CIERRE` | 409 | la etapa anterior del VIN no está terminada: no tiene su llegada cerrada (`details.motivo: "etapa_previa_sin_cierre"`) o su transferencia no tiene tipo de cierre (`"transferencia_sin_cierre"`); no se puede crear la salida de la siguiente (`details.etapa_previa` dice cuál) |
+| `ETAPA_PREVIA_SIN_CIERRE` | 409 | la etapa anterior del VIN no está terminada: no tiene su llegada cerrada (`details.motivo: "etapa_previa_sin_cierre"`) o su transferencia no tiene tipo de cierre **o no existe**, cuando la etapa anterior es el Cargue y la operación es «Reportar novedad» o «Llegué» (`"transferencia_sin_cierre"`, con «Falta cerrar la entrega del cargue: fírmenla, recíbanla con reservas o registren la no firma»); no se puede crear la salida de la siguiente (`details.etapa_previa` dice cuál) |
 | `LLEGADA_YA_CERRADA` | 409 | la llegada de Transporte de esa unidad ya estaba confirmada: es un éxito para un reintento (ver «Conductor en ruta») |
+| `MOMENTO_NO_ADMITIDO` | 409 | el momento de la inspección no existe en esa etapa: la **salida del Descargue** ya no se crea ni se corrige (`details.motivo: "salida_descargue"`; ver `POST /api/inspecciones`) |
 | `HALLAZGO_YA_REVISADO` | 409 | la novedad del conductor ya fue revisada: su zona, clase y nivel ya no se cambian (ver «Revisión de la novedad») |
 | `UNIDAD_NO_SALE` | 409 | la unidad se marcó «no sale» del viaje: no admite novedades ni llegada |
 | `CORRECCION_SOLO_AUTOR` | 403 | corregir una inspección que hizo otra persona sin ser administrador: la corrigen quien la hizo y los administradores (ver «Corregir una inspección») |
+| `DESCARTE_SOLO_AUTOR_O_COORDINADOR` | 403 | descartar un informe en borrador que hizo otra persona sin ser el coordinador de calidad: lo descartan quien lo hizo y el coordinador; el administrador y el super administrador no (ver «Descartar un informe en borrador») |
+| `INFORME_CERRADO_NO_SE_DESCARTA` | 409 | descartar un informe cerrado, o un borrador cuya transferencia ya tiene una firma: es evidencia y no se descarta; `details.motivo` dice `informe_cerrado` o `informe_con_firmas` (ver «Descartar un informe en borrador») |
 | `INSPECCION_YA_FIRMADA` | 409 | alguna transferencia de la **etapa** (de la llegada o de la salida) ya tiene una firma o un cierre: ya no se corrige, sea quien sea quien lo intente (ver «Corregir una inspección») |
 
 **El motivo fijo de los rechazos.** Los rechazos (`409`, `403` y `404`) de **viajes**, **usuarios**, **vehículos** y de la **descarga de la constancia** traen además, en `details.motivo`, un valor fijo en minúsculas (el mismo patrón de `ETAPA_PREVIA_SIN_CIERRE`): el portal y la app muestran el mensaje que corresponde a partir del
@@ -623,7 +626,7 @@ Las lecturas son para cualquier usuario autenticado, filtradas por la visibilida
 
 Los VIN **no se crean aquí**: deben existir ya en el inventario (`POST /api/vehiculos/cargar` o la ingesta Sofasa). Al agregar un VIN a un viaje se
 crean sus etapas, una por cada valor **activo** del catálogo `etapas` (hoy Cargue, Transporte y Descargue): el **Cargue** se hace en el
-`origen` del viaje, el **Descargue** en el destino de la unidad y el Transporte no tiene lugar. El Cargue nace **sin ninguna marca previa**: la inspección de salida la hace siempre un inspector y, si no hay inspector,
+`origen` del viaje, el **Descargue** en el destino de la unidad y el Transporte no tiene lugar. El Cargue nace **sin ninguna marca previa**: la inspección de salida la hace siempre un inspector y, si no hay inspector y el lugar de cargue admite cargue sin inspector (`admite_cargue_sin_inspector`),
 el conductor activa en el momento la excepción «No hay inspector».
 
 Estados: `programado` → `en_curso` → `finalizado`; un viaje `programado` o `en_curso` también puede pasar a `cancelado`. `finalizado` y `cancelado`
@@ -650,7 +653,8 @@ Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viaj
   "fecha_programada": "2026-11-03T11:00:00.000Z", "lugar_cargue_id": "uuid", "lugar_cargue": "CEDI Envigado",
   "capacidad": 9,
   "disposicion": { "puestos": [ { "numero": 1, "etiqueta": "1", "vin": "9FB45RFL8NM201001" }, { "numero": 2, "etiqueta": "2", "vin": null } ] },
-  "fotos_acomodacion": [ { /* EvidenciaDto con es_acomodacion: true */ } ]
+  "fotos_acomodacion": [ { /* EvidenciaDto con es_acomodacion: true */ } ],
+  "papel": null
 }
 ```
 
@@ -667,7 +671,12 @@ el lugar de entrega de **cada unidad**; los tres pueden ser `null` en los viajes
 (en un punto con inspector la firma él y la persona externa se rechaza con `400`; sin inspector, la firma esa persona), si el cargue sin inspector se activa en el momento o se pide con permiso (`403` en un punto con inspectores) y a quién se avisa; el dato no tiene una regla propia, así que **no puede discrepar** de esas decisiones. Un inspector **inactivo no cuenta**
 y el dato sigue lo que asigna el coordinador: asignar o quitar el punto cambia el valor en la **siguiente lectura**. Un viaje sin lugar de cargue (anteriores a la programación) dice `false`, como el servidor lo trata. Lo lee quien ya puede leer ese viaje o esa entrega, ni más ni menos, y **no trae nombres ni identificadores de inspectores**. Es un campo nuevo que se suma: las respuestas anteriores se leen igual y los rechazos de la entrega, del cargue y del permiso no cambian.
 
+**El lugar admite cargue sin inspector.** Cada lugar tiene el dato `admite_cargue_sin_inspector` *(nombre por confirmar)*: **`false` en todos los lugares que ya existían, incluido «CEDI Envigado»**, hasta que el coordinador de calidad lo activa lugar por lugar. Se lee en el catálogo de lugares (`GET /api/catalogos/lugares` y `GET /api/catalogos`) y se cambia con el `PATCH /api/catalogos/lugares/{id}` que ya existe (también en el `POST` de creación), con los mismos roles del catálogo: `coordinador_calidad` lo activa y `admin` y `super_admin` lo hacen como soporte; **no hay ningún permiso nuevo**. Un valor que no sea booleano responde `400` en `admite_cargue_sin_inspector`. El cambio queda en la auditoría del catálogo (`catalogo.lugares.actualizar`) con el valor de antes y el de después. El viaje (el detalle, `GET /api/viajes/mios` y el listado) trae `lugar_cargue_admite_sin_inspector` *(nombre por confirmar)* junto a `lugar_cargue_tiene_inspector`, `false` si el viaje no tiene lugar de cargue. **Lo aplica el servidor en cada petición**: donde el lugar de cargue no lo admite (o el viaje no tiene lugar de cargue), la salida y la llegada del cargue del conductor con la excepción y `POST /api/viajes/{id}/permiso-sin-inspector` responden `409` con `details.motivo: "lugar_no_admite_cargue_sin_inspector"` *(por confirmar)* y «Este lugar de cargue no admite cargue sin inspector: el cargue lo hace el inspector»; lo ya registrado con la excepción antes de un cambio del dato se conserva. Donde sí lo admite todo sigue como se describe en «Excepción «No hay inspector»» (sin inspectores asignados la excepción se activa en el momento; con inspectores se pide el permiso y lo concede el coordinador o el reloj de `permiso_sin_inspector_minutos` minutos).
+
+**Cuándo puede registrar ruta el conductor.** Cada unidad de `vehiculos` (en el detalle del viaje y en `GET /api/viajes/mios`) trae `puede_registrar_ruta` y `motivo_sin_ruta` *(nombres por confirmar)*: `puede_registrar_ruta` es `true` solo si la **llegada del cargue de ese carro está cerrada** y la **transferencia de su cargue existe y tiene un tipo de cierre** (firmada, con reservas, no firma o recibo sin entrega) y la unidad no está «no sale» ni bajada; es **la misma regla que aplica el servidor** a «Reportar novedad» y «Llegué», calculada en la misma consulta de las unidades, sin datos personales. `motivo_sin_ruta` es `null` si puede y, si no, `entrega_del_cargue_sin_cerrar` (la entrega del cargue está sin cerrar o sin transferencia) o `unidad_no_sale` («no sale» y bajada). Campos nuevos que se suman: las respuestas anteriores se leen igual.
+
 `novedades_proceso` son las novedades de proceso de las unidades del viaje (la excepción «No hay inspector» que activó el conductor y el recibo sin entrega), de la más antigua a la más reciente, cada una con `{ tipo, motivo_codigo, motivo, texto, usuario_nombre, fecha, vin, inspeccion_id }`: es un registro aparte, que no cuenta en los patrones por zona ni en la tasa diaria de novedad.
+`novedades_viaje` son las novedades que el conductor y los inspectores reportaron sobre el **viaje** (no sobre un carro; ver `POST /api/viajes/{id}/novedades-viaje`), de la más antigua a la más reciente, cada una con `{ id, tipo, tipo_nombre, urgencia, rol, proceso, lugar_id, lugar, texto, usuario_nombre, fecha, lat, lng, sin_ubicacion, foto, created_at }` (`[]` si no tiene): las ve quien puede ver el viaje y no cuentan en las novedades ni en los daños de ninguna unidad. Es un campo nuevo que se suma: las respuestas anteriores se leen igual.
 `codigo_mtrack`, `tipo_unidad_id` y `placa` pueden ser `null` solo en los viajes migrados desde las asignaciones anteriores. `etapas` y `completas`
 de cada VIN cuentan sus etapas del viaje y las que ya tienen informe cerrado. `estado_unidad` es `activa` o `no_sale` y `no_sale` trae el motivo, el hallazgo, quién la marcó y
 cuándo (el mismo objeto del inventario); una unidad que no sale **sigue en la lista de VIN del viaje**. `estado_transporte` (`sin_registro`, `con_novedad`, `sin_novedad` o `llegada_con_novedad`) y `novedades`
@@ -747,8 +756,13 @@ viajes o que no existe da una página vacía; un valor que no es uuid, `400`. **
 si lo creó alguien de su cliente (así quien lo crea lo encuentra antes de asignarle unidades) y el super administrador, pero no sale al filtrar por `cliente_id`.
 
 ### `GET /api/viajes/mios`
-Autenticado. Los viajes del usuario (donde es conductor o inspector) **con sus VIN**, como `ViajeDto`. Sin parámetros trae los `programado` y `en_curso`;
-con `?estado=` trae los de ese estado (`finalizado`, por ejemplo). Es la entrada de «Mis viajes» en la app.
+Autenticado. Los viajes del usuario (donde es conductor, inspector del viaje o, si es inspector, **donde tiene un reclamo activo de entrega** de alguna parada) **con sus VIN**, como `ViajeDto`. Sin parámetros trae los `programado` y `en_curso`;
+con `?estado=` trae los de ese estado (`finalizado`, por ejemplo). Es la entrada de «Mis viajes» en la app. Un viaje sale **una sola vez** aunque el inspector tenga el reclamo de varias paradas, y deja de salir en la consulta siguiente a liberar su último reclamo de entrega,
+salvo que además sea su inspector del viaje (el que cargó recibe solo si está asignado a esa parada). El reclamo del cargue no cambia nada: reclamarlo ya lo vuelve inspector del viaje.
+
+**El papel del inspector.** Cada viaje de `mios` y el detalle del viaje traen `papel`, que dice qué hace en él **quien consulta si es inspector**: `carga` (es el inspector del viaje o tiene el reclamo del cargue), `recibe` (solo tomó la entrega de una o más paradas) o `carga_y_recibe`
+(el inspector del viaje que además tomó la entrega de una parada suya). Es `null` para el conductor y para los roles de oficina (coordinador, comercial, administrador y super administrador) y en los viajes donde un inspector no hace ninguna de las dos cosas. Es un campo nuevo: ninguno de los anteriores cambia.
+Los nombres (`papel` y sus tres valores) son propuestos y quedan **por confirmar por backend**.
 
 ### `GET /api/viajes/{id}`
 Autenticado. El `ViajeDto`. `403` si es un inspector o conductor y el viaje no es suyo, o si el rol no es el super administrador y el viaje no tiene unidades de su cliente;
@@ -772,8 +786,10 @@ Al cambiar `lugar_cargue_id` el **tipo de origen** (`origen_id`) se recalcula co
 ya tienen un informe cerrado no cambian.
 
 ### `PATCH /api/viajes/{id}/estado`
-Gestión de viajes. Cuerpo `{ "estado": "en_curso" }`. `200` con el `ViajeDto`. Un estado desconocido responde `400`; un cambio que el ciclo no permite
-(por ejemplo `programado` a `finalizado`, o salir de `finalizado`), `409`.
+Gestión de viajes (`coordinador_calidad`, `admin` y `super_admin`; el inspector y el conductor reciben `403`). Cuerpo `{ "estado": "en_curso", "motivo": "…" }`. `200` con el `ViajeDto`. Un estado desconocido responde `400`; un cambio que el ciclo no permite
+(por ejemplo `programado` a `finalizado`, o salir de `finalizado`), `409`. Cancelar o finalizar a mano un viaje **anula** sus esperas del inspector del punto abiertas (estado `anulada`; ver «La espera del inspector del punto»).
+
+**Finalizar a mano con carros pendientes pide un motivo.** `motivo` (1 a 300 caracteres, largo por confirmar) es **obligatorio** cuando el viaje está `en_curso` y se pasa a `finalizado` con al menos un carro activo sin entregar (sin la revisión de llegada del Descargue cerrada o sin su entrega cerrada, o con la entrega rechazada): sin él, `400` con `fieldErrors.motivo` «El motivo es obligatorio para finalizar un viaje con carros pendientes»; un motivo en blanco cuenta como no enviado y uno de más de 300 caracteres responde `400`. Sin carros pendientes el motivo es opcional, y en cualquier otro cambio de estado (por ejemplo cancelar) tampoco se pide. Cuando llega, queda en la auditoría (`viaje.estado.{estado}`) junto con el estado de antes y el de después (`despues.motivo`). Los roles no cambian: ni el administrador ni el super admin reciben ninguna ruta ni permiso nuevo. Lo normal sigue siendo que el viaje se finalice solo al entregar el último carro (ver «Entrega por parada»).
 
 ### `POST /api/viajes/{id}/vehiculos`
 Gestión de viajes. Asigna unidades a un viaje activo y crea sus etapas, con el Descargue en el destino de cada una. Cuerpo `{ "unidades": [ { "vin": "…", "lugar_destino_id": "uuid" } ] }` (de 1 a 500; `vines` **ya
@@ -798,6 +814,9 @@ El inspector reclama el camión que va a revisar («revisar este»). Los **punto
 - `GET /api/viajes/{id}/reclamos` → lista de `ReclamoDto`, del más reciente al más antiguo (activos y liberados): `{ id, viaje_id, proceso, inspector_id, inspector_nombre, reclamado_at, activo, liberado_at, liberado_por, liberado_por_nombre, lugar_id, lugar }`. `lugar_id` y `lugar` son la parada de un reclamo de entrega y son `null` en el del cargue. Es donde queda registrado quién liberó. Conductor e
   inspector solo lo ven de sus viajes o de los que reclamaron (`403`); coordinador y administrador, de su cliente.
 - Reclamar y liberar quedan en la auditoría (`viaje.reclamar` y `viaje.liberar_reclamo`) con el usuario, la fecha, el viaje y la parada.
+- **El reclamo y la espera del inspector del punto.** El reclamo de una parada se acepta **a cualquier hora** mientras la entrega no esté cerrada, **sin mirar ningún reloj**: si el conductor esperaba al inspector de esa parada (ver «La espera del inspector del punto»), la espera pasa a `inspector_llego` con la hora y el inspector, en la misma
+  confirmación que crea el reclamo (auditoría `espera_inspector_punto.inspector_llego`). Si el conductor ya **cerró la parada sin inspector del punto**, el reclamo responde `409` con el motivo `entrega_cerrada_sin_inspector`, «Esta entrega se cerró sin inspector del punto a las 09:20: el cierre es definitivo» (hora de Colombia) y la hora completa en `details.cerrada_at`; nada se reabre. Si el inspector suelta
+  después el reclamo, la espera anterior queda `inspector_llego` en el historial y el conductor puede activar una nueva.
 - `GET /api/viajes/pendientes` (solo `inspector`) → lista de `PendienteDto`: los camiones pendientes de **sus puntos**. Son los **cargues programados para hoy** (hora de Colombia) en un punto suyo y las **entregas** de viajes `en_curso` con unidades por entregar en un punto suyo
   (sin las ya cerradas ni las rechazadas), **una fila por parada**: el estado de cada una (`disponible`, `en_revision`, `mio`) es el del reclamo de ESA parada. Cada fila: `{ viaje_id, codigo_mtrack, placa, proceso, lugar_id, lugar, fecha_programada, estado, reclamado_por, reclamado_por_nombre, reclamado_at, unidades }`. `estado` es `disponible` (nadie lo reclamó), `en_revision` (lo tiene otro inspector:
   «En revisión por» `reclamado_por_nombre`) o `mio`. Los cargues de otros días o de otros puntos no salen; un inspector sin puntos recibe `[]`. Desde ahí se reclama con `POST /api/viajes/{id}/reclamos`.
@@ -818,10 +837,11 @@ nuevo (`GET /api/viajes/{id}/entregas` se lee como siempre); la firma por parada
 - La firma por parada **de un inspector** antes de que algún carro de la parada tenga su «Llegué» responde `409` con el motivo `conductor_sin_llegada` y «El conductor aún no marca «Llegué» en esta parada». El detalle de la parada dice si el conductor ya llegó (`conductor_llego`).
 
 - `GET /api/viajes/{id}/entregas` → `{ viaje_id, viaje_estado, unidades_sin_destino, puntos: [ EntregaPuntoDto ] }`: una entrega por parada. `unidades_sin_destino` cuenta las unidades de viajes anteriores al destino por unidad.
-- `GET /api/viajes/{id}/entregas/{lugar}` → `EntregaPuntoDto`: `{ viaje_id, viaje_estado, lugar_id, lugar, ciudad, unidades_total, unidades_pendientes, entregada, lugar_tiene_inspector, estado_parada, receptor, receptor_nombre, conductor_llego, unidades: [ EntregaUnidadDto ] }`. `404` si ninguna unidad activa del viaje va a ese lugar.
+- `GET /api/viajes/{id}/entregas/{lugar}` → `EntregaPuntoDto`: `{ viaje_id, viaje_estado, lugar_id, lugar, ciudad, unidades_total, unidades_pendientes, entregada, lugar_tiene_inspector, estado_parada, receptor, receptor_nombre, conductor_llego, espera, espera_aviso_minutos, espera_plan_b_minutos, danos_por_calificar, unidades: [ EntregaUnidadDto ] }`. `404` si ninguna unidad activa del viaje va a ese lugar.
+  `espera` es la última espera del inspector del punto de la parada (`null` si el conductor nunca activó «No hay inspector» en ella), `espera_aviso_minutos` y `espera_plan_b_minutos` son X e Y vigentes (para que la app cuente los plazos sin señal) y `danos_por_calificar` los daños sin nivel que el conductor marcó en las revisiones de llegada de la parada (lista vacía si no hay); ver «La espera del inspector del punto».
   - `estado_parada` *(nombres a confirmar por backend)*: `pendiente`, `entregada`, `entregada_con_rechazos` o `firmada_todos_rechazados` (la parada se firmó como constancia del rechazo de cada carro y ninguno se entregó). `entregada` es verdadero cuando ninguna unidad está pendiente **y al menos una se entregó**.
   - `receptor` *(a confirmar por backend)*: `inspector_del_punto` (el que tomó la entrega de esta parada, con su `receptor_nombre`), `persona_del_lugar` (el punto no tiene inspectores; `receptor_nombre` es el de quien ya recibió) o `sin_receptor` (el punto tiene inspectores y nadie tomó la entrega: no se puede firmar).
-  - Cada unidad: `{ vehiculo_id, vin, estado, inspeccion_id, tipo_cierre, entrega_firmada_at, recibe_firmada_at, no_firma_parte, motivo_cierre, recibe_externo_nombre, recibe_externo_cedula, motivo_codigo, reservas, fotos_de_cierre, testigo_nombre, entrega_momento, recibe_momento, danos_nuevos, rechazo }`.
+  - Cada unidad: `{ vehiculo_id, vin, estado, inspeccion_id, tipo_cierre, entrega_firmada_at, recibe_firmada_at, no_firma_parte, motivo_cierre, recibe_externo_nombre, recibe_externo_cedula, motivo_codigo, reservas, fotos_de_cierre, testigo_nombre, entrega_momento, recibe_momento, danos_nuevos, rechazo, entregada_sin_inspector_del_punto }`.
     `estado` es `sin_inspeccion` (aún no tiene la revisión de llegada del Descargue, donde se firma), `pendiente`, `cerrada` (entregada: `firmada`, `con_reservas`, `no_firma` o `recibo_sin_entrega`) o `rechazado` (no se entregó: ver «El carro rechazado»).
     `motivo_cierre` es el motivo escrito del cierre con una sola firma y `motivo_codigo` su motivo codificado (`se_nego_a_firmar`, `no_habia_nadie`, `sin_inspector_del_punto`, u **`otro`** en los cierres de antes de que el motivo fuera codificado, que se leen igual y sin foto); ambos `null` en cualquier otro cierre.
     `reservas` son las observaciones de quien recibe sobre ese carro; `fotos_de_cierre` cuenta las fotos del cierre con una sola firma; `testigo_nombre` es el testigo sin usuario (**nunca su cédula**); `entrega_momento` y `recibe_momento` son `{ momento, lat, lng, precision_m, sin_ubicacion }`: la hora y el GPS del **momento** en que firmó cada parte, aparte de
@@ -830,17 +850,17 @@ nuevo (`GET /api/viajes/{id}/entregas` se lee como siempre); la firma por parada
 
 - `POST /api/viajes/{id}/entregas/{lugar}/firma` con `{ "firma": "…", "reservas"?, "rechazos"?, "recibe_nombre"?, "recibe_cedula"?, "firma_recibe"?, "fecha_momento"?, "lat"?, "lng"?, "precision_m"? }` → `200` con la entrega: la firma del usuario autenticado (quien entrega o quien recibe) se guarda en **cada unidad pendiente de la parada**; con
   las dos firmas cada transferencia queda `firmada` (o `con_reservas` si quien recibe dejó observaciones sobre ese carro, o `rechazado`). `400` sin `firma`. **`motivo_parcial`, `entrega_usuario_id` y `recibe_usuario_id` ya no se aceptan** (`400` «Campo no admitido»): la firma cubre **todos** los carros pendientes de la parada y quien recibe lo decide la parada.
-  - **Quién recibe y quién puede firmar.** Si la parada **tiene inspectores asignados** recibe el inspector que tiene el reclamo activo de **esa parada**. Si nadie la tomó, la firma responde `409` con el motivo `sin_receptor` y «Este punto tiene inspector: pídele a un inspector del punto que tome la entrega en su app» (sin ningún aviso; **nunca se cae al inspector del viaje**).
+  - **Quién recibe y quién puede firmar.** Si la parada **tiene inspectores asignados** recibe el inspector que tiene el reclamo activo de **esa parada**. Si nadie la tomó, la firma responde `409` con el motivo `sin_receptor` y «Este punto tiene inspector: pídele a un inspector del punto que tome la entrega en su app» (sin ningún aviso; **nunca se cae al inspector del viaje**); **la única salida es el plan B** de «La espera del inspector del punto»: con la espera activada y sus plazos cumplidos el conductor firma con la persona del lugar aunque la parada tenga inspectores, y antes del plazo responde `409 plan_b_no_habilitado`.
     Un inspector que no es de la parada recibe `403` con el motivo `no_es_su_punto` (también el que cargó el viaje sin estar asignado); el que la tomó otro inspector, `403` con `entrega_tomada`; uno de sus puntos que no la tomó, `409 sin_receptor`. Si la parada **no tiene inspectores** recibe la persona del lugar (siguiente apartado), traiga o no inspector el viaje. Solo el conductor del viaje y el inspector de la parada firman (`403` el resto).
   - **Reservas.** `reservas` es una lista de `{ "vin", "observaciones" }` (de 1 a 1 000 caracteres cada una; `400` con un VIN repetido, que no es de la parada o sin observaciones). Las deja **quien recibe** (`403` si las manda otra parte); con la persona del lugar las deja el conductor en su nombre y **no se borran** al firmar la persona externa. El carro con reservas cierra `con_reservas` cuando también firma
     quien entrega y los demás `firmada`; si quien entrega ya había firmado antes de que aparecieran reservas en un carro, **ese carro queda esperando su firma otra vez**.
   - **Hora y GPS del momento.** `fecha_momento` (ISO 8601 con zona), `lat`, `lng` y `precision_m` (opcional) son la hora y el lugar del momento en que se firmó: una firma hecha sin señal llega después y conserva la hora del momento y el GPS del patio, y la hora de envío queda aparte (`entrega_firmada_at`, `recibe_firmada_at`). Todos son opcionales: **sin GPS la firma se acepta y queda «sin ubicación»**
     (`sin_ubicacion: true`); `lat` y `lng` van juntas (`400` si no). Lo mismo vale para el cierre con una sola firma y para el recibo sin entrega del cargue.
-  - **409** si no hay unidades pendientes en la parada, o por `sin_receptor`, `conductor_sin_llegada`, `llegada_abierta` o `sin_novedad_para_rechazar` (ver arriba y «El carro rechazado»).
+  - **409** si no hay unidades pendientes en la parada, o por `sin_receptor`, `conductor_sin_llegada`, `llegada_abierta`, `sin_novedad_para_rechazar`, `plan_b_no_habilitado`, `entrega_tomada` o `danos_sin_calificar` (ver arriba, «El carro rechazado» y «La espera del inspector del punto»).
 - `POST /api/viajes/{id}/entregas/{lugar}/una-firma` con `{ "motivo_codigo": "…", "motivo_texto"?, "firma"?, "fotos"?, "testigo_nombre"?, "testigo_cedula"?, "fecha_momento"?, "lat"?, "lng"?, "precision_m"? }` → `200` con la entrega: **una sola firma no bloquea**, pero ahora lleva su **motivo codificado y su evidencia**. Cada unidad pendiente de la parada queda `recibo_sin_entrega` con
   la parte que no firmó (`no_firma_parte`), se crea su **novedad de proceso** `recibo_sin_entrega` **con el código del motivo** (ya no `otro`) y los coordinadores de calidad y administradores del cliente reciben **un solo aviso** por entrega y parada. No lleva `rechazos` (`400` «Campo no admitido»): un rechazo solo viaja en la firma por parada.
   - `motivo_codigo` *(códigos a confirmar por backend)* es obligatorio (`400` sin él o con otro): `se_nego_a_firmar` (quien recibe se negó a firmar: **exige al menos una foto**, `400` «Con este motivo la foto es obligatoria»), `no_habia_nadie` (no exige fotos propias del cierre: su evidencia son las 7 fotos de la revisión de llegada de cada carro, que ya debe estar cerrada; **en una parada con inspectores responde `409 sin_receptor`**) o
-    `sin_inspector_del_punto` (reservado: responde `409` con el motivo `motivo_no_aplica` hasta que exista la excepción «No hay inspector» del destino). `motivo_texto` es opcional (hasta 300 caracteres); sin él el cierre guarda el texto del motivo.
+    `sin_inspector_del_punto` (el cierre del plan B: solo lo cierra el conductor con la espera de la parada activada y sus plazos cumplidos; antes del plazo `409 plan_b_no_habilitado`, sin espera `409 sin_receptor` en una parada con inspectores y `409 motivo_no_aplica` en una sin ellos, y con un inspector que ya tomó la entrega `409 entrega_tomada`). `motivo_texto` es opcional (hasta 300 caracteres); sin él el cierre guarda el texto del motivo.
   - `fotos` es una lista de `{ "vin", "storage_path", "sello_fecha", "sello_lat", "sello_lng", "precision"?, "dispositivo_id"?, "nota"?, "hash_sha256"? }`: evidencias selladas **subidas antes** (`POST /api/uploads`), cada una con el VIN de un carro pendiente de la parada (`400` nombrando los que no). Se guardan como evidencia (constancia) de la revisión de llegada de ese carro.
   - `testigo_nombre` y `testigo_cedula` son **opcionales y van juntos** (mismas reglas de nombre y cédula de la persona externa; `400` en su campo): el testigo **no es un usuario** (por ejemplo, el vigilante). Su cédula es un dato personal y no viaja en ningún aviso.
   - La `firma` solo hace falta si quien cierra aún no había firmado; `409` si la otra parte ya firmó o si el punto tiene inspectores y nadie tomó la entrega. Quien cierra es quien entrega o quien recibe de esa parada (`403` el resto). En una parada **sin inspectores** ni quien reciba, la transferencia queda **sin quien reciba** y solo con la firma de quien entrega (`no_firma_parte: "recibe"`).
@@ -858,6 +878,31 @@ Un carro solo se queda sin entregar si se **rechaza por una novedad de su revisi
 - **El viaje no se finaliza** mientras un carro rechazado no se entregue en su destino nuevo (un carro rechazado cuenta como no entregado).
 - **Cambiar el destino del carro rechazado** (`PATCH /api/viajes/{id}/vehiculos/{vin}`, el de siempre): **se acepta aunque su revisión de llegada esté cerrada** (el `409` `descargue_con_informe_cerrado` no cambia para ningún otro carro) y deja el carro pendiente en el destino nuevo (otra parada del viaje, otro lugar o el lugar de origen). *(PAB-009, propuesta de backend.)* La revisión del rechazo **se conserva como evidencia**:
   la etapa Descargue del carro sigue siendo la misma y su revisión nueva es **otro ciclo** (`Ciclo` 2, 3...) de la misma etapa y momento; la última revisión de cada etapa y momento es la del ciclo más alto. Mientras el carro no recibe otro destino, su rechazo sigue vigente. Con el destino nuevo el carro vuelve a `sin_inspeccion`, se revisa y se entrega siguiendo las reglas de esta sección.
+
+#### La espera del inspector del punto
+Cuando la parada **tiene inspectores asignados y nadie tomó la entrega**, el conductor no puede firmar ni revisar la llegada solo: tiene una espera con dos plazos que **ajusta TI** (`espera_inspector_aviso_minutos` = X, 15 por defecto, y `espera_inspector_plan_b_minutos` = Y, 30 por defecto; ver «Parámetros de los tiempos y los avisos»). Los plazos se leen **en el momento** y se evalúan **dentro de cada petición** que los necesita, sin esperar a ningún proceso
+periódico: nunca se responde «espere» después del plazo. *(Rutas, estados, motivos y campos de esta sección: por confirmar por backend.)*
+
+- **«Llegué» no crea nada.** Marcar «Llegué» no crea ninguna espera ni ningún aviso: sin activación, ninguna parada genera el aviso ni habilita el plan B por mucho tiempo que pase.
+- `POST /api/viajes/{id}/entregas/{lugar}/sin-inspector` con `{ "motivo_sin_inspector": "…", "motivo_sin_inspector_texto"?, "fecha_momento"?, "lat"?, "lng"?, "precision_m"? }` (solo el **conductor del viaje**: `403` a inspector, coordinador, admin y super admin) → `201` con la espera, o `200` con **la misma espera** si ya estaba abierta (el reloj no se reinicia y reenviar la activación no crea otra).
+  - `motivo_sin_inspector` es obligatorio: el código de un motivo **activo** de `motivos-sin-inspector` (`400` «Motivo inválido…» en su campo); `motivo_sin_inspector_texto` solo con un motivo que lo pide (hasta 300 caracteres). `fecha_momento` (ISO 8601 con zona), `lat`, `lng` y `precision_m` son la hora y el GPS **del celular** en el momento de activar: la hora **nunca es posterior a la del servidor** (si el celular la manda adelantada se guarda la del servidor); `lat` y `lng` van juntas.
+  - `409` con `details.motivo`: `parada_sin_inspectores` (la parada no tiene inspectores asignados: ahí recibe la persona del lugar), `entrega_tomada` (un inspector ya tomó la entrega), `entrega_cerrada` (la parada ya está entregada) o `sin_llegue_en_parada` (ningún carro de la parada tiene «Llegué»); `409` también si el viaje no está activo.
+  - La espera guarda el viaje, la parada, el conductor, el motivo, la hora del celular (`activada_at`), la hora en que llegó al servidor (`recibida_at`) y el GPS. Queda en la auditoría (`espera_inspector_punto.activar`).
+- **`EsperaDelPuntoDto`**: `{ id, viaje_id, lugar_id, estado, conductor_id, motivo_sin_inspector, motivo_sin_inspector_texto, activada_at, recibida_at, lat, lng, precision_m, aviso_desde, aviso_at, plan_b_desde, plan_b_habilitado, inspector_id, inspector_nombre, inspector_llego_at, cerrada_at }`. `estado`: `esperando`, `inspector_llego` (con `inspector_id`, `inspector_nombre` e `inspector_llego_at`),
+  `cerrada_sin_inspector_del_punto` (con `cerrada_at`) o `anulada` (el viaje se canceló o se finalizó a mano con la espera abierta; auditoría `espera_inspector_punto.anular`). `aviso_desde` y `plan_b_desde` son `activada_at` más X y más X + Y minutos con los valores vigentes; `aviso_at` es cuándo se avisó (`null` si aún no); `plan_b_habilitado` es verdadero con la espera abierta y el plazo cumplido.
+  Una parada tiene a lo sumo **una espera abierta** (un índice único de la base lo garantiza); las que terminaron quedan de historial.
+- **El aviso a los X minutos.** Cumplidos `espera_inspector_aviso_minutos` desde `activada_at` **sin reclamo de esa parada**, los `coordinador_calidad` del cliente reciben **una sola vez por espera** el aviso `espera_inspector_punto` (urgencia `alta`, bandeja y push) con el título «Nadie ha tomado la entrega: Puerto de Cartagena», el viaje, el conductor y desde qué hora espera, y `datos`:
+  `{ "hecho": "espera_inspector_punto", "viaje_id", "lugar_id", "lugar", "activada_at", "minutos_esperando", "plan_b_desde", "unidades" }`. Lo revisa el proceso de cada minuto **y también la petición de activación**: si al llegar (activada sin señal) ya pasaron X minutos, sale en esa misma petición. Si un inspector tomó la entrega antes, no sale. *(No hay un segundo aviso al habilitarse el plan B ni un aviso a los inspectores de la parada al activar.)*
+- **El plan B: X más Y minutos.** Con la espera `esperando`, sin reclamo y con la hora del servidor igual o posterior a `activada_at` + X + Y:
+  - la **firma por parada** acepta a la persona del lugar (`recibe_nombre`, `recibe_cedula`, `firma_recibe`) aunque la parada tenga inspectores, y el **cierre con una sola firma** acepta el motivo `sin_inspector_del_punto`; antes del plazo ambos responden `409` con `plan_b_no_habilitado` y «Todavía no puedes cerrar sin inspector del punto: faltan N minutos» (`details.faltan_minutos` y `details.plan_b_desde`); sin espera, `409 sin_receptor`. Las reglas de la entrega por parada (revisión de llegada cerrada, rechazos por novedad, hora y GPS del momento) siguen valiendo.
+  - el cierre deja la espera `cerrada_sin_inspector_del_punto` y **marca cada carro entregado** como «entregada sin inspector del punto» (`entregada_sin_inspector_del_punto: true`; un carro rechazado nunca la lleva). La auditoría (`espera_inspector_punto.cerrar`) guarda la hora de activación, la de habilitación (`activada_at` + X + Y), la del cierre y el nombre de quien recibió (nunca su cédula).
+  - **Con su sola firma** (`sin_inspector_del_punto`) todos los carros pendientes de la parada quedan entregados con esa marca y **no lleva rechazos** (`400` «Campo no admitido»), igual que todo cierre con una sola firma.
+- **Si el inspector llega.** Si un inspector toma la entrega **antes del cierre**, aunque ya haya pasado el plazo, la espera termina como `inspector_llego` y desde entonces el plan B responde `409 entrega_tomada`; **después del cierre**, el inspector recibe `409 entrega_cerrada_sin_inspector` (ver «Reclamo del camión») y nada se reabre. Si plan B y reclamo llegan **a la vez**, gana exactamente uno (el estado de la espera lo decide en la misma confirmación) y el otro recibe su `409`: `entrega_tomada` el conductor o `entrega_cerrada_sin_inspector` el inspector.
+- **La revisión de llegada del conductor.** En una parada **con inspectores**, crear la revisión de llegada del Descargue como **conductor** (`POST /api/inspecciones`) responde `409` con el motivo `llegada_del_inspector_del_punto` salvo que la espera de la parada tenga el plan B habilitado (la misma regla de tiempo, evaluada en esa petición): con espera, «La revisión de llegada en esta parada la hace el inspector del punto: podrás hacerla sin él en N minutos»;
+  sin espera, «La revisión de llegada en esta parada la hace el inspector del punto: si no llega, activa «No hay inspector»». El inspector que tomó la entrega la crea siempre; en una parada sin inspectores el conductor la crea como siempre.
+- **El inspector que llega tarde.** Si un inspector toma la entrega cuando el conductor, con el plan B, ya cerró la revisión de llegada de algunos carros, **esas revisiones cuentan** como la revisión de llegada de esos carros (no se crea otra ni se reabren) y el inspector crea las de los que faltan. El inspector que tiene el reclamo de la parada **califica los daños sin nivel que el conductor marcó en esas revisiones** (`POST /api/hallazgos/{id}/revision`; con los demás daños del viaje sigue la regla de siempre).
+  `EntregaPuntoDto.danos_por_calificar` los lista: `{ hallazgo_id, vin, parte, clase_dano, evidencia_id }`. Con la parada **tomada por un inspector**, la firma por parada y el cierre con una sola firma responden `409` con el motivo `danos_sin_calificar` y «Antes de firmar, califica los daños que marcó el conductor en esta parada: falta N» (`details.faltan`) mientras quede alguno sin nivel; una parada sin revisiones del conductor firma como antes.
+- **Rechazar un carro con el plan B.** Con el plan B habilitado la firma por parada del conductor con la persona del lugar acepta `rechazos` con las mismas reglas de «El carro rechazado» (cada rechazo unido a un daño con foto de la revisión de llegada del descargue de ese carro; sin daño, `409 sin_novedad_para_rechazar`). El daño queda sin calificar, el carro rechazado **no** lleva la marca «entregada sin inspector del punto», sigue `activa` a cargo del conductor y emite `carro_rechazado_en_destino`; los demás carros quedan con la marca.
 
 #### Quien recibe es una persona externa
 
@@ -877,7 +922,7 @@ Si el punto **sí tiene inspector asignado**, la entrega se firma entre el condu
 
 **Auditoría.** Cada unidad firmada así deja la acción `transferencia.firmar_externo` con quién la registró, cuándo y, en `despues`, la transferencia (con el nombre y la cédula de quien recibió) y el `punto` (`lugar_id`, `lugar`, `vin`). **La cédula es un dato personal: no viaja en el texto ni en los campos de ningún aviso.**
 La constancia en PDF muestra a esa persona como quien recibe, con su documento y, en cada firma, la hora y el lugar del momento y la hora de envío.
-- **El viaje se finaliza** solo: cuando todas sus unidades activas tienen el Descargue cerrado y entregado (inspección de llegada cerrada y transferencia con cierre que no es un rechazo) y estaba `en_curso`, pasa a `finalizado` (auditoría `viaje.estado.finalizado`); con entregas pendientes o carros rechazados sigue en curso.
+- **El viaje se finaliza** solo: cuando todas sus unidades activas tienen el Descargue cerrado y entregado (inspección de llegada cerrada y transferencia con cierre que no es un rechazo) y estaba `en_curso`, pasa a `finalizado` (auditoría `viaje.estado.finalizado`) con **cualquier** cierre de la entrega que deje al último carro entregado: la firma de la parada (con o sin reservas) o el cierre con una sola firma, con cualquiera de sus motivos (también el plan B del punto sin inspector). Con entregas pendientes o carros rechazados sigue en curso: un carro rechazado cuenta como pendiente hasta que se entregue en su destino nuevo. La firma carro por carro del descargue ya no existe, así que no hay otro camino. Si hay carros pendientes, `PATCH /api/viajes/{id}/estado` solo finaliza con motivo (ver esa ruta).
 
 ### `DELETE /api/viajes/{id}/vehiculos/{vin}`
 Gestión de viajes. Quita un VIN del viaje y borra sus etapas. `200` con el `ViajeDto`. `404` si el VIN no está en el viaje; `409` si el VIN ya tiene inspecciones
@@ -1010,7 +1055,7 @@ versión nueva (`POST /api/inspecciones/{id}/corregir`).
 | Etapa | Qué exige el cierre |
 |---|---|
 | Cargue y Descargue | la foto de **cada una de las 7 vistas obligatorias** (las activas de `vistas-foto` con `obligatoria: true` para el tipo del vehículo); una foto propia por hallazgo; ubicación en toda foto. Las 2 vistas adicionales (piezas en el baúl y cojinería) **no bloquean** el cierre |
-| Transporte (registro del conductor) | no exige las 7 vistas, pero sí la **ubicación (GPS) y la hora del propio registro** (`lat`/`lng` de la inspección); si hay una novedad, el hallazgo lleva su foto. Cuenta para la cobertura |
+| Transporte (registro del conductor) | no exige las 7 vistas, pero sí la **ubicación (GPS) y la hora del propio registro** (`lat`/`lng` de la inspección); si hay una novedad, el hallazgo lleva su foto. Cuenta para la cobertura. **Lo arma el sistema** con «Reportar novedad» y «Llegué»: `POST /api/inspecciones` y `corregir` sobre un informe de transporte responden `409` (`transporte_lo_arma_el_sistema`) |
 
 Las mismas reglas valen para quien haga la inspección: cuando el conductor hace la salida del cargue por la excepción «No hay inspector», con las mismas 7 vistas, sello y hallazgos.
 
@@ -1018,14 +1063,23 @@ Las mismas reglas valen para quien haga la inspección: cuando el conductor hace
 Campo. `201` con la inspección. El usuario sale del token (no se envía) y **la placa, el tráiler y el conductor salen del viaje de la etapa**: ya no se piden como texto.
 Inspector y conductor reciben `403` si la etapa es de un viaje que no es suyo; un viaje finalizado o cancelado responde `409`; una etapa inexistente, `404`.
 
-**El conductor no crea la salida de un Cargue… salvo que active la excepción.** Si la etapa es el Cargue, la salida la crea el inspector: el conductor recibe `403` con «La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción» (no hay ninguna marca previa en el cargue).
-En Transporte y Descargue el conductor sí la crea. La regla es de la salida del Cargue; la llegada y el resto no cambian. La excepción «No hay inspector» está en [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso) (donde el punto de cargue tiene inspectores se pide y se concede; ver «Permiso de la excepción»).
+**El conductor no crea la salida ni la llegada de un Cargue… salvo que active la excepción en un lugar que la admite.** Si la etapa es el Cargue, la revisión la hace el inspector. Solo el conductor del viaje que activa la excepción «No hay inspector» hace la **salida** y la **llegada** del cargue, y solo si el **lugar de cargue la admite** (`admite_cargue_sin_inspector`, ver «El lugar admite cargue sin inspector»): en un lugar que no la admite (o un viaje sin lugar de cargue) la salida y la llegada del cargue del conductor responden `409` con `details.motivo: "lugar_no_admite_cargue_sin_inspector"` y «Este lugar de cargue no admite cargue sin inspector: el cargue lo hace el inspector»; el dato se lee en cada petición y lo ya registrado con la excepción antes de un cambio del dato se conserva.
+- **Salida del cargue del conductor** (sin cambio): exige `motivo_sin_inspector` (sin él, `403` «La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción») y, donde el punto tiene inspectores, el permiso concedido (o vencido: se concede por tiempo en esa misma petición).
+- **Llegada del cargue del conductor**: donde el punto **tiene inspectores** exige el permiso del viaje concedido (o vencido y concedido por tiempo en esa petición); sin él responde `403` con `details.motivo: "conductor_sin_permiso_de_excepcion"` y «Pide el permiso «No hay inspector» y espera a que el coordinador lo conceda». Con el permiso la llegada no repite el motivo: si no se envía `motivo_sin_inspector`, se usa el que el conductor dio al pedirlo. Donde el punto **no tiene inspectores** la llegada activa la excepción como la salida: exige `motivo_sin_inspector` (y su texto si el motivo lo pide) y, sin él, responde `403` con el mismo `motivo` y «Activa «No hay inspector» con su motivo para hacer esta revisión». La llegada con motivo deja la novedad de proceso «Cargue sin inspector» y el aviso, como la salida.
+- La **llegada del Descargue** del conductor no cambia aquí (en una parada con inspectores la limita la espera del inspector del punto).
+La excepción «No hay inspector» está en [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso) (donde el punto de cargue tiene inspectores se pide y se concede; ver «Permiso de la excepción»).
+
+**El informe de transporte lo arma el sistema.** Crear una inspección de una etapa de **Transporte** a mano (`POST /api/inspecciones`) responde `409` con `details.motivo: "transporte_lo_arma_el_sistema"` y «El informe de transporte lo arma el sistema con «Reportar novedad» y «Llegué»», para inspector, conductor y administrador; `POST /api/inspecciones/{id}/corregir` sobre un informe de transporte responde lo mismo. Los informes de transporte manuales que ya existen se siguen leyendo, listando, exportando y descargando en PDF; uno en borrador se resuelve descartándolo. «Reportar novedad» y «Llegué» siguen creando los informes de transporte como hasta ahora.
+
+**En una parada con inspectores la revisión de llegada es del inspector.** Crear la revisión de llegada del Descargue como **conductor** en una parada con inspectores asignados responde `409` con el motivo `llegada_del_inspector_del_punto` salvo que la espera de esa parada tenga el plan B habilitado (X más Y minutos desde que el conductor activó «No hay inspector», evaluados en esa misma petición); el inspector que tomó la entrega la crea siempre y en una parada sin inspectores el conductor la crea como siempre. Ver «La espera del inspector del punto».
+
+**El Descargue tiene una sola revisión: la de llegada.** Crear la inspección de **salida del Descargue** (`momento: "salida"` en una etapa de descargue), con cualquier rol, responde `409` con `code: "MOMENTO_NO_ADMITIDO"` y `details.motivo: "salida_descargue"` (código y motivo por confirmar) y no guarda nada; la app y el portal no ofrecen ese momento. La llegada del Descargue (con sus 7 vistas) es el único registro del destino. Una salida del Descargue que quedó **abierta antes del cambio** sigue pudiendo cerrarse (`POST /api/inspecciones/{id}/cerrar`, sin exigir las vistas), y una ya cerrada se sigue leyendo, exportando y mostrando; no se corrige (ver `corregir`).
 
 **La salida exige la etapa anterior terminada.** Si el VIN tiene una etapa anterior en el viaje (por su `orden`) y esa etapa no tiene su **llegada cerrada**, o tiene una
 **transferencia sin tipo de cierre**, la salida responde `409` con `code: "ETAPA_PREVIA_SIN_CIERRE"` y `details` con `motivo` (`etapa_previa_sin_cierre` si falta cerrar la llegada,
 `transferencia_sin_cierre` si falta cerrar la transferencia), `etapa_previa_id` y `etapa_previa` (el nombre de la etapa que falta terminar), para que la app muestre el bloqueo. La primera
 etapa y la llegada no tienen este bloqueo. Una etapa ya tiene su inspección original de ese momento: crear otra responde `409` (para
-cambiarla, se corrige).
+cambiarla, se corrige), salvo que la original sea un borrador **descartado** o **superado** (ver «Descartar un informe en borrador»).
 
 ```json
 {
@@ -1093,7 +1147,7 @@ La inspección sigue las reglas de la salida que hace el conductor (las 7 vistas
 
 - la inspección guarda `motivo_sin_inspector` y su texto (los conserva también la versión que la corrija);
 - se crea la **novedad de proceso** `cargue_sin_inspector` con el motivo, quién la registró y la `fecha`, `lat` y `lng` **del cuerpo** (los del momento en que el conductor eligió el motivo, aunque la envíe después por falta de señal);
-- se crea la notificación `novedad_proceso` (urgencia `alta`, por bandeja y push) para los `coordinador_calidad` y `admin` activos del **cliente del vehículo**, nunca de otro cliente; un fallo del push no deshace nada;
+- se crea la notificación `novedad_proceso` (urgencia `alta`, por bandeja y push) para los `coordinador_calidad` y `admin` activos de **cada cliente con carros en el viaje**, nunca de otro cliente; un fallo del push no deshace nada. **Es un solo aviso por viaje**: sale con la primera activación, enlazado al viaje (sin `vehiculo_id` ni `inspeccion_id`), con la clave `novedad_proceso:cargue_sin_inspector:{viaje}`, título «Cargue sin inspector (viaje …)», un mensaje que lista los carros y `datos` `{ "hecho": "cargue_sin_inspector", "vins": [los VIN activos del viaje de ese cliente], "motivo", "motivo_nombre", "lugar" }`; las activaciones siguientes del mismo viaje no avisan otra vez (cada carro conserva su novedad de proceso y su auditoría). Los avisos por carro anteriores al cambio se conservan;
 - queda en la auditoría: `inspeccion.crear` (con el motivo) y `novedad_proceso.crear` (entidad `novedades_proceso`).
 
 Una novedad de proceso **no es un hallazgo**: no tiene zona, clase ni nivel y no cuenta en los patrones, el mapa de calor ni la tasa de rechazo.
@@ -1119,7 +1173,7 @@ nadie respondió, que lo concedió el reloj** (`autorizado_por_tiempo: true`, si
 Donde el punto de cargue **tiene inspectores** asignados (ver «Puntos del inspector») el conductor **pide el permiso** antes de activar la excepción:
 
 - `POST /api/viajes/{id}/permiso-sin-inspector` (solo el conductor del viaje; `403` el resto) con `{ "motivo_sin_inspector": "inspector_no_llego", "motivo_sin_inspector_texto"?, "fecha": "2026-11-10T08:30:00-05:00", "lat"?, "lng"? }`: `motivo_sin_inspector` es un motivo activo de `motivos-sin-inspector` (y su texto si lo pide), `fecha` es ISO 8601 **con zona** y `lat`/`lng`
-  son el GPS del momento en que lo pide (los mismos errores `400` por campo que la excepción). `201` con el `PermisoSinInspectorDto`; repetir la solicitud devuelve la misma (una por viaje). `409` si el punto de cargue **no** tiene inspectores (ahí la excepción se activa directamente) o el viaje no está activo.
+  son el GPS del momento en que lo pide (los mismos errores `400` por campo que la excepción). `201` con el `PermisoSinInspectorDto`; repetir la solicitud devuelve la misma (una por viaje). `409` con `details.motivo: "lugar_no_admite_cargue_sin_inspector"` si el lugar de cargue **no admite cargue sin inspector** (o el viaje no tiene lugar de cargue); `409` si el punto de cargue **no** tiene inspectores (ahí la excepción se activa directamente) o el viaje no está activo.
   Se avisa (`permiso_sin_inspector`, urgencia `alta`, bandeja y push) a los **inspectores del punto** y a los **coordinadores y administradores del cliente**.
 - `POST /api/viajes/{id}/permiso-sin-inspector/conceder` (`coordinador_calidad`, `admin`, `super_admin`): concede el permiso y el **conductor queda habilitado de inmediato**, sin esperar al inspector; se le avisa a él. `404` si no hay solicitud; `409` si ya está concedida.
 - `GET /api/viajes/{id}/permiso-sin-inspector`: el estado (el conductor y el inspector del viaje, los coordinadores y administradores del cliente; `404` si no hay).
@@ -1145,8 +1199,26 @@ que referencia a la anterior; **la anterior no cambia**. `201` con la `Inspeccio
 Los dos códigos son estables y distintos, con `details.motivo` (`solo_autor_o_administrador` e `inspeccion_firmada`), para que la app muestre el mensaje que corresponde. Si ambas se cumplen a la vez, gana la de la firma. Una transferencia ya registrada pero **sin ninguna firma** no impide corregir. **Después de firmar se sigue aclarando**: la nota aclaratoria
 (`POST /api/inspecciones/{id}/notas`) y la firma de quien recibe con reservas (`POST /api/inspecciones/{id}/transferencia/reservas`) funcionan igual y no cambian la inspección.
 
-- `409` si la inspección no está cerrada (se sigue editando), si ya fue corregida (se corrige la última versión) o si el viaje está finalizado o cancelado. `403` si el viaje no es del usuario. `404` si no existe.
+- `409` si la inspección no está cerrada (se sigue editando), si ya fue corregida (se corrige la última versión) o si el viaje está finalizado o cancelado; también `409` con `code: "MOMENTO_NO_ADMITIDO"` (`details.motivo: "salida_descargue"`) si es una salida del Descargue de antes del cambio. `403` si el viaje no es del usuario. `404` si no existe.
 - La versión nueva tiene sus propias fotos, hallazgos, transferencia y reglas de cierre. Una etapa puede tener varias versiones; los listados e informes las muestran todas con su `version`.
+
+### Descartar un informe en borrador: `POST /api/inspecciones/{id}/descartar`
+Autenticado, **sin cuerpo**. Descarta un informe que sigue en `borrador` (por ejemplo, el que se abrió por error o la versión vacía de una corrección abandonada): pasa a `estado: "descartada"`, **se conserva con su autor y con sus fotos y daños** (la evidencia no se borra) y su
+momento queda libre para una inspección original nueva. `200` con la `InspeccionDto` descartada. *La operación y sus códigos son propuestas por confirmar con el negocio (PAB-001: se marca y no se borra, porque la base impide borrar un borrador con fotos, hallazgos o transferencia).*
+
+| Regla | Rechazo | Código |
+|---|---|---|
+| Solo descarta **quien creó el informe** (su `usuario_id`) y el **coordinador de calidad** del cliente del VIN. Cualquier otro rol —otro inspector, el conductor, el comercial, el administrador y el super administrador— recibe el rechazo: ninguno gana la acción | `403` «No puedes descartar este informe: lo creó otra persona» con `details.motivo: "solo_autor_o_coordinador"` | `DESCARTE_SOLO_AUTOR_O_COORDINADOR` |
+| Solo mientras está en `borrador`: un informe **cerrado** es evidencia y nunca se descarta, y un borrador cuya transferencia ya tiene una firma tampoco | `409` «Este informe ya está cerrado: es evidencia y no se descarta» (`details.motivo: "informe_cerrado"`) o «Este informe ya tiene una firma: es evidencia y no se descarta» (`"informe_con_firmas"`) | `INFORME_CERRADO_NO_SE_DESCARTA` |
+| Uno que ya está descartado o superado | `409` con `details.motivo: "informe_descartado"` | `CONFLICT` |
+
+- `404` si el informe no existe; el coordinador de calidad recibe `403` si el VIN es de otro cliente. Si ambas se cumplen, gana la de la autoría.
+- **La auditoría del viaje** registra `inspeccion.descartar` con quién, cuándo y, en `detalle.antes` y `detalle.despues`, el `momento`, el `estado` y cuántas `fotos` y `danos` tenía el borrador.
+- **Cómo distinguen la app y el portal un descartado.** El estado nuevo `descartada` (y `superada`, abajo) **no sale en ningún listado**: ni `GET /api/inspecciones`, ni el detalle del viaje, ni el inventario del carro, ni la cobertura, ni los avisos; el momento vuelve a ofrecer «Capturar». Solo se abre **por su id** (`GET /api/inspecciones/{id}`, que trae `estado: "descartada"` y la auditoría lo enlaza): el portal lo muestra con la etiqueta «Descartado» y no con el código crudo. El filtro `estado` del listado sigue admitiendo solo `borrador` y `cerrada`. Las respuestas anteriores se leen igual: los informes de siempre son `borrador` o `cerrada`.
+- Un descartado **no admite** fotos, hallazgos, extras ni cierre (`409`, `details.motivo: "informe_descartado"`) y no genera el aviso «Captura incompleta».
+- Descartar la versión vacía de una corrección abandonada deja la inspección cerrada otra vez **corregible** (la restricción de «una sola corrección» ya no la cuenta).
+
+**Quien toma el carro con un borrador ajeno empieza de cero.** Cuando un **inspector** crea la inspección de un momento (`POST /api/inspecciones`) que ya tiene el borrador **de otro inspector**, si este **ya no tiene el reclamo** del viaje y su transferencia **no tiene ninguna firma**, el borrador anterior pasa a `estado: "superada"`: se conserva con su autor, no se borra y no es el informe vigente de ese momento (queda `inspeccion.superar` en la auditoría), y la inspección nueva se crea (`201`). Si el autor sigue reclamando, o el borrador ya tiene una firma, nada cambia y la creación responde `409` como hasta ahora. Quien repite su propio borrador, y el conductor que crea la salida con la excepción «No hay inspector» frente al borrador de un inspector, siguen recibiendo `409`. *(Por confirmar: que «sin el reclamo» sea la condición de dejar atrás un borrador ajeno.)*
 
 ### `GET /api/inspecciones`
 Autenticado. Una **página** de informes (`{ items, total, pagina, tamano }`; 50 por defecto, máximo 200; los más recientes primero; ver «Paginación y filtros» para `pagina`, `tamano` y `orden`). Todos los filtros son opcionales y van en la consulta:
@@ -1157,7 +1229,7 @@ Autenticado. Una **página** de informes (`{ items, total, pagina, tamano }`; 50
 | `usuario_id` | UUID del inspector |
 | `viaje_id` | UUID del viaje |
 | `momento` | `salida` o `llegada` |
-| `estado` | `borrador` o `cerrada` |
+| `estado` | `borrador` o `cerrada` (los informes `descartada` y `superada` no salen en el listado) |
 | `proceso` | `codigo` de una etapa del catálogo `etapas` (por ejemplo `cargue`, `transporte` o `descargue`), activa o no |
 | `operacion` | `importacion`, `exportacion` o `nacional` (la del vehículo) |
 | `marca` | la marca del vehículo |
@@ -1166,7 +1238,8 @@ Autenticado. Una **página** de informes (`{ items, total, pagina, tamano }`; 50
 | `desde`, `hasta` | fecha ISO sobre la fecha de la inspección |
 
 Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es el `InspeccionDto` más `vin` y `proceso`, y `lugar` (el punto de custodia de la etapa, el mismo que trae el detalle del informe), `codigo_mtrack` (el del viaje) y `unidad` (el tipo de unidad transportadora del viaje), para no abrir cada informe;
-los tres son `null` cuando no hay (una etapa sin punto de custodia, un viaje sin código o sin tipo de unidad). Inspector y conductor solo reciben los informes de sus viajes.
+los tres son `null` cuando no hay (una etapa sin punto de custodia, un viaje sin código o sin tipo de unidad). Trae además `usuario_nombre`: **el nombre de quien hizo el informe**, con el mismo join y el mismo alcance por cliente que `conductor_nombre` (`null` si el usuario ya no existe; una fila de otro cliente no sale, así que su autor tampoco).
+El nombre va solo en este campo del listado: no se agrega a ningún aviso, texto ni exportación. Inspector y conductor solo reciben los informes de sus viajes.
 
 ### `GET /api/inspecciones/{id}/pdf`
 Autenticado. El **informe de la inspección en PDF** (`Content-Type: application/pdf`, nombre `informe-{vin}-{proceso}-{momento}-v{version}.pdf`), como descarga binaria (use `fetch` con el token y descargue el `blob`). Lleva:
@@ -1182,7 +1255,7 @@ Las imágenes salen del almacén; una foto cuyo archivo ya no está se indica en
 `403` si es de otro cliente o de un viaje ajeno (inspector y conductor), y el conductor lo recibe con los hallazgos en lectura (sin nivel, seguimiento ni historial); `404` si no existe. Reemplaza al PDF de texto plano.
 
 ### `GET /api/inspecciones/{id}`
-Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de la inspección más el contexto y sus partes. Inspector y conductor reciben `403` si el informe es de un viaje que no es suyo.
+Autenticado. Informe completo para revisión (`InformeDetalleDto`): los datos de la inspección más el contexto y sus partes. Inspector y conductor reciben `403` si el informe es de un viaje que no es suyo. Abre también un informe `descartada` o `superada` (su `estado` lo dice).
 
 ```json
 {
@@ -1433,6 +1506,8 @@ Al revisar se puede confirmar que el daño **ya estaba registrado** (`es_preexis
 
 El daño de un **extra** se califica sin zona: `{ "clase_dano": "golpe", "nivel_severidad": "v2" }`.
 
+Además del inspector del viaje, **el inspector que tiene el reclamo de la entrega de la parada** donde está el carro califica los daños sin nivel que el conductor marcó en su revisión de llegada del Descargue (la que hizo con el plan B antes de que el inspector llegara; ver «La espera del inspector del punto»); con los demás daños de ese viaje otro inspector sigue recibiendo `403` («El VIN del hallazgo no pertenece a ninguno de sus viajes»).
+
 Con «ya estaba registrado»: `{ …, "es_preexistente": true, "hallazgo_origen_id": "uuid" }`.
 
 | Campo | Obligatorio | Regla |
@@ -1646,6 +1721,8 @@ El conductor responde por lo que pasa en el recorrido de cada unidad de **su** v
 las novedades van en su inspección de **salida** (que se crea en borrador al registrar la primera) y la llegada cierra esa salida y crea y cierra la inspección de **llegada**. Ambas son solo del `conductor` del viaje (`403` a cualquier otro
 usuario, también a un administrador); `404` si el viaje o el VIN no existen o el VIN no está en el viaje, y `409` si el viaje está finalizado o cancelado.
 
+**La entrega del cargue va primero.** Antes de crear nada, «Reportar novedad» y «Llegué» exigen que la entrega del cargue de ese carro esté cerrada: la llegada del cargue cerrada **y la transferencia de su cargue existente con un tipo de cierre**. Con la entrega sin cerrar, **incluido el caso en que la transferencia no existe**, y **aunque la salida de transporte ya exista** (un envío viejo de la cola de la app), responden `409` con `code: "ETAPA_PREVIA_SIN_CIERRE"`, `details.motivo: "transferencia_sin_cierre"` y «Falta cerrar la entrega del cargue: fírmenla, recíbanla con reservas o registren la no firma». El código de error no cambia, para que la cola de la app lo siga tratando como espera; un «Llegué» de una llegada ya cerrada sigue siendo un éxito (`LLEGADA_YA_CERRADA`). La exigencia de que la transferencia exista aplica solo cuando la etapa anterior es el Cargue. La app lee la misma regla en `puede_registrar_ruta` y `motivo_sin_ruta` de cada unidad.
+
 El celular guarda la novedad y la llegada con su fecha, hora y GPS aunque no haya señal y las envía al recuperarla conservando esos datos: la `fecha`, `lat` y `lng` son los del **momento del registro**, no los del envío.
 
 ### `POST /api/viajes/{id}/vehiculos/{vin}/novedades`
@@ -1664,6 +1741,7 @@ El celular guarda la novedad y la llegada con su fecha, hora y GPS aunque no hay
 | `tipo_novedad` | sí | `golpe`, `piedra`, `granizo` o `incidente_vial` |
 | `tamano_dano` | sí | un código **activo** del catálogo `tamanos-dano` |
 | `evidencia` | sí | la foto de la novedad ya subida con `POST /api/uploads`, con su sello **completo** (`sello_fecha`, `sello_lat` y `sello_lng`; sin ubicación no se podría cerrar el registro). `nota` no se admite (`400`) |
+| `id_envio` | no | un UUID que el celular le pone al envío: **un reenvío con el mismo identificador no crea otra novedad** (ver abajo). Un UUID vacío responde `400` |
 
 **No hay texto libre ni se indican cuadrante, clase o nivel**: `nota`, `clase_dano`, `nivel_severidad`, `cuadrante_numero`, `lado`, `zona_provisional`, `es_preexistente` y `hallazgo_origen_id` responden `400` con `Campo no admitido` en ese campo.
 El cuadrante, la clase y el nivel V quedan vacíos hasta que un inspector revisa la novedad.
@@ -1674,10 +1752,61 @@ Un viaje `programado` pasa a `en_curso`. Todo queda en la auditoría (`novedad.c
 
 Responde `201` con el `HallazgoCreadoDto`: `origen: "conductor"`, `tipo_novedad`, `tamano_dano`, `clase_dano`, `cuadrante_numero`, `lado`, `nivel_severidad`, `nota` y `revisado_at` en `null`, `estado_seguimiento: "pendiente"` y la `evidencia` con su `url`.
 
+**El reenvío no duplica.** `id_envio` es único **por unidad** (por la salida de Transporte del VIN en ese viaje). Con un `id_envio` que ya se guardó para esa unidad y el **mismo contenido** (tipo, tamaño y foto) responde `200` con la **misma novedad** (mismo `id`, misma foto), sin crear otra foto ni otro aviso, aunque la salida ya se haya cerrado con la llegada; con otro contenido, `409` con `details.motivo: "envio_repetido_distinto"`. Sin `id_envio` todo se comporta como siempre. Los envíos de la app anterior no llevan identificador.
+
 `409` más con `code: "UNIDAD_NO_SALE"` si la unidad se marcó «no sale» del viaje, y `409` (`CONFLICT`) si la salida de Transporte ya está cerrada (por la llegada): ya no se agregan novedades.
 
 **Aviso.** Al guardar la novedad se crea una notificación `novedad_conductor` de urgencia **alta** para cada `coordinador_calidad` y `admin` **activo del cliente del vehículo** (ninguno de otro cliente, ni el `comercial`, el `inspector` o el conductor), por
 **bandeja** y por **push** a sus dispositivos activos. Si el envío por FCM falla, la petición responde igual y la notificación de push queda con su motivo en `ErrorEnvio`. No se envía correo (el correo es solo del reporte diario).
+
+### `POST /api/viajes/{id}/novedades-viaje`
+
+La **novedad del viaje**: lo que el conductor del viaje o un inspector que participa reporta sobre el **viaje** y no sobre un carro (una falla del camión, un bloqueo de vía, un carro que no llegó al patio). **No es un hallazgo ni cuelga de una unidad**: no crea ni toca la salida de transporte, no suma a `novedades` ni cambia `estado_transporte` de ningún carro, no entra en patrones, mapa de calor, tasa de rechazo, cobertura ni conteos de daños, no cambia el estado del viaje y no marca que «el camión salió» (eso lo marca el cierre de la entrega del cargue).
+
+```json
+{
+  "tipo": "falla_camion", "texto": "Se reventó una llanta en la vía",
+  "fecha": "2026-10-21T14:05:00-05:00", "lat": 4.7, "lng": -74.2,
+  "evidencia": { "storage_path": "abc.png", "sello_fecha": "2026-10-21T14:05:00-05:00", "sello_lat": 4.7, "sello_lng": -74.2, "precision": 5.0, "dispositivo_id": "celular-1", "hash_sha256": "…" },
+  "id_envio": "uuid", "proceso": "cargue", "lugar_id": "uuid"
+}
+```
+
+| Campo | Obligatorio | Regla |
+|---|---|---|
+| `tipo` | sí | el código de un tipo **activo** del catálogo `tipos-novedad-viaje` cuyo `rol` sea el de quien reporta (o `todos`). Un código que no existe o está inactivo responde `400` «Tipo de novedad desconocido»; uno del otro rol, `400` «Ese tipo de novedad no es para tu rol» |
+| `texto` | sí | de 1 a 300 caracteres (se recortan los espacios de los extremos): vacío responde `400` «Escribe qué pasó» y de más de 300, `400` «Escribe máximo 300 caracteres» |
+| `fecha` | sí | fecha ISO 8601 con zona, la del celular: se conserva aunque la novedad llegue después, sin señal |
+| `lat`, `lng` | no | el GPS del celular. Van **juntas o ninguna** (`400` si llega una sola o está fuera de rango). **Sin GPS la novedad se acepta** (`201`) y queda `sin_ubicacion: true` |
+| `evidencia` | no | una foto ya subida con `POST /api/uploads`, con la misma forma que la de la novedad de un carro (`storage_path`, `sello_fecha`, `sello_lat`, `sello_lng`, `precision`, `dispositivo_id`, `hash_sha256`); aquí su GPS tampoco es obligatorio (sin él la foto queda «sin ubicación») y `nota` no se admite (`400`) |
+| `id_envio` | no | un UUID que el celular le pone al envío (ver «El reenvío no duplica» abajo). Un UUID vacío responde `400` |
+| `proceso`, `lugar_id` | solo el inspector | `proceso` es `cargue` o `entrega`; en la entrega, `lugar_id` es la parada (obligatoria) y en el cargue no se envía. **El conductor no los envía**: `400` si los manda |
+
+**Quién reporta.** El **conductor del viaje** mientras el viaje esté activo (`programado` o `en_curso`) y el **inspector que participa**: con `proceso = cargue`, el inspector del viaje o quien tiene el reclamo del cargue; con `proceso = entrega`, quien tiene el reclamo activo de **esa parada**. Un inspector con un proceso que no le corresponde recibe `403` con `details.motivo: "inspector_sin_ese_proceso"`; el inspector que no indica el proceso (o la parada de la entrega), `400`. El `coordinador_calidad`, el `admin`, el `super_admin`, el `comercial` y cualquier conductor de otro viaje reciben `403`. Un viaje que no está activo responde `409`. **Ningún rol recibe un permiso nuevo** con esta ruta.
+
+Responde `201` con la `NovedadViajeDto`:
+
+```json
+{
+  "id": "uuid", "tipo": "falla_camion", "tipo_nombre": "Falla del camión", "urgencia": "alta", "rol": "conductor",
+  "proceso": null, "lugar_id": null, "lugar": null, "texto": "Se reventó una llanta en la vía", "usuario_nombre": "Luis",
+  "fecha": "2026-10-21T19:05:00.000Z", "lat": 4.7, "lng": -74.2, "sin_ubicacion": false,
+  "foto": { "sello_fecha": "…", "sello_lat": 4.7, "sello_lng": -74.2, "url": "https://…?exp=…&firma=…", "url_expira_at": "…", "hash_sha256": "…", "precision": 5.0, "dispositivo_id": "celular-1", "sin_ubicacion": false },
+  "created_at": "2026-10-21T19:05:03.412Z"
+}
+```
+
+`rol` es el de quien la reportó (`conductor` o `inspector`), `urgencia` la de su tipo, `lugar` el nombre de la parada (solo en la novedad de la entrega) y `foto` es `null` si no trae foto; su `url` es una URL firmada de lectura, como la de las demás evidencias. `created_at` es la hora en que llegó al servidor. Se guarda **sin edición ni borrado** (la base lo impide) y queda en la auditoría (`novedad_viaje.crear`, entidad `novedades_viaje`).
+
+**Dónde se lee.** `GET /api/viajes/{id}` y `GET /api/viajes/mios` traen `novedades_viaje`: la lista de `NovedadViajeDto` del viaje, de la más antigua a la más reciente por `fecha` (`[]` si no tiene), para quien puede ver el viaje. `novedades_proceso` no cambia de forma: la novedad del viaje no aparece ahí ni en el reporte `novedades-proceso`, y ninguna novedad de proceso aparece en `novedades_viaje`.
+
+**Aviso.** Al guardarla se crea una notificación `novedad_viaje` con la **urgencia de su tipo** (`alta`: bandeja y push; `media`: solo bandeja) para los `coordinador_calidad` y `admin` activos de **cada cliente con carros en el viaje** (nunca de otro cliente), enlazada al viaje y sin `vehiculo_id` ni `hallazgo_id`. Título «Novedad del viaje: {tipo} ({código del viaje})»; el mensaje lleva el tipo y el texto, **sin el nombre de nadie** («{tipo}: {texto}»). Los `datos` son `{ "tipo_novedad", "tipo_novedad_nombre", "rol", "proceso", "lugar", "usuario_nombre", "con_foto" }`. La clave de deduplicación es la de la novedad (`novedad_viaje:{novedad}`): un reenvío no avisa dos veces.
+
+**El reenvío no duplica.** `id_envio` es el UUID que el celular genera una vez por novedad y repite en cada reintento. Es **único por viaje**:
+
+- con un `id_envio` que ya se guardó para ese viaje y el **mismo contenido** (mismo usuario, tipo, texto y foto), responde `200` con la **misma novedad** (mismo `id`, misma foto): no crea otra fila, otra foto ni otro aviso. Vale también si el viaje ya no está activo, porque la cola del celular puede llegar tarde;
+- con otro contenido responde `409` con `details.motivo: "envio_repetido_distinto"`;
+- sin `id_envio` todo se comporta como siempre: cada envío es una novedad. Los envíos de la app anterior no llevan identificador.
 
 ### `POST /api/viajes/{id}/vehiculos/{vin}/llegada`
 
@@ -1685,7 +1814,7 @@ Responde `201` con el `HallazgoCreadoDto`: `origen: "conductor"`, `tipo_novedad`
 { "fecha": "2026-10-21T14:10:00-05:00", "lat": 4.9, "lng": -74.4 }
 ```
 
-Confirma la llegada de la unidad: cierra la salida de Transporte si está abierta (con sus novedades) y crea y cierra la inspección de **llegada** de Transporte con la fecha, hora y ubicación recibidas; no pide las vistas de foto.
+Confirma la llegada de la unidad: cierra la salida de Transporte si está abierta (con sus novedades) y crea y cierra la inspección de **llegada** de Transporte con la fecha, hora y ubicación recibidas; no pide las vistas de foto. **Sin novedades en el recorrido** (no hay salida de Transporte) también queda la salida: se crea y se cierra «sin novedades» (0 hallazgos) con la misma fecha y el mismo GPS del «Llegué», sin pedir otra ubicación; así una unidad que llega tiene siempre sus dos registros de Transporte.
 Responde `200`:
 
 ```json
@@ -1728,7 +1857,7 @@ Nada de otros viajes del mismo VIN: el inventario solo trae las etapas de sus vi
 
 Las alertas y los avisos llegan a una **bandeja** (el portal y la app) y, las urgentes, también por **push** al celular. La capacidad `ver_alertas` de `GET /api/auth/me` la tienen `coordinador_calidad`, `admin` y `super_admin` (las alertas preventivas
 de su cliente), `inspector` (solo los avisos operativos dirigidos a él: `captura_incompleta` de una inspección que inició y `transferencia_pendiente` de su firma) y `conductor` (solo `respuesta_conductor`, `captura_incompleta` de una inspección que
-él inició en la salida de un cargue y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `permiso_sin_inspector` (urgencia alta: el conductor pide el permiso de esa excepción, al inspector del punto y al coordinador del cliente, o se avisa que se concedió; con `datos`: `hecho` `solicitud` o `concesion`), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente`, `cargue_sin_reclamar`, `propuesta_ubicacion`, `ubicacion_fijada`, `firma_cargue_pendiente`, `cambio_cargue_inspector` y `cambio_destino_unidad` (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
+él inició en la salida de un cargue y `transferencia_pendiente` dirigida a él). `comercial` no la tiene y recibe `403` en estos endpoints. Se generan `reclamo_sin_actividad` (urgencia media, al coordinador de calidad, cuando un camión reclamado lleva `reclamo_sin_actividad_minutos` sin actividad; ver «Reclamo del camión»), `novedad_conductor` y `respuesta_conductor` (ver «Conductor en ruta»), `novedad_proceso` (urgencia alta, por bandeja y push, cuando el conductor hace el cargue sin inspector; ver [Excepción «No hay inspector»](#excepción-no-hay-inspector-y-novedades-de-proceso)), `permiso_sin_inspector` (urgencia alta: el conductor pide el permiso de esa excepción, al inspector del punto y al coordinador del cliente, o se avisa que se concedió; con `datos`: `hecho` `solicitud` o `concesion`), `hallazgo_critico`, `umbral_patron`, `captura_incompleta` y `transferencia_pendiente`, `cargue_sin_reclamar`, `propuesta_ubicacion`, `ubicacion_fijada`, `firma_cargue_pendiente`, `cambio_cargue_inspector`, `cambio_destino_unidad` y `espera_inspector_punto` (urgencia alta, a los coordinadores de calidad del cliente: nadie tomó la entrega de una parada pasados X minutos desde que el conductor activó «No hay inspector»; ver «La espera del inspector del punto») (ver [docs/alertas.md](docs/alertas.md)); `reporte_diario` lo crea el reporte diario.
 Todo lo que se hace aquí queda en la auditoría.
 
 `NotificacionDto`:
@@ -1748,7 +1877,7 @@ Todo lo que se hace aquí queda en la auditoría.
 `{ "hecho": "entrega_con_una_firma", "lugar_id": "…", "lugar": "…", "parte_que_firmo": "entrega", "motivo": "…", "unidades": 3 }`. Y el de **umbral superado** (`umbral_patron`): `{ "tipo_umbral": "zona", "cuadrante_numero": 4, "lado": "izquierdo", "proceso": null, "total": 12, "umbral": 10, "ventana_dias": 30 }`
 cuando la zona (lado y número de cuadrante) llega al umbral, o `{ "tipo_umbral": "proceso", "cuadrante_numero": null, "lado": null, "proceso": "cargue", … }` cuando es el proceso; con esos campos el portal abre el tablero ya filtrado (`/api/reportes/patrones?proceso=…`). Un dato personal (como la cédula) nunca va en `datos`.
 
-`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar`, `propuesta_ubicacion`, `permiso_sin_inspector`, `firma_cargue_pendiente`, `cambio_cargue_inspector`, `cambio_destino_unidad`, `carro_rechazado_en_destino` o `ubicacion_fijada` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
+`tipo`: `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`, `transferencia_pendiente`, `reporte_diario`, `novedad_proceso`, `reclamo_sin_actividad`, `fuera_de_rango`, `cargue_sin_reclamar`, `propuesta_ubicacion`, `permiso_sin_inspector`, `firma_cargue_pendiente`, `cambio_cargue_inspector`, `cambio_destino_unidad`, `carro_rechazado_en_destino`, `ubicacion_fijada`, `espera_inspector_punto`, `viaje_sin_movimiento` o `novedad_viaje` (la lista completa de lo que el servidor emite). `urgencia`: `alta` o `media`. `respuesta` es `null` mientras nadie responde la novedad.
 
 ### `GET /api/notificaciones`
 Una página de la bandeja, las más recientes primero: `{ "items": [NotificacionDto], "total": 3, "pagina": 1, "tamano": 50, "no_leidas": 2 }`.
@@ -1817,6 +1946,8 @@ La ubicación de un lugar (`latitud`, `longitud`, `radio_metros`) tiene un estad
 
 **Carga manual.** `PATCH /api/catalogos/lugares/{id}` (y el `POST` de creación) aceptan `latitud` (−90 a 90), `longitud` (−180 a 180) y `radio_metros` (1 a 100.000); los pueden cambiar `admin`, `super_admin` y `coordinador_calidad`, como el resto del catálogo. Las coordenadas van **juntas o ninguna** (`400`), el radio necesita coordenadas (`400`) y lo que no se envía se conserva. Con coordenadas la ubicación queda `confirmada` con el autor y la fecha; enviando `latitud`, `longitud` y `radio_metros` en `null` el lugar vuelve a `sin_ubicacion`.
 
+**Cargue sin inspector.** El mismo `PATCH` (y el `POST` de creación) acepta `admite_cargue_sin_inspector` (booleano, `false` por defecto): si el lugar admite que el cargue lo haga el conductor cuando no hay inspector. Lo cambian los mismos roles del catálogo y el cambio queda en la auditoría con el valor de antes y el de después (ver «El lugar admite cargue sin inspector»).
+
 ### `POST /api/lugares/{id}/ubicacion`
 «Fijar ubicación aquí»: quien está en un lugar **sin ubicación** deja la suya. Roles: `inspector`, `conductor`, `coordinador_calidad`, `admin` y `super_admin` (`comercial` recibe `403`).
 
@@ -1826,6 +1957,9 @@ La ubicación de un lugar (`latitud`, `longitud`, `radio_metros`) tiene un estad
 `lat` y `lng` son obligatorios (`400` si faltan o están fuera de rango); `precision` (metros, opcional, no negativa) es la del GPS: queda **guardada en el lugar** (`precision_m`, nula en los lugares fijados antes, cargados a mano o con otras coordenadas) y en la auditoría (`lugar.fijar_ubicacion`). `200` con el lugar: `{ "id", "nombre", "latitud", "longitud", "radio_metros": null, "estado_ubicacion": "pendiente_confirmar", "ubicacion_fijada_por", "ubicacion_fijada_por_nombre", "ubicacion_fijada_at", "precision_m" }`. `404` si el lugar no existe. `409` si el lugar ya tiene ubicación (pendiente o confirmada): una ubicación existente la cambia quien administra el catálogo.
 
 **Aviso `ubicacion_fijada`** (código por confirmar). Al fijar la ubicación se avisa a los `coordinador_calidad` y `admin` activos del cliente de quien la fijó (los mismos destinatarios que `propuesta_ubicacion`, más los administradores), de urgencia `media` y **solo en la bandeja**: título «Ubicación fijada: {lugar}», mensaje con quién, cuándo y «precisión N m», y `datos`: `lugar_id`, `lugar`, `usuario_nombre`, `precision_m` y `fijada_at`. Uno por lugar (clave de deduplicación por lugar); el `409` de la segunda fijación no cambia y no avisa. `precision_m` también sale en el catálogo `lugares` (`GET /api/catalogos/lugares`) y en cada propuesta de `GET /api/lugares/propuestas` (la precisión con que se fijó la ubicación actual del lugar; `null` si no se guardó).
+
+### Aviso `viaje_sin_movimiento`
+Al coordinador de calidad de cada cliente de las unidades del viaje (urgencia `media`, solo bandeja; código por confirmar). Título «Viaje sin movimiento: {código_mtrack}» y un mensaje con las horas que lleva sin movimiento. `datos`: `viaje_id`, `codigo_mtrack`, `ultimo_movimiento_at` (ISO 8601) y `horas_sin_movimiento` (entero). **El último movimiento** es lo más reciente entre una inspección creada o cerrada del viaje (la llegada y la salida de Transporte incluidas), un daño o novedad de una de ellas, una novedad de proceso y una firma de entrega o de recibo; si no hay ninguno, la última vez que se tocó el viaje. Un solo aviso por viaje y último movimiento: no se repite mientras no haya un movimiento nuevo (que fija otro «último movimiento» y puede avisar de nuevo pasadas otras 24 horas), y nunca se emite para un viaje programado, finalizado o cancelado.
 
 ### Autocalibración: propuestas de ubicación
 Cada hora el servidor toma las fotos selladas de las vistas de Cargue y Descargue (lugar de cargue del viaje y destino de la unidad) con ubicación y con precisión menor que `valvula_precision_m`, de los lugares **activos cuya ubicación no está confirmada**. Si un lugar reúne fotos de **al menos `propuesta_ubicacion_visitas` visitas distintas** (viajes; 3 por defecto, ajustable sin desplegar), propone el **centro** en la mediana de las coordenadas y el **radio** que cubre al 90 % de las fotos (redondeado hacia arriba a 10 m, entre 100 y 5.000 m), crea una propuesta `pendiente` y avisa al `coordinador_calidad` del cliente (`propuesta_ubicacion`, urgencia media, solo bandeja). **El lugar no cambia** mientras la propuesta esté pendiente. No se repite una propuesta pendiente ni se vuelve a proponer tras una decisión sin fotos nuevas.
@@ -1849,13 +1983,14 @@ El sistema avisa de lo que requiere atención sin que nadie revise listados. Las
 |---|---|---|---|---|
 | `hallazgo_critico` | preventiva | `alta` | `coordinador_calidad` y `admin` activos del cliente de la unidad | al **cerrar** una inspección con un hallazgo de nivel crítico y al **revisar** una novedad del conductor con ese nivel; una por inspección |
 | `umbral_patron` | preventiva | `media` | `coordinador_calidad` y `admin` activos del cliente | cada hora, cuando los hallazgos de una zona (lado + número) o de un proceso, de ese cliente, llegan al umbral dentro de la ventana; una vez por ventana |
-| `captura_incompleta` | operativo | `media` | quien inició la inspección (el inspector o, solo en la salida de un Cargue, el conductor) | cada 10 minutos, si una inspección de Cargue o Descargue sigue en borrador y le faltan fotos de vistas obligatorias; una por inspección |
+| `captura_incompleta` | operativo | `media` | quien inició la inspección (el inspector o, solo en un Cargue sin personal de apoyo, el conductor) | cada 10 minutos, si la **llegada** del Cargue o la **llegada** del Descargue sigue en borrador y le faltan fotos de vistas obligatorias; una por inspección. **La acomodación** (la salida del Cargue) **no cuenta**: no exige vistas (sus fotos son las de la niñera) |
 | `transferencia_pendiente` | operativo | `media` | el firmante que falta (o, si aún no hay transferencia, el conductor o el inspector del viaje) | cada 10 minutos, si una llegada cerrada sigue sin transferencia con tipo de cierre; una por inspección y destinatario |
 | `cargue_sin_reclamar` | operativo | `media` | `coordinador_calidad` activos del cliente de las unidades del viaje | cada 10 minutos, si un cargue programado lleva `cargue_sin_reclamar_minutos` (30) pasada su hora programada, sin reclamo activo ni inspección iniciada (solo si esa hora fue en las últimas 24 horas); uno por viaje |
 | `firma_cargue_pendiente` | operativo | `media` | el inspector del viaje (si falta quien entrega) o su conductor (si falta quien recibe) | cada 10 minutos, si la salida del cargue de un carro lleva `firma_cargue_pendiente_minutos` (30) cerrada sin que su transferencia esté cerrada; uno por viaje y parte, con los VIN que faltan (ver «Firma del cargue por niñera») |
 | `propuesta_ubicacion` | operativo | `media` | `coordinador_calidad` activos del cliente | cada hora, cuando la autocalibración propone el centro y el radio de un lugar (ver «Ubicación de los lugares»); uno por propuesta |
+| `viaje_sin_movimiento` | operativo | `media` | `coordinador_calidad` activos del cliente de las unidades del viaje | cada 10 minutos, si un viaje `en_curso` lleva `viaje_sin_movimiento_horas` (24 por defecto) sin ningún movimiento: ni una inspección creada o cerrada (la llegada y la salida de Transporte son inspecciones), ni un daño o novedad, ni una novedad de proceso, ni una firma de entrega o de recibo; solo bandeja, uno por viaje y último movimiento (código por confirmar) |
 
-Los umbrales y los tiempos de espera son **parámetros** que se cambian sin desplegar (`niveles_criticos`, `umbral_patron_cantidad`, `umbral_patron_ventana_dias`, `captura_incompleta_minutos`, `transferencia_pendiente_minutos` y `firma_cargue_pendiente_minutos`; ver «Parámetros»). Las alertas preventivas nunca llegan a un usuario de otro cliente
+Los umbrales y los tiempos de espera son **parámetros** que se cambian sin desplegar (`niveles_criticos`, `umbral_patron_cantidad`, `umbral_patron_ventana_dias`, `captura_incompleta_minutos`, `transferencia_pendiente_minutos` y `firma_cargue_pendiente_minutos` y `viaje_sin_movimiento_horas`; ver «Parámetros»). Las alertas preventivas nunca llegan a un usuario de otro cliente
 (ver «Visibilidad por cliente»). Cada una lleva su clave de dedupe: correr un proceso otra vez, o dos instancias a la vez, no repite nada. Llegan por **bandeja** y, solo si su urgencia es `alta`, también por **push** a los dispositivos activos del destinatario (los de urgencia `media` quedan solo en la bandeja y no dejan fila de push); **nunca por correo** (el único correo es el reporte diario).
 
 ## Notas aclaratorias
@@ -1935,7 +2070,7 @@ Seis parámetros numéricos (`tipo` `numero`, entero de 1 a 1.000.000; se cambia
 | `firma_cargue_pendiente_minutos` | 30 | minutos | espera para avisar de la firma del cargue pendiente |
 | `propuesta_ubicacion_visitas` | 3 | visitas | visitas distintas con fotos selladas que hacen falta para proponer la ubicación de un lugar |
 
-Hoy leen su valor el permiso del cargue, la autocalibración de la ubicación y el aviso de la firma del cargue; los plazos del destino (`espera_inspector_*`) los calcula la función `clsEsperaDelDestino` en cada petición que necesita saber si el plan B ya está habilitado (sin esperar a ningún proceso periódico), y el aviso de viaje sin movimiento lo lee su proceso cuando exista.
+Hoy leen su valor el permiso del cargue, la autocalibración de la ubicación y el aviso de la firma del cargue; los plazos del destino (`espera_inspector_*`) los calcula la función `clsEsperaDelDestino` en cada petición que necesita saber si el plan B ya está habilitado (la firma por parada, el cierre con una sola firma y la revisión de llegada del conductor; sin esperar a ningún proceso periódico) y el proceso de cada minuto que avisa de la espera (ver «La espera del inspector del punto»); el aviso de viaje sin movimiento lo lee su proceso (`viaje_sin_movimiento_horas`, 24 por defecto si la fila no existe).
 
 ### `GET /api/parametros/app`
 Los dos parámetros que la app lee del servidor en lugar de llevarlos fijos al compilar (nombre de la ruta por confirmar). La leen el `inspector`, el `conductor`, el `coordinador_calidad`, el `admin` y el `super_admin` (`403` al resto; `401` sin sesión). Responde `200` con **solo** estos dos, con su valor vigente (caché de un minuto; un cambio se ve en un minuto o menos):
@@ -1952,7 +2087,7 @@ Toda acción de escritura (y el inicio de sesión) queda en un registro **que na
 (`X-Dispositivo-Id` o, si no llega, el `User-Agent`; ambos `null` en las acciones del sistema, como la ingesta Sofasa), el **detalle** del cambio y el **viaje** y el **cliente** de lo auditado. El detalle nunca incluye contraseñas, PIN ni tokens.
 
 Acciones registradas: inicio de sesión, PIN errado y bloqueo (`auth.*`); usuarios (`usuario.*`); catálogos (`catalogo.{nombre}.*`); vehículos (`vehiculos.cargar`, `vehiculo.baja`); viajes (`viaje.*`, `viajes.cargar`);
-inspecciones (`inspeccion.crear`, `inspeccion.cerrar`, `inspeccion.corregir`, `llegada.registrar`); hallazgos y novedades (`hallazgo.crear`, `novedad.crear`, `hallazgo.revision`, `hallazgo.seguimiento`); evidencias (`evidencia.crear`);
+inspecciones (`inspeccion.crear`, `inspeccion.cerrar`, `inspeccion.corregir`, `inspeccion.descartar`, `inspeccion.superar`, `llegada.registrar`); hallazgos y novedades (`hallazgo.crear`, `novedad.crear`, `hallazgo.revision`, `hallazgo.seguimiento`); evidencias (`evidencia.crear`);
 transferencias (`transferencia.firmar`, `transferencia.reservas`, `transferencia.no_firma`, `transferencia.sin_entrega`); notas aclaratorias (`nota.crear`); notificaciones (`notificacion.leer`, `notificacion.responder`); dispositivos y la ingesta Sofasa.
 
 ### `GET /api/auditoria`
@@ -2198,6 +2333,7 @@ La web y la app deben leerlos de la API (y guardar una copia para trabajar sin s
 | `tipos-extra` | Los tipos de extra del vehículo fuera del dibujo estándar: `barras_techo` «Barras de techo», `volco` «Volco», `platon` «Platón» y `otro` «Otro» (el único que admite un texto libre; **está protegido**: no se inactiva, no se borra y no cambia de nombre, `409`, porque no tiene reemplazo; sí admite cambiar su orden). Lo administra Calidad: lo crean y editan `admin`, `super_admin` y `coordinador_calidad` (`403` los demás); un tipo con extras reportados **no se borra** (`409`): se inactiva y los extras conservan su tipo, pero ya no se ofrece para extras nuevos | `id`, `codigo`, `nombre`, `orden`, `activo` |
 | `muelles` | Los muelles de cada lugar (hijo de `lugares`): `m1`… dentro de su lugar; no viene sembrado | `id`, `codigo`, `nombre`, `orden`, `activo`, `lugar_id` |
 | `motivos-no-sale` | Los motivos por los que un carro no sale del viaje: `dano_v1_plus`, `dano_reportado_conductor`, `no_llego_al_patio`, `faltan_documentos`, `no_esta_listo` y `otro` (que exige texto) | `id`, `codigo`, `nombre`, `orden`, `activo`, `exige_hallazgo`, `exige_texto`, `solo_sin_inspector` |
+| `tipos-novedad-viaje` | Los tipos de la novedad del **viaje** (no de un carro): `falla_camion` (alta), `dano_ninera`, `bloqueo_via`, `intento_robo` (alta) y `accidente` (alta) para el conductor; `carro_no_llego_patio`, `puesto_ninera_danado`, `faltan_documentos` y `camion_llego_tarde` para el inspector; y `otro` para los dos (la lista y las urgencias las confirma el negocio). Un tipo que una novedad usa no se borra (`409`): se inactiva | `id`, `codigo`, `nombre`, `orden`, `activo`, `rol` (`conductor`, `inspector` o `todos`: quién puede elegirlo; en `POST`/`PATCH` es opcional y por defecto `todos`) y `urgencia` (`alta` o `media`: la del aviso que genera; por defecto `media`); un valor fuera de esas listas responde `400` |
 | `motivos-sin-inspector` | Los motivos por los que no hay inspector en un cargue (la excepción «No hay inspector», que activa el conductor en el momento): `inspector_no_llego`, `inspector_no_disponible` y `otro` (que exige texto); trae además, **inactivos** (`activo: false`, no se ofrecen en la excepción), `se_nego_a_firmar`, `no_habia_nadie` y `sin_inspector_del_punto`: los motivos codificados del cierre de una entrega con una sola firma, que la novedad de proceso de ese cierre guarda como su `motivo_codigo` | `id`, `codigo`, `nombre`, `orden`, `activo`, `requiere_texto` |
 
 **Estados Sofasa (`estados-sofasa`).** `GET /api/sofasa/ordenes` sigue devolviendo `status_code` **sin traducir**; el portal lo traduce con este catálogo (`items.find(i => i.codigo === orden.status_code)?.nombre`; si el estado no está, muestra el código). A diferencia de los demás
@@ -2229,6 +2365,7 @@ Cualquier usuario autenticado. Devuelve todos los catálogos, **activos e inacti
     ],
     "muelles": [ { "id": "uuid", "codigo": "m1", "nombre": "Muelle 1", "orden": 0, "activo": true, "lugar_id": "uuid" } ],
     "motivos-no-sale": [ { "id": "uuid", "codigo": "otro", "nombre": "Otro", "orden": 6, "activo": true, "exige_hallazgo": false, "exige_texto": true, "solo_sin_inspector": false } ],
+    "tipos-novedad-viaje": [ { "id": "uuid", "codigo": "falla_camion", "nombre": "Falla del camión", "orden": 1, "activo": true, "rol": "conductor", "urgencia": "alta" } ],
     "motivos-sin-inspector": [ { "id": "uuid", "codigo": "otro", "nombre": "Otro", "orden": 3, "activo": true, "requiere_texto": true } ],
     "paneles-dano": [ { "id": "uuid", "codigo": "costado_izquierdo", "nombre": "Costado izquierdo", "orden": 1, "activo": true, "ancho_ref": 1071, "alto_ref": 491, "version": 6, "imagen_url": "/api/catalogos/paneles-dano/costado_izquierdo/imagen?v=3f2b…c1" } ],
     "cuadrante-regiones": [ { "id": "uuid", "panel": "costado_izquierdo", "cuadrante_id": "uuid", "numero": 1, "nombre": "Esquina del parachoques delantero", "lado": "izquierdo", "prioridad": 1, "geometria": { "puntos": [ [0.34, 0.30], [0.59, 0.30], [0.59, 0.48] ] } } ],
@@ -2421,7 +2558,7 @@ Todas las filas traen: **VIN, marca, tipo de vehículo, operación, cliente, via
 
 | Ruta | Una fila por | Filtros | Además trae |
 |---|---|---|---|
-| `GET /api/exportaciones/viajes.xlsx` | unidad (VIN), etapa y momento (salida o llegada) de cada viaje: los seis registros de la unidad | `estado`, `codigo_mtrack`, `vin`, `conductor_id`, `inspector_id`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` (sobre la creación del viaje) | estado del viaje y de la unidad, origen y destino; `Estado` es `sin_inspeccion`, `borrador` o `cerrada` (versión y fechas vacías si no hay inspección) |
+| `GET /api/exportaciones/viajes.xlsx` | unidad (VIN), etapa y momento (salida o llegada) de cada viaje: los cinco registros de la unidad (la llegada del Descargue es su única revisión: no hay fila de salida del Descargue, ni como `sin_inspeccion`; una salida del Descargue cerrada de antes sí se exporta) | `estado`, `codigo_mtrack`, `vin`, `conductor_id`, `inspector_id`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` (sobre la creación del viaje) | estado del viaje y de la unidad, origen y destino; `Estado` es `sin_inspeccion`, `borrador` o `cerrada` (versión y fechas vacías si no hay inspección) |
 | `GET /api/exportaciones/inspecciones.xlsx` | inspección (cada versión) | `vin`, `usuario_id`, `viaje_id`, `momento`, `estado`, `proceso`, `operacion`, `marca`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` (sobre la fecha de la inspección) | el inspector y las **firmas** de la transferencia: tipo de cierre y, de quien entrega y de quien recibe, quién, fecha e IP |
 | `GET /api/exportaciones/hallazgos.xlsx` | hallazgo | `estado_seguimiento`, `origen`, `revisado`, `cliente_id`, `viaje_id`, `vin`, `inspeccion_id`, `nivel`, `cuadrante_numero`, `lado`, `proceso`, `desde`, `hasta` (sobre el cierre de la inspección) y `sin_calificar` (el mismo filtro del listado de hallazgos) | **zona** (lado, número y nombre), clase, tamaño, nivel, si es preexistente, origen, estado de seguimiento y la **fecha, hora y ubicación de su foto** |
 
@@ -2451,7 +2588,7 @@ El `proceso` y el `nivel` se ignoran en los reportes que no tienen esos datos (c
 **programación** del viaje en la adopción y la del **cierre de la inspección** en el tiempo de captura, las averías y los patrones.
 
 ### `GET /api/reportes/cobertura`
-Unidades despachadas (un VIN de un viaje con la **salida del Cargue cerrada**, sin las unidades marcadas «no sale») y cuántas tienen sus **seis registros cerrados** (salida y llegada de las tres etapas). `cobertura` = completas / despachadas, en porcentaje con dos
+Unidades despachadas (un VIN de un viaje con la **salida del Cargue cerrada**, sin las unidades marcadas «no sale») y cuántas tienen sus **cinco registros cerrados** (llegada del Cargue, acomodación —la salida del Cargue—, salida y llegada de Transporte y llegada del Descargue; el Descargue ya no tiene salida y la que exista de antes no cuenta). Un carro que ya tenía sus seis registros sigue completo. `cobertura` = completas / despachadas, en porcentaje con dos
 decimales; `meta` es 90. Una unidad cuenta en el punto de origen y en el de destino de su viaje.
 
 ```json

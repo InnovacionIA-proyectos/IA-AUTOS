@@ -33,7 +33,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
     }
 
     public Task<bool> EsDeClienteAsync(Guid inspeccionId, Guid clienteId, CancellationToken ct = default) =>
-        (from i in contexto.Inspecciones.AsNoTracking()
+        (from i in contexto.Inspecciones.IgnoreQueryFilters().AsNoTracking()
          join e in contexto.Etapas on i.EtapaId equals e.Id
          join v in contexto.Vehiculos on e.VehiculoId equals v.Id
          where i.Id == inspeccionId && v.ClienteId == clienteId
@@ -52,6 +52,8 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                        join vj in contexto.Viajes on i.ViajeId equals vj.Id
                        join c in contexto.Usuarios on vj.ConductorId equals c.Id into conductores
                        from c in conductores.DefaultIfEmpty()
+                       join au in contexto.Usuarios on i.UsuarioId equals au.Id into autores
+                       from au in autores.DefaultIfEmpty()
                        join lg in contexto.PuntosCustodia on e.PuntoCustodiaId equals lg.Id into lugares
                        from lg in lugares.DefaultIfEmpty()
                        join tu in contexto.TiposUnidad on vj.TipoUnidadId equals tu.Id into unidades
@@ -69,7 +71,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                           && (f.Proceso == null || p.Codigo == f.Proceso)
                           && (f.Desde == null || i.Fecha >= f.Desde)
                           && (f.Hasta == null || i.Fecha <= f.Hasta)
-                       select new { Inspeccion = i, v.Vin, Proceso = p.Codigo, vj.Placa, vj.Trailer, Conductor = (string?)c.Nombre, Lugar = (string?)lg.Nombre, vj.CodigoMtrack, Unidad = (string?)tu.Nombre };
+                       select new { Inspeccion = i, v.Vin, Proceso = p.Codigo, vj.Placa, vj.Trailer, Conductor = (string?)c.Nombre, Lugar = (string?)lg.Nombre, vj.CodigoMtrack, Unidad = (string?)tu.Nombre, Autor = (string?)au.Nombre };
         if (soloDeUsuario is { } usuarioId)
         {
             var viajesPropios = clsAlcanceViajes.Viajes(contexto, usuarioId);
@@ -99,7 +101,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                 x.Inspeccion.CreatedAt, x.Inspeccion.UpdatedAt, x.Vin, x.Proceso,
                 x.Inspeccion.IniciadaAt, x.Inspeccion.CerradaAt, x.Inspeccion.Version, x.Inspeccion.CorrigeInspeccionId,
                 x.Inspeccion.Momento == clsMomento.SALIDA ? "Inspección de salida" : x.Inspeccion.Momento == clsMomento.LLEGADA ? "Inspección de llegada" : x.Inspeccion.Momento,
-                x.Lugar, x.CodigoMtrack, x.Unidad))
+                x.Lugar, x.CodigoMtrack, x.Unidad, x.Autor))
             .ToListAsync(ct);
         return (filas, total);
     }
@@ -177,7 +179,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
 
     public async Task<InformeDetalleDto?> ObtenerInformeAsync(Guid id, CancellationToken ct = default)
     {
-        var fila = await (from i in contexto.Inspecciones.AsNoTracking()
+        var fila = await (from i in contexto.Inspecciones.IgnoreQueryFilters().AsNoTracking()
                           join e in contexto.Etapas on i.EtapaId equals e.Id
                           join v in contexto.Vehiculos on e.VehiculoId equals v.Id
                           join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id

@@ -30,11 +30,13 @@ public sealed class clsViajesService(
     clsEnsamblajeViajes ensamblaje,
     clsAccesoViajes acceso,
     IReclamoRepository reclamos,
+    IEsperaInspectorPuntoRepository esperas,
     clsEmisorNotificaciones emisor,
     clsPermisosSinInspectorService permisos,
     IInspeccionRepository inspecciones,
     ITransferenciaCustodiaRepository transferencias,
     INovedadProcesoRepository novedadesProceso,
+    clsFinalizadorDelViaje finalizador,
     IUnidadDeTrabajo unidadDeTrabajo,
     IAuditor auditor,
     IUsuarioActual actual,
@@ -163,7 +165,7 @@ public sealed class clsViajesService(
         return await consultas.TrailersAsync(actual.ClienteDelFiltro(cliente), ct);
     }
 
-    /// <summary>Los viajes del usuario (como conductor o inspector). Sin estado: los programados y en curso.</summary>
+    /// <summary>Los viajes del usuario (como conductor o inspector del viaje, o inspector con un reclamo activo de entrega), cada uno con su papel si es inspector. Sin estado: los programados y en curso.</summary>
     public async Task<IReadOnlyList<ViajeDto>> MiosAsync(string? estado, CancellationToken ct = default)
     {
         var errores = new Dictionary<string, string[]>();
@@ -175,9 +177,10 @@ public sealed class clsViajesService(
 
         string[] estados = filtro is null ? clsEstadoViaje.ACTIVOS : [filtro];
         // Un carro bajado del viaje no cuenta para quien trabaja el viaje: no sale en «mis viajes».
-        return (await consultas.MiosAsync(actual.IdObligatorio(), estados, ct))
+        var viajes = (await consultas.MiosAsync(actual.IdObligatorio(), estados, ct))
             .Select(v => (v with { Vehiculos = v.Vehiculos.Where(u => u.EstadoUnidad != clsEstadoUnidad.BAJADO).ToList() }).ParaConductor(actual))
             .ToList();
+        return await ConPapelAsync(viajes, ct);
     }
 
     public async Task<ViajeDto> ObtenerAsync(Guid id, CancellationToken ct = default)
@@ -266,14 +269,38 @@ public sealed class clsViajesService(
         return await ObtenerDtoAsync(id, ct);
     }
 
+    /// <summary>
+    /// Cambia el estado del viaje. Finalizar a mano un viaje en curso con carros pendientes de entrega exige un <c>motivo</c> (400 sin el); sin pendientes el motivo es opcional. El motivo, cuando llega, queda en la auditoria
+    /// junto con el estado de antes y el de despues.
+    /// </summary>
     public async Task<ViajeDto> CambiarEstadoAsync(Guid id, CambiarEstadoViajeRequest solicitud, CancellationToken ct = default)
     {
         await validadorEstado.ValidarOLanzarAsync(solicitud, ct);
         var viaje = await ObtenerViajeAsync(id, ct);
         var estadoAnterior = viaje.Estado;
+        var motivo = clsValidador.Opcional(solicitud.Motivo);
+        if (motivo is null && solicitud.Estado == clsEstadoViaje.FINALIZADO && estadoAnterior == clsEstadoViaje.EN_CURSO && await finalizador.PendientesAsync(viaje, ct) > 0)
+        {
+            throw clsErroresCampos.De("motivo", "El motivo es obligatorio para finalizar un viaje con carros pendientes");
+        }
+
         viaje.CambiarEstado(solicitud.Estado!, reloj.Ahora);
         await auditor.RegistrarDeViajeAsync(
-            $"viaje.estado.{viaje.Estado}", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(new { estado = estadoAnterior }, new { estado = viaje.Estado }), ct: ct);
+            $"viaje.estado.{viaje.Estado}", "viajes", viaje.Id, viaje.Id,
+            new DetalleAuditoria(new { estado = estadoAnterior }, motivo is null ? new { estado = viaje.Estado } : (object)new { estado = viaje.Estado, motivo }), ct: ct);
+
+        // Un viaje cancelado o finalizado a mano ya no espera a ningun inspector: sus esperas abiertas quedan anuladas.
+        if (viaje.Estado is clsEstadoViaje.CANCELADO or clsEstadoViaje.FINALIZADO)
+        {
+            foreach (var espera in await esperas.ObtenerAbiertasDeViajeAsync(viaje.Id, ct))
+            {
+                var antes = clsInstantaneasAuditoria.De(espera);
+                espera.Anular(reloj.Ahora);
+                await auditor.RegistrarDeViajeAsync(
+                    "espera_inspector_punto.anular", "esperas_inspector_punto", espera.Id, viaje.Id, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(espera)), ct: ct);
+            }
+        }
+
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
         return await ObtenerDtoAsync(id, ct);
     }
@@ -501,8 +528,23 @@ public sealed class clsViajesService(
     private async Task<clsViaje> ObtenerViajeAsync(Guid id, CancellationToken ct) =>
         await viajes.ObtenerPorIdAsync(id, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE);
 
-    private async Task<ViajeDto> ObtenerDtoAsync(Guid id, CancellationToken ct) =>
-        (await consultas.ObtenerAsync(id, ClienteRestringido, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE)).ParaConductor(actual);
+    private async Task<ViajeDto> ObtenerDtoAsync(Guid id, CancellationToken ct)
+    {
+        var viaje = (await consultas.ObtenerAsync(id, ClienteRestringido, ct) ?? throw new clsEntidadNoEncontradaException($"Viaje {id} no encontrado", clsMotivosRechazo.VIAJE_NO_EXISTE)).ParaConductor(actual);
+        return (await ConPapelAsync([viaje], ct))[0];
+    }
+
+    /// <summary>Al inspector se le dice su papel en cada viaje (carga, recibe o las dos); al conductor y a los roles de oficina, nulo.</summary>
+    private async Task<IReadOnlyList<ViajeDto>> ConPapelAsync(IReadOnlyList<ViajeDto> viajes, CancellationToken ct)
+    {
+        if (actual.Rol != clsRol.INSPECTOR || viajes.Count == 0)
+        {
+            return viajes;
+        }
+
+        var papeles = await consultas.PapelesDelInspectorAsync(actual.IdObligatorio(), viajes.Select(v => v.Id).ToList(), ct);
+        return viajes.Select(v => papeles.TryGetValue(v.Id, out var papel) ? v with { Papel = papel } : v).ToList();
+    }
 
     /// <summary>
     /// El viaje no tiene un cliente propio: se toma de sus VIN. Quien administra viajes sin ser super administrador (coordinador, administrador,

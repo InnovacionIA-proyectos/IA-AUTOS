@@ -68,6 +68,7 @@ public sealed class PermisoSinInspectorApiTests(clsBaseDatosFixture bd) : clsPru
         var coordinador = await SesionAsync("coord@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
         var admin = await SesionAsync("admin@ejemplo.com", clsRol.ADMIN);
         var lugar = await LugarRealAsync(Como(coordinador), "Puerto de Cartagena", "cedi_2", "Cartagena");
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblLugares SET AdmiteCargueSinInspector = 1 WHERE Id = @l", ("@l", lugar));
         await Sembrador.VehiculoAsync("VIN-PERMISO-1");
         var tipo = (Guid)(await Sembrador.EscalarAsync("SELECT Id FROM dbo.tblTiposUnidadTransportadora WHERE Codigo = 'ninera'"))!;
         var creado = await Como(coordinador).PostAsync(

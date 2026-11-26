@@ -4,7 +4,16 @@ namespace IAAutos.Dominio.Inspecciones;
 
 public interface IInspeccionRepository
 {
+    /// <summary>La inspeccion por id, tambien si esta descartada o superada (esas no salen en ninguna otra consulta).</summary>
     Task<clsInspeccion?> ObtenerPorIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// El borrador ORIGINAL de ese momento y ciclo de la etapa cuando lo hizo otra persona (no <paramref name="usuarioId"/>), o nulo: el que quien toma el carro con el reclamo liberado deja atras al capturar ese momento de cero.
+    /// </summary>
+    Task<clsInspeccion?> ObtenerBorradorAjenoAsync(Guid etapaId, string momento, int ciclo, Guid usuarioId, CancellationToken ct = default);
+
+    /// <summary>True si la transferencia de esa inspeccion ya tiene una firma o un cierre: es evidencia y la inspeccion no se descarta.</summary>
+    Task<bool> TransferenciaTieneFirmaOCierreAsync(Guid inspeccionId, CancellationToken ct = default);
 
     /// <summary>Lo que tiene la inspeccion (fotos, ubicaciones, hallazgos sin foto y vistas fotografiadas) para decidir si puede cerrarse.</summary>
     Task<clsResumenCierre> ObtenerResumenCierreAsync(Guid inspeccionId, CancellationToken ct = default);
@@ -32,6 +41,9 @@ public interface IInspeccionRepository
 
     /// <summary>True si alguna inspeccion de la etapa tiene una transferencia sin tipo de cierre (abierta): bloquea iniciar la etapa siguiente.</summary>
     Task<bool> TieneTransferenciaSinCierreAsync(Guid etapaId, CancellationToken ct = default);
+
+    /// <summary>La etapa tiene al menos una transferencia con tipo de cierre (firmada, con reservas, no firma o recibo sin entrega).</summary>
+    Task<bool> TieneTransferenciaConCierreAsync(Guid etapaId, CancellationToken ct = default);
 
     /// <summary>La version mas reciente de la inspeccion de ese momento (salida o llegada) de la etapa, o nulo si no la tiene.</summary>
     Task<clsInspeccion?> ObtenerUltimaDeEtapaAsync(Guid etapaId, string momento, CancellationToken ct = default);
@@ -73,6 +85,9 @@ public interface IInspeccionRepository
 
     /// <summary>El hallazgo que nacio del dano de un extra, o nulo si el extra no esta danado.</summary>
     Task<clsHallazgo?> ObtenerHallazgoDeExtraAsync(Guid extraId, CancellationToken ct = default);
+
+    /// <summary>La novedad del conductor que ya se guardo en la inspeccion con ese identificador de envio del celular, o nula.</summary>
+    Task<clsHallazgo?> ObtenerHallazgoPorEnvioAsync(Guid inspeccionId, Guid idEnvio, CancellationToken ct = default);
 
     /// <summary>Los hallazgos de la inspeccion (para recalcular su evidencia).</summary>
     Task<IReadOnlyList<clsHallazgo>> ObtenerHallazgosDeInspeccionAsync(Guid inspeccionId, CancellationToken ct = default);

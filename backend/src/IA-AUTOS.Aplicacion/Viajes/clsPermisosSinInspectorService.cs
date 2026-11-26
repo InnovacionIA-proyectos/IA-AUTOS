@@ -4,6 +4,7 @@ using IAAutos.Aplicacion.Comun;
 using IAAutos.Aplicacion.Notificaciones;
 using IAAutos.Aplicacion.Parametros;
 using IAAutos.Aplicacion.Viajes.DTOViajes;
+using IAAutos.Dominio.Catalogos;
 using IAAutos.Dominio.Comun;
 using IAAutos.Dominio.Inspecciones;
 using IAAutos.Dominio.Notificaciones;
@@ -26,6 +27,7 @@ public sealed class clsPermisosSinInspectorService(
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
     IReclamoRepository reclamos,
+    ILugarRepository lugares,
     IUsuarioRepository usuarios,
     ICatalogosLectura catalogos,
     clsAccesoViajes acceso,
@@ -56,6 +58,12 @@ public sealed class clsPermisosSinInspectorService(
         if (await permisos.ObtenerDeViajeAsync(viajeId, ct) is { } existente)
         {
             return await ADtoAsync(existente, ct);
+        }
+
+        // El dato del lugar se lee en cada peticion: donde no se admite cargue sin inspector no hay permiso que pedir (lo ya registrado antes de un cambio del dato se conserva).
+        if (viaje.LugarCargueId is not { } lugarDeCargue || await lugares.ObtenerAsync(lugarDeCargue, ct) is not { AdmiteCargueSinInspector: true })
+        {
+            throw new clsConflictoException(IAAutos.Aplicacion.Inspecciones.clsInspeccionesService.MENSAJE_LUGAR_NO_ADMITE, clsMotivosRechazo.LUGAR_NO_ADMITE_CARGUE_SIN_INSPECTOR);
         }
 
         if (viaje.LugarCargueId is not { } lugarId || !await reclamos.LugarTieneInspectoresAsync(lugarId, ct))

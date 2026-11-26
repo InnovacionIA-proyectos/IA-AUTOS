@@ -390,7 +390,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var viaje = await LeerJsonAsync(r);
         Assert.Equal(
             ["id", "codigo_mtrack", "tipo_unidad_id", "unidad", "placa", "trailer", "conductor_id", "conductor_nombre", "inspector_id", "inspector_nombre",
-             "origen_id", "origen", "destino_id", "destino", "estado", "vehiculos", "clientes", "created_at", "updated_at", "novedades_proceso", "fecha_programada", "lugar_cargue_id", "lugar_cargue", "capacidad", "disposicion", "fotos_acomodacion", "lugar_cargue_tiene_inspector", "cargue_firmado_por_ninera_at", "cargue_no_firmado_at", "cargue_no_firma_parte", "muelle_id", "muelle", "eliminable"],
+             "origen_id", "origen", "destino_id", "destino", "estado", "vehiculos", "clientes", "created_at", "updated_at", "novedades_proceso", "fecha_programada", "lugar_cargue_id", "lugar_cargue", "capacidad", "disposicion", "fotos_acomodacion", "lugar_cargue_tiene_inspector", "cargue_firmado_por_ninera_at", "cargue_no_firmado_at", "cargue_no_firma_parte", "muelle_id", "muelle", "eliminable", "papel", "novedades_viaje", "lugar_cargue_admite_sin_inspector"],
             viaje.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("MTK-ALTA", viaje.GetProperty("codigo_mtrack").GetString());
         Assert.Equal("Niñera", viaje.GetProperty("unidad").GetString());
@@ -480,7 +480,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblViajes"));
 
         await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{primero}/estado", Cuerpo(new { estado = "en_curso" }));
-        await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{primero}/estado", Cuerpo(new { estado = "finalizado" }));
+        await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{primero}/estado", Cuerpo(new { estado = "finalizado", motivo = "Cierre de la prueba" }));
         var tras = await CrearViajeAsync(coordinador, "MTK-B", ["VIN-ROTA-01"]);
 
         Assert.Equal(HttpStatusCode.Created, tras.StatusCode);
@@ -608,7 +608,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         Assert.Equal(JsonValueKind.Null, antesUnidad.GetProperty("no_sale").ValueKind);
         var unidad = despues.GetProperty("vehiculos")[0];
         Assert.Equal(
-            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale", "estado_transporte", "novedades", "lugar_destino_id", "lugar_destino", "posicion", "bajado", "lugar_destino_cambiado_at"],
+            ["vehiculo_id", "vin", "marca", "modelo", "color", "operacion", "etapas", "completas", "estado_unidad", "no_sale", "estado_transporte", "novedades", "lugar_destino_id", "lugar_destino", "posicion", "bajado", "lugar_destino_cambiado_at", "puede_registrar_ruta", "motivo_sin_ruta"],
             unidad.EnumerateObject().Select(p => p.Name).ToList());
         Assert.Equal("no_sale", unidad.GetProperty("estado_unidad").GetString());
         var noSale = unidad.GetProperty("no_sale");
@@ -646,7 +646,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var terminado = await ViajeConVinesAsync(coordinador, "MTK-M3", ["VIN-M-03"], conductor.UsuarioId);
         await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{enCurso}/estado", Cuerpo(new { estado = "en_curso" }));
         await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{terminado}/estado", Cuerpo(new { estado = "en_curso" }));
-        await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{terminado}/estado", Cuerpo(new { estado = "finalizado" }));
+        await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{terminado}/estado", Cuerpo(new { estado = "finalizado", motivo = "Cierre de la prueba" }));
 
         var activos = await LeerJsonAsync(await Cliente(conductor.Token).GetAsync("/api/viajes/mios"));
         var finalizados = await LeerJsonAsync(await Cliente(conductor.Token).GetAsync("/api/viajes/mios?estado=finalizado"));
@@ -749,7 +749,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var invalido = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}/estado", Cuerpo(new { estado = "volando" }));
         var sinEstado = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}/estado", Cuerpo(new { }));
         var inicia = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}/estado", Cuerpo(new { estado = "en_curso" }));
-        var termina = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}/estado", Cuerpo(new { estado = "finalizado" }));
+        var termina = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}/estado", Cuerpo(new { estado = "finalizado", motivo = "Cierre de la prueba" }));
         var reabre = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{id}/estado", Cuerpo(new { estado = "en_curso" }));
         var inexistente = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{Guid.NewGuid()}/estado", Cuerpo(new { estado = "en_curso" }));
 
@@ -854,12 +854,13 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var coordinador = await CoordinadorAsync();
         var conductor = await SesionAsync("cond@ejemplo.com", clsRol.CONDUCTOR);
         var viaje = await ViajeConVinesAsync(coordinador, "MTK-ST", ["VIN-ST-01", "VIN-ST-02"], conductor.UsuarioId);
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblLugares SET AdmiteCargueSinInspector = 1");
         Guid EtapaDe(string vin, int orden) => (Guid)Sembrador.EscalarAsync("SELECT e.Id FROM dbo.tblEtapas e JOIN dbo.tblVehiculos v ON v.Id = e.VehiculoId WHERE v.Vin = @v AND e.Orden = @o", ("@v", vin), ("@o", orden)).Result!;
 
         var primera = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-01", 1), momento = "salida", fecha = FECHA, motivo_sin_inspector = "inspector_no_llego" });
         var estadoTras = (string)(await Sembrador.EscalarAsync("SELECT Estado FROM dbo.tblViajes WHERE Id = @v", ("@v", viaje)))!;
-        await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{viaje}/estado", Cuerpo(new { estado = "finalizado" }));
-        var enFinalizado = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-01", 2), momento = "salida", fecha = FECHA });
+        await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{viaje}/estado", Cuerpo(new { estado = "finalizado", motivo = "Cierre de la prueba" }));
+        var enFinalizado = await Cliente(conductor.Token).PostAsJsonAsync("/api/inspecciones", new { etapa_id = EtapaDe("VIN-ST-02", 1), momento = "salida", fecha = FECHA, motivo_sin_inspector = "inspector_no_llego" });
 
         Assert.Equal(HttpStatusCode.Created, primera.StatusCode);
         Assert.Equal("en_curso", estadoTras);
@@ -881,7 +882,7 @@ public sealed class ViajesApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase(bd
         var conductorNuevo = await SesionAsync("nuevo@ejemplo.com", clsRol.CONDUCTOR);
         var primero = await ViajeConVinesAsync(coordinador, "MTK-H1", ["VIN-HIST-01"], conductorViejo.UsuarioId);
         await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{primero}/estado", Cuerpo(new { estado = "en_curso" }));
-        await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{primero}/estado", Cuerpo(new { estado = "finalizado" }));
+        await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{primero}/estado", Cuerpo(new { estado = "finalizado", motivo = "Cierre de la prueba" }));
         var segundo = await CrearViajeAsync(coordinador, "MTK-H2", ["VIN-HIST-01"], conductorNuevo.UsuarioId);
         Assert.Equal(HttpStatusCode.Created, segundo.StatusCode);
 

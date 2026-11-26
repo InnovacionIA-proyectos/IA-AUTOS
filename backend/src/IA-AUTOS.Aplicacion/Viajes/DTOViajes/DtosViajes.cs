@@ -48,7 +48,11 @@ public sealed record CambiarCargueDelViajeRequest(Guid? MuelleId, string? Traile
 /// <summary>Cambia el lugar de destino de una unidad del viaje (un lugar activo del catalogo <c>lugares</c>).</summary>
 public sealed record CambiarDestinoUnidadRequest(Guid? LugarDestinoId);
 
-public sealed record CambiarEstadoViajeRequest(string? Estado);
+/// <summary>
+/// El estado nuevo del viaje. <c>Motivo</c> (1 a 300 caracteres) es obligatorio para finalizar a mano un viaje en curso con carros pendientes de entrega y opcional en cualquier otro cambio; queda en la auditoria junto con el
+/// estado de antes y el de despues.
+/// </summary>
+public sealed record CambiarEstadoViajeRequest(string? Estado, string? Motivo = null);
 
 /// <summary>
 /// El conductor pide el permiso de la excepcion «No hay inspector» (el punto de cargue tiene inspectores): su <c>MotivoSinInspector</c> (codigo activo del catalogo <c>motivos-sin-inspector</c>), el
@@ -120,7 +124,9 @@ public sealed record ViajeVehiculoDto(
     string? LugarDestino = null,
     int? Posicion = null,
     BajadoDto? Bajado = null,
-    DateTimeOffset? LugarDestinoCambiadoAt = null);
+    DateTimeOffset? LugarDestinoCambiadoAt = null,
+    bool PuedeRegistrarRuta = false,
+    string? MotivoSinRuta = null);
 
 /// <summary>
 /// Algo que paso en el proceso del viaje y no es un dano (una novedad de proceso): <c>Tipo</c> es <c>cargue_sin_inspector</c> (la excepcion «No hay inspector» que el conductor activo en el momento) o
@@ -139,9 +145,10 @@ public sealed record NovedadDelViajeDto(
     IAAutos.Aplicacion.Inspecciones.DTOInspecciones.PermisoDeLaNovedadDto? Permiso = null);
 
 /// <summary>
-/// Viaje completo con sus VIN. <c>NovedadesProceso</c> son las novedades de proceso de sus unidades (la excepcion «No hay inspector» y el recibo sin entrega), de la mas antigua a la mas reciente. El viaje no tiene un cliente propio: <c>Clientes</c>
+/// Viaje completo con sus VIN. <c>NovedadesViaje</c> son las novedades que el conductor y los inspectores reportaron sobre el viaje (no sobre un carro), de la mas antigua a la mas reciente; la ve quien puede ver el viaje. <c>NovedadesProceso</c> son las novedades de proceso de sus unidades (la excepcion «No hay inspector» y el recibo sin entrega), de la mas antigua a la mas reciente. El viaje no tiene un cliente propio: <c>Clientes</c>
 /// son los de los VIN que quien consulta puede ver (todos para el conductor, el inspector y el super administrador; solo los de su cliente
-/// para el resto) y <c>Vehiculos</c> trae esos mismos VIN.
+/// para el resto) y <c>Vehiculos</c> trae esos mismos VIN. <c>Papel</c> dice, para un inspector, si en este viaje carga, recibe o ambas cosas (<see cref="IAAutos.Dominio.Viajes.clsPapelEnElViaje"/>); es nulo para el
+/// conductor y para los roles de oficina.
 /// </summary>
 public sealed record ViajeDto(
     Guid Id,
@@ -176,7 +183,10 @@ public sealed record ViajeDto(
     string? CargueNoFirmaParte = null,
     Guid? MuelleId = null,
     string? Muelle = null,
-    bool Eliminable = false);
+    bool Eliminable = false,
+    string? Papel = null,
+    IReadOnlyList<NovedadViajeDto>? NovedadesViaje = null,
+    bool LugarCargueAdmiteSinInspector = false);
 
 /// <summary>Un puesto de la ninera: su <c>Numero</c> (el que se envia como posicion de una unidad), la <c>Etiqueta</c> con que se muestra (hoy el mismo numero) y el <c>Vin</c> de la unidad que lo ocupa (nulo si esta libre).</summary>
 public sealed record PuestoDeNiniera(int Numero, string Etiqueta, string? Vin);
@@ -222,7 +232,8 @@ public sealed record ViajeResumenDto(
     bool LugarCargueTieneInspector = false,
     Guid? MuelleId = null,
     string? Muelle = null,
-    bool Eliminable = false);
+    bool Eliminable = false,
+    bool LugarCargueAdmiteSinInspector = false);
 
 /// <summary>
 /// Filtros del listado tal como llegan en la consulta (texto); se validan en el servicio. <c>Pagina</c>, <c>Tamano</c> y <c>Orden</c> son el formato comun de los listados; la exportacion a Excel los

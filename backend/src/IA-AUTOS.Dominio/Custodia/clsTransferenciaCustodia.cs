@@ -166,7 +166,13 @@ public sealed partial class clsTransferenciaCustodia : clsEntidadBase
     /// <summary>Quien marco el rechazo: el inspector que tomo la entrega de la parada o, donde no hay inspectores, el conductor.</summary>
     public Guid? RechazoMarcadoPor { get; private set; }
 
+    /// <summary>True si el carro se entrego en una parada con inspectores sin que el inspector del punto estuviera: el conductor cerro la parada con el plan B despues de la espera.</summary>
+    public bool SinInspectorDelPunto { get; private set; }
+
     public bool EstaRechazada => TipoCierre == clsTipoCierre.RECHAZADO;
+
+    /// <summary>Marca el carro como «entregada sin inspector del punto»: se llama antes de cerrar la transferencia con el plan B, y nunca en un carro rechazado.</summary>
+    public void MarcarSinInspectorDelPunto() => SinInspectorDelPunto = true;
 
     public bool EstaCompleta => !string.IsNullOrEmpty(FirmaEntrega) && !string.IsNullOrEmpty(FirmaRecibe);
 

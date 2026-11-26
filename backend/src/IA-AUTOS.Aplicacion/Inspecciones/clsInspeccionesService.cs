@@ -74,6 +74,7 @@ public sealed class clsInspeccionesService(
     IEtapaRepository etapas,
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
+    ILugarRepository lugares,
     clsFabricaEvidencias fabricaEvidencias,
     clsConfirmacionEnSitioService confirmacionEnSitio,
     clsVerificadorEtapaPrevia etapaPrevia,
@@ -86,6 +87,8 @@ public sealed class clsInspeccionesService(
     INovedadProcesoRepository novedades,
     clsPermisosSinInspectorService permisos,
     IReclamoRepository reclamos,
+    IEsperaInspectorPuntoRepository esperas,
+    clsEsperaDelDestino plazos,
     ITransferenciaCustodiaRepository transferencias,
     clsEmisorNotificaciones emisor,
     IDescriptorHallazgos descriptorHallazgos,
@@ -121,10 +124,16 @@ public sealed class clsInspeccionesService(
             throw new clsProhibidoException("El viaje de esta etapa no está asignado a su usuario");
         }
 
+        // El informe de transporte lo arma el sistema con «Reportar novedad» y «Llegué»: nadie lo crea a mano.
+        await AsegurarQueNoEsTransporteAsync(etapa, ct);
+
         if (!viaje.EstaActivo)
         {
             throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite inspecciones nuevas");
         }
+
+        // El Descargue tiene una sola revision, la de llegada: la salida del Descargue ya no se crea, la haga quien la haga.
+        await AsegurarMomentoAdmitidoAsync(etapa, solicitud.Momento, ct);
 
         // Una unidad que no sale (o que se bajo) del viaje no se revisa.
         await guardaDeUnidad.AsegurarActivaAsync(etapa.ViajeId, etapa.VehiculoId, ct);
@@ -135,24 +144,55 @@ public sealed class clsInspeccionesService(
         if (solicitud.Momento == clsMomento.LLEGADA && await CodigoDeEtapaAsync(etapa, ct) == clsCodigosEtapa.DESCARGUE)
         {
             ciclo = await CicloDeLaLlegadaDelDescargueAsync(etapa, viaje, ct);
+            if (actual.Rol == clsRol.CONDUCTOR)
+            {
+                await AsegurarLlegadaDelConductorAsync(viaje, etapa, ct);
+            }
         }
 
-        // La salida de un Cargue la hace siempre el inspector: el conductor solo firma el recibo. Si no hay inspector, el conductor del viaje la hace activando en el momento la excepcion
-        // «No hay inspector» (con su motivo); sin motivo es 403 y en cualquier otro caso el motivo no se admite (400).
-        var porExcepcion = actual.Rol == clsRol.CONDUCTOR && solicitud.Momento == clsMomento.SALIDA && await EsCargueAsync(etapa, ct);
-        var motivo = await ResolverMotivoAsync(solicitud, porExcepcion, ct);
+        // El cargue lo hace el inspector. Solo si no hay inspector, y solo en un lugar que lo admite, el conductor del viaje hace la salida (y la llegada) del cargue activando la excepcion «No hay inspector»: donde el punto
+        // TIENE inspectores se pide el permiso y lo concede un coordinador (o el reloj al cumplirse el plazo de la solicitud); donde no los hay se activa en el momento con su motivo. Donde el lugar no la admite, 409.
+        var esCargueDelConductor = actual.Rol == clsRol.CONDUCTOR && await EsCargueAsync(etapa, ct);
+        var esLlegadaDelConductor = esCargueDelConductor && solicitud.Momento == clsMomento.LLEGADA;
+        var porExcepcion = esCargueDelConductor && (solicitud.Momento == clsMomento.SALIDA || esLlegadaDelConductor);
+        var lugarConInspectores = false;
+        if (porExcepcion)
+        {
+            await AsegurarQueElLugarAdmiteCargueSinInspectorAsync(viaje.LugarCargueId, ct);
+            lugarConInspectores = await reclamos.LugarTieneInspectoresAsync(viaje.LugarCargueId!.Value, ct);
+        }
 
-        // Donde el punto de cargue TIENE inspectores la excepcion se pide y la concede un coordinador (o el reloj al cumplirse el plazo de la solicitud); donde no los hay se activa en el momento, como siempre. Una solicitud
-        // pendiente con el plazo ya cumplido se concede por tiempo en esta misma peticion: no se responde «espere» despues del plazo.
+        // La llegada del cargue del conductor exige primero la excepcion activa: el permiso concedido (donde el punto tiene inspectores) o su motivo (donde no los tiene). Un permiso pendiente con el plazo ya cumplido se
+        // concede por tiempo en esta misma peticion.
         clsPermisoSinInspector? permiso = null;
-        if (porExcepcion && viaje.LugarCargueId is { } lugarDeCargue && await reclamos.LugarTieneInspectoresAsync(lugarDeCargue, ct))
+        if (esLlegadaDelConductor && lugarConInspectores)
+        {
+            permiso = await permisos.ConcederSiVencidoAsync(viaje.Id, ct);
+            if (permiso is not { EstaConcedido: true })
+            {
+                throw new clsProhibidoException(
+                    "Pide el permiso «No hay inspector» y espera a que el coordinador lo conceda", clsMotivosRechazo.CONDUCTOR_SIN_PERMISO_DE_EXCEPCION);
+            }
+        }
+
+        // Con el permiso concedido la llegada no repite el motivo: es el que el conductor dio al pedirlo.
+        if (esLlegadaDelConductor && permiso is not null && clsValidador.Opcional(solicitud.MotivoSinInspector) is null)
+        {
+            solicitud = solicitud with { MotivoSinInspector = permiso.MotivoCodigo, MotivoSinInspectorTexto = permiso.MotivoTexto };
+        }
+
+        var motivo = await ResolverMotivoAsync(solicitud, porExcepcion, esLlegadaDelConductor, ct);
+
+        // La salida con inspectores en el punto: el permiso concedido (o vencido y concedido por tiempo en esta peticion); no se responde «espere» despues del plazo.
+        if (porExcepcion && !esLlegadaDelConductor && lugarConInspectores)
         {
             permiso = await permisos.ConcederSiVencidoAsync(viaje.Id, ct);
             if (permiso is not { EstaConcedido: true })
             {
                 var espera = permiso?.EsperaMinutos ?? await permisos.EsperaVigenteAsync(ct);
                 throw new clsProhibidoException(
-                    $"El punto de cargue tiene inspectores: pida el permiso de la excepción «No hay inspector» y espere a que lo conceda el coordinador (o a que pasen {espera} minutos sin respuesta)");
+                    $"El punto de cargue tiene inspectores: pida el permiso de la excepción «No hay inspector» y espere a que lo conceda el coordinador (o a que pasen {espera} minutos sin respuesta)",
+                    clsMotivosRechazo.CONDUCTOR_SIN_PERMISO_DE_EXCEPCION);
             }
         }
 
@@ -161,6 +201,10 @@ public sealed class clsInspeccionesService(
         {
             await etapaPrevia.AsegurarCerradaAsync(etapa, ct);
         }
+
+        // Quien toma el carro con el reclamo liberado captura el momento de cero: el borrador de otra persona se conserva con su autor, pero deja de ser el informe de este momento. Se confirma antes de crear el nuevo
+        // para que el indice unico de la inspeccion original ya no lo cuente.
+        await SuperarBorradorAjenoAsync(etapa, viaje, solicitud.Momento!, ciclo, ct);
 
         // El usuario siempre sale del token: el cliente no puede crear informes a nombre de otro.
         var inspeccion = clsInspeccion.Crear(
@@ -209,9 +253,9 @@ public sealed class clsInspeccionesService(
 
         // Un usuario inexistente (404) y una segunda inspeccion original del mismo momento en la etapa (409) se traducen al confirmar.
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
-        if (novedad is not null && vehiculo is not null)
+        if (novedad is not null)
         {
-            await AvisarCargueSinInspectorAsync(novedad, vehiculo, viaje, motivo!, ct);
+            await AvisarCargueSinInspectorAsync(novedad, viaje, motivo!, ct);
         }
 
         var conductor = viaje.ConductorId is { } conductorId ? (await usuarios.ObtenerPorIdAsync(conductorId, ct))?.Nombre : null;
@@ -219,10 +263,96 @@ public sealed class clsInspeccionesService(
     }
 
     /// <summary>
+    /// Si quien crea es un inspector, el momento tiene el borrador de OTRO inspector, este ya no tiene el reclamo del viaje y su transferencia no tiene ninguna firma, el borrador pasa a «superada»: se conserva con su autor y
+    /// deja el momento libre para el informe que se va a crear. Si no se cumple alguna condicion (por ejemplo, el conductor que crea la salida con la excepcion «No hay inspector» frente al borrador de un inspector) no se toca
+    /// nada y el indice unico sigue respondiendo 409.
+    /// </summary>
+    private async Task SuperarBorradorAjenoAsync(clsEtapa etapa, clsViaje viaje, string momento, int ciclo, CancellationToken ct)
+    {
+        if (actual.Rol != clsRol.INSPECTOR
+            || await inspecciones.ObtenerBorradorAjenoAsync(etapa.Id, momento, ciclo, actual.IdObligatorio(), ct) is not { } ajeno
+            || (await usuarios.ObtenerPorIdAsync(ajeno.UsuarioId, ct))?.Rol != clsRol.INSPECTOR)
+        {
+            return;
+        }
+
+        var sigueReclamando = (await reclamos.ObtenerDeViajeAsync(viaje.Id, ct)).Any(r => r.LiberadoAt is null && r.InspectorId == ajeno.UsuarioId);
+        if (sigueReclamando || await inspecciones.TransferenciaTieneFirmaOCierreAsync(ajeno.Id, ct))
+        {
+            return;
+        }
+
+        var antes = clsInstantaneasAuditoria.De(ajeno);
+        ajeno.Superar(reloj.Ahora);
+        await auditor.RegistrarDeViajeAsync("inspeccion.superar", "inspecciones", ajeno.Id, viaje.Id, new DetalleAuditoria(antes, clsInstantaneasAuditoria.De(ajeno)), ct: ct);
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+    }
+
+    /// <summary>
+    /// Descarta un informe en BORRADOR: pasa a «descartada», se conserva con su autor y su momento queda libre para una inspeccion original nueva. Lo descartan quien lo creo y el coordinador de calidad de su cliente; cualquier
+    /// otra persona, incluidos el administrador y el super administrador, recibe 403 DESCARTE_SOLO_AUTOR_O_COORDINADOR. Un informe cerrado o un borrador cuya transferencia ya tiene una firma es evidencia y no se descarta
+    /// (409 INFORME_CERRADO_NO_SE_DESCARTA). Queda en la auditoria del viaje con las fotos y los danos que tenia.
+    /// </summary>
+    public async Task<InspeccionDto> DescartarAsync(Guid inspeccionId, CancellationToken ct = default)
+    {
+        var inspeccion = await inspecciones.ObtenerPorIdAsync(inspeccionId, ct)
+            ?? throw new clsEntidadNoEncontradaException($"Inspección {inspeccionId} no encontrada");
+        var viaje = await viajes.ObtenerPorIdAsync(inspeccion.ViajeId, ct)
+            ?? throw new clsEntidadNoEncontradaException("El viaje de la inspección no existe");
+
+        var esAutor = inspeccion.UsuarioId == actual.IdObligatorio();
+        if (!esAutor && actual.Rol != clsRol.COORDINADOR_CALIDAD)
+        {
+            throw new clsDescarteSoloDelAutorException();
+        }
+
+        // El coordinador de calidad solo descarta informes de VIN de su cliente.
+        if (!esAutor)
+        {
+            await AsegurarClienteAsync(inspeccionId, ct);
+        }
+
+        if (!inspeccion.EstaCerrada && !inspeccion.EstaFueraDeJuego && await inspecciones.TransferenciaTieneFirmaOCierreAsync(inspeccionId, ct))
+        {
+            throw new clsInformeCerradoNoSeDescartaException(conFirmas: true);
+        }
+
+        var resumen = await inspecciones.ObtenerResumenCierreAsync(inspeccionId, ct);
+        var antes = new { inspeccion.Momento, inspeccion.Estado, inspeccion.UsuarioId, Fotos = resumen.TotalEvidencias, Danos = resumen.TotalHallazgos };
+        var ahora = reloj.Ahora;
+        inspeccion.Descartar(ahora);
+        await auditor.RegistrarDeViajeAsync(
+            "inspeccion.descartar", "inspecciones", inspeccion.Id, viaje.Id, new DetalleAuditoria(antes, new { inspeccion.Momento, inspeccion.Estado, inspeccion.UsuarioId, Fotos = resumen.TotalEvidencias, Danos = resumen.TotalHallazgos }), ct: ct);
+        await unidadDeTrabajo.GuardarCambiosAsync(ct);
+        var conductor = viaje.ConductorId is { } conductorId ? (await usuarios.ObtenerPorIdAsync(conductorId, ct))?.Nombre : null;
+        return clsMapeadorInspecciones.AInspeccion(inspeccion, viaje.Placa, viaje.Trailer, conductor, await consultasNovedades.DeInspeccionAsync(inspeccion.Id, ct));
+    }
+
+    public const string MENSAJE_LUGAR_NO_ADMITE = "Este lugar de cargue no admite cargue sin inspector: el cargue lo hace el inspector";
+
+    /// <summary>409 LUGAR_NO_ADMITE_CARGUE_SIN_INSPECTOR si el lugar de cargue del viaje no admite cargue sin inspector (o el viaje no tiene lugar de cargue). El dato se lee en cada peticion.</summary>
+    private async Task AsegurarQueElLugarAdmiteCargueSinInspectorAsync(Guid? lugarCargueId, CancellationToken ct)
+    {
+        if (lugarCargueId is not { } lugarId || await lugares.ObtenerAsync(lugarId, ct) is not { AdmiteCargueSinInspector: true })
+        {
+            throw new clsConflictoException(MENSAJE_LUGAR_NO_ADMITE, clsMotivosRechazo.LUGAR_NO_ADMITE_CARGUE_SIN_INSPECTOR);
+        }
+    }
+
+    /// <summary>409 TRANSPORTE_LO_ARMA_EL_SISTEMA: el informe de transporte lo arman «Reportar novedad» y «Llegué»; no se crea ni se corrige a mano.</summary>
+    private async Task AsegurarQueNoEsTransporteAsync(clsEtapa etapa, CancellationToken ct)
+    {
+        if (await CodigoDeEtapaAsync(etapa, ct) == clsCodigosEtapa.TRANSPORTE)
+        {
+            throw new clsConflictoException("El informe de transporte lo arma el sistema con «Reportar novedad» y «Llegué»", clsMotivosRechazo.TRANSPORTE_LO_ARMA_EL_SISTEMA);
+        }
+    }
+
+    /// <summary>
     /// El motivo del conductor que hace la salida de un Cargue con personal de apoyo porque el inspector previsto no esta. Sin motivo, 403 (el conductor solo firma el recibo); un motivo que no
     /// existe o esta inactivo, o un texto que falta o que el motivo no admite, 400 con <c>fieldErrors</c>. Fuera de esa salida el motivo y su texto no se admiten (400 «Campo no admitido»).
     /// </summary>
-    private async Task<ValorCatalogo?> ResolverMotivoAsync(CrearInspeccionRequest solicitud, bool porExcepcion, CancellationToken ct)
+    private async Task<ValorCatalogo?> ResolverMotivoAsync(CrearInspeccionRequest solicitud, bool porExcepcion, bool esLlegada, CancellationToken ct)
     {
         if (!porExcepcion)
         {
@@ -243,7 +373,9 @@ public sealed class clsInspeccionesService(
         var codigo = clsValidador.Opcional(solicitud.MotivoSinInspector);
         if (codigo is null)
         {
-            throw new clsProhibidoException("La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción");
+            throw esLlegada
+                ? new clsProhibidoException("Activa «No hay inspector» con su motivo para hacer esta revisión", clsMotivosRechazo.CONDUCTOR_SIN_PERMISO_DE_EXCEPCION)
+                : new clsProhibidoException("La inspección de salida del cargue la hace un inspector; si no hay inspector, active la excepción");
         }
 
         var motivo = (await catalogos.ValoresAsync(clsNombresCatalogo.MOTIVOS_SIN_INSPECTOR, ct)).FirstOrDefault(m => m.Codigo == codigo && m.Activo)
@@ -261,29 +393,58 @@ public sealed class clsInspeccionesService(
     }
 
     /// <summary>
-    /// El aviso de urgencia alta (bandeja y push) a los coordinadores de calidad y administradores activos del cliente del vehiculo, nunca de otro cliente. Un fallo al avisar no deshace la
-    /// inspeccion ni la novedad, que ya quedaron guardadas.
+    /// El aviso de urgencia alta (bandeja y push) de la excepcion «No hay inspector»: UNO solo por viaje, con la lista de los VIN activos del viaje, para los coordinadores de calidad y administradores activos de cada cliente con
+    /// carros en el viaje (cada uno recibe solo los VIN de su cliente, nunca los de otro). Sale con la primera activacion; las siguientes del mismo viaje no avisan porque su clave es la misma (cada carro conserva su novedad de
+    /// proceso y su auditoria). Un fallo al avisar no deshace la inspeccion ni la novedad, que ya quedaron guardadas.
     /// </summary>
-    private async Task AvisarCargueSinInspectorAsync(clsNovedadProceso novedad, clsVehiculo vehiculo, clsViaje viaje, ValorCatalogo motivo, CancellationToken ct)
+    private async Task AvisarCargueSinInspectorAsync(clsNovedadProceso novedad, clsViaje viaje, ValorCatalogo motivo, CancellationToken ct)
     {
-        var destinatarios = await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN], vehiculo.ClienteId, ct);
+        var vinesPorCliente = new Dictionary<Guid, List<string>>();
+        foreach (var enlace in (await viajes.ObtenerVehiculosAsync(viaje.Id, ct)).Where(e => e.EstaActiva))
+        {
+            if (await vehiculos.ObtenerPorIdAsync(enlace.VehiculoId, ct) is not { } unidad)
+            {
+                continue;
+            }
+
+            if (!vinesPorCliente.TryGetValue(unidad.ClienteId, out var vines))
+            {
+                vinesPorCliente[unidad.ClienteId] = vines = [];
+            }
+
+            vines.Add(unidad.Vin);
+        }
+
         var autor = (await usuarios.ObtenerPorIdAsync(novedad.UsuarioId, ct))?.Nombre ?? "El conductor";
         var detalle = novedad.MotivoTexto is null ? string.Empty : $": {novedad.MotivoTexto}";
         var codigoViaje = viaje.CodigoMtrack is { } codigo ? $" (viaje {codigo})" : string.Empty;
-        await emisor.EmitirAsync(
-            new clsAlerta(
-                clsTipoNotificacion.NOVEDAD_PROCESO,
-                clsUrgenciaNotificacion.ALTA,
-                destinatarios.Select(d => d.Id).ToList(),
-                vehiculo.ClienteId,
-                viaje.Id,
-                vehiculo.Id,
-                null,
-                novedad.InspeccionId,
-                $"Cargue sin inspector: {vehiculo.Vin}",
-                $"{autor} hizo el cargue de la unidad {vehiculo.Vin}{codigoViaje} sin inspector. Motivo: {motivo["nombre"]}{detalle}.",
-                $"{clsTipoNotificacion.NOVEDAD_PROCESO}:{novedad.Id}"),
-            ct);
+        var lugar = viaje.LugarCargueId is { } lugarId ? (await lugares.ObtenerAsync(lugarId, ct))?.Nombre : null;
+        foreach (var (clienteId, vines) in vinesPorCliente)
+        {
+            var destinatarios = await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN], clienteId, ct);
+            await emisor.EmitirAsync(
+                new clsAlerta(
+                    clsTipoNotificacion.NOVEDAD_PROCESO,
+                    clsUrgenciaNotificacion.ALTA,
+                    destinatarios.Select(d => d.Id).ToList(),
+                    clienteId,
+                    viaje.Id,
+                    null,
+                    null,
+                    null,
+                    $"Cargue sin inspector{codigoViaje}",
+                    $"{autor} hizo el cargue del viaje{codigoViaje} sin inspector. Motivo: {motivo["nombre"]}{detalle}. Carros: {string.Join(", ", vines)}.",
+                    $"{clsTipoNotificacion.NOVEDAD_PROCESO}:{clsTipoNovedadProceso.CARGUE_SIN_INSPECTOR}:{viaje.Id}",
+                    new Dictionary<string, object?>
+                    {
+                        ["hecho"] = clsTipoNovedadProceso.CARGUE_SIN_INSPECTOR,
+                        ["vins"] = vines,
+                        ["motivo"] = novedad.MotivoCodigo,
+                        ["motivo_nombre"] = motivo["nombre"],
+                        ["lugar"] = lugar,
+                    }),
+                ct);
+        }
     }
 
     /// <summary>
@@ -304,12 +465,24 @@ public sealed class clsInspeccionesService(
             throw new clsProhibidoException("El viaje de esta inspección no está asignado a su usuario");
         }
 
+        // El informe de transporte lo arma el sistema: tampoco se corrige a mano.
+        if (await etapas.ObtenerPorIdAsync(original.EtapaId, ct) is { } etapaDelInforme)
+        {
+            await AsegurarQueNoEsTransporteAsync(etapaDelInforme, ct);
+        }
+
         if (!viaje.EstaActivo)
         {
             throw new clsConflictoException($"El viaje está {viaje.Estado} y no admite correcciones");
         }
 
         await guardaDeUnidad.AsegurarActivaDeInspeccionAsync(original, ct);
+
+        // Corregir crea una version nueva: la salida del Descargue (que ya no existe) tampoco se corrige.
+        if (await etapas.ObtenerPorIdAsync(original.EtapaId, ct) is { } etapaDeLaCorreccion)
+        {
+            await AsegurarMomentoAdmitidoAsync(etapaDeLaCorreccion, original.Momento, ct);
+        }
 
         if (await inspecciones.ObtenerCorreccionIdAsync(inspeccionId, ct) is { } corregidaPor)
         {
@@ -707,7 +880,7 @@ public sealed class clsInspeccionesService(
         // La segunda inspeccion del cargue (la salida del Cargue) documenta la acomodacion en la ninera: no exige las fotos de las vistas de estado (quedan solo en la primera) sino la posicion de cada
         // unidad activa del viaje y las fotos de la acomodacion.
         var esAcomodacion = EsSegundaInspeccionDelCargue(codigoEtapa, inspeccion);
-        var exigeVistas = clsEtapaCatalogo.ExigeVistas(codigoEtapa) && !esAcomodacion;
+        var exigeVistas = clsEtapaCatalogo.ExigeVistas(codigoEtapa, inspeccion.Momento) && !esAcomodacion;
         var faltantes = exigeVistas && !inspeccion.EstaCerrada ? await calculadoraVistas.FaltantesAsync(etapa, resumen, ct) : [];
         var otrosFaltantes = new List<string>();
         if (!inspeccion.EstaCerrada)
@@ -786,6 +959,15 @@ public sealed class clsInspeccionesService(
         return EsSegundaInspeccionDelCargue(codigo, inspeccion);
     }
 
+    /// <summary>La salida del Descargue ya no se crea ni se corrige: 409 <c>MOMENTO_NO_ADMITIDO</c> con el motivo <c>salida_descargue</c>. Un borrador de salida del Descargue anterior si se puede cerrar.</summary>
+    private async Task AsegurarMomentoAdmitidoAsync(clsEtapa etapa, string? momento, CancellationToken ct)
+    {
+        if (momento == clsMomento.SALIDA && await CodigoDeEtapaAsync(etapa, ct) == clsCodigosEtapa.DESCARGUE)
+        {
+            throw new clsMomentoNoAdmitidoException("El descargue tiene una sola revisión, la de llegada: la salida del descargue ya no se registra", clsMotivosRechazo.SALIDA_DESCARGUE);
+        }
+    }
+
     /// <summary>True si la etapa es el Cargue (la etapa del catalogo con ese codigo).</summary>
     private async Task<string?> CodigoDeEtapaAsync(clsEtapa etapa, CancellationToken ct) =>
         (await catalogos.ValoresAsync(clsNombresCatalogo.ETAPAS, ct)).FirstOrDefault(e => e.Id == etapa.EtapaCatalogoId)?.Codigo;
@@ -814,6 +996,39 @@ public sealed class clsInspeccionesService(
         var transferencia = await transferencias.ObtenerPorInspeccionAsync(ultima.Id, ct);
         var enlace = await viajes.ObtenerVehiculoAsync(viaje.Id, descargue.VehiculoId, ct);
         return transferencia is { EstaRechazada: true, FirmadaAt: { } rechazadoAt } && enlace?.LugarDestinoCambiadoAt is { } cambiadoAt && cambiadoAt > rechazadoAt ? ultima.Ciclo + 1 : ultima.Ciclo;
+    }
+
+    /// <summary>
+    /// En una parada con inspectores asignados la revision de llegada la hace el inspector del punto: el conductor solo la crea con el plan B habilitado (la espera de la parada activada y X mas Y minutos cumplidos, evaluados en esta
+    /// misma peticion). Antes responde 409 <c>llegada_del_inspector_del_punto</c> con lo que falta o con lo que debe hacer. En una parada sin inspectores el conductor la crea como siempre.
+    /// </summary>
+    private async Task AsegurarLlegadaDelConductorAsync(clsViaje viaje, clsEtapa descargue, CancellationToken ct)
+    {
+        var enlace = await viajes.ObtenerVehiculoAsync(viaje.Id, descargue.VehiculoId, ct);
+        if (enlace?.LugarDestinoId is not { } lugar || !await reclamos.LugarTieneInspectoresAsync(lugar, ct))
+        {
+            return;
+        }
+
+        if (await esperas.ObtenerAbiertaAsync(viaje.Id, lugar, ct) is { } espera)
+        {
+            var habilita = (await plazos.PlazosAsync(espera.ActivadaAt, ct)).HabilitaPlanBAt;
+            var ahora = reloj.Ahora;
+            if (ahora >= habilita)
+            {
+                return;
+            }
+
+            var faltan = Math.Max((int)Math.Ceiling((habilita - ahora).TotalMinutes), 1);
+            throw new clsConflictoException(
+                $"La revisión de llegada en esta parada la hace el inspector del punto: podrás hacerla sin él en {faltan} minutos",
+                clsMotivosRechazo.LLEGADA_DEL_INSPECTOR_DEL_PUNTO,
+                new Dictionary<string, object> { ["faltan_minutos"] = faltan, ["plan_b_desde"] = habilita });
+        }
+
+        throw await reclamos.ObtenerActivoAsync(viaje.Id, clsProcesoReclamo.ENTREGA, lugar, ct) is not null
+            ? new clsConflictoException("Un inspector del punto tomó la entrega de esta parada: la revisión de llegada la hace él", clsMotivosRechazo.LLEGADA_DEL_INSPECTOR_DEL_PUNTO)
+            : new clsConflictoException("La revisión de llegada en esta parada la hace el inspector del punto: si no llega, activa «No hay inspector»", clsMotivosRechazo.LLEGADA_DEL_INSPECTOR_DEL_PUNTO);
     }
 
     private async Task<bool> EsCargueAsync(clsEtapa etapa, CancellationToken ct) =>

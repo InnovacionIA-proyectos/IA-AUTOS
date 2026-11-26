@@ -88,10 +88,11 @@ public sealed class clsEtapaPreviaSinCierreException : clsExcepcionDominio
     public const string MOTIVO_SIN_LLEGADA = "etapa_previa_sin_cierre";
     public const string MOTIVO_TRANSFERENCIA_ABIERTA = "transferencia_sin_cierre";
 
-    public clsEtapaPreviaSinCierreException(Guid etapaPreviaId, string etapaPrevia, string motivo = MOTIVO_SIN_LLEGADA)
+    public clsEtapaPreviaSinCierreException(Guid etapaPreviaId, string etapaPrevia, string motivo = MOTIVO_SIN_LLEGADA, string? mensaje = null)
         : base(
             clsCodigosError.ETAPA_PREVIA_SIN_CIERRE,
-            motivo == MOTIVO_TRANSFERENCIA_ABIERTA
+            mensaje is not null ? mensaje
+            : motivo == MOTIVO_TRANSFERENCIA_ABIERTA
                 ? $"La transferencia de la etapa anterior ({etapaPrevia}) no tiene tipo de cierre: fírmela, recíbala con reservas o registre la no firma antes de crear la salida"
                 : $"La etapa anterior ({etapaPrevia}) no tiene cerrada su inspección de llegada: ciérrela antes de crear la salida",
             new Dictionary<string, object>
@@ -109,6 +110,15 @@ public sealed class clsLlegadaYaCerradaException : clsExcepcionDominio
 {
     public clsLlegadaYaCerradaException(string vin)
         : base(clsCodigosError.LLEGADA_YA_CERRADA, $"La llegada de la unidad {vin} ya estaba confirmada")
+    {
+    }
+}
+
+/// <summary>El momento de la inspeccion no existe en esa etapa (la salida del Descargue): 409 MOMENTO_NO_ADMITIDO con el motivo en <c>details</c>.</summary>
+public sealed class clsMomentoNoAdmitidoException : clsExcepcionDominio
+{
+    public clsMomentoNoAdmitidoException(string mensaje, string motivo)
+        : base(clsCodigosError.MOMENTO_NO_ADMITIDO, mensaje, clsMotivosRechazo.Detalles(motivo))
     {
     }
 }
@@ -136,6 +146,30 @@ public sealed class clsCorreccionSoloDelAutorException : clsExcepcionDominio
 {
     public clsCorreccionSoloDelAutorException()
         : base(clsCodigosError.CORRECCION_SOLO_AUTOR, "Esta inspección solo la corrigen quien la hizo o un administrador", new Dictionary<string, object> { ["motivo"] = "solo_autor_o_administrador" })
+    {
+    }
+}
+
+/// <summary>Descartar un borrador que hizo otra persona sin ser el coordinador de calidad: 403 DESCARTE_SOLO_AUTOR_O_COORDINADOR.</summary>
+public sealed class clsDescarteSoloDelAutorException : clsExcepcionDominio
+{
+    public clsDescarteSoloDelAutorException()
+        : base(
+            clsCodigosError.DESCARTE_SOLO_AUTOR_O_COORDINADOR,
+            "No puedes descartar este informe: lo creó otra persona",
+            new Dictionary<string, object> { ["motivo"] = clsMotivosRechazo.SOLO_AUTOR_O_COORDINADOR })
+    {
+    }
+}
+
+/// <summary>Descartar un informe cerrado, o un borrador con firmas: es evidencia y no se descarta: 409 INFORME_CERRADO_NO_SE_DESCARTA.</summary>
+public sealed class clsInformeCerradoNoSeDescartaException : clsExcepcionDominio
+{
+    public clsInformeCerradoNoSeDescartaException(bool conFirmas = false)
+        : base(
+            clsCodigosError.INFORME_CERRADO_NO_SE_DESCARTA,
+            conFirmas ? "Este informe ya tiene una firma: es evidencia y no se descarta" : "Este informe ya está cerrado: es evidencia y no se descarta",
+            new Dictionary<string, object> { ["motivo"] = conFirmas ? clsMotivosRechazo.INFORME_CON_FIRMAS : clsMotivosRechazo.INFORME_CERRADO })
     {
     }
 }

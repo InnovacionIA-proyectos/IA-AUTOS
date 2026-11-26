@@ -52,11 +52,11 @@ public sealed class CalificacionDeDanosApiTests(clsBaseDatosFixture bd) : clsPru
         await Sembrador.InformeAsync(etapas[0], conductor.UsuarioId, cerrada: true, momento: "llegada");
         var delConductor = await Como(conductor).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[0], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1, motivo_sin_inspector = "inspector_no_llego" });
         Assert.Equal(HttpStatusCode.Created, delConductor.StatusCode);
-        var delInspector = await Como(inspector).PostAsJsonAsync("/api/inspecciones", new { etapa_id = etapas[1], momento = "salida", fecha = FECHA, lat = 4.6, lng = -74.1 });
-        Assert.Equal(HttpStatusCode.Created, delInspector.StatusCode);
+        // El informe de transporte lo arma el sistema (nadie lo crea por la API): se siembra el borrador de la salida.
+        var delInspector = await Sembrador.InformeAsync(etapas[1], inspector.UsuarioId, cerrada: false, momento: "salida");
         return new Escenario(
             await Sembrador.ViajeDeEtapaAsync(etapas[0]), etapas, conductor, inspector, coordinador, admin,
-            (await JsonAsync(delConductor)).GetProperty("id").GetGuid(), (await JsonAsync(delInspector)).GetProperty("id").GetGuid());
+            (await JsonAsync(delConductor)).GetProperty("id").GetGuid(), delInspector);
     }
 
     private async Task<(string Ruta, string Hash)> SubirAsync(Sesion quien)

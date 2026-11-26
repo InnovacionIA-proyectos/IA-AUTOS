@@ -5,6 +5,7 @@ using IAAutos.Aplicacion.Archivos;
 using IAAutos.Aplicacion.Archivos.DTOArchivos;
 using IAAutos.Aplicacion.Inspecciones.DTOInspecciones;
 using IAAutos.Aplicacion.Parametros;
+using IAAutos.Aplicacion.Viajes.DTOViajes;
 using IAAutos.Dominio.Parametros;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
@@ -53,6 +54,11 @@ public sealed partial class clsConfiguracionJsonUrls(IFirmadorUrls firmador, IHt
         {
             Reemplazar(tipo, "url", o => FirmaDe(o, ((EvidenciaDto)o).RutaArchivo)?.Url ?? ((EvidenciaDto)o).Url);
             Reemplazar(tipo, "url_expira_at", o => FirmaDe(o, ((EvidenciaDto)o).RutaArchivo)?.ExpiraAt);
+        }
+        else if (tipo.Type == typeof(FotoNovedadViajeDto))
+        {
+            Reemplazar(tipo, "url", o => FirmaDe(o, ((FotoNovedadViajeDto)o).RutaArchivo)?.Url ?? ((FotoNovedadViajeDto)o).Url);
+            Reemplazar(tipo, "url_expira_at", o => FirmaDe(o, ((FotoNovedadViajeDto)o).RutaArchivo)?.ExpiraAt);
         }
         else if (tipo.Type == typeof(ArchivoSubidoDto))
         {

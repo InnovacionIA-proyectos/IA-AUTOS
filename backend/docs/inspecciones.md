@@ -17,9 +17,10 @@ El trigger de inmutabilidad sigue impidiendo modificar una cerrada y agregarle h
 
 | Etapa | Requisitos |
 |---|---|
-| **Cargue y Descargue** | la foto de **cada una de las 7 vistas obligatorias** (las vistas activas de `vistas-foto` con `obligatoria`, que no tienen tipo de vehículo o lo tienen igual al del vehículo); una foto propia por cada hallazgo; ubicación en toda foto |
+| **Cargue y Descargue (llegada)** | la foto de **cada una de las 7 vistas obligatorias** (las vistas activas de `vistas-foto` con `obligatoria`, que no tienen tipo de vehículo o lo tienen igual al del vehículo); una foto propia por cada hallazgo; ubicación en toda foto |
 | **Cargue, segunda inspección (salida)** | la **acomodación en la niñera**, no las vistas de estado (esas quedan en la primera inspección): la posición de 1 a 7 de **cada unidad activa** del viaje (las que no salen no la exigen), al menos `acomodacion_fotos_minimas` fotos de la acomodación (fotos sin vista ni hallazgo, selladas como las demás) y la ubicación propia del cierre |
-| **Transporte** | no exige las 7 vistas: la salida y la llegada son el registro del conductor y exigen el **GPS y la hora del propio registro**; una novedad lleva su hallazgo con foto. Cuentan para la cobertura |
+| **Transporte** | no exige las 7 vistas: la salida y la llegada son el registro del conductor, **las arma el sistema con «Reportar novedad» y «Llegué»** (crear o corregir un informe de transporte a mano responde `409` con `transporte_lo_arma_el_sistema`; los manuales que ya existen se siguen leyendo) y exigen el **GPS y la hora del propio registro**; una novedad lleva su hallazgo con foto. Cuentan para la cobertura |
+| **Descargue, salida** | ya no existe: el Descargue tiene una sola revisión, la de llegada. Crear o corregir una salida del Descargue responde `409` `MOMENTO_NO_ADMITIDO` (`details.motivo: "salida_descargue"`); una abierta de antes se cierra sin exigir las vistas y una cerrada de antes se sigue leyendo |
 | Cualquier otra etapa que agregue el catálogo | se trata como Transporte (no exige las vistas) |
 
 Las dos **vistas adicionales** (piezas en el baúl y cojinería) se toman solo cuando hay un faltante o daño, y su foto exige una **nota** con ese faltante o daño. Una inspección sin faltantes ni
@@ -64,6 +65,16 @@ Una inspección cerrada no se edita. `POST /api/inspecciones/{id}/corregir` crea
 anterior; la anterior no cambia (sigue cerrada, con sus fotos y su hora de cierre). La nueva tiene sus propias fotos, hallazgos, transferencia y reglas de cierre. Solo se corrige la
 **última** versión, y mientras el viaje esté activo (`409` en otro caso). Quien corrige es quien participa en el viaje **y**, además, quien hizo la inspección o un administrador (`403 CORRECCION_SOLO_AUTOR` en otro caso); y solo hasta la primera firma de **la etapa**: si alguna transferencia de la etapa (la de la llegada o la de la salida) ya tiene una
 firma o un cierre, nadie corrige (`409 INSPECCION_YA_FIRMADA`), aunque la inspección que se corrige no tenga firma propia y se aclara con una nota aclaratoria o firmando con reservas. Ningún rechazo crea una versión.
+
+## Descartar un borrador
+
+`POST /api/inspecciones/{id}/descartar` (sin cuerpo) descarta un informe que sigue en **borrador**: pasa a `estado` `descartada`, se conserva con su autor y con sus fotos y daños (la evidencia no se borra) y su momento queda libre para una inspección
+original nueva. Lo descartan quien creó el informe y el coordinador de calidad de su cliente; el administrador y el super administrador no (`403 DESCARTE_SOLO_AUTOR_O_COORDINADOR`, con `details.motivo` `solo_autor_o_coordinador`). Un informe cerrado, o un borrador cuya
+transferencia ya tiene una firma, es evidencia y no se descarta (`409 INFORME_CERRADO_NO_SE_DESCARTA`, con `details.motivo` `informe_cerrado` o `informe_con_firmas`). Queda `inspeccion.descartar` en la auditoría del viaje con las fotos y los daños que tenía. Un descartado no sale en ningún listado, ni en el
+detalle del viaje, el inventario o la cobertura, no admite cambios ni cierre y no genera el aviso «Captura incompleta»; solo se abre por su id.
+
+Un inspector que toma el carro con el reclamo liberado puede capturar de cero un momento que tiene el borrador **de otro inspector** si este ya no tiene el reclamo del viaje y la transferencia no tiene firmas (el conductor no deja atras el borrador de un inspector): el borrador anterior pasa a `superada` (`inspeccion.superar` en la auditoría), se
+conserva con su autor y la inspección nueva se crea. La base lo respalda: la inspección original única por etapa, momento y ciclo y la corrección única no cuentan los informes descartados ni superados (script `50-descartar-informe-en-borrador.sql`).
 
 ## Nombres en pantalla
 

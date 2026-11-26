@@ -55,12 +55,15 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblNotificaciones DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNotasAclaratorias DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNovedadesProceso DISABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNovedadesViaje DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblReclamos DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblInspeccionExtras DISABLE TRIGGER ALL;
             ALTER TABLE dbo.tblPropuestasUbicacion DISABLE TRIGGER ALL;
             DELETE FROM dbo.tblPropuestasUbicacion;
             UPDATE dbo.tblLugares SET UbicacionFijadaPor = NULL;
             DELETE FROM dbo.tblNovedadesProceso;
+            DELETE FROM dbo.tblNovedadesViaje;
+            DELETE FROM dbo.tblEsperasInspectorPunto;
             DELETE FROM dbo.tblPermisosSinInspector;
             DELETE FROM dbo.tblReclamos;
             DELETE FROM dbo.tblInspectorLugares;
@@ -94,6 +97,7 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNotasAclaratorias ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNovedadesViaje ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblReclamos ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblInspeccionExtras ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblPropuestasUbicacion ENABLE TRIGGER ALL;
@@ -108,6 +112,7 @@ public sealed class clsBaseDatosFixture : IAsyncLifetime
             ALTER TABLE dbo.tblNotificaciones ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNotasAclaratorias ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblNovedadesProceso ENABLE TRIGGER ALL;
+            ALTER TABLE dbo.tblNovedadesViaje ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblReclamos ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblInspeccionExtras ENABLE TRIGGER ALL;
             ALTER TABLE dbo.tblPropuestasUbicacion ENABLE TRIGGER ALL;

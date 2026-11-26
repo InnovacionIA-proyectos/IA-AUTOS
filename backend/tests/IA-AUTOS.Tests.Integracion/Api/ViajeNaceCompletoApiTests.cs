@@ -163,6 +163,8 @@ public sealed class ViajeNaceCompletoApiTests(clsBaseDatosFixture bd) : clsPrueb
         var cedi = await LugarAsync(coordinador, "CEDI Envigado", "cedi_1");
         var (_, etapas) = await Sembrador.VehiculoConRutaAsync("VIN-OLD-01");
         var viejo = await Sembrador.ViajeDeEtapaAsync(etapas[0]);
+        // Un viaje anterior a la programacion no tiene fecha ni lugar de cargue.
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET LugarCargueId = NULL WHERE Id = @v", ("@v", viejo));
 
         var leido = await Cliente(coordinador.Token).GetAsync($"/api/viajes/{viejo}");
         var corregido = await Cliente(coordinador.Token).PatchAsync($"/api/viajes/{viejo}", Cuerpo(new { placa = "XYZ789" }));

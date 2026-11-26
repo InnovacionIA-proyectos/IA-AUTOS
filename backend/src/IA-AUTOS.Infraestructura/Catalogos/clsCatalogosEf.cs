@@ -216,7 +216,7 @@ internal sealed class clsCatalogoEstadosSofasa(clsAppDbContext contexto, IReloj 
 /// </summary>
 internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj, IUsuarioActual actual) : clsCatalogoEf<clsLugar>(contexto, reloj, clsNombresCatalogo.LUGARES)
 {
-    protected override IReadOnlyList<string> CamposPermitidos { get; } = ["nombre", "tipo", "ciudad", "orden", "activo", "latitud", "longitud", "radio_metros"];
+    protected override IReadOnlyList<string> CamposPermitidos { get; } = ["nombre", "tipo", "ciudad", "orden", "activo", "latitud", "longitud", "radio_metros", "admite_cargue_sin_inspector"];
 
     private async Task<Dictionary<Guid, (string Codigo, string Nombre)>> TiposAsync(CancellationToken ct) =>
         (await Contexto.PuntosCustodia.AsNoTracking().Select(p => new { p.Id, p.Codigo, p.Nombre }).ToListAsync(ct)).ToDictionary(p => p.Id, p => (p.Codigo, p.Nombre));
@@ -241,6 +241,7 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj,
         ["radio_metros"] = l.RadioMetros,
         ["precision_m"] = l.PrecisionM,
         ["sin_ubicacion"] = l.SinUbicacion,
+        ["admite_cargue_sin_inspector"] = l.AdmiteCargueSinInspector,
         ["estado_ubicacion"] = l.EstadoUbicacion,
         ["ubicacion_fijada_por"] = l.UbicacionFijadaPor,
         ["ubicacion_fijada_por_nombre"] = l.UbicacionFijadaPor is { } fijador && nombres is not null ? nombres.GetValueOrDefault(fijador) : null,
@@ -263,6 +264,7 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj,
     {
         var lugar = clsLugar.Crear(campos.Texto("nombre"), await TipoActivoAsync(campos.Texto("tipo"), requerido: true, ct) ?? Guid.Empty, campos.Texto("ciudad"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora);
         AplicarUbicacion(lugar, campos);
+        AplicarCargueSinInspector(lugar, campos);
         return lugar;
     }
 
@@ -274,6 +276,20 @@ internal sealed class clsCatalogoLugares(clsAppDbContext contexto, IReloj reloj,
         }
 
         AplicarUbicacion(entidad, campos);
+        AplicarCargueSinInspector(entidad, campos);
+    }
+
+    /// <summary>El dato «admite cargue sin inspector»: lo cambia quien administra el catalogo (coordinador de calidad, admin y super admin); un valor nulo o que no sea booleano se rechaza con 400 y lo que no se envia se conserva.</summary>
+    private void AplicarCargueSinInspector(clsLugar lugar, clsCamposCatalogo campos)
+    {
+        if (!campos.Tiene("admite_cargue_sin_inspector"))
+        {
+            return;
+        }
+
+        var admite = campos.Booleano("admite_cargue_sin_inspector")
+            ?? throw clsErroresCampos.De("admite_cargue_sin_inspector", "Debe ser verdadero o falso");
+        lugar.CambiarAdmiteCargueSinInspector(admite, Reloj.Ahora);
     }
 
     /// <summary>
@@ -367,6 +383,38 @@ internal sealed class clsCatalogoMotivosNoSale(clsAppDbContext contexto, IReloj 
         if (campos.Tiene("exige_hallazgo") || campos.Tiene("exige_texto") || campos.Tiene("solo_sin_inspector"))
         {
             entidad.CambiarMarcas(campos.Booleano("exige_hallazgo"), campos.Booleano("exige_texto"), campos.Booleano("solo_sin_inspector"), Reloj.Ahora);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
+/// Los tipos de novedad del viaje: codigo, nombre, orden, activo, <c>rol</c> (quien puede reportarlo: <c>conductor</c>, <c>inspector</c> o <c>todos</c>) y <c>urgencia</c> (<c>alta</c> o <c>media</c>, la del aviso que genera).
+/// Un tipo que una novedad del viaje usa no se borra (409): se inactiva.
+/// </summary>
+internal sealed class clsCatalogoTiposNovedadViaje(clsAppDbContext contexto, IReloj reloj)
+    : clsCatalogoEf<clsTipoNovedadViaje>(contexto, reloj, clsNombresCatalogo.TIPOS_NOVEDAD_VIAJE)
+{
+    protected override IReadOnlyList<string> CamposPermitidos { get; } = [.. clsCamposCatalogo.COMUNES, "rol", "urgencia"];
+
+    protected override ValorCatalogo Mapear(clsTipoNovedadViaje t)
+    {
+        var valor = Comunes(t);
+        valor["rol"] = t.Rol;
+        valor["urgencia"] = t.Urgencia;
+        return valor;
+    }
+
+    protected override Task<clsTipoNovedadViaje> CrearEntidadAsync(clsCamposCatalogo campos, CancellationToken ct) =>
+        Task.FromResult(clsTipoNovedadViaje.Crear(
+            campos.Texto("codigo"), campos.Texto("nombre"), campos.Texto("rol"), campos.Texto("urgencia"), campos.Entero("orden"), campos.Booleano("activo"), Reloj.Ahora));
+
+    protected override Task AplicarAsync(clsTipoNovedadViaje entidad, clsCamposCatalogo campos, CancellationToken ct)
+    {
+        if (campos.Tiene("rol") || campos.Tiene("urgencia"))
+        {
+            entidad.Cambiar(campos.Texto("rol"), campos.Texto("urgencia"), Reloj.Ahora);
         }
 
         return Task.CompletedTask;
