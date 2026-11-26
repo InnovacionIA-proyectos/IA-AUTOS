@@ -15,6 +15,8 @@ Catalogos catalogosCon(
   List<Map<String, dynamic>> muelles = const [],
   /// Los motivos de «no sale». Vacío = no se descargaron.
   List<Map<String, dynamic>> motivosNoSale = const [],
+  /// Los tipos de la novedad del viaje (S8-HU-07.3). Vacío = no se descargaron.
+  List<Map<String, dynamic>> tiposNovedadViaje = const [],
 }) =>
     Catalogos.desdeRespuesta(
       {
@@ -36,10 +38,21 @@ Catalogos catalogosCon(
           Catalogo.motivosSinInspector: motivos,
           Catalogo.muelles: muelles,
           Catalogo.motivosNoSale: motivosNoSale,
+          Catalogo.tiposNovedadViaje: tiposNovedadViaje,
         },
       },
       usuarioId: usuarioId,
     );
+
+/// Los tipos de la novedad del viaje como los sirve la API: de cada rol, de los dos y uno inactivo.
+const tiposNovedadViajeDePrueba = [
+  {'id': 't1', 'codigo': 'falla_camion', 'nombre': 'Falla del camión', 'orden': 1, 'activo': true, 'rol': 'conductor', 'urgencia': 'alta'},
+  {'id': 't2', 'codigo': 'bloqueo_via', 'nombre': 'Bloqueo de vía', 'orden': 3, 'activo': true, 'rol': 'conductor', 'urgencia': 'media'},
+  {'id': 't3', 'codigo': 'carro_no_llego_patio', 'nombre': 'Carro no llegó al patio', 'orden': 6, 'activo': true, 'rol': 'inspector', 'urgencia': 'media'},
+  {'id': 't4', 'codigo': 'faltan_documentos', 'nombre': 'Faltan documentos', 'orden': 8, 'activo': true, 'rol': 'inspector', 'urgencia': 'media'},
+  {'id': 't5', 'codigo': 'otro', 'nombre': 'Otro', 'orden': 10, 'activo': true, 'rol': 'todos', 'urgencia': 'media'},
+  {'id': 't6', 'codigo': 'accidente', 'nombre': 'Accidente', 'orden': 5, 'activo': false, 'rol': 'conductor', 'urgencia': 'alta'},
+];
 
 /// Los motivos de «No hay inspector» como los sirve la API.
 const motivosDePrueba = [

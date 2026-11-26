@@ -26,7 +26,7 @@ String normalizarVin(String texto) => texto.replaceAll(RegExp(r'\s'), '').toUppe
 /// Los motivos salen del catálogo del servidor. [hallazgosV1Plus] son los V1+ de inspecciones cerradas y vigentes
 /// del viaje: sin uno, «Daño V1+» se ve pero no se elige. [danosDelConductor] son los daños del conductor con foto
 /// y sin calificar; «Daño reportado por el conductor» además necesita que el lugar de cargue admita el cargue sin
-/// inspector ([admiteSinInspector]), y hoy ninguno lo admite.
+/// inspector ([admiteSinInspector]), que lo dice el viaje (`lugar_cargue_admite_sin_inspector`, S8-HU-07.3 CA-6).
 Future<DatosNoSale?> pedirNoSale(
   BuildContext context, {
   required Catalogos catalogos,

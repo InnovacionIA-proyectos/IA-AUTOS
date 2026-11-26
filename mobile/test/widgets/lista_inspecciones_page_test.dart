@@ -124,6 +124,40 @@ void main() {
 
       expect(find.textContaining(' · '), findsOneWidget, reason: 'solo el del momento y la fecha');
     });
+
+    // S8-HU-10.2 CA-5: quién hizo cada informe, sin abrirlo.
+    testWidgets('dice quién hizo el informe cuando el servidor lo manda', (tester) async {
+      await abrir(
+        tester,
+        conArnes: conEtapas()
+          ..inspecciones.remoto = [
+            _resumen('1', 'VIN00000000000001', proceso: 'cargue', codigo: 'MTK-2026-001', lugar: 'CEDI Envigado', hizo: 'Ana'),
+          ],
+        extra: catalogos(),
+      );
+
+      expect(find.text('Hizo: Ana'), findsOneWidget);
+    });
+
+    testWidgets('sin el nombre la fila queda como antes', (tester) async {
+      await abrir(
+        tester,
+        conArnes: conEtapas()..inspecciones.remoto = [_resumen('1', 'VIN00000000000001', proceso: 'cargue')],
+        extra: catalogos(),
+      );
+
+      expect(find.textContaining('Hizo:'), findsNothing);
+    });
+
+    // S8-HU-10.2 CA-6: sin señal se ve lo de la caché, con el nombre.
+    testWidgets('sin señal el nombre sigue en la copia guardada', (tester) async {
+      final arnes = conEtapas()
+        ..inspecciones.cache = [_resumen('1', 'VIN00000000000001', proceso: 'cargue', hizo: 'Ana')]
+        ..inspecciones.errorRemoto = errorApi(0, 'Sin conexión');
+      await abrir(tester, conArnes: arnes, extra: catalogos());
+
+      expect(find.text('Hizo: Ana'), findsOneWidget);
+    });
   });
 
   testWidgets('al inspector no le cambia nada: su pestaña sigue siendo la suya y sin buscador', (tester) async {
@@ -134,7 +168,7 @@ void main() {
   });
 }
 
-InspeccionResumen _resumen(String id, String vin, {String? proceso, String? codigo, String? lugar}) =>
+InspeccionResumen _resumen(String id, String vin, {String? proceso, String? codigo, String? lugar, String? hizo}) =>
     InspeccionResumen(
       id: id,
       vin: vin,
@@ -145,4 +179,5 @@ InspeccionResumen _resumen(String id, String vin, {String? proceso, String? codi
       proceso: proceso,
       codigoMtrack: codigo,
       lugar: lugar,
+      usuarioNombre: hizo,
     );

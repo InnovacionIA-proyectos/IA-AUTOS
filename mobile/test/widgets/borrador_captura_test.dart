@@ -124,7 +124,8 @@ Finder get _cerrarInforme => find.widgetWithText(FilledButton, 'Cerrar informe')
 void main() {
   // S8-HU-01.3 CA-4 y ESC-10: los puestos de la acomodación se guardan en el teléfono al elegirlos, por viaje.
   group('los puestos de la acomodación', () {
-    const vinA = 'VINA0000000000001';
+    // A es el carro de la captura: el único que se acomoda en ella.
+    const vinA = _vin;
     const vinB = 'VINB0000000000002';
     final clave = clavePuestos(usuarioId: 'u1', viajeId: 'v1');
 
@@ -155,23 +156,21 @@ void main() {
 
       expect(find.textContaining('Continuar lo guardado'), findsNothing);
       expect(puestoDe(tester, vinA), ['4']);
-      expect(find.text('Falta la posición de la unidad $vinB'), findsOneWidget);
+      expect(find.text('Falta la posición de la unidad $vinB: ponla desde la pantalla de la niñera'), findsOneWidget);
     });
 
-    // Revisión: quitar a un carro del puesto que el servidor ya tenía y poner otro ahí no vuelve con los dos.
-    testWidgets('un puesto liberado se guarda y al volver sigue libre, con el otro en su lugar', (tester) async {
+    // Revisión: soltar el puesto que el servidor ya tenía se guarda como suelto, no se pierde.
+    testWidgets('un puesto liberado se guarda y al volver sigue libre', (tester) async {
       final arnes = await montar(tester, momento: Momento.salida, delViaje: viaje('v1', vines: [vinA, vinB], posiciones: {vinA: 3}));
       await abrirCaptura(tester);
 
       await tester.tap(find.descendant(of: find.widgetWithText(Tarjeta, vinA), matching: find.widgetWithText(ChoiceChip, '3')));
       await avanzar(tester);
-      await tester.tap(find.descendant(of: find.widgetWithText(Tarjeta, vinB), matching: find.widgetWithText(ChoiceChip, '3')));
-      await avanzar(tester);
 
       final guardados = PuestosGuardados.fromJson(arnes.puestos.guardados[clave]!);
-      expect(guardados.cambios, {vinA: null, vinB: 3});
-      expect(guardados.base, {vinA: 3, vinB: null});
-      expect(guardados.sobre({vinA: 3}), {vinB: 3}, reason: 'nunca dos en el mismo puesto');
+      expect(guardados.cambios, {vinA: null});
+      expect(guardados.base, {vinA: 3});
+      expect(guardados.sobre({vinA: 3}), isEmpty);
     });
 
     testWidgets('un puesto guardado que el servidor cambió después no se aplica', (tester) async {

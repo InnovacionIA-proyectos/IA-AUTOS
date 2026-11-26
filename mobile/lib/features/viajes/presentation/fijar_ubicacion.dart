@@ -6,12 +6,22 @@ import '../../../core/dispositivo/servicios.dart';
 import '../../../core/errores/error_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
+import '../../auth/presentation/auth_controller.dart';
 import '../domain/ubicacion_lugar.dart';
 import '../providers.dart';
 
-/// «Fijar ubicación aquí» en un lugar que no tiene ubicación: el conductor deja la posición de su teléfono y el
-/// lugar queda pendiente de confirmar. Un lugar con ubicación no muestra nada, y la app nunca avisa «fuera del
-/// rango»: eso lo resuelve el servidor sin bloquear el flujo.
+/// Quién ve «Fijar ubicación aquí» (S8-HU-09.2 CA-3): quien está de verdad en el lugar. El inspector en el cargue que
+/// reclamó y en la entrega de su parada, y el conductor en la entrega, como siempre. El coordinador y el
+/// administrador no: el servidor se lo admite, pero desde la oficina lo que dejarían es la ubicación de la oficina;
+/// ellos la cargan o la confirman en el catálogo.
+bool puedeFijarUbicacion(String? rol) => rol == 'inspector' || rol == 'conductor';
+
+/// «Fijar ubicación aquí» en un lugar que no tiene ubicación: quien está en el lugar deja la posición de su teléfono,
+/// con la precisión del GPS, y el lugar queda pendiente de confirmar. Un lugar con ubicación no muestra nada, y la
+/// app nunca avisa «fuera del rango»: eso lo resuelve el servidor sin bloquear el flujo.
+///
+/// Decide aquí mismo quién lo ve ([puedeFijarUbicacion]), para que ninguna pantalla que lo ponga se lo muestre a
+/// quien no debe.
 class FijarUbicacionLugar extends ConsumerStatefulWidget {
   const FijarUbicacionLugar({super.key, required this.lugarId});
 
@@ -48,6 +58,10 @@ class _EstadoFijarUbicacionLugar extends ConsumerState<FijarUbicacionLugar> {
 
   @override
   Widget build(BuildContext context) {
+    // Antes de mirar el catálogo: a quien no lo ve no hay por qué pedirle el estado de los lugares.
+    if (!puedeFijarUbicacion(ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol)))) {
+      return const SizedBox.shrink();
+    }
     final estado = ref.watch(estadosUbicacionProvider).value?[widget.lugarId];
     return switch (estado) {
       EstadoUbicacionLugar.sinUbicacion => Column(

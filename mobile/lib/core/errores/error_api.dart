@@ -9,6 +9,10 @@ const codigoProhibido = 'FORBIDDEN';
 /// Código local (no del servidor) de un envío retirado porque su carro ya no sale o se bajó del viaje.
 const codigoRetirado = 'RETIRADO';
 
+/// Código local (no del servidor) de un envío de la parada que agotó sus intentos sin que el servidor lo rechazara:
+/// sin red, sin respuesta o con un error del servidor (S8-HU-05.2 CA-6). No es un rechazo y no se dice como tal.
+const codigoSinRespuesta = 'SIN_RESPUESTA';
+
 /// Error devuelto por la API (cuerpo uniforme `{error, code, message, timestamp, details}`) o de red.
 ///
 /// `status == 0` significa que la petición no llegó al servidor (sin red, tiempo agotado, DNS...).

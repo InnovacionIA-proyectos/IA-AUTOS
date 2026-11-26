@@ -14,9 +14,13 @@ import '../domain/reglas_informe.dart';
 /// quedaron.
 ///
 /// [unidades] es null mientras no se conozca el viaje. [alElegir] recibe el lugar elegido, o null cuando se suelta.
+///
+/// Dentro de la salida de un carro solo se acomoda ese carro ([vinPropio]): los demás se ven con su puesto, en
+/// lectura, y se acomodan desde la pantalla de la niñera.
 class SeccionAcomodacion extends StatelessWidget {
   const SeccionAcomodacion({
     super.key,
+    required this.vinPropio,
     required this.unidades,
     required this.posiciones,
     required this.fotos,
@@ -31,6 +35,9 @@ class SeccionAcomodacion extends StatelessWidget {
   /// El viaje tal como lo manda el servidor: de él salen los puestos que se dibujan y cuántos hay. Null mientras
   /// no se haya podido traer.
   final Viaje? viaje;
+
+  /// El carro de esta inspección: el único al que aquí se le elige puesto.
+  final String vinPropio;
 
   final List<ViajeVehiculo>? unidades;
   final Map<String, int> posiciones;
@@ -53,7 +60,8 @@ class SeccionAcomodacion extends StatelessWidget {
       children: [
         Text('Acomodación en la niñera', style: tema.titleMedium),
         Text(
-          'Elige el lugar de cada unidad. Los puestos son los de esta niñera: ${capacidadDe(viaje)} en total.',
+          'Elige el lugar de este carro. Los demás se acomodan desde la pantalla de la niñera. '
+          'Los puestos son los de esta niñera: ${capacidadDe(viaje)} en total.',
           style: tema.bodySmall,
         ),
         const SizedBox(height: Espacio.md),
@@ -70,21 +78,30 @@ class SeccionAcomodacion extends StatelessWidget {
             ),
           )
         else
-          // Un carro bajado ya no va en la niñera (S8-HU-02.2 CA-6).
-          for (final unidad in lista.where((u) => !u.bajado)) ...[
-            _FilaUnidad(
-              unidad: unidad,
-              posiciones: posiciones,
-              puestos: puestosDe(viaje),
-              alElegir: (posicion) => alElegir(unidad.vin, posicion),
-            ),
+          // Un carro bajado ya no va en la niñera (S8-HU-02.2 CA-6). Primero el de esta inspección, que es el que se
+          // acomoda aquí; después los demás, solo para ver dónde quedaron.
+          for (final unidad in [
+            ...lista.where((u) => !u.bajado && u.vin == vinPropio),
+            ...lista.where((u) => !u.bajado && u.vin != vinPropio),
+          ]) ...[
+            if (unidad.vin == vinPropio)
+              _FilaUnidad(
+                unidad: unidad,
+                posiciones: posiciones,
+                puestos: puestosDe(viaje),
+                alElegir: (posicion) => alElegir(unidad.vin, posicion),
+              )
+            else
+              _FilaDeOtro(unidad: unidad, posicion: posiciones[unidad.vin], puestos: puestosDe(viaje)),
             const SizedBox(height: Espacio.sm),
           ],
         const SizedBox(height: Espacio.md),
         Text('Fotos de la acomodación', style: tema.titleSmall),
         Text(
           fotosMinimas > 0
-              ? 'Se piden al menos $fotosMinimas. Llevan fecha y ubicación como las demás.'
+              // S8-HU-09.2 CA-1: el número es el que dijo el servidor (ESC-06), y se dice de qué son las fotos.
+              ? 'Se piden al menos $fotosMinimas ${fotosMinimas == 1 ? 'foto' : 'fotos'} de la niñera. '
+                  'Llevan fecha y ubicación como las demás.'
               : 'Llevan fecha y ubicación como las demás.',
           style: tema.bodySmall,
         ),
@@ -233,6 +250,44 @@ class _FilaUnidad extends StatelessWidget {
             ),
           if (unidad.sale && actual == null)
             Text('Sin posición todavía', style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Otro carro del viaje, en lectura: dónde quedó o que todavía no tiene puesto. Se acomoda desde la niñera.
+class _FilaDeOtro extends StatelessWidget {
+  const _FilaDeOtro({required this.unidad, required this.posicion, required this.puestos});
+
+  final ViajeVehiculo unidad;
+  final int? posicion;
+  final List<PuestoNinera> puestos;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    final descripcion = [unidad.marca, unidad.modelo].whereType<String>().join(' ');
+    final numero = posicion;
+    final etiqueta = numero == null
+        ? null
+        : puestos.where((p) => p.numero == numero).firstOrNull?.etiqueta ?? '$numero';
+    return Tarjeta(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextoMono(unidad.vin),
+          if (descripcion.isNotEmpty) Text(descripcion, style: tema.bodySmall),
+          const SizedBox(height: Espacio.xs),
+          if (!unidad.sale)
+            Text('No sale del viaje: no lleva posición.', style: tema.bodySmall)
+          else if (etiqueta != null)
+            Text('Puesto $etiqueta', style: tema.bodyMedium)
+          else
+            Text(
+              'Sin puesto: se pone desde la pantalla de la niñera',
+              style: tema.bodySmall?.copyWith(color: Colores.advertencia),
+            ),
         ],
       ),
     );

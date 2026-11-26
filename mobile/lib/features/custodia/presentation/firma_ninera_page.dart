@@ -16,6 +16,7 @@ import '../../sync/providers.dart';
 import '../../vehiculos/domain/inventario.dart';
 import '../../vehiculos/providers.dart';
 import '../../viajes/domain/viaje.dart';
+import '../../viajes/presentation/mis_viajes_controller.dart';
 import '../../viajes/providers.dart';
 import '../domain/firma_ninera.dart';
 import 'lienzo_firma.dart';
@@ -62,7 +63,7 @@ class _EstadoFirmaNinera extends ConsumerState<FirmaNineraPage> {
   Future<void> _reservar(String vin) async {
     final texto = await showDialog<String>(
       context: context,
-      builder: (_) => _DialogoReserva(vin: vin, actual: _reservas[vin] ?? ''),
+      builder: (_) => DialogoReserva(vin: vin, actual: _reservas[vin] ?? ''),
     );
     if (texto == null || !mounted) return;
     setState(() => texto.isEmpty ? _reservas.remove(vin) : _reservas[vin] = texto);
@@ -114,13 +115,20 @@ class _EstadoFirmaNinera extends ConsumerState<FirmaNineraPage> {
         noRegistrado: 'No se pudo registrar la firma',
       ));
       if (!mounted) return;
-      ref.invalidate(viajeDeEtapaProvider(viaje.id));
+      _refrescarViaje(viaje.id);
       Navigator.of(context).pop();
     } catch (e) {
       mensajes.showSnackBar(SnackBar(content: Text(mensajeDeError(e, 'No se pudo guardar la firma. Inténtalo de nuevo.'))));
     } finally {
       if (mounted) setState(() => _guardando = false);
     }
+  }
+
+  /// Con la firma o la constancia el cargue puede quedar cerrado: se vuelve a leer el viaje y también Mis viajes, que
+  /// tiene su propia copia y por eso su botón seguía diciendo «Niñera y firma del cargue».
+  void _refrescarViaje(String viajeId) {
+    ref.invalidate(viajeDeEtapaProvider(viajeId));
+    ref.read(misViajesControllerProvider.notifier).cargar().ignore();
   }
 
   @override
@@ -298,7 +306,7 @@ class _EstadoFirmaNinera extends ConsumerState<FirmaNineraPage> {
                         ),
                       ),
                     );
-                    ref.invalidate(viajeDeEtapaProvider(viaje.id));
+                    if (mounted) _refrescarViaje(viaje.id);
                   }
                 : null,
             child: Text(recibe ? 'El inspector se negó a firmar' : 'El conductor se negó a firmar'),
@@ -351,18 +359,18 @@ class _FilaCarro extends StatelessWidget {
 }
 
 /// Pide la observación de la reserva de un carro. Vacía quita la reserva. Es dueño de su campo de texto: el
-/// diálogo sigue en pantalla mientras se cierra.
-class _DialogoReserva extends StatefulWidget {
-  const _DialogoReserva({required this.vin, required this.actual});
+/// diálogo sigue en pantalla mientras se cierra. Lo usa también la entrega por parada (S8-HU-04.2 CA-5).
+class DialogoReserva extends StatefulWidget {
+  const DialogoReserva({super.key, required this.vin, required this.actual});
 
   final String vin;
   final String actual;
 
   @override
-  State<_DialogoReserva> createState() => _EstadoDialogoReserva();
+  State<DialogoReserva> createState() => _EstadoDialogoReserva();
 }
 
-class _EstadoDialogoReserva extends State<_DialogoReserva> {
+class _EstadoDialogoReserva extends State<DialogoReserva> {
   late final _texto = TextEditingController(text: widget.actual)..addListener(() => setState(() {}));
 
   @override

@@ -75,6 +75,38 @@ void main() {
     expect(find.text('PANTALLA COLA'), findsOneWidget);
   });
 
+  // S8-HU-02.2 CA-4 y CA-6: el envío de un carro que no sale o se bajó se retira. No es un error, pero con «Todo
+  // sincronizado» parecía que el informe había llegado, y en la lista de inspecciones no aparece.
+  group('envíos retirados', () {
+    testWidgets('uno solo lo dice en singular y lleva a la lista al tocar', (tester) async {
+      await montar(tester, const EstadoSync(retirados: 1));
+
+      expect(find.text('1 envío retirado · toca para ver por qué'), findsOneWidget);
+      expect(find.text('Todo sincronizado'), findsNothing);
+
+      await tester.tap(find.text('1 envío retirado · toca para ver por qué'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('PANTALLA COLA'), findsOneWidget);
+    });
+
+    testWidgets('varios los cuenta en plural', (tester) async {
+      await montar(tester, const EstadoSync(retirados: 3));
+
+      expect(find.text('3 envíos retirados · toca para ver por qué'), findsOneWidget);
+    });
+
+    testWidgets('lo que está con error va primero', (tester) async {
+      await montar(tester, const EstadoSync(fallidos: 1, retirados: 2));
+      expect(find.text('1 con error · toca para revisar'), findsOneWidget);
+    });
+
+    testWidgets('lo que está en cola va primero', (tester) async {
+      await montar(tester, const EstadoSync(pendientes: 2, retirados: 2));
+      expect(find.text('2 en cola'), findsOneWidget);
+    });
+  });
+
   // Esta barra es lo único que el conductor ve de su cola: no tiene la pestaña de Inspecciones. «2 en cola» a
   // secas lo dejaba sin saber si eso iba a moverse alguna vez o se había quedado ahí para siempre.
   group('cuándo se vuelve a intentar', () {

@@ -45,7 +45,15 @@ class BarraSync extends ConsumerWidget {
           'El servidor no responde · ${sync.pendientes} en cola$cuando',
         ),
       EstadoSync(pendientes: > 0) => (Icons.cloud_upload_outlined, Colores.info, '${sync.pendientes} en cola$cuando'),
-      _ => (Icons.cloud_done_outlined, Colores.info, 'Todo sincronizado'),
+      // Un envío retirado no es un error (el carro no sale o se bajó), pero tampoco se envió: «Todo sincronizado»
+      // hacía creer que el informe había llegado, y en la lista de inspecciones no aparece porque nunca se creó.
+      EstadoSync(retirados: 1) => (Icons.info_outline, Colores.textoSecundario, '1 envío retirado · toca para ver por qué'),
+      EstadoSync(retirados: > 1) => (
+          Icons.info_outline,
+          Colores.textoSecundario,
+          '${sync.retirados} envíos retirados · toca para ver por qué',
+        ),
+      _ =>(Icons.cloud_done_outlined, Colores.info, 'Todo sincronizado'),
     };
 
     return Material(

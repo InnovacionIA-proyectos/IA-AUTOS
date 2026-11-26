@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:traza_autos/core/config/parametros_app.dart';
+import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/core/ui/widgets.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
 import 'package:traza_autos/features/inspecciones/presentation/captura_page.dart';
 import 'package:traza_autos/features/inspecciones/presentation/filas_captura.dart';
+import 'package:traza_autos/features/inspecciones/presentation/seccion_acomodacion.dart';
+import 'package:traza_autos/features/vehiculos/data/vehiculos_repositorio.dart';
+
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
+import 'package:traza_autos/features/vehiculos/providers.dart';
 import 'package:traza_autos/features/viajes/providers.dart';
 
 import '../support/arnes.dart';
@@ -31,6 +38,9 @@ Future<Arnes> abrir(
   String procesoCodigo = 'cargue',
   String momento = Momento.llegada,
   List<Map<String, dynamic>> muelles = const [],
+  // S8-HU-11.2 CA-2: el borrador del servidor que se continúa, y el inventario de donde se lee lo que ya tiene.
+  String? borradorId,
+  Map<String, dynamic>? inventario,
 }) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -41,6 +51,7 @@ Future<Arnes> abrir(
       overrides: [
         ...usado.overrides,
         viajesRepositorioProvider.overrideWithValue(viajes),
+        if (inventario != null) vehiculosRepositorioProvider.overrideWithValue(_InventarioFijo(inventario)),
         // Con copia guardada además de la remota: así los catálogos están listos también sin señal, como queda
         // el celular tras el primer ingreso. Sin ellos el cierre se bloquea y no se llega al desenlace.
         catalogosRepositorioProvider.overrideWithValue(
@@ -57,6 +68,7 @@ Future<Arnes> abrir(
           proceso: procesoCodigo,
           momento: momento,
           viajeId: viajeId,
+          borradorId: borradorId,
         ),
       ),
     ),
@@ -65,6 +77,19 @@ Future<Arnes> abrir(
     await tester.pump(const Duration(milliseconds: 50));
   }
   return usado;
+}
+
+/// El inventario del carro, siempre el mismo: de él lee la captura lo que ya tiene el borrador que continúa.
+class _InventarioFijo implements VehiculosRepositorio {
+  _InventarioFijo(this.json);
+
+  final Map<String, dynamic> json;
+
+  @override
+  Future<List<VehiculoBusqueda>> buscar(String termino) async => const [];
+
+  @override
+  Future<Inventario> inventario(String vin) async => Inventario.fromJson(json);
 }
 
 /// Cierra el informe y espera a que salga el diálogo del desenlace.
@@ -177,6 +202,120 @@ void main() {
       expect(find.textContaining('Cola'), findsOneWidget, reason: 'dónde recuperarlo');
     });
 
+    // S8-HU-09.2 CA-2: la captura y la ficha que la abrió, con el servidor respondiendo una vez el 403 del permiso.
+    Future<(Arnes, PermisosRepositorioFalso)> abrirConEspera(WidgetTester tester, {required bool bajoPermiso}) async {
+      await tester.binding.setSurfaceSize(const Size(600, 2400));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final arnes = Arnes();
+      arnes.gateway.errores['crearInspeccion'] = [
+        const ErrorApi(
+          message: 'El punto de cargue tiene inspectores: pida el permiso de la excepción «No hay inspector» y espere',
+          code: 'FORBIDDEN',
+          status: 403,
+          details: {'motivo': 'conductor_sin_permiso_de_excepcion'},
+        ),
+      ];
+      final permisos = PermisosRepositorioFalso()..permiso = permisoDe(viajeId: 'v1', falta: Duration.zero);
+      final router = GoRouter(
+        initialLocation: '/',
+        routes: [
+          GoRoute(
+            path: '/',
+            builder: (_, _) => const Scaffold(body: Text('La ficha del carro')),
+            routes: [
+              GoRoute(
+                path: 'captura',
+                builder: (_, _) => CapturaPage(
+                  vin: 'VIN00000000000001',
+                  etapaId: 'e1',
+                  proceso: 'cargue',
+                  momento: Momento.llegada,
+                  viajeId: 'v1',
+                  bajoPermiso: bajoPermiso,
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          retry: (_, _) => null,
+          overrides: [
+            ...arnes.overrides,
+            viajesRepositorioProvider.overrideWithValue(ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1')),
+            catalogosRepositorioProvider.overrideWithValue(
+              CatalogosRepositorioFalso()
+                ..guardado = catalogosCon('Golpe')
+                ..remoto = catalogosCon('Golpe'),
+            ),
+            permisosRepositorioProvider.overrideWithValue(permisos),
+          ],
+          child: MaterialApp.router(theme: crearTema(), routerConfig: router),
+        ),
+      );
+      router.go('/captura');
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      return (arnes, permisos);
+    }
+
+    Future<void> fotogramas(WidgetTester tester) async {
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+    }
+
+    // Se siguió con la cuenta atrás en cero y el servidor todavía responde que espere. La pantalla vuelve a consultar
+    // el permiso y lo muestra; lo capturado sigue en la cola y sale cuando el servidor lo concede.
+    testWidgets('bajo un permiso pedido, el servidor aún pide esperar: lo vuelve a consultar sin perder lo capturado',
+        (tester) async {
+      final (arnes, permisos) = await abrirConEspera(tester, bajoPermiso: true);
+
+      await cerrarInforme(tester);
+
+      expect(find.text('El permiso aún no se ve concedido'), findsOneWidget);
+      expect(find.textContaining('Nada se perdió'), findsOneWidget);
+      expect(arnes.cola.jobs.single.fallido, isFalse, reason: 'esperar no es un rechazo: sigue en la cola');
+      final consultasAntes = permisos.consultas;
+      await tester.tap(find.widgetWithText(TextButton, 'OK'));
+      await fotogramas(tester);
+
+      expect(find.text('Permiso para el cargue'), findsOneWidget);
+      expect(permisos.consultas, greaterThan(consultasAntes), reason: 'lo vuelve a consultar');
+      // El reloj del teléfono dice cero, pero el servidor acaba de decir que no: ofrecer seguir repetiría el rechazo.
+      expect(find.textContaining('El servidor aún no lo concede; se reintenta solo'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Continuar el cargue'), findsNothing);
+
+      // El servidor ya lo ve concedido: ahora sí se sigue, y lo capturado sale.
+      permisos.permiso = permisoDe(viajeId: 'v1', concedido: true, porTiempo: true);
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Actualizar'));
+      await fotogramas(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Continuar el cargue'));
+      await fotogramas(tester);
+
+      expect(arnes.cola.jobs, isEmpty, reason: 'al seguir, lo capturado salió con el permiso ya concedido');
+      expect(find.text('La ficha del carro'), findsOneWidget);
+    });
+
+    // Sin permiso pedido el servidor usa el mismo motivo, pero el tiempo no lo arregla: es un rechazo, con su mensaje.
+    testWidgets('sin un permiso pedido, ese mismo 403 se dice como rechazo y no abre ningún permiso', (tester) async {
+      final (arnes, _) = await abrirConEspera(tester, bajoPermiso: false);
+
+      await cerrarInforme(tester);
+
+      expect(find.text('No se pudo enviar'), findsOneWidget);
+      expect(find.textContaining('pida el permiso de la excepción'), findsOneWidget, reason: 'el mensaje del servidor');
+      expect(find.text('El permiso aún no se ve concedido'), findsNothing);
+      expect(arnes.cola.jobs.single.fallido, isTrue);
+      await tester.tap(find.widgetWithText(TextButton, 'OK'));
+      await fotogramas(tester);
+
+      expect(find.text('Permiso para el cargue'), findsNothing);
+      expect(find.text('La ficha del carro'), findsOneWidget);
+    });
+
   });
 
   group('el checklist de vistas', () {
@@ -223,8 +362,12 @@ void main() {
   // La segunda inspección del cargue (la salida) no pide las vistas de estado: documenta dónde quedó cada unidad en
   // la niñera. Es la misma regla con la que el servidor la deja cerrar.
   group('la acomodación de la segunda inspección del cargue', () {
-    const vinA = 'VINA0000000000001';
+    // A es el carro de la captura: el único que se acomoda en ella.
+    const vinA = 'VIN00000000000001';
     const vinB = 'VINB0000000000002';
+
+    // El VIN de la captura también va en su encabezado: se busca dentro de la acomodación.
+    Finder enLaNinera(String vin) => find.descendant(of: find.byType(SeccionAcomodacion), matching: find.text(vin));
 
     Future<void> abrirAcomodacion(WidgetTester tester, {Map<String, int> posiciones = const {}}) => abrir(
           tester,
@@ -238,8 +381,8 @@ void main() {
 
       expect(find.text('Acomodación en la niñera'), findsOneWidget);
       expect(find.text('Fotos de la inspección'), findsNothing);
-      expect(find.text(vinA), findsOneWidget);
-      expect(find.text(vinB), findsOneWidget);
+      expect(enLaNinera(vinA), findsOneWidget);
+      expect(enLaNinera(vinB), findsOneWidget);
     });
 
     testWidgets('en la llegada del cargue sigue pidiendo las vistas', (tester) async {
@@ -257,20 +400,31 @@ void main() {
       expect(find.text('Falta la posición de la unidad $vinA'), findsOneWidget);
     });
 
-    testWidgets('elegir el lugar de una unidad avanza al siguiente faltante', (tester) async {
+    testWidgets('con este carro en su lugar, lo que falta de otro se pone desde la niñera', (tester) async {
       await abrirAcomodacion(tester);
 
       await tester.tap(find.descendant(of: find.widgetWithText(Tarjeta, vinA), matching: find.widgetWithText(ChoiceChip, '4')));
       await tester.pump();
 
-      expect(find.text('Falta la posición de la unidad $vinB'), findsOneWidget);
+      expect(find.text('Falta la posición de la unidad $vinB: ponla desde la pantalla de la niñera'), findsOneWidget);
+    });
+
+    // Dentro de la salida de un carro solo se acomoda ese carro: los demás se ven, pero se acomodan desde la niñera.
+    testWidgets('los otros carros se ven con su puesto, pero no se acomodan aquí', (tester) async {
+      await abrirAcomodacion(tester);
+
+      expect(find.descendant(of: find.widgetWithText(Tarjeta, vinB), matching: find.byType(ChoiceChip)), findsNothing);
+      expect(
+        find.descendant(of: find.widgetWithText(Tarjeta, vinB), matching: find.text('Sin puesto: se pone desde la pantalla de la niñera')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('un lugar que ya tiene otra unidad no se puede elegir', (tester) async {
-      await abrirAcomodacion(tester, posiciones: {vinA: 4});
+      await abrirAcomodacion(tester, posiciones: {vinB: 4});
 
       final chip = tester.widget<ChoiceChip>(
-        find.descendant(of: find.widgetWithText(Tarjeta, vinB), matching: find.widgetWithText(ChoiceChip, '4')),
+        find.descendant(of: find.widgetWithText(Tarjeta, vinA), matching: find.widgetWithText(ChoiceChip, '4')),
       );
       expect(chip.onSelected, isNull);
     });
@@ -278,12 +432,11 @@ void main() {
     testWidgets('las posiciones que el viaje ya tenía llegan marcadas', (tester) async {
       await abrirAcomodacion(tester, posiciones: {vinA: 4, vinB: 3});
 
-      for (final (vin, posicion) in [(vinA, '4'), (vinB, '3')]) {
-        final elegidas = tester
-            .widgetList<ChoiceChip>(find.descendant(of: find.widgetWithText(Tarjeta, vin), matching: find.byType(ChoiceChip)))
-            .where((c) => c.selected);
-        expect(elegidas.map((c) => ((c.label as SizedBox).child as Text).data), [posicion], reason: vin);
-      }
+      final elegidas = tester
+          .widgetList<ChoiceChip>(find.descendant(of: find.widgetWithText(Tarjeta, vinA), matching: find.byType(ChoiceChip)))
+          .where((c) => c.selected);
+      expect(elegidas.map((c) => ((c.label as SizedBox).child as Text).data), ['4']);
+      expect(find.descendant(of: find.widgetWithText(Tarjeta, vinB), matching: find.text('Puesto 3')), findsOneWidget);
       expect(find.text('Sin posición todavía'), findsNothing);
     });
 
@@ -299,6 +452,34 @@ void main() {
       expect(find.textContaining('Faltan fotos de la acomodación'), findsNothing);
     });
 
+    // S8-HU-01.3 CA-3 y S8-HU-09 ESC-06: el mínimo es el que manda el servidor, no el de hoy.
+    testWidgets('el mínimo de fotos de la niñera es el que manda el servidor', (tester) async {
+      final arnes = Arnes()..parametros.valor = const ParametrosApp(acomodacionFotosMinimas: 2);
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1', vines: [vinA], posiciones: {vinA: 1}, fotosAcomodacion: 1),
+        arnes: arnes,
+        vistas: vistasDePrueba,
+        momento: Momento.salida,
+      );
+
+      expect(find.text('Faltan fotos de la acomodación: se exige al menos 2 y hay 1'), findsOneWidget);
+      expect(find.text('Se piden al menos 2 fotos de la niñera. Llevan fecha y ubicación como las demás.'), findsOneWidget);
+    });
+
+    // S8-HU-09.2 CA-1: sin respuesta del servidor ni copia guardada, la regla de hoy (1 foto) y no otra.
+    testWidgets('sin parámetros del servidor ni copia pide la foto de hoy', (tester) async {
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1', vines: [vinA], posiciones: {vinA: 1}, fotosAcomodacion: 1),
+        vistas: vistasDePrueba,
+        momento: Momento.salida,
+      );
+
+      expect(find.textContaining('Faltan fotos de la acomodación'), findsNothing);
+      expect(find.text('Se piden al menos 1 foto de la niñera. Llevan fecha y ubicación como las demás.'), findsOneWidget);
+    });
+
     // S8-HU-02.2 CA-6: un carro bajado ya no va en la niñera ni pide puesto.
     testWidgets('un carro bajado no aparece en la niñera ni pide puesto', (tester) async {
       await abrir(
@@ -309,8 +490,8 @@ void main() {
         momento: Momento.salida,
       );
 
-      expect(find.text(vinA), findsOneWidget);
-      expect(find.text(vinB), findsNothing);
+      expect(enLaNinera(vinA), findsOneWidget);
+      expect(enLaNinera(vinB), findsNothing);
       expect(find.textContaining('Falta la posición'), findsNothing);
     });
 
@@ -466,6 +647,92 @@ void main() {
         expect(find.text('Falta el muelle del viaje'), findsNothing);
         expect(find.textContaining('Faltan fotos de la acomodación'), findsOneWidget, reason: 'sigue con lo siguiente');
       }
+    });
+  });
+
+  // S8-HU-11.2 CA-2: «Continuar» sobre un borrador del servidor muestra lo que ya tiene, no vuelve a pedir la vista
+  // que ya está allá, y el envío arranca con su id: no crea otro informe ni repite fotos.
+  group('continuar un borrador del servidor', () {
+    Map<String, dynamic> inventarioConBorrador() => {
+          'id': 'v1',
+          'vin': 'VIN00000000000001',
+          'marca': 'Renault',
+          'operacion': 'nacional',
+          'etapas': [
+            {
+              'id': 'e1',
+              'orden': 1,
+              'proceso': 'cargue',
+              'requiere_inspeccion': true,
+              'viaje_id': 'v1',
+              'inspecciones': [
+                {
+                  'id': 'b1',
+                  'momento': 'llegada',
+                  'momento_nombre': 'Inspección de llegada',
+                  'fecha': '2026-01-02T09:00:00Z',
+                  'estado': 'borrador',
+                  'usuario_id': 'u1',
+                  'hallazgos': [
+                    {'id': 'h1', 'zona': 'Izquierdo 13 · Puerta delantera', 'clase_dano': 'golpe', 'tamano_dano': 'menos_5cm'},
+                  ],
+                  'evidencias': [
+                    {'id': 'ev1', 'url': null, 'hallazgo_id': null, 'vista_id': 'v-frontal'},
+                    {'id': 'ev2', 'url': null, 'hallazgo_id': 'h1'},
+                  ],
+                },
+              ],
+            },
+          ],
+        };
+
+    testWidgets('muestra lo que ya tiene y la vista subida no se vuelve a pedir', (tester) async {
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'),
+        vistas: vistasDePrueba,
+        borradorId: 'b1',
+        inventario: inventarioConBorrador(),
+      );
+
+      expect(find.textContaining('Tiene 1 foto y 1 daño'), findsOneWidget);
+      expect(find.textContaining('Izquierdo 13 · Puerta delantera'), findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(FilaVista), matching: find.text('Ya está en el servidor')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Falta la foto de la vista'), findsNothing);
+      final cerrar = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Cerrar informe'));
+      expect(cerrar.onPressed, isNotNull, reason: 'la obligatoria ya está en el servidor');
+    });
+
+    testWidgets('al cerrar no crea otro informe: cierra ese mismo', (tester) async {
+      final arnes = await abrir(
+        tester,
+        ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'),
+        vistas: vistasDePrueba,
+        borradorId: 'b1',
+        inventario: inventarioConBorrador(),
+      );
+
+      await cerrarInforme(tester);
+
+      expect(arnes.gateway.llamadas, isNot(contains('crearInspeccion')));
+      expect(arnes.gateway.llamadas, contains('cerrarInspeccion'));
+      expect(arnes.gateway.evidencias, isEmpty, reason: 'lo que ya estaba no se vuelve a subir');
+    });
+
+    testWidgets('sin el borrador a la vista, la vista se pide como siempre', (tester) async {
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'),
+        vistas: vistasDePrueba,
+        borradorId: 'otro',
+        inventario: inventarioConBorrador(),
+      );
+
+      expect(find.textContaining('No se pudo leer lo que tiene'), findsOneWidget);
+      expect(find.textContaining('Falta la foto de la vista'), findsOneWidget);
     });
   });
 }

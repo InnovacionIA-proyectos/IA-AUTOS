@@ -39,6 +39,11 @@ abstract final class Catalogo {
 
   /// Los muelles de cada lugar (`lugar_id`). Los carga el negocio: un lugar sin muelles no los exige.
   static const muelles = 'muelles';
+
+  /// Los tipos de la novedad del **viaje** (no de un carro): cada uno dice quién lo elige (`rol`: `conductor`,
+  /// `inspector` o `todos`) y con qué urgencia avisa (`urgencia`). La app ofrece solo los del rol de quien reporta,
+  /// porque el servidor responde 400 «Ese tipo de novedad no es para tu rol» a los demás (S8-HU-07.3 CA-2).
+  static const tiposNovedadViaje = 'tipos-novedad-viaje';
 }
 
 /// Catálogos que hoy la API sirve iguales para todos, pero que podría pasar a filtrar por el cliente del usuario.

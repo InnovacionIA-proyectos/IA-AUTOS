@@ -354,6 +354,8 @@ void main() {
         expect(retirado.retirado, isTrue);
         expect(retirado.error, esperado);
         expect((r.enviados, r.fallidos), (1, 0), reason: 'el otro salió y el retirado no cuenta como error');
+        expect(r.retirados, 1, reason: 'se cuenta aparte, para que la barra lo diga');
+        expect(await procesador.contarRetirados(usuarioPrueba), 1);
       });
     }
 
@@ -369,6 +371,26 @@ void main() {
       expect(r.enviados, 0);
       expect(cola.jobs.single.retirado, isTrue);
       expect(cola.jobs.single.error, 'El carro ya no está en el viaje');
+    });
+
+    // S8-HU-06.2 CA-5: una salida del descargue encolada antes del cambio ya no aplica; reintentarla daría lo mismo.
+    test('la salida del descargue que ya no se admite se retira con su explicación', () async {
+      await cola.agregar(informe(id: 'a'));
+      gateway.errores['crearInspeccion'] = [
+        const ErrorApi(
+          message: 'La salida del descargue ya no se registra',
+          code: 'MOMENTO_NO_ADMITIDO',
+          status: 409,
+          details: {'motivo': 'salida_descargue'},
+        ),
+      ];
+
+      final r = await procesador.procesar(usuarioPrueba);
+
+      expect(cola.jobs.single.retirado, isTrue);
+      expect(cola.jobs.single.error, 'En el destino solo se revisa la llegada: este informe ya no aplica');
+      expect(r.fallidos, 0);
+      expect(r.retirados, 1);
     });
 
     test('otro 409 sigue siendo un error', () async {
@@ -444,6 +466,77 @@ void main() {
       await procesador.procesar(usuarioPrueba);
 
       expect((cola.jobs.single.fallido, cola.jobs.single.intentos), (false, 7));
+    });
+  });
+
+  // S8-HU-09.2 CA-2: con la cuenta atrás en cero se sigue sin ver el permiso concedido. Si el servidor aún dice que
+  // espere, lo capturado no se pierde ni queda «prohibido»: vuelve a salir solo.
+  group('el permiso «No hay inspector» que el servidor aún no ve concedido', () {
+    const esperar = ErrorApi(
+      message: 'El punto de cargue tiene inspectores: pida el permiso de la excepción «No hay inspector» y espere a que '
+          'lo conceda el coordinador (o a que pasen 10 minutos sin respuesta)',
+      code: 'FORBIDDEN',
+      status: 403,
+      details: {'motivo': 'conductor_sin_permiso_de_excepcion'},
+    );
+
+    test('el informe queda pendiente con su motivo, no prohibido, y no bloquea a los demás', () async {
+      await cola.agregar(informe(id: 'a', bajoPermiso: true));
+      await cola.agregar(informe(id: 'b'));
+      gateway.errores['crearInspeccion'] = [esperar];
+
+      final r = await procesador.procesar(usuarioPrueba);
+
+      final a = cola.jobs.single;
+      expect(a.id, 'a');
+      expect((a.fallido, a.esProhibido, a.codigoError, a.intentos), (false, false, motivoEsperaDelPermiso, 1));
+      expect(a.error, contains('espere'));
+      expect((r.enviados, r.pendientes, r.fallidos), (1, 1, 0), reason: 'el otro informe sí salió');
+    });
+
+    test('en la pasada siguiente, ya concedido por tiempo, sale con lo capturado', () async {
+      await cola.agregar(informe(id: 'a', hallazgos: [hallazgoEjemplo], bajoPermiso: true));
+      gateway.errores['crearInspeccion'] = [esperar];
+      await procesador.procesar(usuarioPrueba);
+
+      await procesador.procesar(usuarioPrueba);
+
+      expect(cola.jobs, isEmpty);
+      expect(gateway.llamadas, ['crearInspeccion', 'crearInspeccion', 'agregarHallazgo', 'cerrarInspeccion']);
+    });
+
+    // El servidor usa el mismo motivo cuando no hay ningún permiso que esperar (una llegada sin motivo donde no hay
+    // inspectores, un cargue sin permiso pedido): reintentarlo media hora no cambia nada.
+    test('sin un permiso pedido, ese mismo 403 es un rechazo con el mensaje del servidor', () async {
+      await cola.agregar(informe(id: 'a', motivoSinInspector: 'inspector_no_llego'));
+      await cola.agregar(informe(id: 'b'));
+      gateway.errores['crearInspeccion'] = [esperar];
+
+      final r = await procesador.procesar(usuarioPrueba);
+
+      final a = cola.jobs.single;
+      expect((a.id, a.fallido), ('a', true));
+      // Se guarda con el motivo del servidor como código (S8-HU-07.3 CA-7), no como `FORBIDDEN`: la cola no lo muestra
+      // «De otro usuario» y se puede quitar o reintentar a mano. Lo que lo hace definitivo es que ya no está pendiente.
+      expect(a.esProhibido, isFalse);
+      expect(a.error, contains('pida el permiso'));
+      expect((r.enviados, r.pendientes, r.fallidos), (1, 0, 1));
+    });
+
+    test('que se capturó bajo un permiso sobrevive al guardado de la cola', () {
+      final guardado = Job.fromJson(informe(bajoPermiso: true).toJson()) as InformeJob;
+      expect(guardado.bajoPermiso, isTrue);
+      expect((Job.fromJson(informe().toJson()) as InformeJob).bajoPermiso, isFalse);
+      expect(guardado.conIntento(intentos: 1, error: 'x', fallido: false), isA<InformeJob>().having((j) => j.bajoPermiso, 'bajoPermiso', true));
+    });
+
+    test('otro 403 sigue siendo un rechazo definitivo', () async {
+      await cola.agregar(informe(bajoPermiso: true));
+      gateway.errores['crearInspeccion'] = [errorHttp(403, 'No es tu viaje')];
+
+      await procesador.procesar(usuarioPrueba);
+
+      expect(cola.jobs.single.fallido, isTrue);
     });
   });
 

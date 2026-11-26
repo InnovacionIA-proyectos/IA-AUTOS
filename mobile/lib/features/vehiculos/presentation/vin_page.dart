@@ -23,6 +23,7 @@ import '../../custodia/domain/firma_ninera.dart';
 import '../../custodia/presentation/firma_ninera_page.dart';
 import '../../custodia/presentation/recibo_sin_entrega_page.dart';
 import '../../inspecciones/domain/acomodacion.dart';
+import '../../inspecciones/domain/borrador_captura.dart';
 import '../../inspecciones/domain/novedad_pendiente.dart';
 import '../../inspecciones/presentation/hoja_sin_inspector.dart';
 import '../../inspecciones/presentation/revision_novedad_page.dart';
@@ -33,9 +34,14 @@ import '../../inspecciones/providers.dart';
 import '../../sync/domain/job.dart';
 import '../../sync/providers.dart';
 import '../../dibujo_dano/presentation/selector_zona_dano.dart';
+import '../../viajes/domain/espera_del_punto.dart';
+import '../../viajes/domain/pendiente.dart';
 import '../../viajes/domain/permiso_sin_inspector.dart';
+import '../../viajes/presentation/entrega_punto_page.dart';
+import '../../viajes/presentation/llegada_parada.dart';
 import '../../viajes/presentation/mis_viajes_controller.dart';
 import '../../viajes/presentation/permiso_sin_inspector_page.dart';
+import '../../viajes/presentation/tomados.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../viajes/domain/viaje.dart';
 import '../../viajes/providers.dart';
@@ -51,14 +57,29 @@ final inventarioProvider = FutureProvider.autoDispose.family<Inventario, String>
   (ref, vin) => ref.watch(vehiculosRepositorioProvider).inventario(vin),
 );
 
+/// Los momentos que la cola de este teléfono tiene por enviar (`etapa|momento`) y los informes que ya creó en el
+/// servidor. Un borrador que la cola va llenando no se ofrece continuar ni descartar (S8-HU-11.2 CA-1): chocaría
+/// con ella. Se vuelve a leer cada vez que cambian los contadores de la cola.
+final informesEnColaProvider = FutureProvider.autoDispose<Set<String>>((ref) async {
+  ref.watch(syncControllerProvider.select((s) => (s.pendientes, s.fallidos, s.retirados, s.sincronizando)));
+  final jobs = await ref.watch(procesadorColaProvider).enElDispositivo();
+  return {
+    for (final j in jobs.whereType<InformeJob>()) ...['${j.etapaId}|${j.momento}', ?j.inspeccionId],
+  };
+});
+
 class VinPage extends ConsumerWidget {
-  const VinPage({super.key, required this.vin, this.viajeId});
+  const VinPage({super.key, required this.vin, this.viajeId, this.hallazgoId});
 
   final String vin;
 
   /// Desde qué viaje se abrió la unidad. Un VIN puede haber andado en varios y su inventario los trae todos; con
   /// esto se ven solo las etapas del viaje en el que se está. Null cuando se llega sin saberlo.
   final String? viajeId;
+
+  /// El hallazgo que se viene a ver, desde un aviso (S8-HU-09.2 CA-6): al cargar la ficha se abre su detalle. Si
+  /// no está en la ficha (de otro viaje, o ya no visible para quien mira) se queda la ficha, sin error.
+  final String? hallazgoId;
 
   Future<void> _ir(BuildContext context, WidgetRef ref, String ruta) async {
     await context.push(ruta);
@@ -98,11 +119,76 @@ class VinPage extends ConsumerWidget {
             olvidarFotosQueFaltan();
             return ref.refresh(inventarioProvider(vin).future);
           },
-          child: _Detalle(inventario: inv.delViaje(viajeId), alIr: (ruta) => _ir(context, ref, ruta)),
+          child: _AbrirHallazgoAlCargar(
+            vin: vin,
+            inventario: inv.delViaje(viajeId),
+            hallazgoId: hallazgoId,
+            child: _Detalle(inventario: inv.delViaje(viajeId), alIr: (ruta) => _ir(context, ref, ruta)),
+          ),
         ),
       ),
     );
   }
+}
+
+/// Abre una sola vez, al llegar a la ficha, el detalle del hallazgo que trae un aviso (S8-HU-09.2 CA-6). Una vez:
+/// al volver de capturar la ficha se recarga, y abrirlo otra vez sería tapar lo que se acaba de hacer.
+class _AbrirHallazgoAlCargar extends ConsumerStatefulWidget {
+  const _AbrirHallazgoAlCargar({required this.vin, required this.inventario, required this.hallazgoId, required this.child});
+
+  final String vin;
+  final Inventario inventario;
+  final String? hallazgoId;
+  final Widget child;
+
+  @override
+  ConsumerState<_AbrirHallazgoAlCargar> createState() => _EstadoAbrirHallazgoAlCargar();
+}
+
+class _EstadoAbrirHallazgoAlCargar extends ConsumerState<_AbrirHallazgoAlCargar> {
+  bool _abierto = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final id = widget.hallazgoId;
+    if (id != null && !_abierto) {
+      _abierto = true;
+      final encontrado = [
+        for (final etapa in widget.inventario.etapas)
+          for (final inspeccion in etapa.inspecciones)
+            for (final hallazgo in inspeccion.hallazgos)
+              if (hallazgo.id == id) (inspeccion, hallazgo),
+      ].firstOrNull;
+      if (encontrado case (final inspeccion, final hallazgo)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) mostrarHallazgoDeLaFicha(context, ref, vin: widget.vin, inspeccion: inspeccion, hallazgo: hallazgo);
+        });
+      }
+    }
+    return widget.child;
+  }
+}
+
+/// El detalle de un daño de la ficha, con su foto. Lo abren el dibujo de daños y el aviso que lleva a un hallazgo.
+void mostrarHallazgoDeLaFicha(
+  BuildContext context,
+  WidgetRef ref, {
+  required String vin,
+  required InspeccionVista inspeccion,
+  required HallazgoVista hallazgo,
+}) {
+  final foto = inspeccion.evidencias.where((e) => e.hallazgoId == hallazgo.id).firstOrNull;
+  mostrarDetalleHallazgo(
+    context,
+    hallazgo: hallazgo,
+    catalogos: ref.read(catalogosProvider),
+    urlFoto: resolverUrlImagen(ref.read(entornoProvider).apiUrl, foto?.url),
+    encabezadosFoto: ref.read(entornoProvider).encabezadosEnrutamiento,
+    venceFoto: foto?.venceEn,
+    alVencerFoto: () => ref.invalidate(inventarioProvider(vin)),
+    sinSenal: !ref.read(syncControllerProvider).online,
+    paraConductor: ref.read(authControllerProvider).sesion?.usuario.rol == 'conductor',
+  );
 }
 
 class _Detalle extends ConsumerWidget {
@@ -111,36 +197,40 @@ class _Detalle extends ConsumerWidget {
   final Inventario inventario;
   final void Function(String ruta) alIr;
 
-  /// La excepción «No hay inspector» en la salida del cargue.
+  /// La excepción «No hay inspector» en el cargue: en la salida y, desde S8-HU-07.3 CA-7, en la llegada.
   ///
   /// Dos caminos, y los separa el servidor: donde el punto de cargue **no** tiene inspectores la excepción se
   /// activa en el momento, como siempre; donde los tiene hay que pedir permiso y esperar (S7-HU-06.2). Quién es
-  /// cuál lo dice el viaje en `lugar_cargue_tiene_inspector`, no una suposición de la app.
+  /// cuál lo dice el viaje en `lugar_cargue_tiene_inspector`, no una suposición de la app. Solo se llega aquí donde
+  /// el lugar admite cargue sin inspector (CA-6).
   Future<void> _excepcion(
     BuildContext context,
     WidgetRef ref,
     EtapaVista etapa,
     String vinRuta, {
+    required String momento,
     required bool cargueConInspector,
     required PermisoSinInspector? permiso,
   }) async {
-    if (!cargueConInspector) return _sinInspector(context, ref, etapa, vinRuta);
-    // Ya concedido: se sigue con el motivo que se pidió, sin volver a preguntar nada (CA-4).
+    if (!cargueConInspector) return _sinInspector(context, ref, etapa, vinRuta, momento);
+    // Ya concedido: se sigue con el motivo que se pidió, sin volver a preguntar nada (CA-4). Con la cuenta atrás en
+    // cero también: el servidor lo concede por tiempo en la petición que crea la salida (S8-HU-09.2 CA-2).
     if (permiso != null) {
-      if (permiso.concedido) return _continuarConPermiso(etapa, vinRuta, permiso);
-      return _abrirEspera(context, etapa, vinRuta);
+      if (permiso.permiteSeguir(DateTime.now())) return _continuarConPermiso(etapa, vinRuta, permiso, momento);
+      return _abrirEspera(context, etapa, vinRuta, momento);
     }
-    return _pedirPermiso(context, ref, etapa, vinRuta);
+    return _pedirPermiso(context, ref, etapa, vinRuta, momento);
   }
 
   /// «No hay inspector»: el conductor elige el motivo, se toma la fecha y el lugar de ese momento, y sigue la captura
-  /// de la salida del cargue. Esos tres datos viajan con la inspección: la novedad de proceso los guarda tal cual,
+  /// de ese momento del cargue. Esos tres datos viajan con la inspección: la novedad de proceso los guarda tal cual,
   /// aunque el informe se envíe horas después.
-  Future<void> _sinInspector(BuildContext context, WidgetRef ref, EtapaVista etapa, String vinRuta) async {
-    if (await _pedirMotivoYLugar(context, ref) case (final motivo, final posicion)) {
+  Future<void> _sinInspector(BuildContext context, WidgetRef ref, EtapaVista etapa, String vinRuta, String momento) async {
+    if (await _pedirMotivoYLugar(context, ref, momento) case (final motivo, final posicion)) {
       _irACaptura(
         etapa,
         vinRuta,
+        momento: momento,
         motivo: motivo.codigo,
         motivoTexto: motivo.texto,
         fecha: DateTime.now().toUtc(),
@@ -152,8 +242,8 @@ class _Detalle extends ConsumerWidget {
 
   /// Donde el punto de cargue tiene inspectores, la excepción se pide: el motivo y el lugar son los mismos, pero
   /// en vez de seguir a la captura se queda esperando a que alguien la conceda, o a que la conceda el tiempo.
-  Future<void> _pedirPermiso(BuildContext context, WidgetRef ref, EtapaVista etapa, String vinRuta) async {
-    final datos = await _pedirMotivoYLugar(context, ref);
+  Future<void> _pedirPermiso(BuildContext context, WidgetRef ref, EtapaVista etapa, String vinRuta, String momento) async {
+    final datos = await _pedirMotivoYLugar(context, ref, momento);
     if (datos == null || etapa.viajeId == null) return;
     final (motivo, posicion) = datos;
     try {
@@ -180,6 +270,7 @@ class _Detalle extends ConsumerWidget {
         _irACaptura(
           etapa,
           vinRuta,
+          momento: momento,
           motivo: motivo.codigo,
           motivoTexto: motivo.texto,
           fecha: DateTime.now().toUtc(),
@@ -188,19 +279,21 @@ class _Detalle extends ConsumerWidget {
         );
         return;
       }
+      // S8-HU-07.3 CA-6: un 409 `lugar_no_admite_cargue_sin_inspector` (el dato cambió después de la última copia
+      // del viaje) también llega aquí: se dice con el mensaje del servidor, no con un código.
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(mensajeDeError(e))));
       return;
     }
     if (!context.mounted) return;
     ref.invalidate(permisoSinInspectorProvider(etapa.viajeId!));
-    await _abrirEspera(context, etapa, vinRuta);
+    await _abrirEspera(context, etapa, vinRuta, momento);
   }
 
   /// El motivo del catálogo y dónde se está ahora. Null si se canceló o si no hay ubicación: sin cualquiera de
   /// los dos no se sigue, porque el servidor los exige.
-  Future<(MotivoElegido, Posicion)?> _pedirMotivoYLugar(BuildContext context, WidgetRef ref) async {
+  Future<(MotivoElegido, Posicion)?> _pedirMotivoYLugar(BuildContext context, WidgetRef ref, String momento) async {
     final motivos = ref.read(catalogosProvider).seleccionables(Catalogo.motivosSinInspector);
-    final motivo = await pedirMotivoSinInspector(context, motivos: motivos);
+    final motivo = await pedirMotivoSinInspector(context, motivos: motivos, enLaLlegada: momento == Momento.llegada);
     if (motivo == null || !context.mounted) return null;
     try {
       return (motivo, await ref.read(servicioUbicacionProvider).obtenerActual());
@@ -210,17 +303,18 @@ class _Detalle extends ConsumerWidget {
     }
   }
 
-  Future<void> _abrirEspera(BuildContext context, EtapaVista etapa, String vinRuta) async {
+  Future<void> _abrirEspera(BuildContext context, EtapaVista etapa, String vinRuta, String momento) async {
     if (etapa.viajeId == null) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (deLaEspera) => PermisoSinInspectorPage(
           viajeId: etapa.viajeId!,
+          enLaLlegada: momento == Momento.llegada,
           // La espera se cierra al seguir. Si se quedara debajo, al terminar la captura se volvería a ella y
           // ofrecería «Continuar el cargue» otra vez, sobre un informe que ya quedó cerrado.
           alContinuar: (permiso) {
             Navigator.of(deLaEspera).pop();
-            _continuarConPermiso(etapa, vinRuta, permiso);
+            _continuarConPermiso(etapa, vinRuta, permiso, momento);
           },
         ),
       ),
@@ -229,36 +323,126 @@ class _Detalle extends ConsumerWidget {
 
   /// Sigue a la captura con lo que quedó guardado en el permiso: el motivo, su texto, y el momento y el lugar
   /// desde donde se pidió. No los de ahora: lo que documenta la novedad es cuándo y dónde faltó el inspector.
-  void _continuarConPermiso(EtapaVista etapa, String vinRuta, PermisoSinInspector permiso) => _irACaptura(
+  ///
+  /// En la llegada el servidor tomaría el motivo del permiso aunque no viajara; se manda igual, que es el mismo, para
+  /// que la captura diga con qué excepción se está haciendo.
+  void _continuarConPermiso(EtapaVista etapa, String vinRuta, PermisoSinInspector permiso, String momento) => _irACaptura(
         etapa,
         vinRuta,
+        momento: momento,
         motivo: permiso.motivoCodigo,
         motivoTexto: permiso.motivoTexto,
         fecha: permiso.fecha ?? permiso.solicitadoAt,
         lat: permiso.lat,
         lng: permiso.lng,
+        bajoPermiso: true,
       );
 
   void _irACaptura(
     EtapaVista etapa,
     String vinRuta, {
+    required String momento,
     required String motivo,
     required DateTime fecha,
     String? motivoTexto,
     double? lat,
     double? lng,
+    bool bajoPermiso = false,
   }) {
     final consulta = [
       'proceso=${Uri.encodeQueryComponent(etapa.proceso)}',
-      'momento=${Momento.salida}',
+      'momento=${Uri.encodeQueryComponent(momento)}',
       if (etapa.viajeId != null) 'viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}',
       'motivo=${Uri.encodeQueryComponent(motivo)}',
       if (motivoTexto != null) 'motivoTexto=${Uri.encodeQueryComponent(motivoTexto)}',
       'fechaMotivo=${Uri.encodeQueryComponent(fecha.toUtc().toIso8601String())}',
       if (lat != null) 'latMotivo=$lat',
       if (lng != null) 'lngMotivo=$lng',
+      // S8-HU-09.2 CA-2: sigue un permiso pedido; un 403 de espera será esperar, no un rechazo.
+      if (bajoPermiso) 'permiso=1',
     ].join('&');
     alIr('/inspecciones/vin/$vinRuta/captura/${etapa.id}?$consulta');
+  }
+
+  /// «Continuar»: la misma captura de siempre, sobre el informe que ya está en el servidor (S8-HU-11.2 CA-2).
+  void _continuar(EtapaVista etapa, InspeccionVista borrador) {
+    final consulta = [
+      'proceso=${Uri.encodeQueryComponent(etapa.proceso)}',
+      'momento=${Uri.encodeQueryComponent(borrador.momento)}',
+      if (etapa.viajeId != null) 'viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}',
+      'borrador=${Uri.encodeQueryComponent(borrador.id)}',
+    ].join('&');
+    alIr('/inspecciones/vin/${Uri.encodeComponent(inventario.vin)}/captura/${etapa.id}?$consulta');
+  }
+
+  /// «Descartar» (S8-HU-11.2 CA-3): con confirmación que dice lo que se pierde. Va directo al servidor, no por la
+  /// cola: quien descarta tiene que ver ahí si se aceptó, y si no, por qué (el mensaje del servidor).
+  Future<void> _descartar(BuildContext context, WidgetRef ref, EtapaVista etapa, InspeccionVista borrador) async {
+    final confirmado = await showDialog<bool>(
+      context: context,
+      builder: (contexto) => AlertDialog(
+        title: const Text('¿Descartar este informe?'),
+        content: Text(
+          'Tiene ${resumenDelBorrador(borrador)}. Deja de ser el informe de este momento y se vuelve a capturar '
+          'de cero. En el servidor se conserva con su autor: no se borra.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(contexto).pop(false), child: const Text('Cancelar')),
+          TextButton(
+            onPressed: () => Navigator.of(contexto).pop(true),
+            child: const Text('Descartar', style: TextStyle(color: Colores.peligro)),
+          ),
+        ],
+      ),
+    );
+    if (confirmado != true || !context.mounted) return;
+    final avisos = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(inspeccionesRepositorioProvider).descartar(borrador.id);
+    } catch (e) {
+      if (!context.mounted) return;
+      // El motivo del servidor, no un texto genérico: «lo creó otra persona», «ya tiene una firma»...
+      await _avisar(context, 'No se pudo descartar', mensajeDeError(e, 'No se pudo descartar el informe. Revisa la señal.'));
+      return;
+    }
+    await _soltarLoGuardado(ref, etapa, borrador);
+    avisos.showSnackBar(const SnackBar(content: Text('Informe descartado. El momento se vuelve a capturar.')));
+    ref.invalidate(inventarioProvider(inventario.vin));
+  }
+
+  /// Lo que se había sumado en este teléfono a ese borrador ya no tiene a dónde ir: se borra, con sus fotos.
+  Future<void> _soltarLoGuardado(WidgetRef ref, EtapaVista etapa, InspeccionVista borrador) async {
+    final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
+    if (usuarioId == null) return;
+    final almacen = ref.read(almacenBorradoresProvider);
+    final archivos = ref.read(archivosLocalesProvider);
+    final clave = claveBorrador(
+      usuarioId: usuarioId,
+      vin: inventario.vin,
+      etapaId: etapa.id,
+      momento: borrador.momento,
+      continuaInspeccionId: borrador.id,
+    );
+    try {
+      final guardado = await almacen.leer(clave);
+      if (guardado == null) return;
+      for (final ruta in {
+        ...guardado.archivos,
+        for (final f in guardado.fotos) f.ruta,
+        for (final h in guardado.hallazgos) ?h.foto?.ruta,
+        for (final e in guardado.extras)
+          for (final f in e.fotos) f.ruta,
+      }) {
+        try {
+          await archivos.borrar(ruta);
+        } catch (_) {
+          // Un archivo que no se pudo borrar no detiene a los demás.
+        }
+      }
+      await almacen.borrar(clave);
+    } catch (_) {
+      // Lo del servidor ya quedó descartado: lo del teléfono no puede deshacerlo.
+    }
   }
 
   Future<void> _avisar(BuildContext context, String titulo, String cuerpo) => showDialog<void>(
@@ -306,14 +490,61 @@ class _Detalle extends ConsumerWidget {
     // Donde el punto de cargue tiene inspectores, la excepción se pide y se espera. Solo entonces se consulta:
     // en los demás viajes ese permiso no existe y preguntarlo sería un 404 por cada ficha que se abre.
     final cargueConInspector = viaje?.cargueTieneInspector ?? false;
-    final permiso = viajeId != null && cargueConInspector && rol == 'conductor'
+    // S8-HU-07.3 CA-6 (C1): «No hay inspector» y el permiso solo donde el viaje dice que el lugar de cargue lo admite.
+    // Sin el viaje (sin señal y sin copia) no se sabe, y no se ofrece: el servidor lo rechazaría con 409.
+    final admiteSinInspector = viaje?.cargueAdmiteSinInspector ?? false;
+    final permiso = viajeId != null && cargueConInspector && admiteSinInspector && rol == 'conductor'
         ? ref.watch(permisoSinInspectorProvider(viajeId)).value
         : null;
+    // S8-HU-09.2 CA-2: el botón pasa de «Ver el permiso» a «Continuar el cargue» cuando la cuenta llega a cero, aunque
+    // nadie toque la pantalla.
+    if (permiso != null && !permiso.concedido) ref.watch(cumplidoProvider(permiso.venceAt));
     // Quien consulta no captura ni firma: el servidor le responde 403 y la ruta de captura ni se abre. Se dice en
     // la tarjeta, en vez de ofrecer botones muertos.
     final puedeTrabajar =
         ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.puede(Capacidad.registrarInspecciones))) ??
             false;
+    // S8-HU-04.2 CA-11: el descargue se entrega por parada. Lleva a ella el conductor del viaje, una vez marcó
+    // «Llegué» en esa parada (CA-1), y el inspector que tomó la entrega de la parada de este carro (lo que tiene
+    // tomado, guardado en el teléfono); nadie más firma.
+    final paradaDelCarro = unidadDelViaje?.lugarDestinoId;
+    final entregaEnLaParada = viaje != null &&
+        paradaDelCarro != null &&
+        switch (rol) {
+          'conductor' => viaje.conductorId == yoId &&
+              viaje.vehiculos.any((v) => v.lugarDestinoId == paradaDelCarro && yaLlego(v)),
+          'inspector' => (ref.watch(tomadosGuardadosProvider).value ?? const <Pendiente>[]).any(
+              (p) => p.esEntrega && p.viajeId == viaje.id && p.lugarId == paradaDelCarro,
+            ),
+          _ => false,
+        };
+    // S8-HU-05.2 CA-9 (C10): en una parada con inspectores la revisión de llegada del descargue la hace el inspector
+    // del punto hasta que el plan B se habilite. Lo dice la parada del carro (con su copia sin señal) y, si la
+    // activación de «No hay inspector» espera señal, el reloj de este teléfono. Solo se consulta para el conductor.
+    final paradaDelConductor = rol == 'conductor' &&
+            viaje != null &&
+            paradaDelCarro != null &&
+            inventario.etapas.any((e) => e.proceso == 'descargue')
+        ? (viajeId: viaje.id, lugarId: paradaDelCarro)
+        : null;
+    if (paradaDelConductor != null) refrescarAlSalirLaActivacion(ref, paradaDelConductor);
+    final bloqueoDeLaLlegada = paradaDelConductor == null
+        ? null
+        : bloqueoDeLaLlegadaDelConductor(
+            ref.watch(entregaDeParadaProvider(paradaDelConductor)).value,
+            activacion: ref.watch(enviosDeLaParadaProvider(paradaDelConductor)).value?.activacion,
+            ahora: ref.watch(horaDelTelefonoProvider)(),
+          );
+    // Con los minutos a la vista, la ficha se repinta sola para que la cuenta baje (CA-9).
+    if (bloqueoDeLaLlegada != null && bloqueoDeLaLlegada != mensajeLlegadaDelInspector) ref.watch(tictacProvider);
+    final enCola = ref.watch(informesEnColaProvider).value ?? const <String>{};
+    // De quién es el carro ahora, para empezar de cero sobre el borrador de otra persona: en el cargue, del inspector
+    // del viaje (reclamar el cargue lo vuelve inspector del viaje); en el destino, de quien tomó esa parada.
+    bool tengoElCarro(EtapaVista etapa) => switch (etapa.proceso) {
+          'cargue' => viaje != null && yoId != null && viaje.inspectorId == yoId,
+          'descargue' => rol == 'inspector' && entregaEnLaParada,
+          _ => false,
+        };
 
     return ListView(
       padding: const EdgeInsets.all(Espacio.lg),
@@ -381,12 +612,21 @@ class _Detalle extends ConsumerWidget {
                 _ => null,
               },
               sinInspector: (momento) => conductorUsaExcepcion(etapa, rol: rol, momento: momento),
-              etiquetaSinInspector: etiquetaExcepcion(cargueConInspector: cargueConInspector, permiso: permiso),
-              alSinInspector: () => _excepcion(
+              motivoSinCapturar: (momento) =>
+                  etapa.proceso == 'descargue' && momento == Momento.llegada ? bloqueoDeLaLlegada : null,
+              admiteSinInspector: admiteSinInspector,
+              viajeConocido: viaje != null,
+              etiquetaSinInspector: (momento) => etiquetaExcepcion(
+                cargueConInspector: cargueConInspector,
+                permiso: permiso,
+                enLaLlegada: momento == Momento.llegada,
+              ),
+              alSinInspector: (momento) => _excepcion(
                 context,
                 ref,
                 etapa,
                 vinRuta,
+                momento: momento,
                 cargueConInspector: cargueConInspector,
                 permiso: permiso,
               ),
@@ -402,6 +642,18 @@ class _Detalle extends ConsumerWidget {
                 '&momento=$momento'
                 '${etapa.viajeId == null ? '' : '&viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}'}',
               ),
+              ofertaDe: (momento) => ofertaDelBorrador(
+                momento,
+                etapa,
+                yoId: yoId,
+                rol: rol,
+                puedeTrabajar: puedeTrabajar && !viajeTerminado && !unidadFuera,
+                tengoElCarro: tengoElCarro(etapa),
+                enCola: enCola.contains('${etapa.id}|${momento.momento}') ||
+                    (momento.inspeccion != null && enCola.contains(momento.inspeccion!.id)),
+              ),
+              alContinuar: (momento) => _continuar(etapa, momento.inspeccion!),
+              alDescartar: (momento) => _descartar(context, ref, etapa, momento.inspeccion!),
               alAbrirInforme: (momento) => _mostrarInforme(
                 context,
                 vin: inventario.vin,
@@ -415,6 +667,16 @@ class _Detalle extends ConsumerWidget {
                   ? () async {
                       await Navigator.of(context).push<void>(
                         MaterialPageRoute(builder: (_) => FirmaNineraPage(viajeId: etapa.viajeId!)),
+                      );
+                      ref.invalidate(inventarioProvider(inventario.vin));
+                    }
+                  : null,
+              alEntregarEnParada: etapa.viajeId != null && entregaEnLaParada
+                  ? () async {
+                      await Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) => EntregaParadaPage(viajeId: etapa.viajeId!, lugarId: paradaDelCarro),
+                        ),
                       );
                       ref.invalidate(inventarioProvider(inventario.vin));
                     }
@@ -587,8 +849,9 @@ class _EstadoNoSale extends ConsumerState<_NoSale> {
       catalogos: ref.read(catalogosProvider),
       hallazgosV1Plus: hallazgosQueImpidenSalir(widget.inventario, viajeId: viajeId),
       danosDelConductor: danosDelConductorSinCalificar(widget.inventario, viajeId: viajeId),
-      // El dato del lugar llega con S8-HU-07; mientras tanto ningún lugar admite el cargue sin inspector.
-      admiteSinInspector: false,
+      // Los motivos que solo aplican donde se carga sin inspector, solo donde el viaje dice que el lugar lo admite
+      // (S8-HU-07.3 CA-6).
+      admiteSinInspector: ref.read(viajeDeEtapaProvider(viajeId)).value?.cargueAdmiteSinInspector ?? false,
     );
     if (datos == null || !mounted) return;
     await _enviar(
@@ -722,11 +985,16 @@ Future<void> _mostrarInforme(
 ///
 /// El daño de un extra no tiene zona —no está en el dibujo—, así que en su lugar va el extra: «Platón: Golpe…».
 /// Decir «Sin zona» ahí seria esconder de qué se está hablando.
-String _lineaHallazgo(HallazgoVista h, Catalogos catalogos, {List<ExtraVista> extras = const []}) {
+String _lineaHallazgo(
+  HallazgoVista h,
+  Catalogos catalogos, {
+  List<ExtraVista> extras = const [],
+  bool paraConductor = false,
+}) {
   final clase = h.clase == null ? 'Sin clase' : catalogos.etiqueta(Catalogo.clasesDano, h.clase!);
   // Un daño sin nivel no se deja en blanco: se dice que está sin calificar. En blanco parecía un daño leve, y
-  // es justo al revés: es uno del que todavía no se sabe qué tan grave es.
-  final nivel = h.nivel == null ? ' · Sin calificar' : ' · ${catalogos.etiqueta(Catalogo.nivelesSeveridad, h.nivel!)}';
+  // es justo al revés: es uno del que todavía no se sabe qué tan grave es. Al conductor, solo si ya se calificó.
+  final nivel = ' · ${textoDelNivel(h, (codigo) => catalogos.etiqueta(Catalogo.nivelesSeveridad, codigo), paraConductor: paraConductor)}';
   final donde = extras.where((e) => e.id == h.extraId).firstOrNull?.nombre ?? h.zona;
   return '$donde: $clase (${catalogos.etiqueta(Catalogo.tamanosDano, h.tamano)})$nivel';
 }
@@ -764,17 +1032,7 @@ class _UltimoInforme extends ConsumerWidget {
         .where((h) => h.cuadranteNumero != null && claveDeZona(h.cuadranteNumero!, h.lado) == zona.clave)
         .firstOrNull;
     if (hallazgo == null) return;
-    final foto = inspeccion.evidencias.where((e) => e.hallazgoId == hallazgo.id).firstOrNull;
-    mostrarDetalleHallazgo(
-      context,
-      hallazgo: hallazgo,
-      catalogos: ref.read(catalogosProvider),
-      urlFoto: resolverUrlImagen(ref.read(entornoProvider).apiUrl, foto?.url),
-      encabezadosFoto: ref.read(entornoProvider).encabezadosEnrutamiento,
-      venceFoto: foto?.venceEn,
-      alVencerFoto: () => ref.invalidate(inventarioProvider(vin)),
-      sinSenal: !ref.read(syncControllerProvider).online,
-    );
+    mostrarHallazgoDeLaFicha(context, ref, vin: vin, inspeccion: inspeccion, hallazgo: hallazgo);
   }
 
   /// Escribe una nota sobre este informe y la deja en la cola. No se envía al momento a propósito: se escribe
@@ -876,12 +1134,19 @@ class _UltimoInforme extends ConsumerWidget {
       null => null,
     };
     final noSale = unidad != null && !unidad.sale;
+    // S8-HU-06.2 CA-4: la salida del descargue ya no existe; la de antes se lee, pero el servidor no la corrige
+    // (409 `MOMENTO_NO_ADMITIDO`).
+    final momentoRetirado = !momentosDelProceso(etapa.proceso).contains(inspeccion.momento);
+    // S8-HU-07.3 CA-8: el transporte, el armado por el sistema y el manual de antes, se abre en lectura: el servidor
+    // responde 409 `transporte_lo_arma_el_sistema` a su corrección.
     final puedeCorregir = (suya || esAdministrador) &&
         inspeccion.cerrada &&
         !yaCorregida &&
         !yaFirmada &&
         !viajeTerminado &&
-        !noSale;
+        !noSale &&
+        !momentoRetirado &&
+        !loArmaElSistema(etapa);
 
     return Tarjeta(
       child: Column(
@@ -963,7 +1228,7 @@ class _UltimoInforme extends ConsumerWidget {
             else
               for (final h in inspeccion.hallazgos)
                 Text(
-                  '• ${_lineaHallazgo(h, catalogos, extras: inspeccion.extras)}',
+                  '• ${_lineaHallazgo(h, catalogos, extras: inspeccion.extras, paraConductor: yo?.rol == 'conductor')}',
                   style: tema.bodySmall?.copyWith(color: Colores.textoPrimario),
                 ),
           ],
@@ -1013,6 +1278,9 @@ class _UltimoInforme extends ConsumerWidget {
           if (puedeCorregir) ...[
             const SizedBox(height: Espacio.sm),
             OutlinedButton(onPressed: () => _corregir(context), child: const Text('Corregir')),
+          ] else if (momentoRetirado) ...[
+            const SizedBox(height: Espacio.sm),
+            Text(avisoMomentoHistorico, style: tema.bodySmall),
           ] else if (!ajeno && yaCorregida) ...[
             const SizedBox(height: Espacio.sm),
             Text(
@@ -1045,19 +1313,34 @@ class _TarjetaEtapa extends StatelessWidget {
     required this.alCapturar,
     required this.alFirmar,
     required this.sinInspector,
+    required this.admiteSinInspector,
+    required this.viajeConocido,
     required this.etiquetaSinInspector,
     required this.alSinInspector,
     required this.reciboSinEntrega,
     required this.alReciboSinEntrega,
     required this.alAbrirInforme,
     required this.alFirmarNinera,
+    this.alEntregarEnParada,
+    this.motivoSinCapturar,
     this.viajeTerminado = false,
+    this.ofertaDe,
+    this.alContinuar,
+    this.alDescartar,
   });
+
+  /// Qué se ofrece sobre el borrador del servidor de cada momento (S8-HU-11.2 CA-1); null, nada.
+  final OfertaBorrador Function(MomentoEtapa momento)? ofertaDe;
+  final void Function(MomentoEtapa momento)? alContinuar;
+  final void Function(MomentoEtapa momento)? alDescartar;
 
   final EtapaVista etapa;
 
   /// Lleva a la firma de la niñera; null si quien mira no la firma.
   final VoidCallback? alFirmarNinera;
+
+  /// Lleva a «Entregar en esta parada»; null si quien mira no firma la parada de este carro.
+  final VoidCallback? alEntregarEnParada;
 
   /// El viaje ya termino: esta etapa no espera nada de nadie.
   final bool viajeTerminado;
@@ -1078,9 +1361,21 @@ class _TarjetaEtapa extends StatelessWidget {
   /// ¿En este momento el conductor no captura sino que activa «No hay inspector»?
   final bool Function(String momento) sinInspector;
 
-  /// Qué dice ese botón: activar, pedir el permiso, mirar cómo va, o seguir con el que ya se concedió.
-  final String etiquetaSinInspector;
-  final VoidCallback alSinInspector;
+  /// Por qué quien mira no captura ese momento aunque esté libre, o null (S8-HU-05.2 CA-9).
+  final String? Function(String momento)? motivoSinCapturar;
+
+
+  /// El lugar de cargue admite cargue sin inspector (S8-HU-07.3 CA-6). Si no, donde al conductor le tocaría la
+  /// excepción no hay botón: la tarjeta dice que el cargue lo hace el inspector.
+  final bool admiteSinInspector;
+
+  /// Se tiene el viaje (de la red o de la copia). Sin él no se sabe si el lugar admite la excepción, y no se afirma
+  /// que el cargue lo hace el inspector.
+  final bool viajeConocido;
+
+  /// Qué dice ese botón en cada momento: activar, pedir el permiso, mirar cómo va, o seguir con el que ya se concedió.
+  final String Function(String momento) etiquetaSinInspector;
+  final void Function(String momento) alSinInspector;
 
   /// La salida sin inspector cuya transferencia espera la firma del conductor; null si no aplica.
   final InspeccionVista? reciboSinEntrega;
@@ -1090,9 +1385,18 @@ class _TarjetaEtapa extends StatelessWidget {
   /// que quedó registrado no es trabajar el carro.
   final void Function(MomentoEtapa momento) alAbrirInforme;
 
+  /// Si en [momento] se ofrece capturar (o la excepción). No en el transporte, que lo arma el sistema (S8-HU-07.3
+  /// CA-8), ni donde al conductor le toca la excepción y el lugar no la admite (CA-6).
+  bool _capturable(String momento) => !loArmaElSistema(etapa) && (admiteSinInspector || !sinInspector(momento));
+
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
+    // Solo cuando dice algo: con el viaje a la vista (sin señal y sin copia no se sabe si el lugar la admite) y con
+    // algún momento del conductor todavía por hacer. Con el cargue ya hecho no hay nada que explicar.
+    final cargueDelInspector = viajeConocido &&
+        !admiteSinInspector &&
+        momentos.any((m) => sinInspector(m.momento) && m.inspeccion == null && !m.historico);
     return Tarjeta(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1128,6 +1432,18 @@ class _TarjetaEtapa extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: Espacio.sm),
               child: Text(motivo, style: tema.bodySmall),
+            )
+          // S8-HU-07.3 CA-6: sin botón, y dicho una vez para la etapa: el cargue de este carro lo hace el inspector.
+          else if (cargueDelInspector)
+            Padding(
+              padding: const EdgeInsets.only(top: Espacio.sm),
+              child: Text(mensajeCargueDelInspector, style: tema.bodySmall),
+            )
+          // S8-HU-07.3 CA-8: el transporte no se captura a mano; lo que ya hay se sigue abriendo en lectura.
+          else if (loArmaElSistema(etapa))
+            Padding(
+              padding: const EdgeInsets.only(top: Espacio.sm),
+              child: Text(mensajeTransporteDelSistema, style: tema.bodySmall),
             ),
           for (final momento in momentos) ...[
             const SizedBox(height: Espacio.sm),
@@ -1136,10 +1452,15 @@ class _TarjetaEtapa extends StatelessWidget {
               nombreDeEtapa: nombreDeEtapa,
               alCapturar: () => alCapturar(momento.momento),
               sinInspector: sinInspector(momento.momento),
-              etiquetaSinInspector: etiquetaSinInspector,
-              alSinInspector: alSinInspector,
+              motivoSinCapturar: motivoSinCapturar?.call(momento.momento),
+              capturable: _capturable(momento.momento),
+              etiquetaSinInspector: etiquetaSinInspector(momento.momento),
+              alSinInspector: () => alSinInspector(momento.momento),
               soloLectura: motivoSoloLectura != null,
               alAbrir: momento.inspeccion == null ? null : () => alAbrirInforme(momento),
+              oferta: ofertaDe?.call(momento) ?? OfertaBorrador.ninguna,
+              alContinuar: alContinuar == null ? null : () => alContinuar!(momento),
+              alDescartar: alDescartar == null ? null : () => alDescartar!(momento),
             ),
           ],
           // Lo que pasó en el proceso alrededor de estas inspecciones: cargue sin inspector, recibo sin entrega.
@@ -1203,6 +1524,21 @@ class _TarjetaEtapa extends StatelessWidget {
                         'El cargue se firma por niñera: lo firman el inspector y el conductor del viaje.',
                         style: tema.bodySmall,
                       )
+                  // S8-HU-04.2 CA-11 (C12): en el destino tampoco, para ningún rol (el servidor responde 409
+                  // `entrega_por_parada`). La firma, los rechazos y las reservas van en la entrega de la parada.
+                  else if (etapa.proceso == 'descargue')
+                    if (alEntregarEnParada != null)
+                      FilledButton(onPressed: alEntregarEnParada, child: const Text('Entregar en esta parada'))
+                    else
+                      Text(
+                        'En el destino la entrega se firma por parada: la firman el conductor del viaje y quien recibe '
+                        'en la parada.',
+                        style: tema.bodySmall,
+                      )
+                  // El transporte no es un cambio de custodia: el carro pasó al conductor con la firma de la niñera y
+                  // se entrega en la parada. Firmar aquí dejaba una transferencia suelta sobre el informe de transporte.
+                  else if (etapa.proceso == 'transporte')
+                    Text(mensajeTransporteSinFirma, style: tema.bodySmall)
                   else
                     FilledButton(
                       onPressed: () => alFirmar(a),
@@ -1218,6 +1554,11 @@ class _TarjetaEtapa extends StatelessWidget {
   }
 }
 
+/// Lo que dice la etapa de transporte en lugar de una firma: ahí no cambia la custodia.
+const mensajeTransporteSinFirma =
+    'El transporte no se firma: el carro quedó a cargo del conductor con la firma de la niñera y se entrega en cada '
+    'parada.';
+
 /// Una de las dos filas de la etapa: «Inspección de salida» o «Inspección de llegada», con lo que hay hecho y lo
 /// que se puede hacer.
 class _FilaMomento extends StatelessWidget {
@@ -1230,9 +1571,22 @@ class _FilaMomento extends StatelessWidget {
     required this.alSinInspector,
     required this.soloLectura,
     required this.alAbrir,
+    this.capturable = true,
+    this.oferta = OfertaBorrador.ninguna,
+    this.alContinuar,
+    this.alDescartar,
+    this.motivoSinCapturar,
   });
 
   final MomentoEtapa momento;
+
+  /// S8-HU-05.2 CA-9: en vez de «Capturar», por qué no le toca (la revisión de llegada es del inspector del punto).
+  final String? motivoSinCapturar;
+
+  /// Qué se ofrece sobre el borrador del servidor (S8-HU-11.2 CA-1).
+  final OfertaBorrador oferta;
+  final VoidCallback? alContinuar;
+  final VoidCallback? alDescartar;
   final String Function(String codigoEtapa) nombreDeEtapa;
   final VoidCallback alCapturar;
 
@@ -1246,6 +1600,10 @@ class _FilaMomento extends StatelessWidget {
   /// Esta etapa ya no se trabaja: se lee lo que hay, pero no se ofrece capturar.
   final bool soloLectura;
 
+  /// Falso donde nadie captura este momento a mano: el transporte (S8-HU-07.3 CA-8) y el cargue del conductor en un
+  /// lugar que no admite cargue sin inspector (CA-6). Lo que ya existe se sigue viendo con su insignia.
+  final bool capturable;
+
   /// Abre el informe de este momento; null cuando todavía no hay ninguno que abrir.
   final VoidCallback? alAbrir;
 
@@ -1256,8 +1614,13 @@ class _FilaMomento extends StatelessWidget {
     // El nombre lo manda la API cuando la inspección existe; para la que todavía no, lo pone la app.
     final nombre = inspeccion?.momentoNombre ?? etiquetar(etiquetaMomento, momento.momento);
     final versionTexto = inspeccion == null ? null : textoDeVersion(inspeccion);
+    final deCero = oferta == OfertaBorrador.capturarDeCero && !soloLectura;
+    final continuar = oferta == OfertaBorrador.continuarODescartar && !soloLectura;
+    // El coordinador de calidad mira en lectura y aun así descarta: es la única acción que tiene aquí.
+    final descartar = continuar || oferta == OfertaBorrador.soloDescartar;
+    final noLeToca = motivoSinCapturar != null && momento.sePuedeCapturar && !soloLectura && !sinInspector;
 
-    return InkWell(
+    final fila = InkWell(
       onTap: alAbrir,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1268,24 +1631,32 @@ class _FilaMomento extends StatelessWidget {
               children: [
                 Text(nombre, style: tema.bodyMedium?.copyWith(color: Colores.textoPrimario)),
                 if (versionTexto != null) Text(versionTexto, style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
+                if (momento.historico) Text(avisoMomentoHistorico, style: tema.bodySmall),
                 if (momento.cerrada && inspeccion?.cerradaEn != null)
                   Text('Cerrada el ${formatearFecha(inspeccion!.cerradaEn)}', style: tema.bodySmall)
-                else if (momento.enBorrador)
-                  Text('Empezada el ${formatearFecha(inspeccion!.fecha)}', style: tema.bodySmall)
+                else if (momento.enBorrador) ...[
+                  Text('Empezada el ${formatearFecha(inspeccion!.fecha)}', style: tema.bodySmall),
+                  if (deCero) Text(avisoBorradorAjeno, style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
+                ]
                 else if (momento.bloqueo case final bloqueo?)
                   Text(
                     mensajeBloqueo(bloqueo.motivo, nombreDeEtapa(bloqueo.procesoPrevio)),
                     style: tema.bodySmall?.copyWith(color: Colores.advertencia),
-                  ),
+                  )
+                else if (noLeToca)
+                  Text(motivoSinCapturar!, style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
               ],
             ),
           ),
           const SizedBox(width: Espacio.sm),
           if (momento.cerrada)
             const Insignia('Cerrada', tono: TonoInsignia.exito)
+          // S8-HU-11.2 CA-1: el borrador de otra persona que ya no tiene el carro no tranca el momento.
+          else if (deCero)
+            BotonEnFila(texto: 'Capturar', onPressed: alCapturar)
           else if (momento.enBorrador)
             const Insignia('Borrador', tono: TonoInsignia.info)
-          else if (!soloLectura)
+          else if (!soloLectura && !noLeToca && capturable)
             // Deshabilitado, no escondido: que se vea que falta y por qué.
             sinInspector
                 ? BotonEnFila(texto: etiquetaSinInspector, onPressed: momento.sePuedeCapturar ? alSinInspector : null)
@@ -1294,6 +1665,23 @@ class _FilaMomento extends StatelessWidget {
           if (alAbrir != null) const Icon(Icons.chevron_right, size: 20, color: Colores.textoSecundario),
         ],
       ),
+    );
+    if (!continuar && !descartar) return fila;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        fila,
+        const SizedBox(height: Espacio.xs),
+        Row(
+          children: [
+            if (continuar) ...[
+              Expanded(child: FilledButton(onPressed: alContinuar, child: const Text('Continuar'))),
+              const SizedBox(width: Espacio.sm),
+            ],
+            Expanded(child: BotonEnFila(texto: 'Descartar', onPressed: alDescartar)),
+          ],
+        ),
+      ],
     );
   }
 }

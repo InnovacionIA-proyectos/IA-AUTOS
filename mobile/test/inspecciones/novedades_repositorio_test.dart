@@ -85,8 +85,22 @@ void main() {
   });
 
   /// S7-HU-03.2 CA-1: la lista del inspector, por viaje y con lo más viejo primero.
+  // S8-HU-08.2 CA-4: un daño de extra no lleva zona (el servidor responde 400 si se le manda una), y uno con zona
+  // la conserva si la petición no manda otra.
+  test('sin zona elegida, la revisión no manda la zona', () async {
+    final adaptador = AdaptadorFalso((_) => json(200, {'id': 'h1'}));
+
+    await repositorio(adaptador).revisar('h1', cuadranteNumero: null, lado: null, clase: 'golpe', nivel: 'v2', tamano: '1_5cm');
+
+    final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
+    expect(cuerpo.containsKey('cuadrante_numero'), isFalse);
+    expect(cuerpo.containsKey('lado'), isFalse);
+    expect((cuerpo['clase_dano'], cuerpo['nivel_severidad']), ('golpe', 'v2'));
+  });
+
   group('sinCalificarDelViaje', () {
-    test('pide las del conductor sin revisar de todo el viaje, de la más antigua a la más reciente', () async {
+    // S8-HU-08.2 CA-2: el filtro de verdad, no el atajo de «del conductor sin revisar».
+    test('pide las sin calificar de todo el viaje, de la más antigua a la más reciente', () async {
       final adaptador = AdaptadorFalso((_) => json(200, {
             'items': [
               {'id': 'h-viejo', 'vin': 'VIN00000000000001', 'proceso': 'transporte', 'momento': 'llegada', 'tamano_dano': '1_5cm'},
@@ -101,7 +115,9 @@ void main() {
 
       final q = adaptador.peticiones.single.uri.queryParameters;
       expect(adaptador.peticiones.single.uri.path, '/api/hallazgos');
-      expect((q['viaje_id'], q['origen'], q['revisado']), ('via-1', 'conductor', 'false'));
+      expect((q['viaje_id'], q['sin_calificar']), ('via-1', 'true'));
+      expect(q.containsKey('origen'), isFalse, reason: 'un daño sin nivel de cualquier origen');
+      expect(q.containsKey('revisado'), isFalse);
       expect(q['orden'], 'antiguos', reason: 'lo que lleva más tiempo esperando va primero');
       expect(q.containsKey('vin'), isFalse, reason: 'son todas las unidades del viaje, no una');
       expect(novedades.map((n) => n.id), ['h-viejo', 'h-nuevo'], reason: 'se respeta el orden del servidor');

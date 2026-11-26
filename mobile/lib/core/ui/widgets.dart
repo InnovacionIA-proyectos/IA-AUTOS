@@ -51,29 +51,48 @@ class BotonEnFila extends StatelessWidget {
 }
 
 class Tarjeta extends StatelessWidget {
-  const Tarjeta({super.key, required this.child, this.onTap, this.padding = const EdgeInsets.all(Espacio.lg)});
+  const Tarjeta({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.padding = const EdgeInsets.all(Espacio.lg),
+    this.franja,
+  });
 
   final Widget child;
   final VoidCallback? onTap;
   final EdgeInsetsGeometry padding;
 
+  /// Una franja de color en el borde izquierdo, para distinguir de un vistazo tarjetas de la misma lista (por ejemplo
+  /// lo libre para tomar de lo que ya tiene alguien). Null, sin franja.
+  final Color? franja;
+
   @override
   Widget build(BuildContext context) {
+    final contenido = Container(
+      width: double.infinity,
+      padding: franja == null ? padding : padding.add(const EdgeInsets.only(left: Espacio.xs)),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colores.borde, width: 0.5),
+      ),
+      child: child,
+    );
     return Material(
       color: Colores.superficie,
       borderRadius: BorderRadius.circular(10),
+      clipBehavior: franja == null ? Clip.none : Clip.antiAlias,
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
         onTap: onTap,
-        child: Container(
-          width: double.infinity,
-          padding: padding,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colores.borde, width: 0.5),
-          ),
-          child: child,
-        ),
+        child: franja == null
+            ? contenido
+            : Stack(
+                children: [
+                  contenido,
+                  Positioned(left: 0, top: 0, bottom: 0, child: Container(width: 5, color: franja)),
+                ],
+              ),
       ),
     );
   }

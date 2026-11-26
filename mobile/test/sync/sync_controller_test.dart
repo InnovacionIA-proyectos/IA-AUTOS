@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/features/auth/presentation/auth_controller.dart';
 import 'package:traza_autos/features/sync/domain/desenlace_envio.dart';
 import 'package:traza_autos/features/sync/presentation/sync_controller.dart';
@@ -154,6 +155,24 @@ void main() {
     expect(contenedor.read(syncControllerProvider).fallidos, 0);
     expect(arnes.cola.jobs, isEmpty);
     expect(arnes.gateway.llamadas.where((l) => l == 'cerrarInspeccion'), isEmpty);
+  });
+
+  // S8-HU-02.2 CA-4: el informe de un carro que dejó de salir se retira. No es un error, pero la barra tiene que
+  // saberlo para no decir «Todo sincronizado»; y al quitarlo, el contador baja.
+  test('un envío retirado se cuenta aparte y al quitarlo deja de contarse', () async {
+    final arnes = Arnes();
+    arnes.gateway.errores['crearInspeccion'] = [
+      const ErrorApi(message: 'La unidad no sale de este viaje', code: 'CONFLICT', status: 409, details: {'motivo': 'unidad_no_sale'}),
+    ];
+    await arnes.cola.agregar(informe());
+    final contenedor = await iniciar(arnes);
+
+    final estado = contenedor.read(syncControllerProvider);
+    expect((estado.pendientes, estado.fallidos, estado.retirados), (0, 0, 1));
+
+    await contenedor.read(syncControllerProvider.notifier).descartar('j1');
+
+    expect(contenedor.read(syncControllerProvider).retirados, 0);
   });
 
   test('sincronizar a demanda no se reentra mientras ya hay una pasada en curso', () async {

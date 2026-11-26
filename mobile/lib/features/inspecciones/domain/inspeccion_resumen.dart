@@ -12,6 +12,7 @@ class InspeccionResumen {
     this.proceso,
     this.codigoMtrack,
     this.lugar,
+    this.usuarioNombre,
   });
 
   factory InspeccionResumen.fromJson(Map<String, dynamic> json) => InspeccionResumen(
@@ -26,6 +27,7 @@ class InspeccionResumen {
         proceso: json['proceso'] as String?,
         codigoMtrack: json['codigo_mtrack'] as String?,
         lugar: json['lugar'] as String?,
+        usuarioNombre: json['usuario_nombre'] as String?,
       );
 
   final String id;
@@ -50,6 +52,9 @@ class InspeccionResumen {
   final String? codigoMtrack;
   final String? lugar;
 
+  /// Quién hizo el informe (S8-HU-10.1). Null en las respuestas de antes y si el usuario ya no existe.
+  final String? usuarioNombre;
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'vin': vin,
@@ -62,6 +67,8 @@ class InspeccionResumen {
         'proceso': proceso,
         'codigo_mtrack': codigoMtrack,
         'lugar': lugar,
+        // S8-HU-10.2 CA-6: la caché del listado guarda el nombre, para verlo también sin señal.
+        'usuario_nombre': usuarioNombre,
       };
 
   DateTime? get fechaLocal => DateTime.tryParse(fecha)?.toLocal();

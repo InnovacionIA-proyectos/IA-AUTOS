@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:traza_autos/core/dispositivo/servicios.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/core/http/cliente_api.dart';
 import 'package:traza_autos/features/viajes/data/reclamos_repositorio.dart';
@@ -69,6 +70,47 @@ void main() {
       expect(peticion.data, {'proceso': 'cargue'});
     });
 
+    // S8-HU-04.2 CA-10: la entrega se toma por parada.
+    test('reclamar la entrega manda la parada', () async {
+      final (repo, adaptador) = repositorio((_) => json(201, {'id': 'r1'}));
+
+      await repo.reclamar('v1', 'entrega', lugarId: 'l-puerto');
+
+      expect(adaptador.peticiones.single.data, {'proceso': 'entrega', 'lugar_id': 'l-puerto'});
+    });
+
+    // S8-HU-09.2 CA-4: con el GPS del momento, la posición y su precisión; sin él, ningún campo de ubicación.
+    test('reclamar la entrega con GPS manda lat, lng y precision', () async {
+      final (repo, adaptador) = repositorio((_) => json(201, {'id': 'r1'}));
+
+      await repo.reclamar('v1', 'entrega', lugarId: 'l-puerto', posicion: const Posicion(10.39, -75.51, precision: 10));
+
+      expect(adaptador.peticiones.single.data, {
+        'proceso': 'entrega',
+        'lugar_id': 'l-puerto',
+        'lat': 10.39,
+        'lng': -75.51,
+        'precision': 10.0,
+      });
+    });
+
+    test('sin precisión del GPS manda la posición sin ella', () async {
+      final (repo, adaptador) = repositorio((_) => json(201, {'id': 'r1'}));
+
+      await repo.reclamar('v1', 'entrega', lugarId: 'l-puerto', posicion: const Posicion(10.39, -75.51));
+
+      expect(adaptador.peticiones.single.data, {'proceso': 'entrega', 'lugar_id': 'l-puerto', 'lat': 10.39, 'lng': -75.51});
+    });
+
+    test('el pendiente trae su parada, y solo la entrega la manda', () async {
+      final (repo, _) = repositorio((_) => json(200, [fila(), fila(proceso: 'entrega')]));
+
+      final lista = await repo.pendientes();
+
+      expect(lista.map((p) => p.lugarId), ['l1', 'l1']);
+      expect(lista.map((p) => p.parada), [null, 'l1']);
+    });
+
     test('un 409 llega con el mensaje del servidor, tal cual', () async {
       final (repo, _) = repositorio(
         (_) => json(409, {'error': 'Ya fue tomado por otro inspector', 'code': 'CONFLICT', 'message': 'Ya fue tomado por otro inspector'}),
@@ -87,6 +129,17 @@ void main() {
 
       final peticion = adaptador.peticiones.single;
       expect((peticion.method, peticion.uri.path), ('DELETE', '/api/viajes/v1/reclamos/entrega'));
+      expect(peticion.uri.queryParameters, isEmpty);
+    });
+
+    test('liberar la entrega de una parada la nombra en la consulta', () async {
+      final (repo, adaptador) = repositorio((_) => json(200, {'id': 'r1', 'activo': false}));
+
+      await repo.liberar('v1', 'entrega', lugarId: 'l-puerto');
+
+      final peticion = adaptador.peticiones.single;
+      expect((peticion.method, peticion.uri.path), ('DELETE', '/api/viajes/v1/reclamos/entrega'));
+      expect(peticion.uri.queryParameters, {'lugar_id': 'l-puerto'});
     });
 
     test('el viaje de un pendiente se pide suelto, no de la copia de Mis viajes', () async {

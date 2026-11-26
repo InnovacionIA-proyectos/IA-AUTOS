@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/auth/presentation/auth_controller.dart';
+import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/viajes/domain/viaje.dart';
 import 'package:traza_autos/features/viajes/presentation/destinos_vistos.dart';
 import 'package:traza_autos/features/viajes/presentation/mis_viajes_page.dart';
@@ -189,6 +190,169 @@ void main() {
       await abrir(tester, ViajesRepositorioFalso()..remotos = [viaje('v1', vines: [_vin], inspectorId: 'otro', conductorId: 'otro2')]);
       expect(find.widgetWithText(OutlinedButton, 'Niñera y firma del cargue'), findsNothing);
       expect(find.widgetWithText(OutlinedButton, 'Niñera'), findsNothing);
+    });
+  });
+
+  // S8-HU-04.2: la entrega por parada desde el viaje.
+  group('las paradas del viaje', () {
+    const vinSur = 'VINCCCCCCCCCCCCC3';
+    ViajesRepositorioFalso dosParadas() => ViajesRepositorioFalso()
+      ..remotos = [
+        viaje(
+          'v1',
+          vines: [_vin, 'VINBBBBBBBBBBBBB2', vinSur],
+          destinos: {_vin: 'Patio Guayabal', 'VINBBBBBBBBBBBBB2': 'Patio Guayabal', vinSur: 'Concesionario Sur'},
+        ),
+      ];
+
+    // CA-1: el botón de antes («Entrega por punto») ya no sale; el conductor entra por las paradas.
+    testWidgets('el conductor entra a las paradas, y ya no a «Entrega por punto»', (tester) async {
+      await abrir(tester, dosParadas());
+
+      expect(find.widgetWithText(OutlinedButton, 'Paradas y entregas'), findsOneWidget);
+      expect(find.text('Entrega por punto'), findsNothing);
+    });
+
+    // CA-9: «Llegué a esta parada» sale de la copia del viaje, una por parada, y sin señal queda en la cola con
+    // la hora y el GPS de ese momento, una llegada por carro.
+    testWidgets('«Llegué a esta parada» deja en la cola la llegada de cada carro de esa parada', (tester) async {
+      final arnes = Arnes(sesion: _luis)..red.estable = false;
+      await abrir(tester, dosParadas(), arnes: arnes);
+
+      expect(find.text('Parada: Patio Guayabal'), findsOneWidget);
+      expect(find.text('Parada: Concesionario Sur'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Llegué a esta parada').first);
+      await avanzar(tester);
+      await tester.tap(find.text('Confirmar'));
+      await avanzar(tester);
+
+      final llegadas = arnes.cola.jobs.whereType<LlegadaJob>().toList();
+      expect(llegadas.map((l) => l.vin), [_vin, 'VINBBBBBBBBBBBBB2'], reason: 'solo los de esa parada');
+      expect(llegadas.map((l) => (l.fecha, l.lat, l.lng)).toSet(), hasLength(1), reason: 'la misma hora y el mismo lugar');
+      expect(find.textContaining('2 carros quedan en cola'), findsOneWidget);
+      await tester.tap(find.text('OK'));
+      await avanzar(tester);
+
+      expect(find.text('La llegada a esta parada está guardada: se enviará cuando haya señal.'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Llegué a esta parada'), findsOneWidget, reason: 'queda la otra parada');
+    });
+
+    testWidgets('la parada donde ya llegaron todos no pide «Llegué» otra vez', (tester) async {
+      final viajes = ViajesRepositorioFalso()
+        ..remotos = [
+          Viaje(
+            id: 'v1',
+            codigoMtrack: 'MTK-1',
+            placa: 'ABC123',
+            estado: 'en_curso',
+            vehiculos: const [
+              ViajeVehiculo(vin: _vin, lugarDestino: 'Patio Guayabal', estadoTransporte: EstadoTransporte.sinNovedad),
+            ],
+          ),
+        ];
+      await abrir(tester, viajes);
+
+      expect(find.widgetWithText(FilledButton, 'Llegué a esta parada'), findsNothing);
+    });
+
+    // S8-HU-07.3 CA-5: un carro cuya ruta el servidor todavía no deja registrar no va en «Llegué a esta parada».
+    Viaje conUnoSinRuta({bool todos = false}) => Viaje(
+          id: 'v1',
+          codigoMtrack: 'MTK-1',
+          placa: 'ABC123',
+          estado: 'en_curso',
+          vehiculos: [
+            const ViajeVehiculo(
+              vin: _vin,
+              lugarDestino: 'Patio Guayabal',
+              puedeRegistrarRuta: false,
+              motivoSinRuta: 'entrega_del_cargue_sin_cerrar',
+            ),
+            ViajeVehiculo(
+              vin: 'VINBBBBBBBBBBBBB2',
+              lugarDestino: 'Patio Guayabal',
+              puedeRegistrarRuta: !todos,
+              motivoSinRuta: todos ? 'entrega_del_cargue_sin_cerrar' : null,
+            ),
+          ],
+        );
+
+    testWidgets('el carro con la entrega del cargue sin cerrar no entra en la llegada de la parada y se dice por qué', (tester) async {
+      final arnes = Arnes(sesion: _luis)..red.estable = false;
+      await abrir(tester, ViajesRepositorioFalso()..remotos = [conUnoSinRuta()], arnes: arnes);
+
+      expect(find.text('Falta cerrar la entrega del cargue: $_vin'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Llegué a esta parada'));
+      await avanzar(tester);
+      await tester.tap(find.text('Confirmar'));
+      await avanzar(tester);
+
+      expect(arnes.cola.jobs.whereType<LlegadaJob>().map((l) => l.vin), ['VINBBBBBBBBBBBBB2']);
+    });
+
+    testWidgets('si ninguno se puede registrar todavía, el botón de la parada se ve gris', (tester) async {
+      await abrir(tester, ViajesRepositorioFalso()..remotos = [conUnoSinRuta(todos: true)]);
+
+      final boton = tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Llegué a esta parada'));
+      expect(boton.onPressed, isNull);
+      expect(find.text('Falta cerrar la entrega del cargue: $_vin, VINBBBBBBBBBBBBB2'), findsOneWidget);
+    });
+
+    // CA-1: el coordinador, el admin y el super admin no ven la entrega de ningún viaje.
+    testWidgets('el coordinador no ve ni las paradas ni «Llegué a esta parada»', (tester) async {
+      await abrir(
+        tester,
+        dosParadas(),
+        arnes: Arnes(
+          sesion: const Sesion(
+            token: 'jwt',
+            usuario: Usuario(id: 'coord-1', nombre: 'Sara Calderón', email: '', rol: 'coordinador_calidad'),
+          ),
+        ),
+      );
+
+      expect(find.widgetWithText(OutlinedButton, 'Paradas y entregas'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Llegué a esta parada'), findsNothing);
+      expect(find.textContaining('Entregar en esta parada'), findsNothing);
+    });
+  });
+  // S8-HU-10.2 CA-3 y CA-9: la tarjeta dice el papel que manda el servidor, y sin él no dice nada.
+  group('el papel del inspector en la tarjeta', () {
+    testWidgets('«Tú recibes» para quien solo tomó la entrega de una parada', (tester) async {
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()..remotos = [viaje('v1', codigo: 'MTK-0417', vines: [_vin], papel: 'recibe')],
+        arnes: Arnes(sesion: sesionPrueba),
+      );
+
+      expect(find.text('Tú recibes'), findsOneWidget);
+    });
+
+    testWidgets('«Tú cargas» para quien carga', (tester) async {
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()..remotos = [viaje('v1', vines: [_vin], papel: 'carga')],
+        arnes: Arnes(sesion: sesionPrueba),
+      );
+
+      expect(find.text('Tú cargas'), findsOneWidget);
+    });
+
+    testWidgets('el conductor no ve ninguna etiqueta, y un valor desconocido tampoco se muestra', (tester) async {
+      await abrir(tester, ViajesRepositorioFalso()..remotos = [viaje('v1', vines: [_vin]), viaje('v2', vines: ['VIN2'], papel: 'supervisa')]);
+
+      expect(find.textContaining('Tú '), findsNothing);
+      expect(find.text('supervisa'), findsNothing);
+    });
+
+    // CA-6: sin señal la tarjeta sigue diciendo el papel, desde la copia guardada.
+    testWidgets('sin señal se ve el papel de la copia guardada', (tester) async {
+      final viajes = ViajesRepositorioFalso()
+        ..guardados = [Viaje.fromJson(viaje('v1', vines: [_vin], papel: 'recibe').toJson())]
+        ..error = errorApi(0, 'Sin conexión');
+      await abrir(tester, viajes, arnes: Arnes(sesion: sesionPrueba));
+
+      expect(find.text('Tú recibes'), findsOneWidget);
     });
   });
 }

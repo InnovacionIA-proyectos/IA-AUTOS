@@ -105,9 +105,9 @@ Cinco de seis criterios:
 - Un 400 al cerrar muestra el detalle línea por línea; un 409 se toma como éxito.
 - Repetir una foto agrega otra evidencia de la misma vista sin borrar la anterior.
 
-CA-6 cerrado el 28-oct: el umbral sale de `GPS_PRECISION_MINIMA_M` al compilar, con 30 metros de
-valor inicial. No se lee de `GET /api/parametros`, donde el backend ya tiene `gps_precision_minima_m`,
-porque esa ruta es de administradores y del coordinador: a quien está en el patio le responde 403.
+CA-6 cerrado el 28-oct con el umbral fijado al compilar. Desde S8-HU-09.2 (#434) ya no se compila: la app lee
+`gps_precision_minima_m` de `GET /api/parametros/app` (abierta a quien está en el patio) al iniciar sesión, al
+recuperar señal y al abrir la captura, y guarda la última respuesta para usarla sin señal; sin ninguna, 30 metros.
 
 ### #170 — Firma, reservas y no firma
 

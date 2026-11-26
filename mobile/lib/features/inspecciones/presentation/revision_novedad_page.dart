@@ -60,7 +60,16 @@ class RevisionNovedadPage extends ConsumerStatefulWidget {
 }
 
 /// Lo que quien revisa ya eligió y el servidor no aceptó: se conserva para mandarlo otra vez o corregirlo.
-typedef _Calificacion = ({ZonaDano zona, DatosDano dano, bool esPreexistente, String? hallazgoOrigenId});
+///
+/// [cuadrante] null es «sin mandar zona»: el daño conserva la suya, o es de un extra y no lleva (S8-HU-08.2 CA-4).
+typedef _Calificacion = ({
+  int? cuadrante,
+  String? lado,
+  String nombreZona,
+  DatosDano dano,
+  bool esPreexistente,
+  String? hallazgoOrigenId,
+});
 
 class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
   bool _enviando = false;
@@ -84,8 +93,35 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
 
   String? _url(String? relativa) => resolverUrlImagen(ref.read(entornoProvider).apiUrl, relativa);
 
-  /// Ubicada la zona, se pide la clase, el tamaño y el nivel, y se pregunta si el daño ya venía de antes.
-  Future<void> _revisar(ZonaDano zona) async {
+  /// Ubicada la zona en el dibujo, se pide la clase, el tamaño y el nivel.
+  Future<void> _revisar(ZonaDano zona) => _calificar(
+        cuadrante: zona.numero,
+        lado: zona.lado,
+        nombre: zona.nombreCompleto,
+        subtitulo: zona.descripcion,
+        clave: zona.clave,
+      );
+
+  /// El daño ya trae su zona, o es de un extra: solo falta lo que no tiene (CA-4). La zona no viaja.
+  Future<void> _calificarComoViene() {
+    final novedad = widget.novedad;
+    return _calificar(
+      cuadrante: null,
+      lado: null,
+      nombre: novedad.zona ?? (novedad.esDeExtra ? 'Daño del extra' : 'Daño'),
+      subtitulo: novedad.esDeExtra ? 'Daño de un extra: no tiene zona' : null,
+      clave: novedad.tieneZona ? claveDeZona(novedad.cuadranteNumero!, novedad.lado) : null,
+    );
+  }
+
+  /// Pide la clase, el tamaño y el nivel, y pregunta si el daño ya venía de antes.
+  Future<void> _calificar({
+    required int? cuadrante,
+    required String? lado,
+    required String nombre,
+    required String? subtitulo,
+    required String? clave,
+  }) async {
     final catalogos = ref.read(catalogosProvider);
     final niveles = catalogos.seleccionables(Catalogo.nivelesSeveridad);
     if (niveles.isEmpty) {
@@ -99,8 +135,8 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
 
     final dano = await pedirDano(
       context,
-      titulo: zona.nombreCompleto,
-      subtitulo: zona.descripcion,
+      titulo: nombre,
+      subtitulo: subtitulo,
       clases: catalogos.seleccionables(Catalogo.clasesDano),
       tamanos: catalogos.seleccionables(Catalogo.tamanosDano),
       niveles: niveles,
@@ -113,7 +149,7 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
     );
     if (dano == null || !mounted) return;
 
-    final previo = previoDe(_previos, clave: zona.clave, clase: dano.clase);
+    final previo = clave == null ? null : previoDe(_previos, clave: clave, clase: dano.clase);
     var esPreexistente = false;
     if (previo != null) {
       final respuesta = await preguntarPreexistente(
@@ -129,7 +165,14 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
       esPreexistente = respuesta;
     }
 
-    await _enviar((zona: zona, dano: dano, esPreexistente: esPreexistente, hallazgoOrigenId: esPreexistente ? previo!.id : null));
+    await _enviar((
+      cuadrante: cuadrante,
+      lado: lado,
+      nombreZona: nombre,
+      dano: dano,
+      esPreexistente: esPreexistente,
+      hallazgoOrigenId: esPreexistente ? previo!.id : null,
+    ));
   }
 
   Future<void> _enviar(_Calificacion calificacion) async {
@@ -138,8 +181,8 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
     try {
       await ref.read(novedadesRepositorioProvider).revisar(
             widget.novedad.id,
-            cuadranteNumero: calificacion.zona.numero,
-            lado: calificacion.zona.lado,
+            cuadranteNumero: calificacion.cuadrante,
+            lado: calificacion.lado,
             clase: calificacion.dano.clase,
             nivel: calificacion.dano.nivel!,
             tamano: calificacion.dano.tamano,
@@ -225,7 +268,7 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
                       Text('No se registró la calificación', style: tema.titleSmall?.copyWith(color: Colores.peligro)),
                       Text(motivo, style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
                       Text(
-                        '${rechazada.zona.nombreCompleto} · '
+                        '${rechazada.nombreZona} · '
                         '${catalogos.etiqueta(Catalogo.clasesDano, rechazada.dano.clase)} · '
                         '${catalogos.etiqueta(Catalogo.nivelesSeveridad, rechazada.dano.nivel!)}',
                         style: tema.bodySmall,
@@ -237,14 +280,31 @@ class _EstadoRevisionNovedadPage extends ConsumerState<RevisionNovedadPage> {
                 ),
               ],
               const SizedBox(height: Espacio.lg),
-              Text('¿Dónde está el daño?', style: tema.titleMedium),
-              Text('Tócalo en el dibujo y después dile qué es y de qué nivel.', style: tema.bodySmall),
-              const SizedBox(height: Espacio.md),
-              SelectorZonaDano(
-                contexto: 'revision-${novedad.id}',
-                danos: const {},
-                alRegistrar: _enviando ? null : _revisar,
-              ),
+              // S8-HU-08.2 CA-4: el daño de un extra no tiene zona y no se toca en el dibujo; el que ya tiene zona
+              // llega con ella y solo pide lo que falta (se puede mover a otra si está mal ubicado).
+              if (novedad.esDeExtra) ...[
+                Text('Daño del extra «${novedad.zona ?? 'extra'}»', style: tema.titleMedium),
+                Text('No tiene zona en el dibujo: solo falta decir qué es y de qué nivel.', style: tema.bodySmall),
+                const SizedBox(height: Espacio.md),
+                FilledButton(onPressed: _enviando ? null : _calificarComoViene, child: const Text('Calificar')),
+              ] else ...[
+                if (novedad.tieneZona) ...[
+                  Text('Zona: ${novedad.zona ?? 'marcada por el conductor'}', style: tema.titleMedium),
+                  const SizedBox(height: Espacio.sm),
+                  FilledButton(onPressed: _enviando ? null : _calificarComoViene, child: const Text('Calificar en esta zona')),
+                  const SizedBox(height: Espacio.md),
+                  Text('Si está mal ubicado, tócalo en otra zona del dibujo.', style: tema.bodySmall),
+                ] else ...[
+                  Text('¿Dónde está el daño?', style: tema.titleMedium),
+                  Text('Tócalo en el dibujo y después dile qué es y de qué nivel.', style: tema.bodySmall),
+                ],
+                const SizedBox(height: Espacio.md),
+                SelectorZonaDano(
+                  contexto: 'revision-${novedad.id}',
+                  danos: const {},
+                  alRegistrar: _enviando ? null : _revisar,
+                ),
+              ],
             ],
           ),
         ),

@@ -10,6 +10,9 @@ import '../../inspecciones/providers.dart';
 import '../domain/pendiente.dart';
 import '../domain/viaje.dart';
 import '../providers.dart';
+import 'entrega_punto_page.dart';
+import 'fijar_ubicacion.dart';
+import 'novedad_viaje.dart';
 import 'tomados.dart';
 
 /// El camión que el inspector reclamó: dónde es, qué unidades trae y cómo soltarlo.
@@ -35,7 +38,9 @@ class _EstadoDetallePendiente extends ConsumerState<DetallePendientePage> {
     setState(() => _liberando = true);
     final mensajes = ScaffoldMessenger.of(context);
     try {
-      await ref.read(reclamosRepositorioProvider).liberar(_pendiente.viajeId, _pendiente.proceso);
+      await ref
+          .read(reclamosRepositorioProvider)
+          .liberar(_pendiente.viajeId, _pendiente.proceso, lugarId: _pendiente.parada);
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       mensajes.showSnackBar(SnackBar(content: Text(mensajeDeError(e, 'No se pudo liberar. Inténtalo de nuevo.'))));
@@ -73,6 +78,12 @@ class _EstadoDetallePendiente extends ConsumerState<DetallePendientePage> {
                 ],
               ),
             ),
+            // S8-HU-09.2 CA-3: quien reclamó el camión está en su punto. Si el lugar no tiene ubicación, la deja desde
+            // aquí con la precisión del GPS; el lugar es el del pendiente (`lugar_id`), el de cargue o la parada.
+            if (_pendiente.estado == EstadoPendiente.mio && _pendiente.lugarId != null) ...[
+              const SizedBox(height: Espacio.sm),
+              FijarUbicacionLugar(lugarId: _pendiente.lugarId!),
+            ],
             const SizedBox(height: Espacio.lg),
             Text('Unidades', style: tema.titleMedium),
             const SizedBox(height: Espacio.sm),
@@ -90,8 +101,19 @@ class _EstadoDetallePendiente extends ConsumerState<DetallePendientePage> {
                   ],
                 ),
               ),
-              data: (datos) => _Unidades(viaje: datos, proceso: _pendiente.proceso),
+              data: (datos) => _Unidades(viaje: datos, proceso: _pendiente.proceso, parada: _pendiente.parada),
             ),
+            // S8-HU-04.2 CA-1: desde «Pendientes», el inspector entrega en la parada que tomó, y en ninguna otra.
+            if (_pendiente.esEntrega && _pendiente.estado == EstadoPendiente.mio && _pendiente.lugarId != null) ...[
+              const SizedBox(height: Espacio.lg),
+              BotonEntregarEnParada(viajeId: _pendiente.viajeId, lugarId: _pendiente.lugarId!, lugar: _pendiente.lugar),
+            ],
+            // S8-HU-07.3 CA-1: en el camión que reclamó, la novedad del viaje va con el proceso de su reclamo y, en la
+            // entrega, con la parada. Sin el reclamo el servidor responde 403 `inspector_sin_ese_proceso`.
+            if (_pendiente.estado == EstadoPendiente.mio && (!_pendiente.esEntrega || _pendiente.lugarId != null)) ...[
+              const SizedBox(height: Espacio.lg),
+              BotonNovedadViaje(viajeId: _pendiente.viajeId, proceso: _pendiente.proceso, lugarId: _pendiente.parada),
+            ],
             const SizedBox(height: Espacio.xl),
             OutlinedButton(
               onPressed: _liberando ? null : _liberar,
@@ -107,9 +129,12 @@ class _EstadoDetallePendiente extends ConsumerState<DetallePendientePage> {
 }
 
 class _Unidades extends ConsumerWidget {
-  const _Unidades({required this.viaje, required this.proceso});
+  const _Unidades({required this.viaje, required this.proceso, this.parada});
 
   final Viaje viaje;
+
+  /// En la entrega, la parada tomada: solo se listan sus carros. Un carro sin destino conocido se deja a la vista.
+  final String? parada;
 
   /// El proceso del pendiente (cargue o entrega): decide de qué informes se lee el estado de cada unidad.
   final String proceso;
@@ -118,7 +143,9 @@ class _Unidades extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
     // Un carro bajado ya no es parte del viaje (S8-HU-02.2 CA-6), aunque el detalle del viaje lo siga listando.
-    final unidades = [...viaje.vehiculos.where((v) => !v.bajado)];
+    final unidades = [
+      ...viaje.vehiculos.where((v) => !v.bajado && (parada == null || v.lugarDestinoId == null || v.lugarDestinoId == parada)),
+    ];
     if (unidades.isEmpty) return Tarjeta(child: Text('Este viaje todavía no tiene unidades.', style: tema.bodySmall));
     // Sin los informes todavía (o sin señal) no se inventa un estado: la insignia simplemente no sale, en vez de
     // decir «sin informe» de una unidad que puede estar cerrada.

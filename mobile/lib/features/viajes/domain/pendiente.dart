@@ -8,6 +8,7 @@ class Pendiente {
     required this.lugar,
     required this.estado,
     required this.unidades,
+    this.lugarId,
     this.codigoMtrack,
     this.placa,
     this.fechaProgramada,
@@ -18,6 +19,7 @@ class Pendiente {
         viajeId: json['viaje_id'] as String,
         proceso: json['proceso'] as String? ?? procesoCargue,
         lugar: json['lugar'] as String? ?? '',
+        lugarId: json['lugar_id'] as String?,
         estado: EstadoPendiente.desde(json['estado'] as String?),
         unidades: json['unidades'] as int? ?? 0,
         codigoMtrack: json['codigo_mtrack'] as String?,
@@ -31,6 +33,10 @@ class Pendiente {
   /// `cargue` o `entrega`. El mismo camión puede salir en las dos.
   final String proceso;
   final String lugar;
+
+  /// El lugar del pendiente: el de cargue o, en la entrega, la **parada** (S8-HU-04.2 CA-10). La entrega se toma
+  /// y se libera por parada: dos paradas del mismo viaje son dos pendientes, cada una de su inspector.
+  final String? lugarId;
   final EstadoPendiente estado;
   final int unidades;
   final String? codigoMtrack;
@@ -42,10 +48,14 @@ class Pendiente {
 
   bool get esEntrega => proceso == procesoEntrega;
 
+  /// La parada que se manda al tomar y al liberar: solo la entrega la lleva; el cargue no tiene parada.
+  String? get parada => esEntrega ? lugarId : null;
+
   Map<String, dynamic> toJson() => {
         'viaje_id': viajeId,
         'proceso': proceso,
         'lugar': lugar,
+        'lugar_id': lugarId,
         'estado': switch (estado) {
           EstadoPendiente.disponible => 'disponible',
           EstadoPendiente.enRevision => 'en_revision',

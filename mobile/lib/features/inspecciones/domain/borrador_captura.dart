@@ -65,14 +65,19 @@ String resumenBorrador(BorradorCaptura borrador, [String ultimo = ' y ']) =>
 
 /// Un borrador por persona y por momento: el de la salida del cargue de un VIN no es el de su llegada, ni el de
 /// una corrección es el de la primera captura, ni el de Ana es el de Diana en el mismo teléfono.
+///
+/// [continuaInspeccionId] es el borrador del servidor que se está continuando (S8-HU-11.2 CA-2): lo que se suma a
+/// ese informe no es lo mismo que una captura de cero del mismo momento.
 String claveBorrador({
   required String usuarioId,
   required String vin,
   required String etapaId,
   required String momento,
   String? corrigeInspeccionId,
+  String? continuaInspeccionId,
 }) =>
-    'borrador-captura:$usuarioId:$vin:$etapaId:$momento:${corrigeInspeccionId ?? ''}';
+    'borrador-captura:$usuarioId:$vin:$etapaId:$momento:${corrigeInspeccionId ?? ''}'
+    '${continuaInspeccionId == null ? '' : ':continua:$continuaInspeccionId'}';
 
 /// Dónde se guardan los borradores de captura en el teléfono.
 abstract interface class AlmacenBorradores {

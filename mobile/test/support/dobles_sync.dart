@@ -208,9 +208,45 @@ class GatewayFalso implements GatewayInformes {
     required double lat,
     required double lng,
     required FotoLocal foto,
+    String? idEnvio,
   }) {
     novedadesEnviadas.add((viajeId, vin, tipoNovedad, tamanoDano, fecha, lat, lng, foto.storagePath));
+    idsEnvioNovedad.add(idEnvio);
     return _paso('crearNovedad');
+  }
+
+  /// El `id_envio` con que salió cada novedad de un carro, en el mismo orden que [novedadesEnviadas].
+  final List<String?> idsEnvioNovedad = [];
+
+  /// Cada novedad del viaje que salió, con todo lo que llevaba (S8-HU-07.3).
+  final List<NovedadViajeEnviada> novedadesViajeEnviadas = [];
+
+  @override
+  Future<void> registrarNovedadViaje(
+    String viajeId, {
+    required String tipo,
+    required String texto,
+    required String fecha,
+    double? lat,
+    double? lng,
+    FotoLocal? foto,
+    String? idEnvio,
+    String? proceso,
+    String? lugarId,
+  }) {
+    novedadesViajeEnviadas.add((
+      viajeId: viajeId,
+      tipo: tipo,
+      texto: texto,
+      fecha: fecha,
+      lat: lat,
+      lng: lng,
+      storagePath: foto?.storagePath,
+      idEnvio: idEnvio,
+      proceso: proceso,
+      lugarId: lugarId,
+    ));
+    return _paso('registrarNovedadViaje');
   }
 
   /// Cada llegada que salió: (viaje, VIN, fecha, lat, lng).
@@ -234,8 +270,9 @@ class GatewayFalso implements GatewayInformes {
     return _paso('firmarReciboSinEntrega');
   }
 
-  /// Cada firma de una entrega por punto que salió: (viaje, lugar, motivo si es una sola firma, firma).
-  final List<(String, String, String?, String?)> entregasEnviadas = [];
+  /// Cada firma de una parada que salió, con todo lo que llevaba. `motivoCodigo` es null en la firma de una parte y
+  /// trae el motivo en el cierre con una sola firma.
+  final List<EntregaEnviada> entregasEnviadas = [];
 
   /// Quién recibió de fuera en cada entrega que salió: (nombre, cédula, su firma). Vacía si recibió un usuario.
   final List<(String?, String?, String?)> externosEnviados = [];
@@ -248,15 +285,80 @@ class GatewayFalso implements GatewayInformes {
     String? recibeNombre,
     String? recibeCedula,
     String? firmaRecibe,
+    List<ReservaCarro> reservas = const [],
+    List<RechazoCarro> rechazos = const [],
+    String? fechaMomento,
+    double? lat,
+    double? lng,
+    double? precisionM,
   }) {
-    entregasEnviadas.add((viajeId, lugarId, null, firma));
+    entregasEnviadas.add((
+      viajeId: viajeId,
+      lugarId: lugarId,
+      firma: firma,
+      motivoCodigo: null,
+      motivoTexto: null,
+      reservas: reservas,
+      rechazos: rechazos,
+      fotos: const [],
+      testigo: (null, null),
+      momento: (fecha: fechaMomento, lat: lat, lng: lng, precision: precisionM),
+    ));
     externosEnviados.add((recibeNombre, recibeCedula, firmaRecibe));
     return _paso('firmarEntregaPunto');
   }
 
+  /// Cada «No hay inspector» de una parada que salió (S8-HU-05.2 CA-2), con su motivo, su hora y su GPS.
+  final List<ActivacionEnviada> activacionesEnviadas = [];
+
   @override
-  Future<void> cerrarEntregaConUnaFirma(String viajeId, String lugarId, {required String motivo, String? firma}) {
-    entregasEnviadas.add((viajeId, lugarId, motivo, firma));
+  Future<void> activarSinInspector(
+    String viajeId,
+    String lugarId, {
+    required String motivo,
+    String? motivoTexto,
+    String? fechaMomento,
+    double? lat,
+    double? lng,
+    double? precisionM,
+  }) {
+    activacionesEnviadas.add((
+      viajeId: viajeId,
+      lugarId: lugarId,
+      motivo: motivo,
+      motivoTexto: motivoTexto,
+      momento: (fecha: fechaMomento, lat: lat, lng: lng, precision: precisionM),
+    ));
+    return _paso('activarSinInspector');
+  }
+
+  @override
+  Future<void> cerrarEntregaConUnaFirma(
+    String viajeId,
+    String lugarId, {
+    required String motivoCodigo,
+    String? motivoTexto,
+    String? firma,
+    List<({String vin, FotoLocal foto})> fotos = const [],
+    String? testigoNombre,
+    String? testigoCedula,
+    String? fechaMomento,
+    double? lat,
+    double? lng,
+    double? precisionM,
+  }) {
+    entregasEnviadas.add((
+      viajeId: viajeId,
+      lugarId: lugarId,
+      firma: firma,
+      motivoCodigo: motivoCodigo,
+      motivoTexto: motivoTexto,
+      reservas: const [],
+      rechazos: const [],
+      fotos: fotos,
+      testigo: (testigoNombre, testigoCedula),
+      momento: (fecha: fechaMomento, lat: lat, lng: lng, precision: precisionM),
+    ));
     return _paso('cerrarEntregaConUnaFirma');
   }
 
@@ -358,6 +460,43 @@ class GatewayFalso implements GatewayInformes {
   final List<({String parte, String motivo, String testigoId, FotoLocal foto})> constanciasEnviadas = [];
 }
 
+/// Lo que viajó en una firma de parada (S8-HU-04.2), tal como lo recibió el doble del servidor.
+typedef EntregaEnviada = ({
+  String viajeId,
+  String lugarId,
+  String? firma,
+  String? motivoCodigo,
+  String? motivoTexto,
+  List<ReservaCarro> reservas,
+  List<RechazoCarro> rechazos,
+  List<({String vin, FotoLocal foto})> fotos,
+  (String?, String?) testigo,
+  ({String? fecha, double? lat, double? lng, double? precision}) momento,
+});
+
+/// Lo que llevó una activación de «No hay inspector» en una parada.
+typedef ActivacionEnviada = ({
+  String viajeId,
+  String lugarId,
+  String motivo,
+  String? motivoTexto,
+  ({String? fecha, double? lat, double? lng, double? precision}) momento,
+});
+
+/// Lo que viajó en una novedad del viaje (S8-HU-07.3 CA-3), tal como lo recibió el doble del servidor.
+typedef NovedadViajeEnviada = ({
+  String viajeId,
+  String tipo,
+  String texto,
+  String fecha,
+  double? lat,
+  double? lng,
+  String? storagePath,
+  String? idEnvio,
+  String? proceso,
+  String? lugarId,
+});
+
 ErrorApi errorHttp(int status, [String mensaje = 'error']) => ErrorApi(message: mensaje, code: 'X', status: status);
 
 /// El mismo id de usuario que `sesionPrueba`: lo normal es que el job sea de quien tiene la sesión. Se pasa otro,
@@ -380,6 +519,7 @@ InformeJob informe({
   bool posicionesEnviadas = false,
   String? motivoSinInspector,
   String? motivoSinInspectorTexto,
+  bool bajoPermiso = false,
   String? corrigeInspeccionId,
 }) => InformeJob(
   id: id,
@@ -404,6 +544,7 @@ InformeJob informe({
   posicionesEnviadas: posicionesEnviadas,
   motivoSinInspector: motivoSinInspector,
   motivoSinInspectorTexto: motivoSinInspectorTexto,
+  bajoPermiso: bajoPermiso,
   corrigeInspeccionId: corrigeInspeccionId,
 );
 

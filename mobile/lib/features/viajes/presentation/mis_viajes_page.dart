@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/errores/error_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../auth/presentation/auth_controller.dart';
@@ -11,6 +12,7 @@ import '../../inspecciones/providers.dart';
 import '../../sync/presentation/barra_sync.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../vehiculos/domain/etiquetas.dart';
+import '../domain/novedad_viaje.dart';
 import '../domain/pendiente.dart';
 import '../domain/viaje.dart';
 import '../providers.dart';
@@ -19,7 +21,10 @@ import '../../inspecciones/presentation/ninera_page.dart';
 import 'acciones_conductor.dart';
 import 'destinos_vistos.dart';
 import 'entrega_punto_page.dart';
+import 'fijar_ubicacion.dart';
+import 'llegada_parada.dart';
 import 'mis_viajes_controller.dart';
+import 'novedad_viaje.dart';
 import 'seccion_pendientes.dart';
 import 'tomados.dart';
 
@@ -195,12 +200,13 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
             const SeccionPendientes(),
             const SizedBox(height: Espacio.lg),
             Text('Mis viajes', style: tema.titleMedium),
+            Text('Las niñeras que tomaste tú o que te asignaron, con franja azul.', style: tema.bodySmall),
             const SizedBox(height: Espacio.sm),
             if (estado.viajes.isEmpty && sueltos.isEmpty)
               Text('Cuando tomes un camión de «Por tomar» o se te asigne un viaje, aparecerá aquí con sus unidades.', style: tema.bodySmall)
             else ...[
               for (final viaje in estado.viajes) ...[
-                _TarjetaViaje(viaje, tomados: [for (final p in tomados) if (p.viajeId == viaje.id) p]),
+                _TarjetaViaje(viaje, tomados: [for (final p in tomados) if (p.viajeId == viaje.id) p], deInspector: true),
                 const SizedBox(height: Espacio.sm),
               ],
               for (final pendiente in sueltos) ...[TarjetaTomada(pendiente: pendiente), const SizedBox(height: Espacio.sm)],
@@ -242,10 +248,65 @@ class _EstadoMisViajesPage extends ConsumerState<MisViajesPage> {
   }
 }
 
+/// Un viaje solo, el que nombra un aviso por su `viaje_id` (S8-HU-09.2 CA-6): el coordinador toca «Fuera del rango»
+/// y llega al viaje, aunque no esté en su lista ni sea suyo. Es la misma tarjeta de «Mis viajes», con sus unidades.
+///
+/// Se pide al servidor y, sin señal, sale de la copia guardada si el viaje está ahí. Sin acceso o sin el viaje lo dice
+/// así, no como un problema de señal.
+class ViajeDelAvisoPage extends ConsumerWidget {
+  const ViajeDelAvisoPage({super.key, required this.viajeId});
+
+  final String viajeId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final viaje = ref.watch(viajeDelAvisoProvider(viajeId));
+    return Scaffold(
+      appBar: AppBar(title: Text(viaje.value?.codigoMtrack ?? 'Viaje')),
+      body: SafeArea(
+        child: switch (viaje) {
+          AsyncData(value: final v) => RefreshIndicator(
+              onRefresh: () async => ref.invalidate(viajeDelAvisoProvider(viajeId)),
+              child: ListView(padding: const EdgeInsets.all(Espacio.lg), children: [_TarjetaViaje(v)]),
+            ),
+          // Reintentar un 403 o un 404 da lo mismo: no se ofrece.
+          AsyncError(error: ErrorApi(status: 403)) => const EstadoMensaje(
+              icono: Icons.lock_outline,
+              titulo: 'No puedes ver este viaje',
+              descripcion: 'El viaje no es de tus viajes ni de tu cliente.',
+            ),
+          AsyncError(error: ErrorApi(status: 404)) => const EstadoMensaje(
+              icono: Icons.search_off,
+              titulo: 'Este viaje ya no existe',
+              descripcion: 'Puede que lo hayan borrado después de enviar el aviso.',
+            ),
+          AsyncError(:final error) => EstadoMensaje(
+              icono: Icons.warning_amber_rounded,
+              colorIcono: Colores.peligro,
+              titulo: 'No se pudo abrir el viaje',
+              descripcion: error is ErrorApi && error.status == 0
+                  ? 'El viaje se consulta con señal. Revisa tu conexión e inténtalo de nuevo.'
+                  : mensajeDeError(error),
+              accion: FilledButton(
+                onPressed: () => ref.invalidate(viajeDelAvisoProvider(viajeId)),
+                child: const Text('Reintentar'),
+              ),
+            ),
+          _ => const EstadoCargando(),
+        },
+      ),
+    );
+  }
+}
+
 class _TarjetaViaje extends ConsumerWidget {
-  const _TarjetaViaje(this.viaje, {this.tomados = const []});
+  const _TarjetaViaje(this.viaje, {this.tomados = const [], this.deInspector = false});
 
   final Viaje viaje;
+
+  /// Es un viaje del inspector que mira (lo tomó o se lo asignaron): lleva la franja azul que lo distingue de lo que
+  /// está en «Por tomar».
+  final bool deInspector;
 
   /// Lo que quien mira tomó de este viaje en «Por tomar»: dice si carga o recibe y desde aquí se libera.
   final List<Pendiente> tomados;
@@ -254,8 +315,17 @@ class _TarjetaViaje extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tema = Theme.of(context).textTheme;
     final ruta = [viaje.origen, viaje.destino].whereType<String>().where((l) => l.isNotEmpty).join(' → ');
+    final rol = ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.rol));
+    final reclamos = rol == 'inspector'
+        ? reclamosDeNovedadViaje(
+            viaje,
+            yoId: ref.watch(authControllerProvider.select((e) => e.sesion?.usuario.id)),
+            tomados: tomados,
+          )
+        : const <ReclamoNovedad>[];
 
     return Tarjeta(
+      franja: deInspector ? Colores.primario : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -282,7 +352,9 @@ class _TarjetaViaje extends ConsumerWidget {
             ],
           ),
           if (ruta.isNotEmpty) Text(ruta, style: tema.bodySmall),
-          if (etiquetaDelPapel(tomados) case final papel?) ...[
+          // S8-HU-10.2 CA-3: el papel lo dice el servidor; lo tomado en «Por tomar» queda para un viaje de antes que
+          // no lo trae. Sin ninguno de los dos (el conductor, la oficina) no hay etiqueta.
+          if (etiquetaPapel(viaje.papel) ?? etiquetaDelPapel(tomados) case final papel?) ...[
             const SizedBox(height: Espacio.xs),
             Insignia(papel, tono: TonoInsignia.info),
           ],
@@ -321,8 +393,26 @@ class _TarjetaViaje extends ConsumerWidget {
               child: Text(viaje.cargueCerrado ? 'Niñera' : 'Niñera y firma del cargue'),
             ),
           ],
-          // Entregar es lo que se hace con un viaje en ruta: en cada punto se firma una vez para todas sus unidades.
-          if (viaje.estado == 'en_curso' && viaje.vehiculos.isNotEmpty) ...[
+          // S8-HU-04.2 CA-9: «Llegué a esta parada», una por parada con carros sin su llegada. Sale de la copia del
+          // viaje, así que sirve sin señal: la llegada va por la cola con la hora y el GPS de ese momento.
+          if (rol == 'conductor' && viaje.admiteTrabajo)
+            for (final parada in paradasDelViaje(viaje))
+              if (parada.carros.any((c) => !yaLlego(c))) ...[
+                const SizedBox(height: Espacio.sm),
+                Text('Parada: ${parada.lugar}', style: tema.titleSmall),
+                const SizedBox(height: Espacio.xs),
+                LlegueAParada(
+                  viajeId: viaje.id,
+                  lugar: parada.lugar,
+                  // S8-HU-07.3 CA-5: el carro cuya ruta el servidor todavía no deja registrar no va en la llegada de la
+                  // parada; se dice por qué, igual que bajo su «Llegué» gris.
+                  vines: [for (final c in parada.carros) if (!yaLlego(c) && !c.rutaBloqueada) c.vin],
+                  sinRuta: [for (final c in parada.carros) if (!yaLlego(c) && c.rutaBloqueada) c],
+                ),
+              ],
+          // S8-HU-04.2 CA-1: la entrega es por parada. El conductor la ve en cada parada donde ya marcó «Llegué»;
+          // el inspector, solo en la parada que tomó. Nadie más ve la entrega de ningún viaje.
+          if (rol == 'conductor' && viaje.estado == 'en_curso' && viaje.vehiculos.any((v) => v.sale)) ...[
             const SizedBox(height: Espacio.sm),
             OutlinedButton(
               onPressed: () => Navigator.of(context).push<void>(
@@ -330,9 +420,40 @@ class _TarjetaViaje extends ConsumerWidget {
                   builder: (_) => EntregasViajePage(viajeId: viaje.id),
                 ),
               ),
-              child: const Text('Entrega por punto'),
+              child: const Text('Paradas y entregas'),
             ),
           ],
+          if (rol == 'inspector')
+            for (final tomado in tomados)
+              if (tomado.esEntrega && tomado.lugarId != null) ...[
+                const SizedBox(height: Espacio.sm),
+                BotonEntregarEnParada(viajeId: viaje.id, lugarId: tomado.lugarId!, lugar: tomado.lugar),
+              ],
+          // S8-HU-07.3 CA-1: la novedad del viaje, mientras el viaje admita trabajo. El conductor, sin proceso; el
+          // inspector, una por cada proceso en que participa, con el de su reclamo y, en la entrega, la parada.
+          if (viaje.admiteTrabajo && rol == 'conductor') ...[
+            const SizedBox(height: Espacio.sm),
+            BotonNovedadViaje(viajeId: viaje.id),
+          ],
+          if (viaje.admiteTrabajo && rol == 'inspector')
+            for (final reclamo in reclamos)
+              ...[
+                const SizedBox(height: Espacio.sm),
+                BotonNovedadViaje(
+                  viajeId: viaje.id,
+                  proceso: reclamo.proceso,
+                  lugarId: reclamo.lugarId,
+                  texto: textoBotonNovedadViaje(reclamo, varios: reclamos.length > 1),
+                ),
+              ],
+          // S8-HU-09.2 CA-3: el cargue que reclamó llega como viaje suyo; el punto es el `lugar_id` del pendiente.
+          // Si no tiene ubicación, el inspector la deja desde aquí, que es donde trabaja el cargue.
+          if (rol == 'inspector')
+            for (final tomado in tomados)
+              if (!tomado.esEntrega && tomado.lugarId != null) ...[
+                const SizedBox(height: Espacio.sm),
+                FijarUbicacionLugar(lugarId: tomado.lugarId!),
+              ],
           if (tomados.isNotEmpty) ...[
             const SizedBox(height: Espacio.sm),
             BotonesLiberar(tomados: tomados),

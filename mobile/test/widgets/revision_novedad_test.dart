@@ -34,7 +34,7 @@ Future<void> avanzar(WidgetTester tester) async {
 }
 
 /// Abre la pantalla desde otra, como lo hacen la lista y la ficha, y devuelve lo que ella responde al salir.
-Future<({Arnes arnes, List<bool?> respuestas})> abrir(WidgetTester tester) async {
+Future<({Arnes arnes, List<bool?> respuestas})> abrir(WidgetTester tester, {NovedadPendiente novedad = _novedad}) async {
   // Ancha a propósito: a 1600 px el primer toque elige la zona sin acercar.
   await tester.binding.setSurfaceSize(const Size(1600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -57,7 +57,7 @@ Future<({Arnes arnes, List<bool?> respuestas})> abrir(WidgetTester tester) async
                   body: TextButton(
                     onPressed: () async => respuestas.add(
                       await Navigator.of(context).push<bool>(
-                        MaterialPageRoute(builder: (_) => const RevisionNovedadPage(novedad: _novedad)),
+                        MaterialPageRoute(builder: (_) => RevisionNovedadPage(novedad: novedad)),
                       ),
                     ),
                     child: const Text('abrir'),
@@ -179,5 +179,64 @@ void main() {
 
     expect(arnes.novedades.revisadas, isEmpty);
     expect(respuestas, [null]);
+  });
+
+  // S8-HU-08.2 CA-4: lo que el daño ya trae no se vuelve a pedir.
+  group('lo que el daño ya trae', () {
+    Future<void> elegirV1YGuardar(WidgetTester tester) async {
+      await tester.tap(find.text('V1'));
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Guardar cambios'));
+      await avanzar(tester);
+    }
+
+    testWidgets('el daño de un extra se califica sin dibujo y sin zona', (tester) async {
+      const deExtra = NovedadPendiente(
+        id: 'h-extra',
+        vin: 'VIN00000000000001',
+        proceso: 'descargue',
+        momento: 'llegada',
+        clase: 'golpe',
+        tamano: 'mas_20cm',
+        zona: 'Platón',
+        extraId: 'x1',
+      );
+      final (:arnes, :respuestas) = await abrir(tester, novedad: deExtra);
+
+      expect(find.text('Daño del extra «Platón»'), findsOneWidget);
+      expect(_lienzo, findsNothing, reason: 'el extra no tiene zona en el dibujo');
+      await tester.tap(find.widgetWithText(FilledButton, 'Calificar'));
+      await avanzar(tester);
+      await elegirV1YGuardar(tester);
+
+      final enviada = arnes.novedades.revisadas.single;
+      expect((enviada['cuadrante_numero'], enviada['lado'], enviada['clase'], enviada['nivel']), (null, null, 'golpe', 'v1'));
+      expect(respuestas, [true]);
+    });
+
+    testWidgets('un daño con zona se califica en su zona sin tocar el dibujo', (tester) async {
+      const conZona = NovedadPendiente(
+        id: 'h-zona',
+        vin: 'VIN00000000000001',
+        proceso: 'descargue',
+        momento: 'llegada',
+        clase: 'golpe',
+        tamano: 'mas_20cm',
+        zona: 'Izquierdo 34 · Puerta trasera',
+        cuadranteNumero: 34,
+        lado: 'izquierdo',
+      );
+      final (:arnes, :respuestas) = await abrir(tester, novedad: conZona);
+
+      expect(find.text('Zona: Izquierdo 34 · Puerta trasera'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Calificar en esta zona'));
+      await avanzar(tester);
+      await elegirV1YGuardar(tester);
+
+      final enviada = arnes.novedades.revisadas.single;
+      expect(enviada['cuadrante_numero'], isNull, reason: 'la zona no viaja: el daño conserva la suya');
+      expect((enviada['clase'], enviada['nivel']), ('golpe', 'v1'));
+      expect(respuestas, [true]);
+    });
   });
 }

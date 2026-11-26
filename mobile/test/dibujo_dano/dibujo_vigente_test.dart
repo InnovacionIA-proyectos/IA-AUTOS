@@ -40,7 +40,7 @@ class ApiDeImagenes extends ClienteApi {
   final pedidas = <String>[];
 
   @override
-  Future<Uint8List> descargarBytes(String ruta) async {
+  Future<Uint8List> descargarBytes(String ruta, {String aceptar = 'image/*'}) async {
     pedidas.add(ruta);
     if (falla) throw Exception('sin red');
     return Uint8List.fromList([1, 2, 3]);

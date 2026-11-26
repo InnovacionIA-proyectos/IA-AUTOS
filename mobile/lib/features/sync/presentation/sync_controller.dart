@@ -12,6 +12,7 @@ class EstadoSync {
     this.sincronizando = false,
     this.pendientes = 0,
     this.fallidos = 0,
+    this.retirados = 0,
     this.proximoIntento,
     this.entregados = 0,
     this.pausa,
@@ -26,6 +27,10 @@ class EstadoSync {
 
   /// Elementos que necesitan atención del usuario (reintento manual o descarte).
   final int fallidos;
+
+  /// Envíos que se retiraron porque el carro no sale o se bajó del viaje (S8-HU-02.2 CA-4 y CA-6). No son un
+  /// error, pero tampoco se enviaron: sin contarlos la barra decía «Todo sincronizado» y el informe parecía perdido.
+  final int retirados;
 
   /// Cuándo volverá a intentarlo solo. Null si no hay nada pendiente o si no hay con qué intentarlo.
   final DateTime? proximoIntento;
@@ -43,6 +48,7 @@ class EstadoSync {
     bool? sincronizando,
     int? pendientes,
     int? fallidos,
+    int? retirados,
     DateTime? proximoIntento,
     bool sinProximoIntento = false,
     int? entregados,
@@ -54,6 +60,7 @@ class EstadoSync {
         sincronizando: sincronizando ?? this.sincronizando,
         pendientes: pendientes ?? this.pendientes,
         fallidos: fallidos ?? this.fallidos,
+        retirados: retirados ?? this.retirados,
         proximoIntento: sinProximoIntento ? null : proximoIntento ?? this.proximoIntento,
         entregados: entregados ?? this.entregados,
         pausa: sinPausa ? null : pausa ?? this.pausa,
@@ -110,13 +117,14 @@ class SyncController extends Notifier<EstadoSync> {
     if (usuario == null) {
       // Sin sesión no se cuenta lo de nadie: la cola de quien salió no es asunto de la pantalla de ingreso.
       _cancelarReloj();
-      state = state.copiar(pendientes: 0, fallidos: 0, sinProximoIntento: true);
+      state = state.copiar(pendientes: 0, fallidos: 0, retirados: 0, sinProximoIntento: true);
       return;
     }
     final procesador = ref.read(procesadorColaProvider);
     final pendientes = await procesador.contarPendientes(usuario);
     final fallidos = await procesador.contarFallidos(usuario);
-    state = state.copiar(pendientes: pendientes, fallidos: fallidos);
+    final retirados = await procesador.contarRetirados(usuario);
+    state = state.copiar(pendientes: pendientes, fallidos: fallidos, retirados: retirados);
     await _programarReintento(usuario);
   }
 
@@ -134,6 +142,7 @@ class SyncController extends Notifier<EstadoSync> {
       state = state.copiar(
         pendientes: r.pendientes,
         fallidos: r.fallidos,
+        retirados: r.retirados,
         // Solo sube cuando el servidor aceptó algo: quien lo observe recarga únicamente si el mundo cambió.
         entregados: state.entregados + r.enviados,
         pausa: r.pausa,

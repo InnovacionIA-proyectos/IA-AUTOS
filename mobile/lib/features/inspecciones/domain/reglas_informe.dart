@@ -12,9 +12,8 @@ import 'hallazgo_local.dart';
 /// techado el GPS siempre es malo y bloquear dejaría a la gente sin poder trabajar; se avisa para que, si se
 /// puede, salgan a cielo abierto.
 ///
-/// Es el valor inicial, el mismo que el backend trae en el parámetro `gps_precision_minima_m`. Mientras Calidad
-/// no lo confirme, cada entorno puede ajustarlo al compilar (`GPS_PRECISION_MINIMA_M`, ver `Entorno`): la API no
-/// publica sus parámetros a quien está en el patio, solo a administradores y al coordinador.
+/// Es el valor inicial, el mismo que el backend trae en el parámetro `gps_precision_minima_m`. La app usa el que
+/// lee de `GET /api/parametros/app` (o su copia local); este solo manda si nunca pudo leer ninguno (S8-HU-09.2 CA-1).
 const precisionBajaMetrosPorDefecto = 30.0;
 
 /// Por qué todavía no se puede cerrar un informe.
@@ -98,13 +97,17 @@ class SinUnidadesDelViaje extends BloqueoCierre {
 
 /// Una unidad que sigue en el viaje y no tiene lugar en la niñera. Es la regla del servidor al cerrar la segunda
 /// inspección del cargue, con sus mismas palabras.
+///
+/// [desdeLaNinera]: es otro carro, que en la salida de este no se acomoda; se dice dónde se le pone el puesto.
 class FaltaPosicion extends BloqueoCierre {
-  const FaltaPosicion(this.vin);
+  const FaltaPosicion(this.vin, {this.desdeLaNinera = false});
 
   final String vin;
+  final bool desdeLaNinera;
 
   @override
-  String get mensaje => 'Falta la posición de la unidad $vin';
+  String get mensaje =>
+      desdeLaNinera ? 'Falta la posición de la unidad $vin: ponla desde la pantalla de la niñera' : 'Falta la posición de la unidad $vin';
 }
 
 /// El lugar de cargue tiene muelles y el viaje todavía no tiene el suyo. Mismas palabras que el servidor al cerrar.
@@ -137,17 +140,23 @@ BloqueoCierre? bloqueoDeCierre({
   List<VistaChecklist> checklist = const [],
   bool catalogosListos = true,
   Acomodacion? acomodacion,
+  Set<String> vistasEnElServidor = const {},
 }) {
   if (!catalogosListos) return const SinCatalogos();
   if (!hayUbicacion) return const SinUbicacion();
 
-  final faltan = vistasObligatoriasSinFoto(checklist, fotos);
+  // Al continuar un borrador (S8-HU-11.2 CA-2), la vista que ya tiene su foto en el servidor no se vuelve a pedir.
+  final faltan = vistasObligatoriasSinFoto(checklist, fotos, enElServidor: vistasEnElServidor);
   if (faltan.isNotEmpty) return FaltanVistas(faltan);
 
   if (acomodacion != null) {
     if (acomodacion.unidades == null) return const SinUnidadesDelViaje();
+    // El servidor exige el puesto de todos los carros del viaje para cerrar la salida de cualquiera. Primero el de
+    // este carro, que se pone aquí; los demás se ponen desde la niñera.
     final sin = vinesSinPosicion(acomodacion.unidades!, acomodacion.posiciones);
-    if (sin.isNotEmpty) return FaltaPosicion(sin.first);
+    final propio = acomodacion.vinPropio;
+    if (propio != null && sin.contains(propio)) return FaltaPosicion(propio);
+    if (sin.isNotEmpty) return FaltaPosicion(sin.first, desdeLaNinera: propio != null);
     if (acomodacion.exigeMuelle && acomodacion.muelleId == null) return const FaltaMuelle();
     // Por viaje (S8-HU-01.3 CA-3): el servidor cuenta las fotos de todas las salidas del cargue del viaje, así
     // que una foto de la niñera sirve para todos los carros. Las que el viaje ya tiene más las de esta pantalla.
@@ -181,7 +190,11 @@ class Acomodacion {
     this.fotosDelViaje = 0,
     this.exigeMuelle = false,
     this.muelleId,
+    this.vinPropio,
   });
+
+  /// El carro de la inspección: el único que se acomoda en su salida. Null, cualquiera (sin pantalla de por medio).
+  final String? vinPropio;
 
   final List<ViajeVehiculo>? unidades;
   final Map<String, int> posiciones;
@@ -222,7 +235,9 @@ InformeJob construirInformeJob({
   Map<String, int> posicionesPrevias = const {},
   String? motivoSinInspector,
   String? motivoSinInspectorTexto,
+  bool bajoPermiso = false,
   String? corrigeInspeccionId,
+  String? inspeccionId,
 }) {
   String? opcional(String valor) => valor.trim().isEmpty ? null : valor.trim();
   return InformeJob(
@@ -245,7 +260,11 @@ InformeJob construirInformeJob({
     posicionesPrevias: posicionesPrevias,
     motivoSinInspector: motivoSinInspector,
     motivoSinInspectorTexto: motivoSinInspectorTexto,
+    bajoPermiso: bajoPermiso,
     corrigeInspeccionId: corrigeInspeccionId,
+    // S8-HU-11.2 CA-2: continuar un borrador del servidor arranca el envío con su id. La cola no crea otro informe
+    // y solo sube lo que se agregó aquí: lo que ya estaba allá no viaja en el job.
+    inspeccionId: inspeccionId,
   );
 }
 

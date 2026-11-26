@@ -169,6 +169,57 @@ void main() {
       expect(await procesador.contarFallidos(usuarioPrueba), 0);
     });
 
+    // S8-HU-07.3 CA-4 (hueco 6): el id del job viaja como `id_envio`, el mismo en cada reintento.
+    test('sale con el id del job como id_envio, y el reintento repite el mismo', () async {
+      gateway.errores['crearNovedad'] = [Exception('se cortó la respuesta')];
+      await cola.agregar(novedad(id: 'envio-1'));
+
+      await procesador.procesar(usuarioPrueba);
+      await procesador.procesar(usuarioPrueba);
+
+      expect(gateway.idsEnvioNovedad, ['envio-1', 'envio-1']);
+      expect(cola.jobs, isEmpty);
+    });
+
+    // CA-4: el primer envío llegó y se perdió la respuesta; el reenvío recibe la misma novedad (200) y la cola la da
+    // por registrada, sin volver a subir la foto.
+    test('el reenvío de un envío cuya respuesta se perdió se da por registrado', () async {
+      // Un servidor como el de verdad: guarda la novedad la primera vez y la respuesta se pierde en el camino; el
+      // reenvío con el mismo `id_envio` responde 200 con la misma novedad, sin crear otra.
+      final servidor = _ServidorConReenvio();
+      final conServidor = ProcesadorCola(cola: cola, gateway: servidor, red: RedFalsa(), archivos: archivos);
+      await cola.agregar(novedad(id: 'envio-1'));
+
+      final primera = await conServidor.procesar(usuarioPrueba);
+      expect((primera.enviados, primera.pendientes), (0, 1));
+      expect(servidor.guardadas, {'envio-1': 1}, reason: 'ya quedó en el servidor');
+      final segunda = await conServidor.procesar(usuarioPrueba);
+
+      expect((segunda.enviados, segunda.fallidos), (1, 0));
+      expect(servidor.guardadas, {'envio-1': 1}, reason: 'el reenvío no crea otra');
+      expect(servidor.respuestas, ['respuesta perdida', '200 la misma']);
+      expect(servidor.llamadas.where((l) => l == 'subirImagen'), hasLength(1), reason: 'ni otra foto');
+      expect(cola.jobs, isEmpty);
+    });
+
+    // CA-5: el 409 ETAPA_PREVIA_SIN_CIERRE de la entrega del cargue sigue dejando el envío en espera, con lo que falta.
+    test('con la entrega del cargue sin cerrar espera y dice «Falta cerrar la entrega del cargue»', () async {
+      gateway.errores['crearNovedad'] = [
+        conCodigo(
+          409,
+          codigoEtapaPreviaSinCierre,
+          'Falta cerrar la entrega del cargue: fírmenla, recíbanla con reservas o registren la no firma',
+          details: {'motivo': 'transferencia_sin_cierre', 'etapa_previa': 'Cargue'},
+        ),
+      ];
+      await cola.agregar(novedad());
+
+      final r = await procesador.procesar(usuarioPrueba);
+
+      expect(cola.jobs.single.error, 'Falta cerrar la entrega del cargue');
+      expect((cola.jobs.single.fallido, cola.jobs.single.intentos, r.fallidos), (false, 0, 0));
+    });
+
     // Un 404 no es un carro bajado (al conductor el servidor le responde 409 UNIDAD_NO_SALE también en ese caso):
     // no se retira como si lo fuera.
     test('un 404 no se toma como carro retirado', () async {
@@ -274,6 +325,25 @@ void main() {
       expect((evidencia['sello_lat'], evidencia['sello_lng'], evidencia['hash_sha256']), (4.7, -74.2, 'abc'));
     });
 
+    test('con el id del envío, la novedad lo manda como id_envio (S8-HU-07.3 CA-4)', () async {
+      final (api, adaptador) = gatewayApi();
+
+      await api.crearNovedad(
+        'v1',
+        'VIN1',
+        tipoNovedad: 'piedra',
+        tamanoDano: '5_10cm',
+        fecha: '2026-10-21T13:30:00.000Z',
+        lat: 4.7,
+        lng: -74.2,
+        foto: const FotoLocal(ruta: 'f.jpg', selloFecha: '2026-10-21T13:30:00.000Z', storagePath: 'uploads/f.jpg'),
+        idEnvio: 'envio-1',
+      );
+
+      final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
+      expect(cuerpo['id_envio'], 'envio-1');
+    });
+
     test('la llegada manda la fecha y el lugar', () async {
       final (api, adaptador) = gatewayApi();
 
@@ -292,4 +362,52 @@ void main() {
     expect((guardada.estadoTransporte, guardada.novedades), ('llegada_con_novedad', 2));
     expect(ViajeVehiculo.fromJson({'vin': 'VIN1'}).estadoTransporte, EstadoTransporte.sinRegistro);
   });
+
+  // S8-HU-07.3 CA-5 (decisión 10): el dato del servidor se lee y se guarda en la copia sin señal.
+  test('la unidad trae si puede registrar la ruta y por qué no, y la copia sin señal los conserva', () {
+    final unidad = ViajeVehiculo.fromJson({
+      'vin': 'VIN1',
+      'puede_registrar_ruta': false,
+      'motivo_sin_ruta': 'entrega_del_cargue_sin_cerrar',
+    });
+    expect((unidad.puedeRegistrarRuta, unidad.motivoSinRuta, unidad.rutaBloqueada), (false, 'entrega_del_cargue_sin_cerrar', true));
+    final guardada = ViajeVehiculo.fromJson(unidad.toJson());
+    expect((guardada.puedeRegistrarRuta, guardada.motivoSinRuta), (false, 'entrega_del_cargue_sin_cerrar'));
+
+    final anterior = ViajeVehiculo.fromJson({'vin': 'VIN1'});
+    expect((anterior.puedeRegistrarRuta, anterior.rutaBloqueada), (null, false), reason: 'un servidor anterior: como hoy');
+    expect(textoSinRuta('entrega_del_cargue_sin_cerrar'), 'Falta cerrar la entrega del cargue');
+    expect(textoSinRuta('algo_nuevo'), 'Todavía no puedes registrar la ruta de este carro');
+  });
+}
+
+/// El servidor del reenvío (S8-HU-07.3 CA-4): guarda una novedad por `id_envio` y, con uno ya guardado, responde
+/// 200 con la misma. La primera respuesta se pierde en el camino, como con un corte de señal justo después de enviar.
+class _ServidorConReenvio extends GatewayFalso {
+  /// Cuántas novedades guardó por `id_envio`.
+  final Map<String?, int> guardadas = {};
+  final List<String> respuestas = [];
+  bool _perderLaPrimera = true;
+
+  @override
+  Future<void> crearNovedad(
+    String viajeId,
+    String vin, {
+    required String tipoNovedad,
+    required String tamanoDano,
+    required String fecha,
+    required double lat,
+    required double lng,
+    required FotoLocal foto,
+    String? idEnvio,
+  }) async {
+    final repetida = idEnvio != null && guardadas.containsKey(idEnvio);
+    if (!repetida) guardadas[idEnvio] = (guardadas[idEnvio] ?? 0) + 1;
+    if (_perderLaPrimera) {
+      _perderLaPrimera = false;
+      respuestas.add('respuesta perdida');
+      throw const ErrorApi.red();
+    }
+    respuestas.add(repetida ? '200 la misma' : '201 nueva');
+  }
 }

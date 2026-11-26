@@ -150,6 +150,18 @@ void main() {
       expect(cuerpo, {'motivo_codigo': 'otro', 'motivo_texto': 'Lo pidió el cliente', 'vin_reemplazo': null});
     });
 
+    // S8-HU-01.3 CA-10.
+    test('el informe de la niñera se pide como PDF a su ruta', () async {
+      final adaptador = AdaptadorFalso((_) => ResponseBody.fromBytes([37, 80, 68, 70], 200));
+
+      final bytes = await repositorio(adaptador).pdfNinera('v 1');
+
+      final peticion = adaptador.peticiones.single;
+      expect(peticion.uri.path, '/api/viajes/v%201/ninera/pdf');
+      expect(peticion.headers['Accept'], 'application/pdf');
+      expect(bytes, [37, 80, 68, 70]);
+    });
+
     test('«Vuelve a salir» va a su ruta, sin cuerpo', () async {
       final adaptador = AdaptadorFalso((_) => json(200, viajeJson('v1')));
 

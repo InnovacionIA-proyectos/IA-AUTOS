@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:traza_autos/core/dispositivo/abridor_pdf.dart';
+import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/core/tema/tema.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/auth/presentation/auth_controller.dart';
@@ -78,7 +80,14 @@ Future<void> avanzar(WidgetTester tester) async {
   }
 }
 
-Future<Arnes> abrir(WidgetTester tester, {Sesion sesion = const Sesion(token: 'jwt', usuario: ana), Arnes? arnes, Viaje? delViaje, Set<String> cerradas = const {}}) async {
+Future<Arnes> abrir(
+  WidgetTester tester, {
+  Sesion sesion = const Sesion(token: 'jwt', usuario: ana),
+  Arnes? arnes,
+  Viaje? delViaje,
+  Set<String> cerradas = const {},
+  ViajesRepositorioFalso? viajes,
+}) async {
   await tester.binding.setSurfaceSize(const Size(600, 2200));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final usado = arnes ?? Arnes(sesion: sesion);
@@ -87,7 +96,7 @@ Future<Arnes> abrir(WidgetTester tester, {Sesion sesion = const Sesion(token: 'j
       retry: (_, _) => null,
       overrides: [
         ...usado.overrides,
-        viajesRepositorioProvider.overrideWithValue(ViajesRepositorioFalso()..viajeDeEtapa = delViaje ?? _viaje()),
+        viajesRepositorioProvider.overrideWithValue((viajes ?? ViajesRepositorioFalso())..viajeDeEtapa = delViaje ?? _viaje()),
         vehiculosRepositorioProvider.overrideWithValue(_Inventarios(cerradas: cerradas)),
       ],
       child: MaterialApp.router(
@@ -206,5 +215,57 @@ void main() {
     await avanzar(tester);
     expect(find.text('Captura e-$_vinB salida'), findsOneWidget, reason: 'el ocupado abre el carro de una vez');
     expect(arnes.puestos.guardados, isEmpty);
+  });
+
+  // CA-10: el informe de la niñera se descarga y se abre; si falla, dice por qué y deja reintentar.
+  group('el informe de la niñera', () {
+    testWidgets('se descarga y se abre con su nombre', (tester) async {
+      final viajes = ViajesRepositorioFalso();
+      final arnes = await abrir(tester, viajes: viajes);
+
+      await tester.tap(find.text('Informe de la niñera'));
+      await avanzar(tester);
+
+      expect(viajes.pdfsPedidos, 1);
+      expect(arnes.pdfs.abiertos, ['ninera-MTK-1.pdf']);
+    });
+
+    testWidgets('sin señal lo dice y reintentar lo abre', (tester) async {
+      final viajes = ViajesRepositorioFalso()..errorPdf = const ErrorApi.red();
+      final arnes = await abrir(tester, viajes: viajes);
+
+      await tester.tap(find.text('Informe de la niñera'));
+      await avanzar(tester);
+      expect(find.text('No se pudo abrir el informe de la niñera'), findsOneWidget);
+      expect(find.text('No hay señal o el servidor no responde.'), findsOneWidget);
+
+      viajes.errorPdf = null;
+      await tester.tap(find.widgetWithText(TextButton, 'Reintentar'));
+      await avanzar(tester);
+
+      expect(arnes.pdfs.abiertos, ['ninera-MTK-1.pdf']);
+      expect(find.text('No se pudo abrir el informe de la niñera'), findsNothing);
+    });
+
+    testWidgets('si el teléfono no tiene con qué abrirlo, lo dice', (tester) async {
+      final arnes = Arnes(sesion: const Sesion(token: 'jwt', usuario: ana));
+      arnes.pdfs.error = const PdfNoAbierto('Este teléfono no tiene una app para abrir PDF.');
+      await abrir(tester, arnes: arnes);
+
+      await tester.tap(find.text('Informe de la niñera'));
+      await avanzar(tester);
+
+      expect(find.text('Este teléfono no tiene una app para abrir PDF.'), findsOneWidget);
+    });
+
+    testWidgets('un rechazo del servidor se muestra con su mensaje', (tester) async {
+      final viajes = ViajesRepositorioFalso()..errorPdf = errorApi(403, 'El viaje no es tuyo');
+      await abrir(tester, viajes: viajes);
+
+      await tester.tap(find.text('Informe de la niñera'));
+      await avanzar(tester);
+
+      expect(find.text('El viaje no es tuyo'), findsOneWidget);
+    });
   });
 }

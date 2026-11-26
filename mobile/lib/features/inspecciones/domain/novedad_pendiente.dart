@@ -43,6 +43,10 @@ class NovedadPendiente {
     this.clase,
     this.nota,
     this.foto,
+    this.zona,
+    this.cuadranteNumero,
+    this.lado,
+    this.extraId,
   });
 
   factory NovedadPendiente.fromJson(Map<String, dynamic> json) => NovedadPendiente(
@@ -56,6 +60,10 @@ class NovedadPendiente {
         tipoNovedad: json['tipo_novedad'] as String?,
         clase: json['clase_dano'] as String?,
         nota: json['nota'] as String?,
+        zona: json['zona'] as String?,
+        cuadranteNumero: (json['cuadrante_numero'] as num?)?.toInt(),
+        lado: json['lado'] as String?,
+        extraId: json['extra_id'] as String?,
         foto: switch (json['evidencia']) {
           final Map<String, dynamic> e => FotoNovedad.fromJson(e),
           _ => null,
@@ -79,6 +87,20 @@ class NovedadPendiente {
   final String? clase;
   final String? nota;
   final FotoNovedad? foto;
+
+  /// El texto de la zona («Izquierdo 7 · Puerta delantera») o, en un daño de extra, el nombre del extra.
+  final String? zona;
+
+  /// La zona que ya tiene el daño (el conductor lo marcó en el dibujo). Null en una novedad sin ubicar y en el
+  /// daño de un extra.
+  final int? cuadranteNumero;
+  final String? lado;
+
+  /// El extra del que es el daño: entonces no tiene zona y se califica sin ella (S8-HU-08.2 CA-4).
+  final String? extraId;
+
+  bool get esDeExtra => extraId != null;
+  bool get tieneZona => cuadranteNumero != null;
 }
 
 /// Quién revisa las novedades del conductor: quien inspecciona y los administradores. El coordinador de calidad

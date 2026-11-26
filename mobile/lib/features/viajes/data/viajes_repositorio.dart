@@ -85,6 +85,11 @@ class ViajesRepositorio {
     return Viaje.fromJson(r as Map<String, dynamic>);
   }
 
+  /// El informe de la niñera en PDF (S8-HU-01.3 CA-10). El servidor lo arma al pedirlo con lo que haya: un cargue
+  /// sin firmar no falla, lo dice dentro. Solo con señal.
+  Future<List<int>> pdfNinera(String viajeId) =>
+      _api.descargarBytes('/api/viajes/${Uri.encodeComponent(viajeId)}/ninera/pdf', aceptar: 'application/pdf');
+
   /// Mis viajes ya terminados.
   ///
   /// No se guardan en la copia local: solo se miran con señal. Mezclarlos con los activos dejaría a quien está

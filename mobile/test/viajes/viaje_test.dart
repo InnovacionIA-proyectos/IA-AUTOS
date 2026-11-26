@@ -75,4 +75,41 @@ void main() {
       expect(viaje.vehiculos.single.destinoCambiadoAt, isNull);
     });
   });
+  // S8-HU-10.2 CA-3, CA-6 y CA-9: el papel del inspector viene del servidor, se guarda en la copia y nunca se muestra
+  // como código crudo.
+  group('el papel del inspector', () {
+    test('se lee y sobrevive a la copia sin señal', () {
+      final viaje = Viaje.fromJson({'id': 'v1', 'papel': 'recibe', 'vehiculos': <Object>[]});
+      final copia = Viaje.fromJson(viaje.toJson());
+
+      expect(viaje.papel, PapelInspector.recibe);
+      expect(copia.papel, PapelInspector.recibe);
+    });
+
+    test('un viaje de antes o del conductor no lo trae', () {
+      expect(Viaje.fromJson({'id': 'v1', 'vehiculos': <Object>[]}).papel, isNull);
+    });
+
+    test('cada valor tiene su etiqueta y uno desconocido no tiene ninguna', () {
+      expect(etiquetaPapel(PapelInspector.carga), 'Tú cargas');
+      expect(etiquetaPapel(PapelInspector.recibe), 'Tú recibes');
+      expect(etiquetaPapel(PapelInspector.cargaYRecibe), 'Tú cargas y recibes');
+      expect(etiquetaPapel('supervisa'), isNull);
+      expect(etiquetaPapel(null), isNull);
+    });
+  });
+
+  // S8-HU-07.3 CA-6: si el lugar de cargue admite cargue sin inspector lo dice el viaje, y sin señal también.
+  group('el lugar de cargue admite cargue sin inspector', () {
+    test('se lee y sobrevive a la copia sin señal', () {
+      final viaje = Viaje.fromJson({'id': 'v1', 'lugar_cargue_admite_sin_inspector': true, 'vehiculos': <Object>[]});
+
+      expect(viaje.cargueAdmiteSinInspector, isTrue);
+      expect(Viaje.fromJson(viaje.toJson()).cargueAdmiteSinInspector, isTrue);
+    });
+
+    test('un servidor anterior no lo manda: no lo admite, como todos los lugares de hoy', () {
+      expect(Viaje.fromJson({'id': 'v1', 'vehiculos': <Object>[]}).cargueAdmiteSinInspector, isFalse);
+    });
+  });
 }

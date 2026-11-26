@@ -66,9 +66,11 @@ sealed class Job {
         'no_firma' => NoFirmaJob.fromJson(json),
         'nota' => NotaJob.fromJson(json),
         'entrega_punto' => EntregaPuntoJob.fromJson(json),
+        'sin_inspector_parada' => SinInspectorParadaJob.fromJson(json),
         'recibo_sin_entrega' => ReciboSinEntregaJob.fromJson(json),
         'novedad' => NovedadJob.fromJson(json),
         'llegada' => LlegadaJob.fromJson(json),
+        'novedad_viaje' => NovedadViajeJob.fromJson(json),
         'firma_ninera' => FirmaNineraJob.fromJson(json),
         'no_firma_ninera' => NoFirmaNineraJob.fromJson(json),
         final otro => throw FormatException('Tipo de job desconocido: $otro'),
@@ -100,6 +102,7 @@ class InformeJob extends Job {
     this.posicionesEnviadas = false,
     this.motivoSinInspector,
     this.motivoSinInspectorTexto,
+    this.bajoPermiso = false,
     this.corrigeInspeccionId,
     this.inspeccionId,
     this.hallazgosEnviados = 0,
@@ -134,6 +137,7 @@ class InformeJob extends Job {
         posicionesEnviadas: json['posiciones_enviadas'] as bool? ?? false,
         motivoSinInspector: json['motivo_sin_inspector'] as String?,
         motivoSinInspectorTexto: json['motivo_sin_inspector_texto'] as String?,
+        bajoPermiso: json['bajo_permiso'] as bool? ?? false,
         // Los informes encolados antes de que se pudiera corregir desde la app no traen la clave.
         corrigeInspeccionId: json['corrige_inspeccion_id'] as String?,
         inspeccionId: json['inspeccion_id'] as String?,
@@ -168,6 +172,12 @@ class InformeJob extends Job {
   /// momento en que eligió el motivo.
   final String? motivoSinInspector;
   final String? motivoSinInspectorTexto;
+
+  /// Se capturó siguiendo un permiso «No hay inspector» que el conductor pidió (S8-HU-09.2 CA-2): concedido o con la
+  /// cuenta atrás en cero. Solo entonces un 403 `conductor_sin_permiso_de_excepcion` es «todavía no se ve concedido»
+  /// y se reintenta solo. Sin permiso pedido (un lugar sin inspectores, una revisión sin motivo) ese mismo 403 no lo
+  /// arregla el tiempo: es un rechazo, con el mensaje del servidor. Vale para la salida y para la llegada del cargue.
+  final bool bajoPermiso;
 
   /// La inspección **cerrada** que este informe viene a corregir, cuando lo es.
   ///
@@ -220,6 +230,7 @@ class InformeJob extends Job {
         posicionesEnviadas: posicionesEnviadas ?? this.posicionesEnviadas,
         motivoSinInspector: motivoSinInspector,
         motivoSinInspectorTexto: motivoSinInspectorTexto,
+        bajoPermiso: bajoPermiso,
         corrigeInspeccionId: corrigeInspeccionId,
         inspeccionId: inspeccionId ?? this.inspeccionId,
         hallazgosEnviados: hallazgosEnviados ?? this.hallazgosEnviados,
@@ -251,6 +262,7 @@ class InformeJob extends Job {
         posicionesEnviadas: posicionesEnviadas,
         motivoSinInspector: motivoSinInspector,
         motivoSinInspectorTexto: motivoSinInspectorTexto,
+        bajoPermiso: bajoPermiso,
         corrigeInspeccionId: corrigeInspeccionId,
         inspeccionId: inspeccionId,
         hallazgosEnviados: hallazgosEnviados,
@@ -282,6 +294,7 @@ class InformeJob extends Job {
         posicionesEnviadas: posicionesEnviadas,
         motivoSinInspector: motivoSinInspector,
         motivoSinInspectorTexto: motivoSinInspectorTexto,
+        bajoPermiso: bajoPermiso,
         corrigeInspeccionId: corrigeInspeccionId,
         inspeccionId: inspeccionId,
         hallazgosEnviados: hallazgosEnviados,
@@ -314,6 +327,7 @@ class InformeJob extends Job {
         'posiciones_enviadas': posicionesEnviadas,
         'motivo_sin_inspector': motivoSinInspector,
         'motivo_sin_inspector_texto': motivoSinInspectorTexto,
+        'bajo_permiso': bajoPermiso,
         'corrige_inspeccion_id': corrigeInspeccionId,
         'inspeccion_id': inspeccionId,
         'hallazgos_enviados': hallazgosEnviados,
@@ -629,11 +643,35 @@ class NotaJob extends Job {
       };
 }
 
-/// La firma de la entrega de un punto: una sola para todas las unidades que se entregan allí, o el cierre con una
+/// Un carro que no se entrega en la parada por un daño de su revisión de llegada (S8-HU-04.2 CA-4, C20): su VIN y el
+/// daño con foto que lo motiva.
+class RechazoCarro {
+  const RechazoCarro({required this.vin, required this.hallazgoId});
+
+  factory RechazoCarro.fromJson(Map<String, dynamic> json) =>
+      RechazoCarro(vin: json['vin'] as String, hallazgoId: json['hallazgo_id'] as String);
+
+  final String vin;
+  final String hallazgoId;
+
+  Map<String, dynamic> toJson() => {'vin': vin, 'hallazgo_id': hallazgoId};
+
+  @override
+  bool operator ==(Object other) => other is RechazoCarro && other.vin == vin && other.hallazgoId == hallazgoId;
+
+  @override
+  int get hashCode => Object.hash(vin, hallazgoId);
+}
+
+/// La firma de la entrega de una parada: una sola para todos los carros que se entregan allí, o el cierre con una
 /// sola firma cuando la otra parte no está. Va por la cola para que se envíe sola al volver la señal.
 ///
+/// Lleva todo lo que se decidió al firmar (S8-HU-04.2 CA-7): la hora y el GPS de ese momento, los carros
+/// rechazados con su daño, las reservas, y en el cierre con una sola firma el motivo, las fotos y el testigo.
+///
 /// Repetirla no duplica nada: el servidor guarda la misma firma en cada unidad pendiente, y cuando ya no queda
-/// ninguna responde que no hay pendientes, que para el procesador es haber terminado.
+/// ninguna responde que no hay pendientes, que para el procesador es haber terminado. Las fotos se suben una vez y
+/// su ruta queda guardada en el job.
 class EntregaPuntoJob extends Job {
   const EntregaPuntoJob({
     required super.id,
@@ -647,29 +685,57 @@ class EntregaPuntoJob extends Job {
     required this.viajeId,
     required this.lugarId,
     this.firma,
-    this.motivo,
+    this.fechaMomento,
+    this.lat,
+    this.lng,
+    this.precisionM,
+    this.reservas = const [],
+    this.rechazos = const [],
     this.recibeNombre,
     this.recibeCedula,
     this.firmaRecibe,
+    this.motivoCodigo,
+    this.motivoTexto,
+    this.fotos = const [],
+    this.vines = const [],
+    this.testigoNombre,
+    this.testigoCedula,
   });
 
-  factory EntregaPuntoJob.fromJson(Map<String, dynamic> json) => EntregaPuntoJob(
-        id: json['id'] as String,
-        etiqueta: json['etiqueta'] as String,
-        creadoEn: json['creado_en'] as int,
-        intentos: json['intentos'] as int? ?? 0,
-        error: json['error'] as String?,
-        codigoError: json['codigo_error'] as String?,
-        fallido: json['fallido'] as bool? ?? false,
-        usuarioId: json['usuario_id'] as String?,
-        viajeId: json['viaje_id'] as String,
-        lugarId: json['lugar_id'] as String,
-        firma: json['firma'] as String?,
-        motivo: json['motivo'] as String?,
-        recibeNombre: json['recibe_nombre'] as String?,
-        recibeCedula: json['recibe_cedula'] as String?,
-        firmaRecibe: json['firma_recibe'] as String?,
-      );
+  factory EntregaPuntoJob.fromJson(Map<String, dynamic> json) {
+    // Un cierre encolado por una versión anterior traía solo un motivo escrito. Se conserva como cierre con una sola
+    // firma (con el código `otro`): el servidor lo rechaza diciendo qué motivos admite, y queda a la vista en la
+    // cola en vez de salir convertido en una firma de las dos partes, que sería otra cosa.
+    final motivoViejo = json['motivo'] as String?;
+    return EntregaPuntoJob(
+      id: json['id'] as String,
+      etiqueta: json['etiqueta'] as String,
+      creadoEn: json['creado_en'] as int,
+      intentos: json['intentos'] as int? ?? 0,
+      error: json['error'] as String?,
+      codigoError: json['codigo_error'] as String?,
+      fallido: json['fallido'] as bool? ?? false,
+      usuarioId: json['usuario_id'] as String?,
+      viajeId: json['viaje_id'] as String,
+      lugarId: json['lugar_id'] as String,
+      firma: json['firma'] as String?,
+      fechaMomento: json['fecha_momento'] as String?,
+      lat: (json['lat'] as num?)?.toDouble(),
+      lng: (json['lng'] as num?)?.toDouble(),
+      precisionM: (json['precision_m'] as num?)?.toDouble(),
+      reservas: [for (final r in (json['reservas'] as List<dynamic>? ?? [])) ReservaCarro.fromJson(r as Map<String, dynamic>)],
+      rechazos: [for (final r in (json['rechazos'] as List<dynamic>? ?? [])) RechazoCarro.fromJson(r as Map<String, dynamic>)],
+      recibeNombre: json['recibe_nombre'] as String?,
+      recibeCedula: json['recibe_cedula'] as String?,
+      firmaRecibe: json['firma_recibe'] as String?,
+      motivoCodigo: json['motivo_codigo'] as String? ?? (motivoViejo == null ? null : 'otro'),
+      motivoTexto: json['motivo_texto'] as String? ?? motivoViejo,
+      fotos: [for (final f in (json['fotos'] as List<dynamic>? ?? [])) FotoLocal.fromJson(f as Map<String, dynamic>)],
+      vines: [for (final v in (json['vines'] as List<dynamic>? ?? [])) v as String],
+      testigoNombre: json['testigo_nombre'] as String?,
+      testigoCedula: json['testigo_cedula'] as String?,
+    );
+  }
 
   final String viajeId;
   final String lugarId;
@@ -677,8 +743,18 @@ class EntregaPuntoJob extends Job {
   /// El trazo (path SVG) de quien firma. Obligatorio salvo que quien cierra con una sola firma ya hubiera firmado.
   final String? firma;
 
-  /// Con motivo es el cierre con una sola firma; sin él, la firma de una de las partes.
-  final String? motivo;
+  /// Cuándo y dónde se firmó, tomados al firmar y no al enviar ([isoConZona]). Sin GPS van nulos y el servidor deja
+  /// la firma «sin ubicación».
+  final String? fechaMomento;
+  final double? lat;
+  final double? lng;
+  final double? precisionM;
+
+  /// Las observaciones de quien recibe, por carro.
+  final List<ReservaCarro> reservas;
+
+  /// Los carros que no se entregan, cada uno con el daño de su revisión de llegada que lo motiva.
+  final List<RechazoCarro> rechazos;
 
   /// Quién recibió en un punto sin inspector: una persona que no es usuario del sistema. Los tres van juntos
   /// —el servidor los exige juntos— y entonces [firma] es la de quien entrega.
@@ -688,13 +764,53 @@ class EntregaPuntoJob extends Job {
   /// El trazo de esa persona. Es la otra firma: con ella la entrega queda cerrada en el mismo envío.
   final String? firmaRecibe;
 
-  bool get unaSolaFirma => motivo != null;
+  /// Con motivo es el cierre con una sola firma (`se_nego_a_firmar` o `no_habia_nadie`); sin él, la firma de una
+  /// de las partes.
+  final String? motivoCodigo;
+
+  /// Lo que se quiso agregar al motivo. Opcional.
+  final String? motivoTexto;
+
+  /// Las fotos del cierre con una sola firma, con su sello. Cada una va a cada carro de [vines].
+  final List<FotoLocal> fotos;
+
+  /// Los carros de la parada a los que van las fotos del cierre: el servidor guarda cada foto en la revisión de
+  /// llegada del carro que se nombra.
+  final List<String> vines;
+
+  /// El testigo, que no es un usuario (por ejemplo, el vigilante). Los dos datos van juntos o no va ninguno.
+  final String? testigoNombre;
+  final String? testigoCedula;
+
+  bool get unaSolaFirma => motivoCodigo != null;
 
   /// Recibe alguien de fuera: se mira el nombre porque los tres viajan juntos o no viaja ninguno.
   bool get recibeExterno => recibeNombre != null;
 
+  /// Se firmó sin GPS.
+  bool get sinUbicacion => lat == null || lng == null;
+
   @override
   String get tipo => 'entrega_punto';
+
+  EntregaPuntoJob conFotos(List<FotoLocal> nuevas) => _copiar(fotos: nuevas);
+
+  /// S8-HU-05.2 CA-6: el plan B llegó tarde y un inspector del punto ya tomó la entrega. La firma de quien entrega
+  /// se conserva y se manda sola, para firmar con él: sin la persona del lugar, sin rechazos ni reservas (en una
+  /// parada con inspector los decide él) y sin el motivo del cierre con una sola firma. Vuelve a la cola como nueva.
+  EntregaPuntoJob soloMiFirma() => EntregaPuntoJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        usuarioId: usuarioId,
+        viajeId: viajeId,
+        lugarId: lugarId,
+        firma: firma,
+        fechaMomento: fechaMomento,
+        lat: lat,
+        lng: lng,
+        precisionM: precisionM,
+      );
 
   @override
   EntregaPuntoJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) =>
@@ -703,7 +819,14 @@ class EntregaPuntoJob extends Job {
   @override
   EntregaPuntoJob conUsuario(String usuario) => _copiar(usuarioId: usuario);
 
-  EntregaPuntoJob _copiar({int? intentos, String? error, String? codigoError, bool? fallido, String? usuarioId}) =>
+  EntregaPuntoJob _copiar({
+    int? intentos,
+    String? error,
+    String? codigoError,
+    bool? fallido,
+    String? usuarioId,
+    List<FotoLocal>? fotos,
+  }) =>
       EntregaPuntoJob(
         id: id,
         etiqueta: etiqueta,
@@ -716,10 +839,21 @@ class EntregaPuntoJob extends Job {
         viajeId: viajeId,
         lugarId: lugarId,
         firma: firma,
-        motivo: motivo,
+        fechaMomento: fechaMomento,
+        lat: lat,
+        lng: lng,
+        precisionM: precisionM,
+        reservas: reservas,
+        rechazos: rechazos,
         recibeNombre: recibeNombre,
         recibeCedula: recibeCedula,
         firmaRecibe: firmaRecibe,
+        motivoCodigo: motivoCodigo,
+        motivoTexto: motivoTexto,
+        fotos: fotos ?? this.fotos,
+        vines: vines,
+        testigoNombre: testigoNombre,
+        testigoCedula: testigoCedula,
       );
 
   @override
@@ -736,10 +870,145 @@ class EntregaPuntoJob extends Job {
         'viaje_id': viajeId,
         'lugar_id': lugarId,
         'firma': firma,
-        'motivo': motivo,
+        'fecha_momento': fechaMomento,
+        'lat': lat,
+        'lng': lng,
+        'precision_m': precisionM,
+        'reservas': [for (final r in reservas) r.toJson()],
+        'rechazos': [for (final r in rechazos) r.toJson()],
         'recibe_nombre': recibeNombre,
         'recibe_cedula': recibeCedula,
         'firma_recibe': firmaRecibe,
+        'motivo_codigo': motivoCodigo,
+        'motivo_texto': motivoTexto,
+        'fotos': [for (final f in fotos) f.toJson()],
+        'vines': vines,
+        'testigo_nombre': testigoNombre,
+        'testigo_cedula': testigoCedula,
+      };
+}
+
+/// «No hay inspector» en una parada con inspectores donde nadie tomó la entrega (S8-HU-05.2 CA-2): el motivo y la
+/// hora y el GPS del celular en el momento de tocarlo. Va por la cola: sin señal se guarda y se envía sola.
+///
+/// Lleva además los X e Y que trajo la parada, porque mientras espera señal el reloj se cuenta aquí, con la hora de
+/// activación guardada, y no depende de que la pantalla siga abierta ni de que la app siga viva (CA-3). Reenviarla
+/// no crea otra espera: con una abierta el servidor devuelve esa misma, con su reloj.
+class SinInspectorParadaJob extends Job {
+  const SinInspectorParadaJob({
+    required super.id,
+    required super.etiqueta,
+    required super.creadoEn,
+    super.intentos,
+    super.error,
+    super.codigoError,
+    super.fallido,
+    super.usuarioId,
+    required this.viajeId,
+    required this.lugarId,
+    required this.motivo,
+    required this.fechaMomento,
+    required this.avisoMinutos,
+    required this.planBMinutos,
+    this.motivoTexto,
+    this.lat,
+    this.lng,
+    this.precisionM,
+  });
+
+  factory SinInspectorParadaJob.fromJson(Map<String, dynamic> json) => SinInspectorParadaJob(
+        id: json['id'] as String,
+        etiqueta: json['etiqueta'] as String,
+        creadoEn: json['creado_en'] as int,
+        intentos: json['intentos'] as int? ?? 0,
+        error: json['error'] as String?,
+        codigoError: json['codigo_error'] as String?,
+        fallido: json['fallido'] as bool? ?? false,
+        usuarioId: json['usuario_id'] as String?,
+        viajeId: json['viaje_id'] as String,
+        lugarId: json['lugar_id'] as String,
+        motivo: json['motivo_sin_inspector'] as String,
+        motivoTexto: json['motivo_sin_inspector_texto'] as String?,
+        fechaMomento: json['fecha_momento'] as String,
+        lat: (json['lat'] as num?)?.toDouble(),
+        lng: (json['lng'] as num?)?.toDouble(),
+        precisionM: (json['precision_m'] as num?)?.toDouble(),
+        avisoMinutos: json['aviso_minutos'] as int,
+        planBMinutos: json['plan_b_minutos'] as int,
+      );
+
+  final String viajeId;
+  final String lugarId;
+
+  /// El código del motivo de `motivos-sin-inspector`, y lo que se escribió si el motivo lo pide.
+  final String motivo;
+  final String? motivoTexto;
+
+  /// Cuándo se tocó «No hay inspector» ([isoConZona]): desde ahí cuentan los plazos, aunque llegue después.
+  final String fechaMomento;
+
+  /// El GPS del celular al tocarlo. Sin GPS se activa igual.
+  final double? lat;
+  final double? lng;
+  final double? precisionM;
+
+  /// X e Y de la parada al activar: el reloj que se ve mientras la activación espera señal.
+  final int avisoMinutos;
+  final int planBMinutos;
+
+  @override
+  String get tipo => 'sin_inspector_parada';
+
+  @override
+  SinInspectorParadaJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) =>
+      _copiar(intentos: intentos, error: error, codigoError: codigo, fallido: fallido);
+
+  @override
+  SinInspectorParadaJob conUsuario(String usuario) => _copiar(usuarioId: usuario);
+
+  SinInspectorParadaJob _copiar({int? intentos, String? error, String? codigoError, bool? fallido, String? usuarioId}) =>
+      SinInspectorParadaJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        intentos: intentos ?? this.intentos,
+        error: error,
+        codigoError: codigoError ?? this.codigoError,
+        fallido: fallido ?? this.fallido,
+        usuarioId: usuarioId ?? this.usuarioId,
+        viajeId: viajeId,
+        lugarId: lugarId,
+        motivo: motivo,
+        motivoTexto: motivoTexto,
+        fechaMomento: fechaMomento,
+        lat: lat,
+        lng: lng,
+        precisionM: precisionM,
+        avisoMinutos: avisoMinutos,
+        planBMinutos: planBMinutos,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'sin_inspector_parada',
+        'id': id,
+        'etiqueta': etiqueta,
+        'creado_en': creadoEn,
+        'intentos': intentos,
+        'error': error,
+        'codigo_error': codigoError,
+        'fallido': fallido,
+        'usuario_id': usuarioId,
+        'viaje_id': viajeId,
+        'lugar_id': lugarId,
+        'motivo_sin_inspector': motivo,
+        'motivo_sin_inspector_texto': motivoTexto,
+        'fecha_momento': fechaMomento,
+        'lat': lat,
+        'lng': lng,
+        'precision_m': precisionM,
+        'aviso_minutos': avisoMinutos,
+        'plan_b_minutos': planBMinutos,
       };
 }
 
@@ -1009,6 +1278,139 @@ class LlegadaJob extends Job {
         'fecha': fecha,
         'lat': lat,
         'lng': lng,
+      };
+}
+
+/// La novedad del **viaje** (S8-HU-07.3 CA-3): lo que el conductor o el inspector reportan sobre el viaje y no sobre
+/// un carro (una llanta reventada, un bloqueo de vía, un carro que no llegó al patio). Va por la cola porque se
+/// reporta en la vía, donde puede no haber señal: guarda el tipo, el texto, la foto si la hay, la hora y el GPS del
+/// momento en que se guardó (no del envío) y, del inspector, el proceso de su reclamo y la parada de la entrega.
+///
+/// Su `id` viaja como `id_envio`: si el primer envío llegó y solo se perdió la respuesta, el reenvío recibe la misma
+/// novedad en vez de crear otra y otro aviso. Es reanudable como la novedad de un carro: la foto se sube primero y
+/// queda anotada, así un corte entre los dos pasos no la vuelve a subir.
+class NovedadViajeJob extends Job {
+  const NovedadViajeJob({
+    required super.id,
+    required super.etiqueta,
+    required super.creadoEn,
+    super.intentos,
+    super.error,
+    super.codigoError,
+    super.fallido,
+    super.usuarioId,
+    required this.viajeId,
+    required this.tipoNovedad,
+    required this.texto,
+    required this.fecha,
+    this.lat,
+    this.lng,
+    this.foto,
+    this.proceso,
+    this.lugarId,
+  });
+
+  factory NovedadViajeJob.fromJson(Map<String, dynamic> json) => NovedadViajeJob(
+        id: json['id'] as String,
+        etiqueta: json['etiqueta'] as String,
+        creadoEn: json['creado_en'] as int,
+        intentos: json['intentos'] as int? ?? 0,
+        error: json['error'] as String?,
+        codigoError: json['codigo_error'] as String?,
+        fallido: json['fallido'] as bool? ?? false,
+        usuarioId: json['usuario_id'] as String?,
+        viajeId: json['viaje_id'] as String,
+        tipoNovedad: json['tipo_novedad'] as String,
+        texto: json['texto'] as String,
+        fecha: json['fecha'] as String,
+        lat: (json['lat'] as num?)?.toDouble(),
+        lng: (json['lng'] as num?)?.toDouble(),
+        foto: switch (json['foto']) {
+          final Map<String, dynamic> f => FotoLocal.fromJson(f),
+          _ => null,
+        },
+        proceso: json['proceso'] as String?,
+        lugarId: json['lugar_id'] as String?,
+      );
+
+  final String viajeId;
+
+  /// Código del catálogo `tipos-novedad-viaje`.
+  final String tipoNovedad;
+
+  /// Lo que pasó, de 1 a 300 caracteres.
+  final String texto;
+
+  /// Cuándo y dónde se guardó. Sin GPS van nulos los dos y el servidor la acepta igual, marcada «sin ubicación»
+  /// (C14): una novedad del viaje no se pierde por falta de señal del GPS.
+  final String fecha;
+  final double? lat;
+  final double? lng;
+
+  /// La foto sellada, opcional.
+  final FotoLocal? foto;
+
+  /// Solo el inspector: `cargue` o `entrega`, el proceso de su reclamo. El conductor no lo manda (400 si lo hace).
+  final String? proceso;
+
+  /// Solo el inspector en la entrega: la parada que tomó.
+  final String? lugarId;
+
+  bool get sinUbicacion => lat == null || lng == null;
+
+  @override
+  String get tipo => 'novedad_viaje';
+
+  NovedadViajeJob conFoto(FotoLocal nueva) => _copiar(foto: nueva);
+
+  @override
+  NovedadViajeJob conIntento({required int intentos, required String? error, String? codigo, required bool fallido}) =>
+      _copiar(intentos: intentos, error: error, codigoError: codigo, fallido: fallido);
+
+  @override
+  NovedadViajeJob conUsuario(String usuario) => _copiar(usuarioId: usuario);
+
+  NovedadViajeJob _copiar({int? intentos, String? error, String? codigoError, bool? fallido, String? usuarioId, FotoLocal? foto}) =>
+      NovedadViajeJob(
+        id: id,
+        etiqueta: etiqueta,
+        creadoEn: creadoEn,
+        intentos: intentos ?? this.intentos,
+        error: error,
+        codigoError: codigoError ?? this.codigoError,
+        fallido: fallido ?? this.fallido,
+        usuarioId: usuarioId ?? this.usuarioId,
+        viajeId: viajeId,
+        tipoNovedad: tipoNovedad,
+        texto: texto,
+        fecha: fecha,
+        lat: lat,
+        lng: lng,
+        foto: foto ?? this.foto,
+        proceso: proceso,
+        lugarId: lugarId,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'novedad_viaje',
+        'id': id,
+        'etiqueta': etiqueta,
+        'creado_en': creadoEn,
+        'intentos': intentos,
+        'error': error,
+        'codigo_error': codigoError,
+        'fallido': fallido,
+        'usuario_id': usuarioId,
+        'viaje_id': viajeId,
+        'tipo_novedad': tipoNovedad,
+        'texto': texto,
+        'fecha': fecha,
+        'lat': lat,
+        'lng': lng,
+        'foto': foto?.toJson(),
+        'proceso': proceso,
+        'lugar_id': lugarId,
       };
 }
 

@@ -37,7 +37,8 @@ abstract interface class ServicioUbicacion {
   Future<Posicion> obtenerActual();
 
   /// Posición para sellar una foto sin hacer esperar al usuario: la actual con tiempo corto o la última conocida.
-  /// Null si no hay ninguna. Quien la use debe mirar [Posicion.delMomento] antes de darla por buena.
+  /// Null si no hay ninguna. Quien la use debe mirar [Posicion.delMomento] antes de darla por buena. Si el permiso de
+  /// ubicación nunca se dio, lo pide; negado, devuelve null sin lanzar.
   Future<Posicion?> obtenerRapida();
 
   /// Si el GPS del teléfono está encendido, y cada vez que eso cambia.

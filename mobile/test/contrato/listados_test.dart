@@ -164,9 +164,9 @@ void main() {
             ],
           }));
 
-      final puntos = await EntregasRepositorio(apiCon(adaptador)).delViaje('via-1');
+      final entregas = await EntregasRepositorio(apiCon(adaptador)).delViaje('via-1');
 
-      expect(puntos.single.lugarId, 'lug-1');
+      expect(entregas.puntos.single.lugarId, 'lug-1');
     });
 
     // S7-HU-22.1: quién recibe lo decide el servidor por punto de entrega. La app lo lee de aquí en vez de
@@ -188,9 +188,9 @@ void main() {
             ],
           }));
 
-      final puntos = await EntregasRepositorio(apiCon(adaptador)).delViaje('via-1');
+      final entregas = await EntregasRepositorio(apiCon(adaptador)).delViaje('via-1');
 
-      expect(puntos.map((p) => p.tieneInspector), [true, false, false]);
+      expect(entregas.puntos.map((p) => p.tieneInspector), [true, false, false]);
     });
   });
 

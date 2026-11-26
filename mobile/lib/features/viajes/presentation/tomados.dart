@@ -12,7 +12,9 @@ import '../../../core/ui/widgets.dart';
 import '../domain/pendiente.dart';
 import '../providers.dart';
 import 'detalle_pendiente_page.dart';
+import 'entrega_punto_page.dart';
 import 'mis_viajes_controller.dart';
+import 'novedad_viaje.dart';
 
 /// Lo que el inspector tomó de «Por tomar» y ahora le toca inspeccionar: cómo se nombra, qué papel tiene en el viaje
 /// y cómo se libera.
@@ -113,7 +115,9 @@ Future<void> liberarTomado(BuildContext context, Pendiente pendiente) async {
   // El contenedor y no `ref`: al liberarlo, la tarjeta sale de «Mis viajes» y quien la pintó puede ya no estar.
   final contenedor = ProviderScope.containerOf(context, listen: false);
   try {
-    await contenedor.read(reclamosRepositorioProvider).liberar(pendiente.viajeId, pendiente.proceso);
+    await contenedor
+        .read(reclamosRepositorioProvider)
+        .liberar(pendiente.viajeId, pendiente.proceso, lugarId: pendiente.parada);
   } catch (e) {
     mensajes.showSnackBar(SnackBar(content: Text(mensajeDeError(e, 'No se pudo liberar. Inténtalo de nuevo.'))));
     return;
@@ -123,7 +127,8 @@ Future<void> liberarTomado(BuildContext context, Pendiente pendiente) async {
   await contenedor.read(misViajesControllerProvider.notifier).cargar();
 }
 
-/// Los botones «Liberar» de lo tomado en un viaje: uno por proceso, y si son dos dicen cuál es cuál.
+/// Los botones «Liberar» de lo tomado en un viaje: uno por proceso (y en la entrega, uno por parada), y si son
+/// varios dicen cuál es cuál.
 class BotonesLiberar extends StatefulWidget {
   const BotonesLiberar({super.key, required this.tomados});
 
@@ -149,6 +154,8 @@ class _EstadoBotonesLiberar extends State<BotonesLiberar> {
   @override
   Widget build(BuildContext context) {
     final tomados = widget.tomados;
+    // Dos paradas del mismo viaje son dos entregas: el botón nombra la parada para no liberar la que no era.
+    final variasEntregas = tomados.where((t) => t.esEntrega).length > 1;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -156,7 +163,12 @@ class _EstadoBotonesLiberar extends State<BotonesLiberar> {
           OutlinedButton(
             onPressed: _liberando ? null : () => _liberar(tomado),
             child: Text(
-              tomados.length == 1 ? 'Liberar' : (tomado.esEntrega ? 'Liberar la entrega' : 'Liberar el cargue'),
+              switch (tomado) {
+                _ when tomados.length == 1 => 'Liberar',
+                Pendiente(esEntrega: true) when variasEntregas => 'Liberar la entrega · ${tomado.lugar}',
+                Pendiente(esEntrega: true) => 'Liberar la entrega',
+                _ => 'Liberar el cargue',
+              },
             ),
           ),
       ],
@@ -174,7 +186,9 @@ class TarjetaTomada extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
+    // Tomada por quien mira: la misma franja azul de sus viajes, que la separa de lo que está en «Por tomar».
     return Tarjeta(
+      franja: Colores.primario,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -198,6 +212,17 @@ class TarjetaTomada extends StatelessWidget {
             },
             child: const Text('Ver unidades'),
           ),
+          // S8-HU-04.2 CA-1: el inspector entrega solo en la parada que tomó.
+          if (pendiente.esEntrega && pendiente.lugarId != null) ...[
+            const SizedBox(height: Espacio.sm),
+            BotonEntregarEnParada(viajeId: pendiente.viajeId, lugarId: pendiente.lugarId!, lugar: pendiente.lugar),
+          ],
+          // S8-HU-07.3 CA-1: la novedad del viaje del camión que tomó, con el proceso de su reclamo y, en la entrega,
+          // la parada (sin ella el servidor responde 400).
+          if (!pendiente.esEntrega || pendiente.lugarId != null) ...[
+            const SizedBox(height: Espacio.sm),
+            BotonNovedadViaje(viajeId: pendiente.viajeId, proceso: pendiente.proceso, lugarId: pendiente.parada),
+          ],
           const SizedBox(height: Espacio.sm),
           BotonesLiberar(tomados: [pendiente]),
         ],

@@ -109,6 +109,9 @@ abstract interface class GatewayInformes {
   Future<void> cerrarInspeccion(String inspeccionId);
 
   /// Registra una novedad del conductor sobre una unidad del viaje. La foto ya está subida ([FotoLocal.storagePath]).
+  ///
+  /// [idEnvio] es el identificador del envío en la cola (hueco 6, S8-HU-07.3 CA-4): si el primer envío llegó y solo
+  /// se perdió la respuesta, el servidor devuelve la misma novedad en vez de crear otra foto y otro aviso.
   Future<void> crearNovedad(
     String viajeId,
     String vin, {
@@ -118,6 +121,23 @@ abstract interface class GatewayInformes {
     required double lat,
     required double lng,
     required FotoLocal foto,
+    String? idEnvio,
+  });
+
+  /// La novedad del viaje (S8-HU-07.3 CA-3), con la foto ya subida si la trae. Sin GPS [lat] y [lng] van nulos y el
+  /// servidor la acepta «sin ubicación». [proceso] y [lugarId] solo los manda el inspector. [idEnvio] hace que el
+  /// reenvío no la duplique.
+  Future<void> registrarNovedadViaje(
+    String viajeId, {
+    required String tipo,
+    required String texto,
+    required String fecha,
+    double? lat,
+    double? lng,
+    FotoLocal? foto,
+    String? idEnvio,
+    String? proceso,
+    String? lugarId,
   });
 
   /// Confirma la llegada de una unidad, con la fecha y el lugar del momento en que el conductor lo hizo.
@@ -127,12 +147,16 @@ abstract interface class GatewayInformes {
   /// sin inspector.
   Future<void> firmarReciboSinEntrega(String inspeccionId, {required String firma});
 
-  /// La firma de quien tiene la sesión sobre la entrega de un punto: el servidor la guarda en cada unidad pendiente.
-  /// Quién entrega y quién recibe salen del viaje (su conductor y su inspector).
+  /// La firma de quien tiene la sesión sobre la entrega de una parada: el servidor la guarda en cada unidad
+  /// pendiente. Quién recibe lo decide la parada (S8-HU-04.2): el inspector que la tomó o, donde el punto no tiene
+  /// inspectores, la persona del lugar.
   ///
-  /// En un punto sin inspector recibe alguien que no es usuario: [recibeNombre], [recibeCedula] y [firmaRecibe]
-  /// viajan juntos y entonces la entrega queda cerrada de una vez, porque las dos firmas llegan a la vez. En un
-  /// punto con inspector el servidor rechaza esos tres campos con 400: allí firma él desde su sesión.
+  /// En una parada sin inspectores recibe alguien que no es usuario: [recibeNombre], [recibeCedula] y [firmaRecibe]
+  /// viajan juntos y entonces la entrega queda cerrada de una vez, porque las dos firmas llegan a la vez. En una
+  /// parada con inspectores el servidor rechaza esos tres campos con 400: allí firma él desde su sesión.
+  ///
+  /// [rechazos] son los carros que no se entregan, con el daño que lo motiva; [reservas], las observaciones de quien
+  /// recibe por carro; [fechaMomento], [lat], [lng] y [precisionM], la hora y el GPS del momento en que se firmó.
   Future<void> firmarEntregaPunto(
     String viajeId,
     String lugarId, {
@@ -140,11 +164,44 @@ abstract interface class GatewayInformes {
     String? recibeNombre,
     String? recibeCedula,
     String? firmaRecibe,
+    List<ReservaCarro> reservas = const [],
+    List<RechazoCarro> rechazos = const [],
+    String? fechaMomento,
+    double? lat,
+    double? lng,
+    double? precisionM,
   });
 
-  /// Cierra la entrega de un punto con una sola firma y el motivo de la otra parte. [firma] solo hace falta si quien
-  /// cierra todavía no había firmado.
-  Future<void> cerrarEntregaConUnaFirma(String viajeId, String lugarId, {required String motivo, String? firma});
+  /// «No hay inspector» en una parada con inspectores (S8-HU-05.2 CA-2): el motivo y la hora y el GPS del celular al
+  /// tocarlo. Con una espera ya abierta el servidor devuelve esa misma: reenviar no crea otra ni reinicia el reloj.
+  Future<void> activarSinInspector(
+    String viajeId,
+    String lugarId, {
+    required String motivo,
+    String? motivoTexto,
+    String? fechaMomento,
+    double? lat,
+    double? lng,
+    double? precisionM,
+  });
+
+  /// Cierra la entrega de una parada con una sola firma, con su motivo codificado y su evidencia: las [fotos] ya
+  /// subidas, cada una con el VIN del carro al que va, y el testigo. [firma] solo hace falta si quien cierra todavía
+  /// no había firmado.
+  Future<void> cerrarEntregaConUnaFirma(
+    String viajeId,
+    String lugarId, {
+    required String motivoCodigo,
+    String? motivoTexto,
+    String? firma,
+    List<({String vin, FotoLocal foto})> fotos = const [],
+    String? testigoNombre,
+    String? testigoCedula,
+    String? fechaMomento,
+    double? lat,
+    double? lng,
+    double? precisionM,
+  });
 
   /// Firma la transferencia. Solo viaja **una** firma, la de quien tiene la sesión: el servidor se la atribuye
   /// al usuario del token.

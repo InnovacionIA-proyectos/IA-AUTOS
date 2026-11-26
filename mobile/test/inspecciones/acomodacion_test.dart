@@ -124,6 +124,23 @@ void main() {
       expect(b!.mensaje, 'Falta la posición de la unidad ${_b.vin}');
     });
 
+    // En la salida de un carro solo se acomoda ese carro: primero se pide el suyo, y el de otro se pone en la niñera.
+    test('en la salida de un carro, primero su puesto; el de otro se pide desde la niñera', () {
+      BloqueoCierre? enLaDe(String vinPropio, Map<String, int> posiciones) => bloqueoDeCierre(
+            hayUbicacion: true,
+            fotos: [_foto()],
+            hallazgos: const [],
+            acomodacion: Acomodacion(vinPropio: vinPropio, unidades: const [_a, _b, _c], posiciones: posiciones, fotosMinimas: 1),
+          );
+
+      expect(enLaDe(_c.vin, {})!.mensaje, 'Falta la posición de la unidad ${_c.vin}');
+      expect(
+        enLaDe(_c.vin, {_c.vin: 1})!.mensaje,
+        'Falta la posición de la unidad ${_a.vin}: ponla desde la pantalla de la niñera',
+      );
+      expect(enLaDe(_c.vin, {_a.vin: 2, _b.vin: 3, _c.vin: 1}), isNull);
+    });
+
     test('con todas las posiciones faltan las fotos de la acomodación', () {
       final b = _bloqueo(unidades: [_a], posiciones: {_a.vin: 4}, minimas: 2, fotos: [_foto()]);
       expect(b!.mensaje, 'Faltan fotos de la acomodación: se exige al menos 2 y hay 1');

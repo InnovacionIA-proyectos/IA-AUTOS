@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:traza_autos/app/proveedores.dart';
 import 'package:traza_autos/core/config/entorno.dart';
+import 'package:traza_autos/core/config/parametros_app.dart';
 import 'package:traza_autos/core/dispositivo/servicios.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/features/auth/domain/almacen_sesion.dart';
@@ -27,6 +28,7 @@ import 'package:traza_autos/features/sync/providers.dart';
 import 'package:traza_autos/features/viajes/presentation/destinos_vistos.dart';
 import 'package:traza_autos/features/viajes/presentation/tomados.dart';
 import 'package:traza_autos/features/inspecciones/domain/puestos_guardados.dart';
+import 'package:traza_autos/core/dispositivo/abridor_pdf.dart';
 
 import 'dobles_dibujo.dart';
 import 'dobles_sync.dart';
@@ -171,6 +173,16 @@ class InspeccionesRepositorioFalso implements InspeccionesRepositorio {
   /// distingue al coordinador de calidad del inspector.
   final peticiones = <({String? usuarioId, String? vin, int pagina})>[];
 
+  /// Los informes que se pidieron descartar, en orden. Con [errorDescartar] puesto, el descarte lo levanta.
+  final descartados = <String>[];
+  Object? errorDescartar;
+
+  @override
+  Future<void> descartar(String inspeccionId) async {
+    if (errorDescartar != null) throw errorDescartar!;
+    descartados.add(inspeccionId);
+  }
+
   @override
   Future<List<InspeccionResumen>?> leerCache(String usuarioId) async => cache;
 
@@ -287,10 +299,18 @@ class Arnes {
   /// Los puestos de la niñera elegidos en el teléfono, en memoria.
   final puestos = PuestosEnMemoria();
 
+  /// Los PDF que la app mandó abrir, sin tocar el teléfono.
+  final pdfs = AbridorPdfFalso();
+
+  /// Los parámetros de la app que manda el servidor. Sin nada por defecto: mandan los valores de hoy de la regla.
+  final parametros = ParametrosAppFalsos();
+
   List<Override> get overrides => [
         almacenDestinosVistosProvider.overrideWithValue(destinosVistos),
         almacenTomadosProvider.overrideWithValue(tomadosGuardados),
         almacenPuestosProvider.overrideWithValue(puestos),
+        abridorPdfProvider.overrideWithValue(pdfs),
+        fuenteParametrosAppProvider.overrideWithValue(parametros),
         entornoProvider.overrideWithValue(entorno),
         almacenSesionProvider.overrideWithValue(almacen),
         authRepositorioProvider.overrideWithValue(auth),
@@ -434,4 +454,33 @@ class PuestosEnMemoria implements AlmacenPuestos {
 
   @override
   Future<void> borrar(String clave) async => guardados.remove(clave);
+}
+
+class AbridorPdfFalso implements AbridorPdf {
+  final List<String> abiertos = [];
+
+  /// Lo que lanza en vez de abrir: el teléfono sin app de PDF, por ejemplo.
+  Object? error;
+
+  @override
+  Future<void> abrir(List<int> bytes, String nombre) async {
+    if (error != null) throw error!;
+    abiertos.add(nombre);
+  }
+}
+
+class ParametrosAppFalsos implements FuenteParametrosApp {
+  ParametrosApp? valor;
+
+  /// Cuántas veces se pidieron al servidor: al iniciar sesión, al volver la señal y al abrir la captura.
+  int lecturas = 0;
+
+  @override
+  Future<ParametrosApp?> leer() async {
+    lecturas++;
+    return valor;
+  }
+
+  @override
+  Future<ParametrosApp?> guardados() async => valor;
 }
