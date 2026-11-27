@@ -5,6 +5,8 @@ import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../viajes/domain/entrega_punto.dart';
+import '../../viajes/presentation/entrega_punto_page.dart';
 import '../domain/desenlace_envio.dart';
 import '../domain/job.dart';
 import '../providers.dart';
@@ -14,7 +16,8 @@ import 'sync_controller.dart';
 /// apareciera, quien usa el equipo no tendría cómo saber por qué hay trabajo que nunca sale.
 final _jobsProvider = FutureProvider.autoDispose<List<Job>>((ref) async {
   // Se vuelve a leer cada vez que cambian los contadores de la cola.
-  ref.watch(syncControllerProvider.select((s) => (s.pendientes, s.fallidos, s.sincronizando)));
+  // Los retirados cuentan aparte: sin ellos, quitar uno no cambiaba ningún contador y seguía en la lista.
+  ref.watch(syncControllerProvider.select((s) => (s.pendientes, s.fallidos, s.retirados, s.sincronizando)));
   return ref.watch(procesadorColaProvider).enElDispositivo();
 });
 
@@ -77,6 +80,23 @@ class ColaPage extends ConsumerWidget {
   }
 }
 
+/// S8-HU-05.2 CA-6: lo que se dice de un envío de la parada que el servidor rechazó, por su motivo y nunca con el
+/// texto crudo del servidor; o que agotó sus intentos sin respuesta, que no es un rechazo. Null para los demás
+/// envíos y para el que falló en el teléfono (sin código del servidor), que se leen como siempre.
+String? explicacionDeLaParada(Job job) => switch (job) {
+      Job(codigoError: null) => null,
+      EntregaPuntoJob(fallido: true, retirado: false) => explicacionDelRechazoTardio(job.codigoError),
+      SinInspectorParadaJob(fallido: true, retirado: false) => explicacionDeLaActivacionRechazada(job.codigoError),
+      _ => null,
+    };
+
+/// La parada de un envío de la parada, para abrirla desde la cola. Null para los demás.
+({String viajeId, String lugarId})? paradaDelEnvio(Job job) => switch (job) {
+      EntregaPuntoJob(:final viajeId, :final lugarId) => (viajeId: viajeId, lugarId: lugarId),
+      SinInspectorParadaJob(:final viajeId, :final lugarId) => (viajeId: viajeId, lugarId: lugarId),
+      _ => null,
+    };
+
 class _FilaJob extends StatelessWidget {
   const _FilaJob({
     required this.job,
@@ -98,6 +118,8 @@ class _FilaJob extends StatelessWidget {
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
     final creado = DateTime.fromMillisecondsSinceEpoch(job.creadoEn);
+    final explicacion = explicacionDeLaParada(job);
+    final parada = explicacion == null || ajeno ? null : paradaDelEnvio(job);
     return Tarjeta(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,7 +129,11 @@ class _FilaJob extends StatelessWidget {
               Expanded(child: Text(job.etiqueta, style: tema.titleMedium?.copyWith(fontSize: 15))),
               if (ajeno || job.esProhibido)
                 const Insignia('De otro usuario', tono: TonoInsignia.neutro)
-              else if (job.codigoError == 'VALIDATION_ERROR')
+              else if (job.retirado)
+                // No falló nada: el carro ya no sale o se bajó del viaje, y el servidor ya no lo admite.
+                const Insignia('Retirado', tono: TonoInsignia.neutro)
+              // Solo de un informe: a una novedad del viaje rechazada con 400 no le falta ninguna captura (S8-HU-07.3).
+              else if (job.codigoError == 'VALIDATION_ERROR' && job is InformeJob)
                 // No es un fallo de envío: al informe le falta algo, y el detalle de abajo dice qué.
                 const Insignia('Captura incompleta', tono: TonoInsignia.advertencia)
               else if (job.fallido)
@@ -118,7 +144,16 @@ class _FilaJob extends StatelessWidget {
           ),
           Text(formatearFecha(creado), style: tema.bodySmall),
           if (job.intentos > 0) Text('Intentos: ${job.intentos}', style: tema.bodySmall),
-          if (job.error != null) Padding(padding: const EdgeInsets.only(top: Espacio.xs), child: Text(job.error!, style: tema.bodySmall?.copyWith(color: Colores.peligro))),
+          if (explicacion != null)
+            Padding(
+              padding: const EdgeInsets.only(top: Espacio.xs),
+              child: Text(explicacion, style: tema.bodySmall?.copyWith(color: Colores.peligro)),
+            )
+          else if (job.error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: Espacio.xs),
+              child: Text(job.error!, style: tema.bodySmall?.copyWith(color: job.retirado ? null : Colores.peligro)),
+            ),
           // Lo intentó y falló por algo pasajero: decir cuándo vuelve a intentarlo evita el «no está haciendo
           // nada» de quien mira una cola que, por dentro, sí espera.
           if (!job.fallido && !ajeno && job.error != null)
@@ -138,7 +173,11 @@ class _FilaJob extends StatelessWidget {
                 style: tema.bodySmall,
               ),
             ),
-          if (job.fallido && !ajeno && !job.esProhibido) ...[
+          if (job.retirado && !ajeno) ...[
+            const SizedBox(height: Espacio.md),
+            // Reintentar daría el mismo rechazo: lo único que queda es quitarlo.
+            OutlinedButton(onPressed: onDescartar, child: const Text('Quitar')),
+          ] else if (job.fallido && !ajeno && !job.esProhibido) ...[
             const SizedBox(height: Espacio.md),
             Row(
               children: [
@@ -148,6 +187,14 @@ class _FilaJob extends StatelessWidget {
               ],
             ),
           ],
+          // CA-6: desde aquí se abre la parada para ver cómo quedó y qué hacer con lo que se rechazó.
+          if (parada != null)
+            TextButton(
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute(builder: (_) => EntregaParadaPage(viajeId: parada.viajeId, lugarId: parada.lugarId)),
+              ),
+              child: const Text('Abrir la parada'),
+            ),
         ],
       ),
     );

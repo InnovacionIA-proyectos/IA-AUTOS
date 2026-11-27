@@ -48,7 +48,8 @@ funciona; `HallazgoDto` no cambió.
 - **Una etapa sin ninguna transferencia ya no bloquea la siguiente**, porque es lo que hace la API. Si debe
   exigirse, la regla entra primero en el servidor: una más estricta solo en la app bloquea trabajo que la API
   acepta.
-- **El umbral de precisión baja (30 m)** es un valor inicial, en `precisionBajaMetros`.
+- **El umbral de precisión baja** lo ajusta TI en el portal (`gps_precision_minima_m`) y la app lo lee de
+  `GET /api/parametros/app` (S8-HU-09.2); 30 m es solo el valor de hoy si nunca pudo leerlo.
 - **La vista superior**: confirmar cómo se toma en la práctica, porque nadie se sube encima del vehículo y una
   guía cenital imposible de cumplir se ignora.
 

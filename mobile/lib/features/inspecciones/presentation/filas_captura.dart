@@ -20,9 +20,14 @@ class FilaVista extends StatelessWidget {
     required this.foto,
     required this.alTomar,
     this.precisionBaja,
+    this.enElServidor = false,
   });
 
   final VistaChecklist vista;
+
+  /// La vista ya tiene su foto en el borrador del servidor que se está continuando (S8-HU-11.2 CA-2): cuenta para
+  /// cerrar sin tomarla otra vez.
+  final bool enElServidor;
 
   /// La última foto de la vista; null si todavía no hay.
   final FotoLocal? foto;
@@ -43,7 +48,11 @@ class FilaVista extends StatelessWidget {
             width: 56,
             height: 48,
             decoration: BoxDecoration(color: Colores.superficie, borderRadius: BorderRadius.circular(8)),
-            child: const Icon(Icons.photo_camera_outlined, size: 20, color: Colores.textoSecundario),
+            child: Icon(
+              enElServidor ? Icons.cloud_done_outlined : Icons.photo_camera_outlined,
+              size: 20,
+              color: enElServidor ? Colores.exito : Colores.textoSecundario,
+            ),
           )
         else
           // Se puede abrir: a 56 px no se ve si la foto salió movida u oscura.
@@ -62,7 +71,10 @@ class FilaVista extends StatelessWidget {
               Text(vista.nombre, style: tema.bodyMedium?.copyWith(color: Colores.textoPrimario)),
               // Cada cosa en su línea, no una excluyendo a las otras: la nota de una foto adicional quedaba
               // tapada por el aviso de precisión, que bajo techo sale siempre.
-              if (!vista.obligatoria && actual == null) Text('Solo si hay faltante o daño', style: tema.bodySmall),
+              if (actual == null && enElServidor)
+                Text('Ya está en el servidor', style: tema.bodySmall?.copyWith(color: Colores.exito))
+              else if (!vista.obligatoria && actual == null)
+                Text('Solo si hay faltante o daño', style: tema.bodySmall),
               if (actual?.nota case final nota? when nota.isNotEmpty)
                 Text(nota, style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
               if (actual != null && actual.sinUbicacion)
@@ -82,7 +94,7 @@ class FilaVista extends StatelessWidget {
           ),
         ),
         const SizedBox(width: Espacio.sm),
-        TextButton(onPressed: alTomar, child: Text(actual == null ? 'Tomar' : 'Repetir')),
+        TextButton(onPressed: alTomar, child: Text(actual == null && !enElServidor ? 'Tomar' : 'Repetir')),
       ],
     );
   }

@@ -18,6 +18,7 @@ Future<void> mostrarDetalleHallazgo(
   DateTime? venceFoto,
   VoidCallback? alVencerFoto,
   bool sinSenal = false,
+  bool paraConductor = false,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -31,6 +32,7 @@ Future<void> mostrarDetalleHallazgo(
       venceFoto: venceFoto,
       alVencerFoto: alVencerFoto,
       sinSenal: sinSenal,
+      paraConductor: paraConductor,
     ),
   );
 }
@@ -44,7 +46,11 @@ class _DetalleHallazgo extends StatelessWidget {
     required this.venceFoto,
     required this.alVencerFoto,
     required this.sinSenal,
+    required this.paraConductor,
   });
+
+  /// Quien mira es el conductor: ve si ya se calificó, nunca el nivel.
+  final bool paraConductor;
 
   final HallazgoVista hallazgo;
   final Catalogos catalogos;
@@ -60,13 +66,13 @@ class _DetalleHallazgo extends StatelessWidget {
   Widget build(BuildContext context) {
     final tema = Theme.of(context).textTheme;
     final clase = hallazgo.clase == null ? 'Sin clase' : catalogos.etiqueta(Catalogo.clasesDano, hallazgo.clase!);
-    // Sin nivel hay dos casos distintos y conviene no confundirlos: que nadie lo haya clasificado, o que ya lo
-    // hayan hecho y a quien mira no se le muestre con qué. Al conductor el servidor le oculta el nivel.
-    final nivel = switch (hallazgo) {
-      HallazgoVista(nivel: final codigo?) => catalogos.etiqueta(Catalogo.nivelesSeveridad, codigo),
-      HallazgoVista(yaLoRevisaron: true) => 'Revisado',
-      _ => 'Por revisar',
-    };
+    // Un solo estado para el conductor, «Pendiente de calificar» o «Calificado», con el dato del servidor
+    // (S8-HU-08.2 CA-5); a los demás, el nivel.
+    final nivel = textoDelNivel(
+      hallazgo,
+      (codigo) => catalogos.etiqueta(Catalogo.nivelesSeveridad, codigo),
+      paraConductor: paraConductor,
+    );
 
     return SafeArea(
       child: Padding(

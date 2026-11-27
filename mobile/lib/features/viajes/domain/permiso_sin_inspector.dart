@@ -81,6 +81,15 @@ class PermisoSinInspector {
     final falta = venceAt.difference(ahora.toUtc());
     return falta.isNegative ? Duration.zero : falta;
   }
+
+  /// Pendiente y con la cuenta atrás en cero: nadie respondió dentro del plazo.
+  bool vencido(DateTime ahora) => !concedido && faltaPara(ahora) == Duration.zero;
+
+  /// Si el conductor ya puede seguir con el cargue (S8-HU-09.2 CA-2). Con el plazo cumplido no hace falta esperar a
+  /// que el permiso aparezca concedido: el servidor lo concede por tiempo en la misma petición que crea la salida
+  /// del cargue o pone el puesto en la niñera (ESC-03), así que esperar al proceso de cada minuto solo era perder
+  /// hasta un minuto con el camión parado.
+  bool permiteSeguir(DateTime ahora) => concedido || vencido(ahora);
 }
 
 enum EstadoPermiso {
@@ -93,12 +102,20 @@ enum EstadoPermiso {
 /// Qué dice el botón de la salida del cargue cuando al conductor le toca la excepción.
 ///
 /// Son cuatro frases porque son cuatro situaciones distintas, y el conductor tiene que poder leer en el botón
-/// qué va a pasar si lo toca: activar, pedir, esperar o seguir.
-String etiquetaExcepcion({required bool cargueConInspector, PermisoSinInspector? permiso}) {
+/// qué va a pasar si lo toca: activar, pedir, esperar o seguir. Con el plazo cumplido ya se sigue (S8-HU-09.2 CA-2).
+///
+/// En la **llegada** del cargue (S8-HU-07.3 CA-7) el botón dice «No hay inspector» también donde lleva a pedir el
+/// permiso, y «Capturar» cuando ya se puede seguir: es la revisión de siempre, ya con la excepción activa.
+String etiquetaExcepcion({
+  required bool cargueConInspector,
+  PermisoSinInspector? permiso,
+  bool enLaLlegada = false,
+  DateTime? ahora,
+}) {
   if (!cargueConInspector) return 'No hay inspector';
   return switch (permiso) {
-    null => 'Pedir permiso',
-    PermisoSinInspector(concedido: true) => 'Continuar el cargue',
+    null => enLaLlegada ? 'No hay inspector' : 'Pedir permiso',
+    final p when p.permiteSeguir(ahora ?? DateTime.now()) => enLaLlegada ? 'Capturar' : 'Continuar el cargue',
     _ => 'Ver el permiso',
   };
 }

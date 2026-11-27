@@ -542,10 +542,26 @@ void main() {
       expect(conductorUsaExcepcion(inv.etapas.single, rol: 'conductor', momento: 'salida'), isFalse);
     });
 
-    test('solo es de la salida: la llegada del cargue la captura como siempre', () {
+    test('con la marca (un servidor anterior) solo es de la salida: la llegada del cargue la captura como entonces', () {
       final inv = inventario([etapaJson('e1', 1, 'cargue', conApoyo: true)]);
 
       expect(conductorUsaExcepcion(inv.etapas.single, rol: 'conductor', momento: 'llegada'), isFalse);
+    });
+
+    // S8-HU-07.3 CA-7 (hueco 7): hoy el servidor rechaza la llegada del cargue del conductor sin la excepción activa.
+    test('sin la marca, la llegada del cargue del conductor también va con la excepción', () {
+      final json = etapaJson('e1', 1, 'cargue')..remove('con_personal_apoyo');
+      final etapa = inventario([json]).etapas.single;
+
+      expect(conductorUsaExcepcion(etapa, rol: 'conductor', momento: 'llegada'), isTrue);
+      expect(conductorUsaExcepcion(etapa, rol: 'inspector', momento: 'llegada'), isFalse);
+    });
+
+    // S8-HU-07.3 CA-8: el transporte lo arma el sistema; ninguna otra etapa.
+    test('solo el transporte lo arma el sistema', () {
+      final inv = inventario([etapaJson('e1', 1, 'cargue'), etapaJson('e2', 2, 'transporte'), etapaJson('e3', 3, 'descargue')]);
+
+      expect([for (final e in inv.etapas) loArmaElSistema(e)], [false, true, false]);
     });
 
     test('solo aplica al cargue: en descargue el conductor captura igual', () {
@@ -583,6 +599,151 @@ void main() {
       final inspeccion = inv.etapas.single.inspecciones.single;
       expect(inspeccion.fueSinInspector, isFalse);
       expect(inspeccion.novedadesProceso, isEmpty);
+    });
+  });
+  // S8-HU-11.2 CA-1: qué se ofrece sobre un borrador del servidor. Son las reglas del servidor, para no ofrecer lo
+  // que va a rechazar.
+  group('el borrador del servidor', () {
+    Inventario conBorrador({String autor = 'yo', String proceso = 'cargue', bool firmada = false}) => Inventario.fromJson({
+          'id': 'v',
+          'vin': 'VIN',
+          'marca': 'Renault',
+          'operacion': 'nacional',
+          'etapas': [
+            etapaJson('e1', 1, proceso, inspecciones: [
+              {
+                ...inspeccionJson('b1', '2026-01-01T10:00:00Z', estado: 'borrador', momento: Momento.llegada, firmada: firmada),
+                'usuario_id': autor,
+              },
+            ]),
+          ],
+        });
+
+    OfertaBorrador oferta(
+      Inventario inventario, {
+      String? yoId = 'yo',
+      String rol = 'inspector',
+      bool puedeTrabajar = true,
+      bool tengoElCarro = true,
+      bool enCola = false,
+    }) {
+      final etapa = inventario.etapas.single;
+      final momento = momentosDeEtapa(etapa, inventario).firstWhere((m) => m.momento == Momento.llegada);
+      return ofertaDelBorrador(
+        momento,
+        etapa,
+        yoId: yoId,
+        rol: rol,
+        puedeTrabajar: puedeTrabajar,
+        tengoElCarro: tengoElCarro,
+        enCola: enCola,
+      );
+    }
+
+    test('el propio se continúa o se descarta', () {
+      expect(oferta(conBorrador()), OfertaBorrador.continuarODescartar);
+    });
+
+    test('el propio, mientras la cola de este teléfono lo envía, no ofrece nada', () {
+      expect(oferta(conBorrador(), enCola: true), OfertaBorrador.ninguna);
+    });
+
+    test('con una firma en la etapa es evidencia: no se ofrece nada', () {
+      expect(oferta(conBorrador(firmada: true)), OfertaBorrador.ninguna);
+    });
+
+    test('el coordinador de calidad lo descarta, aunque no lo hizo', () {
+      expect(oferta(conBorrador(autor: 'ana'), yoId: 'carlos', rol: 'coordinador_calidad'), OfertaBorrador.soloDescartar);
+    });
+
+    test('el administrador no lo descarta: el servidor le responde 403', () {
+      expect(oferta(conBorrador(autor: 'ana'), yoId: 'marta', rol: 'admin'), OfertaBorrador.ninguna);
+    });
+
+    test('el de otra persona, con el carro ahora mío, se captura de cero', () {
+      expect(oferta(conBorrador(autor: 'ana'), yoId: 'diana'), OfertaBorrador.capturarDeCero);
+    });
+
+    test('el de otra persona que todavía tiene el carro no ofrece nada', () {
+      expect(oferta(conBorrador(autor: 'ana'), yoId: 'diana', tengoElCarro: false), OfertaBorrador.ninguna);
+    });
+
+    test('el transporte lo arma el sistema: no se continúa ni se descarta', () {
+      expect(oferta(conBorrador(proceso: 'transporte')), OfertaBorrador.ninguna);
+    });
+
+    test('se dice lo que tiene: las fotos que no son de un daño y los daños', () {
+      final inventario = conBorrador();
+      expect(resumenDelBorrador(inventario.etapas.single.inspecciones.single), '1 foto y 0 daños');
+    });
+
+    test('cada foto dice qué vista cubre', () {
+      final evidencia = EvidenciaVista.fromJson({'id': 'ev', 'vista_id': 'v-frontal'});
+      expect(evidencia.vistaId, 'v-frontal');
+    });
+  });
+  // S8-HU-06.2 CA-1 y CA-4: el descargue tiene una sola revisión, la de llegada. Una salida de antes se sigue viendo,
+  // pero no se captura.
+  group('el descargue', () {
+    Inventario conDescargue({List<Map<String, dynamic>> inspecciones = const []}) => Inventario.fromJson({
+          'id': 'v',
+          'vin': 'VIN',
+          'marca': 'Renault',
+          'operacion': 'nacional',
+          'etapas': [
+            etapaJson('e1', 1, 'cargue', inspecciones: [
+              inspeccionJson('c1', '2026-01-01T10:00:00Z', momento: Momento.llegada, cerradaEn: '2026-01-01T11:00:00Z'),
+            ]),
+            etapaJson('e3', 3, 'descargue', inspecciones: inspecciones),
+          ],
+        });
+
+    List<MomentoEtapa> delDescargue(Inventario inventario) =>
+        momentosDeEtapa(inventario.etapas.firstWhere((e) => e.proceso == 'descargue'), inventario);
+
+    test('ofrece solo la llegada', () {
+      final momentos = delDescargue(conDescargue());
+
+      expect(momentos.map((m) => m.momento), [Momento.llegada]);
+      expect(momentos.single.sePuedeCapturar, isTrue, reason: 'la llegada no espera a la etapa anterior');
+    });
+
+    test('una salida de antes se muestra, en lectura', () {
+      final momentos = delDescargue(conDescargue(inspecciones: [
+        inspeccionJson('d1', '2026-01-03T10:00:00Z', cerradaEn: '2026-01-03T11:00:00Z'),
+      ]));
+
+      expect(momentos.map((m) => m.momento), [Momento.salida, Momento.llegada]);
+      expect(momentos.first.historico, isTrue);
+      expect(momentos.first.sePuedeCapturar, isFalse);
+      expect(momentos.last.historico, isFalse);
+    });
+
+    test('el cargue sigue con sus dos momentos', () {
+      final inventario = conDescargue();
+      final cargue = momentosDeEtapa(inventario.etapas.first, inventario);
+
+      expect(cargue.map((m) => m.momento), Momento.todos);
+    });
+
+    test('la salida de antes en borrador no se continúa ni se descarta', () {
+      final inventario = conDescargue(inspecciones: [
+        {...inspeccionJson('d1', '2026-01-03T10:00:00Z', estado: 'borrador'), 'usuario_id': 'yo'},
+      ]);
+      final etapa = inventario.etapas.last;
+
+      expect(
+        ofertaDelBorrador(
+          momentosDeEtapa(etapa, inventario).first,
+          etapa,
+          yoId: 'yo',
+          rol: 'inspector',
+          puedeTrabajar: true,
+          tengoElCarro: true,
+          enCola: false,
+        ),
+        OfertaBorrador.ninguna,
+      );
     });
   });
 }

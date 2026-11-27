@@ -15,5 +15,7 @@ class CacheLecturasRepo {
         CacheLecturasCompanion.insert(clave: clave, valor: valor, actualizadoEn: DateTime.now().millisecondsSinceEpoch),
       );
 
+  Future<void> borrar(String clave) => (_db.delete(_db.cacheLecturas)..where((t) => t.clave.equals(clave))).go();
+
   Future<void> borrarTodo() => _db.delete(_db.cacheLecturas).go();
 }

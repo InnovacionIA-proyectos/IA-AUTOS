@@ -63,6 +63,9 @@ class ClienteApi {
   Future<dynamic> post(String ruta, {Object? cuerpo, Map<String, String>? encabezados}) async =>
       (await enviar('POST', ruta, cuerpo: cuerpo, encabezados: encabezados)).datos;
 
+  Future<dynamic> patch(String ruta, {Object? cuerpo, Map<String, String>? encabezados}) async =>
+      (await enviar('PATCH', ruta, cuerpo: cuerpo, encabezados: encabezados)).datos;
+
   /// Sube un archivo como `multipart/form-data`.
   ///
   /// Multipart y no base64: base64 infla el cuerpo un tercio y obliga a tener la foto entera en memoria dos
@@ -74,14 +77,16 @@ class ClienteApi {
 
   /// Descarga un archivo binario (la imagen de fondo de un panel del dibujo de daños). Los fallos se convierten en
   /// [ErrorApi] igual que en el resto de llamadas.
-  Future<Uint8List> descargarBytes(String ruta) async {
+  ///
+  /// [aceptar] es lo que se pide: una imagen por defecto, o `application/pdf` para un informe.
+  Future<Uint8List> descargarBytes(String ruta, {String aceptar = 'image/*'}) async {
     final jwt = await token();
     try {
       final respuesta = await _dio.get<List<int>>(
         ruta,
         options: Options(
           responseType: ResponseType.bytes,
-          headers: {if (jwt != null) 'Authorization': 'Bearer $jwt', 'Accept': 'image/*'},
+          headers: {if (jwt != null) 'Authorization': 'Bearer $jwt', 'Accept': aceptar},
         ),
       );
       return Uint8List.fromList(respuesta.data ?? const []);

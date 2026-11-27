@@ -34,6 +34,17 @@ class ServicioUbicacionGeolocator implements ServicioUbicacion {
 
   @override
   Future<Posicion?> obtenerRapida() async {
+    // Quien nunca dio el permiso no tenía cómo darlo: la lectura rápida fallaba en silencio y, por ejemplo, toda
+    // entrega se tomaba «sin ubicación» (S8-HU-09.2 CA-4). Se pide una vez si se puede pedir; si lo niega, o si está
+    // bloqueado en los ajustes, se sigue sin posición: esto nunca detiene a nadie.
+    try {
+      if (await Geolocator.checkPermission() == LocationPermission.denied &&
+          await Geolocator.requestPermission() == LocationPermission.denied) {
+        return null;
+      }
+    } catch (_) {
+      // Sin servicio de permisos se intenta igual: la lectura dirá si hay posición.
+    }
     try {
       final pos = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium, timeLimit: Duration(seconds: 4)),

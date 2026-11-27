@@ -3,6 +3,7 @@ import '../../inspecciones/domain/extra_local.dart';
 import '../../inspecciones/domain/foto_local.dart';
 import '../../inspecciones/domain/hallazgo_local.dart';
 import '../../inspecciones/domain/nota_aclaratoria.dart';
+import '../domain/job.dart';
 import '../domain/puertos.dart';
 
 /// Implementación de [GatewayInformes] sobre la API REST (contrato en backend/docs/openapi.json).
@@ -172,6 +173,7 @@ class GatewayInformesApi implements GatewayInformes {
     required double lat,
     required double lng,
     required FotoLocal foto,
+    String? idEnvio,
   }) async {
     // Sin texto libre ni zona, clase o nivel: el servidor responde 400 «Campo no admitido» si llega cualquiera. La
     // evidencia va con su sello completo y sin `nota`.
@@ -181,7 +183,42 @@ class GatewayInformesApi implements GatewayInformes {
       'lng': lng,
       'tipo_novedad': tipoNovedad,
       'tamano_dano': tamanoDano,
-      'evidencia': {
+      'evidencia': _evidenciaDe(foto),
+      // S8-HU-07.3 CA-4: el reenvío con el mismo identificador responde 200 con la misma novedad, sin duplicarla.
+      'id_envio': ?idEnvio,
+    });
+  }
+
+  @override
+  Future<void> registrarNovedadViaje(
+    String viajeId, {
+    required String tipo,
+    required String texto,
+    required String fecha,
+    double? lat,
+    double? lng,
+    FotoLocal? foto,
+    String? idEnvio,
+    String? proceso,
+    String? lugarId,
+  }) async {
+    // `lat` y `lng` van juntas o ninguna: sin GPS no se mandan y el servidor la guarda «sin ubicación». `proceso` y
+    // `lugar_id` solo los manda el inspector: al conductor el servidor le responde 400 si llegan.
+    final conGps = lat != null && lng != null;
+    await _api.post('/api/viajes/${Uri.encodeComponent(viajeId)}/novedades-viaje', cuerpo: {
+      'tipo': tipo,
+      'texto': texto,
+      'fecha': fecha,
+      if (conGps) ...{'lat': lat, 'lng': lng},
+      if (foto != null) 'evidencia': _evidenciaDe(foto),
+      'id_envio': ?idEnvio,
+      'proceso': ?proceso,
+      'lugar_id': ?lugarId,
+    });
+  }
+
+  /// La foto ya subida, con su sello y sin `nota`, que el servidor no admite en las novedades.
+  Map<String, Object?> _evidenciaDe(FotoLocal foto) => {
         'storage_path': foto.storagePath,
         'sello_fecha': foto.selloFecha,
         'sello_lat': foto.selloLat,
@@ -189,9 +226,7 @@ class GatewayInformesApi implements GatewayInformes {
         'precision': foto.precision,
         'dispositivo_id': foto.dispositivoId,
         'hash_sha256': foto.hash,
-      },
-    });
-  }
+      };
 
   @override
   Future<void> confirmarLlegada(String viajeId, String vin, {required String fecha, required double lat, required double lng}) async {
@@ -214,19 +249,88 @@ class GatewayInformesApi implements GatewayInformes {
     String? recibeNombre,
     String? recibeCedula,
     String? firmaRecibe,
+    List<ReservaCarro> reservas = const [],
+    List<RechazoCarro> rechazos = const [],
+    String? fechaMomento,
+    double? lat,
+    double? lng,
+    double? precisionM,
   }) async {
     await _api.post('${_rutaEntrega(viajeId, lugarId)}/firma', cuerpo: {
       'firma': firma,
       'recibe_nombre': ?recibeNombre,
       'recibe_cedula': ?recibeCedula,
       'firma_recibe': ?firmaRecibe,
+      if (reservas.isNotEmpty) 'reservas': [for (final r in reservas) r.toJson()],
+      if (rechazos.isNotEmpty) 'rechazos': [for (final r in rechazos) r.toJson()],
+      ..._momento(fechaMomento, lat, lng, precisionM),
     });
   }
 
   @override
-  Future<void> cerrarEntregaConUnaFirma(String viajeId, String lugarId, {required String motivo, String? firma}) async {
-    await _api.post('${_rutaEntrega(viajeId, lugarId)}/una-firma', cuerpo: {'motivo': motivo, 'firma': ?firma});
+  Future<void> activarSinInspector(
+    String viajeId,
+    String lugarId, {
+    required String motivo,
+    String? motivoTexto,
+    String? fechaMomento,
+    double? lat,
+    double? lng,
+    double? precisionM,
+  }) async {
+    await _api.post('${_rutaEntrega(viajeId, lugarId)}/sin-inspector', cuerpo: {
+      'motivo_sin_inspector': motivo,
+      'motivo_sin_inspector_texto': ?motivoTexto,
+      ..._momento(fechaMomento, lat, lng, precisionM),
+    });
   }
+
+  @override
+  Future<void> cerrarEntregaConUnaFirma(
+    String viajeId,
+    String lugarId, {
+    required String motivoCodigo,
+    String? motivoTexto,
+    String? firma,
+    List<({String vin, FotoLocal foto})> fotos = const [],
+    String? testigoNombre,
+    String? testigoCedula,
+    String? fechaMomento,
+    double? lat,
+    double? lng,
+    double? precisionM,
+  }) async {
+    await _api.post('${_rutaEntrega(viajeId, lugarId)}/una-firma', cuerpo: {
+      'motivo_codigo': motivoCodigo,
+      'motivo_texto': ?motivoTexto,
+      'firma': ?firma,
+      if (fotos.isNotEmpty)
+        'fotos': [
+          for (final f in fotos)
+            {
+              'vin': f.vin,
+              'storage_path': f.foto.storagePath,
+              'sello_fecha': f.foto.selloFecha,
+              'sello_lat': f.foto.selloLat,
+              'sello_lng': f.foto.selloLng,
+              'precision': f.foto.precision,
+              'dispositivo_id': f.foto.dispositivoId,
+              'nota': f.foto.nota,
+              'hash_sha256': f.foto.hash,
+            },
+        ],
+      'testigo_nombre': ?testigoNombre,
+      'testigo_cedula': ?testigoCedula,
+      ..._momento(fechaMomento, lat, lng, precisionM),
+    });
+  }
+
+  /// La hora y el GPS del momento de la firma (S8-HU-04.2 CA-7). La latitud y la longitud van juntas o no va
+  /// ninguna: el servidor rechaza una sin la otra, y sin las dos deja la firma «sin ubicación».
+  Map<String, Object> _momento(String? fecha, double? lat, double? lng, double? precision) => {
+        'fecha_momento': ?fecha,
+        if (lat != null && lng != null) ...{'lat': lat, 'lng': lng, 'precision_m': ?precision},
+      };
 
   String _rutaEntrega(String viajeId, String lugarId) =>
       '/api/viajes/${Uri.encodeComponent(viajeId)}/entregas/${Uri.encodeComponent(lugarId)}';
@@ -288,6 +392,60 @@ class GatewayInformesApi implements GatewayInformes {
         'nota': foto.nota,
         'hash_sha256': foto.hash,
       },
+    });
+  }
+
+  @override
+  Future<void> firmarCargueNinera(
+    String viajeId, {
+    required String parte,
+    required String firma,
+    required String fechaMomento,
+    required double lat,
+    required double lng,
+    double? precisionM,
+    List<ReservaCarro> reservas = const [],
+  }) async {
+    await _api.post('/api/viajes/${Uri.encodeComponent(viajeId)}/cargue/firma', cuerpo: {
+      'firma': firma,
+      'parte': parte,
+      'fecha_momento': fechaMomento,
+      'lat': lat,
+      'lng': lng,
+      'precision_m': ?precisionM,
+      if (reservas.isNotEmpty) 'reservas': [for (final r in reservas) r.toJson()],
+    });
+  }
+
+  @override
+  Future<void> registrarNoFirmaNinera(
+    String viajeId, {
+    required String parte,
+    required String motivo,
+    required String testigoId,
+    required FotoLocal foto,
+    required String fechaMomento,
+    required double lat,
+    required double lng,
+    double? precisionM,
+  }) async {
+    await _api.post('/api/viajes/${Uri.encodeComponent(viajeId)}/cargue/no-firma', cuerpo: {
+      'parte': parte,
+      'motivo': motivo,
+      'testigo_usuario_id': testigoId,
+      'evidencia': {
+        'storage_path': foto.storagePath,
+        'sello_fecha': foto.selloFecha,
+        'sello_lat': foto.selloLat,
+        'sello_lng': foto.selloLng,
+        'precision': foto.precision,
+        'dispositivo_id': foto.dispositivoId,
+        'hash_sha256': foto.hash,
+      },
+      'fecha_momento': fechaMomento,
+      'lat': lat,
+      'lng': lng,
+      'precision_m': ?precisionM,
     });
   }
 

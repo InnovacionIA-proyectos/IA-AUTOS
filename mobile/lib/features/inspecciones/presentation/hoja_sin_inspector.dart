@@ -14,19 +14,43 @@ typedef MotivoElegido = ({String codigo, String nombre, String? texto});
 ///
 /// No hay campo de texto libre salvo en el motivo que lo exige, y sin motivo no se sigue: es lo que el servidor pide
 /// para dejarle crear la salida del cargue.
-Future<MotivoElegido?> pedirMotivoSinInspector(BuildContext context, {required List<ValorCatalogo> motivos}) {
+///
+/// La misma hoja sirve a «No hay inspector» en una parada del destino (S8-HU-05.2 CA-2), con el mismo catálogo:
+/// cambian solo lo que dice debajo del título, el aviso y el botón, que en el cargue hablan de la salida del cargue.
+///
+/// [enLaLlegada]: la llegada del cargue también se hace con la excepción (S8-HU-07.3 CA-7), y la hoja dice cuál es.
+/// Sin [detalle] ni [accion] propios, los dos hablan de la salida o la llegada del cargue según eso.
+Future<MotivoElegido?> pedirMotivoSinInspector(
+  BuildContext context, {
+  required List<ValorCatalogo> motivos,
+  bool enLaLlegada = false,
+  String? detalle,
+  String aviso = 'Se registrará y se avisará al coordinador.',
+  String? accion,
+}) {
   return showModalBottomSheet<MotivoElegido>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => _HojaMotivo(motivos: motivos),
+    builder: (_) => _HojaMotivo(
+      motivos: motivos,
+      detalle: detalle ?? 'Elige por qué: ${_revisionDelCargue(enLaLlegada)} la haces tú.',
+      aviso: aviso,
+      accion: accion ?? 'Continuar con ${_revisionDelCargue(enLaLlegada)}',
+    ),
   );
 }
 
+/// La revisión del cargue que el conductor hace con la excepción.
+String _revisionDelCargue(bool enLaLlegada) => enLaLlegada ? 'la llegada del cargue' : 'la salida del cargue';
+
 class _HojaMotivo extends StatefulWidget {
-  const _HojaMotivo({required this.motivos});
+  const _HojaMotivo({required this.motivos, required this.detalle, required this.aviso, required this.accion});
 
   final List<ValorCatalogo> motivos;
+  final String detalle;
+  final String aviso;
+  final String accion;
 
   @override
   State<_HojaMotivo> createState() => _EstadoHojaMotivo();
@@ -57,7 +81,7 @@ class _EstadoHojaMotivo extends State<_HojaMotivo> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('No hay inspector', style: tema.titleMedium),
-            Text('Elige por qué: la salida del cargue la haces tú.', style: tema.bodySmall),
+            Text(widget.detalle, style: tema.bodySmall),
             const SizedBox(height: Espacio.md),
             if (widget.motivos.isEmpty)
               Text(
@@ -97,7 +121,7 @@ class _EstadoHojaMotivo extends State<_HojaMotivo> {
             const SizedBox(height: Espacio.sm),
             Semantics(
               liveRegion: true,
-              child: Text('Se registrará y se avisará al coordinador.', style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
+              child: Text(widget.aviso, style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
             ),
             const SizedBox(height: Espacio.md),
             FilledButton(
@@ -108,7 +132,7 @@ class _EstadoHojaMotivo extends State<_HojaMotivo> {
                         texto: _pideTexto ? _texto.text.trim() : null,
                       ))
                   : null,
-              child: const Text('Continuar con la salida del cargue'),
+              child: Text(widget.accion),
             ),
           ],
         ),

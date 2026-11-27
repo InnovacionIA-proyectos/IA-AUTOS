@@ -8,6 +8,7 @@ import '../../../core/ui/widgets.dart';
 import '../../../core/util/formato.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../domain/aviso.dart';
+import '../domain/destino_aviso.dart';
 import '../providers.dart';
 
 /// Lo que máximo admite el servidor en la respuesta a una novedad.
@@ -111,6 +112,30 @@ class AvisosPage extends ConsumerWidget {
   }
 }
 
+/// Los carros del aviso único «Cargue sin inspector» (S8-HU-07.3 CA-9): cuántos y cuáles. Es un aviso por viaje, así
+/// que sin la lista no se sabe a qué carros mirar.
+class VinsDelAviso extends StatelessWidget {
+  const VinsDelAviso({super.key, required this.vins});
+
+  final List<String> vins;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Carros: ${vins.length}', style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
+        Wrap(
+          spacing: Espacio.sm,
+          runSpacing: Espacio.xs,
+          children: [for (final vin in vins) TextoMono(vin, estilo: tema.bodySmall)],
+        ),
+      ],
+    );
+  }
+}
+
 class _TarjetaAviso extends StatelessWidget {
   const _TarjetaAviso({required this.aviso, required this.alTocar});
 
@@ -139,6 +164,9 @@ class _TarjetaAviso extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // S8-HU-07.3 CA-9: el tipo, donde la app lo nombra. Uno que no conoce se ve con su título y su mensaje.
+                if (aviso.etiquetaTipo case final tipo?)
+                  Text(tipo, style: tema.labelSmall?.copyWith(color: Colores.info, fontWeight: FontWeight.w600)),
                 Row(
                   children: [
                     Expanded(
@@ -152,6 +180,10 @@ class _TarjetaAviso extends StatelessWidget {
                   ],
                 ),
                 Text(aviso.mensaje, maxLines: 2, overflow: TextOverflow.ellipsis, style: tema.bodySmall),
+                if (aviso.vinsDelCargueSinInspector case final vins? when vins.isNotEmpty) ...[
+                  const SizedBox(height: Espacio.xs),
+                  VinsDelAviso(vins: vins),
+                ],
                 const SizedBox(height: Espacio.xs),
                 Row(
                   children: [
@@ -235,6 +267,16 @@ class _EstadoHojaAviso extends ConsumerState<_HojaAviso> {
             Text(formatearFecha(_aviso.creadoEn), style: tema.bodySmall),
             const SizedBox(height: Espacio.md),
             Text(_aviso.mensaje, style: tema.bodyMedium),
+            if (_aviso.vinsDelCargueSinInspector case final vins? when vins.isNotEmpty) ...[
+              const SizedBox(height: Espacio.md),
+              VinsDelAviso(vins: vins),
+            ],
+            // S8-HU-09.2 CA-6: «Ubicación fijada» y «Fuera del rango» dicen sus datos propios (el lugar, quién, la
+            // distancia, el rango, la precisión) tal como los manda el servidor en `datos`.
+            if (lineasDeDatos(_aviso) case final lineas when lineas.isNotEmpty) ...[
+              const SizedBox(height: Espacio.md),
+              for (final linea in lineas) Text(linea, style: tema.bodyMedium?.copyWith(color: Colores.textoPrimario)),
+            ],
             if (_aviso.codigoMtrack != null || _aviso.vin != null) ...[
               const SizedBox(height: Espacio.md),
               Row(
@@ -263,16 +305,16 @@ class _EstadoHojaAviso extends ConsumerState<_HojaAviso> {
                 ),
               ),
             ],
-            if (_aviso.vin != null && _aviso.viajeId != null) ...[
+            // S8-HU-09.2 CA-6: a dónde lleva lo decide su tipo con sus ids. Sin destino (un tipo nuevo, un aviso de un
+            // lugar) no hay botón: el aviso se lee aquí.
+            if (_aviso.destino case DestinoAviso(ruta: final ruta?, :final etiqueta)) ...[
               const SizedBox(height: Espacio.md),
               OutlinedButton(
                 onPressed: () {
                   Navigator.of(context).pop();
-                  context.push(
-                    '/inspecciones/vin/${Uri.encodeComponent(_aviso.vin!)}?viajeId=${Uri.encodeQueryComponent(_aviso.viajeId!)}',
-                  );
+                  context.push(ruta);
                 },
-                child: const Text('Ver la unidad'),
+                child: Text(etiqueta),
               ),
             ],
             if (widget.puedeResponder && _aviso.sePuedeResponder) ...[

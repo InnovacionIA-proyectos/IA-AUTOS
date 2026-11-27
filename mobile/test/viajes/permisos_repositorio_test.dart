@@ -124,10 +124,24 @@ void main() {
     });
 
     test('con inspectores, se pide, se mira y se sigue', () {
+      // Antes del plazo de la solicitud (vence a las 10:10). Cumplido, ya se sigue: S8-HU-09.2 CA-2.
+      final antesDelPlazo = DateTime.utc(2026, 11, 13, 10, 2, 30);
       expect(etiquetaExcepcion(cargueConInspector: true), 'Pedir permiso');
       expect(
-        etiquetaExcepcion(cargueConInspector: true, permiso: PermisoSinInspector.fromJson(permisoJson())),
+        etiquetaExcepcion(
+          cargueConInspector: true,
+          permiso: PermisoSinInspector.fromJson(permisoJson()),
+          ahora: antesDelPlazo,
+        ),
         'Ver el permiso',
+      );
+      expect(
+        etiquetaExcepcion(
+          cargueConInspector: true,
+          permiso: PermisoSinInspector.fromJson(permisoJson()),
+          ahora: DateTime.utc(2026, 11, 13, 10, 42),
+        ),
+        'Continuar el cargue',
       );
       expect(
         etiquetaExcepcion(
@@ -135,6 +149,39 @@ void main() {
           permiso: PermisoSinInspector.fromJson(permisoJson(estado: 'concedido')),
         ),
         'Continuar el cargue',
+      );
+    });
+
+    // S8-HU-07.3 CA-7: en la llegada dice «No hay inspector» también donde lleva a pedir, y «Capturar» con el permiso.
+    test('en la llegada: «No hay inspector», mirar el permiso o, concedido, «Capturar»', () {
+      expect(etiquetaExcepcion(cargueConInspector: false, enLaLlegada: true), 'No hay inspector');
+      expect(etiquetaExcepcion(cargueConInspector: true, enLaLlegada: true), 'No hay inspector');
+      expect(
+        etiquetaExcepcion(
+          cargueConInspector: true,
+          permiso: PermisoSinInspector.fromJson(permisoJson()),
+          enLaLlegada: true,
+          ahora: DateTime.utc(2026, 11, 13, 10, 2, 30),
+        ),
+        'Ver el permiso',
+      );
+      // S8-HU-09.2 CA-2: con la cuenta atrás en cero también se sigue en la llegada.
+      expect(
+        etiquetaExcepcion(
+          cargueConInspector: true,
+          permiso: PermisoSinInspector.fromJson(permisoJson()),
+          enLaLlegada: true,
+          ahora: DateTime.utc(2026, 11, 13, 10, 42),
+        ),
+        'Capturar',
+      );
+      expect(
+        etiquetaExcepcion(
+          cargueConInspector: true,
+          permiso: PermisoSinInspector.fromJson(permisoJson(estado: 'concedido')),
+          enLaLlegada: true,
+        ),
+        'Capturar',
       );
     });
   });

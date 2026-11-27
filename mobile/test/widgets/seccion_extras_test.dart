@@ -19,13 +19,12 @@ final nivelesDano = [tipo('v2', 'V2')];
 
 /// Abre la hoja del extra con un botón y devuelve lo que entregue al cerrarse.
 ///
-/// `puedeMarcarDano` en falso es el caso del conductor: no se le ofrece marcarlo como dañado, porque el servidor
-/// exige el nivel para el daño de un extra y él no asigna niveles.
+/// `pideNivel` en falso es el caso del conductor: marca el extra dañado con clase y tamaño, sin nivel (S8-HU-08.2).
 Future<DatosExtra? Function()> abrirHoja(
   WidgetTester tester,
   List<ValorCatalogo> tipos, {
   List<ValorCatalogo>? niveles,
-  bool puedeMarcarDano = true,
+  bool pideNivel = true,
 }) async {
   DatosExtra? resultado;
   await tester.pumpWidget(MaterialApp(
@@ -39,7 +38,7 @@ Future<DatosExtra? Function()> abrirHoja(
             clases: clasesDano,
             tamanos: tamanosDano,
             niveles: niveles ?? nivelesDano,
-            puedeMarcarDano: puedeMarcarDano,
+            pideNivel: pideNivel,
           ),
           child: const Text('abrir'),
         ),
@@ -102,8 +101,8 @@ void main() {
   /// S7-HU-04.2: el golpe de un platón es un golpe del carro. Se marca aquí mismo, con los tres datos de
   /// siempre, y cuenta en las estadísticas como cualquier otro.
   group('el extra dañado', () {
-    Future<DatosExtra? Function()> conPlaton(WidgetTester tester, {bool puedeMarcarDano = true}) async {
-      final resultado = await abrirHoja(tester, [tipo('platon', 'Platón')], puedeMarcarDano: puedeMarcarDano);
+    Future<DatosExtra? Function()> conPlaton(WidgetTester tester, {bool pideNivel = true}) async {
+      final resultado = await abrirHoja(tester, [tipo('platon', 'Platón')], pideNivel: pideNivel);
       await tester.tap(find.widgetWithText(ChoiceChip, 'Platón'));
       await tester.pumpAndSettle();
       return resultado;
@@ -159,16 +158,20 @@ void main() {
     // Al revés que en el daño de una zona: en un extra el servidor exige el nivel a todo el mundo (CONTRATO.md,
     // «los tres, con danado: true»). Al conductor, que no asigna niveles, no se le ofrece marcarlo: si se le
     // ofreciera, armaría un envío que vuelve con 400 y deja el informe a medias.
-    testWidgets('al conductor no se le ofrece marcarlo como dañado, y se le dice qué hacer', (tester) async {
-      final resultado = await conPlaton(tester, puedeMarcarDano: false);
+    // S8-HU-08.2 CA-1: el conductor marca el extra dañado con la clase y el tamaño; el nivel lo pone quien califica.
+    testWidgets('el conductor marca el extra dañado sin nivel', (tester) async {
+      final resultado = await conPlaton(tester, pideNivel: false);
 
-      expect(find.byType(SwitchListTile), findsNothing);
-      expect(find.textContaining('lo califica quien inspecciona'), findsOneWidget);
-
+      await marcarDanado(tester);
+      expect(find.text('Nivel de severidad'), findsNothing);
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Golpe'));
+      await tester.tap(find.widgetWithText(ChoiceChip, 'De 1 a 5 cm'));
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Agregar'));
       await tester.pumpAndSettle();
 
-      expect(resultado()?.dano, isNull, reason: 'nunca sale un extra dañado sin nivel');
+      final dano = resultado()?.dano;
+      expect((dano?.clase, dano?.tamano, dano?.nivel), ('golpe', '1_5cm', null));
     });
 
     testWidgets('apagar el interruptor deja el extra sin daño', (tester) async {

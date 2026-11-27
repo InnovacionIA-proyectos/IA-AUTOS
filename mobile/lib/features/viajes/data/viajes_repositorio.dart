@@ -42,17 +42,53 @@ class ViajesRepositorio {
   Future<Viaje> marcarNoSale(
     String viajeId,
     String vin, {
-    required String motivo,
-    required String hallazgoId,
+    required String motivoCodigo,
+    String? motivoTexto,
+    String? hallazgoId,
     String? vinReemplazo,
   }) async {
     final r = await _api.post(
       '/api/viajes/${Uri.encodeComponent(viajeId)}/vehiculos/${Uri.encodeComponent(vin)}/no-sale',
-      // Las tres claves van presentes aunque el reemplazo sea nulo: el contrato las exige.
-      cuerpo: {'motivo': motivo, 'hallazgo_id': hallazgoId, 'vin_reemplazo': vinReemplazo},
+      // El texto y el daño solo cuando el motivo los lleva; el reemplazo va siempre, en nulo si no hay.
+      cuerpo: {
+        'motivo_codigo': motivoCodigo,
+        'motivo_texto': ?motivoTexto,
+        'hallazgo_id': ?hallazgoId,
+        'vin_reemplazo': vinReemplazo,
+      },
     );
     return Viaje.fromJson(r as Map<String, dynamic>);
   }
+
+  /// «Vuelve a salir»: el carro que no salía vuelve a estar activo, sin puesto. Directo a la API, como «no sale»:
+  /// el servidor responde 409 si el cargue ya se cerró, si el carro ya tiene reemplazo o si la niñera está llena.
+  Future<Viaje> vuelveASalir(String viajeId, String vin) async {
+    final r = await _api.post(
+      '/api/viajes/${Uri.encodeComponent(viajeId)}/vehiculos/${Uri.encodeComponent(vin)}/vuelve-a-salir',
+    );
+    return Viaje.fromJson(r as Map<String, dynamic>);
+  }
+
+  /// Cambia el muelle o el tráiler del viaje durante el cargue y devuelve el viaje ya actualizado.
+  ///
+  /// Va directo a la API, como «no sale»: el servidor responde 409 `cargue_firmado` cuando la entrega del cargue ya
+  /// se cerró, y quien lo cambia tiene que enterarse ahí mismo. Solo viaja lo que cambia: [quitarMuelle] manda el
+  /// muelle en null, que es como el contrato lo quita.
+  Future<Viaje> cambiarCargue(String viajeId, {String? muelleId, bool quitarMuelle = false, String? trailer}) async {
+    final r = await _api.patch(
+      '/api/viajes/${Uri.encodeComponent(viajeId)}/cargue',
+      cuerpo: {
+        if (muelleId != null || quitarMuelle) 'muelle_id': muelleId,
+        'trailer': ?trailer,
+      },
+    );
+    return Viaje.fromJson(r as Map<String, dynamic>);
+  }
+
+  /// El informe de la niñera en PDF (S8-HU-01.3 CA-10). El servidor lo arma al pedirlo con lo que haya: un cargue
+  /// sin firmar no falla, lo dice dentro. Solo con señal.
+  Future<List<int>> pdfNinera(String viajeId) =>
+      _api.descargarBytes('/api/viajes/${Uri.encodeComponent(viajeId)}/ninera/pdf', aceptar: 'application/pdf');
 
   /// Mis viajes ya terminados.
   ///

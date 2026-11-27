@@ -1,4 +1,5 @@
 import '../../../core/errores/error_api.dart';
+import '../../viajes/domain/entrega_punto.dart';
 import 'desenlace_envio.dart';
 import 'job.dart';
 import 'puertos.dart';
@@ -6,6 +7,108 @@ import 'puertos.dart';
 /// Códigos con que el servidor explica un 409 del conductor en ruta.
 const codigoEtapaPreviaSinCierre = 'ETAPA_PREVIA_SIN_CIERRE';
 const codigoLlegadaYaCerrada = 'LLEGADA_YA_CERRADA';
+const codigoUnidadNoSale = 'UNIDAD_NO_SALE';
+
+/// Lo que dice un envío retirado de un carro que se bajó del viaje. El de un carro que no sale es el del servidor.
+const mensajeCarroBajado = 'El carro ya no está en el viaje';
+
+/// Lo que dice un informe de salida del descargue encolado antes de que el destino tuviera una sola revisión
+/// (S8-HU-06.2 CA-5): el servidor ya no admite ese momento.
+const mensajeSalidaDescargue = 'En el destino solo se revisa la llegada: este informe ya no aplica';
+const codigoMomentoNoAdmitido = 'MOMENTO_NO_ADMITIDO';
+
+/// El `details.motivo` de ese 409: la salida del descargue, que ya no existe (S8-HU-06.2).
+const motivoSalidaDescargue = 'salida_descargue';
+
+/// Por qué el servidor ya no admite este envío del carro, o null si el rechazo es otro (S8-HU-02.2 CA-4 y CA-6).
+///
+/// Llega de tres maneras: las inspecciones y las firmas responden 409 con `details.motivo` `unidad_no_sale` o
+/// `unidad_bajada`; la novedad y el «Llegué» del conductor, 409 con el código `UNIDAD_NO_SALE` (también cuando el
+/// carro se bajó: el servidor responde lo mismo).
+String? motivoDeRetiro(ErrorApi e, Job job) {
+  final motivo = switch (e.details) { final Map m => m['motivo'], _ => null };
+  if (e.status == 409 && (motivo == 'unidad_no_sale' || e.code == codigoUnidadNoSale)) return e.message;
+  if (e.status == 409 && motivo == 'unidad_bajada') return mensajeCarroBajado;
+  // S8-HU-01.3 CA-11: en el cargue ya no se firma carro por carro; un envío viejo se retira con lo que dice el
+  // servidor («firma desde la pantalla de la niñera»), no queda «con error».
+  if (e.status == 409 && motivo == 'firma_por_ninera') return e.message;
+  // S8-HU-04.2 CA-11: en el destino tampoco; la firma de un carro del descargue encolada antes se retira con lo que
+  // dice el servidor («usa Entregar en esta parada»).
+  if (e.status == 409 && motivo == 'entrega_por_parada') return e.message;
+  // S8-HU-06.2 CA-5: la salida del descargue ya no existe. Reintentarla daría el mismo 409 para siempre.
+  if (e.status == 409 && (motivo == motivoSalidaDescargue || e.code == codigoMomentoNoAdmitido)) return mensajeSalidaDescargue;
+  // S8-HU-07.3 CA-8: el informe de transporte ya lo arma el sistema con «Reportar novedad» y «Llegué»; uno manual
+  // encolado antes no se reintenta: se retira con lo que dice el servidor.
+  if (e.status == 409 && motivo == motivoTransporteLoArmaElSistema) return e.message;
+  // S8-HU-07.3 CA-6: el lugar de cargue no admite cargue sin inspector. Reintentar daría el mismo 409: el cargue lo
+  // hace el inspector, y se dice con el mensaje del servidor en vez de quedar «con error».
+  if (e.status == 409 && motivo == motivoLugarNoAdmiteSinInspector) return e.message;
+  return null;
+}
+
+/// Los motivos (`details.motivo`) con que el servidor rechaza lo que la app ya no ofrece (S8-HU-07.3).
+const motivoTransporteLoArmaElSistema = 'transporte_lo_arma_el_sistema';
+const motivoLugarNoAdmiteSinInspector = 'lugar_no_admite_cargue_sin_inspector';
+const motivoConductorSinPermiso = 'conductor_sin_permiso_de_excepcion';
+
+/// El motivo del 409 `ETAPA_PREVIA_SIN_CIERRE` cuando lo que falta es la entrega (la transferencia) de la etapa anterior.
+const motivoTransferenciaSinCierre = 'transferencia_sin_cierre';
+
+/// Lo que dice un envío del conductor en ruta que espera a que se cierre la entrega del cargue (S8-HU-07.3 CA-5).
+const mensajeEntregaDelCargueSinCerrar = 'Falta cerrar la entrega del cargue';
+
+/// El código con que se guarda un rechazo en el job. Casi siempre es el del servidor; cambia donde ese código haría
+/// que la cola lo tratara como lo que no es:
+///
+/// - la entrega de una parada guarda el motivo de la parada (S8-HU-04.2 CA-3);
+/// - un 403 que no es «lo empezó otra persona» no se guarda como `FORBIDDEN`: la cola lo mostraría como «De otro
+///   usuario» y no dejaría ni reintentarlo ni quitarlo. Son la llegada del cargue sin el permiso concedido (S8-HU-07.3
+///   CA-7: queda con el mensaje del servidor y con su motivo como código) y cualquier rechazo de la novedad del
+///   viaje, que solo la envía su dueño (CA-3: queda en «Cola» con el mensaje del servidor).
+String codigoDelRechazo(ErrorApi e, Job job) {
+  if (job is EntregaPuntoJob || job is SinInspectorParadaJob) return motivoDeLaParada(e) ?? e.code;
+  final motivo = switch (e.details) { final Map m => m['motivo'], _ => null };
+  if (e.status == 403 && motivo == motivoConductorSinPermiso) return motivoConductorSinPermiso;
+  if (job is NovedadViajeJob && e.code == codigoProhibido) return motivo is String ? motivo : codigoNovedadViajeRechazada;
+  return e.code;
+}
+
+/// Código local de una novedad del viaje que el servidor rechazó por permisos sin decir el motivo.
+const codigoNovedadViajeRechazada = 'NOVEDAD_VIAJE_RECHAZADA';
+
+/// El motivo con que el servidor rechaza el cargue del conductor sin la excepción «No hay inspector» activa (`403`).
+/// Es el mismo para «pida el permiso … y espere» que para rechazos que el tiempo no arregla (una llegada sin motivo
+/// donde no hay inspectores, o sin ningún permiso pedido).
+const motivoEsperaDelPermiso = motivoConductorSinPermiso;
+
+/// Si el servidor rechazó [job] solo porque el permiso «No hay inspector» que se pidió todavía no se ve concedido
+/// (S8-HU-09.2 CA-2).
+///
+/// Con la cuenta atrás en cero la app deja seguir sin esperar a ver el permiso concedido, porque el servidor lo
+/// concede en la misma petición (ESC-03). Si el reloj del teléfono iba adelantado y el servidor aún responde que
+/// espere, eso no es un rechazo definitivo: en segundos o minutos el permiso se concede, por tiempo o por un
+/// coordinador. Por eso no se marca «prohibido» —que solo su dueño arreglaría y nadie podría reintentar—: el informe
+/// se queda en la cola, con lo capturado, y vuelve a salir solo.
+///
+/// Solo si el informe se capturó siguiendo un permiso pedido ([InformeJob.bajoPermiso]): el servidor usa el mismo
+/// motivo cuando no hay ningún permiso que esperar, y reintentar eso media hora no cambia nada.
+bool esEsperaDelPermiso(ErrorApi e, Job job) =>
+    job is InformeJob &&
+    job.bajoPermiso &&
+    e.status == 403 &&
+    switch (e.details) { final Map m => m['motivo'] == motivoEsperaDelPermiso, _ => false };
+
+
+/// El motivo de la parada con que el servidor rechazó una entrega (S8-HU-04.2 CA-3) o «No hay inspector» (S8-HU-05.2
+/// CA-6), o null si el rechazo es otro.
+///
+/// Se guarda como código del job en vez del código genérico del error: la pantalla de la parada decide con él qué
+/// explicar, sin leer el texto. Así un 403 `entrega_tomada` tampoco queda como «prohibido»: no es algo que solo su
+/// dueño pueda arreglar, y quien lo ve en la cola lo puede quitar.
+String? motivoDeLaParada(ErrorApi e) {
+  final motivo = switch (e.details) { final Map m => m['motivo'], _ => null };
+  return motivo is String && MotivoParada.todos.contains(motivo) ? motivo : null;
+}
 
 enum _Desenlace { hecho, espera }
 
@@ -14,7 +117,13 @@ const mensajeSinPendientes = 'No hay unidades pendientes de entrega';
 
 /// Resultado de una pasada de sincronización.
 class ResultadoSync {
-  const ResultadoSync({required this.enviados, required this.pendientes, required this.fallidos, this.pausa});
+  const ResultadoSync({
+    required this.enviados,
+    required this.pendientes,
+    required this.fallidos,
+    this.retirados = 0,
+    this.pausa,
+  });
 
   final int enviados;
 
@@ -23,6 +132,10 @@ class ResultadoSync {
 
   /// Jobs que necesitan atención del usuario (reintento manual o descarte).
   final int fallidos;
+
+  /// Jobs que el servidor ya no admite porque el carro no sale o se bajó del viaje. No son un error, pero quien
+  /// los encoló tiene que poder enterarse de que no se enviaron y por qué.
+  final int retirados;
 
   /// Null si la pasada sí recorrió la cola. Con valor, no se intentó nada y por eso ningún job quedó con motivo.
   final MotivoPausa? pausa;
@@ -75,7 +188,10 @@ class ProcesadorCola {
   /// Cantidad de jobs que aún se reintentarán solos.
   Future<int> contarPendientes(String usuarioId) async => (await visibles(usuarioId)).where((j) => !j.fallido).length;
 
-  Future<int> contarFallidos(String usuarioId) async => (await visibles(usuarioId)).where((j) => j.fallido).length;
+  Future<int> contarFallidos(String usuarioId) async =>
+      (await visibles(usuarioId)).where((j) => j.fallido && !j.retirado).length;
+
+  Future<int> contarRetirados(String usuarioId) async => (await visibles(usuarioId)).where((j) => j.retirado).length;
 
   /// Adopta los jobs sin dueño para [usuarioId]. Se llama al arrancar con una sesión guardada: esa es, casi con
   /// certeza, quien los encoló, porque es la última que se usó antes de actualizar la app. Devuelve cuántos.
@@ -92,7 +208,8 @@ class ProcesadorCola {
     return ResultadoSync(
       enviados: enviados,
       pendientes: jobs.where((j) => !j.fallido).length,
-      fallidos: jobs.where((j) => j.fallido).length,
+      fallidos: jobs.where((j) => j.fallido && !j.retirado).length,
+      retirados: jobs.where((j) => j.retirado).length,
       pausa: pausa,
     );
   }
@@ -127,8 +244,33 @@ class ProcesadorCola {
               await gateway.agregarNota(entidad: job.entidad, entidadId: job.entidadId, texto: job.texto);
             case EntregaPuntoJob():
               await _ejecutarEntregaPunto(job);
+            case SinInspectorParadaJob():
+              // S8-HU-05.2 CA-2: reenviarla no crea otra espera; con una abierta el servidor devuelve esa misma.
+              await gateway.activarSinInspector(
+                job.viajeId,
+                job.lugarId,
+                motivo: job.motivo,
+                motivoTexto: job.motivoTexto,
+                fechaMomento: job.fechaMomento,
+                lat: job.lat,
+                lng: job.lng,
+                precisionM: job.precisionM,
+              );
             case ReciboSinEntregaJob():
               await gateway.firmarReciboSinEntrega(job.inspeccionId, firma: job.firma);
+            case FirmaNineraJob():
+              await gateway.firmarCargueNinera(
+                job.viajeId,
+                parte: job.parte,
+                firma: job.firma,
+                fechaMomento: job.fechaMomento,
+                lat: job.lat,
+                lng: job.lng,
+                precisionM: job.precisionM,
+                reservas: job.reservas,
+              );
+            case NoFirmaNineraJob():
+              await _ejecutarNoFirmaNinera(job);
             case NovedadJob():
               if (await _ejecutarNovedad(job) == _Desenlace.espera) {
                 esperando.add(job.id);
@@ -139,12 +281,29 @@ class ProcesadorCola {
                 esperando.add(job.id);
                 continue;
               }
+            case NovedadViajeJob():
+              await _ejecutarNovedadViaje(job);
           }
           await cola.eliminar(job.id);
           enviados++;
         } catch (e) {
           final actual = (await cola.listar()).where((j) => j.id == job.id).firstOrNull;
           if (actual == null) continue;
+          final retiro = e is ErrorApi ? motivoDeRetiro(e, actual) : null;
+          if (retiro != null) {
+            await cola.guardar(actual.conIntento(intentos: actual.intentos + 1, error: retiro, codigo: codigoRetirado, fallido: true));
+            continue;
+          }
+          // S8-HU-09.2 CA-2: el permiso aún no se ve concedido. Queda pendiente (salvo que agote los intentos) y se
+          // salta en esta pasada: no bloquea a los demás y vuelve a salir en la siguiente.
+          if (e is ErrorApi && esEsperaDelPermiso(e, actual)) {
+            final intentos = actual.intentos + 1;
+            await cola.guardar(
+              actual.conIntento(intentos: intentos, error: e.message, codigo: motivoEsperaDelPermiso, fallido: intentos >= maxIntentos),
+            );
+            esperando.add(actual.id);
+            continue;
+          }
           final transitorio = e is! ErrorApi || e.esTransitorio;
           // El PIN temporal no es un fallo del envío: la cola queda en pausa hasta que la persona lo cambie, así
           // que no gasta uno de los ocho intentos. Cualquier otro error sí cuenta.
@@ -155,7 +314,13 @@ class ProcesadorCola {
               intentos: intentos,
               // Con su detalle: lo que el servidor rechazó, línea por línea, es lo único accionable.
               error: e is ErrorApi ? e.mensajeDetallado : e.toString(),
-              codigo: e is ErrorApi ? e.code : null,
+              codigo: switch (e) {
+                // Un fallo pasajero de la parada no es un rechazo: si agota los intentos se dice que no hubo respuesta.
+                final ErrorApi api when (actual is EntregaPuntoJob || actual is SinInspectorParadaJob) && motivoDeLaParada(api) == null =>
+                  transitorio && !api.esCambioPinRequerido ? codigoSinRespuesta : api.code,
+                final ErrorApi api => codigoDelRechazo(api, actual),
+                _ => null,
+              },
               fallido: !transitorio || intentos >= maxIntentos,
             ),
           );
@@ -184,6 +349,8 @@ class ProcesadorCola {
     final job = (await cola.listar()).where((j) => j.id == id).firstOrNull;
     if (job == null) return;
     if (job is InformeJob) await _borrarFotos(job);
+    if (job is EntregaPuntoJob) await _borrarRutas([for (final f in job.fotos) f.ruta]);
+    if (job is NovedadViajeJob) await _borrarRutas([?job.foto?.ruta]);
     await cola.eliminar(id);
   }
 
@@ -329,7 +496,8 @@ class ProcesadorCola {
       try {
         await gateway.cerrarInspeccion(inspeccionId);
       } on ErrorApi catch (e) {
-        if (e.status != 409) rethrow;
+        // El 409 de un carro que ya no sale o se bajó no es «ya cerrada»: se retira con su explicación.
+        if (e.status != 409 || motivoDeRetiro(e, job) != null) rethrow;
       }
       job = job.conProgreso(cerrada: true);
       await cola.guardar(job);
@@ -337,6 +505,32 @@ class ProcesadorCola {
 
     // 5) Limpiar los archivos locales.
     await _borrarFotos(job);
+  }
+
+  /// Como la constancia por carro: la foto se sube primero y queda anotada, así un reintento no la sube dos veces.
+  Future<void> _ejecutarNoFirmaNinera(NoFirmaNineraJob job) async {
+    var actual = job;
+    if (actual.foto.storagePath == null) {
+      final subido = await gateway.subirImagen(await archivos.leerBytes(actual.foto.ruta), nombre: 'no-firma-ninera.jpg');
+      actual = actual.conFoto(actual.foto.copyWith(storagePath: subido.storagePath, hash: subido.hash));
+      await cola.guardar(actual);
+    }
+    await gateway.registrarNoFirmaNinera(
+      actual.viajeId,
+      parte: actual.parte,
+      motivo: actual.motivo,
+      testigoId: actual.testigoId,
+      foto: actual.foto,
+      fechaMomento: actual.fechaMomento,
+      lat: actual.lat,
+      lng: actual.lng,
+      precisionM: actual.precisionM,
+    );
+    try {
+      await archivos.borrar(actual.foto.ruta);
+    } catch (_) {
+      // Una foto que no se pudo borrar no invalida una constancia ya registrada.
+    }
   }
 
   /// La constancia va en dos pasos, como un hallazgo: primero el archivo, y el progreso se guarda, de modo
@@ -404,6 +598,9 @@ class ProcesadorCola {
         lat: job.lat,
         lng: job.lng,
         foto: job.foto,
+        // Hueco 6 (S8-HU-07.3 CA-4): el id del job es el del envío. Si el primer envío llegó y la respuesta se perdió,
+        // el reenvío recibe la misma novedad (200) y la cola la da por registrada, sin otra foto ni otro aviso.
+        idEnvio: job.id,
       );
     } on ErrorApi catch (e) {
       if (await _enEspera(job, e)) return _Desenlace.espera;
@@ -415,6 +612,31 @@ class ProcesadorCola {
       // Un archivo que no se pudo borrar no invalida una novedad ya registrada.
     }
     return _Desenlace.hecho;
+  }
+
+  /// La novedad del viaje (S8-HU-07.3 CA-3): la foto, si la trae, se sube primero y queda anotada; después se
+  /// registra con la hora y el GPS de cuando se guardó y con el id del job como `id_envio`, así un reenvío no crea
+  /// otra novedad ni otro aviso. No espera a ninguna etapa: no cuelga de un carro.
+  Future<void> _ejecutarNovedadViaje(NovedadViajeJob inicial) async {
+    var job = inicial;
+    if (job.foto case final foto? when foto.storagePath == null) {
+      final subido = await gateway.subirImagen(await archivos.leerBytes(foto.ruta), nombre: 'novedad-viaje.jpg');
+      job = job.conFoto(foto.copyWith(storagePath: subido.storagePath, hash: subido.hash));
+      await cola.guardar(job);
+    }
+    await gateway.registrarNovedadViaje(
+      job.viajeId,
+      tipo: job.tipoNovedad,
+      texto: job.texto,
+      fecha: job.fecha,
+      lat: job.lat,
+      lng: job.lng,
+      foto: job.foto,
+      idEnvio: job.id,
+      proceso: job.proceso,
+      lugarId: job.lugarId,
+    );
+    await _borrarRutas([?job.foto?.ruta]);
   }
 
   /// «Llegué». Un 409 `LLEGADA_YA_CERRADA` es un éxito para un reintento: la primera confirmación ya quedó y el
@@ -432,12 +654,22 @@ class ProcesadorCola {
 
   /// Si el error es que falta cerrar la etapa anterior: deja el job en la cola, sin gastar un intento ni marcarlo
   /// fallido, con el mensaje de lo que falta.
+  ///
+  /// Solo la usan la novedad y «Llegué», cuya etapa anterior es el cargue: cuando lo que falta es su entrega
+  /// (`transferencia_sin_cierre`), se dice como lo dicen los botones grises (S8-HU-07.3 CA-5).
   Future<bool> _enEspera(Job job, ErrorApi e) async {
     if (e.status != 409 || e.code != codigoEtapaPreviaSinCierre) return false;
-    final etapa = switch (e.details) { final Map m => m['etapa_previa'] as String?, _ => null };
+    final (etapa, motivo) = switch (e.details) {
+      final Map m => (m['etapa_previa'] as String?, m['motivo'] as String?),
+      _ => (null, null),
+    };
     await cola.guardar(job.conIntento(
       intentos: job.intentos,
-      error: etapa == null ? 'Falta cerrar la etapa anterior' : 'Falta cerrar $etapa',
+      error: switch (etapa) {
+        _ when motivo == motivoTransferenciaSinCierre => mensajeEntregaDelCargueSinCerrar,
+        null => 'Falta cerrar la etapa anterior',
+        final etapa => 'Falta cerrar $etapa',
+      },
       codigo: e.code,
       fallido: false,
     ));
@@ -446,10 +678,39 @@ class ProcesadorCola {
 
   /// Un 409 «No hay unidades pendientes» es que la entrega ya quedó cerrada: lo más probable es que el envío anterior
   /// sí llegó y solo se perdió la respuesta. Se toma como hecho, así reintentar no deja nada a medias ni firma dos veces.
-  Future<void> _ejecutarEntregaPunto(EntregaPuntoJob job) async {
+  ///
+  /// Las fotos del cierre con una sola firma se suben primero, una a una, y su ruta queda guardada: un corte a mitad
+  /// no vuelve a subir las que ya llegaron (S8-HU-04.2 CA-7).
+  Future<void> _ejecutarEntregaPunto(EntregaPuntoJob inicial) async {
+    var job = inicial;
+    for (var i = 0; i < job.fotos.length; i++) {
+      final foto = job.fotos[i];
+      if (foto.storagePath != null) continue;
+      final subido = await gateway.subirImagen(await archivos.leerBytes(foto.ruta), nombre: 'cierre-parada-$i.jpg');
+      job = job.conFotos(_reemplazar(job.fotos, i, foto.copyWith(storagePath: subido.storagePath, hash: subido.hash)));
+      await cola.guardar(job);
+    }
     try {
-      if (job.motivo case final motivo?) {
-        await gateway.cerrarEntregaConUnaFirma(job.viajeId, job.lugarId, motivo: motivo, firma: job.firma);
+      if (job.motivoCodigo case final motivo?) {
+        await gateway.cerrarEntregaConUnaFirma(
+          job.viajeId,
+          job.lugarId,
+          motivoCodigo: motivo,
+          motivoTexto: job.motivoTexto,
+          firma: job.firma,
+          // Cada foto va a cada carro de la parada: el servidor la guarda en la revisión de llegada del carro que se
+          // nombra, y así ninguno queda sin la constancia de su cierre.
+          fotos: [
+            for (final foto in job.fotos)
+              for (final vin in job.vines) (vin: vin, foto: foto),
+          ],
+          testigoNombre: job.testigoNombre,
+          testigoCedula: job.testigoCedula,
+          fechaMomento: job.fechaMomento,
+          lat: job.lat,
+          lng: job.lng,
+          precisionM: job.precisionM,
+        );
       } else {
         await gateway.firmarEntregaPunto(
           job.viajeId,
@@ -458,15 +719,38 @@ class ProcesadorCola {
           recibeNombre: job.recibeNombre,
           recibeCedula: job.recibeCedula,
           firmaRecibe: job.firmaRecibe,
+          reservas: job.reservas,
+          rechazos: job.rechazos,
+          fechaMomento: job.fechaMomento,
+          lat: job.lat,
+          lng: job.lng,
+          precisionM: job.precisionM,
         );
       }
     } on ErrorApi catch (e) {
       if (e.status != 409 || !e.message.startsWith(mensajeSinPendientes)) rethrow;
     }
+    await _borrarRutas([for (final f in job.fotos) f.ruta]);
+  }
+
+  Future<void> _borrarRutas(List<String> rutas) async {
+    for (final ruta in rutas) {
+      try {
+        await archivos.borrar(ruta);
+      } catch (_) {
+        // Un archivo que no se pudo borrar no invalida una entrega ya registrada.
+      }
+    }
   }
 
   Future<void> _borrarFotos(InformeJob job) async {
-    for (final foto in [...job.fotos, for (final e in job.extras) ...e.fotos]) {
+    // La foto de cada daño también: sin ella, cada informe con un daño dejaba un archivo sin dueño en el teléfono
+    // (S8-HU-11.2 CA-5).
+    for (final foto in [
+      ...job.fotos,
+      for (final h in job.hallazgos) ?h.foto,
+      for (final e in job.extras) ...e.fotos,
+    ]) {
       try {
         await archivos.borrar(foto.ruta);
       } catch (_) {

@@ -32,6 +32,7 @@ class HallazgoVista {
     this.origen,
     this.revisadoEn,
     this.extraId,
+    this.calificado,
   });
 
   factory HallazgoVista.fromJson(Map<String, dynamic> json) => HallazgoVista(
@@ -48,6 +49,7 @@ class HallazgoVista {
         esPreexistente: json['es_preexistente'] as bool? ?? false,
         origen: json['origen'] as String?,
         revisadoEn: switch (json['revisado_at']) { final String f => DateTime.tryParse(f), _ => null },
+        calificado: json['calificado'] as bool?,
       );
 
   final String id;
@@ -74,6 +76,10 @@ class HallazgoVista {
 
   bool get loRegistroElConductor => origen == 'conductor';
 
+  /// Ya tiene nivel (S8-HU-08.2 CA-5). Al conductor es lo único que se le dice de la calificación: el nivel nunca.
+  /// Null si el servidor es de antes y no lo manda.
+  final bool? calificado;
+
   /// Cuándo lo revisó un inspector. Null si nadie lo ha hecho **o** si a quien pregunta no se le muestra: al
   /// conductor el servidor le oculta la revisión entera.
   final DateTime? revisadoEn;
@@ -84,13 +90,14 @@ class HallazgoVista {
 }
 
 class EvidenciaVista {
-  const EvidenciaVista({required this.id, this.url, this.hallazgoId, this.venceEn});
+  const EvidenciaVista({required this.id, this.url, this.hallazgoId, this.vistaId, this.venceEn});
 
   factory EvidenciaVista.fromJson(Map<String, dynamic> json) =>
       EvidenciaVista(
         id: json['id'] as String,
         url: json['url'] as String?,
         hallazgoId: json['hallazgo_id'] as String?,
+        vistaId: json['vista_id'] as String?,
         venceEn: switch (json['url_expira_at']) { final String f => DateTime.tryParse(f), _ => null },
       );
 
@@ -101,6 +108,10 @@ class EvidenciaVista {
 
   /// El daño que retrata. Null en las fotos del checklist de vistas, que no son de ningún daño.
   final String? hallazgoId;
+
+  /// La vista del checklist que cubre. Con él, al continuar un borrador, la vista que ya está en el servidor no se
+  /// vuelve a pedir (S8-HU-11.2 CA-2).
+  final String? vistaId;
 
   /// Hasta cuándo vale el enlace firmado. Pasada esa hora el servidor responde 403 y hay que pedir uno nuevo.
   final DateTime? venceEn;
@@ -137,6 +148,8 @@ class TransferenciaVista {
     this.entregaFirmoEn,
     this.recibeFirmoEn,
     this.tipoCierre,
+    this.reservasTexto,
+    this.firmaPorNinera = false,
   });
 
   factory TransferenciaVista.fromJson(Map<String, dynamic> json) => TransferenciaVista(
@@ -148,7 +161,15 @@ class TransferenciaVista {
         entregaFirmoEn: switch (json['entrega_firmada_at']) { final String f => DateTime.tryParse(f), _ => null },
         recibeFirmoEn: switch (json['recibe_firmada_at']) { final String f => DateTime.tryParse(f), _ => null },
         tipoCierre: json['tipo_cierre'] as String?,
+        reservasTexto: json['reservas_texto'] as String?,
+        firmaPorNinera: json['firma_por_ninera'] as bool? ?? false,
       );
+
+  /// Lo que quien recibe dejó dicho al recibir con reservas. Null si recibió sin reservas o aún no recibe.
+  final String? reservasTexto;
+
+  /// Se firmó por niñera (S8-HU-01.3): una firma de cada parte para todos los carros del cargue.
+  final bool firmaPorNinera;
 
   final String entregaId;
   final String recibeId;
@@ -334,6 +355,7 @@ class EtapaVista {
     this.conPersonalApoyo = false,
     this.traeMarcaApoyo = true,
     this.inspecciones = const [],
+    this.posicion,
   });
 
   factory EtapaVista.fromJson(Map<String, dynamic> json) => EtapaVista(
@@ -346,10 +368,23 @@ class EtapaVista {
         conPersonalApoyo: json['con_personal_apoyo'] as bool? ?? false,
         traeMarcaApoyo: json.containsKey('con_personal_apoyo'),
         inspecciones: [for (final i in (json['inspecciones'] as List<dynamic>? ?? [])) InspeccionVista.fromJson(i as Map<String, dynamic>)],
+        posicion: (json['posicion'] as num?)?.toInt(),
       );
 
   final String id;
   final int orden;
+
+  /// El puesto que tuvo el carro en la niñera en esta etapa (el cargue), tal como lo manda el servidor. Null si no
+  /// se registró: los viajes de antes y los carros que no salen.
+  final int? posicion;
+
+  /// Alguna transferencia de la etapa (de la llegada o de la salida, de cualquier versión) ya tiene una firma o un
+  /// cierre. Desde ahí nadie corrige ninguno de sus informes: el servidor responde 409 `INSPECCION_YA_FIRMADA`
+  /// aunque el informe que se corrige no tenga firma propia (S8-HU-01.3 CA-8).
+  bool get tieneFirma => inspecciones.any((i) {
+        final t = i.transferencia;
+        return t != null && (t.firmoEntrega || t.firmoRecibe || t.cerrada);
+      });
 
   /// Código de la etapa del catálogo `etapas` (cargue, transporte, descargue).
   final String proceso;
@@ -503,9 +538,13 @@ class BloqueoMomento {
 
 /// Uno de los dos momentos de una etapa, tal como lo ve la pantalla.
 class MomentoEtapa {
-  const MomentoEtapa({required this.momento, this.inspeccion, this.bloqueo});
+  const MomentoEtapa({required this.momento, this.inspeccion, this.bloqueo, this.historico = false});
 
   final String momento;
+
+  /// Un momento que el proceso ya no tiene y que se muestra solo porque quedó un informe de antes: la salida del
+  /// descargue (S8-HU-06.2 CA-4). Se lee, pero no se captura, ni se continúa, ni se corrige.
+  final bool historico;
 
   /// La inspección de ese momento, si ya existe. Si hay varias versiones, la última.
   final InspeccionVista? inspeccion;
@@ -515,32 +554,125 @@ class MomentoEtapa {
 
   bool get cerrada => inspeccion?.cerrada ?? false;
   bool get enBorrador => inspeccion != null && !inspeccion!.cerrada;
-  bool get sePuedeCapturar => inspeccion == null && bloqueo == null;
+  bool get sePuedeCapturar => inspeccion == null && bloqueo == null && !historico;
 }
 
-/// La salida del cargue no la hace el conductor: la hace un inspector, y si no hay ninguno el conductor activa en el
-/// momento la excepción «No hay inspector» y da el motivo. Vale con la marca de personal de apoyo (contrato anterior)
-/// y sin ella (contrato 2.10 en adelante, donde la regla es para todos los cargues).
+/// Los momentos que tiene cada proceso. El descargue tiene una sola revisión, la de llegada (S8-HU-06.1): el
+/// servidor ya no crea ni corrige su salida (409 `MOMENTO_NO_ADMITIDO`, `salida_descargue`). Los demás, los dos.
+List<String> momentosDelProceso(String proceso) => proceso == 'descargue' ? const [Momento.llegada] : Momento.todos;
+
+/// Lo que se dice de un informe de un momento que el proceso ya no tiene: se lee, no se rehace.
+const avisoMomentoHistorico = 'En el destino ya solo se revisa la llegada: este informe de antes se conserva para consulta.';
+
+/// Qué se ofrece en un momento que tiene un informe en borrador en el servidor (S8-HU-11.2 CA-1).
+enum OfertaBorrador {
+  /// Solo la insignia «Borrador»: no le toca a quien mira, ya tiene una firma o la cola de este teléfono lo está
+  /// enviando todavía.
+  ninguna,
+
+  /// El propio: «Continuar» y «Descartar».
+  continuarODescartar,
+
+  /// El coordinador de calidad lo puede descartar, pero no continúa lo que capturó otra persona.
+  soloDescartar,
+
+  /// De otra persona que ya no tiene el carro: se captura de cero y el de ella queda atrás, con su autor.
+  capturarDeCero,
+}
+
+/// Lo que se dice sobre «Capturar» cuando el borrador es de otra persona.
+const avisoBorradorAjeno = 'Hay un borrador de otra persona; vas a empezar de cero';
+
+/// Decide [OfertaBorrador] con las mismas reglas que aplica el servidor, para no ofrecer lo que va a rechazar:
 ///
-/// La llegada y las demás etapas no cambian: ahí el conductor captura como siempre.
-bool conductorUsaExcepcion(EtapaVista etapa, {required String rol, required String momento}) =>
-    rol == 'conductor' &&
-    etapa.proceso == 'cargue' &&
-    momento == Momento.salida &&
-    (etapa.conPersonalApoyo || !etapa.traeMarcaApoyo);
+/// - descartar, solo quien lo hizo y el coordinador de calidad, y solo sin ninguna firma en la etapa (403
+///   `solo_autor_o_coordinador`, 409 `informe_con_firmas`);
+/// - empezar de cero sobre el de otro, solo un inspector, sin firma y cuando el carro es suyo ahora
+///   ([tengoElCarro]): el reclamo es de uno solo, así que el autor ya no lo tiene.
+///
+/// [enCola] dice que este teléfono tiene un envío de ese momento: el borrador es el que esa cola va llenando, y
+/// continuarlo o descartarlo desde aquí chocaría con ella. La etapa de transporte no entra: la arma el sistema con
+/// «Reportar novedad» y «Llegué».
+OfertaBorrador ofertaDelBorrador(
+  MomentoEtapa momento,
+  EtapaVista etapa, {
+  required String? yoId,
+  required String rol,
+  required bool puedeTrabajar,
+  required bool tengoElCarro,
+  required bool enCola,
+}) {
+  final borrador = momento.inspeccion;
+  if (borrador == null ||
+      borrador.cerrada ||
+      enCola ||
+      momento.historico ||
+      etapa.tieneFirma ||
+      etapa.proceso == 'transporte') {
+    return OfertaBorrador.ninguna;
+  }
+  final suyo = yoId != null && borrador.usuarioId == yoId;
+  if (suyo) return puedeTrabajar ? OfertaBorrador.continuarODescartar : OfertaBorrador.ninguna;
+  if (rol == 'coordinador_calidad') return OfertaBorrador.soloDescartar;
+  if (rol == 'inspector' && puedeTrabajar && tengoElCarro && borrador.usuarioId != null) {
+    return OfertaBorrador.capturarDeCero;
+  }
+  return OfertaBorrador.ninguna;
+}
+
+/// Lo que tiene un borrador del servidor, dicho como se confirma al descartarlo: «1 foto y 0 daños». Las fotos son
+/// las que no retratan un daño (las del checklist, la acomodación y los extras).
+String resumenDelBorrador(InspeccionVista borrador) {
+  final fotos = borrador.evidencias.where((e) => e.hallazgoId == null).length;
+  final danos = borrador.hallazgos.length;
+  return '${fotos == 1 ? '1 foto' : '$fotos fotos'} y ${danos == 1 ? '1 daño' : '$danos daños'}';
+}
+
+/// El cargue no lo hace el conductor: lo hace un inspector, y si no hay ninguno el conductor activa la excepción
+/// «No hay inspector» con su motivo (o pide el permiso donde el punto tiene inspectores). Desde S8-HU-07.3 (hueco 7,
+/// CA-7) vale para la **salida y la llegada** del cargue: el servidor rechaza la llegada del conductor sin la
+/// excepción activa o el permiso concedido (403 `conductor_sin_permiso_de_excepcion`), así que «Capturar» a secas
+/// lo mandaría a ese rechazo. Que el lugar la admita lo decide la pantalla con el viaje (CA-6).
+///
+/// Con la marca de personal de apoyo (un servidor anterior al contrato 2.10) sigue la regla de entonces: solo la
+/// salida, y solo con apoyo. Las demás etapas no cambian.
+bool conductorUsaExcepcion(EtapaVista etapa, {required String rol, required String momento}) {
+  if (rol != 'conductor' || etapa.proceso != 'cargue') return false;
+  if (etapa.traeMarcaApoyo) return momento == Momento.salida && etapa.conPersonalApoyo;
+  return momento == Momento.salida || momento == Momento.llegada;
+}
+
+/// Lo que dice la ficha de cada carro en el cargue donde el lugar no admite cargue sin inspector (S8-HU-07.3 CA-6),
+/// en vez del botón: el servidor rechaza la excepción y el permiso con 409 `lugar_no_admite_cargue_sin_inspector`.
+const mensajeCargueDelInspector = 'El cargue lo hace el inspector';
+
+/// Lo que dice la etapa de transporte (S8-HU-07.3 CA-8): ya nadie la captura a mano; el servidor responde 409
+/// `transporte_lo_arma_el_sistema` a quien lo intente. Lo que ya existe se sigue leyendo.
+const mensajeTransporteDelSistema = 'El informe de transporte lo arma el sistema con «Reportar novedad» y «Llegué».';
+
+/// Una etapa que nadie captura a mano: el transporte.
+bool loArmaElSistema(EtapaVista etapa) => etapa.proceso == 'transporte';
 
 /// Lo que se dice en una etapa de un viaje que ya cerró. Se puede mirar lo que quedó, no agregar nada.
 const mensajeViajeTerminado = 'Este viaje ya terminó: solo se puede consultar.';
 
-/// Los dos momentos de una etapa que exige inspección, en orden. Una etapa que no la exige no tiene ninguno:
-/// ahí solo se firma.
+/// Lo que dice cada etapa de un carro que no sale (S8-HU-02.2 CA-4): se ve lo registrado, pero no se captura ni
+/// se firma.
+const mensajeNoSale = 'Este carro no sale del viaje: no se revisa ni se firma';
+
+/// Los momentos de una etapa que exige inspección, en orden: los de su proceso ([momentosDelProceso]) y, si quedó un
+/// informe de un momento que el proceso ya no tiene (la salida del descargue de antes), ese también, para leerlo.
+/// Una etapa que no exige inspección no tiene ninguno: ahí solo se firma.
 List<MomentoEtapa> momentosDeEtapa(EtapaVista etapa, Inventario inventario) {
   if (!etapa.requiereInspeccion) return const [];
   final bloqueoSalida = _bloqueoDeLaPrevia(etapa, inventario);
+  final delProceso = momentosDelProceso(etapa.proceso);
   return [
     for (final momento in Momento.todos)
+      if (delProceso.contains(momento) || etapa.inspecciones.any((i) => i.momento == momento))
       MomentoEtapa(
         momento: momento,
+        historico: !delProceso.contains(momento),
         // La versión que vale es la más alta: las anteriores quedan encadenadas debajo, sin cambios.
         inspeccion: etapa.inspecciones.where((i) => i.momento == momento).fold<InspeccionVista?>(
           null,
@@ -628,8 +760,13 @@ AccionEtapa accionDeEtapa(EtapaVista etapa, Inventario inventario) {
   // La primera cerrada **que siga valiendo**. El servidor las entrega de la más antigua a la más reciente, así
   // que tras una corrección la primera es la que quedó atrás: firmar sobre ella sería firmar un informe que ya
   // no describe el carro.
-  final referencia =
-      inspecciones.where((i) => i.cerrada && !etapa.fueCorregida(i)).firstOrNull ?? inspecciones.firstOrNull;
+  //
+  // Si alguna de las vigentes ya tiene la transferencia, es esa: la firma por niñera cuelga de la salida del cargue
+  // (la acomodación) y no de la llegada, que es la primera. Sin esto la ficha nunca veía el cargue firmado.
+  final vigentes = [...inspecciones.where((i) => i.cerrada && !etapa.fueCorregida(i))];
+  final referencia = vigentes.where((i) => i.transferencia != null).firstOrNull ??
+      vigentes.firstOrNull ??
+      inspecciones.firstOrNull;
   if (etapa.requiereInspeccion) {
     if (referencia == null) return const SinInforme();
     return FirmarTransferencia(
@@ -647,4 +784,13 @@ AccionEtapa accionDeEtapa(EtapaVista etapa, Inventario inventario) {
     transferencia: base.transferencia,
     momentoNombre: base.momentoNombre,
   );
+}
+
+/// Lo que se dice del nivel de un daño. Al conductor, solo si ya se calificó: «Pendiente de calificar» o
+/// «Calificado», nunca el nivel, y «Pendiente de calificar» si el servidor no lo dice (S8-HU-08.2 CA-5). A los demás,
+/// el nivel, o «Sin calificar» mientras no lo tenga.
+String textoDelNivel(HallazgoVista hallazgo, String Function(String codigo) etiquetaNivel, {required bool paraConductor}) {
+  if (paraConductor) return hallazgo.calificado == true ? 'Calificado' : 'Pendiente de calificar';
+  if (hallazgo.nivel case final nivel?) return etiquetaNivel(nivel);
+  return 'Sin calificar';
 }

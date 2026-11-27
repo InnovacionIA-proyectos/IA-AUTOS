@@ -11,6 +11,8 @@ class Aviso {
     this.viajeId,
     this.codigoMtrack,
     this.vin,
+    this.hallazgoId,
+    this.datos,
     this.leidoEn,
     this.respuesta,
   });
@@ -25,6 +27,10 @@ class Aviso {
         viajeId: json['viaje_id'] as String?,
         codigoMtrack: json['codigo_mtrack'] as String?,
         vin: json['vin'] as String?,
+        hallazgoId: json['hallazgo_id'] as String?,
+        // S8-HU-07.3 CA-9 y S8-HU-09.2 CA-6: lo propio de cada tipo. Cualquier otra forma se ignora: el aviso se muestra
+        // igual, con su título y su mensaje.
+        datos: switch (json['datos']) { final Map<String, dynamic> d => d, _ => null },
         leidoEn: switch (json['leida_at']) { final String f => DateTime.tryParse(f), _ => null },
         respuesta: switch (json['respuesta']) {
           final Map<String, dynamic> r => RespuestaAviso.fromJson(r),
@@ -34,8 +40,8 @@ class Aviso {
 
   final String id;
 
-  /// `novedad_conductor`, `respuesta_conductor`, `hallazgo_critico`, `umbral_patron`, `captura_incompleta`,
-  /// `transferencia_pendiente`, `novedad_proceso`, `reclamo_sin_actividad` o `reporte_diario`.
+  /// Uno de [tiposDeAviso]. Uno que la app no conoce (el servidor sumó otro) se pinta igual, con su título y su
+  /// mensaje, y se queda en la bandeja: no lleva a ninguna parte (S8-HU-09.2 CA-6).
   final String tipo;
 
   /// `alta` o `media`.
@@ -46,6 +52,13 @@ class Aviso {
   final String? viajeId;
   final String? codigoMtrack;
   final String? vin;
+
+  /// El hallazgo del aviso (una novedad del conductor, un hallazgo crítico), para llevar a él.
+  final String? hallazgoId;
+
+  /// Los campos propios del aviso (`datos` del contrato), para no tener que leer el mensaje: el lugar, quién, la
+  /// distancia, la precisión... Null en los avisos que no los llevan.
+  final Map<String, dynamic>? datos;
 
   /// Null mientras nadie lo ha abierto.
   final DateTime? leidoEn;
@@ -59,6 +72,22 @@ class Aviso {
   /// Una novedad del conductor que todavía nadie contestó: la única que el coordinador puede responder.
   bool get sePuedeResponder => tipo == tipoNovedadConductor && respuesta == null;
 
+  /// Cómo se nombra el tipo en la bandeja; null si la app no lo nombra (el título ya lo dice).
+  String? get etiquetaTipo => switch (tipo) {
+        tipoNovedadViaje => 'Novedad del viaje',
+        _ => null,
+      };
+
+  /// Los VIN del aviso único «Cargue sin inspector» del viaje (S8-HU-07.3 CA-9), de `datos.vins`. Null en cualquier
+  /// otro aviso, o si `datos` no tiene esa forma: entonces el aviso se ve solo con su título y su mensaje.
+  List<String>? get vinsDelCargueSinInspector {
+    final d = datos;
+    if (tipo != tipoNovedadProceso || d == null || d['hecho'] != hechoCargueSinInspector) return null;
+    final vins = d['vins'];
+    if (vins is! List) return null;
+    return [for (final vin in vins) if (vin is String && vin.isNotEmpty) vin];
+  }
+
   Aviso copiar({DateTime? leidoEn, RespuestaAviso? respuesta}) => Aviso(
         id: id,
         tipo: tipo,
@@ -69,12 +98,50 @@ class Aviso {
         viajeId: viajeId,
         codigoMtrack: codigoMtrack,
         vin: vin,
+        hallazgoId: hallazgoId,
+        datos: datos,
         leidoEn: leidoEn ?? this.leidoEn,
         respuesta: respuesta ?? this.respuesta,
       );
 }
 
 const tipoNovedadConductor = 'novedad_conductor';
+const tipoFueraDeRango = 'fuera_de_rango';
+const tipoUbicacionFijada = 'ubicacion_fijada';
+const tipoPropuestaUbicacion = 'propuesta_ubicacion';
+
+/// Todos los tipos que el servidor emite hoy (`NotificacionDto.tipo`). Un tipo fuera de esta lista es uno nuevo que
+/// esta versión de la app no sabe a dónde llevar.
+const tiposDeAviso = {
+  'novedad_conductor',
+  'respuesta_conductor',
+  'hallazgo_critico',
+  'umbral_patron',
+  'captura_incompleta',
+  'transferencia_pendiente',
+  'reporte_diario',
+  'novedad_proceso',
+  'reclamo_sin_actividad',
+  'fuera_de_rango',
+  'cargue_sin_reclamar',
+  'propuesta_ubicacion',
+  'permiso_sin_inspector',
+  'firma_cargue_pendiente',
+  'cambio_cargue_inspector',
+  'cambio_destino_unidad',
+  'carro_rechazado_en_destino',
+  'ubicacion_fijada',
+  'espera_inspector_punto',
+  'viaje_sin_movimiento',
+  'novedad_viaje',
+};
+
+/// El aviso de la novedad del viaje (S8-HU-07.3): con la urgencia de su tipo.
+const tipoNovedadViaje = 'novedad_viaje';
+
+/// Lo que pasó en el proceso; el «Cargue sin inspector» es uno por viaje y trae los VIN en `datos.vins`.
+const tipoNovedadProceso = 'novedad_proceso';
+const hechoCargueSinInspector = 'cargue_sin_inspector';
 
 abstract final class UrgenciaAviso {
   static const alta = 'alta';

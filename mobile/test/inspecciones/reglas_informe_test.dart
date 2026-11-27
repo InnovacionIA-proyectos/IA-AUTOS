@@ -37,6 +37,7 @@ BloqueoCierre? bloqueo({
   List<ExtraLocal> extras = const [],
   List<VistaChecklist> checklist = const [],
   bool catalogos = true,
+  Set<String> enElServidor = const {},
 }) =>
     bloqueoDeCierre(
       hayUbicacion: gps,
@@ -45,6 +46,7 @@ BloqueoCierre? bloqueo({
       extras: extras,
       checklist: checklist,
       catalogosListos: catalogos,
+      vistasEnElServidor: enElServidor,
     );
 
 /// Un informe completo de la etapa con checklist: las dos obligatorias con su foto.
@@ -76,6 +78,15 @@ void main() {
         final b = bloqueo(checklist: checklistDePrueba);
 
         expect(b!.mensaje, 'Faltan 2 fotos obligatorias: Frontal, Superior.');
+      });
+
+      // S8-HU-11.2 CA-2: al continuar un borrador, la vista que ya está en el servidor cuenta.
+      test('la que ya está en el borrador del servidor no se vuelve a pedir', () {
+        expect(bloqueo(checklist: checklistDePrueba, fotos: [fotoDe('v-frontal')], enElServidor: {'v-superior'}), isNull);
+        expect(
+          bloqueo(checklist: checklistDePrueba, enElServidor: {'v-superior'})!.mensaje,
+          'Falta la foto de la vista «Frontal».',
+        );
       });
 
       test('la adicional no se exige', () {
@@ -268,5 +279,28 @@ void main() {
       expect(firma(entrega: null), isNull);
       expect(firma(recibe: null), isNull);
     });
+  });
+  // S8-HU-11.2 CA-2 y CA-8: continuar un borrador arma el job con su id. La cola salta la creación y solo sube lo
+  // que trae el job, que es lo que se agregó en el teléfono.
+  test('continuar un borrador arma el job con el id del informe del servidor', () {
+    final job = construirInformeJob(
+      id: 'id-1',
+      creadoEn: 99,
+      usuarioId: 'u1',
+      momento: Momento.llegada,
+      vin: 'VIN123',
+      proceso: 'Cargue',
+      etapaId: 'etapa-1',
+      fecha: DateTime.utc(2026, 1, 2, 10),
+      lat: 6.2,
+      lng: -75.5,
+      fotos: [foto('nueva.jpg')],
+      hallazgos: const [],
+      inspeccionId: 'b1',
+    );
+
+    expect(job.inspeccionId, 'b1');
+    expect(job.fotos.map((f) => f.ruta), ['nueva.jpg']);
+    expect(InformeJob.fromJson(job.toJson()).inspeccionId, 'b1', reason: 'sobrevive a la cola guardada');
   });
 }

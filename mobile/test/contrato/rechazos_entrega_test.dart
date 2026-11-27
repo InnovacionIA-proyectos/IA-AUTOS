@@ -1,12 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:traza_autos/features/viajes/presentation/entrega_punto_page.dart';
+import 'package:traza_autos/features/viajes/domain/entrega_punto.dart';
 
-/// La entrega por punto reconoce tres rechazos del servidor por su **texto**: el 400 no trae un código propio.
-/// Esta prueba busca esos textos en el código del backend, para que un cambio de redacción allá se vea aquí en
-/// rojo en vez de que la app deje de reconocerlos sin que nadie se entere —y el envío se quede en la cola con
-/// un mensaje que el conductor no sabe interpretar—.
+/// La entrega por parada reconoce los rechazos del servidor por su **motivo** (`details.motivo`), no por el texto
+/// (S8-HU-04.2 CA-3). Esta prueba busca esos motivos, y los códigos del cierre con una sola firma, en el código del
+/// backend: si allá cambian, se ve aquí en rojo en vez de que la app deje de reconocerlos sin que nadie se entere.
 ///
 /// Igual que la prueba del contrato, necesita la raíz del monorepo montada: sin ella se salta.
 File? _localizar(String ruta) {
@@ -17,30 +16,31 @@ File? _localizar(String ruta) {
   return null;
 }
 
+/// Los motivos llegan con el PR #456 (S8-HU-04.1); hasta que entre a QA, el backend montado es el anterior.
+
 void main() {
-  final entregas = _localizar('backend/src/IA-AUTOS.Aplicacion/Viajes/clsEntregasService.cs');
+  final motivos = _localizar('backend/src/IA-AUTOS.Dominio/Comun/clsMotivosRechazo.cs');
   final custodia = _localizar('backend/src/IA-AUTOS.Dominio/Custodia/clsTransferenciaCustodia.cs');
-  if (entregas == null || custodia == null) {
-    test('rechazos de la entrega por punto', () {}, skip: 'No se encontró el backend (monta la raíz del monorepo).');
+  if (motivos == null || custodia == null) {
+    test('rechazos de la entrega por parada', () {}, skip: 'No se encontró el backend (monta la raíz del monorepo).');
     return;
   }
 
-  // En minúsculas, como los compara la app.
-  final deEntregas = entregas.readAsStringSync().toLowerCase();
-  final deCustodia = custodia.readAsStringSync().toLowerCase();
+  final deMotivos = motivos.readAsStringSync();
+  final deCustodia = custodia.readAsStringSync();
 
-  test('«tiene inspector asignado»: mandar los datos de un externo donde el punto tiene inspector', () {
-    expect(deEntregas, contains(rechazosDelPunto.conInspector));
+  group('los motivos de la parada que la pantalla explica', () {
+    for (final motivo in MotivoParada.todos) {
+      test(motivo, () => expect(deMotivos, contains('"$motivo"')));
+    }
   });
 
-  test('«indique quién recibe»: el punto tiene inspector, pero no hay quien reciba', () {
-    expect(deEntregas, contains(rechazosDelPunto.sinQuienReciba));
+  group('los motivos del cierre con una sola firma', () {
+    for (final motivo in [MotivoUnaFirma.seNegoAFirmar, MotivoUnaFirma.noHabiaNadie]) {
+      test(motivo, () => expect(deCustodia, contains('"$motivo"')));
+    }
   });
 
-  // Salen de la validación del externo, que vive en la transferencia: el nombre y la cédula, cada uno con su
-  // género. El trozo que busca la app tiene que cubrir los dos.
-  test('«de quien recibe es obligatorio/a»: el punto no tiene inspector y faltan los datos del externo', () {
-    expect(deCustodia, contains('el nombre ${rechazosDelPunto.faltanDatos}'));
-    expect(deCustodia, contains('la cédula ${rechazosDelPunto.faltanDatos}'));
-  });
+  // Ya está en QA: el retiro de la firma carro por carro del cargue (S8-HU-01.3) sigue reconociéndose por su motivo.
+  test('firma_por_ninera', () => expect(deMotivos, contains('"firma_por_ninera"')));
 }

@@ -81,7 +81,17 @@ Map<String, dynamic> _inventario({bool conApoyo = true, List<Map<String, dynamic
       ],
     };
 
-Future<Arnes> abrir(WidgetTester tester, {Sesion? sesion, Map<String, dynamic>? inventario, List<Uri>? capturas}) async {
+/// [admite]: si el viaje dice que el lugar de cargue admite cargue sin inspector (S8-HU-07.3 CA-6). Estas pruebas son
+/// de un lugar que sí lo admite, salvo la que prueba lo contrario.
+Future<Arnes> abrir(
+  WidgetTester tester, {
+  Sesion? sesion,
+  Map<String, dynamic>? inventario,
+  List<Uri>? capturas,
+  bool admite = true,
+  // Sin señal y sin copia del viaje.
+  bool sinViaje = false,
+}) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final arnes = Arnes(sesion: sesion ?? _conductor);
@@ -107,7 +117,9 @@ Future<Arnes> abrir(WidgetTester tester, {Sesion? sesion, Map<String, dynamic>? 
           CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe', motivos: motivosDePrueba),
         ),
         vehiculosRepositorioProvider.overrideWithValue(_InventarioFalso(inventario ?? _inventario())),
-        viajesRepositorioProvider.overrideWithValue(ViajesRepositorioFalso()),
+        viajesRepositorioProvider.overrideWithValue(
+          ViajesRepositorioFalso()..viajeDeEtapa = sinViaje ? null : viaje('viaje-1', admiteSinInspector: admite),
+        ),
       ],
       child: MaterialApp.router(theme: crearTema(), routerConfig: router),
     ),
@@ -133,12 +145,60 @@ void main() {
       expect(find.widgetWithText(OutlinedButton, 'Capturar'), findsOneWidget, reason: 'solo la llegada');
     });
 
-    testWidgets('sin la marca de apoyo en la respuesta (contrato 2.10) también', (tester) async {
+    // Sin la marca es la respuesta de hoy: desde S8-HU-07.3 CA-7 la llegada del cargue del conductor también va con la
+    // excepción, porque el servidor la rechaza sin ella.
+    testWidgets('sin la marca de apoyo en la respuesta (contrato 2.10) también, y en la llegada', (tester) async {
       final json = _inventario();
       ((json['etapas'] as List<dynamic>).first as Map<String, dynamic>).remove('con_personal_apoyo');
       await abrir(tester, inventario: json);
 
-      expect(find.widgetWithText(OutlinedButton, 'No hay inspector'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'No hay inspector'), findsNWidgets(2));
+      expect(find.widgetWithText(OutlinedButton, 'Capturar'), findsNothing);
+    });
+
+    // S8-HU-07.3 CA-6: con falso (hoy, todos los lugares) no hay botón: la ficha dice quién hace el cargue.
+    testWidgets('donde el lugar no admite cargue sin inspector, la ficha dice «El cargue lo hace el inspector»', (tester) async {
+      final json = _inventario();
+      ((json['etapas'] as List<dynamic>).first as Map<String, dynamic>).remove('con_personal_apoyo');
+      await abrir(tester, inventario: json, admite: false);
+
+      expect(find.widgetWithText(OutlinedButton, 'No hay inspector'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'Capturar'), findsNothing);
+      expect(find.text('El cargue lo hace el inspector'), findsOneWidget);
+    });
+
+    // Revisión de S8-HU-07.3: el aviso solo cuando dice algo.
+    testWidgets('sin señal y sin copia del viaje no afirma quién hace el cargue', (tester) async {
+      final json = _inventario();
+      ((json['etapas'] as List<dynamic>).first as Map<String, dynamic>).remove('con_personal_apoyo');
+      await abrir(tester, inventario: json, sinViaje: true);
+
+      expect(find.text('El cargue lo hace el inspector'), findsNothing);
+      expect(find.widgetWithText(OutlinedButton, 'No hay inspector'), findsNothing, reason: 'tampoco se ofrece');
+    });
+
+    testWidgets('con el cargue ya hecho no lo repite', (tester) async {
+      Map<String, dynamic> cerrada(String id, String momento) => {
+            ..._salidaSinInspector(),
+            'id': id,
+            'momento': momento,
+            'momento_nombre': momento == 'salida' ? 'Inspección de salida' : 'Inspección de llegada',
+            'motivo_sin_inspector': null,
+            'novedades_proceso': <dynamic>[],
+            'transferencia': null,
+          };
+      final json = _inventario(inspecciones: [cerrada('i1', 'salida'), cerrada('i2', 'llegada')]);
+      ((json['etapas'] as List<dynamic>).first as Map<String, dynamic>).remove('con_personal_apoyo');
+      await abrir(tester, inventario: json, admite: false);
+
+      expect(find.text('El cargue lo hace el inspector'), findsNothing);
+    });
+
+    testWidgets('donde el lugar no lo admite el inspector sigue capturando', (tester) async {
+      await abrir(tester, sesion: sesionPrueba, admite: false);
+
+      expect(find.widgetWithText(OutlinedButton, 'Capturar'), findsNWidgets(2));
+      expect(find.text('El cargue lo hace el inspector'), findsNothing);
     });
 
     testWidgets('el inspector sigue capturando: a él le toca la salida', (tester) async {

@@ -22,6 +22,12 @@ class InspeccionesRepositorio {
   final ClienteApi _api;
   final CacheLecturasRepo _cache;
 
+  /// Descarta un informe en borrador (S8-HU-11.2 CA-3). No va por la cola: es una decisión que se confirma, y
+  /// quien la toma tiene que ver ahí mismo si el servidor la aceptó o por qué no (403 de autoría, 409 si ya tiene
+  /// firma o está cerrado). Un error sale como [ErrorApi] con el mensaje del servidor.
+  Future<void> descartar(String inspeccionId) =>
+      _api.post('/api/inspecciones/${Uri.encodeComponent(inspeccionId)}/descartar');
+
   /// La caché es por usuario: en un dispositivo compartido nadie ve las inspecciones de otra persona.
   static String _clave(String usuarioId) => 'inspecciones.$usuarioId';
 

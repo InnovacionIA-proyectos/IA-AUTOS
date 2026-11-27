@@ -7,9 +7,11 @@ import 'package:traza_autos/app/sin_permisos_page.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
 import 'package:traza_autos/features/viajes/presentation/mis_viajes_page.dart';
+import 'package:traza_autos/features/viajes/providers.dart';
 
 import '../support/arnes.dart';
 import '../support/dobles_catalogos.dart';
+import '../support/dobles_viajes.dart';
 
 /// El menú sale de las capacidades, y la autorización de verdad la impone la API: esto evita ofrecer puertas que
 /// el servidor cierra. Es también la primera prueba que ejercita `router.dart`.
@@ -117,5 +119,49 @@ void main() {
 
     expect(find.byType(NavigationBar), findsNothing);
     expect(find.byType(MisViajesPage), findsOneWidget);
+  });
+
+  // S8-HU-09.2 CA-6: el aviso lleva al viaje por una ruta del router de verdad, con el permiso de ver viajes.
+  group('la ruta del viaje de un aviso', () {
+    Future<void> abrirConViaje(WidgetTester tester, Sesion sesion) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          retry: (_, _) => null,
+          overrides: [
+            ...Arnes(sesion: sesion).overrides,
+            catalogosRepositorioProvider.overrideWithValue(CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe')),
+            reclamosRepositorioProvider.overrideWithValue(
+              ReclamosRepositorioFalso()..viajeDelPendiente = viaje('v17', codigo: 'MT-2026-0417'),
+            ),
+          ],
+          child: const TrazaApp(),
+        ),
+      );
+      await avanzar(tester);
+    }
+
+    testWidgets('existe y abre el viaje a quien puede ver viajes', (tester) async {
+      await abrirConViaje(tester, sesionCon('coordinador_calidad', capacidadesDeRol('coordinador_calidad')));
+
+      tester.element(find.byType(MisViajesPage)).go('/viajes/viaje/v17');
+      await avanzar(tester);
+
+      expect(find.byType(ViajeDelAvisoPage), findsOneWidget);
+      expect(find.text('MT-2026-0417'), findsWidgets);
+      final permitido = tester.widget<Permitido>(
+        find.ancestor(of: find.byType(ViajeDelAvisoPage), matching: find.byType(Permitido)),
+      );
+      expect(permitido.capacidad, Capacidad.verViajes);
+    });
+
+    testWidgets('sin ver_viajes muestra «sin permisos»', (tester) async {
+      await abrirConViaje(tester, sesionCon('inspector', [Capacidad.verInspecciones, Capacidad.verAlertas]));
+
+      tester.element(find.byType(NavigationBar)).go('/viajes/viaje/v17');
+      await avanzar(tester);
+
+      expect(find.byType(ViajeDelAvisoPage), findsNothing);
+      expect(find.byType(SinPermisosPage), findsOneWidget);
+    });
   });
 }

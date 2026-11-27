@@ -1,25 +1,34 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:traza_autos/app/proveedores.dart';
 import 'package:traza_autos/core/config/entorno.dart';
+import 'package:traza_autos/core/config/parametros_app.dart';
 import 'package:traza_autos/core/dispositivo/servicios.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/features/auth/domain/almacen_sesion.dart';
 import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/auth/providers.dart';
 import 'package:traza_autos/features/dibujo_dano/providers.dart';
+import 'package:traza_autos/features/inspecciones/data/cierre_de_captura.dart';
 import 'package:traza_autos/features/inspecciones/data/hallazgos_previos_repositorio.dart';
 import 'package:traza_autos/features/inspecciones/data/inspecciones_repositorio.dart';
 import 'package:traza_autos/features/inspecciones/data/novedades_repositorio.dart';
+import 'package:traza_autos/features/inspecciones/domain/borrador_captura.dart';
 import 'package:traza_autos/features/inspecciones/domain/hallazgo_previo.dart';
 import 'package:traza_autos/features/inspecciones/domain/novedad_pendiente.dart';
 import 'package:traza_autos/features/inspecciones/domain/inspeccion_resumen.dart';
 import 'package:traza_autos/features/inspecciones/providers.dart';
+import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/sync/domain/procesador_cola.dart';
 import 'package:traza_autos/features/sync/domain/puertos.dart';
 import 'package:traza_autos/features/sync/providers.dart';
+import 'package:traza_autos/features/viajes/presentation/destinos_vistos.dart';
+import 'package:traza_autos/features/viajes/presentation/tomados.dart';
+import 'package:traza_autos/features/inspecciones/domain/puestos_guardados.dart';
+import 'package:traza_autos/core/dispositivo/abridor_pdf.dart';
 
 import 'dobles_dibujo.dart';
 import 'dobles_sync.dart';
@@ -164,6 +173,16 @@ class InspeccionesRepositorioFalso implements InspeccionesRepositorio {
   /// distingue al coordinador de calidad del inspector.
   final peticiones = <({String? usuarioId, String? vin, int pagina})>[];
 
+  /// Los informes que se pidieron descartar, en orden. Con [errorDescartar] puesto, el descarte lo levanta.
+  final descartados = <String>[];
+  Object? errorDescartar;
+
+  @override
+  Future<void> descartar(String inspeccionId) async {
+    if (errorDescartar != null) throw errorDescartar!;
+    descartados.add(inspeccionId);
+  }
+
   @override
   Future<List<InspeccionResumen>?> leerCache(String usuarioId) async => cache;
 
@@ -242,7 +261,8 @@ class Arnes {
         ubicacion = UbicacionFalsa(),
         dispositivo = DispositivoFalso(),
         previos = HallazgosPreviosFalso(),
-        novedades = NovedadesFalso();
+        novedades = NovedadesFalso(),
+        borradores = BorradoresEnMemoria();
 
   final Entorno entorno;
   final AlmacenSesionEnMemoria almacen;
@@ -262,9 +282,35 @@ class Arnes {
   /// Las novedades del conductor pendientes de revisión. Vacías por defecto: casi ninguna prueba las necesita.
   final NovedadesFalso novedades;
 
+  /// Las capturas sin cerrar guardadas en el teléfono. Vacío por defecto.
+  final BorradoresEnMemoria borradores;
+
+  /// Encolar el informe y soltar su borrador: en memoria, sobre esta misma cola y estos mismos borradores.
+  late final CierreEnMemoria cierre = CierreEnMemoria(cola, borradores);
+
   late final ProcesadorCola procesador = ProcesadorCola(cola: cola, gateway: gateway, red: red, archivos: archivos);
 
+  /// Lo que el conductor ya vio de cada cambio de destino (S8-HU-03.2 CA-5), en memoria.
+  final destinosVistos = DestinosVistosEnMemoria();
+
+  /// Lo último que el inspector tenía tomado, guardado en el teléfono, en memoria.
+  final tomadosGuardados = TomadosEnMemoria();
+
+  /// Los puestos de la niñera elegidos en el teléfono, en memoria.
+  final puestos = PuestosEnMemoria();
+
+  /// Los PDF que la app mandó abrir, sin tocar el teléfono.
+  final pdfs = AbridorPdfFalso();
+
+  /// Los parámetros de la app que manda el servidor. Sin nada por defecto: mandan los valores de hoy de la regla.
+  final parametros = ParametrosAppFalsos();
+
   List<Override> get overrides => [
+        almacenDestinosVistosProvider.overrideWithValue(destinosVistos),
+        almacenTomadosProvider.overrideWithValue(tomadosGuardados),
+        almacenPuestosProvider.overrideWithValue(puestos),
+        abridorPdfProvider.overrideWithValue(pdfs),
+        fuenteParametrosAppProvider.overrideWithValue(parametros),
         entornoProvider.overrideWithValue(entorno),
         almacenSesionProvider.overrideWithValue(almacen),
         authRepositorioProvider.overrideWithValue(auth),
@@ -278,6 +324,9 @@ class Arnes {
         almacenImagenesPanelProvider.overrideWithValue(AlmacenImagenesEnMemoria()),
         hallazgosPreviosRepositorioProvider.overrideWithValue(previos),
         novedadesRepositorioProvider.overrideWithValue(novedades),
+        almacenBorradoresProvider.overrideWithValue(borradores),
+        archivosLocalesProvider.overrideWithValue(archivos),
+        cierreDeCapturaProvider.overrideWithValue(cierre),
       ];
 
   ProviderContainer contenedor() => ProviderContainer(overrides: overrides, retry: (_, _) => null);
@@ -336,4 +385,102 @@ class NovedadesFalso implements NovedadesRepositorio {
     });
     if (errorAlRevisar != null) throw errorAlRevisar!;
   }
+}
+
+/// Los borradores de captura en memoria; se guardan como JSON, así la prueba también pasa por la lectura.
+class BorradoresEnMemoria implements AlmacenBorradores {
+  final Map<String, Map<String, dynamic>> guardados = {};
+
+  @override
+  Future<BorradorCaptura?> leer(String clave) async =>
+      guardados[clave] == null ? null : BorradorCaptura.fromJson(guardados[clave]!);
+
+  @override
+  Future<void> guardar(String clave, BorradorCaptura borrador) async =>
+      guardados[clave] = jsonDecode(jsonEncode(borrador.toJson())) as Map<String, dynamic>;
+
+  @override
+  Future<void> borrar(String clave) async => guardados.remove(clave);
+}
+
+/// El cierre de una captura en memoria: las dos cosas o ninguna, como la transacción de verdad.
+class CierreEnMemoria implements CierreDeCaptura {
+  CierreEnMemoria(this.cola, this.borradores);
+
+  final ColaRepositorio cola;
+  final BorradoresEnMemoria borradores;
+
+  /// Si se pone, encolar falla y no cambia nada.
+  Object? error;
+
+  @override
+  Future<void> encolar(Job job, {String? claveBorrador}) async {
+    if (error != null) throw error!;
+    await cola.agregar(job);
+    if (claveBorrador != null) await borradores.borrar(claveBorrador);
+  }
+}
+
+class DestinosVistosEnMemoria implements AlmacenDestinosVistos {
+  final Map<String, String> guardados = {};
+
+  @override
+  Future<String?> leer(String clave) async => guardados[clave];
+
+  @override
+  Future<void> escribir(String clave, String valor) async => guardados[clave] = valor;
+}
+
+class TomadosEnMemoria implements AlmacenTomados {
+  final Map<String, String> guardados = {};
+
+  @override
+  Future<String?> leer(String clave) async => guardados[clave];
+
+  @override
+  Future<void> escribir(String clave, String valor) async => guardados[clave] = valor;
+}
+
+class PuestosEnMemoria implements AlmacenPuestos {
+  final Map<String, Map<String, dynamic>> guardados = {};
+
+  @override
+  Future<PuestosGuardados?> leer(String clave) async =>
+      guardados[clave] == null ? null : PuestosGuardados.fromJson(guardados[clave]!);
+
+  @override
+  Future<void> guardar(String clave, PuestosGuardados puestos) async =>
+      guardados[clave] = jsonDecode(jsonEncode(puestos.toJson())) as Map<String, dynamic>;
+
+  @override
+  Future<void> borrar(String clave) async => guardados.remove(clave);
+}
+
+class AbridorPdfFalso implements AbridorPdf {
+  final List<String> abiertos = [];
+
+  /// Lo que lanza en vez de abrir: el teléfono sin app de PDF, por ejemplo.
+  Object? error;
+
+  @override
+  Future<void> abrir(List<int> bytes, String nombre) async {
+    if (error != null) throw error!;
+    abiertos.add(nombre);
+  }
+}
+
+class ParametrosAppFalsos implements FuenteParametrosApp {
+  ParametrosApp? valor;
+
+  /// Cuántas veces se pidieron al servidor: al iniciar sesión, al volver la señal y al abrir la captura.
+  int lecturas = 0;
+
+  @override
+  Future<ParametrosApp?> leer() async {
+    lecturas++;
+    return valor;
+  }
+
+  @override
+  Future<ParametrosApp?> guardados() async => valor;
 }

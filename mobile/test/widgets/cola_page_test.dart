@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/core/tema/tema.dart';
+import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/sync/presentation/cola_page.dart';
 
 import '../support/arnes.dart';
@@ -42,6 +43,22 @@ void main() {
     expect(find.text('Con error'), findsOneWidget);
     expect(reintentar, findsOneWidget);
     expect(descartar, findsOneWidget);
+  });
+
+  // S8-HU-02.2 CA-4 y CA-6: retirado no es «con error»; reintentar daría lo mismo, así que solo se quita.
+  testWidgets('uno retirado dice por qué y solo se puede quitar', (tester) async {
+    final arnes = Arnes();
+    await arnes.cola.agregar(
+      informe(id: 'j').conIntento(intentos: 1, error: 'El carro ya no está en el viaje', codigo: codigoRetirado, fallido: true),
+    );
+
+    await abrir(tester, arnes);
+
+    expect(find.text('Retirado'), findsOneWidget);
+    expect(find.text('Con error'), findsNothing);
+    expect(find.text('El carro ya no está en el viaje'), findsOneWidget);
+    expect(reintentar, findsNothing);
+    expect(find.widgetWithText(OutlinedButton, 'Quitar'), findsOneWidget);
   });
 
   testWidgets('uno de otra persona se ve, pero no se puede tocar', (tester) async {
@@ -91,6 +108,31 @@ void main() {
 
     expect(descartar, findsOneWidget, reason: 'si no, queda atrapado con un envío que nunca va a salir');
     expect(find.textContaining('Momento inválido'), findsOneWidget);
+  });
+
+  // S8-HU-07.3: «Captura incompleta» es de un informe. A la novedad del viaje rechazada con 400 no le falta ninguna
+  // captura: se ve «Con error» con el mensaje del servidor y se puede reintentar o descartar.
+  testWidgets('un 400 de la novedad del viaje no se ve como «Captura incompleta»', (tester) async {
+    final arnes = Arnes();
+    await arnes.cola.agregar(
+      NovedadViajeJob(
+        id: 'nv',
+        etiqueta: 'Novedad del viaje: Otro',
+        creadoEn: 1,
+        usuarioId: usuarioPrueba,
+        viajeId: 'v1',
+        tipoNovedad: 'otro',
+        texto: 'Paro en el peaje',
+        fecha: '2026-10-21T21:20:00.000Z',
+      ).conIntento(intentos: 1, error: 'Datos inválidos\n· Ese tipo de novedad no es para tu rol', codigo: 'VALIDATION_ERROR', fallido: true),
+    );
+    await arnes.cola.agregar(informe(id: 'j').conIntento(intentos: 1, error: 'Falta la foto', codigo: 'VALIDATION_ERROR', fallido: true));
+
+    await abrir(tester, arnes);
+
+    expect(find.text('Captura incompleta'), findsOneWidget, reason: 'solo la del informe');
+    expect(find.text('Con error'), findsOneWidget, reason: 'la de la novedad del viaje');
+    expect(find.textContaining('Ese tipo de novedad no es para tu rol'), findsOneWidget);
   });
 
   testWidgets('sin nada en la cola lo dice', (tester) async {
