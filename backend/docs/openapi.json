@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.32.0"
+    "version": "3.33.0"
   },
   "paths": {
     "/api/viajes": {
@@ -32782,7 +32782,8 @@
                   "solicitado_lng": 1.5,
                   "concedido_por_nombre": "texto",
                   "concedido_at": "2026-10-22T14:30:00.000Z",
-                  "autorizado_por_tiempo": true
+                  "autorizado_por_tiempo": true,
+                  "vence_at": "2026-10-22T14:30:00.000Z"
                 }
               }
             ],
@@ -33276,7 +33277,8 @@
                   "solicitado_lng": 1.5,
                   "concedido_por_nombre": "texto",
                   "concedido_at": "2026-10-22T14:30:00.000Z",
-                  "autorizado_por_tiempo": true
+                  "autorizado_por_tiempo": true,
+                  "vence_at": "2026-10-22T14:30:00.000Z"
                 }
               }
             ]
@@ -33443,7 +33445,10 @@
             "lugar": "texto",
             "codigo_mtrack": "MTK-0001",
             "unidad": "texto",
-            "usuario_nombre": "texto"
+            "usuario_nombre": "texto",
+            "usuario_rol": "texto",
+            "descartada_por_nombre": "texto",
+            "descartada_at": "2026-10-22T14:30:00.000Z"
           }
         ],
         "required": [
@@ -33590,7 +33595,20 @@
               "null",
               "string"
             ]
-          }
+          },
+          "usuario_rol": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "descartada_por_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "descartada_at": {}
         }
       },
       "InventarioDto": {
@@ -34045,7 +34063,8 @@
                   "solicitado_lng": 1.5,
                   "concedido_por_nombre": "texto",
                   "concedido_at": "2026-10-22T14:30:00.000Z",
-                  "autorizado_por_tiempo": true
+                  "autorizado_por_tiempo": true,
+                  "vence_at": "2026-10-22T14:30:00.000Z"
                 }
               }
             ],
@@ -35559,7 +35578,8 @@
               "solicitado_lng": 1.5,
               "concedido_por_nombre": "texto",
               "concedido_at": "2026-10-22T14:30:00.000Z",
-              "autorizado_por_tiempo": true
+              "autorizado_por_tiempo": true,
+              "vence_at": "2026-10-22T14:30:00.000Z"
             }
           }
         ],
@@ -35742,7 +35762,8 @@
               "solicitado_lng": 1.5,
               "concedido_por_nombre": "texto",
               "concedido_at": "2026-10-22T14:30:00.000Z",
-              "autorizado_por_tiempo": true
+              "autorizado_por_tiempo": true,
+              "vence_at": "2026-10-22T14:30:00.000Z"
             }
           }
         ],
@@ -36213,7 +36234,10 @@
                 "lugar": "texto",
                 "codigo_mtrack": "MTK-0001",
                 "unidad": "texto",
-                "usuario_nombre": "texto"
+                "usuario_nombre": "texto",
+                "usuario_rol": "texto",
+                "descartada_por_nombre": "texto",
+                "descartada_at": "2026-10-22T14:30:00.000Z"
               }
             ],
             "total": 1,
@@ -37031,7 +37055,8 @@
             "solicitado_lng": 1.5,
             "concedido_por_nombre": "texto",
             "concedido_at": "2026-10-22T14:30:00.000Z",
-            "autorizado_por_tiempo": true
+            "autorizado_por_tiempo": true,
+            "vence_at": "2026-10-22T14:30:00.000Z"
           }
         ],
         "required": [
@@ -37079,7 +37104,8 @@
           },
           "autorizado_por_tiempo": {
             "type": "boolean"
-          }
+          },
+          "vence_at": {}
         }
       },
       "PermisoSinInspectorDto": {
@@ -39787,7 +39813,8 @@
                   "solicitado_lng": 1.5,
                   "concedido_por_nombre": "texto",
                   "concedido_at": "2026-10-22T14:30:00.000Z",
-                  "autorizado_por_tiempo": true
+                  "autorizado_por_tiempo": true,
+                  "vence_at": "2026-10-22T14:30:00.000Z"
                 }
               }
             ],

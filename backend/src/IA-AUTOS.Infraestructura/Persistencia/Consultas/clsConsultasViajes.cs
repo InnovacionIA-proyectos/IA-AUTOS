@@ -497,13 +497,13 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                {
                                    n.ViajeId, n.Tipo, n.MotivoCodigo, Motivo = (string?)m.Nombre, Texto = n.MotivoTexto, Usuario = (string?)u.Nombre, n.Fecha, h.Vin, n.InspeccionId,
                                    TienePermiso = p != null, PedidoPor = (string?)pc.Nombre, PedidoAt = (DateTimeOffset?)p.CreatedAt, PedidoLat = p.Lat, PedidoLng = p.Lng,
-                                   ConcedidoPorNombre = (string?)pq.Nombre, ConcedidoAt = p.ConcedidoAt, PorTiempo = p != null && p.PorTiempo,
+                                   ConcedidoPorNombre = (string?)pq.Nombre, ConcedidoAt = p.ConcedidoAt, PorTiempo = p != null && p.PorTiempo, VenceAt = (DateTimeOffset?)p.VenceAt,
                                }).ToListAsync(ct);
         var novedadesPorViaje = novedades.ToLookup(
             n => n.ViajeId,
             n => new NovedadDelViajeDto(
                 n.Tipo, n.MotivoCodigo, n.Motivo, n.Texto, n.Usuario, n.Fecha, n.Vin, n.InspeccionId,
-                n.TienePermiso ? new PermisoDeLaNovedadDto(n.PedidoPor, n.PedidoAt!.Value, n.PedidoLat, n.PedidoLng, n.ConcedidoPorNombre, n.ConcedidoAt, n.PorTiempo) : null));
+                n.TienePermiso ? new PermisoDeLaNovedadDto(n.PedidoPor, n.PedidoAt!.Value, n.PedidoLat, n.PedidoLng, n.ConcedidoPorNombre, n.ConcedidoAt, n.PorTiempo, n.VenceAt) : null));
 
         // Las fotos de la acomodacion cuelgan del viaje: se llega a ellas desde su detalle, sin pasar por el inventario de cada VIN.
         var fotos = (await (from e in contexto.Evidencias.AsNoTracking()

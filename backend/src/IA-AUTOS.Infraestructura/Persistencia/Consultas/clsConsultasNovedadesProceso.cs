@@ -43,7 +43,7 @@ internal sealed class clsConsultasNovedadesProceso(clsAppDbContext contexto) : I
                                {
                                    n.InspeccionId, n.Tipo, n.MotivoCodigo, Motivo = (string?)m.Nombre, n.MotivoTexto, Usuario = (string?)u.Nombre, n.Fecha,
                                    TienePermiso = p != null, PedidoPor = (string?)pc.Nombre, PedidoAt = (DateTimeOffset?)p.CreatedAt, PedidoLat = p.Lat, PedidoLng = p.Lng,
-                                   ConcedidoPorNombre = (string?)pq.Nombre, ConcedidoAt = p.ConcedidoAt, PorTiempo = p != null && p.PorTiempo,
+                                   ConcedidoPorNombre = (string?)pq.Nombre, ConcedidoAt = p.ConcedidoAt, PorTiempo = p != null && p.PorTiempo, VenceAt = (DateTimeOffset?)p.VenceAt,
                                }).ToListAsync(ct);
 
         var motivoPorInspeccion = motivos.ToDictionary(m => m.Id, m => new MotivoSinInspectorDto(m.Codigo, m.Nombre, m.MotivoSinInspectorTexto));
@@ -55,6 +55,6 @@ internal sealed class clsConsultasNovedadesProceso(clsAppDbContext contexto) : I
                     motivoPorInspeccion.GetValueOrDefault(id),
                     novedadesPorInspeccion[id].Select(n => new NovedadProcesoDto(
                         n.Tipo, n.MotivoCodigo, n.Motivo, n.MotivoTexto, n.Usuario, n.Fecha,
-                        n.TienePermiso ? new PermisoDeLaNovedadDto(n.PedidoPor, n.PedidoAt!.Value, n.PedidoLat, n.PedidoLng, n.ConcedidoPorNombre, n.ConcedidoAt, n.PorTiempo) : null)).ToList()));
+                        n.TienePermiso ? new PermisoDeLaNovedadDto(n.PedidoPor, n.PedidoAt!.Value, n.PedidoLat, n.PedidoLng, n.ConcedidoPorNombre, n.ConcedidoAt, n.PorTiempo, n.VenceAt) : null)).ToList()));
     }
 }

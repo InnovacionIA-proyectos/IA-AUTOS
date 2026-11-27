@@ -515,7 +515,7 @@ public sealed class clsInspeccionesService(
     public async Task<PaginaDto<InspeccionListadoDto>> ListarAsync(FiltrosInspeccionesRequest solicitud, CancellationToken ct = default)
     {
         var errores = new Dictionary<string, string[]>();
-        var filtros = await LeerFiltrosAsync(solicitud, catalogos, errores, ct);
+        var filtros = await LeerFiltrosAsync(solicitud, catalogos, errores, ct, admiteDescartada: true);
         var pagina = clsPaginacion.Pagina(solicitud.Pagina, solicitud.Tamano, errores);
         var orden = clsPaginacion.Orden(solicitud.Orden, CAMPOS_ORDEN, errores);
         if (errores.Count > 0)
@@ -523,7 +523,39 @@ public sealed class clsInspeccionesService(
             throw clsErroresCampos.Varios(errores);
         }
 
+        if (filtros.Estado == clsEstadoInspeccion.DESCARTADA)
+        {
+            return await ListarDescartadasAsync(filtros, pagina, orden, ct);
+        }
+
         var (filas, total) = await consultas.ListarAsync(filtros, actual.SoloSusViajes(), actual.ClienteDelFiltro(filtros.ClienteId), pagina, orden, ct);
+        return new PaginaDto<InspeccionListadoDto>(filas, total, pagina.Pagina, pagina.Tamano);
+    }
+
+    /// <summary>
+    /// Los informes descartados (<c>estado=descartada</c>): todos los del cliente para el coordinador de calidad, el administrador y el super administrador; el inspector y el conductor solo los que hicieron ellos
+    /// (lista vacia si no hicieron ninguno, tambien si piden los de otra persona); el comercial recibe 403.
+    /// </summary>
+    private async Task<PaginaDto<InspeccionListadoDto>> ListarDescartadasAsync(FiltrosInspecciones filtros, PaginaSolicitada pagina, OrdenSolicitado? orden, CancellationToken ct)
+    {
+        if (actual.Rol == clsRol.COMERCIAL)
+        {
+            throw new clsProhibidoException("Su rol no puede ver los informes descartados");
+        }
+
+        // Quien se limita a sus viajes solo ve los descartados que hizo el: no se mira el viaje.
+        if (actual.SoloSusViajes() is { } propio)
+        {
+            if (filtros.UsuarioId is { } otro && otro != propio)
+            {
+                return new PaginaDto<InspeccionListadoDto>([], 0, pagina.Pagina, pagina.Tamano);
+            }
+
+            var (propias, totalPropias) = await consultas.ListarAsync(filtros with { UsuarioId = propio }, null, null, pagina, orden, ct);
+            return new PaginaDto<InspeccionListadoDto>(propias, totalPropias, pagina.Pagina, pagina.Tamano);
+        }
+
+        var (filas, total) = await consultas.ListarAsync(filtros, null, actual.ClienteDelFiltro(filtros.ClienteId), pagina, orden, ct);
         return new PaginaDto<InspeccionListadoDto>(filas, total, pagina.Pagina, pagina.Tamano);
     }
 
@@ -1158,13 +1190,17 @@ public sealed class clsInspeccionesService(
     }
 
     /// <summary>Lee los filtros acumulando los errores por campo (la validacion unica del VIN incluida) para responder todos juntos.</summary>
-    private static async Task<FiltrosInspecciones> LeerFiltrosAsync(FiltrosInspeccionesRequest s, ICatalogosLectura catalogos, Dictionary<string, string[]> errores, CancellationToken ct)
+    private static async Task<FiltrosInspecciones> LeerFiltrosAsync(
+        FiltrosInspeccionesRequest s, ICatalogosLectura catalogos, Dictionary<string, string[]> errores, CancellationToken ct, bool admiteDescartada = false)
     {
         var vin = clsParseoFiltros.Vin(s.Vin, "vin", errores);
         var usuarioId = clsParseoFiltros.Uuid(s.UsuarioId, "usuario_id", errores);
         var viajeId = clsParseoFiltros.Uuid(s.ViajeId, "viaje_id", errores);
         var momento = clsParseoFiltros.Catalogo(s.Momento, clsMomento.VALORES, "momento", errores);
-        var estado = clsParseoFiltros.Catalogo(s.Estado, clsEstadoInspeccion.VALORES, "estado", errores);
+        // «descartada» no es un estado de captura: solo la lista lo admite como filtro y siempre solo; la exportacion y el resto lo rechazan con 400.
+        var estado = admiteDescartada && s.Estado == clsEstadoInspeccion.DESCARTADA
+            ? clsEstadoInspeccion.DESCARTADA
+            : clsParseoFiltros.Catalogo(s.Estado, clsEstadoInspeccion.VALORES, "estado", errores);
         // El proceso es una etapa del catalogo; se aceptan tambien las inactivas porque hay informes historicos de ellas.
         var proceso = clsParseoFiltros.Catalogo(s.Proceso, await catalogos.CodigosAsync(clsNombresCatalogo.ETAPAS, soloActivos: false, ct), "proceso", errores);
         var operacion = clsParseoFiltros.Catalogo(s.Operacion, clsOperacion.VALORES, "operacion", errores);

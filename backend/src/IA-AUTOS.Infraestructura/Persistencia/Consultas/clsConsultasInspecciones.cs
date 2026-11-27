@@ -45,7 +45,10 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
         var vinExacto = f.Vin?.Length == clsVin.LONGITUD_ISO;
         // La marca busca por contenido, sin distinguir mayusculas.
         var marca = f.Marca?.ToLower();
-        var consulta = from i in contexto.Inspecciones.AsNoTracking()
+        // Los descartados y los superados no salen en ninguna lista; el filtro estado=descartada es la unica excepcion y solo trae los descartados.
+        var descartadas = f.Estado == clsEstadoInspeccion.DESCARTADA;
+        var origen = descartadas ? contexto.Inspecciones.IgnoreQueryFilters() : contexto.Inspecciones;
+        var consulta = from i in origen.AsNoTracking()
                        join e in contexto.Etapas on i.EtapaId equals e.Id
                        join v in contexto.Vehiculos on e.VehiculoId equals v.Id
                        join p in contexto.EtapasCatalogo on e.EtapaCatalogoId equals p.Id
@@ -71,7 +74,7 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                           && (f.Proceso == null || p.Codigo == f.Proceso)
                           && (f.Desde == null || i.Fecha >= f.Desde)
                           && (f.Hasta == null || i.Fecha <= f.Hasta)
-                       select new { Inspeccion = i, v.Vin, Proceso = p.Codigo, vj.Placa, vj.Trailer, Conductor = (string?)c.Nombre, Lugar = (string?)lg.Nombre, vj.CodigoMtrack, Unidad = (string?)tu.Nombre, Autor = (string?)au.Nombre };
+                       select new { Inspeccion = i, v.Vin, Proceso = p.Codigo, vj.Placa, vj.Trailer, Conductor = (string?)c.Nombre, Lugar = (string?)lg.Nombre, vj.CodigoMtrack, Unidad = (string?)tu.Nombre, Autor = (string?)au.Nombre, AutorRol = (string?)au.Rol };
         if (soloDeUsuario is { } usuarioId)
         {
             var viajesPropios = clsAlcanceViajes.Viajes(contexto, usuarioId);
@@ -101,9 +104,25 @@ internal sealed class clsConsultasInspecciones(clsAppDbContext contexto) : ICons
                 x.Inspeccion.CreatedAt, x.Inspeccion.UpdatedAt, x.Vin, x.Proceso,
                 x.Inspeccion.IniciadaAt, x.Inspeccion.CerradaAt, x.Inspeccion.Version, x.Inspeccion.CorrigeInspeccionId,
                 x.Inspeccion.Momento == clsMomento.SALIDA ? "Inspección de salida" : x.Inspeccion.Momento == clsMomento.LLEGADA ? "Inspección de llegada" : x.Inspeccion.Momento,
-                x.Lugar, x.CodigoMtrack, x.Unidad, x.Autor))
+                x.Lugar, x.CodigoMtrack, x.Unidad, x.Autor, x.AutorRol))
             .ToListAsync(ct);
-        return (filas, total);
+        return (descartadas ? await ConQuienDescartoAsync(filas, ct) : filas, total);
+    }
+
+    /// <summary>A cada descartado le pone quien lo descarto y cuando, segun la auditoria (la ultima accion de descarte); sin registro, solo la fecha de su ultimo cambio.</summary>
+    private async Task<List<InspeccionListadoDto>> ConQuienDescartoAsync(List<InspeccionListadoDto> filas, CancellationToken ct)
+    {
+        var ids = filas.Select(x => (Guid?)x.Id).ToList();
+        var descartes = (await (from a in contexto.AuditLog.AsNoTracking()
+                                join u in contexto.Usuarios.AsNoTracking() on a.UsuarioId equals u.Id into usuarios
+                                from u in usuarios.DefaultIfEmpty()
+                                where a.Accion == "inspeccion.descartar" && ids.Contains(a.EntidadId)
+                                orderby a.CreatedAt descending
+                                select new { Id = a.EntidadId!.Value, Nombre = (string?)u.Nombre, a.CreatedAt }).ToListAsync(ct))
+            .GroupBy(x => x.Id).ToDictionary(g => g.Key, g => g.First());
+        return filas.Select(x => descartes.TryGetValue(x.Id, out var d)
+            ? x with { DescartadaPorNombre = d.Nombre, DescartadaAt = d.CreatedAt }
+            : x with { DescartadaAt = x.UpdatedAt }).ToList();
     }
 
     public async Task<IReadOnlyList<EvidenciaDto>> FotosDeAcomodacionDelViajeAsync(Guid viajeId, CancellationToken ct = default) =>

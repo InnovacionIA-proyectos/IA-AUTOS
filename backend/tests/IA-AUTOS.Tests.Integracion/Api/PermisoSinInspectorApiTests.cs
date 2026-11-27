@@ -263,6 +263,8 @@ public sealed class PermisoSinInspectorApiTests(clsBaseDatosFixture bd) : clsPru
         Assert.Equal(-75.5, delPermiso.GetProperty("solicitado_lng").GetDouble());
         Assert.Equal("Nombre coord@ejemplo.com", delPermiso.GetProperty("concedido_por_nombre").GetString());
         Assert.False(delPermiso.GetProperty("autorizado_por_tiempo").GetBoolean());
+        // El plazo con que nacio la solicitud (10 minutos con el parametro por defecto) viaja con el permiso.
+        Assert.Equal(delPermiso.GetProperty("solicitado_at").GetDateTimeOffset().AddMinutes(10), delPermiso.GetProperty("vence_at").GetDateTimeOffset());
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNovedadesProceso n JOIN dbo.tblPermisosSinInspector p ON p.Id = n.PermisoId WHERE p.ViajeId = @v", ("@v", e.Viaje)));
         // La auditoria: la solicitud, la concesion y la novedad con su permiso.
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'permiso_sin_inspector.solicitar' AND ViajeId = @v AND UsuarioId = @u", ("@v", e.Viaje), ("@u", e.Conductor.UsuarioId)));
