@@ -216,6 +216,8 @@ public sealed class clsConductorService(
         var destinatarios = await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN], unidad.Vehiculo.ClienteId, ct);
         var conductor = (await usuarios.ObtenerPorIdAsync(actual.IdObligatorio(), ct))?.Nombre ?? "El conductor";
         var viaje = unidad.Viaje.CodigoMtrack is { } codigo ? $" (viaje {codigo})" : string.Empty;
+        // El tamano se escribe con el nombre del catalogo («1 a 5 cm»); si el codigo ya no esta en el catalogo, se escribe el codigo.
+        var tamano = NombreDelTamano(await catalogos.ValoresAsync(clsNombresCatalogo.TAMANOS_DANO, ct), hallazgo.TamanoDano);
         await emisor.EmitirAsync(
             new clsAlerta(
                 clsTipoNotificacion.NOVEDAD_CONDUCTOR,
@@ -227,10 +229,14 @@ public sealed class clsConductorService(
                 hallazgo.Id,
                 hallazgo.InspeccionId,
                 $"Novedad en ruta: {unidad.Vehiculo.Vin}",
-                $"{conductor} registró una novedad de tipo {TextoDeTipo(hallazgo.TipoNovedad)} (tamaño {hallazgo.TamanoDano}) en la unidad {unidad.Vehiculo.Vin}{viaje}.",
+                $"{conductor} registró una novedad de tipo {TextoDeTipo(hallazgo.TipoNovedad)} (tamaño {tamano}) en la unidad {unidad.Vehiculo.Vin}{viaje}.",
                 $"{clsTipoNotificacion.NOVEDAD_CONDUCTOR}:{hallazgo.Id}"),
             ct);
     }
+
+    /// <summary>El nombre del tamano en el catalogo («1 a 5 cm» para <c>1_5cm</c>); si el codigo no esta en el catalogo, el codigo.</summary>
+    public static string NombreDelTamano(IReadOnlyList<ValorCatalogo> tamanos, string codigo) =>
+        tamanos.FirstOrDefault(v => v.Codigo == codigo)?.GetValueOrDefault("nombre") as string ?? codigo;
 
     private static string TextoDeTipo(string? tipo) => tipo?.Replace('_', ' ') ?? string.Empty;
 }
