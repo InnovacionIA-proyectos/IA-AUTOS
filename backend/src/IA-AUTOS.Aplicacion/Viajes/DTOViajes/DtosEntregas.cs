@@ -5,8 +5,9 @@ public sealed record MomentoDeFirmaDto(DateTimeOffset? Momento, double? Lat, dou
 
 /// <summary>
 /// El rechazo de un carro en su parada: el dano de su revision de llegada que lo motivo (<c>HallazgoId</c>) con su foto (<c>EvidenciaId</c>), quien lo marco y el motivo fijo <c>rechazado_por_novedad</c>.
+/// <c>Foto</c> es esa misma foto con su enlace firmado y su sello (la forma de la foto de una novedad del viaje); nula si el dano no tiene foto.
 /// </summary>
-public sealed record RechazoDeEntregaDto(Guid HallazgoId, Guid? EvidenciaId, Guid MarcadoPor, string? MarcadoPorNombre, string Motivo);
+public sealed record RechazoDeEntregaDto(Guid HallazgoId, Guid? EvidenciaId, Guid MarcadoPor, string? MarcadoPorNombre, string Motivo, FotoNovedadViajeDto? Foto = null);
 
 /// <summary>
 /// Una unidad en la entrega de una parada. <c>Estado</c>: <c>sin_inspeccion</c> (aun no tiene la inspeccion de llegada del Descargue, donde se firma), <c>pendiente</c> (se puede firmar o esta abierta), <c>cerrada</c> (su
@@ -18,6 +19,7 @@ public sealed record RechazoDeEntregaDto(Guid HallazgoId, Guid? EvidenciaId, Gui
 /// de cada firma, aparte de <c>EntregaFirmadaAt</c> y <c>RecibeFirmadaAt</c>, que son cuando llegaron al servidor. <c>DanosNuevos</c> cuenta los danos nuevos de su revision de llegada.
 /// <c>RecibeExternoNombre</c> y <c>RecibeExternoCedula</c> son los de la persona que recibio cuando no es un usuario (el punto no tiene inspector) y son nulos si recibio un usuario o si nadie recibio.
 /// <c>EntregadaSinInspectorDelPunto</c> es verdadero en el carro que se entrego en una parada con inspectores sin que el inspector del punto estuviera (el conductor cerro la parada con el plan B); un carro rechazado nunca la lleva.
+/// <c>FotosCierre</c> son las fotos de ese cierre con su enlace firmado y su sello (la forma de la foto de una novedad del viaje), de la mas antigua a la mas reciente (<c>[]</c> si no tiene); <c>FotosDeCierre</c> es su conteo.
 /// </summary>
 public sealed record EntregaUnidadDto(
     Guid VehiculoId,
@@ -39,7 +41,8 @@ public sealed record EntregaUnidadDto(
     MomentoDeFirmaDto? RecibeMomento = null,
     int DanosNuevos = 0,
     RechazoDeEntregaDto? Rechazo = null,
-    bool EntregadaSinInspectorDelPunto = false);
+    bool EntregadaSinInspectorDelPunto = false,
+    IReadOnlyList<FotoNovedadViajeDto>? FotosCierre = null);
 
 /// <summary>
 /// Las unidades del viaje que se entregan en una parada (un lugar de destino), con lo que falta de cada una. <c>Entregada</c> es verdadero cuando ninguna esta pendiente y al menos una se entrego.

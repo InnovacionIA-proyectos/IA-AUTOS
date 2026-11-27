@@ -285,12 +285,24 @@ internal sealed class clsInspeccionRepository(clsAppDbContext contexto) : IInspe
     public async Task<IReadOnlySet<Guid>> HallazgosConFotoAsync(IReadOnlyCollection<Guid> hallazgoIds, CancellationToken ct = default) =>
         await clsFotosDeHallazgos.ConFotoAsync(contexto, hallazgoIds, ct);
 
-    public async Task<IReadOnlyDictionary<Guid, int>> ContarFotosDeConstanciaAsync(IReadOnlyCollection<Guid> inspeccionIds, CancellationToken ct = default)
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<clsEvidencia>>> FotosDeConstanciaAsync(IReadOnlyCollection<Guid> inspeccionIds, CancellationToken ct = default)
     {
         var ids = inspeccionIds.Distinct().ToList();
-        return ids.Count == 0
-            ? new Dictionary<Guid, int>()
-            : await contexto.Evidencias.AsNoTracking().Where(e => e.EsConstancia && ids.Contains(e.InspeccionId)).GroupBy(e => e.InspeccionId).Select(g => new { g.Key, Total = g.Count() }).ToDictionaryAsync(x => x.Key, x => x.Total, ct);
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<clsEvidencia>>();
+        }
+
+        var fotos = await contexto.Evidencias.AsNoTracking().Where(e => e.EsConstancia && ids.Contains(e.InspeccionId)).OrderBy(e => e.CreatedAt).ToListAsync(ct);
+        return fotos.GroupBy(e => e.InspeccionId).ToDictionary(g => g.Key, g => (IReadOnlyList<clsEvidencia>)g.ToList());
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, clsEvidencia>> EvidenciasPorIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        var distintos = ids.Distinct().ToList();
+        return distintos.Count == 0
+            ? new Dictionary<Guid, clsEvidencia>()
+            : await contexto.Evidencias.AsNoTracking().Where(e => distintos.Contains(e.Id)).ToDictionaryAsync(e => e.Id, ct);
     }
 
     public async Task<IReadOnlyDictionary<Guid, Guid>> PrimeraFotoDeHallazgosAsync(IReadOnlyCollection<Guid> hallazgoIds, CancellationToken ct = default)

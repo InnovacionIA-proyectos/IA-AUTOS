@@ -173,13 +173,20 @@ public sealed class ContratoOpenApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Contains("EntregaPuntoDto", rutas["/api/viajes/{id}/entregas/{lugar}"]!["get"]!["responses"]!["200"]!.ToJsonString());
         Assert.Contains("FirmarEntregaRequest", rutas["/api/viajes/{id}/entregas/{lugar}/firma"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
         Assert.Contains("CerrarEntregaUnaFirmaRequest", rutas["/api/viajes/{id}/entregas/{lugar}/una-firma"]!["post"]!["requestBody"]!["content"]!["application/json"]!["schema"]!.ToJsonString());
-        Assert.Equal(["vehiculo_id", "vin", "estado", "inspeccion_id", "tipo_cierre", "entrega_firmada_at", "recibe_firmada_at", "no_firma_parte", "motivo_cierre", "recibe_externo_nombre", "recibe_externo_cedula", "motivo_codigo", "reservas", "fotos_de_cierre", "testigo_nombre", "entrega_momento", "recibe_momento", "danos_nuevos", "rechazo", "entregada_sin_inspector_del_punto"], Propiedades(esquemas["EntregaUnidadDto"]!));
+        Assert.Equal(["vehiculo_id", "vin", "estado", "inspeccion_id", "tipo_cierre", "entrega_firmada_at", "recibe_firmada_at", "no_firma_parte", "motivo_cierre", "recibe_externo_nombre", "recibe_externo_cedula", "motivo_codigo", "reservas", "fotos_de_cierre", "testigo_nombre", "entrega_momento", "recibe_momento", "danos_nuevos", "rechazo", "entregada_sin_inspector_del_punto", "fotos_cierre"], Propiedades(esquemas["EntregaUnidadDto"]!));
         // La entrega por parada: quien recibe, el estado de la parada, el llegue del conductor, los rechazos y el cierre con motivo codificado.
         Assert.Equal(["lugar_tiene_inspector", "estado_parada", "receptor", "receptor_nombre", "conductor_llego", "espera", "espera_aviso_minutos", "espera_plan_b_minutos", "danos_por_calificar"], Propiedades(esquemas["EntregaPuntoDto"]!).TakeLast(9));
         Assert.Equal(["firma", "recibe_nombre", "recibe_cedula", "firma_recibe", "reservas", "rechazos", "fecha_momento", "lat", "lng", "precision_m"], Propiedades(esquemas["FirmarEntregaRequest"]!));
         Assert.Equal(["firma", "motivo_codigo", "motivo_texto", "fotos", "testigo_nombre", "testigo_cedula", "fecha_momento", "lat", "lng", "precision_m"], Propiedades(esquemas["CerrarEntregaUnaFirmaRequest"]!));
         Assert.Equal(["vin", "hallazgo_id"], Propiedades(esquemas["FirmarEntregaRequest"]!["properties"]!["rechazos"]!["items"]!));
-        Assert.Equal(["hallazgo_id", "evidencia_id", "marcado_por", "marcado_por_nombre", "motivo"], Propiedades(esquemas["RechazoDeEntregaDto"]!));
+        Assert.Equal(["hallazgo_id", "evidencia_id", "marcado_por", "marcado_por_nombre", "motivo", "foto"], Propiedades(esquemas["RechazoDeEntregaDto"]!));
+        // El detalle del viaje trae el cargue de la niñera y el estado de la solicitud «No hay inspector»; el inventario, el carro bajado.
+        Assert.Equal(["cargue_ninera", "permiso_sin_inspector_estado"], Propiedades(esquemas["ViajeDto"]!).TakeLast(2));
+        Assert.Equal(["recibidos", "reservas", "entrega", "recibe", "constancia", "carros_sin_firma"], Propiedades(esquemas["CargueNineraDelViajeDto"]!));
+        Assert.Equal(["nombre", "firmada_at", "firma"], Propiedades(esquemas["FirmaDeLaNineraDto"]!));
+        Assert.Equal(["vin", "observaciones"], Propiedades(esquemas["ReservaDelCargueDto"]!));
+        Assert.Equal(["parte", "motivo", "testigo_nombre", "foto", "momento", "lat", "lng"], Propiedades(esquemas["ConstanciaDelCargueDto"]!));
+        Assert.Equal("bajado", Propiedades(esquemas["InventarioEtapaDto"]!).Last());
     }
 
     [Fact]

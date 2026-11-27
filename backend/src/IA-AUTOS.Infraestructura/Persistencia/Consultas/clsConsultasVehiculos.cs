@@ -182,6 +182,8 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                              from vv in vinesEnViaje.DefaultIfEmpty()
                              join um in contexto.Usuarios on vv.NoSaleMarcadoPor equals um.Id into marcadores
                              from um in marcadores.DefaultIfEmpty()
+                             join ub in contexto.Usuarios on vv.BajadoPor equals ub.Id into bajadores
+                             from ub in bajadores.DefaultIfEmpty()
                              join r in contexto.Vehiculos on vv.ReemplazoVehiculoId equals r.Id into reemplazos
                              from r in reemplazos.DefaultIfEmpty()
                              where e.VehiculoId == vehiculo.Id
@@ -201,6 +203,10 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
                                  vv.NoSaleAt,
                                  VinReemplazo = (string?)r.Vin,
                                  vv.Posicion,
+                                 vv.BajadoMotivo,
+                                 vv.BajadoPor,
+                                 BajadoPorNombre = (string?)ub.Nombre,
+                                 vv.BajadoAt,
                              };
         if (soloDeUsuario is { } usuarioId)
         {
@@ -257,7 +263,8 @@ internal sealed class clsConsultasVehiculos(clsAppDbContext contexto) : IConsult
             e.EstadoUnidad,
             clsMapeadorViajes.ANoSale(e.EstadoUnidad, e.NoSaleMotivoCodigo, e.NoSaleMotivo, e.NoSaleHallazgoId, e.NoSaleMarcadoPor, e.MarcadoPorNombre, e.NoSaleAt, e.VinReemplazo, motivosNoSale),
             inspecciones.Where(i => i.EtapaId == e.Etapa.Id).Select(AInspeccion).ToList(),
-            e.Posicion))
+            e.Posicion,
+            clsMapeadorViajes.ABajado(e.EstadoUnidad, e.BajadoMotivo, e.BajadoPor, e.BajadoPorNombre, e.BajadoAt)))
             .ToList();
 
         // Las mismas dos cifras del listado: solo la version vigente de cada informe (la que una correccion cerrada no reemplazo).
