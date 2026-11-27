@@ -161,7 +161,8 @@ public sealed record FiltrosInspecciones(
 /// <summary>
 /// Fila del listado de inspecciones: los datos de la inspeccion mas el VIN y el proceso. La placa, el trailer y el conductor salen del viaje. <c>Lugar</c> es el punto de custodia de la etapa, <c>CodigoMtrack</c>
 /// el codigo del viaje y <c>Unidad</c> el tipo de unidad transportadora del viaje (los mismos datos que trae el detalle del informe): nulos cuando no hay. <c>UsuarioNombre</c> es el nombre de quien hizo la
-/// inspeccion (nulo si el usuario ya no existe).
+/// inspeccion y <c>UsuarioRol</c> su rol (nulos si el usuario ya no existe). <c>DescartadaPorNombre</c> y <c>DescartadaAt</c> solo se llenan en la lista de descartados (<c>estado=descartada</c>): quien descarto
+/// el informe y cuando, tal como quedo en la auditoria.
 /// </summary>
 public sealed record InspeccionListadoDto(
     Guid Id,
@@ -189,7 +190,10 @@ public sealed record InspeccionListadoDto(
     string? Lugar = null,
     string? CodigoMtrack = null,
     string? Unidad = null,
-    string? UsuarioNombre = null);
+    string? UsuarioNombre = null,
+    string? UsuarioRol = null,
+    string? DescartadaPorNombre = null,
+    DateTimeOffset? DescartadaAt = null);
 
 /// <summary>Transferencia con nombres y firmas dibujadas, para la revision del informe en la web.</summary>
 public sealed record TransferenciaDetalleDto(

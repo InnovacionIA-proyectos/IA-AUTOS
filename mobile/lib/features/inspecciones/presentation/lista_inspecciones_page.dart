@@ -262,6 +262,9 @@ class _FilaInspeccion extends ConsumerWidget {
                 if (deQueViaje != null)
                   Text(deQueViaje, style: tema.bodySmall?.copyWith(color: Colores.textoPrimario)),
                 Text('${item.momentoNombre} · ${formatearFechaIso(item.fecha)}', style: tema.bodySmall),
+                // S8-HU-10.2 CA-5: quién lo hizo, sin abrirlo. Sin el dato la fila queda como antes.
+                if (item.usuarioNombre case final nombre? when nombre.trim().isNotEmpty)
+                  Text('Hizo: ${nombre.trim()}', style: tema.bodySmall),
                 if (item.version > 1)
                   Text('Versión ${item.version} · corrige la versión ${item.version - 1}', style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
               ],

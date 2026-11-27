@@ -132,16 +132,28 @@ void main() {
 
   group('puedeMarcarNoSale', () {
     test('solo el inspector de ese viaje', () {
-      expect(puedeMarcarNoSale(rol: 'inspector', esInspectorDelViaje: true, hayHallazgoV1Plus: true), isTrue);
-      expect(puedeMarcarNoSale(rol: 'inspector', esInspectorDelViaje: false, hayHallazgoV1Plus: true), isFalse);
+      expect(puedeMarcarNoSale(rol: 'inspector', esInspectorDelViaje: true), isTrue);
+      expect(puedeMarcarNoSale(rol: 'inspector', esInspectorDelViaje: false), isFalse);
     });
 
-    test('el conductor no, aunque haya un V1+', () {
-      expect(puedeMarcarNoSale(rol: 'conductor', esInspectorDelViaje: true, hayHallazgoV1Plus: true), isFalse);
+    // S8-HU-02.2 CA-2: el conductor, el coordinador en la app y TI no la ven.
+    test('nadie más, aunque sea «del viaje»', () {
+      for (final rol in ['conductor', 'coordinador_calidad', 'admin', 'super_admin']) {
+        expect(puedeMarcarNoSale(rol: rol, esInspectorDelViaje: true), isFalse, reason: rol);
+      }
+    });
+  });
+
+  // S8-HU-02.2 CA-5: «Vuelve a salir» mientras la entrega del cargue no se haya cerrado.
+  group('puedeVolverASalir', () {
+    test('el inspector del viaje, con el cargue abierto', () {
+      expect(puedeVolverASalir(rol: 'inspector', esInspectorDelViaje: true, cargueCerrado: false), isTrue);
     });
 
-    test('sin un V1+ no hay nada que marcar', () {
-      expect(puedeMarcarNoSale(rol: 'inspector', esInspectorDelViaje: true, hayHallazgoV1Plus: false), isFalse);
+    test('con el cargue cerrado ya no, ni otro rol', () {
+      expect(puedeVolverASalir(rol: 'inspector', esInspectorDelViaje: true, cargueCerrado: true), isFalse);
+      expect(puedeVolverASalir(rol: 'conductor', esInspectorDelViaje: true, cargueCerrado: false), isFalse);
+      expect(puedeVolverASalir(rol: 'inspector', esInspectorDelViaje: false, cargueCerrado: false), isFalse);
     });
   });
 }

@@ -12,6 +12,7 @@ import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
 import 'package:traza_autos/features/vehiculos/providers.dart';
 import 'package:traza_autos/features/viajes/domain/viaje.dart';
 import 'package:traza_autos/features/viajes/presentation/acciones_conductor.dart';
+import 'package:traza_autos/features/viajes/presentation/mis_viajes_controller.dart';
 import 'package:traza_autos/features/viajes/presentation/mis_viajes_page.dart';
 import 'package:traza_autos/features/viajes/providers.dart';
 
@@ -37,11 +38,18 @@ Viaje _viaje({String estado = 'en_curso', List<ViajeVehiculo>? unidades}) => Via
           ],
     );
 
-Future<Arnes> abrir(WidgetTester tester, Viaje viaje, {Sesion sesion = _conductor, Arnes? arnes}) async {
+/// [repositorio]: para cambiar lo que responde el servidor y refrescar, como al tirar de la lista.
+Future<Arnes> abrir(
+  WidgetTester tester,
+  Viaje viaje, {
+  Sesion sesion = _conductor,
+  Arnes? arnes,
+  ViajesRepositorioFalso? repositorio,
+}) async {
   await tester.binding.setSurfaceSize(const Size(600, 3000));
   addTearDown(() => tester.binding.setSurfaceSize(null));
   final usado = arnes ?? Arnes(sesion: sesion);
-  final viajes = ViajesRepositorioFalso()..remotos = [viaje];
+  final viajes = (repositorio ?? ViajesRepositorioFalso())..remotos = [viaje];
   await tester.pumpWidget(
     ProviderScope(
       retry: (_, _) => null,
@@ -198,6 +206,105 @@ void main() {
       final job = arnes.cola.jobs.single;
       expect((job.usuarioId, job.fallido), ('conductor-1', false));
       expect(arnes.gateway.llegadasEnviadas, isEmpty);
+    });
+
+    // Revisión de S8-HU-07.3: la lectura que habilitó el botón puede ser de horas antes y de otro sitio.
+    testWidgets('con una lectura vieja del GPS, la llegada sale con la de ese momento', (tester) async {
+      final arnes = Arnes(sesion: _conductor)
+        ..ubicacion.posicion = Posicion(6.2442, -75.5812, tomadaEn: DateTime.now().subtract(const Duration(hours: 6)));
+      await abrir(tester, _viaje(), arnes: arnes);
+
+      arnes.ubicacion.posicion = Posicion(4.9, -74.4, tomadaEn: DateTime.now());
+      await tester.tap(find.widgetWithText(FilledButton, 'Llegué').first);
+      await avanzar(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Confirmar'));
+      await avanzar(tester);
+
+      final llegada = arnes.gateway.llegadasEnviadas.single;
+      expect((llegada.$4, llegada.$5), (4.9, -74.4));
+    });
+
+    testWidgets('si no llega la lectura del momento, no se registra una llegada con la vieja y se dice', (tester) async {
+      final arnes = Arnes(sesion: _conductor)
+        ..ubicacion.posicion = Posicion(6.2442, -75.5812, tomadaEn: DateTime.now().subtract(const Duration(hours: 6)));
+      await abrir(tester, _viaje(), arnes: arnes);
+
+      arnes.ubicacion.error = const UbicacionNoDisponible('GPS apagado');
+      await tester.tap(find.widgetWithText(FilledButton, 'Llegué').first);
+      await avanzar(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Confirmar'));
+      await avanzar(tester);
+
+      expect(arnes.cola.jobs, isEmpty);
+      expect(arnes.gateway.llegadasEnviadas, isEmpty);
+      expect(find.text(mensajeLlegadaSinGps), findsOneWidget);
+    });
+  });
+
+  // S8-HU-07.3 CA-5 (decisión 10): «Reportar novedad» y «Llegué» se pintan con el dato del servidor.
+  group('los botones con el dato del servidor', () {
+    Viaje conRuta(bool? puede, {String? motivo}) => _viaje(unidades: [
+          ViajeVehiculo(vin: 'VINSINREGISTRO0001', puedeRegistrarRuta: puede, motivoSinRuta: motivo),
+        ]);
+
+    testWidgets('con la entrega del cargue sin cerrar se ven grises con el motivo debajo', (tester) async {
+      await abrir(tester, conRuta(false, motivo: 'entrega_del_cargue_sin_cerrar'));
+
+      expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Reportar novedad')).onPressed, isNull);
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Llegué')).onPressed, isNull);
+      expect(find.text('Falta cerrar la entrega del cargue'), findsOneWidget);
+    });
+
+    testWidgets('un motivo que la app no conoce dice lo general, no el código', (tester) async {
+      await abrir(tester, conRuta(false, motivo: 'motivo_nuevo'));
+
+      expect(find.text('Todavía no puedes registrar la ruta de este carro'), findsOneWidget);
+      expect(find.textContaining('motivo_nuevo'), findsNothing);
+    });
+
+    testWidgets('si el servidor no manda el dato, se comportan como antes', (tester) async {
+      await abrir(tester, conRuta(null));
+
+      expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Reportar novedad')).onPressed, isNotNull);
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Llegué')).onPressed, isNotNull);
+    });
+
+    testWidgets('se activan al refrescar cuando el servidor dice que sí, sin preguntar nada más', (tester) async {
+      final repositorio = ViajesRepositorioFalso();
+      await abrir(tester, conRuta(false, motivo: 'entrega_del_cargue_sin_cerrar'), repositorio: repositorio);
+      expect(repositorio.llamadasRemotas, 1, reason: 'pintarlos no consulta al servidor');
+
+      repositorio.remotos = [conRuta(true)];
+      await ProviderScope.containerOf(tester.element(find.byType(MisViajesPage)))
+          .read(misViajesControllerProvider.notifier)
+          .cargar();
+      await avanzar(tester);
+
+      expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Reportar novedad')).onPressed, isNotNull);
+      expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Llegué')).onPressed, isNotNull);
+      expect(find.text('Falta cerrar la entrega del cargue'), findsNothing);
+    });
+
+    // ESC-10: un «Llegué» de una copia vieja recibe el 409 y queda en espera, con lo que falta, sin contar como error.
+    testWidgets('el 409 de la entrega del cargue sin cerrar deja la llegada en espera y lo dice', (tester) async {
+      final arnes = Arnes(sesion: _conductor);
+      arnes.gateway.errores['confirmarLlegada'] = [
+        const ErrorApi(
+          message: 'Falta cerrar la entrega del cargue: fírmenla, recíbanla con reservas o registren la no firma',
+          code: 'ETAPA_PREVIA_SIN_CIERRE',
+          status: 409,
+          details: {'motivo': 'transferencia_sin_cierre', 'etapa_previa': 'Cargue'},
+        ),
+      ];
+      await abrir(tester, conRuta(true), arnes: arnes);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Llegué'));
+      await avanzar(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Confirmar'));
+      await avanzar(tester);
+
+      expect(find.textContaining('Llegada en espera: Falta cerrar la entrega del cargue.'), findsOneWidget);
+      expect((arnes.cola.jobs.single.fallido, arnes.cola.jobs.single.error), (false, 'Falta cerrar la entrega del cargue'));
     });
   });
 

@@ -187,7 +187,13 @@ public sealed class clsViajesService(
     {
         var viaje = await ObtenerViajeAsync(id, ct);
         await AsegurarAccesoAsync(viaje, ct);
-        return await ObtenerDtoAsync(id, ct);
+        // Solo el detalle trae el cargue de la ninera y el estado del permiso «No hay inspector»: las demas respuestas del viaje los llevan nulos.
+        var dto = await ObtenerDtoAsync(id, ct);
+        return dto with
+        {
+            CargueNinera = await consultas.CargueNineraAsync(id, ClienteRestringido, ct),
+            PermisoSinInspectorEstado = await consultas.EstadoDelPermisoSinInspectorAsync(id, ct),
+        };
     }
 
     // ---------------------------------------------------------------------------------------------- cambios
@@ -377,7 +383,8 @@ public sealed class clsViajesService(
     }
 
     /// <summary>
-    /// Avisa del cambio de destino de una unidad al conductor del viaje y a los inspectores asignados al lugar nuevo: «Cambio el destino del VIN …: ahora va a …» (urgencia media). Nunca lanza: el cambio ya quedo guardado.
+    /// Avisa del cambio de destino de una unidad al conductor del viaje, a los inspectores asignados al lugar nuevo y al coordinador de calidad y a los administradores del cliente: «Cambio el destino del VIN …: ahora va a …»
+    /// (urgencia media). Quien es destinatario por dos vias recibe un solo aviso y quien hizo el cambio no recibe el suyo. Nunca lanza: el cambio ya quedo guardado.
     /// </summary>
     private async Task AvisarCambioDeDestinoAsync(clsViaje viaje, clsVehiculo vehiculo, Guid? lugarAnterior, Guid? lugarNuevo, CancellationToken ct)
     {
@@ -396,7 +403,10 @@ public sealed class clsViajesService(
                 destinatarios.Add(conductor);
             }
 
-            destinatarios.AddRange((await reclamos.InspectoresDelLugarAsync(nuevo, ct)).Where(i => !destinatarios.Contains(i)));
+            destinatarios.AddRange(await reclamos.InspectoresDelLugarAsync(nuevo, ct));
+            destinatarios.AddRange((await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN], vehiculo.ClienteId, ct)).Select(u => u.Id));
+            var quienCambio = actual.IdObligatorio();
+            destinatarios = destinatarios.Where(d => d != quienCambio).Distinct().ToList();
             await emisor.EmitirAsync(
                 new clsAlerta(
                     clsTipoNotificacion.CAMBIO_DESTINO_UNIDAD,

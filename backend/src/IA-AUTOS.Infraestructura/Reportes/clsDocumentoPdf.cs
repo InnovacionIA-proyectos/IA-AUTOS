@@ -28,6 +28,7 @@ internal sealed partial class clsDocumentoPdf
     private const double FIRMA_ALTO = 70;
     private const string COLOR_TEXTO = "0.06 0.14 0.28";
     private const double ESPACIO_ENTRE_LINEAS = 6;
+    private const double AIRE_SOBRE_BLOQUE = 12;
 
     private abstract record Elemento;
 
@@ -436,7 +437,8 @@ internal sealed partial class clsDocumentoPdf
                     paginas[^1].Add((trazo, yTrazo));
                     break;
                 case Bloque bloque:
-                    var yBloque = Reservar(bloque.Alto);
+                    // El aire va encima: la linea anterior se dibuja sobre su base, y sin el la foto quedaba pegada a las letras del titulo.
+                    var yBloque = Reservar(bloque.Alto + AIRE_SOBRE_BLOQUE);
                     foreach (var (hijo, desde) in bloque.Hijos)
                     {
                         var altoHijo = hijo switch

@@ -239,6 +239,62 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
     public async Task<ViajeDto?> ObtenerAsync(Guid id, Guid? soloDeCliente = null, CancellationToken ct = default) =>
         (await ConVehiculosAsync(await ProyectarAsync(contexto.Viajes.AsNoTracking().Where(v => v.Id == id), soloDeCliente, ct), soloDeCliente, ct)).FirstOrDefault();
 
+    public async Task<CargueNineraDelViajeDto?> CargueNineraAsync(Guid viajeId, Guid? soloDeCliente, CancellationToken ct = default)
+    {
+        // Solo el informe vigente de cada carro: el descartado o superado ya no sale por el filtro de la consulta y el reemplazado por una correccion cerrada se excluye aqui.
+        var reemplazadas = contexto.Inspecciones.Where(i => i.CorrigeInspeccionId != null && i.Estado == clsEstadoInspeccion.CERRADA).Select(i => i.CorrigeInspeccionId!.Value);
+        var filas = await (from t in contexto.Transferencias.AsNoTracking()
+                           join i in contexto.Inspecciones.AsNoTracking() on t.InspeccionId equals i.Id
+                           join e in contexto.Etapas.AsNoTracking() on i.EtapaId equals e.Id
+                           join h in contexto.Vehiculos.AsNoTracking() on e.VehiculoId equals h.Id
+                           where i.ViajeId == viajeId && t.FirmaPorNinera && t.TipoCierre != null && !reemplazadas.Contains(i.Id)
+                               && (soloDeCliente == null || h.ClienteId == soloDeCliente)
+                           orderby h.Vin
+                           select new { Transferencia = t, h.Vin }).ToListAsync(ct);
+        var firmadas = filas.Where(f => f.Transferencia.TipoCierre is clsTipoCierre.FIRMADA or clsTipoCierre.CON_RESERVAS).ToList();
+        var sinFirma = filas.Where(f => f.Transferencia.TipoCierre == clsTipoCierre.NO_FIRMA).ToList();
+        if (firmadas.Count == 0 && sinFirma.Count == 0)
+        {
+            return null;
+        }
+
+        var baseDeLasFirmas = (firmadas.Count > 0 ? firmadas : sinFirma)[0].Transferencia;
+        var usuarioIds = new[] { baseDeLasFirmas.EntregaUsuarioId, baseDeLasFirmas.RecibeUsuarioId, sinFirma.Count > 0 ? sinFirma[0].Transferencia.TestigoUsuarioId : null }
+            .Where(u => u is not null).Select(u => u!.Value).Distinct().ToList();
+        var nombres = await contexto.Usuarios.AsNoTracking().Where(u => usuarioIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.Nombre, ct);
+        string? Nombre(Guid? id) => id is { } usuario ? nombres.GetValueOrDefault(usuario) : null;
+
+        FirmaDeLaNineraDto? Firma(string? trazo, DateTimeOffset? firmadaAt, string? nombre) =>
+            string.IsNullOrEmpty(trazo) ? null : new FirmaDeLaNineraDto(nombre, firmadaAt, trazo);
+
+        ConstanciaDelCargueDto? constancia = null;
+        if (sinFirma.Count > 0)
+        {
+            var t = sinFirma[0].Transferencia;
+            var foto = t.EvidenciaConstanciaId is { } evidenciaId
+                ? await contexto.Evidencias.AsNoTracking().FirstOrDefaultAsync(e => e.Id == evidenciaId, ct)
+                : null;
+            // Quien deja la constancia es la otra parte: su momento y su GPS son los de la constancia.
+            var entregaLaDeja = t.NoFirmaParte == clsParteFirmante.RECIBE;
+            constancia = new ConstanciaDelCargueDto(
+                t.NoFirmaParte ?? string.Empty, t.MotivoNoFirma, Nombre(t.TestigoUsuarioId), foto is null ? null : clsFotosDelViaje.DeEvidencia(foto, sinCoordenadasSiNoHay: true),
+                (entregaLaDeja ? t.FirmaEntregaMomentoAt : t.FirmaRecibeMomentoAt) ?? t.UpdatedAt,
+                entregaLaDeja ? t.FirmaEntregaLat : t.FirmaRecibeLat,
+                entregaLaDeja ? t.FirmaEntregaLng : t.FirmaRecibeLng);
+        }
+
+        return new CargueNineraDelViajeDto(
+            firmadas.Count,
+            [.. firmadas.Where(f => !string.IsNullOrEmpty(f.Transferencia.ReservasTexto)).Select(f => new ReservaDelCargueDto(f.Vin, f.Transferencia.ReservasTexto!))],
+            Firma(baseDeLasFirmas.FirmaEntrega, baseDeLasFirmas.FirmaEntregaAt, Nombre(baseDeLasFirmas.EntregaUsuarioId)),
+            Firma(baseDeLasFirmas.FirmaRecibe, baseDeLasFirmas.FirmaRecibeAt, Nombre(baseDeLasFirmas.RecibeUsuarioId) ?? baseDeLasFirmas.RecibeExternoNombre),
+            constancia,
+            sinFirma.Count);
+    }
+
+    public async Task<string?> EstadoDelPermisoSinInspectorAsync(Guid viajeId, CancellationToken ct = default) =>
+        await contexto.PermisosSinInspector.AsNoTracking().Where(p => p.ViajeId == viajeId).Select(p => p.Estado).FirstOrDefaultAsync(ct);
+
     public async Task<bool> UsuarioVeVinAsync(string vin, Guid usuarioId, CancellationToken ct = default)
     {
         var propios = clsAlcanceViajes.Viajes(contexto, usuarioId);
@@ -441,13 +497,13 @@ internal sealed class clsConsultasViajes(clsAppDbContext contexto) : IConsultasV
                                {
                                    n.ViajeId, n.Tipo, n.MotivoCodigo, Motivo = (string?)m.Nombre, Texto = n.MotivoTexto, Usuario = (string?)u.Nombre, n.Fecha, h.Vin, n.InspeccionId,
                                    TienePermiso = p != null, PedidoPor = (string?)pc.Nombre, PedidoAt = (DateTimeOffset?)p.CreatedAt, PedidoLat = p.Lat, PedidoLng = p.Lng,
-                                   ConcedidoPorNombre = (string?)pq.Nombre, ConcedidoAt = p.ConcedidoAt, PorTiempo = p != null && p.PorTiempo,
+                                   ConcedidoPorNombre = (string?)pq.Nombre, ConcedidoAt = p.ConcedidoAt, PorTiempo = p != null && p.PorTiempo, VenceAt = (DateTimeOffset?)p.VenceAt,
                                }).ToListAsync(ct);
         var novedadesPorViaje = novedades.ToLookup(
             n => n.ViajeId,
             n => new NovedadDelViajeDto(
                 n.Tipo, n.MotivoCodigo, n.Motivo, n.Texto, n.Usuario, n.Fecha, n.Vin, n.InspeccionId,
-                n.TienePermiso ? new PermisoDeLaNovedadDto(n.PedidoPor, n.PedidoAt!.Value, n.PedidoLat, n.PedidoLng, n.ConcedidoPorNombre, n.ConcedidoAt, n.PorTiempo) : null));
+                n.TienePermiso ? new PermisoDeLaNovedadDto(n.PedidoPor, n.PedidoAt!.Value, n.PedidoLat, n.PedidoLng, n.ConcedidoPorNombre, n.ConcedidoAt, n.PorTiempo, n.VenceAt) : null));
 
         // Las fotos de la acomodacion cuelgan del viaje: se llega a ellas desde su detalle, sin pasar por el inventario de cada VIN.
         var fotos = (await (from e in contexto.Evidencias.AsNoTracking()

@@ -10,12 +10,16 @@ import 'package:traza_autos/features/auth/domain/sesion.dart';
 import 'package:traza_autos/features/catalogos/providers.dart';
 import 'package:traza_autos/features/inspecciones/domain/novedad_pendiente.dart';
 import 'package:traza_autos/features/dibujo_dano/presentation/selector_zona_dano.dart';
+import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/vehiculos/data/vehiculos_repositorio.dart';
 import 'package:traza_autos/features/vehiculos/domain/consulta.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
+import 'package:traza_autos/features/inspecciones/domain/puestos_guardados.dart';
 import 'package:traza_autos/features/vehiculos/presentation/vin_page.dart';
 import 'package:traza_autos/features/vehiculos/providers.dart';
+import 'package:traza_autos/features/viajes/domain/pendiente.dart';
 import 'package:traza_autos/features/viajes/domain/viaje.dart';
+import 'package:traza_autos/features/viajes/presentation/tomados.dart';
 import 'package:traza_autos/features/viajes/providers.dart';
 
 import '../support/arnes.dart';
@@ -198,21 +202,33 @@ Future<void> abrir(
   Sesion? sesion,
   ViajesRepositorioFalso? viajes,
   List<NovedadPendiente> novedades = const [],
+  List<Map<String, dynamic>> motivosNoSale = const [],
   Object? error,
+  // Lo que el inspector tiene tomado, guardado en el teléfono (S8-HU-04.2).
+  List<Pendiente> tomados = const [],
+  // Para mirar después lo que la pantalla hizo con la cola o con el servidor.
+  Arnes? arnes,
+  // S8-HU-09.2 CA-6: el hallazgo al que lleva un aviso.
+  String? hallazgoId,
 }) async {
   await tester.binding.setSurfaceSize(const Size(600, 2400));
   addTearDown(() => tester.binding.setSurfaceSize(null));
+  arnes ??= Arnes(sesion: sesion ?? sesionPrueba);
+  arnes.novedades.lista = novedades;
+  if (tomados.isNotEmpty) await guardarTomados(arnes.tomadosGuardados, (sesion ?? sesionPrueba).usuario.id, tomados);
   await tester.pumpWidget(
     ProviderScope(
       retry: (_, _) => null,
       overrides: [
-        ...(Arnes(sesion: sesion ?? sesionPrueba)..novedades.lista = novedades).overrides,
-        catalogosRepositorioProvider.overrideWithValue(CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe')),
+        ...arnes.overrides,
+        catalogosRepositorioProvider.overrideWithValue(
+          CatalogosRepositorioFalso()..guardado = catalogosCon('Golpe', motivosNoSale: motivosNoSale),
+        ),
         vehiculosRepositorioProvider
             .overrideWithValue(VehiculosRepositorioFalso(inventario ?? inventarioJson(), error: error)),
         viajesRepositorioProvider.overrideWithValue(viajes ?? ViajesRepositorioFalso()),
       ],
-      child: MaterialApp(theme: crearTema(), home: const VinPage(vin: 'VIN00000000000001')),
+      child: MaterialApp(theme: crearTema(), home: VinPage(vin: 'VIN00000000000001', hallazgoId: hallazgoId)),
     ),
   );
   for (var i = 0; i < 10; i++) {
@@ -317,6 +333,34 @@ void main() {
     expect(abiertas.single.queryParameters['proceso'], 'cargue', reason: 'el código, no «Cargue»');
   });
 
+  // S8-HU-09.2 CA-6: un aviso que trae `hallazgo_id` abre la ficha con ese daño a la vista, con su foto y su zona.
+  group('el hallazgo al que lleva un aviso', () {
+    Map<String, dynamic> conHallazgo() {
+      final json = inventarioJson();
+      final etapa = (json['etapas'] as List).first as Map<String, dynamic>;
+      final inspeccion = (etapa['inspecciones'] as List).first as Map<String, dynamic>;
+      inspeccion['hallazgos'] = <Map<String, dynamic>>[
+        {'id': 'h7', 'zona': 'Izquierdo 7 · Espejo retrovisor', 'cuadrante_numero': 7, 'lado': 'izquierdo',
+         'clase_dano': 'golpe', 'tamano_dano': 'mas_20cm', 'nivel_severidad': 'v1_plus'},
+      ];
+      return json;
+    }
+
+    testWidgets('se abre su detalle al llegar', (tester) async {
+      await abrir(tester, inventario: conHallazgo(), hallazgoId: 'h7');
+
+      expect(find.byType(BottomSheet), findsOneWidget);
+      expect(find.text('Izquierdo 7 · Espejo retrovisor'), findsOneWidget);
+    });
+
+    testWidgets('si no está en la ficha, queda la ficha sin error', (tester) async {
+      await abrir(tester, inventario: conHallazgo(), hallazgoId: 'otro');
+
+      expect(find.byType(BottomSheet), findsNothing);
+      expect(find.textContaining('Izquierdo 7 · Espejo retrovisor'), findsOneWidget);
+    });
+  });
+
   group('la unidad no sale', () {
     /// Inventario con un V1+ en una inspección cerrada del viaje: la única forma de que el servidor lo acepte.
     Map<String, dynamic> conV1Plus() {
@@ -330,21 +374,31 @@ void main() {
       return json;
     }
 
-    ViajesRepositorioFalso delInspector(String inspectorId, {bool noSale = false}) => ViajesRepositorioFalso()
-      ..viajeDeEtapa = Viaje(
-        id: 'viaje-1',
-        codigoMtrack: 'MTK-1',
-        placa: 'ABC123',
-        estado: 'en_curso',
-        inspectorId: inspectorId,
-        vehiculos: [
-          ViajeVehiculo(
-            vin: 'VIN00000000000001',
+    const faltanDocumentos = NoSale(
+      motivo: 'Faltan documentos',
+      motivoCodigo: 'faltan_documentos',
+      vinReemplazo: 'VIN00000000000002',
+    );
+
+    Viaje viajeCon({required String inspectorId, String estadoUnidad = estadoUnidadActiva, NoSale? noSale, bool cargueCerrado = false}) =>
+        Viaje(
+          id: 'viaje-1',
+          codigoMtrack: 'MTK-1',
+          placa: 'ABC123',
+          estado: 'en_curso',
+          inspectorId: inspectorId,
+          cargueCerrado: cargueCerrado,
+          vehiculos: [ViajeVehiculo(vin: 'VIN00000000000001', estadoUnidad: estadoUnidad, noSale: noSale)],
+        );
+
+    ViajesRepositorioFalso delInspector(String inspectorId, {bool noSale = false, bool cargueCerrado = false}) =>
+        ViajesRepositorioFalso()
+          ..viajeDeEtapa = viajeCon(
+            inspectorId: inspectorId,
             estadoUnidad: noSale ? 'no_sale' : estadoUnidadActiva,
-            noSale: noSale ? const NoSale(motivo: 'Golpe profundo en el capó', vinReemplazo: 'VIN00000000000002') : null,
-          ),
-        ],
-      );
+            noSale: noSale ? faltanDocumentos : null,
+            cargueCerrado: cargueCerrado,
+          );
 
     testWidgets('se le ofrece al inspector del viaje con un V1+ cerrado', (tester) async {
       await abrir(tester, inventario: conV1Plus(), viajes: delInspector('u1'));
@@ -364,19 +418,159 @@ void main() {
       expect(find.text('La unidad no sale'), findsNothing);
     });
 
-    testWidgets('sin un V1+ no hay nada que marcar', (tester) async {
+    // S8-HU-02.2 CA-2: ya no hace falta un V1+: los demás motivos no piden ningún daño.
+    testWidgets('sin un V1+ también se ofrece, con cualquier motivo', (tester) async {
       await abrir(tester, viajes: delInspector('u1'));
 
-      expect(find.text('La unidad no sale'), findsNothing);
+      expect(find.text('La unidad no sale'), findsOneWidget);
+    });
+
+    testWidgets('marcar manda el motivo del catálogo y la ficha dice por qué no sale', (tester) async {
+      final viajes = delInspector('u1')
+        ..viajeTrasNoSale = viajeCon(inspectorId: 'u1', estadoUnidad: 'no_sale', noSale: faltanDocumentos);
+      await abrir(tester, viajes: viajes, motivosNoSale: motivosDePruebaNoSale);
+
+      await tester.tap(find.text('La unidad no sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Faltan documentos'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Marcar que no sale'));
+      await tester.pumpAndSettle();
+
+      expect(viajes.noSalesMarcados.single['motivo_codigo'], 'faltan_documentos');
+      expect(viajes.noSalesMarcados.single['hallazgo_id'], isNull);
+      expect(find.text('Este carro no sale: Faltan documentos'), findsOneWidget);
+    });
+
+    // S8-HU-07.3 CA-6: el motivo que solo aplica donde se carga sin inspector lo decide el dato del viaje.
+    for (final admite in [false, true]) {
+      testWidgets('el motivo de cargue sin inspector se habilita solo donde el lugar lo admite (admite: $admite)', (tester) async {
+        const motivos = [
+          ...motivosDePruebaNoSale,
+          {'id': 'n5', 'codigo': 'dano_conductor', 'nombre': 'Daño reportado por el conductor', 'orden': 5, 'activo': true, 'exige_hallazgo': true, 'exige_texto': false, 'solo_sin_inspector': true},
+        ];
+        final viajes = ViajesRepositorioFalso()
+          ..viajeDeEtapa = viaje('viaje-1', vines: const ['VIN00000000000001'], inspectorId: 'u1', admiteSinInspector: admite);
+        await abrir(tester, viajes: viajes, motivosNoSale: motivos);
+        await tester.tap(find.text('La unidad no sale'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Este lugar de cargue no lo admite'), admite ? findsNothing : findsOneWidget);
+        expect(find.text('No hay un daño del conductor sin calificar en este carro'), admite ? findsOneWidget : findsNothing);
+      });
+    }
+
+    testWidgets('un 403 del servidor se muestra con su mensaje', (tester) async {
+      final viajes = delInspector('u1')..errorNoSale = errorApi(403, 'No eres el inspector de este viaje');
+      await abrir(tester, viajes: viajes, motivosNoSale: motivosDePruebaNoSale);
+
+      await tester.tap(find.text('La unidad no sale'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Faltan documentos'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Marcar que no sale'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('No eres el inspector de este viaje'), findsOneWidget);
     });
 
     testWidgets('una unidad ya marcada dice por qué, en vez del botón', (tester) async {
       await abrir(tester, inventario: conV1Plus(), viajes: delInspector('u1', noSale: true));
 
       expect(find.text('La unidad no sale'), findsNothing);
-      expect(find.text('Esta unidad no sale'), findsOneWidget);
-      expect(find.text('Golpe profundo en el capó'), findsOneWidget);
+      expect(find.text('Este carro no sale: Faltan documentos'), findsOneWidget);
       expect(find.text('La reemplaza VIN00000000000002'), findsOneWidget);
+    });
+
+    // CA-3: el conductor ve la etiqueta que el servidor le manda a él, nunca el nivel.
+    testWidgets('el conductor ve el motivo con la etiqueta que le manda el servidor', (tester) async {
+      await abrir(
+        tester,
+        sesion: conductor,
+        viajes: ViajesRepositorioFalso()
+          ..viajeDeEtapa = viajeCon(
+            inspectorId: 'u1',
+            estadoUnidad: 'no_sale',
+            noSale: const NoSale(motivo: 'Daño que impide viajar', motivoCodigo: 'dano_v1_plus'),
+          ),
+      );
+
+      expect(find.text('Este carro no sale: Daño que impide viajar'), findsOneWidget);
+      expect(find.textContaining('V1+'), findsNothing);
+      expect(find.text('Vuelve a salir'), findsNothing);
+    });
+
+    // CA-7: un motivo que la app no conoce se muestra con la etiqueta del servidor.
+    testWidgets('un motivo desconocido se muestra con lo que dice el servidor', (tester) async {
+      await abrir(
+        tester,
+        viajes: ViajesRepositorioFalso()
+          ..viajeDeEtapa = viajeCon(
+            inspectorId: 'u1',
+            estadoUnidad: 'no_sale',
+            noSale: const NoSale(motivo: 'Lluvia en el patio', motivoCodigo: 'motivo_que_vendra'),
+          ),
+      );
+
+      expect(find.text('Este carro no sale: Lluvia en el patio'), findsOneWidget);
+    });
+
+    // CA-4: ni «Capturar» ni «Firmar transferencia» en ninguna etapa.
+    testWidgets('la ficha de un carro que no sale no ofrece capturar ni firmar', (tester) async {
+      await abrir(tester, viajes: delInspector('u1', noSale: true));
+
+      expect(find.text('Este carro no sale del viaje: no se revisa ni se firma'), findsWidgets);
+      expect(find.widgetWithText(BotonEnFila, 'Capturar'), findsNothing);
+      expect(find.textContaining('Firmar'), findsNothing);
+    });
+
+    // CA-5: «Vuelve a salir», con confirmación.
+    testWidgets('el inspector del viaje lo devuelve con «Vuelve a salir»', (tester) async {
+      final viajes = delInspector('u1', noSale: true)..viajeTrasVolver = viajeCon(inspectorId: 'u1');
+      await abrir(tester, viajes: viajes);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Vuelve a salir'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Vuelve a salir'));
+      await tester.pumpAndSettle();
+
+      expect(viajes.vueltasASalir, [('viaje-1', 'VIN00000000000001')]);
+      expect(find.text('El carro vuelve a salir: acomódalo en la niñera.'), findsOneWidget);
+      expect(find.textContaining('Este carro no sale'), findsNothing);
+      expect(find.text('La unidad no sale'), findsOneWidget, reason: 'vuelve a tener sus acciones');
+    });
+
+    testWidgets('si el servidor no lo deja volver, se muestra su mensaje', (tester) async {
+      final viajes = delInspector('u1', noSale: true)
+        ..errorVolver = errorApi(409, 'La niñera tiene 7 puestos y ya hay 7 unidades');
+      await abrir(tester, viajes: viajes);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Vuelve a salir'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Vuelve a salir'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('La niñera tiene 7 puestos y ya hay 7 unidades'), findsOneWidget);
+      expect(find.text('Este carro no sale: Faltan documentos'), findsOneWidget);
+    });
+
+    // Revisión: corregir es revisar otra vez, y un carro que no sale no se revisa (409 `unidad_no_sale`).
+    testWidgets('la ficha de un carro que no sale no ofrece «Corregir»', (tester) async {
+      await abrir(tester, inventario: inventarioSalida(momento: 'llegada'), viajes: delInspector('u1', noSale: true));
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
+    });
+
+    testWidgets('el mismo informe de un carro activo sí se corrige', (tester) async {
+      await abrir(tester, inventario: inventarioSalida(momento: 'llegada'), viajes: delInspector('u1'));
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsOneWidget);
+    });
+
+    testWidgets('con el cargue ya cerrado no se ofrece «Vuelve a salir»', (tester) async {
+      await abrir(tester, viajes: delInspector('u1', noSale: true, cargueCerrado: true));
+
+      expect(find.text('Vuelve a salir'), findsNothing);
     });
   });
 
@@ -430,7 +624,7 @@ void main() {
       await tester.tap(find.byIcon(Icons.chevron_right).first);
       await asentar(tester);
 
-      // El «Corregir» que queda en pantalla es el de la tarjeta de abajo, que es otro informe y sí se corrige.
+      // La tarjeta de abajo es otro informe, el del transporte, que se lee pero ya no se corrige (S8-HU-07.3 CA-8).
       expect(find.textContaining('ya fue firmada'), findsOneWidget);
     });
 
@@ -439,6 +633,68 @@ void main() {
 
       // Cuatro momentos (dos por etapa) y solo dos tienen informe.
       expect(find.byIcon(Icons.chevron_right), findsNWidgets(2));
+    });
+  });
+
+  // S8-HU-07.3 CA-8 (C8): el informe de transporte lo arma el sistema con «Reportar novedad» y «Llegué».
+  group('el transporte lo arma el sistema', () {
+    ViajesRepositorioFalso enCurso() => ViajesRepositorioFalso()
+      ..viajeDeEtapa = viaje('viaje-1', vines: const ['VIN00000000000001'], inspectorId: 'u1');
+
+    /// La tarjeta de la etapa de transporte (sin el catálogo de etapas, su nombre es el código).
+    Finder tarjetaDelTransporte() => find.ancestor(of: find.text('transporte'), matching: find.byType(Tarjeta)).first;
+
+    for (final (quien, sesion) in [('el inspector', sesionPrueba), ('el conductor', conductor), ('el administrador', administrador)]) {
+      testWidgets('$quien no ve «Capturar» en el transporte', (tester) async {
+        await abrir(tester, inventario: inventarioSinInformes(), sesion: sesion, viajes: enCurso());
+
+        expect(find.text('Inspección de llegada'), findsNWidgets(2), reason: 'los momentos se siguen viendo');
+        expect(
+          find.descendant(of: tarjetaDelTransporte(), matching: find.widgetWithText(BotonEnFila, 'Capturar')),
+          findsNothing,
+        );
+      });
+    }
+
+    testWidgets('la ficha dice quién lo arma, y el cargue se sigue capturando', (tester) async {
+      await abrir(tester, inventario: inventarioSinInformes(), viajes: enCurso());
+
+      expect(find.text(mensajeTransporteDelSistema), findsOneWidget);
+      expect(find.widgetWithText(BotonEnFila, 'Capturar'), findsNWidgets(2), reason: 'los dos momentos del cargue');
+    });
+
+    testWidgets('el informe de transporte hecho a mano antes se ve con su insignia y se abre en lectura', (tester) async {
+      // El informe de arriba (el más reciente) es la salida de transporte hecha a mano por quien mira.
+      await abrir(tester, inventario: inventarioConDosInformes(), viajes: enCurso());
+
+      expect(find.descendant(of: tarjetaDelTransporte(), matching: find.widgetWithText(Insignia, 'Cerrada')), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing, reason: 'el servidor responde 409 a su corrección');
+
+      await tester.tap(find.byIcon(Icons.chevron_right).last);
+      await asentar(tester);
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
+    });
+
+    testWidgets('un borrador manual de transporte a medias sigue diciendo «Borrador», sin acciones', (tester) async {
+      final json = inventarioJson();
+      ((json['etapas'] as List<dynamic>)[1] as Map<String, dynamic>)['inspecciones'] = [
+        {
+          'id': 'b1',
+          'momento': 'llegada',
+          'momento_nombre': 'Inspección de llegada',
+          'fecha': '2026-01-05T10:00:00Z',
+          'estado': 'borrador',
+          'usuario_id': 'u1',
+          'hallazgos': <Map<String, dynamic>>[],
+          'evidencias': <Map<String, dynamic>>[],
+          'transferencia': null,
+        },
+      ];
+      await abrir(tester, inventario: json, viajes: enCurso());
+
+      expect(find.descendant(of: tarjetaDelTransporte(), matching: find.widgetWithText(Insignia, 'Borrador')), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Continuar'), findsNothing, reason: 'sus acciones son de S8-HU-11.2');
+      expect(find.widgetWithText(BotonEnFila, 'Descartar'), findsNothing);
     });
   });
 
@@ -560,6 +816,30 @@ void main() {
       expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
       expect(find.textContaining('ya fue firmada'), findsOneWidget);
       expect(find.widgetWithText(OutlinedButton, 'Agregar nota aclaratoria'), findsOneWidget);
+    });
+
+    // S8-HU-01.3 CA-8: la firma por niñera cuelga de la acomodación, y desde ahí la llegada de esa etapa tampoco
+    // se corrige: la regla es por etapa, no por informe.
+    testWidgets('con la salida firmada, la llegada de la misma etapa tampoco se corrige', (tester) async {
+      final json = inventarioSalida(transferencia: firmaDeEntrega);
+      final etapa = (json['etapas'] as List<dynamic>).first as Map<String, dynamic>;
+      (etapa['inspecciones'] as List<dynamic>).add({
+        'id': 'i0',
+        'momento': 'llegada',
+        'momento_nombre': 'Inspección de llegada',
+        // La más reciente: es la que la ficha muestra como «Último informe».
+        'fecha': '2026-01-02T12:30:00Z',
+        'cerrada_at': '2026-01-02T12:40:00Z',
+        'estado': 'cerrada',
+        'usuario_id': 'u1',
+        'hallazgos': [],
+        'evidencias': [],
+        'transferencia': null,
+      });
+      await abrir(tester, inventario: json, viajes: enEstado('en_curso'));
+
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
+      expect(find.text('Esta etapa ya fue firmada: deja una nota aclaratoria'), findsOneWidget);
     });
 
     testWidgets('tampoco la corrige el administrador con una firma de por medio', (tester) async {
@@ -916,6 +1196,495 @@ void main() {
       );
 
       expect(find.text('Es la firma de la inspección de salida.'), findsOneWidget);
+    });
+  });
+
+  // S8-HU-01.3 CA-9: el cargue muestra el puesto que el servidor registró para el carro en la niñera.
+  testWidgets('el cargue dice el puesto del carro en la niñera', (tester) async {
+    final json = inventarioJson();
+    ((json['etapas'] as List<dynamic>).first as Map<String, dynamic>)['posicion'] = 4;
+    await abrir(tester, inventario: json);
+
+    expect(find.text('Posición en la niñera: 4'), findsOneWidget);
+  });
+
+  testWidgets('sin puesto registrado no se habla de puesto', (tester) async {
+    await abrir(tester);
+
+    expect(find.textContaining('Posición en la niñera'), findsNothing);
+  });
+
+  // S8-HU-01.3 CA-11: en el cargue no se firma carro por carro; la ficha lleva a la firma de la niñera.
+  group('la firma del cargue va por niñera', () {
+    ViajesRepositorioFalso delViaje() => ViajesRepositorioFalso()
+      ..viajeDeEtapa = const Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: 'en_curso',
+        inspectorId: 'u1',
+        conductorId: 'conductor-1',
+        vehiculos: [ViajeVehiculo(vin: 'VIN00000000000001')],
+      );
+
+    testWidgets('al inspector del viaje le ofrece ir a la firma de la niñera, no firmar este carro', (tester) async {
+      await abrir(tester, viajes: delViaje());
+
+      expect(find.widgetWithText(FilledButton, 'Ir a la firma de la niñera'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Firmar transferencia'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Revisar y firmar'), findsNothing);
+    });
+
+    testWidgets('al conductor del viaje también', (tester) async {
+      await abrir(tester, sesion: conductor, viajes: delViaje());
+
+      expect(find.widgetWithText(FilledButton, 'Ir a la firma de la niñera'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Revisar y firmar'), findsNothing);
+    });
+
+    // Revisión: la firma por niñera cuelga de la salida, no de la llegada; la ficha tiene que verla cerrada.
+    testWidgets('con la niñera firmada, la ficha dice cómo se cerró y con qué reservas', (tester) async {
+      final json = inventarioJson();
+      final etapa = (json['etapas'] as List<dynamic>).first as Map<String, dynamic>;
+      final salida = (etapa['inspecciones'] as List<dynamic>).first as Map<String, dynamic>;
+      salida['transferencia'] = {
+        'entrega_usuario_id': 'u1',
+        'recibe_usuario_id': 'conductor-1',
+        'entrega_firmada_at': '2026-01-02T12:00:00Z',
+        'recibe_firmada_at': '2026-01-02T12:05:00Z',
+        'tipo_cierre': 'con_reservas',
+        'reservas_texto': 'Rayón en la puerta izquierda',
+        'firma_por_ninera': true,
+      };
+      // La llegada es la primera: antes la ficha buscaba la firma ahí y nunca la encontraba.
+      (etapa['inspecciones'] as List<dynamic>).insert(0, {
+        'id': 'i0',
+        'momento': 'llegada',
+        'momento_nombre': 'Inspección de llegada',
+        'fecha': '2026-01-02T09:00:00Z',
+        'cerrada_at': '2026-01-02T09:30:00Z',
+        'estado': 'cerrada',
+        'usuario_id': 'u1',
+        'hallazgos': [],
+        'evidencias': [],
+        'transferencia': null,
+      });
+      await abrir(tester, inventario: json, viajes: delViaje());
+
+      expect(find.widgetWithText(FilledButton, 'Ir a la firma de la niñera'), findsNothing);
+      expect(find.text('Reservas: Rayón en la puerta izquierda'), findsOneWidget);
+    });
+
+    testWidgets('a quien no la firma, ni carro por carro ni por niñera: dice quién la firma', (tester) async {
+      await abrir(tester, sesion: administrador, viajes: delViaje());
+
+      expect(find.widgetWithText(FilledButton, 'Ir a la firma de la niñera'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Firmar transferencia'), findsNothing);
+      expect(find.text('El cargue se firma por niñera: lo firman el inspector y el conductor del viaje.'), findsOneWidget);
+    });
+  });
+
+  // S8-HU-04.2 CA-11 (C12): en el descargue tampoco se firma carro por carro, para ningún rol; la ficha lleva a
+  // «Entregar en esta parada» a quien firma la parada del carro.
+  group('la entrega del descargue va por parada', () {
+    Map<String, dynamic> conDescargue() {
+      final json = inventarioJson();
+      (json['etapas'] as List<dynamic>).add({
+        'id': 'e3',
+        'orden': 3,
+        'proceso': 'descargue',
+        'lugar': 'Concesionario Norte',
+        'requiere_inspeccion': true,
+        'viaje_id': 'viaje-1',
+        'inspecciones': [
+          {
+            'id': 'i3',
+            'momento': 'llegada',
+            'momento_nombre': 'Inspección de llegada',
+            'fecha': '2026-01-03T10:00:00Z',
+            'cerrada_at': '2026-01-03T10:30:00Z',
+            'estado': 'cerrada',
+            'usuario_id': 'u1',
+            'hallazgos': [],
+            'evidencias': [],
+            'transferencia': null,
+          },
+        ],
+      });
+      return json;
+    }
+
+    ViajesRepositorioFalso delViaje({bool llego = true}) => ViajesRepositorioFalso()
+      ..viajeDeEtapa = Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: 'en_curso',
+        inspectorId: 'u1',
+        conductorId: 'conductor-1',
+        vehiculos: [
+          ViajeVehiculo(
+            vin: 'VIN00000000000001',
+            lugarDestino: 'Concesionario Norte',
+            lugarDestinoId: 'l-norte',
+            estadoTransporte: llego ? EstadoTransporte.sinNovedad : EstadoTransporte.sinRegistro,
+          ),
+        ],
+      );
+
+    testWidgets('al conductor del viaje lo lleva a «Entregar en esta parada», no a firmar este carro', (tester) async {
+      await abrir(tester, sesion: conductor, inventario: conDescargue(), viajes: delViaje());
+
+      expect(find.widgetWithText(FilledButton, 'Entregar en esta parada'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Firmar transferencia'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Revisar y firmar'), findsNothing);
+    });
+
+    // CA-1: al conductor, solo después de marcar «Llegué» en esa parada.
+    testWidgets('al conductor que todavía no marcó «Llegué» en la parada no se la ofrece', (tester) async {
+      await abrir(tester, sesion: conductor, inventario: conDescargue(), viajes: delViaje(llego: false));
+
+      expect(find.widgetWithText(FilledButton, 'Entregar en esta parada'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Firmar transferencia'), findsNothing);
+      expect(find.textContaining('En el destino la entrega se firma por parada'), findsOneWidget);
+    });
+
+    testWidgets('al administrador tampoco le ofrece firmar el carro: dice quién firma la parada', (tester) async {
+      await abrir(tester, sesion: administrador, inventario: conDescargue(), viajes: delViaje());
+
+      expect(find.widgetWithText(FilledButton, 'Firmar transferencia'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Revisar y firmar'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Entregar en esta parada'), findsNothing);
+      expect(find.textContaining('En el destino la entrega se firma por parada'), findsOneWidget);
+    });
+
+    testWidgets('al inspector que tomó la parada del carro lo lleva a «Entregar en esta parada»', (tester) async {
+      await abrir(
+        tester,
+        inventario: conDescargue(),
+        viajes: delViaje(),
+        tomados: [
+          const Pendiente(
+            viajeId: 'viaje-1',
+            proceso: procesoEntrega,
+            lugar: 'Concesionario Norte',
+            lugarId: 'l-norte',
+            estado: EstadoPendiente.mio,
+            unidades: 1,
+          ),
+        ],
+      );
+
+      expect(find.widgetWithText(FilledButton, 'Entregar en esta parada'), findsOneWidget);
+    });
+
+    testWidgets('el que tomó otra parada del mismo viaje no firma la de este carro', (tester) async {
+      await abrir(
+        tester,
+        inventario: conDescargue(),
+        viajes: delViaje(),
+        tomados: [
+          const Pendiente(
+            viajeId: 'viaje-1',
+            proceso: procesoEntrega,
+            lugar: 'Concesionario Sur',
+            lugarId: 'l-sur',
+            estado: EstadoPendiente.mio,
+            unidades: 1,
+          ),
+        ],
+      );
+
+      expect(find.widgetWithText(FilledButton, 'Entregar en esta parada'), findsNothing);
+    });
+
+    // C11: el inspector que cargó el viaje no recibe por defecto: solo en la parada que tomó.
+    testWidgets('el inspector que cargó y no tomó la parada no la firma', (tester) async {
+      await abrir(tester, inventario: conDescargue(), viajes: delViaje());
+
+      expect(find.widgetWithText(FilledButton, 'Entregar en esta parada'), findsNothing);
+      expect(find.widgetWithText(FilledButton, 'Firmar transferencia'), findsNothing);
+      expect(find.textContaining('En el destino la entrega se firma por parada'), findsOneWidget);
+    });
+  });
+
+  // En la prueba en el teléfono el conductor firmó el transporte de un carro desde la ficha y quedó una
+  // transferencia suelta. El transporte no cambia la custodia: no ofrece firma a nadie.
+  group('el transporte no se firma', () {
+    Map<String, dynamic> conTransporte() {
+      final json = inventarioJson();
+      (json['etapas'] as List<dynamic>).add({
+        'id': 'e2',
+        'orden': 2,
+        'proceso': 'transporte',
+        'lugar': 'En ruta',
+        'requiere_inspeccion': false,
+        'viaje_id': 'viaje-1',
+        'inspecciones': [
+          {
+            'id': 'i2',
+            'momento': 'llegada',
+            'momento_nombre': 'Inspección de llegada',
+            'fecha': '2026-01-03T10:00:00Z',
+            'cerrada_at': '2026-01-03T10:00:00Z',
+            'estado': 'cerrada',
+            'usuario_id': 'conductor-1',
+            'hallazgos': [],
+            'evidencias': [],
+            'transferencia': null,
+          },
+        ],
+      });
+      return json;
+    }
+
+    for (final (nombre, sesion) in [('al conductor', conductor), ('al inspector', null), ('al administrador', administrador)]) {
+      testWidgets('$nombre no le ofrece firmar el transporte: dice por qué', (tester) async {
+        await abrir(tester, sesion: sesion, inventario: conTransporte());
+
+        expect(find.widgetWithText(FilledButton, 'Firmar transferencia'), findsNothing);
+        expect(find.widgetWithText(FilledButton, 'Revisar y firmar'), findsNothing);
+        expect(find.text(mensajeTransporteSinFirma), findsOneWidget);
+      });
+    }
+  });
+
+  // S8-HU-11.2 CA-1 y CA-3: un borrador del servidor tiene salida. El propio se continúa o se descarta; el de otra
+  // persona que ya no tiene el carro deja capturar de cero.
+  group('el borrador del servidor', () {
+    /// La llegada del cargue en borrador, hecha por [autor], con una foto de vista y sin daños.
+    Map<String, dynamic> conBorrador({String autor = 'u1', Map<String, dynamic>? transferencia}) {
+      final json = inventarioJson();
+      final etapa = (json['etapas'] as List<dynamic>).first as Map<String, dynamic>;
+      (etapa['inspecciones'] as List<dynamic>).add({
+        'id': 'b1',
+        'momento': 'llegada',
+        'momento_nombre': 'Inspección de llegada',
+        'fecha': '2026-01-02T09:00:00Z',
+        'cerrada_at': null,
+        'estado': 'borrador',
+        'usuario_id': autor,
+        'hallazgos': <Map<String, dynamic>>[],
+        'evidencias': [
+          {'id': 'ev1', 'url': null, 'hallazgo_id': null, 'vista_id': 'vista-frente'},
+        ],
+        'transferencia': transferencia,
+      });
+      return json;
+    }
+
+    ViajesRepositorioFalso delInspector(String inspectorId) => ViajesRepositorioFalso()
+      ..viajeDeEtapa = Viaje(
+        id: 'viaje-1',
+        codigoMtrack: 'MTK-1',
+        placa: 'ABC123',
+        estado: 'en_curso',
+        inspectorId: inspectorId,
+        vehiculos: const [ViajeVehiculo(vin: 'VIN00000000000001')],
+      );
+
+    testWidgets('el propio ofrece «Continuar» y «Descartar»', (tester) async {
+      await abrir(tester, inventario: conBorrador(), viajes: delInspector('u1'));
+
+      expect(find.text('Borrador'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Continuar'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Descartar'), findsOneWidget);
+    });
+
+    testWidgets('descartar pide confirmación con lo que se pierde y lo manda al servidor', (tester) async {
+      final arnes = Arnes(sesion: sesionPrueba);
+      await abrir(tester, inventario: conBorrador(), viajes: delInspector('u1'), arnes: arnes);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Descartar'));
+      await asentar(tester);
+      expect(find.text('¿Descartar este informe?'), findsOneWidget);
+      expect(find.textContaining('Tiene 1 foto y 0 daños'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Descartar'));
+      await asentar(tester);
+
+      expect(arnes.inspecciones.descartados, ['b1']);
+      expect(find.textContaining('Informe descartado'), findsOneWidget);
+    });
+
+    // S8-HU-01.3 CA-4: los puestos de la niñera elegidos en el teléfono se sueltan también al descartar la acomodación.
+    testWidgets('descartar la acomodación suelta los puestos de la niñera guardados en el teléfono', (tester) async {
+      final json = conBorrador();
+      final etapa = (json['etapas'] as List<dynamic>).first as Map<String, dynamic>;
+      final inspecciones = etapa['inspecciones'] as List<dynamic>;
+      // La salida cerrada del fixture pasa a ser la llegada, y el borrador es la acomodación.
+      (inspecciones.first as Map<String, dynamic>)
+        ..['momento'] = 'llegada'
+        ..['momento_nombre'] = 'Inspección de llegada';
+      (inspecciones.last as Map<String, dynamic>)
+        ..['momento'] = 'salida'
+        ..['momento_nombre'] = 'Inspección de salida';
+      final arnes = Arnes(sesion: sesionPrueba);
+      final clave = clavePuestos(usuarioId: 'u1', viajeId: 'viaje-1');
+      arnes.puestos.guardados[clave] = {
+        'cambios': {'VIN00000000000001': 2},
+        'base': {'VIN00000000000001': null},
+      };
+      await abrir(tester, inventario: json, viajes: delInspector('u1'), arnes: arnes);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Descartar'));
+      await asentar(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Descartar'));
+      await asentar(tester);
+
+      expect(arnes.inspecciones.descartados, ['b1']);
+      expect(arnes.puestos.guardados, isNot(contains(clave)));
+    });
+
+    testWidgets('descartar la llegada no toca los puestos de la niñera', (tester) async {
+      final arnes = Arnes(sesion: sesionPrueba);
+      final clave = clavePuestos(usuarioId: 'u1', viajeId: 'viaje-1');
+      arnes.puestos.guardados[clave] = {
+        'cambios': {'VIN00000000000001': 2},
+        'base': {'VIN00000000000001': null},
+      };
+      await abrir(tester, inventario: conBorrador(), viajes: delInspector('u1'), arnes: arnes);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Descartar'));
+      await asentar(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Descartar'));
+      await asentar(tester);
+
+      expect(arnes.inspecciones.descartados, ['b1']);
+      expect(arnes.puestos.guardados, contains(clave));
+    });
+
+    testWidgets('cancelar no descarta nada', (tester) async {
+      final arnes = Arnes(sesion: sesionPrueba);
+      await abrir(tester, inventario: conBorrador(), viajes: delInspector('u1'), arnes: arnes);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Descartar'));
+      await asentar(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Cancelar'));
+      await asentar(tester);
+
+      expect(arnes.inspecciones.descartados, isEmpty);
+    });
+
+    testWidgets('si el servidor lo rechaza se ve su motivo, no un texto genérico', (tester) async {
+      final arnes = Arnes(sesion: sesionPrueba)
+        ..inspecciones.errorDescartar = errorApi(409, 'Este informe ya tiene una firma: es evidencia y no se descarta');
+      await abrir(tester, inventario: conBorrador(), viajes: delInspector('u1'), arnes: arnes);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Descartar'));
+      await asentar(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Descartar'));
+      await asentar(tester);
+
+      expect(find.text('No se pudo descartar'), findsOneWidget);
+      expect(find.text('Este informe ya tiene una firma: es evidencia y no se descarta'), findsOneWidget);
+    });
+
+    // Fallido y todo: desde la cola se reintenta, y continuarlo aquí subiría las mismas fotos dos veces.
+    testWidgets('mientras la cola de este teléfono lo tiene no se ofrece nada', (tester) async {
+      final arnes = Arnes(sesion: sesionPrueba);
+      await arnes.cola.agregar(InformeJob(
+        fallido: true,
+        id: 'j1',
+        etiqueta: 'Informe',
+        creadoEn: 1,
+        usuarioId: 'u1',
+        etapaId: 'e1',
+        momento: 'llegada',
+        fecha: '2026-01-02T09:00:00Z',
+        lat: 6.2,
+        lng: -75.5,
+        inspeccionId: 'b1',
+      ));
+      await abrir(tester, inventario: conBorrador(), viajes: delInspector('u1'), arnes: arnes);
+
+      expect(find.text('Borrador'), findsOneWidget);
+      expect(find.text('Continuar'), findsNothing);
+      expect(find.text('Descartar'), findsNothing);
+    });
+
+    testWidgets('con una firma en la etapa ya no se ofrece', (tester) async {
+      await abrir(tester, inventario: conBorrador(transferencia: firmaDeEntrega), viajes: delInspector('u1'));
+
+      expect(find.text('Continuar'), findsNothing);
+      expect(find.text('Descartar'), findsNothing);
+    });
+
+    testWidgets('el de otra persona, con el carro ahora mío, deja capturar de cero y lo dice', (tester) async {
+      await abrir(tester, inventario: conBorrador(autor: 'diana'), viajes: delInspector('u1'));
+
+      expect(find.text(avisoBorradorAjeno), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Capturar'), findsWidgets);
+      expect(find.text('Continuar'), findsNothing);
+      expect(find.text('Descartar'), findsNothing);
+    });
+
+    testWidgets('el de otra persona que todavía tiene el carro no ofrece nada', (tester) async {
+      await abrir(tester, inventario: conBorrador(autor: 'diana'), viajes: delInspector('diana'));
+
+      expect(find.text(avisoBorradorAjeno), findsNothing);
+      expect(find.text('Borrador'), findsOneWidget);
+      expect(find.text('Continuar'), findsNothing);
+    });
+
+    testWidgets('el coordinador de calidad lo descarta, pero no lo continúa', (tester) async {
+      await abrir(tester, inventario: conBorrador(autor: 'diana'), sesion: coordinador, viajes: delInspector('diana'));
+
+      expect(find.widgetWithText(OutlinedButton, 'Descartar'), findsOneWidget);
+      expect(find.text('Continuar'), findsNothing);
+    });
+  });
+  // S8-HU-06.2 CA-1 y CA-4: en el destino solo se revisa la llegada. La salida de antes se lee y no se corrige.
+  group('el descargue en la ficha', () {
+    Map<String, dynamic> conDescargue({List<Map<String, dynamic>> inspecciones = const []}) {
+      final json = inventarioJson();
+      (json['etapas'] as List<dynamic>).add({
+        'id': 'e3',
+        'orden': 3,
+        'proceso': 'descargue',
+        'lugar': 'Concesionario Norte',
+        'requiere_inspeccion': true,
+        'viaje_id': 'viaje-1',
+        'inspecciones': inspecciones,
+      });
+      return json;
+    }
+
+    Finder enElDescargue(Finder f) => find.descendant(
+          of: find.ancestor(of: find.text('Concesionario Norte'), matching: find.byType(Tarjeta)).first,
+          matching: f,
+        );
+
+    testWidgets('dibuja un solo momento: la llegada', (tester) async {
+      await abrir(tester, inventario: conDescargue());
+
+      expect(enElDescargue(find.text('Inspección de llegada')), findsOneWidget);
+      expect(enElDescargue(find.text('Inspección de salida')), findsNothing);
+    });
+
+    testWidgets('una salida de antes se ve en lectura, sin capturar ni corregir', (tester) async {
+      await abrir(
+        tester,
+        inventario: conDescargue(inspecciones: [
+          {
+            'id': 'd1',
+            'momento': 'salida',
+            'momento_nombre': 'Inspección de salida',
+            'fecha': '2026-01-09T10:00:00Z',
+            'cerrada_at': '2026-01-09T11:00:00Z',
+            'estado': 'cerrada',
+            'usuario_id': 'u1',
+            'hallazgos': <Map<String, dynamic>>[],
+            'evidencias': <Map<String, dynamic>>[],
+            'transferencia': null,
+          },
+        ]),
+      );
+
+      expect(enElDescargue(find.text('Inspección de salida')), findsOneWidget);
+      expect(find.text(avisoMomentoHistorico), findsWidgets);
+      // Es el último informe del carro: su tarjeta tampoco ofrece corregirlo.
+      expect(find.widgetWithText(OutlinedButton, 'Corregir'), findsNothing);
     });
   });
 }

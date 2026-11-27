@@ -124,6 +124,23 @@ void main() {
       expect(b!.mensaje, 'Falta la posición de la unidad ${_b.vin}');
     });
 
+    // En la salida de un carro solo se acomoda ese carro: primero se pide el suyo, y el de otro se pone en la niñera.
+    test('en la salida de un carro, primero su puesto; el de otro se pide desde la niñera', () {
+      BloqueoCierre? enLaDe(String vinPropio, Map<String, int> posiciones) => bloqueoDeCierre(
+            hayUbicacion: true,
+            fotos: [_foto()],
+            hallazgos: const [],
+            acomodacion: Acomodacion(vinPropio: vinPropio, unidades: const [_a, _b, _c], posiciones: posiciones, fotosMinimas: 1),
+          );
+
+      expect(enLaDe(_c.vin, {})!.mensaje, 'Falta la posición de la unidad ${_c.vin}');
+      expect(
+        enLaDe(_c.vin, {_c.vin: 1})!.mensaje,
+        'Falta la posición de la unidad ${_a.vin}: ponla desde la pantalla de la niñera',
+      );
+      expect(enLaDe(_c.vin, {_a.vin: 2, _b.vin: 3, _c.vin: 1}), isNull);
+    });
+
     test('con todas las posiciones faltan las fotos de la acomodación', () {
       final b = _bloqueo(unidades: [_a], posiciones: {_a.vin: 4}, minimas: 2, fotos: [_foto()]);
       expect(b!.mensaje, 'Faltan fotos de la acomodación: se exige al menos 2 y hay 1');
@@ -203,6 +220,45 @@ void main() {
         fotos: [_foto()],
         hallazgos: const [],
         acomodacion: Acomodacion(unidades: [_a, _b], posiciones: {_a.vin: 1}, fotosMinimas: 1),
+      );
+
+      expect(bloqueo, isA<FaltaPosicion>());
+    });
+  });
+
+  // S8-HU-03.2 CA-3: donde el lugar tiene muelles, el viaje necesita el suyo, con las palabras del servidor.
+  group('el muelle del viaje', () {
+    BloqueoCierre? conMuelle({required bool exige, String? muelleId}) => bloqueoDeCierre(
+          hayUbicacion: true,
+          fotos: [_foto()],
+          hallazgos: const [],
+          acomodacion: Acomodacion(
+            unidades: [_a],
+            posiciones: {_a.vin: 1},
+            fotosMinimas: 1,
+            exigeMuelle: exige,
+            muelleId: muelleId,
+          ),
+        );
+
+    test('falta el muelle donde hay muelles', () {
+      final bloqueo = conMuelle(exige: true);
+
+      expect(bloqueo, isA<FaltaMuelle>());
+      expect(bloqueo!.mensaje, 'Falta el muelle del viaje');
+    });
+
+    test('con el muelle asignado, o donde no hay muelles, no bloquea', () {
+      expect(conMuelle(exige: true, muelleId: 'm1'), isNull);
+      expect(conMuelle(exige: false), isNull);
+    });
+
+    test('el puesto que falta se dice antes que el muelle', () {
+      final bloqueo = bloqueoDeCierre(
+        hayUbicacion: true,
+        fotos: [_foto()],
+        hallazgos: const [],
+        acomodacion: Acomodacion(unidades: [_a], posiciones: const {}, fotosMinimas: 1, exigeMuelle: true),
       );
 
       expect(bloqueo, isA<FaltaPosicion>());

@@ -241,10 +241,9 @@ void main() {
       expect((cuerpo['clase_dano'], cuerpo['tamano_dano'], cuerpo['nivel_severidad']), ('golpe', '1_5cm', 'v2'));
     });
 
-    // El servidor exige los tres con `danado: true`, sin excepcion por rol. Un cuerpo con `danado` y sin nivel
-    // vuelve con 400, que no es transitorio: el job queda fallido con la inspeccion abierta. Por eso la pantalla
-    // no deja armar un dano sin nivel; si alguna vez llegara uno, aqui se ve que el cuerpo sale incompleto.
-    test('un dano sin nivel sale incompleto: es el cuerpo que el servidor rechaza', () async {
+    // S8-HU-08.2 CA-1: el conductor marca el extra danado con clase y tamano, sin nivel (lo pone quien califica). El
+    // cuerpo sale entonces sin `nivel_severidad`; con el inspector, que si lo elige, sale con los tres.
+    test('el dano del conductor sale sin nivel', () async {
       final adaptador = AdaptadorFalso((_) => json(201, {'id': 'x-1'}));
       final api = ClienteApi(baseUrl: 'https://api.test', token: () async => 'jwt', dio: Dio()..httpClientAdapter = adaptador);
 
@@ -256,7 +255,7 @@ void main() {
 
       final cuerpo = adaptador.peticiones.single.data as Map<String, dynamic>;
       expect(cuerpo['danado'], isTrue);
-      expect(cuerpo.containsKey('nivel_severidad'), isFalse, reason: 'el 400 vendria por este campo');
+      expect(cuerpo.containsKey('nivel_severidad'), isFalse, reason: 'el nivel lo pone quien califica');
     });
   });
 }

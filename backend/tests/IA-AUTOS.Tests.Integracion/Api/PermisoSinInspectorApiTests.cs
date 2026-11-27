@@ -263,6 +263,8 @@ public sealed class PermisoSinInspectorApiTests(clsBaseDatosFixture bd) : clsPru
         Assert.Equal(-75.5, delPermiso.GetProperty("solicitado_lng").GetDouble());
         Assert.Equal("Nombre coord@ejemplo.com", delPermiso.GetProperty("concedido_por_nombre").GetString());
         Assert.False(delPermiso.GetProperty("autorizado_por_tiempo").GetBoolean());
+        // El plazo con que nacio la solicitud (10 minutos con el parametro por defecto) viaja con el permiso.
+        Assert.Equal(delPermiso.GetProperty("solicitado_at").GetDateTimeOffset().AddMinutes(10), delPermiso.GetProperty("vence_at").GetDateTimeOffset());
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNovedadesProceso n JOIN dbo.tblPermisosSinInspector p ON p.Id = n.PermisoId WHERE p.ViajeId = @v", ("@v", e.Viaje)));
         // La auditoria: la solicitud, la concesion y la novedad con su permiso.
         Assert.Equal(1, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblAuditLog WHERE Accion = 'permiso_sin_inspector.solicitar' AND ViajeId = @v AND UsuarioId = @u", ("@v", e.Viaje), ("@u", e.Conductor.UsuarioId)));
@@ -564,5 +566,33 @@ public sealed class PermisoSinInspectorApiTests(clsBaseDatosFixture bd) : clsPru
         var enviado = Assert.Single(_push.Enviados);
         Assert.Equal("tk-coord", enviado.Token);
         Assert.Equal("Aviso alto", enviado.Mensaje.Titulo);
+    }
+
+    [Fact]
+    public async Task El_detalle_del_viaje_dice_el_estado_de_la_solicitud_sin_conceder_por_tiempo_y_solo_el_detalle_lo_trae()
+    {
+        var e = await EscenarioAsync();
+
+        // Sin solicitud el detalle lo dice (null) y la consulta del permiso sigue respondiendo 404.
+        var sinSolicitud = await JsonAsync(await Como(e.Coordinador).GetAsync($"/api/viajes/{e.Viaje}"));
+        Assert.Equal(JsonValueKind.Null, sinSolicitud.GetProperty("permiso_sin_inspector_estado").ValueKind);
+        Assert.Equal(HttpStatusCode.NotFound, (await Como(e.Coordinador).GetAsync($"/api/viajes/{e.Viaje}/permiso-sin-inspector")).StatusCode);
+
+        Assert.Equal(HttpStatusCode.Created, (await PedirAsync(e.Conductor, e.Viaje)).StatusCode);
+        Assert.Equal("pendiente", (await JsonAsync(await Como(e.Coordinador).GetAsync($"/api/viajes/{e.Viaje}"))).GetProperty("permiso_sin_inspector_estado").GetString());
+
+        // Con el plazo cumplido el detalle sigue diciendo lo guardado: no concede por tiempo; lo concede la consulta del permiso.
+        await EnvejecerPermisoAsync(e.Viaje, 11);
+        Assert.Equal("pendiente", (await JsonAsync(await Como(e.Coordinador).GetAsync($"/api/viajes/{e.Viaje}"))).GetProperty("permiso_sin_inspector_estado").GetString());
+        Assert.Equal("pendiente", await Sembrador.EscalarAsync("SELECT Estado FROM dbo.tblPermisosSinInspector WHERE ViajeId = @v", ("@v", e.Viaje)));
+        Assert.Equal(HttpStatusCode.OK, (await Como(e.Coordinador).GetAsync($"/api/viajes/{e.Viaje}/permiso-sin-inspector")).StatusCode);
+        Assert.Equal("concedido", (await JsonAsync(await Como(e.Coordinador).GetAsync($"/api/viajes/{e.Viaje}"))).GetProperty("permiso_sin_inspector_estado").GetString());
+
+        // Solo el detalle lo trae: «mis viajes» y la respuesta de una operacion sobre el viaje lo llevan nulo.
+        var mios = (await JsonAsync(await Como(e.Conductor).GetAsync("/api/viajes/mios"))).EnumerateArray().Single();
+        Assert.Equal(JsonValueKind.Null, mios.GetProperty("permiso_sin_inspector_estado").ValueKind);
+        var cambio = await Como(e.Coordinador).PatchAsync($"/api/viajes/{e.Viaje}", Cuerpo(new { placa = "XYZ987" }));
+        Assert.Equal(HttpStatusCode.OK, cambio.StatusCode);
+        Assert.Equal(JsonValueKind.Null, (await JsonAsync(cambio)).GetProperty("permiso_sin_inspector_estado").ValueKind);
     }
 }

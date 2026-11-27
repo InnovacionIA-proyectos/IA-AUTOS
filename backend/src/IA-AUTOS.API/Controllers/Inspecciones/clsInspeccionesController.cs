@@ -64,7 +64,9 @@ public sealed class clsInspeccionesController(clsInspeccionesService servicio, c
     /// <summary>
     /// Una pagina de informes <c>{items, total, pagina, tamano}</c> (mas recientes primero por defecto). Filtros: <c>vin</c>, <c>viaje_id</c>, <c>usuario_id</c>, <c>momento</c>, <c>estado</c>, <c>proceso</c>, <c>operacion</c>,
     /// <c>marca</c>, <c>cliente_id</c> (solo el super administrador elige otro), <c>origen_id</c>, <c>destino_id</c>, <c>desde</c> y <c>hasta</c>; <c>pagina</c>, <c>tamano</c> (50, maximo 200) y <c>orden</c> (<c>campo:asc|desc</c>).
-    /// Inspectores y conductores ven solo los informes de sus viajes.
+    /// Inspectores y conductores ven solo los informes de sus viajes. <c>estado=descartada</c> (solo, sin otro valor) pide los descartados: todos los del cliente para el coordinador de calidad, el administrador y el
+    /// super administrador, y solo los que hicieron ellos para el inspector y el conductor; el comercial recibe 403 y la exportacion a Excel lo rechaza con 400. Cada fila trae <c>usuario_rol</c> (el rol de quien hizo el informe)
+    /// y, en los descartados, <c>descartada_por_nombre</c> y <c>descartada_at</c>.
     /// </summary>
     [HttpGet]
     [ProducesResponseType<PaginaDto<InspeccionListadoDto>>(StatusCodes.Status200OK)]

@@ -230,11 +230,8 @@ void main() {
       );
     });
 
-    // Sin fijarlo al compilar queda nulo, y entonces manda el valor inicial que vive en la regla del informe.
-    test('el umbral de precisión es opcional', () {
-      expect(const Entorno(flavor: Flavor.dev, apiUrl: 'https://x').precisionBajaMetros, isNull);
-      expect(const Entorno(flavor: Flavor.dev, apiUrl: 'https://x', precisionBajaMetros: 50).precisionBajaMetros, 50);
-    });
+    // El umbral de precisión ya no se fija al compilar: lo trae el servidor (S8-HU-09.2 CA-1, ver
+    // test/core/parametros_app_test.dart).
   });
 
   group('pasarela', () {

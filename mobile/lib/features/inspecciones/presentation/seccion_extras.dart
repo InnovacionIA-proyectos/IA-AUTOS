@@ -20,17 +20,16 @@ typedef DatosExtra = ({String tipo, String nombre, String? textoOtro, String? ob
 /// El daño se pide aquí mismo y no en otra hoja encima: son tres fichas más, y partirlo en dos pasos dejaría un
 /// extra guardado a medias si se cancela el segundo.
 ///
-/// [puedeMarcarDano] en falso esconde el interruptor: es el caso del conductor. En el daño de un **extra** el
-/// servidor exige los tres —clase, tamaño y **nivel**— sin excepción por rol, al revés que en el daño de una
-/// zona, donde el conductor no manda nivel. Así que o se piden los tres o no se marca el daño; dejarlo a medias
-/// manda un cuerpo que el servidor rechaza con 400 y tumba el informe entero.
+/// [pideNivel] en falso es el caso del conductor (S8-HU-08.2 CA-1): marca el extra como dañado con la clase y el
+/// tamaño, y el nivel lo pone después quien califica. Es la misma regla del daño de una zona: el servidor le
+/// responde 400 si manda nivel. Al inspector y al administrador se les piden los tres.
 Future<DatosExtra?> pedirExtra(
   BuildContext context, {
   required List<ValorCatalogo> tipos,
   required List<ValorCatalogo> clases,
   required List<ValorCatalogo> tamanos,
   required List<ValorCatalogo> niveles,
-  bool puedeMarcarDano = true,
+  bool pideNivel = true,
 }) {
   return showModalBottomSheet<DatosExtra>(
     context: context,
@@ -41,7 +40,7 @@ Future<DatosExtra?> pedirExtra(
       clases: clases,
       tamanos: tamanos,
       niveles: niveles,
-      puedeMarcarDano: puedeMarcarDano,
+      pideNivel: pideNivel,
     ),
   );
 }
@@ -52,14 +51,14 @@ class _HojaExtra extends StatefulWidget {
     required this.clases,
     required this.tamanos,
     required this.niveles,
-    required this.puedeMarcarDano,
+    required this.pideNivel,
   });
 
   final List<ValorCatalogo> tipos;
   final List<ValorCatalogo> clases;
   final List<ValorCatalogo> tamanos;
   final List<ValorCatalogo> niveles;
-  final bool puedeMarcarDano;
+  final bool pideNivel;
 
   @override
   State<_HojaExtra> createState() => _EstadoHojaExtra();
@@ -91,8 +90,8 @@ class _EstadoHojaExtra extends State<_HojaExtra> {
     if (_danado) {
       if (_clase == null) return 'Elige la clase del daño.';
       if (_tamano == null) return 'Elige el tamaño del daño.';
-      // El nivel es obligatorio siempre: en un extra el servidor lo exige a todo el mundo.
-      if (_nivel == null) return 'Elige el nivel de severidad.';
+      // Al inspector se le exige el nivel; el conductor no lo pone.
+      if (widget.pideNivel && _nivel == null) return 'Elige el nivel de severidad.';
     }
     return null;
   }
@@ -107,7 +106,7 @@ class _EstadoHojaExtra extends State<_HojaExtra> {
       nombre: _esOtro ? 'Otro: $textoOtro' : widget.tipos.firstWhere((t) => t.codigo == _tipo).nombre,
       textoOtro: _esOtro ? textoOtro : null,
       observacion: observacion.isEmpty ? null : observacion,
-      dano: _danado ? DanoExtra(clase: _clase!, tamano: _tamano!, nivel: _nivel) : null,
+      dano: _danado ? DanoExtra(clase: _clase!, tamano: _tamano!, nivel: widget.pideNivel ? _nivel : null) : null,
     );
   }
 
@@ -163,24 +162,18 @@ class _EstadoHojaExtra extends State<_HojaExtra> {
                       const SizedBox(height: Espacio.md),
                       // El golpe de un platón es un golpe del carro: con sus tres datos cuenta en las
                       // estadísticas como cualquier otro. Sin ellos solo quedaba una foto y un texto.
-                      if (widget.puedeMarcarDano)
-                        SwitchListTile(
-                          value: _danado,
-                          onChanged: (v) => setState(() => _danado = v),
-                          title: const Text('Está dañado'),
-                          subtitle: Text(
-                            'Cuenta como un daño del carro. No se marca en el dibujo: el extra no tiene zona.',
-                            style: tema.bodySmall,
-                          ),
-                          contentPadding: EdgeInsets.zero,
-                        )
-                      else
-                        // El servidor exige el nivel para el daño de un extra, y el conductor no asigna niveles:
-                        // ofrecérselo sería dejarle armar un envío que vuelve rechazado.
-                        Text(
-                          'Si está dañado, dilo en la observación: el daño lo califica quien inspecciona.',
+                      SwitchListTile(
+                        value: _danado,
+                        onChanged: (v) => setState(() => _danado = v),
+                        title: const Text('Está dañado'),
+                        subtitle: Text(
+                          widget.pideNivel
+                              ? 'Cuenta como un daño del carro. No se marca en el dibujo: el extra no tiene zona.'
+                              : 'Di qué daño es y de qué tamaño. El nivel lo pone quien califica.',
                           style: tema.bodySmall,
                         ),
+                        contentPadding: EdgeInsets.zero,
+                      ),
                       if (_danado) ...[
                         const SizedBox(height: Espacio.sm),
                         GrupoDeOpciones(
@@ -196,7 +189,7 @@ class _EstadoHojaExtra extends State<_HojaExtra> {
                           elegido: _tamano,
                           alElegir: (codigo) => setState(() => _tamano = codigo),
                         ),
-                        if (widget.niveles.isNotEmpty) ...[
+                        if (widget.pideNivel && widget.niveles.isNotEmpty) ...[
                           const SizedBox(height: Espacio.lg),
                           GrupoDeOpciones(
                             titulo: 'Nivel de severidad',

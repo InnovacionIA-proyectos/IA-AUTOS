@@ -60,7 +60,7 @@ class SinCalificarPage extends ConsumerWidget {
           AsyncData(value: final novedades) when novedades.isEmpty => const EstadoMensaje(
               icono: Icons.check_circle_outline,
               colorIcono: Colores.exito,
-              titulo: 'Nada sin calificar',
+              titulo: 'No hay daños por calificar en este viaje',
               descripcion: 'Todos los daños de las unidades de este viaje ya tienen su clase y su nivel.',
             ),
           AsyncData(value: final novedades) => RefreshIndicator(
@@ -73,10 +73,8 @@ class SinCalificarPage extends ConsumerWidget {
                     ? Padding(
                         padding: const EdgeInsets.only(bottom: Espacio.sm),
                         child: Text(
-                          novedades.length == 1
-                              ? 'Falta calificar 1 daño. Lo registró el conductor: le falta la zona, la clase y el nivel.'
-                              : 'Faltan calificar ${novedades.length} daños. Los registró el conductor: les falta la '
-                                  'zona, la clase y el nivel.',
+                          // S8-HU-08.2 CA-2: solo cuántos faltan.
+                          novedades.length == 1 ? 'Falta calificar 1 daño' : 'Faltan calificar ${novedades.length} daños',
                           style: tema.bodySmall,
                         ),
                       )

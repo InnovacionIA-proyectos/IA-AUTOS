@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/config/parametros_app.dart';
 import '../core/tema/tema.dart';
 import '../features/catalogos/presentation/catalogos_controller.dart';
 import '../features/sync/presentation/sync_controller.dart';
@@ -18,6 +19,9 @@ class TrazaApp extends ConsumerWidget {
     // Y los catálogos, por lo mismo: así se descargan al abrir la app y al iniciar sesión, con señal, y no la
     // primera vez que alguien abre un VIN —que puede ser ya en el patio y sin cobertura—.
     ref.watch(catalogosControllerProvider);
+
+    // Y la copia de los parámetros que TI ajusta (S8-HU-09.2 CA-1): se pide al iniciar sesión y al volver la señal.
+    ref.watch(refrescoParametrosAppProvider);
 
     return MaterialApp.router(
       title: 'Traza Autos 360°',

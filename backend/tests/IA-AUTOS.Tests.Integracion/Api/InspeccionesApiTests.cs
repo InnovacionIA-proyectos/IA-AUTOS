@@ -1926,7 +1926,7 @@ public sealed class InspeccionesApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         var porFecha = Items(await ClonarAsync(await Cliente(coordinador.Token).GetAsync("/api/inspecciones?desde=2026-07-01T00:00:00Z&hasta=2026-07-31T00:00:00Z")));
 
         Assert.Equal(3, todas.GetArrayLength());
-        Assert.Equal(["iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre", "lugar", "codigo_mtrack", "unidad", "usuario_nombre"], todas[0].EnumerateObject().Select(p => p.Name).TakeLast(9).ToList());
+        Assert.Equal(["iniciada_at", "cerrada_at", "version", "corrige_inspeccion_id", "momento_nombre", "lugar", "codigo_mtrack", "unidad", "usuario_nombre", "usuario_rol", "descartada_por_nombre", "descartada_at"], todas[0].EnumerateObject().Select(p => p.Name).TakeLast(12).ToList());
         // El nombre de quien hizo cada informe sale en la fila, con el mismo patron del nombre del conductor.
         Assert.Equal("Nombre uno@ejemplo.com", todas.EnumerateArray().Single(i => i.GetProperty("id").GetGuid() == a).GetProperty("usuario_nombre").GetString());
         Assert.Equal("Nombre dos@ejemplo.com", todas.EnumerateArray().Single(i => i.GetProperty("id").GetGuid() == b).GetProperty("usuario_nombre").GetString());

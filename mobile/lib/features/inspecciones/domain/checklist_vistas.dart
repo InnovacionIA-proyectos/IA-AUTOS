@@ -56,8 +56,16 @@ extension FotosPorVista on List<FotoLocal> {
 }
 
 /// Qué vistas obligatorias siguen sin foto. Es la regla de cierre del servidor, comprobada antes de enviar.
-List<VistaChecklist> vistasObligatoriasSinFoto(List<VistaChecklist> checklist, List<FotoLocal> fotos) =>
-    [for (final vista in checklist) if (vista.obligatoria && fotos.deLaVista(vista.id).isEmpty) vista];
+/// [enElServidor] son las vistas que ya tienen su foto en el borrador del servidor que se está continuando.
+List<VistaChecklist> vistasObligatoriasSinFoto(
+  List<VistaChecklist> checklist,
+  List<FotoLocal> fotos, {
+  Set<String> enElServidor = const {},
+}) =>
+    [
+      for (final vista in checklist)
+        if (vista.obligatoria && fotos.deLaVista(vista.id).isEmpty && !enElServidor.contains(vista.id)) vista,
+    ];
 
 /// El momento no cambia el checklist: salida y llegada piden las mismas vistas.
 List<VistaChecklist> obligatoriasDe(List<VistaChecklist> checklist) => [...checklist.where((v) => v.obligatoria)];

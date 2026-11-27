@@ -36,6 +36,33 @@ final ubicacionActualProvider = FutureProvider.autoDispose<Posicion?>((ref) asyn
   }
 });
 
+/// Cuánto se espera una lectura nueva del GPS al guardar. Corto: quien está en la vía no puede quedarse mirando la
+/// pantalla, y sin lectura la novedad del viaje se envía igual, sin ubicación.
+const esperaDelGps = Duration(seconds: 8);
+
+/// El GPS de **este** momento, para lo que se guarda ahora (S8-HU-07.3 CA-2, ESC-04 y ESC-05).
+///
+/// [ubicacionActualProvider] se lee una vez y solo se renueva al encender el GPS o con «Reintentar»; en «Mis viajes»
+/// queda viva toda la jornada, así que una novedad de las 14:05 podía salir con la posición de las 08:00 en otro
+/// sitio. Por eso [conocida] solo vale si es del momento ([Posicion.delMomento]); si no, se pide una lectura nueva
+/// con un límite de [limite]. Null si no llega a tiempo o el GPS no está disponible.
+Future<Posicion?> posicionDelMomento(
+  ServicioUbicacion servicio, {
+  Posicion? conocida,
+  Duration limite = esperaDelGps,
+}) async {
+  if (conocida != null && conocida.delMomento()) return conocida;
+  try {
+    return await servicio.obtenerActual().timeout(limite);
+  } catch (_) {
+    // Sin permiso, con el GPS apagado o sin lectura a tiempo: quien llama decide qué hacer sin ubicación.
+    return null;
+  }
+}
+
+/// Lo que se le dice a quien toca «Llegué» sin una lectura del GPS de ese momento: el servidor exige la ubicación.
+const mensajeLlegadaSinGps = 'No se pudo tomar la ubicación de este momento: espera la señal del GPS e inténtalo de nuevo.';
+
 /// Lo que el conductor hace con cada unidad de su viaje en ruta: reportar una novedad y confirmar que llegó.
 ///
 /// Las dos acciones van por la cola: sin señal se guardan con su fecha y su lugar y se envían al volver.
@@ -74,16 +101,23 @@ class AccionesConductor extends ConsumerWidget {
         if (!_llego) ...[
           const SizedBox(height: Espacio.sm),
           // El botón grande de la pantalla del conductor: una acción por pantalla y con un dedo que puede ir con guante.
+          // S8-HU-07.3 CA-5: grises, no escondidos, mientras el servidor diga que todavía no se puede registrar la ruta
+          // de este carro; el motivo va debajo. Se pintan con el dato del viaje, sin preguntarle a nadie.
           OutlinedButton(
-            onPressed: () => _reportarNovedad(context, ref),
+            onPressed: unidad.rutaBloqueada ? null : () => _reportarNovedad(context, ref),
             child: const Text('Reportar novedad'),
           ),
           const SizedBox(height: Espacio.sm),
           FilledButton(
-            onPressed: gps == null ? null : () => _llegue(context, ref, gps),
+            onPressed: gps == null || unidad.rutaBloqueada ? null : () => _llegue(context, ref, gps),
             child: const Text('Llegué'),
           ),
-          if (gps == null)
+          if (unidad.rutaBloqueada)
+            Padding(
+              padding: const EdgeInsets.only(top: Espacio.xs),
+              child: Text(textoSinRuta(unidad.motivoSinRuta), style: tema.bodySmall?.copyWith(color: Colores.advertencia)),
+            )
+          else if (gps == null)
             Padding(
               padding: const EdgeInsets.only(top: Espacio.xs),
               child: Row(
@@ -100,7 +134,7 @@ class AccionesConductor extends ConsumerWidget {
     );
   }
 
-  Future<void> _llegue(BuildContext context, WidgetRef ref, Posicion posicion) async {
+  Future<void> _llegue(BuildContext context, WidgetRef ref, Posicion ultima) async {
     final tieneNovedades = unidad.novedades > 0 || unidad.estadoTransporte == EstadoTransporte.conNovedad;
     final confirmar = await showDialog<bool>(
       context: context,
@@ -121,16 +155,27 @@ class AccionesConductor extends ConsumerWidget {
     if (confirmar != true || !context.mounted) return;
     final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
     if (usuarioId == null) return;
-    // La fecha y el lugar son los de ahora, que es cuando llegó: el envío puede salir horas después.
+    // La fecha y el lugar son los de ahora, que es cuando llegó: el envío puede salir horas después. El lugar que
+    // habilitó el botón puede ser de horas antes y de otro sitio; si no es de este momento se pide uno nuevo, y sin él
+    // no se envía, porque el servidor exige la ubicación de la llegada y otra cualquiera diría una llegada falsa.
+    final momento = DateTime.now();
+    final mensajes = ScaffoldMessenger.of(context);
+    final posicion = await posicionDelMomento(ref.read(servicioUbicacionProvider), conocida: ultima);
+    if (!context.mounted) return;
+    if (posicion == null) {
+      ref.invalidate(ubicacionActualProvider);
+      mensajes.showSnackBar(const SnackBar(content: Text(mensajeLlegadaSinGps)));
+      return;
+    }
     final jobId = const Uuid().v4();
     await ref.read(colaRepositorioProvider).agregar(LlegadaJob(
           id: jobId,
           etiqueta: 'Llegada ${unidad.vin}',
-          creadoEn: DateTime.now().millisecondsSinceEpoch,
+          creadoEn: momento.millisecondsSinceEpoch,
           usuarioId: usuarioId,
           viajeId: viaje.id,
           vin: unidad.vin,
-          fecha: DateTime.now().toUtc().toIso8601String(),
+          fecha: momento.toUtc().toIso8601String(),
           lat: posicion.lat,
           lng: posicion.lng,
         ));

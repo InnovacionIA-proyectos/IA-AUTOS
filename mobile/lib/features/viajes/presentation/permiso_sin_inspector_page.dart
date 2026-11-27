@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errores/error_api.dart';
 import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
+import '../../sync/presentation/sync_controller.dart';
 import '../domain/permiso_sin_inspector.dart';
 import '../providers.dart';
 
@@ -15,17 +16,36 @@ import '../providers.dart';
 /// avanza igual con la pantalla cerrada, la app en segundo plano o el teléfono apagado.
 const refrescoPermiso = Duration(seconds: 20);
 
+/// Cuánto se deja de ofrecer «Continuar el cargue» tras un «espere» del servidor con la cuenta en cero
+/// (S8-HU-09.2 CA-2). La cuenta la lleva el reloj del teléfono: si va adelantado, el teléfono dice cero y el servidor
+/// todavía no; volver a ofrecer seguir solo repetiría el mismo rechazo. Pasado esto, o con el permiso ya concedido
+/// por el servidor, se vuelve a ofrecer.
+const margenTrasRechazo = Duration(minutes: 2);
+
 /// La espera del permiso de la excepción «No hay inspector», en un punto de cargue que sí tiene inspectores.
 ///
 /// Enseña cuánto falta para que lo conceda el reloj y dice las dos salidas que tiene la espera: que responda un
 /// coordinador o que venza el plazo. Concedido, de aquí se sigue al cargue sin volver a preguntar el motivo.
 class PermisoSinInspectorPage extends ConsumerStatefulWidget {
-  const PermisoSinInspectorPage({super.key, required this.viajeId, required this.alContinuar});
+  const PermisoSinInspectorPage({
+    super.key,
+    required this.viajeId,
+    required this.alContinuar,
+    this.enLaLlegada = false,
+    this.trasRechazo = false,
+  });
 
   final String viajeId;
 
-  /// Qué hacer cuando el permiso ya está concedido: seguir con la salida del cargue, con el motivo que se pidió.
+  /// Se abre porque el servidor acaba de responder que espere, con lo capturado ya en la cola (S8-HU-09.2 CA-2).
+  final bool trasRechazo;
+
+  /// Qué hacer cuando el permiso ya está concedido: seguir con la revisión del cargue, con el motivo que se pidió.
   final void Function(PermisoSinInspector permiso) alContinuar;
+
+  /// Se abrió desde la llegada del cargue (S8-HU-07.3 CA-7): los textos hablan de esa revisión, la misma que en la
+  /// ficha dice «Capturar», y no de la salida.
+  final bool enLaLlegada;
 
   @override
   ConsumerState<PermisoSinInspectorPage> createState() => _EstadoPermisoSinInspector();
@@ -36,6 +56,9 @@ class _EstadoPermisoSinInspector extends ConsumerState<PermisoSinInspectorPage> 
 
   /// El segundero de la cuenta atrás. Solo mueve lo que se ve; lo que decide es lo que responde el servidor.
   DateTime _ahora = DateTime.now();
+
+  /// Cuándo se abrió: tras un rechazo, de aquí se cuenta [margenTrasRechazo].
+  final DateTime _abierta = DateTime.now();
 
   @override
   void initState() {
@@ -66,6 +89,9 @@ class _EstadoPermisoSinInspector extends ConsumerState<PermisoSinInspectorPage> 
   @override
   Widget build(BuildContext context) {
     final permiso = ref.watch(permisoSinInspectorProvider(widget.viajeId));
+    final retenido = widget.trasRechazo && _ahora.difference(_abierta) < margenTrasRechazo;
+    // Cuándo vuelve a salir solo lo que quedó en la cola: es lo que se le dice a quien espera tras el rechazo.
+    final proximoIntento = widget.trasRechazo ? ref.watch(syncControllerProvider.select((s) => s.proximoIntento)) : null;
     return Scaffold(
       appBar: AppBar(title: const Text('Permiso para el cargue')),
       body: SafeArea(
@@ -79,12 +105,21 @@ class _EstadoPermisoSinInspector extends ConsumerState<PermisoSinInspectorPage> 
             accion: FilledButton(onPressed: _refrescar, child: const Text('Reintentar')),
           ),
           data: (p) => p == null
-              ? const EstadoMensaje(
+              ? EstadoMensaje(
                   icono: Icons.hourglass_disabled_outlined,
                   titulo: 'Todavía no hay una solicitud',
-                  descripcion: 'Vuelve a la ficha del vehículo y pide el permiso desde la salida del cargue.',
+                  descripcion: 'Vuelve a la ficha del vehículo y pide el permiso desde la '
+                      '${widget.enLaLlegada ? 'llegada' : 'salida'} del cargue.',
                 )
-              : _Contenido(permiso: p, ahora: _ahora, alRefrescar: _refrescar, alContinuar: widget.alContinuar),
+              : _Contenido(
+                  permiso: p,
+                  ahora: _ahora,
+                  alRefrescar: _refrescar,
+                  alContinuar: widget.alContinuar,
+                  enLaLlegada: widget.enLaLlegada,
+                  retenido: retenido,
+                  proximoIntento: proximoIntento,
+                ),
         ),
       ),
     );
@@ -92,12 +127,35 @@ class _EstadoPermisoSinInspector extends ConsumerState<PermisoSinInspectorPage> 
 }
 
 class _Contenido extends StatelessWidget {
-  const _Contenido({required this.permiso, required this.ahora, required this.alRefrescar, required this.alContinuar});
+  const _Contenido({
+    required this.permiso,
+    required this.ahora,
+    required this.alRefrescar,
+    required this.alContinuar,
+    this.enLaLlegada = false,
+    this.retenido = false,
+    this.proximoIntento,
+  });
 
   final PermisoSinInspector permiso;
   final DateTime ahora;
   final VoidCallback alRefrescar;
   final void Function(PermisoSinInspector permiso) alContinuar;
+  final bool enLaLlegada;
+
+  /// El servidor acaba de decir que espere: con la cuenta en cero no se ofrece seguir hasta que lo conceda él o pase
+  /// [margenTrasRechazo].
+  final bool retenido;
+
+  /// Cuándo la cola vuelve a intentarlo sola. Null si no hay nada programado (sin señal).
+  final DateTime? proximoIntento;
+
+  /// «El servidor aún no lo concede; se reintenta solo en 45 s.»
+  String get _textoDelReintento => switch (proximoIntento?.difference(ahora)) {
+        null => 'El servidor aún no lo concede; se reintenta solo en cuanto haya señal.',
+        final f when f <= Duration.zero => 'El servidor aún no lo concede; se reintenta solo en un momento.',
+        final f => 'El servidor aún no lo concede; se reintenta solo en ${reloj(f)}.',
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -153,7 +211,8 @@ class _Contenido extends StatelessWidget {
         const SizedBox(height: Espacio.lg),
         FilledButton(
           onPressed: () => alContinuar(permiso),
-          child: const Text('Continuar el cargue'),
+          // El mismo texto que el botón de ese momento en la ficha (`etiquetaExcepcion`).
+          child: Text(enLaLlegada ? 'Capturar' : 'Continuar el cargue'),
         ),
         const SizedBox(height: Espacio.sm),
         Text(
@@ -164,7 +223,7 @@ class _Contenido extends StatelessWidget {
 
   List<Widget> _esperando(BuildContext context, TextTheme tema) {
     final falta = permiso.faltaPara(ahora);
-    final vencido = falta == Duration.zero;
+    final vencido = permiso.vencido(ahora);
     return [
       Semantics(
         liveRegion: true,
@@ -176,7 +235,7 @@ class _Contenido extends StatelessWidget {
               const SizedBox(height: Espacio.xs),
               Text(
                 vencido
-                    ? 'Ya se cumplió el plazo: el permiso se concede de un momento a otro.'
+                    ? 'Ya se cumplió el plazo: el permiso se concede por tiempo al seguir con el cargue.'
                     : 'Faltan ${reloj(falta)} para que se conceda por tiempo.',
                 style: tema.titleLarge,
               ),
@@ -191,6 +250,19 @@ class _Contenido extends StatelessWidget {
         ),
       ),
       const SizedBox(height: Espacio.lg),
+      // S8-HU-09.2 CA-2: en cero ya se sigue, sin esperar a ver el permiso concedido: el servidor lo concede en la
+      // misma petición que crea la salida del cargue (ESC-03). Si aun así respondiera que espere, la captura vuelve a
+      // traer esta pantalla y lo capturado queda en la cola.
+      if (vencido && retenido) ...[
+        Semantics(
+          liveRegion: true,
+          child: Text(_textoDelReintento, style: tema.bodyMedium?.copyWith(color: Colores.advertencia)),
+        ),
+        const SizedBox(height: Espacio.sm),
+      ] else if (vencido) ...[
+        FilledButton(onPressed: () => alContinuar(permiso), child: const Text('Continuar el cargue')),
+        const SizedBox(height: Espacio.sm),
+      ],
       OutlinedButton(onPressed: alRefrescar, child: const Text('Actualizar')),
       const SizedBox(height: Espacio.sm),
       Text(

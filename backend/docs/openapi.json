@@ -3,7 +3,7 @@
   "info": {
     "title": "IA-AUTOS API",
     "description": "Traza Autos 360 / Inventario Visual por VIN. Autenticacion con JWT Bearer. Todo va en snake_case; las unicas excepciones en camelCase son el cuerpo de login-portal (lo fija el portal), la respuesta de la ingesta Sofasa y el endpoint /api/metricas/rechazo. La guia para pasar de la version 1 a la 2 esta en docs/migracion-v1-v2.md.",
-    "version": "3.29.0"
+    "version": "3.33.0"
   },
   "paths": {
     "/api/viajes": {
@@ -716,7 +716,32 @@
                             "created_at": "2026-10-22T14:30:00.000Z"
                           }
                         ],
-                        "lugar_cargue_admite_sin_inspector": true
+                        "lugar_cargue_admite_sin_inspector": true,
+                        "cargue_ninera": {
+                          "recibidos": 1,
+                          "reservas": [],
+                          "entrega": {
+                            "nombre": "Nombre de ejemplo",
+                            "firmada_at": "2026-10-22T14:30:00.000Z",
+                            "firma": "texto"
+                          },
+                          "recibe": {
+                            "nombre": "Nombre de ejemplo",
+                            "firmada_at": "2026-10-22T14:30:00.000Z",
+                            "firma": "texto"
+                          },
+                          "constancia": {
+                            "parte": "texto",
+                            "motivo": "Mensaje de ejemplo",
+                            "testigo_nombre": "texto",
+                            "foto": null,
+                            "momento": "2026-10-22T14:30:00.000Z",
+                            "lat": 4.6097,
+                            "lng": -74.0817
+                          },
+                          "carros_sin_firma": 1
+                        },
+                        "permiso_sin_inspector_estado": "texto"
                       }
                     ]
                   ],
@@ -852,7 +877,32 @@
                             "created_at": "2026-10-22T14:30:00.000Z"
                           }
                         ],
-                        "lugar_cargue_admite_sin_inspector": true
+                        "lugar_cargue_admite_sin_inspector": true,
+                        "cargue_ninera": {
+                          "recibidos": 1,
+                          "reservas": [],
+                          "entrega": {
+                            "nombre": "Nombre de ejemplo",
+                            "firmada_at": "2026-10-22T14:30:00.000Z",
+                            "firma": "texto"
+                          },
+                          "recibe": {
+                            "nombre": "Nombre de ejemplo",
+                            "firmada_at": "2026-10-22T14:30:00.000Z",
+                            "firma": "texto"
+                          },
+                          "constancia": {
+                            "parte": "texto",
+                            "motivo": "Mensaje de ejemplo",
+                            "testigo_nombre": "texto",
+                            "foto": null,
+                            "momento": "2026-10-22T14:30:00.000Z",
+                            "lat": 4.6097,
+                            "lng": -74.0817
+                          },
+                          "carros_sin_firma": 1
+                        },
+                        "permiso_sin_inspector_estado": "texto"
                       }
                     ]
                   ],
@@ -988,7 +1038,32 @@
                             "created_at": "2026-10-22T14:30:00.000Z"
                           }
                         ],
-                        "lugar_cargue_admite_sin_inspector": true
+                        "lugar_cargue_admite_sin_inspector": true,
+                        "cargue_ninera": {
+                          "recibidos": 1,
+                          "reservas": [],
+                          "entrega": {
+                            "nombre": "Nombre de ejemplo",
+                            "firmada_at": "2026-10-22T14:30:00.000Z",
+                            "firma": "texto"
+                          },
+                          "recibe": {
+                            "nombre": "Nombre de ejemplo",
+                            "firmada_at": "2026-10-22T14:30:00.000Z",
+                            "firma": "texto"
+                          },
+                          "constancia": {
+                            "parte": "texto",
+                            "motivo": "Mensaje de ejemplo",
+                            "testigo_nombre": "texto",
+                            "foto": null,
+                            "momento": "2026-10-22T14:30:00.000Z",
+                            "lat": 4.6097,
+                            "lng": -74.0817
+                          },
+                          "carros_sin_firma": 1
+                        },
+                        "permiso_sin_inspector_estado": "texto"
                       }
                     ]
                   ],
@@ -27297,6 +27372,105 @@
           }
         }
       },
+      "CargueNineraDelViajeDto": {
+        "examples": [
+          {
+            "recibidos": 1,
+            "reservas": [
+              {
+                "vin": "9FBHSR4E8PM000001",
+                "observaciones": "texto"
+              }
+            ],
+            "entrega": {
+              "nombre": "Nombre de ejemplo",
+              "firmada_at": "2026-10-22T14:30:00.000Z",
+              "firma": "texto"
+            },
+            "recibe": {
+              "nombre": "Nombre de ejemplo",
+              "firmada_at": "2026-10-22T14:30:00.000Z",
+              "firma": "texto"
+            },
+            "constancia": {
+              "parte": "texto",
+              "motivo": "Mensaje de ejemplo",
+              "testigo_nombre": "texto",
+              "foto": {
+                "sello_fecha": "2026-10-22T14:30:00.000Z",
+                "sello_lat": 1.5,
+                "sello_lng": 1.5,
+                "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                "url_expira_at": "2026-10-22T14:30:00.000Z",
+                "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "precision": 1.5,
+                "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "sin_ubicacion": true,
+                "ruta_archivo": "texto"
+              },
+              "momento": "2026-10-22T14:30:00.000Z",
+              "lat": 4.6097,
+              "lng": -74.0817
+            },
+            "carros_sin_firma": 1
+          }
+        ],
+        "required": [
+          "recibidos",
+          "reservas",
+          "entrega",
+          "recibe",
+          "constancia",
+          "carros_sin_firma"
+        ],
+        "type": "object",
+        "properties": {
+          "recibidos": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "reservas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReservaDelCargueDto"
+            }
+          },
+          "entrega": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FirmaDeLaNineraDto"
+              }
+            ]
+          },
+          "recibe": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FirmaDeLaNineraDto"
+              }
+            ]
+          },
+          "constancia": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConstanciaDelCargueDto"
+              }
+            ]
+          },
+          "carros_sin_firma": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "CargueNineraDto": {
         "examples": [
           {
@@ -28119,6 +28293,84 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "ConstanciaDelCargueDto": {
+        "examples": [
+          {
+            "parte": "texto",
+            "motivo": "Mensaje de ejemplo",
+            "testigo_nombre": "texto",
+            "foto": {
+              "sello_fecha": "2026-10-22T14:30:00.000Z",
+              "sello_lat": 1.5,
+              "sello_lng": 1.5,
+              "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+              "url_expira_at": "2026-10-22T14:30:00.000Z",
+              "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "precision": 1.5,
+              "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "sin_ubicacion": true,
+              "ruta_archivo": "texto"
+            },
+            "momento": "2026-10-22T14:30:00.000Z",
+            "lat": 4.6097,
+            "lng": -74.0817
+          }
+        ],
+        "required": [
+          "parte",
+          "motivo",
+          "testigo_nombre",
+          "foto",
+          "momento",
+          "lat",
+          "lng"
+        ],
+        "type": "object",
+        "properties": {
+          "parte": {
+            "type": "string"
+          },
+          "motivo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "testigo_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "foto": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FotoNovedadViajeDto"
+              }
+            ]
+          },
+          "momento": {
+            "format": "date-time"
+          },
+          "lat": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "lng": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
           }
         }
       },
@@ -29112,9 +29364,11 @@
                   "evidencia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                   "marcado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
                   "marcado_por_nombre": "texto",
-                  "motivo": "Mensaje de ejemplo"
+                  "motivo": "Mensaje de ejemplo",
+                  "foto": null
                 },
-                "entregada_sin_inspector_del_punto": true
+                "entregada_sin_inspector_del_punto": true,
+                "fotos_cierre": []
               }
             ],
             "lugar_tiene_inspector": true,
@@ -29376,9 +29630,35 @@
               "evidencia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
               "marcado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
               "marcado_por_nombre": "texto",
-              "motivo": "Mensaje de ejemplo"
+              "motivo": "Mensaje de ejemplo",
+              "foto": {
+                "sello_fecha": "2026-10-22T14:30:00.000Z",
+                "sello_lat": 1.5,
+                "sello_lng": 1.5,
+                "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                "url_expira_at": "2026-10-22T14:30:00.000Z",
+                "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "precision": 1.5,
+                "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "sin_ubicacion": true,
+                "ruta_archivo": "texto"
+              }
             },
-            "entregada_sin_inspector_del_punto": true
+            "entregada_sin_inspector_del_punto": true,
+            "fotos_cierre": [
+              {
+                "sello_fecha": "2026-10-22T14:30:00.000Z",
+                "sello_lat": 1.5,
+                "sello_lng": 1.5,
+                "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                "url_expira_at": "2026-10-22T14:30:00.000Z",
+                "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "precision": 1.5,
+                "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "sin_ubicacion": true,
+                "ruta_archivo": "texto"
+              }
+            ]
           }
         ],
         "required": [
@@ -29507,6 +29787,15 @@
           "entregada_sin_inspector_del_punto": {
             "type": "boolean",
             "default": false
+          },
+          "fotos_cierre": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/FotoNovedadViajeDto"
+            }
           }
         }
       },
@@ -30240,6 +30529,38 @@
           }
         }
       },
+      "FirmaDeLaNineraDto": {
+        "examples": [
+          {
+            "nombre": "Nombre de ejemplo",
+            "firmada_at": "2026-10-22T14:30:00.000Z",
+            "firma": "texto"
+          }
+        ],
+        "required": [
+          "nombre",
+          "firmada_at",
+          "firma"
+        ],
+        "type": "object",
+        "properties": {
+          "nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "firmada_at": {
+            "format": "date-time"
+          },
+          "firma": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "FirmanteDto": {
         "examples": [
           {
@@ -30588,11 +30909,17 @@
             "format": "date-time"
           },
           "sello_lat": {
-            "type": "number",
+            "type": [
+              "null",
+              "number"
+            ],
             "format": "double"
           },
           "sello_lng": {
-            "type": "number",
+            "type": [
+              "null",
+              "number"
+            ],
             "format": "double"
           },
           "url": {
@@ -32455,7 +32782,8 @@
                   "solicitado_lng": 1.5,
                   "concedido_por_nombre": "texto",
                   "concedido_at": "2026-10-22T14:30:00.000Z",
-                  "autorizado_por_tiempo": true
+                  "autorizado_por_tiempo": true,
+                  "vence_at": "2026-10-22T14:30:00.000Z"
                 }
               }
             ],
@@ -32949,7 +33277,8 @@
                   "solicitado_lng": 1.5,
                   "concedido_por_nombre": "texto",
                   "concedido_at": "2026-10-22T14:30:00.000Z",
-                  "autorizado_por_tiempo": true
+                  "autorizado_por_tiempo": true,
+                  "vence_at": "2026-10-22T14:30:00.000Z"
                 }
               }
             ]
@@ -33116,7 +33445,10 @@
             "lugar": "texto",
             "codigo_mtrack": "MTK-0001",
             "unidad": "texto",
-            "usuario_nombre": "texto"
+            "usuario_nombre": "texto",
+            "usuario_rol": "texto",
+            "descartada_por_nombre": "texto",
+            "descartada_at": "2026-10-22T14:30:00.000Z"
           }
         ],
         "required": [
@@ -33263,7 +33595,20 @@
               "null",
               "string"
             ]
-          }
+          },
+          "usuario_rol": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "descartada_por_nombre": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "descartada_at": {}
         }
       },
       "InventarioDto": {
@@ -33301,7 +33646,13 @@
                   "vin_reemplazo": "texto"
                 },
                 "inspecciones": [],
-                "posicion": 1
+                "posicion": 1,
+                "bajado": {
+                  "motivo": "Mensaje de ejemplo",
+                  "bajado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "bajado_por_nombre": "texto",
+                  "fecha": "2026-10-22T14:30:00.000Z"
+                }
               }
             ],
             "novedades": 1,
@@ -33472,7 +33823,13 @@
                 "extras": []
               }
             ],
-            "posicion": 1
+            "posicion": 1,
+            "bajado": {
+              "motivo": "Mensaje de ejemplo",
+              "bajado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "bajado_por_nombre": "texto",
+              "fecha": "2026-10-22T14:30:00.000Z"
+            }
           }
         ],
         "required": [
@@ -33544,6 +33901,16 @@
               "integer"
             ],
             "format": "int32"
+          },
+          "bajado": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/BajadoDto"
+              }
+            ]
           }
         }
       },
@@ -33696,7 +34063,8 @@
                   "solicitado_lng": 1.5,
                   "concedido_por_nombre": "texto",
                   "concedido_at": "2026-10-22T14:30:00.000Z",
-                  "autorizado_por_tiempo": true
+                  "autorizado_por_tiempo": true,
+                  "vence_at": "2026-10-22T14:30:00.000Z"
                 }
               }
             ],
@@ -35210,7 +35578,8 @@
               "solicitado_lng": 1.5,
               "concedido_por_nombre": "texto",
               "concedido_at": "2026-10-22T14:30:00.000Z",
-              "autorizado_por_tiempo": true
+              "autorizado_por_tiempo": true,
+              "vence_at": "2026-10-22T14:30:00.000Z"
             }
           }
         ],
@@ -35393,7 +35762,8 @@
               "solicitado_lng": 1.5,
               "concedido_por_nombre": "texto",
               "concedido_at": "2026-10-22T14:30:00.000Z",
-              "autorizado_por_tiempo": true
+              "autorizado_por_tiempo": true,
+              "vence_at": "2026-10-22T14:30:00.000Z"
             }
           }
         ],
@@ -35864,7 +36234,10 @@
                 "lugar": "texto",
                 "codigo_mtrack": "MTK-0001",
                 "unidad": "texto",
-                "usuario_nombre": "texto"
+                "usuario_nombre": "texto",
+                "usuario_rol": "texto",
+                "descartada_por_nombre": "texto",
+                "descartada_at": "2026-10-22T14:30:00.000Z"
               }
             ],
             "total": 1,
@@ -36682,7 +37055,8 @@
             "solicitado_lng": 1.5,
             "concedido_por_nombre": "texto",
             "concedido_at": "2026-10-22T14:30:00.000Z",
-            "autorizado_por_tiempo": true
+            "autorizado_por_tiempo": true,
+            "vence_at": "2026-10-22T14:30:00.000Z"
           }
         ],
         "required": [
@@ -36730,7 +37104,8 @@
           },
           "autorizado_por_tiempo": {
             "type": "boolean"
-          }
+          },
+          "vence_at": {}
         }
       },
       "PermisoSinInspectorDto": {
@@ -37090,7 +37465,19 @@
             "evidencia_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "marcado_por": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
             "marcado_por_nombre": "texto",
-            "motivo": "Mensaje de ejemplo"
+            "motivo": "Mensaje de ejemplo",
+            "foto": {
+              "sello_fecha": "2026-10-22T14:30:00.000Z",
+              "sello_lat": 1.5,
+              "sello_lng": 1.5,
+              "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+              "url_expira_at": "2026-10-22T14:30:00.000Z",
+              "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "precision": 1.5,
+              "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "sin_ubicacion": true,
+              "ruta_archivo": "texto"
+            }
           }
         ],
         "required": [
@@ -37125,6 +37512,16 @@
           },
           "motivo": {
             "type": "string"
+          },
+          "foto": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/FotoNovedadViajeDto"
+              }
+            ]
           }
         }
       },
@@ -37884,6 +38281,27 @@
               "string"
             ],
             "format": "uuid"
+          }
+        }
+      },
+      "ReservaDelCargueDto": {
+        "examples": [
+          {
+            "vin": "9FBHSR4E8PM000001",
+            "observaciones": "texto"
+          }
+        ],
+        "required": [
+          "vin",
+          "observaciones"
+        ],
+        "type": "object",
+        "properties": {
+          "vin": {
+            "type": "string"
+          },
+          "observaciones": {
+            "type": "string"
           }
         }
       },
@@ -39395,7 +39813,8 @@
                   "solicitado_lng": 1.5,
                   "concedido_por_nombre": "texto",
                   "concedido_at": "2026-10-22T14:30:00.000Z",
-                  "autorizado_por_tiempo": true
+                  "autorizado_por_tiempo": true,
+                  "vence_at": "2026-10-22T14:30:00.000Z"
                 }
               }
             ],
@@ -39477,7 +39896,48 @@
                 "created_at": "2026-10-22T14:30:00.000Z"
               }
             ],
-            "lugar_cargue_admite_sin_inspector": true
+            "lugar_cargue_admite_sin_inspector": true,
+            "cargue_ninera": {
+              "recibidos": 1,
+              "reservas": [
+                {
+                  "vin": "9FBHSR4E8PM000001",
+                  "observaciones": "texto"
+                }
+              ],
+              "entrega": {
+                "nombre": "Nombre de ejemplo",
+                "firmada_at": "2026-10-22T14:30:00.000Z",
+                "firma": "texto"
+              },
+              "recibe": {
+                "nombre": "Nombre de ejemplo",
+                "firmada_at": "2026-10-22T14:30:00.000Z",
+                "firma": "texto"
+              },
+              "constancia": {
+                "parte": "texto",
+                "motivo": "Mensaje de ejemplo",
+                "testigo_nombre": "texto",
+                "foto": {
+                  "sello_fecha": "2026-10-22T14:30:00.000Z",
+                  "sello_lat": 1.5,
+                  "sello_lng": 1.5,
+                  "url": "/api/uploads/ejemplo.jpg?exp=1789570000&firma=abc123",
+                  "url_expira_at": "2026-10-22T14:30:00.000Z",
+                  "hash_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "precision": 1.5,
+                  "dispositivo_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "sin_ubicacion": true,
+                  "ruta_archivo": "texto"
+                },
+                "momento": "2026-10-22T14:30:00.000Z",
+                "lat": 4.6097,
+                "lng": -74.0817
+              },
+              "carros_sin_firma": 1
+            },
+            "permiso_sin_inspector_estado": "texto"
           }
         ],
         "required": [
@@ -39703,6 +40163,22 @@
           "lugar_cargue_admite_sin_inspector": {
             "type": "boolean",
             "default": false
+          },
+          "cargue_ninera": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CargueNineraDelViajeDto"
+              }
+            ]
+          },
+          "permiso_sin_inspector_estado": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },

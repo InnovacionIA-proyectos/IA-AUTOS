@@ -95,8 +95,11 @@ public interface IInspeccionRepository
     /// <summary>De los hallazgos recibidos, los que tienen su foto propia (no cuenta la foto del sello de quien valida).</summary>
     Task<IReadOnlySet<Guid>> HallazgosConFotoAsync(IReadOnlyCollection<Guid> hallazgoIds, CancellationToken ct = default);
 
-    /// <summary>Cuantas fotos de constancia (las del cierre de una entrega con una sola firma) tiene cada inspeccion; solo trae las que tienen alguna.</summary>
-    Task<IReadOnlyDictionary<Guid, int>> ContarFotosDeConstanciaAsync(IReadOnlyCollection<Guid> inspeccionIds, CancellationToken ct = default);
+    /// <summary>Las fotos de constancia (las del cierre de una entrega con una sola firma) de cada inspeccion, de la mas antigua a la mas reciente; solo trae las inspecciones que tienen alguna.</summary>
+    Task<IReadOnlyDictionary<Guid, IReadOnlyList<clsEvidencia>>> FotosDeConstanciaAsync(IReadOnlyCollection<Guid> inspeccionIds, CancellationToken ct = default);
+
+    /// <summary>Las evidencias con esos identificadores, por identificador; solo trae las que existen.</summary>
+    Task<IReadOnlyDictionary<Guid, clsEvidencia>> EvidenciasPorIdAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
 
     /// <summary>La primera foto (evidencia) de cada hallazgo; solo trae los que tienen alguna.</summary>
     Task<IReadOnlyDictionary<Guid, Guid>> PrimeraFotoDeHallazgosAsync(IReadOnlyCollection<Guid> hallazgoIds, CancellationToken ct = default);

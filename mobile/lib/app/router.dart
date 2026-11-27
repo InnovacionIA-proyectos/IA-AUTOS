@@ -67,6 +67,14 @@ final routerProvider = Provider<GoRouter>((ref) {
                   path: 'buscar',
                   builder: (_, _) => const Permitido(capacidad: Capacidad.verViajes, child: BuscarVinPage()),
                 ),
+                // S8-HU-09.2 CA-6: un viaje suelto, al que lleva un aviso por su `viaje_id`.
+                GoRoute(
+                  path: 'viaje/:viajeId',
+                  builder: (_, state) => Permitido(
+                    capacidad: Capacidad.verViajes,
+                    child: ViajeDelAvisoPage(viajeId: state.pathParameters['viajeId']!),
+                  ),
+                ),
               ],
             ),
           ]),
@@ -86,6 +94,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                     child: VinPage(
                       vin: state.pathParameters['vin']!,
                       viajeId: state.uri.queryParameters['viajeId'],
+                      hallazgoId: state.uri.queryParameters['hallazgo'],
                     ),
                   ),
                   routes: [
@@ -106,7 +115,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                           fechaMotivo: DateTime.tryParse(state.uri.queryParameters['fechaMotivo'] ?? ''),
                           latMotivo: double.tryParse(state.uri.queryParameters['latMotivo'] ?? ''),
                           lngMotivo: double.tryParse(state.uri.queryParameters['lngMotivo'] ?? ''),
+                          bajoPermiso: state.uri.queryParameters['permiso'] == '1',
                           corrigeInspeccionId: state.uri.queryParameters['corrige'],
+                          borradorId: state.uri.queryParameters['borrador'],
                         ),
                       ),
                     ),

@@ -417,4 +417,32 @@ public sealed class MotivosNoSaleApiTests(clsBaseDatosFixture bd) : clsPruebaApi
         Assert.Equal(HttpStatusCode.OK, capacidad.StatusCode);
         Assert.NotEqual(Guid.Empty, tercero.VehiculoId);
     }
+
+    [Fact]
+    public async Task El_inventario_de_un_carro_bajado_trae_el_motivo_quien_lo_bajo_y_cuando_igual_que_el_viaje_y_los_demas_no_lo_traen()
+    {
+        var e = await EscenarioAsync();
+        var bajar = await BajarAsync(e.Coordinador, e.Viaje, VINES[0], new { motivo = "Cambio de pedido" });
+        Assert.Equal(HttpStatusCode.OK, bajar.StatusCode);
+        var delViaje = Unidad(await JsonAsync(bajar), VINES[0]).GetProperty("bajado");
+
+        var inventario = await JsonAsync(await Como(e.Coordinador).GetAsync($"/api/vehiculos/{VINES[0]}/inventario"));
+
+        var etapas = inventario.GetProperty("etapas").EnumerateArray().ToList();
+        Assert.NotEmpty(etapas);
+        Assert.All(etapas, etapa =>
+        {
+            Assert.Equal("bajado", etapa.GetProperty("estado_unidad").GetString());
+            var bajado = etapa.GetProperty("bajado");
+            Assert.Equal("Cambio de pedido", bajado.GetProperty("motivo").GetString());
+            Assert.Equal(e.Coordinador.UsuarioId, bajado.GetProperty("bajado_por").GetGuid());
+            Assert.Equal("Nombre coord@ejemplo.com", bajado.GetProperty("bajado_por_nombre").GetString());
+            Assert.Equal(["motivo", "bajado_por", "bajado_por_nombre", "fecha"], bajado.EnumerateObject().Select(p => p.Name).ToList());
+            Assert.Equal(delViaje.GetProperty("fecha").GetDateTimeOffset(), bajado.GetProperty("fecha").GetDateTimeOffset());
+        });
+
+        // Un carro que sigue en el viaje lleva el dato vacio, y el de «no sale» conserva el suyo.
+        var activo = await JsonAsync(await Como(e.Coordinador).GetAsync($"/api/vehiculos/{VINES[1]}/inventario"));
+        Assert.All(activo.GetProperty("etapas").EnumerateArray(), etapa => Assert.Equal(JsonValueKind.Null, etapa.GetProperty("bajado").ValueKind));
+    }
 }

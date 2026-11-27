@@ -12,10 +12,13 @@ una clave.
 | `FLAVOR` | no | `dev`, `qa`, `prod` | entorno; debe coincidir con el sabor de Android (`--flavor`). Por defecto `dev` |
 | `API_HOST_DESTINO` | no | host interno | servicio del cluster al que debe reenviar la pasarela `/contenedores` de IIS; la app lo manda en `X-Forwarded-Host` en toda petición (ver abajo). Vacío = se llama a `API_URL` directo |
 | `EXTRAS_HABILITADOS` | no | `true`, `false` | muestra la sección de extras en la captura. Los extras se envían con el informe (contrato 2.14.0 del backend); prenderlo solo en el entorno que ya tiene esa versión desplegada |
-| `GPS_PRECISION_MINIMA_M` | no | metros, entero | desde cuántos metros de margen del GPS se avisa de precisión baja. Por defecto 30, el mismo valor que el backend trae en `gps_precision_minima_m`. Se fija aquí porque `GET /api/parametros` es de administradores y del coordinador: quien está en el patio no puede leerlo |
-| `ACOMODACION_FOTOS_MINIMAS` | no | entero | cuántas fotos de la acomodación pide la app antes de cerrar la segunda inspección del cargue. Por defecto 1, el mismo valor que el backend trae en `acomodacion_fotos_minimas`. Se fija aquí por la misma razón que `GPS_PRECISION_MINIMA_M`; si queda corto, el servidor rechaza el cierre y dice cuántas faltan |
 
 Sin `API_URL` la app arranca pero muestra un aviso en el login y no deja ingresar.
+
+Las fotos mínimas de la acomodación y la precisión mínima del GPS ya no se fijan al compilar (`GPS_PRECISION_MINIMA_M` y
+`ACOMODACION_FOTOS_MINIMAS` se quitaron): la app las lee de `GET /api/parametros/app` al iniciar sesión, al recuperar señal
+y al abrir la captura, y guarda la última respuesta para usarla sin señal. Sin ninguna, usa los valores de hoy (1 foto y
+30 metros). Las cambia TI en el portal, en Parámetros.
 
 ## Cómo pasarlas
 
@@ -42,9 +45,7 @@ indicado en la cabecera `X-Forwarded-Host`:
   "FLAVOR": "qa",
   "API_URL": "https://servicios.boterosoto.com/contenedores",
   "API_HOST_DESTINO": "iaautos-backend-7cfmwx-4e79a5-10-10-40-17.sslip.io",
-  "EXTRAS_HABILITADOS": true,
-  "GPS_PRECISION_MINIMA_M": 31,
-  "ACOMODACION_FOTOS_MINIMAS": 1
+  "EXTRAS_HABILITADOS": true
 }
 ```
 

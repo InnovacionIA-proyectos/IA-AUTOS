@@ -7,7 +7,8 @@ const posicionMinima = 1;
 /// guardara su capacidad: se siguen comportando como siempre (S7-HU-05 CA-6).
 const capacidadPorDefecto = 7;
 
-/// Mínimo de fotos de la acomodación mientras no se fije otro al compilar (ver `Entorno`).
+/// Mínimo de fotos de la acomodación de hoy: manda solo si la app nunca pudo leer `acomodacion_fotos_minimas` del
+/// servidor ni tiene copia local (S8-HU-09.2 CA-1, ver `parametros_app.dart`).
 const acomodacionFotosMinimasPorDefecto = 1;
 
 /// Un puesto de la niñera, tal como lo manda el servidor: su número y cómo se llama en la Orden de Cargue.

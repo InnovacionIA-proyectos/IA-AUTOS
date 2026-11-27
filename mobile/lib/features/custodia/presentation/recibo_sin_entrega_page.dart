@@ -7,6 +7,7 @@ import '../../../core/tema/tema.dart';
 import '../../../core/ui/widgets.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../sync/domain/job.dart';
+import '../../sync/presentation/anuncio_desenlace.dart';
 import '../../sync/presentation/sync_controller.dart';
 import '../../sync/providers.dart';
 import 'lienzo_firma.dart';
@@ -36,9 +37,10 @@ class _EstadoReciboSinEntrega extends ConsumerState<ReciboSinEntregaPage> {
     final firma = _firma;
     if (usuarioId == null || firma == null || _guardando) return;
     setState(() => _guardando = true);
+    final jobId = const Uuid().v4();
     try {
       await ref.read(colaRepositorioProvider).agregar(ReciboSinEntregaJob(
-            id: const Uuid().v4(),
+            id: jobId,
             etiqueta: 'Recibo sin entrega ${widget.vin}',
             creadoEn: DateTime.now().millisecondsSinceEpoch,
             usuarioId: usuarioId,
@@ -49,21 +51,13 @@ class _EstadoReciboSinEntrega extends ConsumerState<ReciboSinEntregaPage> {
       await sync.refrescar();
       await sync.sincronizar();
       if (!mounted) return;
-      final estado = ref.read(syncControllerProvider);
-      final titulo = estado.fallidos > 0 ? 'No se pudo enviar' : (estado.pendientes > 0 ? 'Recibo guardado' : 'Recibo sin entrega');
-      final mensaje = estado.fallidos > 0
-          ? 'El servidor rechazó el recibo. Quedó en Inspecciones › Cola para reintentarlo o descartarlo.'
-          : estado.pendientes > 0
-              ? 'Quedó en cola; se enviará cuando la señal sea estable.'
-              : 'Quedó registrado: la transferencia se cerró sin entrega.';
-      await showDialog<void>(
-        context: context,
-        builder: (contexto) => AlertDialog(
-          title: Text(titulo),
-          content: Text(mensaje),
-          actions: [TextButton(onPressed: () => Navigator.of(contexto).pop(), child: const Text('OK'))],
-        ),
-      );
+      // Se mira ESTE recibo y no el contador de la cola (S8-HU-11.2 CA-7): una foto rechazada de otro carro
+      // hacía decir «El servidor rechazó el recibo» aunque el recibo hubiera entrado.
+      await anunciarDesenlace(context, ref, jobId, (
+        registrado: 'Recibo sin entrega registrado',
+        detalleRegistrado: 'La transferencia se cerró sin entrega.',
+        noRegistrado: 'No se pudo registrar el recibo',
+      ));
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {

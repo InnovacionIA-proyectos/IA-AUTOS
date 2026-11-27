@@ -28,6 +28,7 @@ public sealed partial class clsEntregasService(
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
     IInspeccionRepository inspecciones,
+    IDescriptorHallazgos descriptorHallazgos,
     ITransferenciaCustodiaRepository transferencias,
     INovedadProcesoRepository novedades,
     ICatalogosLectura catalogos,
@@ -684,9 +685,10 @@ public sealed partial class clsEntregasService(
     {
         var lugar = lugares.TryGetValue(lugarId, out var datos) ? datos : (Nombre: string.Empty, Ciudad: null);
         var llegadas = delPunto.Where(u => u.Llegada is not null).Select(u => u.Llegada!.Id).ToList();
-        var fotosDeCierre = await inspecciones.ContarFotosDeConstanciaAsync(llegadas, ct);
+        var fotosDeCierre = await inspecciones.FotosDeConstanciaAsync(llegadas, ct);
         var hallazgosDeRechazo = delPunto.Where(u => u.Transferencia?.RechazoHallazgoId is not null).Select(u => u.Transferencia!.RechazoHallazgoId!.Value).ToList();
         var fotosDeRechazo = await inspecciones.PrimeraFotoDeHallazgosAsync(hallazgosDeRechazo, ct);
+        var evidenciasDeRechazo = await inspecciones.EvidenciasPorIdAsync([.. fotosDeRechazo.Values], ct);
         var filas = new List<EntregaUnidadDto>();
         foreach (var u in delPunto.OrderBy(u => u.Vehiculo.Vin, StringComparer.Ordinal))
         {
@@ -695,10 +697,14 @@ public sealed partial class clsEntregasService(
             RechazoDeEntregaDto? rechazo = null;
             if (u.Rechazada && t!.RechazoHallazgoId is { } hallazgoId && t.RechazoMarcadoPor is { } marcadoPor)
             {
-                rechazo = new RechazoDeEntregaDto(hallazgoId, fotosDeRechazo.TryGetValue(hallazgoId, out var foto) ? foto : null, marcadoPor, (await usuarios.ObtenerPorIdAsync(marcadoPor, ct))?.Nombre, MOTIVO_DEL_RECHAZO);
+                var fotoId = fotosDeRechazo.TryGetValue(hallazgoId, out var foto) ? foto : (Guid?)null;
+                rechazo = new RechazoDeEntregaDto(
+                    hallazgoId, fotoId, marcadoPor, (await usuarios.ObtenerPorIdAsync(marcadoPor, ct))?.Nombre, MOTIVO_DEL_RECHAZO,
+                    fotoId is { } id && evidenciasDeRechazo.TryGetValue(id, out var evidencia) ? clsFotosDelViaje.DeEvidencia(evidencia) : null);
             }
 
             var cerradaConUnaFirma = t is { TipoCierre: clsTipoCierre.RECIBO_SIN_ENTREGA };
+            IReadOnlyList<clsEvidencia> fotosDelCierre = u.Llegada is { } llegada && fotosDeCierre.TryGetValue(llegada.Id, out var delCierre) ? delCierre : [];
             filas.Add(new EntregaUnidadDto(
                 u.Vehiculo.Id,
                 u.Vehiculo.Vin,
@@ -713,13 +719,14 @@ public sealed partial class clsEntregasService(
                 t?.RecibeExternoCedula,
                 cerradaConUnaFirma ? t!.MotivoCodigo ?? clsMotivoUnaFirma.OTRO : null,
                 t?.ReservasTexto,
-                u.Llegada is { } l && fotosDeCierre.TryGetValue(l.Id, out var fotos) ? fotos : 0,
+                fotosDelCierre.Count,
                 t?.TestigoNombre,
                 DeMomento(t?.FirmaEntregaMomentoAt, t?.FirmaEntregaLat, t?.FirmaEntregaLng, t?.FirmaEntregaPrecisionM),
                 DeMomento(t?.FirmaRecibeMomentoAt, t?.FirmaRecibeLat, t?.FirmaRecibeLng, t?.FirmaRecibePrecisionM),
                 danosNuevos,
                 rechazo,
-                t is { SinInspectorDelPunto: true } && u.Cerrada));
+                t is { SinInspectorDelPunto: true } && u.Cerrada,
+                [.. fotosDelCierre.Select(f => clsFotosDelViaje.DeEvidencia(f))]));
         }
 
         var entregadas = delPunto.Count(u => u.Cerrada);
@@ -762,6 +769,8 @@ public sealed partial class clsEntregasService(
             var autor = (await usuarios.ObtenerPorIdAsync(actorId, ct))?.Nombre ?? "Quien firmó la entrega";
             var lugar = (await LugaresAsync(ct)).TryGetValue(lugarId, out var datos) ? datos.Nombre : "el punto de entrega";
             var codigoViaje = viaje.CodigoMtrack is { } codigo ? $" (viaje {codigo})" : string.Empty;
+            var hallazgo = await inspecciones.ObtenerHallazgoAsync(hallazgoId, ct);
+            var dano = hallazgo is null ? null : (await descriptorHallazgos.DescribirAsync([hallazgo], ct)).FirstOrDefault();
             await emisor.EmitirAsync(
                 new clsAlerta(
                     clsTipoNotificacion.CARRO_RECHAZADO_EN_DESTINO,
@@ -784,6 +793,11 @@ public sealed partial class clsEntregasService(
                         ["hallazgo_id"] = hallazgoId,
                         ["parte"] = parte,
                         ["marcado_por"] = autor,
+                        // La zona solo existe en un dano ubicado en el dibujo: el de un extra no la tiene y su nombre llega en parte_vehiculo.
+                        ["zona"] = dano?.CuadranteNumero is null ? null : dano.Zona,
+                        ["parte_vehiculo"] = dano?.ParteVehiculo,
+                        ["clase_dano"] = dano?.ClaseDano,
+                        ["tamano_dano"] = dano?.TamanoDano,
                     }),
                 ct);
         }
