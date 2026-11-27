@@ -19,7 +19,7 @@ están en [CONTRATO.md](../CONTRATO.md#viajes).
 | `tblAsignaciones` | Se retira: sus datos pasan a viajes |
 
 Estados de un viaje: `programado` → `en_curso` → `finalizado`, o `cancelado` (desde `programado` o `en_curso`). La primera inspección de un viaje
-programado lo pasa a `en_curso`. Un viaje cancelado deja de ser visible para inspectores y conductores.
+programado lo pasa a `en_curso`. Preparar el viaje no lo arranca: asignar o cambiar el muelle y el tráiler, «No sale», «Vuelve a salir» y «Bajar del viaje» dejan un viaje programado como estaba, y cambiar su lugar de cargue (solo mientras está programado) quita el muelle asignado. Un viaje cancelado deja de ser visible para inspectores y conductores.
 
 ## Reglas
 

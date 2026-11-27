@@ -123,7 +123,7 @@ public sealed class clsNoSaleService(
             inspecciones.Agregar(clsHallazgoSeguimiento.CrearNoSale(hallazgo.Id, actual.IdObligatorio(), texto ?? motivo.Nombre, ahora));
         }
 
-        viaje.RegistrarActividad(ahora);
+        viaje.RegistrarCambio(ahora);
         await auditor.RegistrarDeViajeAsync(
             "viaje.no_sale",
             "viajes",
@@ -170,7 +170,7 @@ public sealed class clsNoSaleService(
         var antes = new { vin = vehiculo.Vin, estado_unidad = enlace.EstadoUnidad, motivo_codigo = enlace.NoSaleMotivoCodigo, motivo_texto = enlace.NoSaleMotivo, hallazgo_id = enlace.NoSaleHallazgoId, marcado_por = enlace.NoSaleMarcadoPor, marcado_at = enlace.NoSaleAt };
         var ahora = reloj.Ahora;
         enlace.VolverASalir(ahora);
-        viaje.RegistrarActividad(ahora);
+        viaje.RegistrarCambio(ahora);
         await auditor.RegistrarDeViajeAsync(
             "viaje.vuelve_a_salir", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(antes, new { vin = vehiculo.Vin, estado_unidad = enlace.EstadoUnidad }), vehiculo.ClienteId, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);
@@ -202,7 +202,7 @@ public sealed class clsNoSaleService(
         var motivo = solicitud.Motivo!.Trim();
         var ahora = reloj.Ahora;
         enlace.Bajar(motivo, actual.IdObligatorio(), ahora);
-        viaje.RegistrarActividad(ahora);
+        viaje.RegistrarCambio(ahora);
         await auditor.RegistrarDeViajeAsync(
             "viaje.bajar_vin", "viajes", viaje.Id, viaje.Id, new DetalleAuditoria(antes, new { vin = vehiculo.Vin, estado_unidad = enlace.EstadoUnidad, motivo }), vehiculo.ClienteId, ct);
         await unidadDeTrabajo.GuardarCambiosAsync(ct);

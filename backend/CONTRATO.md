@@ -147,7 +147,7 @@ Un valor de `pagina` o `tamano` que no es un número entero, un filtro o un orde
 
 | Listado | Filtros (todos opcionales, en `snake_case`) | Campos de `orden` | Orden por defecto |
 |---|---|---|---|
-| `GET /api/vehiculos/listado` | `tipo` (`movilizados` por defecto, `pendientes` o `novedad`), `vin`, `operacion`, `marca`, `cliente_id`, `estado_unidad` (`activa` o `no_sale`), `activo` (`true` o `false`), `desde`, `hasta` | `vin`, `marca`, `modelo`, `color`, `operacion`, `activo`, `created_at` | `vin:asc` |
+| `GET /api/vehiculos/listado` | `tipo` (`movilizados` por defecto, `pendientes` o `novedad`), `vin`, `operacion`, `marca`, `cliente_id`, `estado_unidad` (`activa`, `no_sale` o `bajado`), `activo` (`true` o `false`), `desde`, `hasta` | `vin`, `marca`, `modelo`, `color`, `operacion`, `activo`, `created_at` | `vin:asc` |
 | `GET /api/inspecciones` | `vin`, `viaje_id`, `usuario_id`, `momento`, `estado`, `proceso`, `operacion`, `marca`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` | `fecha`, `vin`, `momento`, `estado`, `proceso`, `version`, `created_at`, `cerrada_at` | `fecha:desc` |
 | `GET /api/viajes` | `estado`, `codigo_mtrack`, `vin`, `conductor_id`, `inspector_id`, `cliente_id`, `origen_id`, `destino_id`, `desde`, `hasta` | `created_at`, `updated_at`, `codigo_mtrack`, `estado`, `placa`, `trailer` | `created_at:desc` |
 | `GET /api/sofasa/ordenes` | `vin`, `estado` (el `status_code`), `ciudad`, `desde`, `hasta` | `fecha`, `vin`, `estado`, `ciudad`, `orden`, `marca`, `created_at` | `fecha:desc` (las sin fecha al final) |
@@ -535,7 +535,7 @@ incluidos los que aún no están en un viaje. Inspector y conductor solo ven los
 | `operacion` | `importacion`, `exportacion` o `nacional` |
 | `marca` | la marca del vehículo |
 | `cliente_id` | UUID del cliente (solo el `super_admin` elige otro; los demás reciben `403`) |
-| `estado_unidad` | `activa` o `no_sale`: vehículos que tienen o tuvieron ese estado en algún viaje |
+| `estado_unidad` | `activa`, `no_sale` o `bajado`: vehículos que tienen o tuvieron ese estado en algún viaje |
 | `activo` | `true` o `false`: sin la baja lógica o dados de baja |
 | `desde`, `hasta` | fecha ISO del alta del vehículo |
 
@@ -636,8 +636,7 @@ crean sus etapas, una por cada valor **activo** del catálogo `etapas` (hoy Carg
 el conductor activa en el momento la excepción «No hay inspector».
 
 Estados: `programado` → `en_curso` → `finalizado`; un viaje `programado` o `en_curso` también puede pasar a `cancelado`. `finalizado` y `cancelado`
-son finales: el viaje ya no admite cambios ni inspecciones nuevas. La primera inspección de un viaje `programado` lo pasa a `en_curso`. Un viaje
-`cancelado` deja de ser visible para inspectores y conductores.
+son finales: el viaje ya no admite cambios ni inspecciones nuevas. La primera inspección de un viaje `programado` lo pasa a `en_curso` (también las acciones del conductor en el viaje). **Preparar el viaje no lo arranca**: asignar o cambiar el muelle y el tráiler (`PATCH /api/viajes/{id}/cargue`), «No sale», «Vuelve a salir» y «Bajar del viaje» **no cambian el estado**: un viaje `programado` sigue `programado` después de cada una (el viaje queda tocado, con su `updated_at` y su auditoría) y su fecha y su lugar de cargue se pueden corregir después. Un viaje `cancelado` deja de ser visible para inspectores y conductores.
 
 Un VIN puede estar en varios viajes a lo largo del tiempo, pero **no en dos viajes activos** (`programado` o `en_curso`) a la vez.
 
@@ -787,6 +786,8 @@ Gestión de viajes. Cambia **solo los campos enviados** de un viaje `programado`
 Mientras el viaje está `programado` también se corrige su programación: `fecha_programada` (ISO 8601 **con zona horaria**, por ejemplo `2026-11-03T06:00:00-05:00`; `null` la quita) y
 `lugar_cargue_id` (un lugar **activo** del catálogo `lugares`; `null` lo quita). Una fecha sin zona o un lugar inexistente o inactivo responde `400` con `details.fieldErrors`;
 en un viaje `en_curso` cambiarlos responde `409` (lo demás del viaje sí se sigue editando).
+
+**Cambiar el lugar de cargue quita el muelle.** El muelle es de un lugar de cargue: si `lugar_cargue_id` cambia a un lugar distinto del actual, el viaje queda con el lugar nuevo y `muelle_id: null` (se le asigna después un muelle del lugar nuevo con `PATCH /api/viajes/{id}/cargue`); con el mismo lugar, el muelle se conserva. Esto es así porque asignar el muelle ya no arranca el viaje: sigue `programado` y su lugar todavía se puede corregir.
 
 Al cambiar `lugar_cargue_id` el **tipo de origen** (`origen_id`) se recalcula con el tipo del lugar nuevo (y manda sobre un `origen_id` enviado en la misma solicitud). Al cambiar el tipo de origen se actualiza el lugar del Cargue de los VIN del viaje; las etapas que
 ya tienen un informe cerrado no cambian.
@@ -1634,7 +1635,7 @@ El inspector del viaje (o quien reclamó el cargue) y el `coordinador_calidad` c
 | `muelle_id` | un muelle **activo del lugar de cargue del viaje** (`400` «El muelle no pertenece al lugar de cargue del viaje»); `null` lo quita |
 | `trailer` | el mismo texto de siempre; vacío lo borra |
 
-Se cambia solo lo que se envía; un cuerpo sin ninguno responde `400`. **Al inspector se le acepta solo mientras la entrega del cargue no se haya cerrado**: después responde `409` con `details.motivo: "cargue_firmado"` y «El tráiler y el muelle solo los cambia el inspector durante el cargue»; el coordinador sí puede. Ninguna novedad ni «Llegué» cuenta para esa regla. Queda en la auditoría (`viaje.cambiar_cargue`).
+Se cambia solo lo que se envía; un cuerpo sin ninguno responde `400`. **No arranca el viaje**: sobre un viaje `programado` responde `200` y el viaje sigue `programado` (sobre uno `en_curso` funciona igual que siempre). **Al inspector se le acepta solo mientras la entrega del cargue no se haya cerrado**: después responde `409` con `details.motivo: "cargue_firmado"` y «El tráiler y el muelle solo los cambia el inspector durante el cargue»; el coordinador sí puede. Ninguna novedad ni «Llegué» cuenta para esa regla. Queda en la auditoría (`viaje.cambiar_cargue`).
 
 **Aviso `cambio_cargue_inspector`.** Cuando lo cambia el **inspector**, el coordinador de calidad y los administradores del cliente reciben un aviso por cada cosa que cambió, de urgencia `media` y **solo en la bandeja (sin push)**: «{inspector} asignó el muelle 3 al viaje {código}», «… cambió el muelle del viaje {código} de {antes} a {después}» o «… cambió el tráiler del viaje {código} de TRX-101 a TRX-202». `datos`: `viaje_id`, `codigo_mtrack`, `campo` (`muelle` o `trailer`), `antes`, `despues` y `usuario_nombre`. Repetir lo mismo no avisa otra vez; los cambios del propio coordinador no generan aviso.
 
@@ -1649,7 +1650,7 @@ Crear un viaje, agregar unidades (`POST /api/viajes/{id}/vehiculos`), la carga p
 
 ## Unidad que no sale, vuelve a salir y bajar del viaje
 
-Un carro tiene un **estado dentro del viaje** (`estado_unidad`): `activa`, `no_sale` o `bajado`. Solo una unidad **activa** se acomoda, se revisa, se firma y cuenta en la cobertura, las entregas, los pendientes del inspector, los avisos y la niñera.
+Un carro tiene un **estado dentro del viaje** (`estado_unidad`): `activa`, `no_sale` o `bajado` (los tres se admiten como filtro `estado_unidad` del listado de vehículos). **«No sale», «Vuelve a salir» y «Bajar del viaje» no arrancan el viaje**: un viaje `programado` sigue `programado` después de cada una. Solo una unidad **activa** se acomoda, se revisa, se firma y cuenta en la cobertura, las entregas, los pendientes del inspector, los avisos y la niñera.
 
 - **`no_sale`**: el carro se retira del viaje con un **motivo de catálogo**. Conserva su vínculo, sus etapas e inspecciones y el viaje sigue; libera su puesto. **Puede volver a salir** mientras no se firme el cargue.
 - **`bajado`**: el carro **sale del viaje** (un cambio de pedido) conservando su historia (etapas, inspecciones, fotos y firmas) con la marca de cuándo, quién y por qué. Libera su puesto y no cuenta en nada del viaje; el mismo VIN se puede agregar a otro viaje abierto.

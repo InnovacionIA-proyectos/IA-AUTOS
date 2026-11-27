@@ -82,7 +82,7 @@ public sealed partial class clsViaje : clsEntidadBase
 
         if (cambios.Count > 0)
         {
-            RegistrarActividad(ahora);
+            RegistrarCambio(ahora);
         }
 
         return cambios;
@@ -247,6 +247,12 @@ public sealed partial class clsViaje : clsEntidadBase
 
         if (cambiaLugar)
         {
+            // El muelle es de un lugar de cargue: con otro lugar deja de valer y se vuelve a asignar.
+            if (lugarCargueId != LugarCargueId)
+            {
+                MuelleId = null;
+            }
+
             LugarCargueId = lugarCargueId;
         }
 
@@ -276,6 +282,9 @@ public sealed partial class clsViaje : clsEntidadBase
         Estado = nuevo;
         Tocar(ahora);
     }
+
+    /// <summary>Un cambio de preparacion (muelle, trailer, no sale, vuelve a salir, bajar): deja constancia de que el viaje se toco, sin cambiar su estado.</summary>
+    public void RegistrarCambio(DateTimeOffset ahora) => Tocar(ahora);
 
     /// <summary>La primera inspeccion de un viaje programado lo pone en curso.</summary>
     public void RegistrarActividad(DateTimeOffset ahora)
