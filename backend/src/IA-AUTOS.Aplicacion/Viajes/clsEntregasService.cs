@@ -28,6 +28,7 @@ public sealed partial class clsEntregasService(
     IViajeRepository viajes,
     IVehiculoRepository vehiculos,
     IInspeccionRepository inspecciones,
+    IDescriptorHallazgos descriptorHallazgos,
     ITransferenciaCustodiaRepository transferencias,
     INovedadProcesoRepository novedades,
     ICatalogosLectura catalogos,
@@ -762,6 +763,8 @@ public sealed partial class clsEntregasService(
             var autor = (await usuarios.ObtenerPorIdAsync(actorId, ct))?.Nombre ?? "Quien firmó la entrega";
             var lugar = (await LugaresAsync(ct)).TryGetValue(lugarId, out var datos) ? datos.Nombre : "el punto de entrega";
             var codigoViaje = viaje.CodigoMtrack is { } codigo ? $" (viaje {codigo})" : string.Empty;
+            var hallazgo = await inspecciones.ObtenerHallazgoAsync(hallazgoId, ct);
+            var dano = hallazgo is null ? null : (await descriptorHallazgos.DescribirAsync([hallazgo], ct)).FirstOrDefault();
             await emisor.EmitirAsync(
                 new clsAlerta(
                     clsTipoNotificacion.CARRO_RECHAZADO_EN_DESTINO,
@@ -784,6 +787,11 @@ public sealed partial class clsEntregasService(
                         ["hallazgo_id"] = hallazgoId,
                         ["parte"] = parte,
                         ["marcado_por"] = autor,
+                        // La zona solo existe en un dano ubicado en el dibujo: el de un extra no la tiene y su nombre llega en parte_vehiculo.
+                        ["zona"] = dano?.CuadranteNumero is null ? null : dano.Zona,
+                        ["parte_vehiculo"] = dano?.ParteVehiculo,
+                        ["clase_dano"] = dano?.ClaseDano,
+                        ["tamano_dano"] = dano?.TamanoDano,
                     }),
                 ct);
         }

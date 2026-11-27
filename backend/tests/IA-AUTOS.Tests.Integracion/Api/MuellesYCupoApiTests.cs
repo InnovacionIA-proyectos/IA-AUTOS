@@ -22,9 +22,9 @@ public sealed class MuellesYCupoApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
 
     private sealed record Escenario(Guid Viaje, Guid[] Vehiculos, Guid[][] Etapas, Guid LugarCargue, Guid OtroLugar, Sesion Inspector, Sesion Conductor, Sesion Coordinador, Sesion Admin, Sesion SuperAdmin);
 
-    private async Task<Sesion> SesionAsync(string email, string rol)
+    private async Task<Sesion> SesionAsync(string email, string rol, Guid? clienteId = null)
     {
-        var usuario = await Fabrica.SembrarUsuarioAsync(email, "Clave-Segura-1", rol, nombre: "Nombre " + email);
+        var usuario = await Fabrica.SembrarUsuarioAsync(email, "Clave-Segura-1", rol, nombre: "Nombre " + email, clienteId: clienteId);
         return new Sesion(await LoginAsync(email, "Clave-Segura-1"), usuario.Id);
     }
 
@@ -282,10 +282,14 @@ public sealed class MuellesYCupoApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
     // ------------------------------------------------------------------------------------------------ el destino cambia
 
     [Fact]
-    public async Task Cambiar_el_destino_marca_la_unidad_y_avisa_al_conductor_y_a_los_inspectores_del_lugar_nuevo()
+    public async Task Cambiar_el_destino_marca_la_unidad_y_avisa_al_conductor_a_los_inspectores_del_lugar_nuevo_y_a_coordinacion_y_administracion_menos_a_quien_lo_cambio()
     {
         var (e, _) = await EscenarioAsync();
         var inspectorDelDestino = await SesionAsync("inspector-destino@ejemplo.com", clsRol.INSPECTOR);
+        var otroCoordinador = await SesionAsync("coord2@ejemplo.com", clsRol.COORDINADOR_CALIDAD);
+        var otroCliente = Guid.NewGuid();
+        await Sembrador.EjecutarAsync("INSERT dbo.tblClientes (Id, Codigo, Nombre, Orden) VALUES (@id, 'otro', N'Otro cliente', 2)", ("@id", otroCliente));
+        var coordinadorAjeno = await SesionAsync("coord-otro@ejemplo.com", clsRol.COORDINADOR_CALIDAD, otroCliente);
         var destinoAnterior = await LugarAsync(e.Admin, "Concesionario Norte", "concesionario");
         var destinoNuevo = await LugarAsync(e.Admin, "Puerto de Cartagena", "destino");
         Assert.Equal(HttpStatusCode.OK, (await Como(e.Coordinador).PostAsync($"/api/usuarios/{inspectorDelDestino.UsuarioId}/puntos", Cuerpo(new { lugar_ids = new[] { destinoNuevo } }))).StatusCode);
@@ -302,6 +306,11 @@ public sealed class MuellesYCupoApiTests(clsBaseDatosFixture bd) : clsPruebaApiB
         Assert.Equal(1, await AvisosAsync("cambio_destino_unidad", e.Conductor.UsuarioId));
         Assert.Equal(1, await AvisosAsync("cambio_destino_unidad", inspectorDelDestino.UsuarioId));
         Assert.Equal(0, await AvisosAsync("cambio_destino_unidad", e.Inspector.UsuarioId));
+        // Coordinacion y administracion del cliente lo reciben una sola vez; quien hizo el cambio no recibe el suyo y otro cliente no recibe ninguno.
+        Assert.Equal(1, await AvisosAsync("cambio_destino_unidad", otroCoordinador.UsuarioId));
+        Assert.Equal(1, await AvisosAsync("cambio_destino_unidad", e.Admin.UsuarioId));
+        Assert.Equal(0, await AvisosAsync("cambio_destino_unidad", e.Coordinador.UsuarioId));
+        Assert.Equal(0, await AvisosAsync("cambio_destino_unidad", coordinadorAjeno.UsuarioId));
         Assert.Equal(1, await Sembrador.ContarAsync(
             "SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'cambio_destino_unidad' AND Urgencia = 'media' AND Canal = 'bandeja' AND UsuarioId = @u AND Mensaje = @m AND JSON_VALUE(Datos, '$.lugar_anterior') = N'Concesionario Norte' AND JSON_VALUE(Datos, '$.lugar_nuevo') = N'Puerto de Cartagena'",
             ("@u", e.Conductor.UsuarioId), ("@m", $"Cambió el destino del VIN {VINES[0]}: ahora va a Puerto de Cartagena")));

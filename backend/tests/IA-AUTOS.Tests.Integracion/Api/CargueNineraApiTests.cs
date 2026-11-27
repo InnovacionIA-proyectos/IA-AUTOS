@@ -31,9 +31,9 @@ public sealed partial class CargueNineraApiTests(clsBaseDatosFixture bd) : clsPr
     /// <summary>El viaje con dos carros activos, su inspector y su conductor, con el cargue de cada carro completo (llegada y salida cerradas).</summary>
     private sealed record Escenario(Guid Viaje, Guid[] Vehiculos, Guid[][] Etapas, Guid[] Salidas, Guid[] Llegadas, Sesion Inspector, Sesion Conductor, Sesion Coordinador, Sesion Admin);
 
-    private async Task<Sesion> SesionAsync(string email, string rol)
+    private async Task<Sesion> SesionAsync(string email, string rol, Guid? clienteId = null)
     {
-        var usuario = await Fabrica.SembrarUsuarioAsync(email, "Clave-Segura-1", rol, nombre: "Nombre " + email);
+        var usuario = await Fabrica.SembrarUsuarioAsync(email, "Clave-Segura-1", rol, nombre: "Nombre " + email, clienteId: clienteId);
         return new Sesion(await LoginAsync(email, "Clave-Segura-1"), usuario.Id);
     }
 
@@ -472,10 +472,13 @@ public sealed partial class CargueNineraApiTests(clsBaseDatosFixture bd) : clsPr
         var primera = await ConProcesosAsync(p => p.EjecutarAvisosAsync());
         var segunda = await ConProcesosAsync(p => p.EjecutarAvisosAsync());
 
-        Assert.Equal(2, primera);
-        Assert.Equal(2, segunda);
+        // Cada parte avisa a quien le falta firmar y al coordinador y al administrador del cliente: 2 partes por 3 destinatarios.
+        Assert.Equal(6, primera);
+        Assert.Equal(6, segunda);
         Assert.Equal(1, await AvisosAsync("firma_cargue_pendiente", e.Inspector.UsuarioId));
         Assert.Equal(1, await AvisosAsync("firma_cargue_pendiente", e.Conductor.UsuarioId));
+        Assert.Equal(2, await AvisosAsync("firma_cargue_pendiente", e.Coordinador.UsuarioId));
+        Assert.Equal(2, await AvisosAsync("firma_cargue_pendiente", e.Admin.UsuarioId));
         Assert.Equal(0, await AvisosAsync("transferencia_pendiente"));
         var mensaje = (string)(await Sembrador.EscalarAsync("SELECT TOP 1 Mensaje FROM dbo.tblNotificaciones WHERE Tipo = 'firma_cargue_pendiente' AND UsuarioId = @u", ("@u", e.Inspector.UsuarioId)))!;
         Assert.Contains(VINES[0], mensaje);
@@ -487,6 +490,7 @@ public sealed partial class CargueNineraApiTests(clsBaseDatosFixture bd) : clsPr
         await ConProcesosAsync(p => p.EjecutarAvisosAsync());
         Assert.Equal(0, await AvisosAsync("firma_cargue_pendiente", e.Inspector.UsuarioId));
         Assert.Equal(1, await AvisosAsync("firma_cargue_pendiente", e.Conductor.UsuarioId));
+        Assert.Equal(1, await AvisosAsync("firma_cargue_pendiente", e.Coordinador.UsuarioId));
 
         // Con las dos firmas no avisa a nadie.
         Assert.Equal(HttpStatusCode.OK, (await FirmarAsync(e.Conductor, e.Viaje, "recibe")).StatusCode);
@@ -506,7 +510,56 @@ public sealed partial class CargueNineraApiTests(clsBaseDatosFixture bd) : clsPr
         Assert.Equal(0, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));
 
         await CambiarParametroAsync("firma_cargue_pendiente_minutos", "5");
-        Assert.Equal(2, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));
+        Assert.Equal(6, await ConProcesosAsync(p => p.EjecutarAvisosAsync()));
+    }
+
+    [Fact]
+    public async Task Con_la_firma_de_quien_recibe_pendiente_coordinacion_y_administracion_reciben_un_aviso_del_viaje_con_todos_los_carros_y_no_se_repite()
+    {
+        var e = await EscenarioAsync();
+        var otroCliente = Guid.NewGuid();
+        await Sembrador.EjecutarAsync("INSERT dbo.tblClientes (Id, Codigo, Nombre, Orden) VALUES (@id, 'otro', N'Otro cliente', 2)", ("@id", otroCliente));
+        var coordinadorOtro = await SesionAsync("coord-otro@ejemplo.com", clsRol.COORDINADOR_CALIDAD, otroCliente);
+        foreach (var salida in e.Salidas)
+        {
+            await EnvejecerAsync(salida, 40);
+        }
+
+        Assert.Equal(HttpStatusCode.OK, (await FirmarAsync(e.Inspector, e.Viaje, "entrega")).StatusCode);
+        await ConProcesosAsync(p => p.EjecutarFirmasDelCarguePendientesAsync());
+        await ConProcesosAsync(p => p.EjecutarFirmasDelCarguePendientesAsync());
+
+        foreach (var destinatario in new[] { e.Coordinador, e.Admin, e.Conductor })
+        {
+            Assert.Equal(1, await AvisosAsync("firma_cargue_pendiente", destinatario.UsuarioId));
+            Assert.Equal(1, await Sembrador.ContarAsync(
+                "SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'firma_cargue_pendiente' AND Canal = 'bandeja' AND UsuarioId = @u AND ViajeId = @v AND JSON_VALUE(Datos, '$.parte_que_falta') = 'recibe' AND JSON_QUERY(Datos, '$.vines') IS NOT NULL AND (SELECT COUNT(*) FROM OPENJSON(Datos, '$.vines')) = 2",
+                ("@u", destinatario.UsuarioId), ("@v", e.Viaje)));
+        }
+
+        Assert.Equal(0, await AvisosAsync("firma_cargue_pendiente", e.Inspector.UsuarioId));
+        Assert.Equal(0, await AvisosAsync("firma_cargue_pendiente", coordinadorOtro.UsuarioId));
+    }
+
+    [Fact]
+    public async Task Un_viaje_sin_inspector_asignado_tambien_avisa_a_coordinacion_y_administracion()
+    {
+        var e = await EscenarioAsync();
+        await Sembrador.EjecutarAsync("UPDATE dbo.tblViajes SET InspectorId = NULL WHERE Id = @v", ("@v", e.Viaje));
+        foreach (var salida in e.Salidas)
+        {
+            await EnvejecerAsync(salida, 40);
+        }
+
+        await ConProcesosAsync(p => p.EjecutarFirmasDelCarguePendientesAsync());
+
+        foreach (var destinatario in new[] { e.Coordinador, e.Admin })
+        {
+            Assert.Equal(1, await Sembrador.ContarAsync(
+                "SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Tipo = 'firma_cargue_pendiente' AND Canal = 'bandeja' AND UsuarioId = @u AND JSON_VALUE(Datos, '$.parte_que_falta') = 'entrega'", ("@u", destinatario.UsuarioId)));
+        }
+
+        Assert.Equal(0, await AvisosAsync("firma_cargue_pendiente", e.Inspector.UsuarioId));
     }
 
     // ------------------------------------------------------------------------------------------------ el informe de la niñera en PDF

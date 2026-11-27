@@ -535,7 +535,30 @@ public sealed class EntregaPorParadaApiTests(clsBaseDatosFixture bd) : clsPrueba
         Assert.Equal(e.Norte, datos.GetProperty("lugar_id").GetGuid());
         Assert.Equal(hallazgo, datos.GetProperty("hallazgo_id").GetGuid());
         Assert.Equal("entrega", datos.GetProperty("parte").GetString());
+        // El aviso dice que dano motivo el rechazo, con los mismos valores del hallazgo.
+        Assert.Equal("golpe", datos.GetProperty("clase_dano").GetString());
+        Assert.Equal("5_10cm", datos.GetProperty("tamano_dano").GetString());
+        Assert.Contains("50", datos.GetProperty("zona").GetString());
+        Assert.Equal(JsonValueKind.Null, datos.GetProperty("parte_vehiculo").ValueKind);
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Mensaje LIKE N'%52 123 456%' OR Datos LIKE N'%52 123 456%'"));
+    }
+
+    [Fact]
+    public async Task El_aviso_del_rechazo_de_un_dano_sin_zona_trae_la_zona_nula_y_el_nombre_de_su_parte()
+    {
+        var e = await EscenarioAsync(conDano: ["VIN-PAR-N2"]);
+        var hallazgo = await HallazgoDeAsync(e.Llegadas["VIN-PAR-N2"]);
+        await Sembrador.EjecutarAsync(
+            "ALTER TABLE dbo.tblHallazgos DISABLE TRIGGER ALL; UPDATE dbo.tblHallazgos SET ZonaId = NULL, ParteVehiculo = N'Platón' WHERE Id = @h; ALTER TABLE dbo.tblHallazgos ENABLE TRIGGER ALL", ("@h", hallazgo));
+
+        var r = await FirmarConExternaAsync(e.Conductor, e.Viaje, e.Norte, rechazos: [new { vin = "VIN-PAR-N2", hallazgo_id = hallazgo }]);
+
+        Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var datos = Assert.Single((await JsonAsync(await Como(e.Coordinador).GetAsync("/api/notificaciones?tipo=carro_rechazado_en_destino"))).GetProperty("items").EnumerateArray()).GetProperty("datos");
+        Assert.Equal(JsonValueKind.Null, datos.GetProperty("zona").ValueKind);
+        Assert.Equal("Platón", datos.GetProperty("parte_vehiculo").GetString());
+        Assert.Equal("golpe", datos.GetProperty("clase_dano").GetString());
+        Assert.Equal("5_10cm", datos.GetProperty("tamano_dano").GetString());
     }
 
     [Fact]
@@ -837,6 +860,7 @@ public sealed class EntregaPorParadaApiTests(clsBaseDatosFixture bd) : clsPrueba
         Assert.Equal("se_nego_a_firmar", datos.GetProperty("motivo_codigo").GetString());
         Assert.Equal(1, datos.GetProperty("fotos").GetInt32());
         Assert.Equal("Andrés Pardo", datos.GetProperty("testigo").GetString());
+        Assert.Equal(e.Norte, datos.GetProperty("lugar_id").GetGuid());
         Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Mensaje LIKE N'%79 123 456%' OR Datos LIKE N'%79 123 456%' OR Titulo LIKE N'%79 123 456%'"));
     }
 
@@ -865,6 +889,10 @@ public sealed class EntregaPorParadaApiTests(clsBaseDatosFixture bd) : clsPrueba
         var aviso = Assert.Single((await JsonAsync(await Como(e.Coordinador).GetAsync("/api/notificaciones?tipo=novedad_proceso"))).GetProperty("items").EnumerateArray());
         Assert.Equal("No había nadie para recibir: Concesionario Norte", aviso.GetProperty("titulo").GetString());
         Assert.Equal(0, aviso.GetProperty("datos").GetProperty("fotos").GetInt32());
+        // El lugar y el nombre del testigo viajan con cada motivo; la cedula, nunca.
+        Assert.Equal(e.Norte, aviso.GetProperty("datos").GetProperty("lugar_id").GetGuid());
+        Assert.Equal("Andrés Pardo", aviso.GetProperty("datos").GetProperty("testigo").GetString());
+        Assert.Equal(0, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones WHERE Mensaje LIKE N'%79123456%' OR Datos LIKE N'%79123456%'"));
     }
 
     [Fact]

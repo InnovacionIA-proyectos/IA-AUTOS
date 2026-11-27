@@ -376,6 +376,10 @@ public sealed class ConductorApiTests(clsBaseDatosFixture bd) : clsPruebaApiBase
         }
 
         Assert.Equal(6, await Sembrador.ContarAsync("SELECT COUNT(*) FROM dbo.tblNotificaciones"));
+        // El texto escribe el tamano con el nombre del catalogo, no con su codigo.
+        var mensaje = (string)(await Sembrador.EscalarAsync("SELECT TOP 1 Mensaje FROM dbo.tblNotificaciones WHERE Tipo = 'novedad_conductor' AND Canal = 'bandeja'"))!;
+        Assert.Contains("(tamaño Requiere reemplazo)", mensaje);
+        Assert.DoesNotContain("requiere_reemplazo", mensaje);
         // El push sale a cada celular de los destinatarios, con lo que la app necesita para abrir la alerta, y no sale correo.
         Assert.Equal(["tk-admin", "tk-coord", "tk-coord2"], _push.Enviados.Select(x => x.Token).Order().ToList());
         var enviado = _push.Enviados.First().Mensaje;

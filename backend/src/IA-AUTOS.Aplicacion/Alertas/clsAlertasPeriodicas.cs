@@ -249,8 +249,8 @@ public sealed class clsAlertasPeriodicas(
 
     /// <summary>
     /// Avisa a la parte de la ninera a la que le falta firmar el cargue: cuando la salida del cargue de un carro lleva cerrada <c>firma_cargue_pendiente_minutos</c> (30 por defecto, ajustable sin desplegar) sin que su
-    /// transferencia tenga la firma de una parte, esa parte (el inspector del viaje si falta quien entrega, el conductor si falta quien recibe) recibe un aviso de urgencia media con los carros que faltan. Un solo aviso por viaje y
-    /// parte: las corridas siguientes no lo repiten.
+    /// transferencia tenga la firma de una parte, esa parte (el inspector del viaje si falta quien entrega, el conductor si falta quien recibe) y el coordinador de calidad y los administradores del cliente reciben un aviso de
+    /// urgencia media con los carros que faltan; coordinacion y administracion lo reciben aunque la parte que falta no tenga usuario asignado. Un solo aviso por viaje, parte y destinatario: las corridas siguientes no lo repiten.
     /// </summary>
     public async Task<int> EjecutarFirmasDelCarguePendientesAsync(CancellationToken ct = default)
     {
@@ -264,7 +264,20 @@ public sealed class clsAlertasPeriodicas(
                          (clsParteFirmante.RECIBE, delViaje.First().ConductorId, delViaje.Where(f => f.FaltaRecibe).Select(f => f.Vin).Order(StringComparer.Ordinal).ToList()),
                      })
             {
-                if (destinatario is not { } usuarioId || vines.Count == 0)
+                if (vines.Count == 0)
+                {
+                    continue;
+                }
+
+                // Coordinacion y administracion del cliente reciben el aviso aunque la parte que falta no tenga usuario asignado en el viaje.
+                var destinatarios = (await usuarios.ObtenerActivosPorRolesAsync([clsRol.COORDINADOR_CALIDAD, clsRol.ADMIN], delViaje.First().ClienteId, ct)).Select(u => u.Id).ToList();
+                if (destinatario is { } usuarioId)
+                {
+                    destinatarios.Add(usuarioId);
+                }
+
+                destinatarios = destinatarios.Distinct().ToList();
+                if (destinatarios.Count == 0)
                 {
                     continue;
                 }
@@ -273,7 +286,7 @@ public sealed class clsAlertasPeriodicas(
                     new clsAlerta(
                         clsTipoNotificacion.FIRMA_CARGUE_PENDIENTE,
                         clsUrgenciaNotificacion.MEDIA,
-                        [usuarioId],
+                        destinatarios,
                         delViaje.First().ClienteId,
                         delViaje.Key,
                         null,
@@ -284,7 +297,7 @@ public sealed class clsAlertasPeriodicas(
                         $"{clsTipoNotificacion.FIRMA_CARGUE_PENDIENTE}:{delViaje.Key}:{parte}",
                         new Dictionary<string, object?> { ["viaje_id"] = delViaje.Key, ["vines"] = vines, ["parte_que_falta"] = parte }),
                     ct);
-                emitidas++;
+                emitidas += destinatarios.Count;
             }
         }
 
