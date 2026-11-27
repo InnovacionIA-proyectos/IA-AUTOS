@@ -429,6 +429,29 @@ void main() {
       expect(find.byType(LienzoFirma), findsOneWidget);
     });
 
+    // Reservas en todos los carros después de su firma: el servidor se la retira en todos y no queda rastro de que
+    // firmó. Igual se le dice cuáles carros tienen reservas de quien recibe y que firme, sin el «otra vez».
+    testWidgets('con reservas en todos los carros le dice que las revise y firme esos carros', (tester) async {
+      await abrir(
+        tester,
+        EntregasRepositorioFalso()
+          ..puntos = [
+            puntoDe(
+              'Puerto',
+              reservas: {_vin1: 'Rayón en la puerta', _vin2: 'Llegó sucio y sin manual'},
+              recibeFirmada: {_vin1, _vin2},
+            ),
+          ],
+        pantalla: parada('Puerto'),
+      );
+
+      expect(
+        find.textContaining('Quien recibe ya firmó con reservas: revísalas antes de firmar estos carros: $_vin1, $_vin2'),
+        findsOneWidget,
+      );
+      expect(find.byType(LienzoFirma), findsOneWidget);
+    });
+
     // Si el conductor todavía no había firmado, las reservas son las de siempre: no hay nada que firmar «otra vez».
     testWidgets('si firma por primera vez después de las reservas, no le dice que firme otra vez', (tester) async {
       await abrir(

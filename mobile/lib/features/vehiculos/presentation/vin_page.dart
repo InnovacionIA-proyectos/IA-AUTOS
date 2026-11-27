@@ -30,6 +30,7 @@ import '../../inspecciones/presentation/revision_novedad_page.dart';
 import '../../inspecciones/domain/nota_aclaratoria.dart';
 import '../../inspecciones/presentation/lista_hallazgos_previos.dart';
 import '../../inspecciones/presentation/nota_aclaratoria_hoja.dart';
+import '../../inspecciones/domain/puestos_guardados.dart';
 import '../../inspecciones/providers.dart';
 import '../../sync/domain/job.dart';
 import '../../sync/providers.dart';
@@ -414,6 +415,15 @@ class _Detalle extends ConsumerWidget {
   Future<void> _soltarLoGuardado(WidgetRef ref, EtapaVista etapa, InspeccionVista borrador) async {
     final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
     if (usuarioId == null) return;
+    // S8-HU-01.3 CA-4: descartar la acomodación (la salida del cargue) suelta también los puestos de la niñera
+    // elegidos en este teléfono: eran para ese informe y ya no tienen con qué viajar.
+    if (etapa.proceso == 'cargue' && borrador.momento == Momento.salida && etapa.viajeId != null) {
+      try {
+        await ref.read(almacenPuestosProvider).borrar(clavePuestos(usuarioId: usuarioId, viajeId: etapa.viajeId!));
+      } catch (_) {
+        // Lo del servidor ya quedó descartado: lo del teléfono no puede deshacerlo.
+      }
+    }
     final almacen = ref.read(almacenBorradoresProvider);
     final archivos = ref.read(archivosLocalesProvider);
     final clave = claveBorrador(
@@ -681,12 +691,6 @@ class _Detalle extends ConsumerWidget {
                       ref.invalidate(inventarioProvider(inventario.vin));
                     }
                   : null,
-              alFirmar: (accion) => alIr(
-                '/inspecciones/vin/$vinRuta/firma/${accion.inspeccionId}?proceso=${Uri.encodeQueryComponent(catalogos.etiqueta(Catalogo.etapas, etapa.proceso))}'
-                '&soloFirma=${accion.soloFirma ? 1 : 0}'
-                // El viaje decide quiénes pueden firmar: sin él la pantalla no tiene a quién ofrecer.
-                '${etapa.viajeId == null ? '' : '&viajeId=${Uri.encodeQueryComponent(etapa.viajeId!)}'}',
-              ),
             ),
             const SizedBox(height: Espacio.sm),
           ],
@@ -1311,7 +1315,6 @@ class _TarjetaEtapa extends StatelessWidget {
     required this.accion,
     required this.nombreDeEtapa,
     required this.alCapturar,
-    required this.alFirmar,
     required this.sinInspector,
     required this.admiteSinInspector,
     required this.viajeConocido,
@@ -1356,7 +1359,6 @@ class _TarjetaEtapa extends StatelessWidget {
   final AccionEtapa accion;
   final String Function(String codigoEtapa) nombreDeEtapa;
   final void Function(String momento) alCapturar;
-  final void Function(FirmarTransferencia accion) alFirmar;
 
   /// ¿En este momento el conductor no captura sino que activa «No hay inspector»?
   final bool Function(String momento) sinInspector;
@@ -1537,12 +1539,11 @@ class _TarjetaEtapa extends StatelessWidget {
                       )
                   // El transporte no es un cambio de custodia: el carro pasó al conductor con la firma de la niñera y
                   // se entrega en la parada. Firmar aquí dejaba una transferencia suelta sobre el informe de transporte.
-                  else if (etapa.proceso == 'transporte')
-                    Text(mensajeTransporteSinFirma, style: tema.bodySmall)
+                  // S8-HU-04.2 CA-11: con la niñera y la parada, ninguna etapa se firma carro por carro.
                   else
-                    FilledButton(
-                      onPressed: () => alFirmar(a),
-                      child: Text(a.soloFirma ? 'Revisar y firmar' : 'Firmar transferencia'),
+                    Text(
+                      etapa.proceso == 'transporte' ? mensajeTransporteSinFirma : mensajeSinFirmaPorCarro,
+                      style: tema.bodySmall,
                     ),
                 ],
               ),
@@ -1553,6 +1554,10 @@ class _TarjetaEtapa extends StatelessWidget {
     );
   }
 }
+
+/// Lo que dice una etapa que no es cargue, transporte ni descargue en lugar de una firma: ya nada se firma carro por
+/// carro.
+const mensajeSinFirmaPorCarro = 'Esta etapa no se firma carro por carro.';
 
 /// Lo que dice la etapa de transporte en lugar de una firma: ahí no cambia la custodia.
 const mensajeTransporteSinFirma =

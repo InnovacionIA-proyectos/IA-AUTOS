@@ -1123,10 +1123,15 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
     // conductor en esos carros y los deja esperándola otra vez, mientras los demás cierran con las dos firmas. Eso es
     // lo que se ve: carros ya cerrados (o con la firma del conductor) junto a carros con reservas, la firma de quien
     // recibe y sin la del conductor.
+    //
+    // Si las reservas cayeron en todos los carros, el servidor le retiró la firma en todos y no queda rastro de que
+    // firmó: entonces se le dice, sin el «otra vez», que quien recibe ya firmó con reservas y que las revise y firme.
     final firmoAntes = _punto.unidades.any((u) => u.cerrada || u.entregaFirmada);
-    final volverAFirmar = papel == _Papel.entrega && !_enElLugar && firmoAntes
+    final conReservas = papel == _Papel.entrega && !_enElLugar
         ? [for (final u in carros) if (!u.entregaFirmada && u.recibeFirmada && u.reservas != null) u.vin]
         : const <String>[];
+    final volverAFirmar = firmoAntes ? conReservas : const <String>[];
+    final reservasPorRevisar = firmoAntes ? const <String>[] : conReservas;
     final porQueNoUnaFirma = _porQueNoUnaFirma;
     final reloj = _relojEspera;
     final rol = ref.read(authControllerProvider).sesion?.usuario.rol;
@@ -1264,6 +1269,17 @@ class _EstadoFirmaEntregaPunto extends ConsumerState<FirmaEntregaPuntoPage> {
                 child: Text(
                   'Quien recibe dejó reservas después de tu firma: firma otra vez ${volverAFirmar.length == 1 ? 'este carro' : 'estos carros'}: '
                   '${volverAFirmar.join(', ')}.',
+                  style: tema.bodyMedium?.copyWith(color: Colores.advertencia),
+                ),
+              ),
+            ],
+            if (reservasPorRevisar.isNotEmpty) ...[
+              const SizedBox(height: Espacio.md),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  'Quien recibe ya firmó con reservas: revísalas antes de firmar '
+                  '${reservasPorRevisar.length == 1 ? 'este carro' : 'estos carros'}: ${reservasPorRevisar.join(', ')}.',
                   style: tema.bodyMedium?.copyWith(color: Colores.advertencia),
                 ),
               ),

@@ -42,41 +42,6 @@ class _EstadoNinera extends ConsumerState<NineraPage> {
   /// Los del servidor cuando se leyó el viaje: contra ellos se guarda lo elegido.
   Map<String, int> _delServidor = const {};
   bool _abriendo = false;
-  bool _descargandoPdf = false;
-
-  /// El informe de la niñera en PDF (CA-10): se descarga con señal y se abre con la app de PDF del teléfono. Si
-  /// falla, dice por qué y deja reintentar.
-  Future<void> _informe(Viaje viaje) async {
-    if (_descargandoPdf) return;
-    setState(() => _descargandoPdf = true);
-    final contenedor = ProviderScope.containerOf(context, listen: false);
-    String? motivo;
-    try {
-      final bytes = await contenedor.read(viajesRepositorioProvider).pdfNinera(viaje.id);
-      await contenedor.read(abridorPdfProvider).abrir(bytes, 'ninera-${viaje.codigoMtrack}.pdf');
-    } on PdfNoAbierto catch (e) {
-      motivo = e.motivo;
-    } on ErrorApi catch (e) {
-      motivo = e.esTransitorio ? 'No hay señal o el servidor no responde.' : e.mensajeDetallado;
-    } catch (_) {
-      motivo = 'No se pudo descargar el informe.';
-    }
-    if (!mounted) return;
-    setState(() => _descargandoPdf = false);
-    if (motivo == null) return;
-    final reintentar = await showDialog<bool>(
-      context: context,
-      builder: (contexto) => AlertDialog(
-        title: const Text('No se pudo abrir el informe de la niñera'),
-        content: Text(motivo!),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(contexto).pop(false), child: const Text('Cerrar')),
-          TextButton(onPressed: () => Navigator.of(contexto).pop(true), child: const Text('Reintentar')),
-        ],
-      ),
-    );
-    if (reintentar == true && mounted) await _informe(viaje);
-  }
 
   String? get _clave {
     final usuarioId = ref.read(authControllerProvider).sesion?.usuario.id;
@@ -284,13 +249,7 @@ class _EstadoNinera extends ConsumerState<NineraPage> {
               const SizedBox(height: Espacio.xs),
             ],
             const SizedBox(height: Espacio.lg),
-            OutlinedButton.icon(
-              onPressed: _descargandoPdf ? null : () => _informe(viaje),
-              icon: _descargandoPdf
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.picture_as_pdf_outlined),
-              label: const Text('Informe de la niñera'),
-            ),
+            BotonInformeNinera(viaje: viaje),
             const SizedBox(height: Espacio.sm),
             if (parteEnLaNinera(viaje, yo) != null && !viaje.cargueCerrado)
               FilledButton(
@@ -350,4 +309,65 @@ class _FilaCarro extends StatelessWidget {
       ),
     );
   }
+}
+
+/// «Informe de la niñera» (S8-HU-01.3 CA-10): el PDF de la niñera del viaje. Se descarga con señal y se abre con la app
+/// de PDF del teléfono; si falla, dice por qué y deja reintentar.
+///
+/// Está en la pantalla de la niñera y en la tarjeta del viaje para quien ve el informe por carro y no abre esa
+/// pantalla: el coordinador que llega desde un aviso, el inspector que solo recibe en una parada, un viaje terminado.
+class BotonInformeNinera extends ConsumerStatefulWidget {
+  const BotonInformeNinera({super.key, required this.viaje});
+
+  final Viaje viaje;
+
+  @override
+  ConsumerState<BotonInformeNinera> createState() => _EstadoBotonInformeNinera();
+}
+
+class _EstadoBotonInformeNinera extends ConsumerState<BotonInformeNinera> {
+  bool _descargandoPdf = false;
+
+  /// El informe de la niñera en PDF (CA-10): se descarga con señal y se abre con la app de PDF del teléfono. Si
+  /// falla, dice por qué y deja reintentar.
+  Future<void> _informe() async {
+    if (_descargandoPdf) return;
+    setState(() => _descargandoPdf = true);
+    final contenedor = ProviderScope.containerOf(context, listen: false);
+    String? motivo;
+    try {
+      final bytes = await contenedor.read(viajesRepositorioProvider).pdfNinera(widget.viaje.id);
+      await contenedor.read(abridorPdfProvider).abrir(bytes, 'ninera-${widget.viaje.codigoMtrack}.pdf');
+    } on PdfNoAbierto catch (e) {
+      motivo = e.motivo;
+    } on ErrorApi catch (e) {
+      motivo = e.esTransitorio ? 'No hay señal o el servidor no responde.' : e.mensajeDetallado;
+    } catch (_) {
+      motivo = 'No se pudo descargar el informe.';
+    }
+    if (!mounted) return;
+    setState(() => _descargandoPdf = false);
+    if (motivo == null) return;
+    final reintentar = await showDialog<bool>(
+      context: context,
+      builder: (contexto) => AlertDialog(
+        title: const Text('No se pudo abrir el informe de la niñera'),
+        content: Text(motivo!),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(contexto).pop(false), child: const Text('Cerrar')),
+          TextButton(onPressed: () => Navigator.of(contexto).pop(true), child: const Text('Reintentar')),
+        ],
+      ),
+    );
+    if (reintentar == true && mounted) await _informe();
+  }
+
+  @override
+  Widget build(BuildContext context) => OutlinedButton.icon(
+        onPressed: _descargandoPdf ? null : _informe,
+        icon: _descargandoPdf
+            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.picture_as_pdf_outlined),
+        label: const Text('Informe de la niñera'),
+      );
 }

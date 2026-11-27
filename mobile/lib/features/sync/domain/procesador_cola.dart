@@ -17,6 +17,9 @@ const mensajeCarroBajado = 'El carro ya no está en el viaje';
 const mensajeSalidaDescargue = 'En el destino solo se revisa la llegada: este informe ya no aplica';
 const codigoMomentoNoAdmitido = 'MOMENTO_NO_ADMITIDO';
 
+/// El `details.motivo` de ese 409: la salida del descargue, que ya no existe (S8-HU-06.2).
+const motivoSalidaDescargue = 'salida_descargue';
+
 /// Por qué el servidor ya no admite este envío del carro, o null si el rechazo es otro (S8-HU-02.2 CA-4 y CA-6).
 ///
 /// Llega de tres maneras: las inspecciones y las firmas responden 409 con `details.motivo` `unidad_no_sale` o
@@ -33,7 +36,7 @@ String? motivoDeRetiro(ErrorApi e, Job job) {
   // dice el servidor («usa Entregar en esta parada»).
   if (e.status == 409 && motivo == 'entrega_por_parada') return e.message;
   // S8-HU-06.2 CA-5: la salida del descargue ya no existe. Reintentarla daría el mismo 409 para siempre.
-  if (e.status == 409 && (motivo == 'salida_descargue' || e.code == codigoMomentoNoAdmitido)) return mensajeSalidaDescargue;
+  if (e.status == 409 && (motivo == motivoSalidaDescargue || e.code == codigoMomentoNoAdmitido)) return mensajeSalidaDescargue;
   // S8-HU-07.3 CA-8: el informe de transporte ya lo arma el sistema con «Reportar novedad» y «Llegué»; uno manual
   // encolado antes no se reintenta: se retira con lo que dice el servidor.
   if (e.status == 409 && motivo == motivoTransporteLoArmaElSistema) return e.message;

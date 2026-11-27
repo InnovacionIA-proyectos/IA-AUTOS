@@ -35,12 +35,21 @@ final _testigosDeLaNineraProvider =
 /// La deja la parte que sí está, con el motivo, un testigo y una foto, y cierra la entrega del cargue de cada
 /// carro activo: no hay constancia para solo algunos carros, para eso están las reservas.
 class NoFirmaNineraPage extends ConsumerStatefulWidget {
-  const NoFirmaNineraPage({super.key, required this.viaje, required this.parteQueSeNego});
+  const NoFirmaNineraPage({
+    super.key,
+    required this.viaje,
+    required this.parteQueSeNego,
+    @visibleForTesting this.fotoDePrueba,
+  });
 
   final Viaje viaje;
 
   /// `entrega` o `recibe`: la que se negó.
   final String parteQueSeNego;
+
+  /// Solo para pruebas: la foto ya tomada. La cámara no se abre en una prueba de widget, y sin foto no se llega a
+  /// registrar la constancia ni a ver qué dice su envío.
+  final FotoLocal? fotoDePrueba;
 
   @override
   ConsumerState<NoFirmaNineraPage> createState() => _EstadoNoFirmaNinera();
@@ -51,6 +60,12 @@ class _EstadoNoFirmaNinera extends ConsumerState<NoFirmaNineraPage> {
   String? _testigoId;
   FotoLocal? _foto;
   bool _guardando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _foto = widget.fotoDePrueba;
+  }
 
   @override
   void dispose() {

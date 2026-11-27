@@ -305,6 +305,17 @@ class _EstadoCapturaPage extends ConsumerState<CapturaPage> {
     if (confirmado != true || !mounted) return;
     await _borrarArchivos({...guardado.archivos, ..._rutasDe(guardado)});
     await _almacen.borrar(clave);
+    // S8-HU-01.3 CA-4: en la acomodación, empezar de nuevo también suelta los puestos de la niñera elegidos aquí.
+    if (_clavePuestos case final puestos?) {
+      await _almacenPuestos.borrar(puestos);
+      // Vuelven los puestos del servidor: lo elegido aquí ya no vale.
+      _puestosLeidos = null;
+      if (mounted && _puestosAplicados) {
+        setState(() => _posiciones
+          ..clear()
+          ..addAll(_posicionesPrevias));
+      }
+    }
     if (mounted) setState(() => _ofrecido = null);
   }
 

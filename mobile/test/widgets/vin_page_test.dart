@@ -14,6 +14,7 @@ import 'package:traza_autos/features/sync/domain/job.dart';
 import 'package:traza_autos/features/vehiculos/data/vehiculos_repositorio.dart';
 import 'package:traza_autos/features/vehiculos/domain/consulta.dart';
 import 'package:traza_autos/features/vehiculos/domain/inventario.dart';
+import 'package:traza_autos/features/inspecciones/domain/puestos_guardados.dart';
 import 'package:traza_autos/features/vehiculos/presentation/vin_page.dart';
 import 'package:traza_autos/features/vehiculos/providers.dart';
 import 'package:traza_autos/features/viajes/domain/pendiente.dart';
@@ -1504,6 +1505,53 @@ void main() {
 
       expect(arnes.inspecciones.descartados, ['b1']);
       expect(find.textContaining('Informe descartado'), findsOneWidget);
+    });
+
+    // S8-HU-01.3 CA-4: los puestos de la niñera elegidos en el teléfono se sueltan también al descartar la acomodación.
+    testWidgets('descartar la acomodación suelta los puestos de la niñera guardados en el teléfono', (tester) async {
+      final json = conBorrador();
+      final etapa = (json['etapas'] as List<dynamic>).first as Map<String, dynamic>;
+      final inspecciones = etapa['inspecciones'] as List<dynamic>;
+      // La salida cerrada del fixture pasa a ser la llegada, y el borrador es la acomodación.
+      (inspecciones.first as Map<String, dynamic>)
+        ..['momento'] = 'llegada'
+        ..['momento_nombre'] = 'Inspección de llegada';
+      (inspecciones.last as Map<String, dynamic>)
+        ..['momento'] = 'salida'
+        ..['momento_nombre'] = 'Inspección de salida';
+      final arnes = Arnes(sesion: sesionPrueba);
+      final clave = clavePuestos(usuarioId: 'u1', viajeId: 'viaje-1');
+      arnes.puestos.guardados[clave] = {
+        'cambios': {'VIN00000000000001': 2},
+        'base': {'VIN00000000000001': null},
+      };
+      await abrir(tester, inventario: json, viajes: delInspector('u1'), arnes: arnes);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Descartar'));
+      await asentar(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Descartar'));
+      await asentar(tester);
+
+      expect(arnes.inspecciones.descartados, ['b1']);
+      expect(arnes.puestos.guardados, isNot(contains(clave)));
+    });
+
+    testWidgets('descartar la llegada no toca los puestos de la niñera', (tester) async {
+      final arnes = Arnes(sesion: sesionPrueba);
+      final clave = clavePuestos(usuarioId: 'u1', viajeId: 'viaje-1');
+      arnes.puestos.guardados[clave] = {
+        'cambios': {'VIN00000000000001': 2},
+        'base': {'VIN00000000000001': null},
+      };
+      await abrir(tester, inventario: conBorrador(), viajes: delInspector('u1'), arnes: arnes);
+
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Descartar'));
+      await asentar(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Descartar'));
+      await asentar(tester);
+
+      expect(arnes.inspecciones.descartados, ['b1']);
+      expect(arnes.puestos.guardados, contains(clave));
     });
 
     testWidgets('cancelar no descarta nada', (tester) async {

@@ -355,4 +355,32 @@ void main() {
       expect(find.text('Tú recibes'), findsOneWidget);
     });
   });
+
+  // S8-HU-01.3 CA-10: el informe de la niñera también lo tiene quien ve el viaje y no abre la pantalla de la niñera.
+  group('el informe de la niñera en la tarjeta del viaje', () {
+    const otroInspector =
+        Sesion(token: 'jwt', usuario: Usuario(id: 'pedro', nombre: 'Pedro Salazar', email: '', rol: 'inspector'));
+
+    ViajesRepositorioFalso delViaje() => ViajesRepositorioFalso()
+      ..remotos = [viaje('v1', vines: [_vin], inspectorId: 'ana', conductorId: 'luis')];
+
+    testWidgets('el conductor del viaje lo tiene dentro de la niñera, no repetido en la tarjeta', (tester) async {
+      await abrir(tester, delViaje());
+
+      expect(find.text('Niñera y firma del cargue'), findsOneWidget);
+      expect(find.text('Informe de la niñera'), findsNothing);
+    });
+
+    testWidgets('quien no firma la niñera lo descarga desde la tarjeta', (tester) async {
+      final viajes = delViaje();
+      final arnes = await abrir(tester, viajes, arnes: Arnes(sesion: otroInspector));
+
+      expect(find.text('Niñera y firma del cargue'), findsNothing);
+      await tester.tap(find.text('Informe de la niñera'));
+      await avanzar(tester);
+
+      expect(viajes.pdfsPedidos, 1);
+      expect(arnes.pdfs.abiertos, ['ninera-MTK-1.pdf']);
+    });
+  });
 }

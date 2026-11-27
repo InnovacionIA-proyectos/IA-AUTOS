@@ -414,7 +414,7 @@ void main() {
       expect(parametros.map((p) => (p as Map<String, dynamic>)['name']), contains('usuario_id'));
     });
 
-    // S8-HU-08.2 CA-7: llegan con el PR #457 (#430). Se activan al quitar el `skip` cuando entre a QA.
+    // S8-HU-08.2 CA-7: llegaron con el PR #457 (#430), ya en QA.
     test('el listado de hallazgos admite filtrar por sin_calificar', () {
       final parametros = ((rutas['/api/hallazgos'] as Map<String, dynamic>)['get'] as Map<String, dynamic>)['parameters'] as List<dynamic>;
       expect(parametros.map((p) => (p as Map<String, dynamic>)['name']), contains('sin_calificar'));
@@ -424,8 +424,7 @@ void main() {
     });
   });
 
-  // S8-HU-04.2: la entrega por parada. Lo de aquí llega con el PR #456 (S8-HU-04.1, también dentro del #457); se
-  // activa al quitar el `skip` cuando entre a QA.
+  // S8-HU-04.2: la entrega por parada. Llegó con el PR #456 (S8-HU-04.1, también dentro del #457), ya en QA.
   group('la entrega por parada', () {
 
     // CA-2, CA-3 y CA-8: cómo va la parada, quién recibe y si el conductor ya marcó «Llegué».

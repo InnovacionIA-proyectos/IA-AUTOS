@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:traza_autos/core/config/entorno.dart';
 import 'package:traza_autos/core/config/parametros_app.dart';
 import 'package:traza_autos/core/errores/error_api.dart';
 import 'package:traza_autos/core/tema/tema.dart';
@@ -733,6 +734,48 @@ void main() {
 
       expect(find.textContaining('No se pudo leer lo que tiene'), findsOneWidget);
       expect(find.textContaining('Falta la foto de la vista'), findsOneWidget);
+    });
+  });
+
+  // S8-HU-08.2 CA-1 y CA-7: en la captura, el conductor marca el extra dañado con clase y tamaño, sin nivel: el nivel
+  // lo pone quien califica. El inspector lo sigue eligiendo.
+  group('el extra dañado en la captura', () {
+    const luis = Sesion(token: 'jwt', usuario: Usuario(id: 'luis', nombre: 'Luis Gómez', email: '', rol: 'conductor'));
+    const conExtras = Entorno(flavor: Flavor.dev, apiUrl: 'https://api.test', extrasHabilitados: true);
+
+    Future<void> marcarExtraDanado(WidgetTester tester) async {
+      await tester.ensureVisible(find.widgetWithText(OutlinedButton, 'Agregar extra'));
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Agregar extra'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(ChoiceChip, 'Otro'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, '¿Qué es?'), 'platón');
+      await tester.pump();
+      await tester.tap(find.byType(SwitchListTile));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('al conductor no le pide el nivel', (tester) async {
+      await abrir(
+        tester,
+        ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'),
+        arnes: Arnes(sesion: luis, entorno: conExtras),
+        procesoCodigo: 'descargue',
+        proceso: 'Descargue',
+      );
+
+      await marcarExtraDanado(tester);
+
+      expect(find.text('Clase de daño'), findsOneWidget);
+      expect(find.text('Nivel de severidad'), findsNothing);
+    });
+
+    testWidgets('al inspector sí', (tester) async {
+      await abrir(tester, ViajesRepositorioFalso()..viajeDeEtapa = viaje('v1'), arnes: Arnes(entorno: conExtras));
+
+      await marcarExtraDanado(tester);
+
+      expect(find.text('Nivel de severidad'), findsOneWidget);
     });
   });
 }

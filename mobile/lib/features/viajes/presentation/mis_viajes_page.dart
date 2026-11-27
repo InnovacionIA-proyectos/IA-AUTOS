@@ -392,6 +392,12 @@ class _TarjetaViaje extends ConsumerWidget {
               ),
               child: Text(viaje.cargueCerrado ? 'Niñera' : 'Niñera y firma del cargue'),
             ),
+          ]
+          // S8-HU-01.3 CA-10: quien ve el informe por carro y no abre la pantalla de la niñera (el coordinador desde un
+          // aviso, el inspector que solo recibe, un viaje terminado) tiene el informe de la niñera aquí mismo.
+          else if (viaje.vehiculos.any((v) => !v.bajado)) ...[
+            const SizedBox(height: Espacio.sm),
+            BotonInformeNinera(viaje: viaje),
           ],
           // S8-HU-04.2 CA-9: «Llegué a esta parada», una por parada con carros sin su llegada. Sale de la copia del
           // viaje, así que sirve sin señal: la llegada va por la cola con la hora y el GPS de ese momento.
