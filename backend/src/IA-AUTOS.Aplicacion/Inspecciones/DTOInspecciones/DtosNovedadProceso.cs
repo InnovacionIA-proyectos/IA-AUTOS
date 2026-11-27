@@ -14,7 +14,8 @@ public sealed record NovedadProcesoDto(string Tipo, string? MotivoCodigo, string
 
 /// <summary>
 /// El permiso con el que se activo la excepcion «No hay inspector» en un punto con inspectores: quien lo pidio, cuando y desde donde (el momento y el GPS de la solicitud) y quien lo concedio o, si nadie respondio, que
-/// lo concedio el reloj (<c>AutorizadoPorTiempo</c>). Nulo en la excepcion que se activo directamente (el punto no tenia inspectores).
+/// lo concedio el reloj (<c>AutorizadoPorTiempo</c>). <c>VenceAt</c> es el plazo con que nacio la solicitud: con un plazo de 15 minutos, <c>VenceAt</c> menos <c>SolicitadoAt</c> son 15 minutos. Nulo en la excepcion que
+/// se activo directamente (el punto no tenia inspectores).
 /// </summary>
 public sealed record PermisoDeLaNovedadDto(
     string? SolicitadoPorNombre,
@@ -23,7 +24,8 @@ public sealed record PermisoDeLaNovedadDto(
     double? SolicitadoLng,
     string? ConcedidoPorNombre,
     DateTimeOffset? ConcedidoAt,
-    bool AutorizadoPorTiempo);
+    bool AutorizadoPorTiempo,
+    DateTimeOffset? VenceAt = null);
 
 /// <summary>El motivo de una inspeccion (si la hizo el conductor sin el inspector previsto) y sus novedades de proceso, de la mas antigua a la mas reciente.</summary>
 public sealed record NovedadesDeInspeccionDto(MotivoSinInspectorDto? Motivo, IReadOnlyList<NovedadProcesoDto> Novedades)

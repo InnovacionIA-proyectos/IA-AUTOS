@@ -1180,7 +1180,7 @@ Una novedad de proceso **no es un hallazgo**: no tiene zona, clase ni nivel y no
 
 `motivo_sin_inspector` es `null` y `novedades_proceso` es `[]` en las demás inspecciones. `motivo` es el nombre del motivo y `motivo_codigo` su código. Las novedades se listan de la más antigua a la más reciente.
 
-Cada novedad trae además `permiso` (en el viaje, la inspección y el inventario): `null` si la excepción se activó directamente (el punto no tenía inspectores) o, si se pidió el permiso, `{ solicitado_por_nombre, solicitado_at, solicitado_lat, solicitado_lng, concedido_por_nombre, concedido_at, autorizado_por_tiempo }`: **quién pidió, cuándo y desde dónde**, y **quién concedió o, si
+Cada novedad trae además `permiso` (en el viaje, la inspección y el inventario): `null` si la excepción se activó directamente (el punto no tenía inspectores) o, si se pidió el permiso, `{ solicitado_por_nombre, solicitado_at, solicitado_lat, solicitado_lng, concedido_por_nombre, concedido_at, autorizado_por_tiempo, vence_at }`: **quién pidió, cuándo y desde dónde**, y **quién concedió o, si
 nadie respondió, que lo concedió el reloj** (`autorizado_por_tiempo: true`, sin quien).
 
 #### Permiso de la excepción
@@ -1229,7 +1229,7 @@ momento queda libre para una inspección original nueva. `200` con la `Inspeccio
 
 - `404` si el informe no existe; el coordinador de calidad recibe `403` si el VIN es de otro cliente. Si ambas se cumplen, gana la de la autoría.
 - **La auditoría del viaje** registra `inspeccion.descartar` con quién, cuándo y, en `detalle.antes` y `detalle.despues`, el `momento`, el `estado` y cuántas `fotos` y `danos` tenía el borrador.
-- **Cómo distinguen la app y el portal un descartado.** El estado nuevo `descartada` (y `superada`, abajo) **no sale en ningún listado**: ni `GET /api/inspecciones`, ni el detalle del viaje, ni el inventario del carro, ni la cobertura, ni los avisos; el momento vuelve a ofrecer «Capturar». Solo se abre **por su id** (`GET /api/inspecciones/{id}`, que trae `estado: "descartada"` y la auditoría lo enlaza): el portal lo muestra con la etiqueta «Descartado» y no con el código crudo. El filtro `estado` del listado sigue admitiendo solo `borrador` y `cerrada`. Las respuestas anteriores se leen igual: los informes de siempre son `borrador` o `cerrada`.
+- **Cómo distinguen la app y el portal un descartado.** El estado nuevo `descartada` (y `superada`, abajo) **no sale en ningún listado**: ni `GET /api/inspecciones`, ni el detalle del viaje, ni el inventario del carro, ni la cobertura, ni los avisos; el momento vuelve a ofrecer «Capturar». Solo se abre **por su id** (`GET /api/inspecciones/{id}`, que trae `estado: "descartada"` y la auditoría lo enlaza): el portal lo muestra con la etiqueta «Descartado» y no con el código crudo. El filtro `estado` del listado admite `borrador` y `cerrada` y, **solo y como único valor**, `descartada` (ver el listado de descartados en `GET /api/inspecciones`). Las respuestas anteriores se leen igual: los informes de siempre son `borrador` o `cerrada`.
 - Un descartado **no admite** fotos, hallazgos, extras ni cierre (`409`, `details.motivo: "informe_descartado"`) y no genera el aviso «Captura incompleta».
 - Descartar la versión vacía de una corrección abandonada deja la inspección cerrada otra vez **corregible** (la restricción de «una sola corrección» ya no la cuenta).
 
@@ -1244,7 +1244,7 @@ Autenticado. Una **página** de informes (`{ items, total, pagina, tamano }`; 50
 | `usuario_id` | UUID del inspector |
 | `viaje_id` | UUID del viaje |
 | `momento` | `salida` o `llegada` |
-| `estado` | `borrador` o `cerrada` (los informes `descartada` y `superada` no salen en el listado) |
+| `estado` | `borrador` o `cerrada`; o `descartada`, solo y sin otro valor, para listar los informes descartados (ver abajo). Sin `estado=descartada` los informes `descartada` y `superada` no salen en el listado |
 | `proceso` | `codigo` de una etapa del catálogo `etapas` (por ejemplo `cargue`, `transporte` o `descargue`), activa o no |
 | `operacion` | `importacion`, `exportacion` o `nacional` (la del vehículo) |
 | `marca` | la marca del vehículo |
@@ -1255,6 +1255,12 @@ Autenticado. Una **página** de informes (`{ items, total, pagina, tamano }`; 50
 Un filtro mal formado responde `400` con `fieldErrors` por campo. Cada fila es el `InspeccionDto` más `vin` y `proceso`, y `lugar` (el punto de custodia de la etapa, el mismo que trae el detalle del informe), `codigo_mtrack` (el del viaje) y `unidad` (el tipo de unidad transportadora del viaje), para no abrir cada informe;
 los tres son `null` cuando no hay (una etapa sin punto de custodia, un viaje sin código o sin tipo de unidad). Trae además `usuario_nombre`: **el nombre de quien hizo el informe**, con el mismo join y el mismo alcance por cliente que `conductor_nombre` (`null` si el usuario ya no existe; una fila de otro cliente no sale, así que su autor tampoco).
 El nombre va solo en este campo del listado: no se agrega a ningún aviso, texto ni exportación. Inspector y conductor solo reciben los informes de sus viajes.
+**El rol de quien lo hizo.** Cada fila trae `usuario_rol`: el código del rol de quien hizo el informe (`inspector`, `conductor`, `coordinador_calidad`, `comercial`, `admin` o `super_admin`; `null` si el usuario ya no existe). Es un campo nuevo que se suma y no lleva ninguna cédula: `{ "usuario_nombre": "Luis Pérez", "usuario_rol": "conductor", ... }`.
+**Los descartados.** `GET /api/inspecciones?estado=descartada` lista los informes descartados (`estado: "descartada"`; los `superada` nunca salen en ninguna lista). `estado=descartada` va **solo**: junto a otro valor (`estado=descartada,cerrada`) o en la exportación `GET /api/exportaciones/inspecciones.xlsx` responde `400`, y `POST /api/inspecciones` tampoco lo acepta como `estado` (`400`). Quién ve qué: el `coordinador_calidad`, el `admin` y el `super_admin` reciben **todos los descartados del cliente** (el `super_admin` los de todos los clientes, o los de `cliente_id`); el `inspector` y el `conductor` reciben **solo los que hicieron ellos** (lista vacía si no hicieron ninguno, también si piden los de otra persona con `usuario_id`; no se mira el viaje); el `comercial` recibe `403`. Los demás filtros (`viaje_id`, `vin`, `proceso`, `momento`, fechas…) se combinan igual. Cada fila trae, además de lo de siempre, `descartada_por_nombre` y `descartada_at`: quién lo descartó y cuándo, tal como quedó en la auditoría `inspeccion.descartar` (`descartada_por_nombre` es `null` si esa persona ya no existe; sin registro de auditoría, `descartada_at` es la fecha del último cambio del informe). En las demás listas los dos van `null`. *Los nombres `usuario_rol`, `descartada_por_nombre` y `descartada_at` son propuestas por confirmar con el negocio.*
+```json
+{ "items": [ { "id": "uuid", "estado": "descartada", "momento": "llegada", "vin": "9BWZZZ377VT004251", "usuario_nombre": "Ana Pérez", "usuario_rol": "inspector",
+               "descartada_por_nombre": "Carlos Gómez", "descartada_at": "2026-11-25T14:02:11.000Z" } ], "total": 1, "pagina": 1, "tamano": 50 }
+```
 
 ### `GET /api/inspecciones/{id}/pdf`
 Autenticado. El **informe de la inspección en PDF** (`Content-Type: application/pdf`, nombre `informe-{vin}-{proceso}-{momento}-v{version}.pdf`), como descarga binaria (use `fetch` con el token y descargue el `blob`). Lleva:
