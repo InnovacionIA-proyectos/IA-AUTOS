@@ -20,12 +20,12 @@ public sealed record RegistrarNovedadViajeRequest(
 
 /// <summary>
 /// La foto de una novedad del viaje con el sello del celular. <c>Url</c> es la URL firmada de lectura (la API la reemplaza al responder, a partir de <c>RutaArchivo</c>, que no se expone); <c>SinUbicacion</c> marca la foto
-/// tomada sin senal de GPS.
+/// tomada sin senal de GPS. <c>SelloLat</c> y <c>SelloLng</c> van vacias solo en la foto de la constancia de no firma del cargue cuando <c>SinUbicacion</c> es verdadero; en las demas fotos valen 0.
 /// </summary>
 public sealed record FotoNovedadViajeDto(
     DateTimeOffset SelloFecha,
-    double SelloLat,
-    double SelloLng,
+    double? SelloLat,
+    double? SelloLng,
     string? Url,
     DateTimeOffset? UrlExpiraAt,
     string? HashSha256,

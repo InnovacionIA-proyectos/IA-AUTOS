@@ -124,6 +124,15 @@ El estado es el testigo de concurrencia: si un inspector toma la entrega y el co
 (409 si no). Fuera de 1 a la capacidad del viaje responde `400` «La niñera tiene N puestos: la posición debe estar entre 1 y N»; una posición que ya tiene otra unidad del viaje, `409` «La posición N ya está ocupada por otra unidad de este viaje» (con varias solicitudes simultáneas por la misma gana exactamente una: lo resuelve el índice único); una unidad
 que no sale no admite posición (409). La respuesta es el viaje, cuyas unidades traen `posicion`. Cada cambio queda auditado (`viaje.posicion_unidad`). El informe PDF de la segunda inspección del cargue lista cada unidad con su posición y trae las fotos de la acomodación con su sello, y el inventario del VIN (JSON y PDF) muestra «Posición en niñera: N» en las etapas de los viajes en que fue despachado con posición; un viaje sin posiciones genera ambos documentos igual, sin el dato. El cierre de la segunda inspección del cargue exige la posición de **cada unidad activa** y las fotos de la acomodación (ver [inspecciones.md](inspecciones.md)).
 
+## El detalle del viaje trae lo que el portal necesita (sin cambios de esquema)
+
+Estos campos se calculan al leer; ninguno cambia la base ni pide un script. `GET /api/viajes/{id}` —y solo el detalle— trae:
+
+- **`cargue_ninera`**: el cargue de la niñera completo (carros recibidos, reservas por carro, las dos firmas con su nombre, hora y trazo, y la constancia de no firma con su testigo, su foto con enlace firmado y el momento). Sale del informe **vigente** de cada carro (no de los reemplazados por una corrección cerrada, ni de los descartados o superados), reunido en una sola consulta del viaje, sin una petición por carro. Nunca trae la dirección de red de las firmas ni una cédula. Nulo si el cargue no se firmó ni tiene constancia.
+- **`permiso_sin_inspector_estado`**: `pendiente` o `concedido` si el viaje tiene solicitud de «No hay inspector», nulo si no. Lee el estado guardado: no concede por tiempo (eso lo sigue haciendo la consulta del permiso y el proceso periódico).
+
+`GET /api/viajes/mios`, el listado y las respuestas de las operaciones sobre el viaje llevan los dos campos en `null`. Además, la etapa del inventario de un carro bajado trae `bajado` (con la forma del `bajado` de cada carro del viaje) y la entrega por parada trae `rechazo.foto` y `fotos_cierre` con el enlace firmado y el sello de cada foto. Detalle en `CONTRATO.md`.
+
 ## Aplicar el cambio en una base existente
 
 Con un usuario que pueda crear tablas y vistas y desactivar triggers (no el de la aplicación), conectado a la base de IA Autos, **antes de desplegar la API**:

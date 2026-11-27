@@ -513,6 +513,16 @@ public sealed class EntregaPorParadaApiTests(clsBaseDatosFixture bd) : clsPrueba
         Assert.Equal(e.Conductor.UsuarioId, rechazo.GetProperty("marcado_por").GetGuid());
         Assert.Equal("rechazado_por_novedad", rechazo.GetProperty("motivo").GetString());
         Assert.Equal(1, rechazado.GetProperty("danos_nuevos").GetInt32());
+        // La foto del daño llega con su enlace firmado y su sello, sin leer el informe del carro; el conteo y el identificador se conservan.
+        var fotoDelRechazo = rechazo.GetProperty("foto");
+        Assert.StartsWith("http", fotoDelRechazo.GetProperty("url").GetString());
+        Assert.NotEqual(JsonValueKind.Null, fotoDelRechazo.GetProperty("url_expira_at").ValueKind);
+        Assert.Equal(
+            ["sello_fecha", "sello_lat", "sello_lng", "url", "url_expira_at", "hash_sha256", "precision", "dispositivo_id", "sin_ubicacion"],
+            fotoDelRechazo.EnumerateObject().Select(p => p.Name).ToList());
+        Assert.False(fotoDelRechazo.GetProperty("sin_ubicacion").GetBoolean());
+        Assert.Equal(0, rechazado.GetProperty("fotos_cierre").GetArrayLength());
+        Assert.Equal(JsonValueKind.Null, Unidad(punto, "VIN-PAR-N1").GetProperty("rechazo").ValueKind);
 
         // Sigue activa en el viaje, a cargo del conductor, y el viaje sigue en curso aunque se entregue el resto.
         Assert.Equal("activa", await Sembrador.EscalarAsync("SELECT vv.EstadoUnidad FROM dbo.tblViajeVehiculos vv JOIN dbo.tblVehiculos v ON v.Id = vv.VehiculoId WHERE vv.ViajeId = @v AND v.Vin = 'VIN-PAR-N2'", ("@v", e.Viaje)));
@@ -821,6 +831,15 @@ public sealed class EntregaPorParadaApiTests(clsBaseDatosFixture bd) : clsPrueba
         Assert.Equal("Dijo que no recibía sin el manual", n1.GetProperty("motivo_cierre").GetString());
         Assert.Equal(1, n1.GetProperty("fotos_de_cierre").GetInt32());
         Assert.Equal(0, Unidad(punto, "VIN-PAR-N2").GetProperty("fotos_de_cierre").GetInt32());
+        // Las fotos del cierre llegan como lista, con el enlace firmado y el sello de cada una.
+        var fotosDelCierre = n1.GetProperty("fotos_cierre").EnumerateArray().ToList();
+        var fotoDelCierre = Assert.Single(fotosDelCierre);
+        Assert.StartsWith("http", fotoDelCierre.GetProperty("url").GetString());
+        Assert.Equal(4.6, fotoDelCierre.GetProperty("sello_lat").GetDouble());
+        Assert.Equal(-74.1, fotoDelCierre.GetProperty("sello_lng").GetDouble());
+        Assert.Equal(5.0, fotoDelCierre.GetProperty("precision").GetDouble());
+        Assert.False(fotoDelCierre.GetProperty("sin_ubicacion").GetBoolean());
+        Assert.Equal(0, Unidad(punto, "VIN-PAR-N2").GetProperty("fotos_cierre").GetArrayLength());
         Assert.Equal("Andrés Pardo", n1.GetProperty("testigo_nombre").GetString());
         Assert.Equal(DateTimeOffset.Parse(MOMENTO), n1.GetProperty("entrega_momento").GetProperty("momento").GetDateTimeOffset());
         Assert.Equal(4.71, n1.GetProperty("entrega_momento").GetProperty("lat").GetDouble());

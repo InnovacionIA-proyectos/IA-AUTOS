@@ -187,7 +187,13 @@ public sealed class clsViajesService(
     {
         var viaje = await ObtenerViajeAsync(id, ct);
         await AsegurarAccesoAsync(viaje, ct);
-        return await ObtenerDtoAsync(id, ct);
+        // Solo el detalle trae el cargue de la ninera y el estado del permiso «No hay inspector»: las demas respuestas del viaje los llevan nulos.
+        var dto = await ObtenerDtoAsync(id, ct);
+        return dto with
+        {
+            CargueNinera = await consultas.CargueNineraAsync(id, ClienteRestringido, ct),
+            PermisoSinInspectorEstado = await consultas.EstadoDelPermisoSinInspectorAsync(id, ct),
+        };
     }
 
     // ---------------------------------------------------------------------------------------------- cambios

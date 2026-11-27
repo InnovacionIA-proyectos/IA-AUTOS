@@ -569,7 +569,7 @@ Cada etapa trae `posicion`: la posición (de 1 a la capacidad de la niñera de e
     {
       "id": "uuid", "orden": 1, "proceso": "cargue", "lugar": "CEDI 1", "requiere_inspeccion": true,
       "viaje_id": "uuid", "codigo_mtrack": "MTK-001",
-      "estado_unidad": "activa", "no_sale": null, "posicion": 4,
+      "estado_unidad": "activa", "no_sale": null, "posicion": 4, "bajado": null,
       "inspecciones": [
         { "id": "uuid", "etapa_id": "uuid", "viaje_id": "uuid", "usuario_id": "uuid", "momento": "salida", "fecha": "…", "lat": 6.2, "lng": -75.5,
           "estado": "cerrada", "conductor_nombre": null, "placa": null, "trailer": null, "notas": null,
@@ -581,11 +581,17 @@ Cada etapa trae `posicion`: la posición (de 1 a la capacidad de la niñera de e
 }
 ```
 
-`estado_unidad` es el de la unidad **en el viaje de esa etapa**: `activa` o `no_sale`. Cuando es `no_sale`, `no_sale` trae el detalle; si no, es `null`:
+`estado_unidad` es el de la unidad **en el viaje de esa etapa**: `activa`, `no_sale` o `bajado`. Cuando es `no_sale`, `no_sale` trae el detalle; si no, es `null`:
 
 ```json
 "no_sale": { "motivo": "Golpe estructural en el frente", "hallazgo_id": "uuid", "marcado_por": "uuid", "marcado_por_nombre": "Ana Pérez",
              "fecha": "2026-07-17T12:30:15.123Z", "vin_reemplazo": "9BWZZZ377VT004252" }
+```
+
+Cuando es `bajado`, la etapa trae `bajado` con **la misma forma que el `bajado` de cada carro del detalle del viaje**, y `null` en los demás estados (el carro que sigue en el viaje y el `no_sale`):
+
+```json
+"bajado": { "motivo": "Cambio de pedido", "bajado_por": "uuid", "bajado_por_nombre": "Ana Pérez", "fecha": "2026-11-26T15:04:00.000Z" }
 ```
 
 `vin_reemplazo` es el VIN que reemplaza a la unidad, o `null` si aún no se asignó. Una unidad que no sale **conserva su vínculo con el viaje** y el inventario devuelve las etapas de ese viaje igual que las demás, con su historial completo (incluido el hallazgo que la sacó del viaje).
@@ -841,10 +847,10 @@ nuevo (`GET /api/viajes/{id}/entregas` se lee como siempre); la firma por parada
   `espera` es la última espera del inspector del punto de la parada (`null` si el conductor nunca activó «No hay inspector» en ella), `espera_aviso_minutos` y `espera_plan_b_minutos` son X e Y vigentes (para que la app cuente los plazos sin señal) y `danos_por_calificar` los daños sin nivel que el conductor marcó en las revisiones de llegada de la parada (lista vacía si no hay); ver «La espera del inspector del punto».
   - `estado_parada` *(nombres a confirmar por backend)*: `pendiente`, `entregada`, `entregada_con_rechazos` o `firmada_todos_rechazados` (la parada se firmó como constancia del rechazo de cada carro y ninguno se entregó). `entregada` es verdadero cuando ninguna unidad está pendiente **y al menos una se entregó**.
   - `receptor` *(a confirmar por backend)*: `inspector_del_punto` (el que tomó la entrega de esta parada, con su `receptor_nombre`), `persona_del_lugar` (el punto no tiene inspectores; `receptor_nombre` es el de quien ya recibió) o `sin_receptor` (el punto tiene inspectores y nadie tomó la entrega: no se puede firmar).
-  - Cada unidad: `{ vehiculo_id, vin, estado, inspeccion_id, tipo_cierre, entrega_firmada_at, recibe_firmada_at, no_firma_parte, motivo_cierre, recibe_externo_nombre, recibe_externo_cedula, motivo_codigo, reservas, fotos_de_cierre, testigo_nombre, entrega_momento, recibe_momento, danos_nuevos, rechazo, entregada_sin_inspector_del_punto }`.
+  - Cada unidad: `{ vehiculo_id, vin, estado, inspeccion_id, tipo_cierre, entrega_firmada_at, recibe_firmada_at, no_firma_parte, motivo_cierre, recibe_externo_nombre, recibe_externo_cedula, motivo_codigo, reservas, fotos_de_cierre, testigo_nombre, entrega_momento, recibe_momento, danos_nuevos, rechazo, entregada_sin_inspector_del_punto, fotos_cierre }`.
     `estado` es `sin_inspeccion` (aún no tiene la revisión de llegada del Descargue, donde se firma), `pendiente`, `cerrada` (entregada: `firmada`, `con_reservas`, `no_firma` o `recibo_sin_entrega`) o `rechazado` (no se entregó: ver «El carro rechazado»).
     `motivo_cierre` es el motivo escrito del cierre con una sola firma y `motivo_codigo` su motivo codificado (`se_nego_a_firmar`, `no_habia_nadie`, `sin_inspector_del_punto`, u **`otro`** en los cierres de antes de que el motivo fuera codificado, que se leen igual y sin foto); ambos `null` en cualquier otro cierre.
-    `reservas` son las observaciones de quien recibe sobre ese carro; `fotos_de_cierre` cuenta las fotos del cierre con una sola firma; `testigo_nombre` es el testigo sin usuario (**nunca su cédula**); `entrega_momento` y `recibe_momento` son `{ momento, lat, lng, precision_m, sin_ubicacion }`: la hora y el GPS del **momento** en que firmó cada parte, aparte de
+    `reservas` son las observaciones de quien recibe sobre ese carro; `fotos_de_cierre` cuenta las fotos del cierre con una sola firma y **`fotos_cierre` las trae**: una lista (`[]` si no hay) de la más antigua a la más reciente, cada una `{ sello_fecha, sello_lat, sello_lng, url, url_expira_at, hash_sha256, precision, dispositivo_id, sin_ubicacion }` (la misma forma que la foto de una novedad del viaje, con la `url` firmada de lectura; una foto tomada sin GPS lleva `sello_lat` y `sello_lng` en 0 y `sin_ubicacion: true`), para mostrarlas sin leer el informe de cada carro; `testigo_nombre` es el testigo sin usuario (**nunca su cédula**); `entrega_momento` y `recibe_momento` son `{ momento, lat, lng, precision_m, sin_ubicacion }`: la hora y el GPS del **momento** en que firmó cada parte, aparte de
     `entrega_firmada_at` y `recibe_firmada_at`, que son cuando **llegó la firma al servidor**; `danos_nuevos` cuenta los daños nuevos de su revisión de llegada. `no_firma_parte` dice cuál parte **no** firmó. `recibe_externo_nombre` y `recibe_externo_cedula` son los de la persona que recibió cuando no es un usuario. Las entregas cerradas antes de este cambio se leen igual.
   - `lugar_tiene_inspector` dice si el **punto de destino tiene inspector** (ver «El punto tiene inspector» más abajo).
 
@@ -871,7 +877,15 @@ nuevo (`GET /api/viajes/{id}/entregas` se lee como siempre); la firma por parada
 Un carro solo se queda sin entregar si se **rechaza por una novedad de su revisión de llegada**: el inspector que tomó la entrega (o, donde la parada no tiene inspectores, el conductor a pedido de la persona del lugar) lo marca en `rechazos` de la firma por parada: `[ { "vin", "hallazgo_id" } ]`, con el **daño de la revisión de llegada de ese carro** que lo motiva.
 - Cada carro pendiente de la parada se entrega o va en `rechazos`. `400` («Para no entregar un carro elige el daño de su revisión de llegada que lo motiva») si falta el `hallazgo_id`, si es de otra revisión o si no tiene foto; `409` con el motivo `sin_novedad_para_rechazar` («El VIN … no tiene un daño que justifique el rechazo: entrégalo en esta parada») si el carro no tiene ningún daño con foto; `400` nombrando un VIN que no es de la parada o ya está entregado.
   En una parada con inspectores solo los manda el inspector que tomó la entrega (`403` el conductor); en una sin inspectores, el conductor.
-- El carro rechazado queda con el estado de entrega `rechazado` y el motivo `rechazado_por_novedad`, unido al daño (`rechazo: { hallazgo_id, evidencia_id, marcado_por, marcado_por_nombre, motivo }`, con la foto del daño); **sigue `activa` en el viaje, en el camión y a cargo del conductor, y no cuenta como entregado**. Su transferencia cierra `rechazado` con las dos firmas (la parte que no marcó firma después). La auditoría guarda
+- Ejemplo de las fotos de una unidad (el carro rechazado trae `rechazo.foto` y el que se cerró con una sola firma, `fotos_cierre`):
+
+  ```json
+  "rechazo": { "hallazgo_id": "uuid", "evidencia_id": "uuid", "marcado_por": "uuid", "marcado_por_nombre": "Pedro Ruiz", "motivo": "rechazado_por_novedad",
+               "foto": { "sello_fecha": "2026-11-18T19:10:00.000Z", "sello_lat": 4.6, "sello_lng": -74.1, "url": "https://…?exp=…&firma=…", "url_expira_at": "2026-11-18T19:25:00.000Z",
+                         "hash_sha256": "…", "precision": 5.0, "dispositivo_id": "tablet-7", "sin_ubicacion": false } },
+  "fotos_de_cierre": 2, "fotos_cierre": [ { "sello_fecha": "…", "sello_lat": 4.6, "sello_lng": -74.1, "url": "https://…", "url_expira_at": "…", "hash_sha256": "…", "precision": 5.0, "dispositivo_id": "tablet-7", "sin_ubicacion": false } ]
+  ```
+- El carro rechazado queda con el estado de entrega `rechazado` y el motivo `rechazado_por_novedad`, unido al daño (`rechazo: { hallazgo_id, evidencia_id, marcado_por, marcado_por_nombre, motivo, foto }`, donde `foto` es la foto del daño con la forma de `fotos_cierre` —`url` firmada incluida— y `null` si el daño no tiene foto; `evidencia_id` se conserva); **sigue `activa` en el viaje, en el camión y a cargo del conductor, y no cuenta como entregado**. Su transferencia cierra `rechazado` con las dos firmas (la parte que no marcó firma después). La auditoría guarda
   (`entrega.rechazar`) quién lo marcó, el daño, la hora y el GPS. El daño queda con la gravedad que le puso el inspector en la revisión, o sin calificar si lo registró el conductor.
 - **Si se rechazan todos los carros, la parada igual se firma**, por las dos partes, como constancia del rechazo de cada uno: ningún carro queda entregado, todos siguen a cargo del conductor y `estado_parada` es `firmada_todos_rechazados`.
 - **El aviso.** Cada rechazo emite `carro_rechazado_en_destino` *(tipo nuevo, a confirmar por backend)* de urgencia `alta` a los coordinadores de calidad del cliente: «Carro rechazado en destino: Concesionario Norte», con `datos`: `{ viaje_id, vin, lugar_id, lugar, hallazgo_id, parte, marcado_por }` (el nombre de quien lo marcó; ninguna cédula).
@@ -1176,7 +1190,7 @@ Donde el punto de cargue **tiene inspectores** asignados (ver «Puntos del inspe
   son el GPS del momento en que lo pide (los mismos errores `400` por campo que la excepción). `201` con el `PermisoSinInspectorDto`; repetir la solicitud devuelve la misma (una por viaje). `409` con `details.motivo: "lugar_no_admite_cargue_sin_inspector"` si el lugar de cargue **no admite cargue sin inspector** (o el viaje no tiene lugar de cargue); `409` si el punto de cargue **no** tiene inspectores (ahí la excepción se activa directamente) o el viaje no está activo.
   Se avisa (`permiso_sin_inspector`, urgencia `alta`, bandeja y push) a los **inspectores del punto** y a los **coordinadores y administradores del cliente**.
 - `POST /api/viajes/{id}/permiso-sin-inspector/conceder` (`coordinador_calidad`, `admin`, `super_admin`): concede el permiso y el **conductor queda habilitado de inmediato**, sin esperar al inspector; se le avisa a él. `404` si no hay solicitud; `409` si ya está concedida.
-- `GET /api/viajes/{id}/permiso-sin-inspector`: el estado (el conductor y el inspector del viaje, los coordinadores y administradores del cliente; `404` si no hay).
+- `GET /api/viajes/{id}/permiso-sin-inspector`: el estado (el conductor y el inspector del viaje, los coordinadores y administradores del cliente; `404` si no hay). Para no consultar un permiso que no existe, **`GET /api/viajes/{id}` trae `permiso_sin_inspector_estado`** (por ejemplo `"permiso_sin_inspector_estado": "pendiente"`): `pendiente` o `concedido` si el viaje tiene solicitud y `null` si no (solo el detalle; `mios`, el listado y las respuestas de las operaciones lo llevan `null`). Lee el estado **guardado** y no concede por tiempo: la concesión por reloj sigue ocurriendo al responder `GET …/permiso-sin-inspector` (y al proceso periódico), que usan la app del conductor y el portal; con el plazo cumplido y nadie que haya consultado el permiso, el detalle puede seguir diciendo `pendiente`.
 - **Si nadie responde dentro del plazo** el permiso queda **concedido por tiempo**. El plazo es el parámetro `permiso_sin_inspector_minutos` (10 por defecto; 10 también si la fila no existe), se lee **al pedir el permiso** y **se guarda en la solicitud** (`vence_at`): cambiar el parámetro después no cambia el plazo de una solicitud ya pedida, y la base impide conceder por tiempo antes de ese plazo (`CK_tblPermisosSinInspector_Reloj`). Lo concede un proceso periódico cada minuto (no depende de que alguien abra una pantalla) y **también dentro de la petición que lo necesita**: crear la salida del Cargue con la excepción y registrar la posición de una unidad (`PUT …/posicion`) con una solicitud pendiente y ya vencida la conceden por tiempo en esa misma petición, con la misma auditoría (`permiso_sin_inspector.conceder_por_tiempo`) y el mismo aviso, y la aceptan; antes del plazo siguen respondiendo el `403` de hoy («… o a que pasen N minutos sin respuesta», con el plazo de la solicitud) y nunca responden «espere» después de él. Queda `autorizado_por_tiempo: true` y sin `concedido_por`; se avisa al conductor y al coordinador.
 
 `PermisoSinInspectorDto`: `{ id, viaje_id, estado ("pendiente" o "concedido"), solicitado_at, vence_at (solicitado_at + el plazo con que nació la solicitud: `permiso_sin_inspector_minutos`, 10 por defecto), conductor_id, conductor_nombre, lugar_id, lugar, motivo_codigo, motivo, motivo_texto, fecha, lat, lng, concedido_at, concedido_por, concedido_por_nombre, autorizado_por_tiempo }`;
@@ -2296,6 +2310,24 @@ Permiso: **el mismo del detalle del viaje** (`GET /api/viajes/{id}`): `403` si e
 
 ### El cargue en el viaje
 `GET /api/viajes/{id}` (y el listado) trae tres campos **calculados** de las transferencias, sin datos aparte que puedan quedar desincronizados: `cargue_firmado_por_ninera_at` (cuándo se cerró la firma por niñera, nulo si no se firmó así), `cargue_no_firmado_at` (cuándo se dejó la constancia de no firma, nulo si no hay) y `cargue_no_firma_parte` (`entrega` o `recibe`, la parte que se negó).
+
+**`cargue_ninera` (solo en el detalle).** `GET /api/viajes/{id}` —y solo él— trae además el cargue de la niñera completo, para armar la sección del cargue con esa sola respuesta, sin pedir el informe de cada carro. Sale del informe **vigente** de cada carro (no de los reemplazados por una corrección cerrada ni de los descartados o superados) y existe solo cuando el cargue se firmó o tiene constancia de no firma: un viaje con el cargue sin firmar y sin constancia trae `cargue_ninera: null`. `GET /api/viajes/mios`, el listado y las respuestas de las operaciones sobre el viaje lo llevan `null`. Quien consulta con un cliente asignado solo cuenta los carros de su cliente.
+
+```json
+"cargue_ninera": {
+  "recibidos": 4,
+  "reservas": [ { "vin": "9BWZZZ377VT004251", "observaciones": "Rayón en la puerta izquierda" } ],
+  "entrega": { "nombre": "Ana Pérez", "firmada_at": "2026-11-18T19:09:00.000Z", "firma": "M0 0 L10 10" },
+  "recibe":  { "nombre": "Luis Gómez", "firmada_at": "2026-11-18T19:12:00.000Z", "firma": "https://…?exp=…&firma=…" },
+  "constancia": null,
+  "carros_sin_firma": 0
+}
+```
+
+- `recibidos` son los carros recibidos con la firma de las dos partes (con o sin reservas); `reservas` trae las de cada carro que las tiene (`[]` si ninguno), solo las de esos carros.
+- `entrega` y `recibe` son `{ nombre, firmada_at, firma }`: quién firmó, cuándo llegó la firma al servidor y el trazo (o la URL firmada si la firma es una imagen subida). **No traen la dirección de red de la firma ni ninguna cédula**; una parte que no firmó va `null`. (La Issue pedía `ip` junto a la firma y a la vez que no viajara; se dejó sin `ip`.)
+- Con constancia de no firma, `constancia` es `{ parte, motivo, testigo_nombre, foto, momento, lat, lng }`: `parte` es la que se negó (`entrega` o `recibe`), `testigo_nombre` el testigo (nunca su cédula), `foto` la de la constancia con la forma de las fotos del viaje (`sello_fecha`, `sello_lat`, `sello_lng`, `url` firmada, `url_expira_at`, `hash_sha256`, `precision`, `dispositivo_id`, `sin_ubicacion`) y `momento`, `lat`, `lng` la hora y el GPS del momento en que la otra parte la dejó. Cuando la foto se tomó sin GPS (`sin_ubicacion: true`) **`sello_lat` y `sello_lng` van `null`** (en esta foto; en las demás fotos del viaje valen 0); `lat` y `lng` de la constancia salen siempre, porque quien la deja envía el GPS del momento. `carros_sin_firma` cuenta los carros cuyo cargue quedó con esa constancia (`0` si se firmó).
+- *(Decisiones por confirmar: los nombres de los campos del bloque y que `constancia` y `entrega`/`recibe` convivan: con constancia, la parte que firmó trae su firma y la que se negó va `null`.)*
 
 ### La firma carro por carro del cargue se rechaza
 En el cargue, `POST …/transferencia`, `POST …/transferencia/reservas` y `POST …/transferencia/no-firma` responden **`409` con `details.motivo: "firma_por_ninera"`** para todos los roles: la firma, las reservas y la constancia se hacen por niñera. **El recibo sin entrega del conductor no cambia.** Estos mensajes **tienen que desplegarse junto con la app que firma por niñera o después**: una app que aún firma carro por carro recibe el rechazo.
