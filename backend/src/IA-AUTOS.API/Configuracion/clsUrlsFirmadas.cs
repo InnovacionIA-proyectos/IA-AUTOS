@@ -65,6 +65,10 @@ public sealed partial class clsConfiguracionJsonUrls(IFirmadorUrls firmador, IHt
             Reemplazar(tipo, "url", o => FirmaDe(o, ((ArchivoSubidoDto)o).StoragePath)?.Url ?? ((ArchivoSubidoDto)o).Url);
             Reemplazar(tipo, "url_expira_at", o => FirmaDe(o, ((ArchivoSubidoDto)o).StoragePath)?.ExpiraAt);
         }
+        else if (tipo.Type == typeof(FirmaDeLaNineraDto))
+        {
+            Reemplazar(tipo, "firma", o => FirmaComoUrl(((FirmaDeLaNineraDto)o).Firma));
+        }
         else if (tipo.Type == typeof(TransferenciaDetalleDto))
         {
             Reemplazar(tipo, "firma_entrega", o => FirmaComoUrl(((TransferenciaDetalleDto)o).FirmaEntrega));

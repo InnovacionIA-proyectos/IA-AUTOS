@@ -107,7 +107,8 @@ public sealed record InventarioEtapaDto(
     string EstadoUnidad,
     NoSaleDto? NoSale,
     IReadOnlyList<InventarioInspeccionDto> Inspecciones,
-    int? Posicion = null);
+    int? Posicion = null,
+    BajadoDto? Bajado = null);
 
 /// <summary>El informe del carro: sus etapas con sus inspecciones. <c>Novedades</c> y <c>SinCalificar</c> son las mismas dos cifras del listado de vehiculos, sobre las etapas que se devuelven.</summary>
 public sealed record InventarioDto(

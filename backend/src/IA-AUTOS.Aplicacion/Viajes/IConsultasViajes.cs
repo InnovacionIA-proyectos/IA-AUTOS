@@ -31,6 +31,16 @@ public interface IConsultasViajes
     /// <summary>El viaje con sus VIN. Con <paramref name="soloDeCliente"/> solo los VIN de ese cliente (y solo esos clientes).</summary>
     Task<ViajeDto?> ObtenerAsync(Guid id, Guid? soloDeCliente = null, CancellationToken ct = default);
 
+    /// <summary>
+    /// El cargue de la ninera del viaje para su detalle: los carros recibidos con las dos firmas, las reservas por carro, las firmas (sin direccion de red ni cedula) y la constancia de no firma, todo del informe vigente de cada
+    /// carro (no de los reemplazados por una correccion cerrada ni de los descartados o superados), en una sola consulta del viaje. Con <paramref name="soloDeCliente"/> solo cuentan los carros de ese cliente. Nulo si el cargue no se
+    /// firmo ni tiene constancia.
+    /// </summary>
+    Task<CargueNineraDelViajeDto?> CargueNineraAsync(Guid viajeId, Guid? soloDeCliente, CancellationToken ct = default);
+
+    /// <summary>El estado guardado de la solicitud de «No hay inspector» del viaje (<c>pendiente</c> o <c>concedido</c>), o nulo si no tiene. Solo lee: no concede por tiempo.</summary>
+    Task<string?> EstadoDelPermisoSinInspectorAsync(Guid viajeId, CancellationToken ct = default);
+
     /// <summary>True si el viaje es de ese cliente: tiene algun VIN suyo o, sin VIN, lo creo alguien de su cliente.</summary>
     Task<bool> ViajeEsDeClienteAsync(Guid viajeId, Guid clienteId, CancellationToken ct = default);
 

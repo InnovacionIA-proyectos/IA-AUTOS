@@ -33,3 +33,28 @@ public sealed record CargueUnidadDto(string Vin, string TipoCierre, bool PorNine
 /// cerrada. <c>CargueFirmadoPorNineraAt</c> es cuando se cerro la firma por niñera (nulo mientras falte la otra parte).
 /// </summary>
 public sealed record CargueNineraDto(Guid ViajeId, string Parte, int Unidades, int Cerradas, DateTimeOffset? CargueFirmadoPorNineraAt, IReadOnlyList<CargueUnidadDto> Detalle);
+
+/// <summary>Una firma del cargue de la ninera: quien firmo (<c>Nombre</c>), cuando llego al servidor (<c>FirmadaAt</c>) y la <c>Firma</c> (el trazo o la URL firmada de la imagen). Nunca trae la direccion de red ni ninguna cedula.</summary>
+public sealed record FirmaDeLaNineraDto(string? Nombre, DateTimeOffset? FirmadaAt, string? Firma);
+
+/// <summary>Las observaciones que quien recibe dejo sobre un carro al firmar el cargue «con reservas».</summary>
+public sealed record ReservaDelCargueDto(string Vin, string Observaciones);
+
+/// <summary>
+/// La constancia de no firma del cargue de la ninera: <c>Parte</c> es la que se nego a firmar (<c>entrega</c> o <c>recibe</c>), con su <c>Motivo</c>, el nombre del testigo (nunca su cedula), la <c>Foto</c> de la constancia
+/// (con latitud y longitud vacias si se tomo sin GPS), y el <c>Momento</c> y el GPS (<c>Lat</c>, <c>Lng</c>; vacios sin GPS) en que la otra parte la dejo.
+/// </summary>
+public sealed record ConstanciaDelCargueDto(string Parte, string? Motivo, string? TestigoNombre, FotoNovedadViajeDto? Foto, DateTimeOffset? Momento, double? Lat, double? Lng);
+
+/// <summary>
+/// El cargue de la ninera de un viaje como lo necesita el detalle: <c>Recibidos</c> son los carros que se recibieron con la firma de las dos partes, <c>Reservas</c> las observaciones de quien recibe por carro,
+/// <c>Entrega</c> y <c>Recibe</c> las firmas, <c>Constancia</c> la de no firma (nula si no la hay) y <c>CarrosSinFirma</c> los carros cuyo cargue quedo con esa constancia. Solo existe cuando el cargue se firmo o tiene constancia.
+/// </summary>
+public sealed record CargueNineraDelViajeDto(
+    int Recibidos,
+    IReadOnlyList<ReservaDelCargueDto> Reservas,
+    FirmaDeLaNineraDto? Entrega,
+    FirmaDeLaNineraDto? Recibe,
+    ConstanciaDelCargueDto? Constancia,
+    int CarrosSinFirma);
+
